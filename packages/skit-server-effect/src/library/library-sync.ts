@@ -2,7 +2,7 @@ import { Clock, Context, Effect, Layer, Schema } from "effect";
 import { D1Client } from "@effect/sql-d1";
 import {
   LibraryManifest,
-  LibraryReceipt,
+  RemoteLibrary,
   StoredLibraryManifest,
 } from "@smolai/skit-core/universal/consumer";
 import type { Principal } from "../auth/authentication.js";
@@ -29,13 +29,13 @@ export class LibraryRevisionInvalid extends Schema.TaggedError<LibraryRevisionIn
 export interface LibrarySyncService {
   readonly read: (
     principal: Principal,
-  ) => Effect.Effect<LibraryReceipt | undefined, DatabaseError | LibraryRevisionInvalid>;
+  ) => Effect.Effect<RemoteLibrary | undefined, DatabaseError | LibraryRevisionInvalid>;
   readonly write: (
     principal: Principal,
     expected: string | null,
     manifest: LibraryManifest,
   ) => Effect.Effect<
-    LibraryReceipt,
+    RemoteLibrary,
     DatabaseError | LibraryRevisionInvalid | LibraryRevisionConflict | LibrarySnapshotMissing
   >;
 }

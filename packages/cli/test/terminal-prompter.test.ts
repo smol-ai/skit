@@ -471,7 +471,7 @@ it.effect("Space keeps same-name skills from separate repositories selected toge
       locks: [],
       contentIdentity: {
         status: "none",
-        observedHash: `sha256:${String(index).repeat(64)}`,
+        currentHash: `sha256:${String(index).repeat(64)}`,
         libraryMatches: [],
       },
     }));

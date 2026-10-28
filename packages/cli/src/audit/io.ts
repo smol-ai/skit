@@ -5,12 +5,7 @@
 // previous synchronous implementation reached node:fs directly and re-entered a runtime through
 // runSkitSync for every path classification.
 import { Effect, FileSystem } from "effect";
-import {
-  isJsonObject,
-  LinkStat,
-  observationPathIdentityEffect,
-  type JsonObject,
-} from "@smolai/skit-core";
+import { isJsonObject, LinkStat, physicalPath, type JsonObject } from "@smolai/skit-core";
 
 const classify = Effect.fn("Audit.classify")(function* (path: string) {
   const linkStat = yield* LinkStat;
@@ -48,7 +43,7 @@ export const walk = Effect.fn("Audit.walk")(function* (
     directory: string,
   ): Effect.gen.Return<void, never, FileSystem.FileSystem | LinkStat> {
     if ((yield* classify(directory)).link._tag === "None") return;
-    const canonicalKey = (yield* observationPathIdentityEffect(directory)).comparisonKey;
+    const canonicalKey = (yield* physicalPath(directory)).key;
     if (visited.has(canonicalKey)) return;
     visited.add(canonicalKey);
     const names = yield* fs.readDirectory(directory).pipe(Effect.orElseSucceed(() => null));
@@ -72,7 +67,7 @@ export const walk = Effect.fn("Audit.walk")(function* (
 });
 
 export const canonical = Effect.fn("Audit.canonical")(function* (path: string) {
-  return (yield* observationPathIdentityEffect(path)).canonicalPath;
+  return (yield* physicalPath(path)).realPath;
 });
 
 /** Whether the path itself exists. Broken symlinks count as existing audit evidence. */

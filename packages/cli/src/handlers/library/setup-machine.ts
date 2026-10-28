@@ -1,15 +1,15 @@
 import { resolve } from "node:path";
 import { Effect, Option, Schema } from "effect";
-import { Digest, LibraryStore } from "@smolai/skit-core";
+import { Hash, LibraryStore } from "@smolai/skit-core";
 import { Renderer } from "../../presentation/renderer.js";
 import { OptionCombinationInvalid } from "../../workflows/failures.js";
 import { runSetup, SetupPlanStale, type SetupOptions } from "../../workflows/library/setup.js";
 import { openSetupReview } from "../../workflows/library/setup-review.js";
-import type { LocalAdoptionOptions } from "../../workflows/library/local-adoption.js";
+import type { ManageOptions } from "../../workflows/library/manage-existing.js";
 import type { SetupDuplicateAction as SetupDuplicateActionType } from "../../workflows/library/setup-decisions.js";
 import type { SetupApplied } from "../../workflows/library/setup-contract.js";
 import type { SetupCommandSelection } from "../../commands/setup-actions.js";
-import { setupReconciliationOutcomes } from "../../workflows/library/setup-reconciliation.js";
+import { changeResults } from "../../workflows/library/installed-skill-changes.js";
 
 /**
  * `skit setup --apply`: the non-interactive apply. The plan ID is the caller's consent: it must
@@ -20,14 +20,14 @@ import { setupReconciliationOutcomes } from "../../workflows/library/setup-recon
  */
 export const openSetupCommandReview = Effect.fn("CLI.setup.openReview")(function* (input: {
   readonly options: Omit<SetupOptions, "repositoryRoots" | "persistRoots">;
-  readonly localCustody: LocalAdoptionOptions;
+  readonly manageOptions: ManageOptions;
   readonly workDirFlag?: string;
   readonly planId: string;
   readonly duplicates?: SetupDuplicateActionType;
   readonly selection?: SetupCommandSelection["selection"];
 }) {
   const renderer = yield* Renderer;
-  const planId = Schema.decodeUnknownOption(Digest)(input.planId);
+  const planId = Schema.decodeUnknownOption(Hash)(input.planId);
   if (Option.isNone(planId))
     return yield* new OptionCombinationInvalid({
       detail: "--apply takes the full planId that `skit setup` prints",
@@ -37,28 +37,28 @@ export const openSetupCommandReview = Effect.fn("CLI.setup.openReview")(function
     repositoryRoots: input.workDirFlag ? [resolve(input.workDirFlag)] : [],
     persistRoots: false,
   };
-  const observed = yield* renderer.withStatus("Observing local skills", runSetup(setupOptions));
-  if (observed.onboarding.planId !== planId.value)
+  const scan = yield* renderer.withStatus("Observing local skills", runSetup(setupOptions));
+  if (scan.onboarding.planId !== planId.value)
     return yield* new SetupPlanStale({
       approvedPlanId: planId.value,
-      currentPlanId: observed.onboarding.planId,
+      currentPlanId: scan.onboarding.planId,
     });
   const review = yield* openSetupReview(
     { ...setupOptions, persistRoots: input.workDirFlag !== undefined },
-    observed,
-    input.localCustody,
+    scan,
+    input.manageOptions,
   );
-  return { observed, review, planId: planId.value };
+  return { scan, review, planId: planId.value };
 });
 
 export const prepareSetupCommand = Effect.fn("CLI.setup.prepare")(function* (
   input: Parameters<typeof openSetupCommandReview>[0],
 ) {
-  const { observed, review, planId } = yield* openSetupCommandReview(input);
+  const { scan, review, planId } = yield* openSetupCommandReview(input);
   const plan = yield* input.selection
     ? review.prepareExplicit(input.selection, input.duplicates)
     : review.prepareRecommended(input.duplicates);
-  return { observed, review, plan, planId };
+  return { scan, review, plan, planId };
 });
 
 export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (
@@ -69,7 +69,7 @@ export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (
       detail: "Explicit selections require --reviewed with the reviewId from --review",
     });
   const renderer = yield* Renderer;
-  const { observed, plan, planId } = yield* prepareSetupCommand(input);
+  const { scan, plan, planId } = yield* prepareSetupCommand(input);
   if (input.reviewedPlanId !== undefined && input.reviewedPlanId !== plan.reviewId)
     return yield* new OptionCombinationInvalid({
       detail: "The reviewed setup choices changed. Review these choices again before applying.",
@@ -87,8 +87,7 @@ export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (
   const names = new Map(state.skills.map((skill) => [skill.skill_id, skill.name]));
   return {
     planId,
-    reconciliation:
-      applied?.reconciliation ?? setupReconciliationOutcomes(plan.summary.reconciliation, false),
+    changes: applied?.changes ?? changeResults(plan.summary.changes, false),
     ...(applied ? { operationId: applied.operationId } : {}),
     removed: removals.entries.map(({ name, path }) => ({ name, path })),
     recoveryDirectories: [
@@ -98,13 +97,20 @@ export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (
     imported: sources.map(({ source, names }) => ({ source, names })),
     added: additions,
     reconnected: reconnects,
-    projections: state.projections.flatMap((projection) => {
-      const name = names.get(projection.skill_id);
+    installedSkills: state.installed_skills.flatMap((installedSkill) => {
+      const name = names.get(installedSkill.skill_id);
       return name !== undefined && taken.has(name)
-        ? [{ name, target: projection.target, path: projection.path, status: projection.status }]
+        ? [
+            {
+              name,
+              destination: installedSkill.destination,
+              path: installedSkill.path,
+              status: installedSkill.status,
+            },
+          ]
         : [];
     }),
-    leftAlone: observed.onboarding.candidates
+    leftAlone: scan.onboarding.candidates
       .filter((candidate) => !taken.has(candidate.name))
       .map((candidate) => ({
         name: candidate.name,
@@ -115,6 +121,6 @@ export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (
       ? { aliasRecoveryDirectories: applied.recoveryDirectories }
       : {}),
     ...(applied?.warnings.length ? { aliasesKept: applied.warnings } : {}),
-    ...(applied?.warnings.length ? { preservationWarnings: applied.warnings } : {}),
+    ...(applied?.warnings.length ? { backupWarnings: applied.warnings } : {}),
   } satisfies SetupApplied;
 });

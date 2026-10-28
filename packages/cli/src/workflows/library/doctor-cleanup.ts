@@ -1,11 +1,11 @@
 import { type ListingBudget } from "@smolai/skit-core";
 import { Effect } from "effect";
-import { applyBindingChanges } from "../../library-application/binding-changes.js";
+import { applySetEnabledPlan } from "../../library-application/set-enabled.js";
 import {
   openDoctorCleanupSelection,
   overBudget,
 } from "../../library-application/doctor-cleanup.js";
-import { type InventoryRootOptions } from "../../projection/roots.js";
+import { type InventoryRootOptions } from "../../install/roots.js";
 import { renderDoctorBudgetSelection } from "../../presentation/doctor-listing-budget.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { terminalColorEnabled } from "../../presentation/terminal-style.js";
@@ -97,7 +97,7 @@ export const presentDoctorCleanup = Effect.fn("Doctor.cleanup")(function* (
     return false;
   const outcomes = yield* renderer.withStatus(
     "Disabling selected skills",
-    applyBindingChanges(plan),
+    applySetEnabledPlan(plan),
   );
   for (const outcome of outcomes) yield* renderer.result(result("disable", outcome.value));
   return true;

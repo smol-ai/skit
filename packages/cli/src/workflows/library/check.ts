@@ -1,21 +1,21 @@
 import {
   currentSkillVersion,
   LibraryStore,
-  originalTreeHashEffect,
-  retainedTreePath,
+  originalTreeHash,
+  collectionVersionPath,
   type LibraryState,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
-import { inspectLibrarySourceEffect } from "../../library-application/source-acquisition.js";
-import { checkSkillsShSubjectEffect } from "./skills-sh-update-check.js";
+import { inspectLibrarySource } from "../../library-application/import-source.js";
+import { checkSkillsShSubject } from "./skills-sh-update-check.js";
 import {
-  latestSubjectAcquisition,
+  latestSourceImport,
   resolveOwningLibrarySubjects,
-  subjectAcquisitionIds,
+  subjectImportIds,
 } from "./subject-resolution.js";
 import { sourceFromUpstream } from "./upstream-source.js";
 
-export const checkSubjectsEffect = Effect.fn("Library.checkSubjects")(function* (
+export const checkSubjects = Effect.fn("Library.checkSubjects")(function* (
   state: LibraryState,
   query?: string,
   onCollection?: (collection: {
@@ -37,40 +37,41 @@ export const checkSubjectsEffect = Effect.fn("Library.checkSubjects")(function* 
           display_name: subject.collection.label,
         });
       const skills = subject.skills;
-      const acquisitionIds = subjectAcquisitionIds(state, subject);
+      const importIds = subjectImportIds(state, subject);
       const copyIds = new Set(
-        state.acquisitions
-          .filter((acquisition) => acquisitionIds.has(acquisition.acquisition_id))
-          .map((acquisition) => acquisition.retained_copy_id),
+        state.imports
+          .filter((sourceImport) => importIds.has(sourceImport.import_id))
+          .map((sourceImport) => sourceImport.collection_version_id),
       );
-      const copies = state.retained_copies.filter((copy) => copyIds.has(copy.retained_copy_id));
-      const acquisition = latestSubjectAcquisition(state, subject);
+      const copies = state.collection_versions.filter((copy) =>
+        copyIds.has(copy.collection_version_id),
+      );
+      const sourceImport = latestSourceImport(state, subject);
       const currentCopy =
-        acquisition === undefined
+        sourceImport === undefined
           ? undefined
-          : state.retained_copies.find(
-              (copy) => copy.retained_copy_id === acquisition.retained_copy_id,
+          : state.collection_versions.find(
+              (copy) => copy.collection_version_id === sourceImport.collection_version_id,
             );
       const upstream = subject.kind === "collection" ? subject.collection.upstream : undefined;
       const source = upstream === undefined ? undefined : sourceFromUpstream(upstream);
-      const inspected =
-        source === undefined ? undefined : yield* inspectLibrarySourceEffect(source);
-      const retained_copies = [];
+      const inspected = source === undefined ? undefined : yield* inspectLibrarySource(source);
+      const collection_versions = [];
       for (const copy of copies) {
-        retained_copies.push({
-          retained_copy_id: copy.retained_copy_id,
-          digest: copy.digest,
-          retained_bytes_current:
-            (yield* originalTreeHashEffect(retainedTreePath(store.originalsPath, copy.digest))) ===
-            copy.digest,
+        collection_versions.push({
+          collection_version_id: copy.collection_version_id,
+          hash: copy.hash,
+          original_intact:
+            (yield* originalTreeHash(collectionVersionPath(store.originalsPath, copy.hash))) ===
+            copy.hash,
         });
       }
-      const skillsSh = yield* checkSkillsShSubjectEffect(subject, acquisition, currentCopy);
+      const skillsSh = yield* checkSkillsShSubject(subject, sourceImport, currentCopy);
       return {
         subject_id: subject.subjectId,
         subject_kind: subject.kind,
         label: subject.label,
-        retained_copies,
+        collection_versions,
         unresolved_skill_selections: skills.filter(
           (skill) => currentSkillVersion(state, skill) === undefined,
         ).length,
@@ -79,16 +80,14 @@ export const checkSubjectsEffect = Effect.fn("Library.checkSubjects")(function* 
             ? ("not-applicable" as const)
             : inspected === undefined || currentCopy === undefined
               ? ("unverified" as const)
-              : inspected.snapshot_digest === currentCopy.digest
+              : inspected.snapshot_digest === currentCopy.hash
                 ? ("current" as const)
                 : ("changed" as const),
-        ...(currentCopy === undefined ? {} : { current_snapshot_digest: currentCopy.digest }),
+        ...(currentCopy === undefined ? {} : { current_snapshot_digest: currentCopy.hash }),
         ...(inspected === undefined
           ? {}
           : { available_snapshot_digest: inspected.snapshot_digest }),
-        acquisition_provenance: state.acquisitions.some((acquisition) =>
-          acquisitionIds.has(acquisition.acquisition_id),
-        ),
+        has_imports: state.imports.some((sourceImport) => importIds.has(sourceImport.import_id)),
         ...(skillsSh ? { skills_sh: skillsSh } : {}),
       };
     }),

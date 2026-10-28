@@ -13,9 +13,9 @@ import {
   HarnessMetadataInvalid,
   InvalidLibraryState,
   NoSkitDescriptorFound,
-  ProjectionFileMissing,
+  InstalledSkillFileMissing,
   ReadmeFrontmatterMissing,
-  resolveSkitSourceEffect,
+  resolveSkitSource,
   skitLayer,
 } from "@smolai/skit-core";
 import { productionUrlTestClient } from "./helpers/http-test-client.js";
@@ -82,7 +82,7 @@ describe("declared exit codes", () => {
       new NoStoredCredentials(),
       new RegistryUnreachable({ origin: "https://registry.example", cause: new Error("offline") }),
       new SourceRestoreInvalid({
-        digest: `sha256:${"a".repeat(64)}`,
+        hash: `sha256:${"a".repeat(64)}`,
         detail: "pinned Git acquisition has no commit",
       }),
     ])
@@ -109,7 +109,7 @@ test("validation failures from shipped commands carry their own remediation", ()
     new DescriptorMalformed({ format: "json", detail: "unexpected token" }),
     new DirectSkillDocumentInvalid(),
     new NoSkitDescriptorFound(),
-    new ProjectionFileMissing({ path: "/skills/review/SKILL.md" }),
+    new InstalledSkillFileMissing({ path: "/skills/review/SKILL.md" }),
     new HarnessMetadataInvalid({ path: "/skills/review/SKILL.md", kind: "SKILL.md frontmatter" }),
     new InvalidLibraryState({ path: "/home/.skit/state.json", detail: "schema v2" }),
   ]) {
@@ -137,7 +137,7 @@ it.effect("malformed direct Skill downloads preserve the validation exit code", 
       Layer.provideMerge(NodeHttpServer.layer(createServer, { port: 0 })),
     );
     const outcome = yield* Effect.scoped(
-      resolveSkitSourceEffect("https://example.com/SKILL.md").pipe(Effect.flip),
+      resolveSkitSource("https://example.com/SKILL.md").pipe(Effect.flip),
     ).pipe(Effect.provide(routes.pipe(Layer.provideMerge(client))), Effect.provide(skitLayer));
     expect(classifyFailure(outcome)).toMatchObject({ code: "VALIDATION_FAILED", exitCode: 65 });
   }),

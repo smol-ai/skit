@@ -1,8 +1,8 @@
 import { Schema } from "effect";
 import {
   Upstream,
-  remapBindingEntities,
-  type BindingEntry,
+  remapEnabled,
+  type Enabled,
   type CollectionId,
   type LibraryManifest,
   type LibraryState,
@@ -11,9 +11,9 @@ import {
 } from "@smolai/skit-core";
 
 /**
- * The published handles independently created local records adopt: Collections by upstream and
+ * The remote handles independently created local records adopt: Collections by upstream and
  * tracking, their Skills by path, then equivalent Versions by content. Version aliases name the
- * Skill by its published ID, so they apply after the Skill aliases.
+ * Skill by its remote ID, so they apply after the Skill aliases.
  */
 export interface LibraryAliases {
   readonly collections: readonly { readonly from: CollectionId; readonly to: CollectionId }[];
@@ -26,19 +26,19 @@ export interface LibraryAliases {
 }
 
 const sameContent = (left: SkillVersion, right: SkillVersion) =>
-  left.source_digest === right.source_digest &&
-  left.artifact_digest === right.artifact_digest &&
-  left.validation_identity_digest === right.validation_identity_digest &&
+  left.source_hash === right.source_hash &&
+  left.artifact_hash === right.artifact_hash &&
+  left.validation_identity_hash === right.validation_identity_hash &&
   left.materialization_profile === right.materialization_profile;
 
 const collectionId = (id: CollectionId, aliases: LibraryAliases) =>
   aliases.collections.find((alias) => alias.from === id)?.to ?? id;
 const skillId = (id: SkillId, aliases: LibraryAliases) =>
   aliases.skills.find((alias) => alias.from === id)?.to ?? id;
-const bindingEntry = (entry: BindingEntry, aliases: LibraryAliases): BindingEntry =>
-  entry.kind === "collection"
-    ? { ...entry, collection_id: collectionId(entry.collection_id, aliases) }
-    : { ...entry, skill_id: skillId(entry.skill_id, aliases) };
+const aliasEnabled = (item: Enabled, aliases: LibraryAliases): Enabled =>
+  "collection" in item
+    ? { collection: collectionId(item.collection, aliases) }
+    : { skill: skillId(item.skill, aliases) };
 
 /** Apply only observed Version aliases, including to the accepted base; never match by digest. */
 const aliasSkills = (skills: LibraryManifest["skills"], aliases: LibraryAliases) =>
@@ -72,8 +72,8 @@ const aliasSkills = (skills: LibraryManifest["skills"], aliases: LibraryAliases)
 
 /**
  * Only independently added Collections may adopt an existing upstream/tracking identity, and only
- * Skills new to both sides adopt a published Skill at the same path. Equivalent Versions then adopt
- * their published handles. Remote entities are never renamed.
+ * Skills new to both sides adopt a remote Skill at the same path. Equivalent Versions then adopt
+ * their remote handles. Remote entities are never renamed.
  */
 export function alignLibrary(
   local: LibraryManifest,
@@ -91,12 +91,12 @@ export function alignLibrary(
       )
     )
       continue;
-    const published = remote.collections.find(
+    const remoteMatch = remote.collections.find(
       (item) =>
         item.upstream !== undefined && Schema.toEquivalence(Upstream)(upstream, item.upstream),
     );
-    if (published === undefined) continue;
-    collections.push({ from: collection.collection_id, to: published.collection_id });
+    if (remoteMatch === undefined) continue;
+    collections.push({ from: collection.collection_id, to: remoteMatch.collection_id });
   }
   for (const skill of local.skills) {
     if ([...base.skills, ...remote.skills].some((item) => item.skill_id === skill.skill_id))
@@ -114,9 +114,9 @@ export function alignLibrary(
   }
   const versions: LibraryAliases["versions"][number][] = [];
   for (const skill of aliasSkills(local.skills, { collections, skills, versions: [] })) {
-    const published = remote.skills.find((candidate) => candidate.skill_id === skill.skill_id);
+    const remoteMatch = remote.skills.find((candidate) => candidate.skill_id === skill.skill_id);
     for (const version of skill.versions) {
-      const equivalent = published?.versions.find((candidate) => sameContent(version, candidate));
+      const equivalent = remoteMatch?.versions.find((candidate) => sameContent(version, candidate));
       if (equivalent !== undefined && equivalent.skill_version_id !== version.skill_version_id)
         versions.push({ skillId: skill.skill_id, from: version, to: equivalent });
     }
@@ -132,50 +132,47 @@ export function aliasManifest(manifest: LibraryManifest, aliases: LibraryAliases
       collection_id: collectionId(item.collection_id, aliases),
     })),
     skills: aliasSkills(manifest.skills, aliases),
-    acquisitions: manifest.acquisitions.map((item) => ({
+    imports: manifest.imports.map((item) => ({
       ...item,
       collection_id: collectionId(item.collection_id, aliases),
     })),
-    bindings: manifest.bindings.map((binding) => ({
-      ...binding,
-      entries: binding.entries.map((entry) => bindingEntry(entry, aliases)),
-    })),
+    enabled: manifest.enabled.map((item) => aliasEnabled(item, aliases)),
   };
 }
 
 /**
  * Device references move with the records they name, keeping their content. On-disk ownership of a
- * reidentified Skill must be retired before a state carrying these aliases is published.
+ * reidentified Skill must be retired before a state carrying these aliases is saved.
  */
 export function aliasDevice(state: LibraryState, aliases: LibraryAliases): LibraryState {
   return {
-    ...remapBindingEntities(state, aliases),
+    ...remapEnabled(state, aliases),
     collections: state.collections.map((item) => ({
       ...item,
       collection_id: collectionId(item.collection_id, aliases),
     })),
     skills: aliasSkills(state.skills, aliases),
-    acquisitions: state.acquisitions.map((item) => ({
+    imports: state.imports.map((item) => ({
       ...item,
       collection_id: collectionId(item.collection_id, aliases),
     })),
-    projections: state.projections.map((projection) => {
-      const skill = skillId(projection.skill_id, aliases);
+    installed_skills: state.installed_skills.map((installedSkill) => {
+      const skill = skillId(installedSkill.skill_id, aliases);
       return {
-        ...projection,
+        ...installedSkill,
         skill_id: skill,
         skill_version_id:
           aliases.versions.find(
             (alias) =>
               alias.skillId === skill &&
-              alias.from.skill_version_id === projection.skill_version_id,
-          )?.to.skill_version_id ?? projection.skill_version_id,
+              alias.from.skill_version_id === installedSkill.skill_version_id,
+          )?.to.skill_version_id ?? installedSkill.skill_version_id,
       };
     }),
-    ...(state.custodyIssues === undefined
+    ...(state.ownershipIssues === undefined
       ? {}
       : {
-          custodyIssues: state.custodyIssues.map((issue) => ({
+          ownershipIssues: state.ownershipIssues.map((issue) => ({
             ...issue,
             ...(issue.skillId === undefined ? {} : { skillId: skillId(issue.skillId, aliases) }),
             ...(issue.collectionId === undefined
@@ -193,7 +190,7 @@ export function aliasDevice(state: LibraryState, aliases: LibraryAliases): Libra
               aliases.versions.find(
                 (alias) =>
                   alias.from.skill_version_id === acceptance.skill_version_id &&
-                  alias.from.artifact_digest === acceptance.artifactContentDigest,
+                  alias.from.artifact_hash === acceptance.artifactContentHash,
               )?.to.skill_version_id ?? acceptance.skill_version_id,
           })),
         }),

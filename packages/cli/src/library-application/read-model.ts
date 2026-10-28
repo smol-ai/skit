@@ -6,7 +6,7 @@ import {
   type InvocationPolicyChoice,
   type InvocationReadModel,
 } from "../invocation/read-model.js";
-import type { SkitBindingScope as Scope } from "@smolai/skit-core";
+import type { InstallScope as Scope } from "@smolai/skit-core";
 
 export interface ScopeChoice {
   value: "global" | "repository";
@@ -15,7 +15,7 @@ export interface ScopeChoice {
   scope: Scope;
 }
 
-export interface InvocationBindingRow {
+export interface InvocationScopeRow {
   readonly scope: Scope;
   readonly policy?: InvocationReadModel;
 }
@@ -38,25 +38,25 @@ export function scopeChoices(cwd: string): ScopeChoice[] {
 
 export const DESTINATION_QUESTION = "Where should this change apply?";
 
-export function invocationEligibleBindings<T extends InvocationBindingRow>(row: {
-  readonly bindings: readonly T[];
+export function invocationEligibleScopes<T extends InvocationScopeRow>(row: {
+  readonly scopes: readonly T[];
 }): readonly T[] {
-  return row.bindings.filter((binding) => binding.policy !== undefined);
+  return row.scopes.filter((scopeRow) => scopeRow.policy !== undefined);
 }
 
 export type InvocationChoice = InvocationPolicyChoice;
 
-export function invocationChoices(binding: InvocationBindingRow): InvocationChoice[] {
-  return binding.policy ? invocationPolicyChoices(binding.policy) : [];
+export function invocationChoices(scopeRow: InvocationScopeRow): InvocationChoice[] {
+  return scopeRow.policy ? invocationPolicyChoices(scopeRow.policy) : [];
 }
 
-export function bindingRowLabel(binding: InvocationBindingRow): string {
+export function scopeRowLabel(scopeRow: InvocationScopeRow): string {
   return [
-    destinationLabel(binding.scope),
-    ...(binding.policy ? [invocationRowSummary(binding.policy)] : []),
+    destinationLabel(scopeRow.scope),
+    ...(scopeRow.policy ? [invocationRowSummary(scopeRow.policy)] : []),
   ].join(" · ");
 }
 
 export { destinationLabel, invocationBriefing, invocationRowSummary };
 
-export type { SkitBindingScope as Scope } from "@smolai/skit-core";
+export type { InstallScope as Scope } from "@smolai/skit-core";

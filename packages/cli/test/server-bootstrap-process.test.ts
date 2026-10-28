@@ -7,7 +7,7 @@ import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { consoleRendererLayer } from "../src/presentation/renderer.js";
 import {
   BootstrapExternalFailure,
-  bootstrapServerEffect,
+  bootstrapServer,
   bootstrapOperationsLayer,
 } from "../src/bootstrap/server-bootstrap.js";
 
@@ -41,7 +41,7 @@ it.effect("terminates a real Wrangler substitute that ignores SIGTERM", () =>
       Layer.provide(Layer.merge(registryHttpLayer(), consoleRendererLayer(true))),
       Layer.provide(Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner)),
     );
-    const fiber = yield* bootstrapServerEffect({ origin: "https://skit.example" }).pipe(
+    const fiber = yield* bootstrapServer({ origin: "https://skit.example" }).pipe(
       Effect.provide(layer),
       Effect.flip,
       Effect.forkChild,

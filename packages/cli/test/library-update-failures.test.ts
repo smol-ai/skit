@@ -6,11 +6,11 @@ import { HttpClient, HttpClientResponse } from "effect/http";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { InvalidLibraryState, LibraryStore, libraryStoreLayer } from "@smolai/skit-core";
-import { retainedTreePath } from "@smolai/skit-core";
-import { setLibraryBindings } from "./helpers/binding-changes.js";
+import { collectionVersionPath } from "@smolai/skit-core";
+import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { writingTo } from "./helpers/library-home.js";
-import { retainLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
-import { updateSubjectsEffect, updateExitCode } from "../src/library-application/update.js";
+import { importSource } from "../src/library-application/import-source.js";
+import { updateSubjects, updateExitCode } from "../src/library-application/update.js";
 import { silentLibraryProgressLayer } from "../src/library-application/progress.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 import { defaultTerminalEnvironment, renderResultFrame } from "../src/presentation/output-frame.js";
@@ -65,7 +65,7 @@ const fixture = Effect.gen(function* () {
       Effect.provide(libraryStoreLayer({ home })),
       Effect.provideService(HttpClient.HttpClient, client),
     );
-  for (const url of urls) yield* run(retainLibrarySourceEffect({ type: "archive", url }));
+  for (const url of urls) yield* run(importSource({ type: "archive", url }));
   const before = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
   bodies.set(urls[0]!, yield* archive("broken", true, "after"));
   bodies.set(urls[1]!, yield* archive("healthy", false, "after"));
@@ -84,7 +84,7 @@ it.effect("stops the batch when shared machine settings cannot be read", () =>
     yield* f.fs.writeFileString(join(f.home, "machine.json"), "invalid machine settings");
     const before = yield* f.fs.readFileString(join(f.home, "state.json"));
     const error = yield* f
-      .run(updateSubjectsEffect(f.options).pipe(Effect.provide(silentLibraryProgressLayer)))
+      .run(updateSubjects(f.options).pipe(Effect.provide(silentLibraryProgressLayer)))
       .pipe(Effect.flip);
     assert.strictEqual(error._tag, "MachineSettingsUnusable");
     assert.deepStrictEqual(f.requests, [f.urls[0]]);
@@ -105,7 +105,7 @@ it.effect(
         pathOrDescriptor: join(f.root, "source-temp"),
       });
       const outcomes = yield* f.run(
-        updateSubjectsEffect(f.options).pipe(
+        updateSubjects(f.options).pipe(
           Effect.provide(
             rendererTestLayer({
               withStatus: (status, operation) =>
@@ -142,105 +142,104 @@ it.effect(
     }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-for (const failurePhase of ["projection", "source-cleanup"] as const) {
-  it.effect(`repairs bound projections after ${failurePhase} failure with a current Source`, () =>
-    Effect.gen(function* () {
-      const f = yield* fixture;
-      const roots = { ...f.options.roots, overrides: { codex: [join(f.root, "codex")] } };
-      const options = { ...f.options, roots };
-      const collection = f.before.collections[0]!;
-      yield* writingTo(
-        f.home,
-        f.run(
-          setLibraryBindings({
-            query: collection.collection_id,
-            all: true,
-            roots,
-            variantsPath: options.variantsPath,
-            invocation: {
-              scope: { kind: "global" },
-              enabled: true,
-              dryRun: false,
-            },
-          }),
-        ),
-      );
-      const projectionPath = join(f.root, "codex", "broken", "SKILL.md");
-      const original = yield* f.fs.readFileString(projectionPath);
-      f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "after"));
-      let failed = false;
-      const outcomes = yield* f.run(
-        updateSubjectsEffect(options).pipe(
-          Effect.provide(
-            rendererTestLayer({
-              withStatus: (status, operation) =>
-                failurePhase === "source-cleanup" &&
-                typeof status !== "string" &&
-                status.pending === `${collection.label} · Fetching and inspecting Source`
-                  ? operation.pipe(
-                      Effect.ensuring(
-                        Effect.gen(function* () {
-                          failed = true;
-                          return yield* Effect.die(
-                            systemError({
-                              _tag: "PermissionDenied",
-                              module: "FileSystem",
-                              method: "makeTempDirectoryScoped",
-                              pathOrDescriptor: join(f.root, "source-temp"),
-                            }),
-                          );
-                        }),
-                      ),
-                    )
-                  : operation,
+for (const failurePhase of ["install", "source-cleanup"] as const) {
+  it.effect(
+    `repairs bound installed skills after ${failurePhase} failure with a current Source`,
+    () =>
+      Effect.gen(function* () {
+        const f = yield* fixture;
+        const roots = { ...f.options.roots, overrides: { codex: [join(f.root, "codex")] } };
+        const options = { ...f.options, roots };
+        const collection = f.before.collections[0]!;
+        yield* writingTo(
+          f.home,
+          f.run(
+            setLibraryEnabled({
+              query: collection.collection_id,
+              all: true,
+              roots,
+              variantsPath: options.variantsPath,
+              invocation: {
+                scope: { kind: "global" },
+                enabled: true,
+                dryRun: false,
+              },
             }),
           ),
-          Effect.provideService(FileSystem.FileSystem, {
-            ...f.fs,
-            makeTempDirectoryScoped: (input) =>
-              failurePhase === "projection" && input?.prefix === ".skit-stage-" && !failed
-                ? Effect.gen(function* () {
-                    failed = true;
-                    return yield* Effect.fail(
-                      systemError({
-                        _tag: "PermissionDenied",
-                        module: "FileSystem",
-                        method: "makeTempDirectoryScoped",
-                        pathOrDescriptor: join(f.root, "projection-stage"),
-                      }),
-                    );
-                  })
-                : f.fs.makeTempDirectoryScoped(input),
-          }),
-        ),
-      );
-      assert.isTrue(failed);
-      assert.isTrue("status" in outcomes[0]!);
-      if (!("status" in outcomes[0]!)) return;
-      assert.strictEqual(
-        outcomes[0].phase,
-        failurePhase === "projection" ? "projection" : "source",
-      );
-      assert.strictEqual(outcomes[0].source_retained, true);
-      assert.isTrue("changed" in outcomes[1]! && outcomes[1].changed);
-      assert.strictEqual(yield* f.fs.readFileString(projectionPath), original);
-      const retained = yield* f.run(Effect.flatMap(LibraryStore, (store) => store.load));
-      const retry = yield* writingTo(
-        f.home,
-        f.run(updateSubjectsEffect(options).pipe(Effect.provide(rendererTestLayer()))),
-      );
-      assert.isTrue("changed" in retry[0]! && !retry[0].changed && retry[0].projected === 1);
-      assert.include(yield* f.fs.readFileString(projectionPath), "after");
-      const after = yield* f.run(Effect.flatMap(LibraryStore, (store) => store.load));
-      assert.strictEqual(after.acquisitions.length, retained.acquisitions.length);
-      const unchanged = yield* writingTo(
-        f.home,
-        f.run(updateSubjectsEffect(options).pipe(Effect.provide(rendererTestLayer()))),
-      );
-      assert.isTrue(
-        unchanged.every((item) => "changed" in item && !item.changed && item.projected === 0),
-      );
-    }).pipe(Effect.provide(testPlatformLayer)),
+        );
+        const installedSkillPath = join(f.root, "codex", "broken", "SKILL.md");
+        const original = yield* f.fs.readFileString(installedSkillPath);
+        f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "after"));
+        let failed = false;
+        const outcomes = yield* f.run(
+          updateSubjects(options).pipe(
+            Effect.provide(
+              rendererTestLayer({
+                withStatus: (status, operation) =>
+                  failurePhase === "source-cleanup" &&
+                  typeof status !== "string" &&
+                  status.pending === `${collection.label} · Fetching and inspecting Source`
+                    ? operation.pipe(
+                        Effect.ensuring(
+                          Effect.gen(function* () {
+                            failed = true;
+                            return yield* Effect.die(
+                              systemError({
+                                _tag: "PermissionDenied",
+                                module: "FileSystem",
+                                method: "makeTempDirectoryScoped",
+                                pathOrDescriptor: join(f.root, "source-temp"),
+                              }),
+                            );
+                          }),
+                        ),
+                      )
+                    : operation,
+              }),
+            ),
+            Effect.provideService(FileSystem.FileSystem, {
+              ...f.fs,
+              makeTempDirectoryScoped: (input) =>
+                failurePhase === "install" && input?.prefix === ".skit-stage-" && !failed
+                  ? Effect.gen(function* () {
+                      failed = true;
+                      return yield* Effect.fail(
+                        systemError({
+                          _tag: "PermissionDenied",
+                          module: "FileSystem",
+                          method: "makeTempDirectoryScoped",
+                          pathOrDescriptor: join(f.root, "install-stage"),
+                        }),
+                      );
+                    })
+                  : f.fs.makeTempDirectoryScoped(input),
+            }),
+          ),
+        );
+        assert.isTrue(failed);
+        assert.isTrue("status" in outcomes[0]!);
+        if (!("status" in outcomes[0]!)) return;
+        assert.strictEqual(outcomes[0].phase, failurePhase === "install" ? "install" : "source");
+        assert.strictEqual(outcomes[0].source_imported, true);
+        assert.isTrue("changed" in outcomes[1]! && outcomes[1].changed);
+        assert.strictEqual(yield* f.fs.readFileString(installedSkillPath), original);
+        const imported = yield* f.run(Effect.flatMap(LibraryStore, (store) => store.load));
+        const retry = yield* writingTo(
+          f.home,
+          f.run(updateSubjects(options).pipe(Effect.provide(rendererTestLayer()))),
+        );
+        assert.isTrue("changed" in retry[0]! && !retry[0].changed && retry[0].installed === 1);
+        assert.include(yield* f.fs.readFileString(installedSkillPath), "after");
+        const after = yield* f.run(Effect.flatMap(LibraryStore, (store) => store.load));
+        assert.strictEqual(after.imports.length, imported.imports.length);
+        const unchanged = yield* writingTo(
+          f.home,
+          f.run(updateSubjects(options).pipe(Effect.provide(rendererTestLayer()))),
+        );
+        assert.isTrue(
+          unchanged.every((item) => "changed" in item && !item.changed && item.installed === 0),
+        );
+      }).pipe(Effect.provide(testPlatformLayer)),
   );
 }
 
@@ -252,7 +251,7 @@ for (const kind of ["defect", "interrupt"] as const) {
         kind === "defect" ? Effect.die(new Error("programming defect")) : Effect.interrupt;
       const exit = yield* Effect.exit(
         f.run(
-          updateSubjectsEffect(f.options).pipe(
+          updateSubjects(f.options).pipe(
             Effect.provide(rendererTestLayer({ withStatus: () => failure })),
           ),
         ),
@@ -278,7 +277,7 @@ it.effect("stops on typed filesystem errors in shared Library storage", () =>
     });
     const exit = yield* Effect.exit(
       f.run(
-        updateSubjectsEffect(f.options).pipe(
+        updateSubjects(f.options).pipe(
           Effect.provide(rendererTestLayer()),
           Effect.provideService(FileSystem.FileSystem, {
             ...f.fs,
@@ -315,7 +314,7 @@ it.effect("keeps candidate manifest validation failures local to their Collectio
     );
     f.bodies.set(f.urls[0]!, yield* f.fs.readFile(archivePath));
     const outcomes = yield* f.run(
-      updateSubjectsEffect(f.options).pipe(Effect.provide(rendererTestLayer())),
+      updateSubjects(f.options).pipe(Effect.provide(rendererTestLayer())),
     );
     assert.isTrue("status" in outcomes[0]!);
     if (!("status" in outcomes[0]!)) return;
@@ -334,7 +333,7 @@ it.effect("aborts the batch on typed shared state failures", () =>
       Effect.gen(function* () {
         const store = yield* LibraryStore;
         return yield* Effect.exit(
-          updateSubjectsEffect(f.options).pipe(
+          updateSubjects(f.options).pipe(
             Effect.provide(rendererTestLayer()),
             Effect.provideService(LibraryStore, {
               ...store,
@@ -364,16 +363,16 @@ it.effect("aborts the batch on typed shared state failures", () =>
 it.effect("stops on corruption of an existing retained object", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    const copy = f.before.retained_copies.find(
-      (copy) => copy.retained_copy_id === f.before.acquisitions[0]!.retained_copy_id,
+    const copy = f.before.collection_versions.find(
+      (copy) => copy.collection_version_id === f.before.imports[0]!.collection_version_id,
     )!;
     yield* f.fs.writeFileString(
-      join(retainedTreePath(join(f.home, "originals"), copy.digest), "a", "SKILL.md"),
+      join(collectionVersionPath(join(f.home, "originals"), copy.hash), "a", "SKILL.md"),
       "corrupted",
     );
     f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "before"));
     const exit = yield* Effect.exit(
-      f.run(updateSubjectsEffect(f.options).pipe(Effect.provide(rendererTestLayer()))),
+      f.run(updateSubjects(f.options).pipe(Effect.provide(rendererTestLayer()))),
     );
     assert.isTrue(Exit.isFailure(exit));
     if (Exit.isFailure(exit))

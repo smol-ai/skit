@@ -8,9 +8,9 @@ import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags } from "../../commands/parameters.js";
 import { result } from "../contracts.js";
-import { checkSubjectsEffect } from "../../workflows/library/check.js";
+import { checkSubjects } from "../../workflows/library/check.js";
 
-const subject = Argument.String("skit-or-skill").pipe(Argument.optional);
+const subject = Argument.String("skill-or-collection").pipe(Argument.optional);
 
 export const checkCliCommand = Command.make("check", { subject, ...localFlags }, (input) =>
   handleSourceCommand(
@@ -19,8 +19,8 @@ export const checkCliCommand = Command.make("check", { subject, ...localFlags },
       const store = yield* LibraryStore;
       const state = yield* store.load;
       const value = yield* renderer.withStatus(
-        "Checking retained Collection custody",
-        checkSubjectsEffect(state, Option.getOrUndefined(input.subject), (collection) =>
+        "Checking retained Collections",
+        checkSubjects(state, Option.getOrUndefined(input.subject), (collection) =>
           renderer.updateStatus(`Checking ${collection.display_name}`),
         ),
       );
@@ -28,7 +28,7 @@ export const checkCliCommand = Command.make("check", { subject, ...localFlags },
     }),
   ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
-  Command.withDescription("Check retained Library custody or verified source changes."),
+  Command.withDescription("Check the Library's stored files and whether their sources changed."),
   Command.withExamples([{ command: "skit check" }, { command: "skit check owner/tools" }]),
   Command.annotate(CommandMetadata, {
     effects: {

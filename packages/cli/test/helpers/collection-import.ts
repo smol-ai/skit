@@ -2,11 +2,8 @@ import { assert } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { LibraryStore, libraryStoreLayer, retainedTreePath } from "@smolai/skit-core";
-import {
-  retainLibrarySourceEffect,
-  previewLibrarySourceEffect,
-} from "../../src/library-application/source-acquisition.js";
+import { LibraryStore, libraryStoreLayer, collectionVersionPath } from "@smolai/skit-core";
+import { importSource, previewLibrarySource } from "../../src/library-application/import-source.js";
 import { writingTo } from "./library-home.js";
 
 export const gitBlobHash = (bytes: Uint8Array) =>
@@ -18,12 +15,12 @@ export const assertCollectionImport = Effect.fn("Test.assertCollectionImport")(f
 ) {
   const fs = yield* FileSystem.FileSystem;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-real-collection-" });
-  const preview = yield* previewLibrarySourceEffect(source);
+  const preview = yield* previewLibrarySource(source);
   assert.deepStrictEqual(
     preview.skills.map((skill) => skill.verbatim_path).toSorted(),
     [...expectedPaths].toSorted(),
   );
-  const added = yield* writingTo(home, retainLibrarySourceEffect(source));
+  const added = yield* writingTo(home, importSource(source));
   assert.deepStrictEqual(added.skills, preview.skills);
   const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
     Effect.provide(libraryStoreLayer({ home })),
@@ -31,7 +28,7 @@ export const assertCollectionImport = Effect.fn("Test.assertCollectionImport")(f
   assert.strictEqual(state.collections.length, 1);
   assert.strictEqual(state.skills.length, expectedPaths.length);
   assert.strictEqual(new Set(state.skills.map((skill) => skill.name)).size, state.skills.length);
-  const retained = retainedTreePath(join(home, "originals"), added.snapshot_digest);
-  assert.strictEqual(yield* fs.exists(join(retained, "plugins")), false);
-  return { preview, retained };
+  const imported = collectionVersionPath(join(home, "originals"), added.snapshot_digest);
+  assert.strictEqual(yield* fs.exists(join(imported, "plugins")), false);
+  return { preview, imported };
 });

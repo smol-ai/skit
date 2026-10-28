@@ -1,12 +1,12 @@
 import { join } from "node:path";
 import { Effect, FileSystem, Layer } from "effect";
 import {
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   libraryStoreLayer,
   LibraryStore,
   LinkStat,
   makeMachineId,
-  retainObservedCollectionEffect,
+  importCollection,
   withLibraryWriter,
 } from "@smolai/skit-core";
 import {
@@ -43,7 +43,7 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
       repositoryRoots: [],
     }),
   );
-  const retain = (collection: string, skills: readonly string[]) =>
+  const importSource = (collection: string, skills: readonly string[]) =>
     Effect.gen(function* () {
       const source = join(root, "sources", collection);
       for (const skill of skills) {
@@ -51,23 +51,24 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
         yield* fs.writeFileString(join(source, skill, "SKILL.md"), `${skill}\n`);
       }
       return yield* withLibraryWriter(
-        retainObservedCollectionEffect({
+        importCollection({
           source: { type: "local", path: source },
           input: source,
-          retainedAt: "2026-10-14T00:00:00.000Z",
+          importedAt: "2026-10-14T00:00:00.000Z",
           skills: yield* Effect.forEach(skills, (skill) =>
-            Effect.map(deterministicTreeHashEffect(join(source, skill)), (observedHash) => ({
+            Effect.map(deterministicTreeHash(join(source, skill)), (currentHash) => ({
               name: skill,
               sourcePath: join(source, skill),
               relativePath: skill,
-              observedHash,
+              currentHash,
             })),
           ),
-          observations: [],
+          lockFileEntries: [],
         }),
       ).pipe(Effect.provide(libraryStoreLayer({ home: skitHome })));
     });
-  for (const [collection, skills] of Object.entries(collections)) yield* retain(collection, skills);
+  for (const [collection, skills] of Object.entries(collections))
+    yield* importSource(collection, skills);
   const configuration = {
     home,
     configHome: join(home, ".config"),
@@ -86,8 +87,8 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
     skitHome,
     cwd,
     /** Retain another Collection, as a second front end writing to the same Library would. */
-    retain,
-    /** The projection options the TUI derives from its flags for this home. */
+    retain: importSource,
+    /** The installed-skill options the TUI derives from its flags for this home. */
     configuration,
     /** Enable a whole Collection in `scopes` through the session workflows the TUI confirms. */
     bind: (label: string, scopes: readonly Scope[]) =>

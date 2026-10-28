@@ -2,11 +2,13 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { LibraryStore, libraryStoreLayer, retainedTreePath, skitLayer } from "@smolai/skit-core";
 import {
-  retainLibrarySourceEffect,
-  previewLibrarySourceEffect,
-} from "../src/library-application/source-acquisition.js";
+  LibraryStore,
+  libraryStoreLayer,
+  collectionVersionPath,
+  skitLayer,
+} from "@smolai/skit-core";
+import { importSource, previewLibrarySource } from "../src/library-application/import-source.js";
 import { gitBlobHash } from "./helpers/collection-import.js";
 import { writingTo } from "./helpers/library-home.js";
 import manifest from "./fixtures/source-regressions/humanlayer.json" with { type: "json" };
@@ -29,9 +31,9 @@ it.effect(
         name: skill.name,
         verbatim_path: skill.path,
       }));
-      assert.deepStrictEqual((yield* previewLibrarySourceEffect(source)).skills, expected);
+      assert.deepStrictEqual((yield* previewLibrarySource(source)).skills, expected);
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-humanlayer-import-" });
-      const result = yield* writingTo(home, retainLibrarySourceEffect(source));
+      const result = yield* writingTo(home, importSource(source));
       assert.deepStrictEqual(result.skills, expected);
       const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
         Effect.provide(libraryStoreLayer({ home })),
@@ -41,11 +43,11 @@ it.effect(
         state.skills.map((skill) => skill.path),
         manifest.skills.map((skill) => skill.path),
       );
-      const retained = retainedTreePath(join(home, "originals"), result.snapshot_digest);
+      const imported = collectionVersionPath(join(home, "originals"), result.snapshot_digest);
       for (const file of manifest.files) {
         if (!manifest.skills.some((skill) => file.path.startsWith(`${skill.path}/`))) continue;
         assert.strictEqual(
-          gitBlobHash(yield* fs.readFile(join(retained, file.path))),
+          gitBlobHash(yield* fs.readFile(join(imported, file.path))),
           file.gitBlob,
           file.path,
         );

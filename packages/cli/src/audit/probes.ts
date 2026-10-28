@@ -34,7 +34,7 @@ const invocations: Record<string, Array<{ key: "plugins" | "mcpServers"; args: s
   ],
 };
 
-export const runAuditProbesEffect = Effect.fn("Audit.probes")(function* (options: ProbeOptions) {
+export const runAuditProbes = Effect.fn("Audit.probes")(function* (options: ProbeOptions) {
   const allowed = new Set(options.allowedSubprocesses ?? []);
   const run = Effect.fn("Audit.probe")(function* (args: string[]) {
     const invocation = args.join(" ");

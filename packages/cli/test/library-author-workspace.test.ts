@@ -5,15 +5,15 @@ import {
   COLLECTION_CONTROL_DIRECTORY,
   AUTHOR_WORKSPACE_METADATA_FILE,
   LibraryStore,
-  retainedTreePath,
+  collectionVersionPath,
   skitLayer,
 } from "@smolai/skit-core";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
-import { retainLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
-import { executeRemoveEffect } from "../src/workflows/library/remove.js";
+import { importSource } from "../src/library-application/import-source.js";
+import { executeRemove } from "../src/workflows/library/remove.js";
 import { systemError } from "effect/PlatformError";
 import {
-  ensureAuthorWorkspaceRegisteredEffect,
+  ensureAuthorWorkspaceRegistered,
   type AuthorWorkspaceOptions,
 } from "../src/library/author-workspace.js";
 import {
@@ -36,24 +36,24 @@ it.effect(
       const options = {
         workspaceId: () => `workspace_${"a".repeat(32)}`,
       };
-      const first = yield* home.owned(ensureAuthorWorkspaceRegisteredEffect(source, options));
+      const first = yield* home.owned(ensureAuthorWorkspaceRegistered(source, options));
       assert.ok(first.entry);
       assert.strictEqual(
         first.entry.collection?.upstream?.source_identity.kind,
         "authored-workspace",
       );
       const firstState = yield* home.owned(Effect.flatMap(LibraryStore, (store) => store.load));
-      assert.strictEqual(firstState.retained_copies.length, 1);
-      const firstTree = firstState.retained_copies[0];
+      assert.strictEqual(firstState.collection_versions.length, 1);
+      const firstTree = firstState.collection_versions[0];
       assert.ok(firstTree);
       assert.strictEqual(
-        yield* fs.exists(join(retainedTreePath(home.originals, firstTree.digest), "skit.json")),
+        yield* fs.exists(join(collectionVersionPath(home.originals, firstTree.hash), "skit.json")),
         true,
       );
 
       const skillPath = join(source, "skills", "review", "SKILL.md");
       yield* fs.writeFileString(skillPath, `${yield* fs.readFileString(skillPath)}\nUpdated.\n`);
-      const refreshed = yield* home.owned(ensureAuthorWorkspaceRegisteredEffect(source, options));
+      const refreshed = yield* home.owned(ensureAuthorWorkspaceRegistered(source, options));
       assert.ok(refreshed.entry);
       assert.strictEqual(
         refreshed.entry.collection?.collection_id,
@@ -63,7 +63,7 @@ it.effect(
       assert.strictEqual(state.collections.length, 1);
       // The refreshed tree is retained alongside the first.
       assert.deepStrictEqual(
-        state.retained_copies.map((copy) => copy.digest === firstTree.digest),
+        state.collection_versions.map((copy) => copy.hash === firstTree.hash),
         [true, false],
       );
       assert.strictEqual(state.skills.find((skill) => skill.name === "review")?.versions.length, 2);
@@ -79,7 +79,7 @@ const workspaceFixture = Effect.gen(function* () {
   yield* initializeLibraryMachine(home.home);
   const path = join(source, COLLECTION_CONTROL_DIRECTORY, AUTHOR_WORKSPACE_METADATA_FILE);
   const ensure = (options: AuthorWorkspaceOptions = {}) =>
-    home.owned(ensureAuthorWorkspaceRegisteredEffect(source, options));
+    home.owned(ensureAuthorWorkspaceRegistered(source, options));
   const metadata = fs.readFileString(path).pipe(
     Effect.flatMap(
       Schema.decodeUnknownEffect(
@@ -123,7 +123,7 @@ it.effect("rejects a copied workspace identity before scaffolding or publishing"
     yield* f.fs.copy(f.source, copy);
     const before = yield* captureDisk([f.source, copy, f.home.home], { identity: true });
     const failure = yield* Effect.flip(
-      f.home.owned(ensureAuthorWorkspaceRegisteredEffect(copy, { scaffold: true })),
+      f.home.owned(ensureAuthorWorkspaceRegistered(copy, { scaffold: true })),
     );
     assert.strictEqual(failure._tag, "AuthorWorkspaceAlreadyRegistered");
     yield* assertDiskUnchanged(before);
@@ -138,7 +138,7 @@ it.effect("removal requires explicit re-registration and preserves workspace ide
     const identity = (yield* f.metadata).workspace_id;
     const state = yield* f.home.durable;
     yield* f.home.owned(
-      executeRemoveEffect(state, { query: first.entry.collection.collection_id, dryRun: false }),
+      executeRemove(state, { query: first.entry.collection.collection_id, dryRun: false }),
     );
     assert.strictEqual((yield* f.metadata).registration, "removed");
     assert.strictEqual((yield* f.ensure()).entry, undefined);
@@ -165,7 +165,7 @@ it.effect("removal leaves a different workspace identity untouched", () =>
     });
     yield* f.fs.writeFileString(f.path, replacement);
     yield* f.home.owned(
-      executeRemoveEffect(yield* f.home.durable, {
+      executeRemove(yield* f.home.durable, {
         query: first.entry.collection.collection_id,
         dryRun: false,
       }),
@@ -201,16 +201,16 @@ it.effect(
       assert.strictEqual(failure._tag, "PlatformError");
       const pending = yield* f.metadata;
       assert.strictEqual(pending.registration, undefined);
-      const retained = yield* f.home.durable;
-      assert.strictEqual(retained.collections.length, 1);
-      const copy = retained.retained_copies[0]!;
+      const imported = yield* f.home.durable;
+      assert.strictEqual(imported.collections.length, 1);
+      const copy = imported.collection_versions[0]!;
       assert.isTrue(
-        yield* f.fs.exists(join(retainedTreePath(f.home.originals, copy.digest), "skit.json")),
+        yield* f.fs.exists(join(collectionVersionPath(f.home.originals, copy.hash), "skit.json")),
       );
       const retried = yield* f.ensure();
       assert.strictEqual(
         retried.entry?.collection.collection_id,
-        retained.collections[0]?.collection_id,
+        imported.collections[0]?.collection_id,
       );
       assert.strictEqual((yield* f.metadata).workspace_id, pending.workspace_id);
       assert.strictEqual((yield* f.metadata).registration, "registered");
@@ -222,10 +222,10 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* workspaceFixture;
-      yield* f.home.owned(retainLibrarySourceEffect(f.source));
+      yield* f.home.owned(importSource(f.source));
       const before = yield* captureDisk([f.source, f.home.home], { identity: true });
       const failure = yield* Effect.flip(f.ensure({ scaffold: true }));
-      assert.strictEqual(failure._tag, "DirectoryAlreadyRetained");
+      assert.strictEqual(failure._tag, "DirectoryAlreadyInLibrary");
       yield* assertDiskUnchanged(before);
       assert.isFalse(yield* f.fs.exists(f.path));
     }).pipe(Effect.provide(skitLayer), Effect.scoped),

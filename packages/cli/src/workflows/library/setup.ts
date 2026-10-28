@@ -1,21 +1,21 @@
 import { join } from "node:path";
 import { withConfigurationWriter } from "../../configuration-writer.js";
 import { Data, Effect } from "effect";
-import { canonicalJson, Digest, hashParts, libraryStateRevision } from "@smolai/skit-core";
-import { isEntryLink, observeHarnessShadows } from "../../projection/harness-shadows.js";
+import { canonicalJson, Hash, hashParts, libraryStateRevision } from "@smolai/skit-core";
+import { isEntryLink, findDuplicates } from "../../install/duplicates.js";
 import {
-  activeProjectionTargetsEffect,
-  bindingRoot,
+  activeInstallDestinations,
+  skillsDirectoryFor,
   type InventoryRootOptions,
-} from "../../projection/roots.js";
+} from "../../install/roots.js";
 import type { SetupResult } from "./setup-contract.js";
 import { collectBrokenLinks, SetupDiscovery, suggestRepositoryRoots } from "./setup-discovery.js";
-import { observeSetupCopies } from "./setup-observation.js";
+import { scanSetupCopies } from "./setup-scan.js";
 import {
-  observeSetupReconciliation,
-  setupReconciliationChanges,
-  unresolvedSetupReconciliation,
-} from "./setup-reconciliation.js";
+  findInstalledSkillChanges,
+  hasChangesToApply,
+  changesNeedingChoice,
+} from "./installed-skill-changes.js";
 import { classifySetupOnboarding } from "./setup-onboarding.js";
 import {
   copyConflict,
@@ -24,15 +24,19 @@ import {
   setupDuplicateChoiceRequired,
 } from "./setup-decisions.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
-export { collectHarnessRoots, saveSetupMachineConfig, SetupDiscovery } from "./setup-discovery.js";
-export { classifyObservedOwner, isSetupCandidateFromCodex } from "./setup-onboarding.js";
+export {
+  collectSkillsDirectories,
+  saveSetupMachineConfig,
+  SetupDiscovery,
+} from "./setup-discovery.js";
+export { classifyOwner, isSetupCandidateFromCodex } from "./setup-onboarding.js";
 export { classifySetupOnboarding, setupInstanceGroupKey } from "./setup-onboarding.js";
 export { setupLockCollection, setupLockGroupKey } from "./skills-sh-lock-source.js";
 export { computeSkillsShCompatibleHash as computeSkillsLockCompatibleHash } from "./skills-sh-compatible-hash.js";
 export class SetupPlanStale
   extends Data.TaggedError("SetupPlanStale")<{
-    approvedPlanId: typeof Digest.Type;
-    currentPlanId: typeof Digest.Type;
+    approvedPlanId: typeof Hash.Type;
+    currentPlanId: typeof Hash.Type;
   }>
   implements SkitFailure
 {
@@ -62,7 +66,7 @@ export interface SetupOptions {
 }
 
 /** One full setup scan, and the Library state its plan was made against. */
-const observeSetup = Effect.fn("Library.setup")(
+const scanForSetup = Effect.fn("Library.setup")(
   function* (options: SetupOptions) {
     const evidence = yield* (yield* SetupDiscovery).collect(options);
     const {
@@ -78,7 +82,7 @@ const observeSetup = Effect.fn("Library.setup")(
       discoveryComplete,
       locks,
     } = evidence;
-    const { instances, onboardingInstances, probes, projections } = yield* observeSetupCopies(
+    const { instances, onboardingInstances, probes, installedSkills } = yield* scanSetupCopies(
       evidence,
       options.inventory.home,
       options.probePath,
@@ -97,29 +101,29 @@ const observeSetup = Effect.fn("Library.setup")(
         ),
       )
       .map((candidate) => candidate.name);
-    const shadows = globalNames.length
-      ? yield* observeHarnessShadows(options.inventory, { kind: "global" }, globalNames)
+    const duplicates = globalNames.length
+      ? yield* findDuplicates(options.inventory, { kind: "global" }, globalNames)
       : [];
-    const targets = shadows.length ? yield* activeProjectionTargetsEffect(options.inventory) : [];
+    const targets = duplicates.length ? yield* activeInstallDestinations(options.inventory) : [];
     const onboarding = candidates.map((candidate) => {
-      const matches = shadows.filter((shadow) => shadow.name === candidate.name);
+      const matches = duplicates.filter((duplicate) => duplicate.name === candidate.name);
       if (!matches.length) return candidate;
       const destinations = targets.map((target) =>
-        join(bindingRoot(target, { kind: "global" }, options.inventory), candidate.name),
+        join(skillsDirectoryFor(target, { kind: "global" }, options.inventory), candidate.name),
       );
-      const destinationLinks = matches.flatMap((shadow) =>
-        shadow.aliases
+      const destinationLinks = matches.flatMap((duplicate) =>
+        duplicate.aliases
           .filter((alias) => isEntryLink(alias) && destinations.includes(alias.path))
           .map((alias) => alias.path),
       );
       return {
         ...candidate,
-        shadows: matches,
+        duplicates: matches,
         ...(destinationLinks.length ? { destinationLinks } : {}),
       };
     });
     const sortedInstances = instances.sort((left, right) => left.path.localeCompare(right.path));
-    const reconciliation = yield* observeSetupReconciliation(
+    const installedSkillChanges = yield* findInstalledSkillChanges(
       library,
       options.inventory,
       sortedInstances,
@@ -133,7 +137,7 @@ const observeSetup = Effect.fn("Library.setup")(
       canonicalJson({
         candidates: onboarding,
         instances: sortedInstances,
-        reconciliation,
+        reconciliation: installedSkillChanges,
         repositoryConfigs,
         discoveryRoots,
         repositoryDecisions: [...existingDecisions].sort(([left], [right]) =>
@@ -150,7 +154,7 @@ const observeSetup = Effect.fn("Library.setup")(
           .map(([path]) => path)
           .sort()
       : [];
-    const observed = {
+    const scan = {
       machineConfig: {
         path: machineConfig.path,
         ...(machineConfig.machineId === undefined ? {} : { machineId: machineConfig.machineId }),
@@ -195,7 +199,7 @@ const observeSetup = Effect.fn("Library.setup")(
       // internal inventory for planning above, but expose only configured or invalid repositories.
       repositoryConfigs: repositoryConfigs.filter((config) => config.status !== "missing"),
       authoredCollections,
-      projections: projections.sort((left, right) =>
+      installedSkills: installedSkills.sort((left, right) =>
         `${left.collectionId}\0${left.skillId}\0${left.path ?? ""}`.localeCompare(
           `${right.collectionId}\0${right.skillId}\0${right.path ?? ""}`,
         ),
@@ -203,10 +207,10 @@ const observeSetup = Effect.fn("Library.setup")(
       onboarding: {
         planId,
         candidates: onboarding,
-        ...(!unresolvedSetupReconciliation(reconciliation).length &&
+        ...(!changesNeedingChoice(installedSkillChanges).length &&
         (recommended.sources.length ||
           recommended.copies.length ||
-          setupReconciliationChanges(reconciliation))
+          hasChangesToApply(installedSkillChanges))
           ? {
               applyCommand: setupApplyCommandLine({
                 planId,
@@ -226,28 +230,28 @@ const observeSetup = Effect.fn("Library.setup")(
       },
       locks: [...locks].sort((left, right) => left.path.localeCompare(right.path)),
       instances: sortedInstances,
-      reconciliation,
+      changes: installedSkillChanges,
       brokenLinks: yield* collectBrokenLinks(harnessRoots),
       suppressed: walk.suppressed,
     } satisfies SetupResult;
-    return { observed, library };
+    return { scan, library };
   },
   (effect, options) =>
     options.persistRoots ? withConfigurationWriter(options.libraryHome, effect) : effect,
 );
 
 export const runSetup = (options: SetupOptions) =>
-  Effect.map(observeSetup(options), (scan) => scan.observed);
+  Effect.map(scanForSetup(options), (result) => result.scan);
 
 /** Scan once more and hold it to the approved plan ID; a new plan never inherits consent. */
 export const revalidateSetupPlan = Effect.fn("Setup.revalidatePlan")(function* (
   options: SetupOptions,
-  approvedPlanId: typeof Digest.Type,
+  approvedPlanId: typeof Hash.Type,
 ) {
-  const current = yield* observeSetup({ ...options, persistRoots: false });
-  if (current.observed.onboarding.planId !== approvedPlanId)
+  const current = yield* scanForSetup({ ...options, persistRoots: false });
+  if (current.scan.onboarding.planId !== approvedPlanId)
     return yield* Effect.fail(
-      new SetupPlanStale({ approvedPlanId, currentPlanId: current.observed.onboarding.planId }),
+      new SetupPlanStale({ approvedPlanId, currentPlanId: current.scan.onboarding.planId }),
     );
   return current;
 });

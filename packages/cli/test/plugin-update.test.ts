@@ -5,9 +5,9 @@ import { HttpClient, HttpClientResponse } from "effect/http";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { currentCollectionSkills, LibraryStore, libraryStoreLayer } from "@smolai/skit-core";
-import { retainLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
-import { planUpdatesEffect, updateSubjectsEffect } from "../src/library-application/update.js";
-import { setLibraryBindings } from "./helpers/binding-changes.js";
+import { importSource } from "../src/library-application/import-source.js";
+import { planUpdates, updateSubjects } from "../src/library-application/update.js";
+import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { writingTo } from "./helpers/library-home.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 
@@ -53,7 +53,7 @@ it.effect(
           Effect.provide(rendererTestLayer()),
         );
       const added = yield* run(
-        retainLibrarySourceEffect({ type: "archive", url: "https://fixtures.test/plugins.tar" }),
+        importSource({ type: "archive", url: "https://fixtures.test/plugins.tar" }),
       );
       const collectionId = added.collection_id!;
       const roots = {
@@ -65,7 +65,7 @@ it.effect(
       yield* writingTo(
         home,
         run(
-          setLibraryBindings({
+          setLibraryEnabled({
             query: collectionId,
             all: true,
             roots,
@@ -85,15 +85,15 @@ it.effect(
       yield* skill("plugins/tools/skills/added", "added");
       yield* fs.remove(join(source, "skills/deleted"), { recursive: true });
       bytes = yield* archive();
-      const preview = yield* run(planUpdatesEffect());
+      const preview = yield* run(planUpdates());
       assert.deepStrictEqual(preview[0]?.removed, ["deleted"]);
       assert.deepStrictEqual(preview[0]?.enabled, ["added"]);
-      const outcomes = yield* run(updateSubjectsEffect({ roots }));
+      const outcomes = yield* run(updateSubjects({ roots }));
       assert.strictEqual(outcomes.length, 1);
       assert.isFalse("status" in outcomes[0]!);
       const after = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
       assert.deepStrictEqual(after.collections, before.collections);
-      assert.deepStrictEqual(after.global_bindings, before.global_bindings);
+      assert.deepStrictEqual(after.enabled, before.enabled);
       assert.deepStrictEqual(
         currentCollectionSkills(after, collectionId)
           .map((entry) => entry.path)
@@ -113,12 +113,12 @@ it.effect(
       assert.isTrue(yield* fs.exists(join(root, "codex/legacy/SKILL.md")));
       assert.isTrue(yield* fs.exists(join(root, "codex/added/SKILL.md")));
       assert.isFalse(yield* fs.exists(join(root, "codex/deleted")));
-      const retry = yield* run(updateSubjectsEffect({ roots }));
+      const retry = yield* run(updateSubjects({ roots }));
       assert.isTrue("changed" in retry[0]! && retry[0].changed === false);
       const beforeConflict = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
       yield* skill("plugins/tools/skills/review", "review", "A different variant");
       bytes = yield* archive();
-      const conflicted = yield* run(updateSubjectsEffect({ roots }));
+      const conflicted = yield* run(updateSubjects({ roots }));
       assert.isFalse("status" in conflicted[0]!);
       if ("changed" in conflicted[0]!) {
         assert.strictEqual(conflicted[0].changed, false);

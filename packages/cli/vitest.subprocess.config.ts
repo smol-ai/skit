@@ -3,7 +3,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     include: [
-      "test/add-acquisition-lifetime.test.ts",
+      "test/add-source-lifetime.test.ts",
       "test/add-cli-lifetime.test.ts",
       "test/add-git-parity.test.ts",
       "test/application-cli.test.ts",
@@ -16,7 +16,7 @@ export default defineConfig({
       "test/native-probes.test.ts",
       "test/server-bootstrap-process.test.ts",
       "test/single-machine-journey.test.ts",
-      "test/source-acquisition.test.ts",
+      "test/import-source.test.ts",
     ],
     setupFiles: ["../../vitest.isolated-home.ts"],
     testTimeout: 30_000,

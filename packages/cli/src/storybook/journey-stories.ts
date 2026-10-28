@@ -8,11 +8,11 @@ import {
   LibraryStore,
   libraryAuditLogLayer,
   libraryStoreLayer,
-  makeAcquisitionId,
+  makeImportId,
   makeCollectionId,
   makeMachineId,
-  makeProjectionId,
-  makeRetainedCopyId,
+  makeInstalledSkillId,
+  makeCollectionVersionId,
   makeSkillId,
   makeSkillVersionId,
   skitLayer,
@@ -34,15 +34,15 @@ export interface JourneyStory<A, E, R> {
   readonly finalState: (result: A) => string;
 }
 
-const digest = `sha256:${"0".repeat(64)}`;
+const hash = `sha256:${"0".repeat(64)}`;
 const collectionId = makeCollectionId();
-const retainedTreeId = makeRetainedCopyId();
+const collectionVersionId = makeCollectionVersionId();
 const skillVersionId = makeSkillVersionId();
 const skillId = makeSkillId();
-const acquisitionId = makeAcquisitionId();
+const importId = makeImportId();
 const machineId = makeMachineId();
 const storyState = Schema.decodeUnknownSync(LibraryState)({
-  schemaVersion: 9,
+  schemaVersion: 10,
   collections: [
     {
       collection_id: collectionId,
@@ -58,49 +58,49 @@ const storyState = Schema.decodeUnknownSync(LibraryState)({
       versions: [
         {
           skill_version_id: skillVersionId,
-          source_digest: digest,
-          artifact_digest: digest,
-          validation_identity_digest: digest,
+          source_hash: hash,
+          artifact_hash: hash,
+          validation_identity_hash: hash,
           materialization_profile: "plain-skill/v1",
         },
       ],
     },
   ],
-  retained_copies: [
+  collection_versions: [
     {
-      retained_copy_id: retainedTreeId,
-      digest,
+      collection_version_id: collectionVersionId,
+      hash: hash,
       copy_profile: "verbatim/v1",
       members: [
         {
           source_path: ".",
-          source_digest: digest,
-          artifact_digest: digest,
+          source_hash: hash,
+          artifact_hash: hash,
           materialization_profile: "plain-skill/v1",
         },
       ],
     },
   ],
-  acquisitions: [
+  imports: [
     {
-      acquisition_id: acquisitionId,
+      import_id: importId,
       collection_id: collectionId,
       kind: "source",
-      retained_copy_id: retainedTreeId,
+      collection_version_id: collectionVersionId,
       input: { value: "/fixtures/review" },
       source_identity: {
         kind: "local",
         machine_id: machineId,
         path: { value: "/fixtures/review" },
       },
-      acquired_at: "2026-01-01T00:00:00.000Z",
+      imported_at: "2026-01-01T00:00:00.000Z",
       machine_id: machineId,
-      observations: [],
+      lock_file_entries: [],
     },
   ],
-  global_bindings: [],
-  local_bindings: [],
-  projections: [],
+  enabled: [],
+  repositories: [],
+  installed_skills: [],
   unmanaged: [],
   adoption_receipts: [],
 });
@@ -120,7 +120,7 @@ const previewEnable = Effect.scoped(
     });
     return yield* Effect.gen(function* () {
       const store = yield* LibraryStore;
-      yield* store.publish(storyState, yield* store.load);
+      yield* store.save(storyState, yield* store.load);
       yield* presentSetEnabled({
         action: "enable",
         enabled: true,
@@ -153,24 +153,22 @@ const previewDoctorCleanup = Effect.scoped(
     };
     return yield* Effect.gen(function* () {
       const store = yield* LibraryStore;
-      yield* store.publish(
+      yield* store.save(
         {
           ...storyState,
-          global_bindings: [
-            { scope: { kind: "global" }, entries: [{ kind: "skill", skill_id: skillId }] },
-          ],
-          projections: [
+          enabled: [{ skill: skillId }],
+          installed_skills: [
             {
-              projection_id: makeProjectionId(),
+              installed_skill_id: makeInstalledSkillId(),
               skill_id: skillId,
               skill_version_id: skillVersionId,
-              target: "agents",
+              destination: "agents",
               root: skillsRoot,
               path,
-              expected_digest: digest,
-              observed_digest: digest,
+              expected_hash: hash,
+              current_hash: hash,
               status: "installed",
-              projected_at: "2026-10-18T00:00:00.000Z",
+              installed_at: "2026-10-18T00:00:00.000Z",
             },
           ],
         },
@@ -231,7 +229,7 @@ export const journeyStories: ReadonlyArray<JourneyStory<string, unknown, Prompte
     run: previewEnable.pipe(
       Effect.map(
         (state) =>
-          `${state.skills.length} Skill · ${state.skills.flatMap((skill) => skill.bindings).length} Bindings`,
+          `${state.skills.length} Skill · ${state.skills.flatMap((skill) => skill.scopes).length} Bindings`,
       ),
     ),
     finalState: (state) => state,

@@ -59,9 +59,9 @@ function libraryFailures(
   library: LibraryObservation,
   expected: {
     skills: readonly string[];
-    projections: readonly { target: string; path: string }[];
+    installedSkills: readonly { target: string; path: string }[];
     /** Skills kept in the Library that no agent may see through a skit copy. */
-    retainedOnly?: readonly string[];
+    importOnly?: readonly string[];
   },
 ): string[] {
   if (!library.exists) return ["no Library: setup was not applied"];
@@ -69,24 +69,28 @@ function libraryFailures(
     ...expected.skills
       .filter((name) => !library.skills.includes(name))
       .map((name) => `Library is missing ${name}`),
-    ...expected.projections
+    ...expected.installedSkills
       .filter(
         (want) =>
-          !library.projections.some(
+          !library.installedSkills.some(
             (have) =>
               have.target === want.target && have.path === want.path && have.status === "installed",
           ),
       )
       .map((want) => `no installed ${want.target} copy at ${want.path}`),
-    ...library.projections
-      .filter((projection) => projection.status !== "installed")
+    ...library.installedSkills
+      .filter((installedSkill) => installedSkill.status !== "installed")
       .map(
-        (projection) => `${projection.target} copy at ${projection.path} is ${projection.status}`,
+        (installedSkill) =>
+          `${installedSkill.target} copy at ${installedSkill.path} is ${installedSkill.status}`,
       ),
-    ...(expected.retainedOnly ?? []).flatMap((name) =>
-      library.projections
-        .filter((projection) => projection.path.endsWith(`/${name}`))
-        .map((projection) => `${name} should be kept only, but has a copy at ${projection.path}`),
+    ...(expected.importOnly ?? []).flatMap((name) =>
+      library.installedSkills
+        .filter((installedSkill) => installedSkill.path.endsWith(`/${name}`))
+        .map(
+          (installedSkill) =>
+            `${name} should be kept only, but has a copy at ${installedSkill.path}`,
+        ),
     ),
   ];
 }
@@ -107,7 +111,7 @@ export const baseCase: EvalCase = {
   verify: ({ observation }) =>
     libraryFailures(observation.library, {
       skills: ["release-notes"],
-      projections: [
+      installedSkills: [
         { target: "agents", path: ".agents/skills/release-notes" },
         { target: "claude", path: ".claude/skills/release-notes" },
       ],
@@ -131,13 +135,13 @@ export const messyHomeCase: EvalCase = {
   verify: ({ observation }) => [
     ...libraryFailures(observation.library, {
       skills: ["commit", "release-notes", "standup", "web-design-guidelines"],
-      projections: [
+      installedSkills: [
         { target: "agents", path: ".agents/skills/commit" },
         { target: "claude", path: ".claude/skills/commit" },
         { target: "agents", path: ".agents/skills/release-notes" },
         { target: "claude", path: ".claude/skills/release-notes" },
       ],
-      retainedOnly: ["standup"],
+      importOnly: ["standup"],
     }),
     ...(observation.repositoryRoots.includes("Work") ? [] : ["skit does not scan ~/Work"]),
   ],

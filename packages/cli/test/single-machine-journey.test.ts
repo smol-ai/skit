@@ -48,7 +48,11 @@ test("a Library Owner can manage a Skill through its complete single-machine lif
     return Schema.decodeUnknownSync(contract.schema)(envelope.data);
   }
 
-  expect(succeed(outputContracts.list, "list")).toMatchObject({ subjects: [], bindings: [] });
+  expect(succeed(outputContracts.list, "list")).toMatchObject({
+    subjects: [],
+    enabled: [],
+    enabled_skills: [],
+  });
 
   const added = succeed(outputContracts.add, "add", source);
   const collectionId = added.collection_id;
@@ -56,7 +60,7 @@ test("a Library Owner can manage a Skill through its complete single-machine lif
   const initialList = succeed(outputContracts.list, "list");
   expect(initialList).toMatchObject({
     subjects: [expect.objectContaining({ subject_id: collectionId })],
-    bindings: [],
+    enabled: [],
   });
   const skill = initialList.subjects[0]?.skills.find(
     (candidate) => candidate.name === "code-review",
@@ -67,12 +71,7 @@ test("a Library Owner can manage a Skill through its complete single-machine lif
     "# Code Review",
   );
   expect(existsSync(join(codexRoot, "code-review", "agents", "openai.yaml"))).toBe(false);
-  expect(succeed(outputContracts.list, "list").bindings).toEqual([
-    expect.objectContaining({
-      scope: { kind: "global" },
-      skills: [skill!.skill_id],
-    }),
-  ]);
+  expect(succeed(outputContracts.list, "list").enabled_skills).toEqual([skill!.skill_id]);
 
   const overridden = succeed(
     outputContracts.enable,
@@ -81,23 +80,23 @@ test("a Library Owner can manage a Skill through its complete single-machine lif
     "--invocation",
     "implicit",
   );
-  expect(overridden.bindings).toEqual([
-    expect.objectContaining({ invocation_policies: { [skill!.skill_id]: "implicit" } }),
-  ]);
+  expect(overridden.invocation_policies).toEqual({ [skill!.skill_id]: "implicit" });
   expect(await readFile(join(codexRoot, "code-review", "agents", "openai.yaml"), "utf8")).toContain(
     "allow_implicit_invocation: true",
   );
 
   const reset = succeed(outputContracts.enable, "enable", skill!.name, "--invocation", "declared");
-  expect(reset.bindings).toEqual([
-    expect.not.objectContaining({ invocation_policies: expect.anything() }),
-  ]);
+  expect(reset.invocation_policies).toBeUndefined();
   expect(existsSync(join(codexRoot, "code-review", "agents", "openai.yaml"))).toBe(false);
 
   succeed(outputContracts.disable, "disable", skill!.name);
   expect(existsSync(join(codexRoot, "code-review"))).toBe(false);
-  expect(succeed(outputContracts.list, "list").bindings).toEqual([]);
+  expect(succeed(outputContracts.list, "list").enabled).toEqual([]);
 
   succeed(outputContracts.remove, "remove", collectionId);
-  expect(succeed(outputContracts.list, "list")).toMatchObject({ subjects: [], bindings: [] });
+  expect(succeed(outputContracts.list, "list")).toMatchObject({
+    subjects: [],
+    enabled: [],
+    enabled_skills: [],
+  });
 }, 30_000);

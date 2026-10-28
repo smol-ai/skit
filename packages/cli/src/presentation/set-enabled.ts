@@ -1,10 +1,10 @@
 import type {
-  SetEnabledPlan,
+  SetEnabledChange,
   SetEnabledResult,
 } from "../workflows/library/set-enabled-contract.js";
 
 export function renderSetEnabled(
-  data: SetEnabledPlan | SetEnabledResult,
+  data: SetEnabledChange | SetEnabledResult,
   applied: boolean,
 ): string {
   const application = "application" in data ? data.application : undefined;
@@ -31,23 +31,23 @@ export function renderSetEnabled(
     incomplete || data.changed
       ? ""
       : `${data.enabled ? " · Already enabled" : " · Already disabled"}${data.repair ? (applied ? " · Copies repaired" : " · Copies need repair") : ""}`;
-  const shadows = data.shadows ?? [];
-  const warning = shadows.length
-    ? `\n${applied ? "Allowed duplicate copies" : "Blocked unless --allow-duplicate"}:\n${shadows.flatMap((shadow) => shadow.aliases.map((alias) => `  ${shadow.name} (${shadow.harness}): ${alias.path}${alias.via === "symlink" ? ` → ${shadow.canonicalPath} (symlink)` : " (directory)"}`)).join("\n")}`
+  const duplicates = data.duplicates ?? [];
+  const warning = duplicates.length
+    ? `\n${applied ? "Allowed duplicate copies" : "Blocked unless --allow-duplicate"}:\n${duplicates.flatMap((duplicate) => duplicate.aliases.map((alias) => `  ${duplicate.name} (${duplicate.harness}): ${alias.path}${alias.via === "symlink" ? ` → ${duplicate.canonicalPath} (symlink)` : " (directory)"}`)).join("\n")}`
     : "";
   const warnings = data.warnings
     ?.map((warning) => `Could not inspect ${warning.path}: ${warning.message}`)
     .join("\n");
   const notInstalled =
-    "projections" in data && data.enabled
-      ? data.projections.filter((projection) => projection.status !== "installed")
+    "installed_skills" in data && data.action === "enable"
+      ? data.installed_skills.filter((copy) => copy.status !== "installed")
       : [];
   const notInstalledLines = notInstalled.length
-    ? `\nDestinations not recorded installed:\n${notInstalled.map((projection) => `  ${projection.target} · ${projection.status} · ${projection.path}`).join("\n")}`
+    ? `\nDestinations not recorded installed:\n${notInstalled.map((copy) => `  ${copy.destination} · ${copy.status} · ${copy.path}`).join("\n")}`
     : "";
   const unmanaged = applied ? [] : (data.unmanaged_destinations ?? []);
   const unmanagedLines = unmanaged.length
-    ? `\nA folder SKIT does not manage is already there; enable adopts it only if it is identical, otherwise it is left in place:\n${unmanaged.map((folder) => `  ${folder.target} · ${folder.path}`).join("\n")}`
+    ? `\nA folder SKIT does not manage is already there; enable manages it only if it is identical, otherwise it is left in place:\n${unmanaged.map((folder) => `  ${folder.destination} · ${folder.path}`).join("\n")}`
     : "";
   const completion = incomplete
     ? `\nInstalled copies need attention. ${application.failure?.message ?? "Reconciliation did not complete."}\n${application.failure?.remediation ?? "Inspect the copies, then preview and retry."}\nSaved Library revision: ${application.revision}`

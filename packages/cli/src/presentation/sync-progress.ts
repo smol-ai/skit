@@ -1,5 +1,5 @@
-import type { RestoreObserver, RestorePhase } from "@smolai/skit-core";
-import type { SyncObserver, SyncPhase } from "../workflows/library/library-sync-progress.js";
+import type { RestoreProgress, RestorePhase } from "@smolai/skit-core";
+import type { SyncProgress, SyncPhase } from "../workflows/library/library-sync-progress.js";
 import type { RendererShape } from "./renderer.js";
 
 const copies = (count: number, qualifier = "Skill") =>
@@ -20,8 +20,8 @@ const syncStatus = (phase: SyncPhase) => {
       return { pending: "Planning Library sync", complete: "Compared Library changes" };
     case "check-destinations":
       return { pending: "Checking Skill destinations", complete: "Checked Skill destinations" };
-    case "check-projections":
-      return { pending: "Checking existing projections", complete: "Checked existing projections" };
+    case "check-installed-skills":
+      return { pending: "Checking installed skills", complete: "Checked installed skills" };
     case "check-enabled":
       return { pending: "Checking enabled Skills", complete: "Checked enabled Skills" };
     case "save-remote":
@@ -64,8 +64,8 @@ const restoreStatus = (phase: RestorePhase) => {
 export const terminalSyncProgress = (
   renderer: Pick<RendererShape, "withStatus" | "updateStatus">,
 ): {
-  readonly sync: SyncObserver;
-  readonly restore: RestoreObserver;
+  readonly sync: SyncProgress;
+  readonly restore: RestoreProgress;
 } => ({
   sync: {
     around: (phase, operation) =>

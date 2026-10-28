@@ -4,8 +4,8 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { zipSync } from "fflate";
-import { sha256Digest } from "@smolai/skit-core/universal/consumer";
-import { Bindings, blobStorageEffect, databaseLayer } from "../src/platform/cloudflare.js";
+import { sha256Hash } from "@smolai/skit-core/universal/consumer";
+import { Bindings, blobStorage, databaseLayer } from "../src/platform/cloudflare.js";
 import { Publication, layer as publicationLayer } from "../src/publication/service.js";
 
 const bindings = { database: env.DB, blobs: env.SKIT_BLOBS };
@@ -67,7 +67,7 @@ const prepareDatabase = Effect.fn("PublicationTest.prepareDatabase")(function* (
     ]),
   );
   for (const [path, content] of files) {
-    const digest = yield* sha256Digest(content);
+    const digest = yield* sha256Hash(content);
     yield* Effect.flatMap(
       D1Client.D1Client,
       (sql) =>
@@ -93,7 +93,7 @@ describe("Publication", () => {
 
       expect(published.release_id).toMatch(/^rel_[0-9a-f-]{36}$/);
       expect(published.revision_id).toBe("draft_current");
-      expect(published.archive_digest).toBe(yield* sha256Digest(archive));
+      expect(published.archive_digest).toBe(yield* sha256Hash(archive));
       const storedRows = yield* Effect.flatMap(
         D1Client.D1Client,
         (sql) =>
@@ -107,7 +107,7 @@ describe("Publication", () => {
       expect(stored).toBeDefined();
       if (stored !== undefined)
         expect(
-          yield* blobStorageEffect("find published archive", (bucket) =>
+          yield* blobStorage("find published archive", (bucket) =>
             bucket.head(stored.archive_object_key),
           ),
         ).not.toBeNull();

@@ -7,10 +7,10 @@ import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
-import { executeRemoveEffect } from "../../workflows/library/remove.js";
+import { executeRemove } from "../../workflows/library/remove.js";
 import { result } from "../contracts.js";
 
-const subject = Argument.String("skit-or-skill");
+const subject = Argument.String("skill-or-collection");
 const dryRun = Flag.Boolean("dry-run").pipe(
   Flag.withDescription("Report removals without applying them."),
   Flag.withDefault(false),
@@ -27,7 +27,7 @@ export const removeCliCommand = Command.make(
         const state = yield* store.load;
         const outcome = yield* renderer.withStatus(
           input.dryRun ? "Planning Collection removal" : "Removing retained Collection",
-          executeRemoveEffect(state, {
+          executeRemove(state, {
             query: input.subject,
             dryRun: input.dryRun,
           }),
@@ -38,7 +38,9 @@ export const removeCliCommand = Command.make(
       }),
     ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
-  Command.withDescription("Remove a retained Collection and its owned Projections."),
+  Command.withDescription(
+    "Remove a Collection from your Library and the skills SKIT installed from it.",
+  ),
   Command.withExamples([{ command: "skit remove owner/tools --dry-run" }]),
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read", "filesystem.write"] },

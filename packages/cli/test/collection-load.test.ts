@@ -2,18 +2,18 @@ import { it as effectIt } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
 import { join } from "node:path";
 import {
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   LibraryStore,
   libraryStoreLayer,
-  retainedTreePath,
-  type ObservedSkill,
+  collectionVersionPath,
+  type ImportRequestSkill,
 } from "@smolai/skit-core";
 import { readDescriptionLoad } from "../src/workflows/library/collection-load.js";
-import { retainLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
+import { importSource } from "../src/library-application/import-source.js";
 import {
   initializeLibraryMachine,
   libraryHome,
-  retainObservedIn,
+  importCollectionIn,
   writingTo,
 } from "./helpers/library-home.js";
 import { presentSetEnabled } from "../src/handlers/library/set-enabled.js";
@@ -51,7 +51,7 @@ effectIt.effect(
       const home = yield* libraryHome({ home: join(root, "home") });
       yield* initializeLibraryMachine(home.home);
       const source = join(root, "source");
-      const members: ObservedSkill[] = [];
+      const members: ImportRequestSkill[] = [];
       for (const name of ["keep", "removed"]) {
         const path = join(source, name);
         yield* fs.makeDirectory(path, { recursive: true });
@@ -63,25 +63,25 @@ effectIt.effect(
           name,
           sourcePath: path,
           relativePath: name,
-          observedHash: yield* deterministicTreeHashEffect(path),
+          currentHash: yield* deterministicTreeHash(path),
         });
       }
-      const retain = (skills: typeof members, retainedAt: string) =>
+      const importMembers = (skills: typeof members, importedAt: string) =>
         home.owned(
           writingTo(
             home.home,
-            retainObservedIn(home.home)({
+            importCollectionIn(home.home)({
               source: { type: "local", path: source },
               input: source,
-              retainedAt,
+              importedAt,
               skills,
-              observations: [],
+              lockFileEntries: [],
             }),
           ),
         );
-      const first = yield* retain(members, "2026-10-12T00:00:00.000Z");
+      const first = yield* importMembers(members, "2026-10-12T00:00:00.000Z");
       yield* fs.remove(join(source, "removed"), { recursive: true });
-      yield* retain(
+      yield* importMembers(
         members.filter((member) => member.name === "keep"),
         "2026-10-13T00:00:00.000Z",
       );
@@ -132,9 +132,7 @@ effectIt.effect(
         join(source, "SKILL.md"),
         '---\nname: review\ndescription: "A😀é"\n---\n',
       );
-      const first = yield* retainLibrarySourceEffect(source).pipe(
-        Effect.provide(libraryStoreLayer({ home })),
-      );
+      const first = yield* importSource(source).pipe(Effect.provide(libraryStoreLayer({ home })));
       const firstState = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
         Effect.provide(libraryStoreLayer({ home })),
       );
@@ -143,7 +141,7 @@ effectIt.effect(
         join(source, "SKILL.md"),
         '---\nname: review\ndescription: "A much longer new description"\n---\n',
       );
-      yield* retainLibrarySourceEffect(source).pipe(Effect.provide(libraryStoreLayer({ home })));
+      yield* importSource(source).pipe(Effect.provide(libraryStoreLayer({ home })));
       const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
         Effect.provide(libraryStoreLayer({ home })),
       );
@@ -155,15 +153,18 @@ effectIt.effect(
       const originals = join(home, "originals");
       const measure = readDescriptionLoad(selectedState, originals, [skill]);
       expect(yield* measure).toEqual({ skills: 1, characters: 3, unknown: 0 });
-      const retainedFile = join(retainedTreePath(originals, first.snapshot_digest), "SKILL.md");
+      const importedFile = join(
+        collectionVersionPath(originals, first.snapshot_digest),
+        "SKILL.md",
+      );
       for (const text of [
         "---\nname: review\ndescription: [bad\n---\n",
         "---\nname: review\ndescription: 123\n---\n",
       ]) {
-        yield* fs.writeFileString(retainedFile, text);
+        yield* fs.writeFileString(importedFile, text);
         expect(yield* measure).toEqual({ skills: 1, characters: 0, unknown: 1 });
       }
-      yield* fs.remove(retainedFile);
+      yield* fs.remove(importedFile);
       expect(yield* measure).toEqual({ skills: 1, characters: 0, unknown: 1 });
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

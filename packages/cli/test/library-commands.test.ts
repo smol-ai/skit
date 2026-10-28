@@ -1,11 +1,11 @@
 import { testPlatformLayer } from "./helpers/platform.js";
-import { SetEnabledStale } from "../src/library-application/binding-changes.js";
+import { SetEnabledStale } from "../src/library-application/set-enabled.js";
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem, Option, Result, Schema } from "effect";
 import { join } from "node:path";
-import { deterministicTreeHashEffect, LibraryStore, withLibraryWriter } from "@smolai/skit-core";
+import { deterministicTreeHash, LibraryStore, withLibraryWriter } from "@smolai/skit-core";
 import { presentListCommand } from "../src/handlers/library/list.js";
-import { browseLibraryEffect } from "../src/presentation/interactive-list.js";
+import { browseLibrary } from "../src/presentation/interactive-list.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { renderLibraryList } from "../src/presentation/library-list.js";
 import { ListResult } from "../src/workflows/library/list-contract.js";
@@ -18,7 +18,7 @@ import { rendererTestLayer } from "./helpers/renderer.js";
 import {
   initializeLibraryMachine,
   libraryHome,
-  retainObservedIn,
+  importCollectionIn,
   writingTo,
 } from "./helpers/library-home.js";
 import type { CommandResult } from "../src/commands/types.js";
@@ -37,7 +37,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
     const collection = yield* home.owned(
       writingTo(
         home.home,
-        retainObservedIn(home.home)({
+        importCollectionIn(home.home)({
           source: {
             type: "registry",
             namespace: "tim",
@@ -45,16 +45,16 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
             authority: "https://skit.example.com",
           },
           input: installed,
-          retainedAt: "2026-09-16T00:00:00.000Z",
+          importedAt: "2026-09-16T00:00:00.000Z",
           skills: [
             {
               name: "review",
               sourcePath: installed,
               relativePath: "review",
-              observedHash: yield* deterministicTreeHashEffect(installed),
+              currentHash: yield* deterministicTreeHash(installed),
             },
           ],
-          observations: [],
+          lockFileEntries: [],
         }),
       ),
     );
@@ -71,7 +71,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
         ),
       ),
     );
-    assert.strictEqual(rendered[0]?.schema, "skit.list.v6");
+    assert.strictEqual(rendered[0]?.schema, "skit.list.v7");
     const listing = yield* Schema.decodeUnknownEffect(ListResult)(rendered[0]?.data);
     assert.strictEqual(listing.subjects[0]?.subject_id, collection.collection?.collection_id);
     assert.strictEqual(listing.subjects[0]?.label, "tim/skills");
@@ -80,24 +80,24 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
       listing.subjects[0]?.skills.map((skill) => skill.name),
       ["review"],
     );
-    assert.deepStrictEqual(listing.bindings, []);
+    assert.deepStrictEqual(listing.enabled, []);
     assert.strictEqual(JSON.stringify(listing).includes("release"), false);
 
     const session = yield* home.owned(openLibrarySession());
     const row = session.skills[0];
     assert.ok(row);
     const proposed = yield* home.owned(
-      proposeLibraryEnable(session, home.bindings, row, { scope: { kind: "global" } }),
+      proposeLibraryEnable(session, home.installOptions, row, { scope: { kind: "global" } }),
     );
     const beforeStaleChange = yield* home.durable;
     yield* home.owned(
       writingTo(
         home.home,
         LibraryStore.use((store) =>
-          store.publish(
+          store.save(
             {
               ...beforeStaleChange,
-              custodyIssues: beforeStaleChange.custodyIssues ?? [],
+              ownershipIssues: beforeStaleChange.ownershipIssues ?? [],
             },
             beforeStaleChange,
           ),
@@ -112,14 +112,14 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
       writingTo(
         home.home,
         LibraryStore.use((store) =>
-          Effect.flatMap(store.load, (base) => store.publish(beforeStaleChange, base)),
+          Effect.flatMap(store.load, (base) => store.save(beforeStaleChange, base)),
         ),
       ),
     );
 
     const interaction = yield* makeScriptedInteraction(["Done"]);
     yield* home.owned(
-      browseLibraryEffect(yield* home.owned(openLibrarySession()), home.bindings).pipe(
+      browseLibrary(yield* home.owned(openLibrarySession()), home.installOptions).pipe(
         Effect.provide(interaction.layer),
       ),
     );
@@ -143,25 +143,25 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     const collection = yield* home.owned(
       writingTo(
         home.home,
-        retainObservedIn(home.home)({
+        importCollectionIn(home.home)({
           source: { type: "local", path: installed },
           input: installed,
-          retainedAt: "2026-09-17T00:00:00.000Z",
+          importedAt: "2026-09-17T00:00:00.000Z",
           skills: [
             {
               name: "review",
               sourcePath: review,
               relativePath: "review",
-              observedHash: yield* deterministicTreeHashEffect(review),
+              currentHash: yield* deterministicTreeHash(review),
             },
             {
               name: "effect",
               sourcePath: effect,
               relativePath: "effect",
-              observedHash: yield* deterministicTreeHashEffect(effect),
+              currentHash: yield* deterministicTreeHash(effect),
             },
           ],
-          observations: [],
+          lockFileEntries: [],
         }),
       ),
     );
@@ -172,18 +172,11 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
       writingTo(
         home.home,
         LibraryStore.use((store) =>
-          store.publish(
+          store.save(
             {
               ...state,
-              global_bindings: [
-                { scope: { kind: "global" }, entries: [{ kind: "skill", skill_id: reviewId }] },
-              ],
-              local_bindings: [
-                {
-                  scope: { kind: "repository", root },
-                  entries: [{ kind: "skill", skill_id: reviewId }],
-                },
-              ],
+              enabled: [{ skill: reviewId }],
+              repositories: [{ root, enabled: [{ skill: reviewId }] }],
             },
             state,
           ),
@@ -231,8 +224,8 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     ]);
     assert.strictEqual((yield* interaction.results).length, 2);
     const disabled = yield* home.durable;
-    assert.deepStrictEqual(disabled.global_bindings, []);
-    assert.deepStrictEqual(disabled.local_bindings, []);
+    assert.deepStrictEqual(disabled.enabled, []);
+    assert.deepStrictEqual(disabled.repositories, []);
     const collectionId = collection.collection!.collection_id;
     const enable = yield* makeScriptedInteraction([collectionId, "collection"]);
     yield* home.owned(
@@ -247,9 +240,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
         configuration,
       }).pipe(Effect.provide(enable.layer)),
     );
-    assert.deepStrictEqual((yield* home.durable).global_bindings[0]?.entries, [
-      { kind: "collection", collection_id: collectionId },
-    ]);
+    assert.deepStrictEqual((yield* home.durable).enabled, [{ collection: collectionId }]);
     assert.ok(!(yield* enable.prompts).some((prompt) => prompt.kind === "multiselect"));
 
     const unchangedBrowse = yield* makeScriptedInteraction([
@@ -260,8 +251,8 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
       "Done",
     ]);
     yield* home.owned(
-      browseLibraryEffect(yield* home.owned(openLibrarySession()), {
-        ...home.bindings,
+      browseLibrary(yield* home.owned(openLibrarySession()), {
+        ...home.installOptions,
         ...configuration.inventory,
       }).pipe(Effect.provide(unchangedBrowse.layer)),
     );
@@ -291,7 +282,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
       "Done",
     ]);
     yield* home.owned(
-      browseLibraryEffect(yield* home.owned(openLibrarySession()), home.bindings).pipe(
+      browseLibrary(yield* home.owned(openLibrarySession()), home.installOptions).pipe(
         Effect.provide(browseCancel.layer),
       ),
     );
@@ -304,11 +295,11 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
       "Done",
     ]);
     yield* home.owned(
-      browseLibraryEffect(yield* home.owned(openLibrarySession()), home.bindings).pipe(
+      browseLibrary(yield* home.owned(openLibrarySession()), home.installOptions).pipe(
         Effect.provide(browseDisable.layer),
       ),
     );
-    assert.deepStrictEqual((yield* home.durable).global_bindings, []);
+    assert.deepStrictEqual((yield* home.durable).enabled, []);
     yield* home.owned(
       presentSetEnabled({
         action: "enable",
@@ -335,7 +326,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
         configuration,
       }).pipe(Effect.provide(directDisable.layer)),
     );
-    assert.deepStrictEqual((yield* home.durable).local_bindings, []);
+    assert.deepStrictEqual((yield* home.durable).repositories, []);
     assert.strictEqual(yield* directDisable.remaining, 0);
     assert.strictEqual((yield* directDisable.prompts).length, 1);
     for (const scope of [{ kind: "global" } as const, { kind: "repository", root } as const]) {
@@ -366,8 +357,8 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
         configuration,
       }).pipe(Effect.provide(disableEverywhere.layer)),
     );
-    assert.deepStrictEqual((yield* home.durable).global_bindings, []);
-    assert.deepStrictEqual((yield* home.durable).local_bindings, []);
+    assert.deepStrictEqual((yield* home.durable).enabled, []);
+    assert.deepStrictEqual((yield* home.durable).repositories, []);
     assert.strictEqual(yield* disableEverywhere.remaining, 0);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
@@ -384,19 +375,19 @@ it.effect("bare disable asks before changing a global Binding spanning Collectio
     yield* home.owned(
       writingTo(
         home.home,
-        retainObservedIn(home.home)({
+        importCollectionIn(home.home)({
           source: { type: "local", path: source },
           input: source,
-          retainedAt: "2026-10-06T00:00:00.000Z",
+          importedAt: "2026-10-06T00:00:00.000Z",
           skills: [
             {
               name: "show-me",
               sourcePath: source,
               relativePath: ".",
-              observedHash: yield* deterministicTreeHashEffect(source),
+              currentHash: yield* deterministicTreeHash(source),
             },
           ],
-          observations: [],
+          lockFileEntries: [],
         }),
       ),
     );
@@ -406,36 +397,28 @@ it.effect("bare disable asks before changing a global Binding spanning Collectio
     yield* home.owned(
       writingTo(
         home.home,
-        retainObservedIn(home.home)({
+        importCollectionIn(home.home)({
           source: { type: "local", path: other },
           input: other,
-          retainedAt: "2026-10-06T00:00:00.000Z",
+          importedAt: "2026-10-06T00:00:00.000Z",
           skills: [
             {
               name: "effect",
               sourcePath: other,
               relativePath: ".",
-              observedHash: yield* deterministicTreeHashEffect(other),
+              currentHash: yield* deterministicTreeHash(other),
             },
           ],
-          observations: [],
+          lockFileEntries: [],
         }),
       ),
     );
-    const retained = yield* home.durable;
+    const imported = yield* home.durable;
     const state = {
-      ...retained,
-      global_bindings: [
-        {
-          scope: { kind: "global" as const },
-          entries: retained.skills.map((skill) => ({
-            kind: "skill" as const,
-            skill_id: skill.skill_id,
-          })),
-        },
-      ],
+      ...imported,
+      enabled: imported.skills.map((skill) => ({ skill: skill.skill_id })),
     };
-    yield* home.owned(LibraryStore.use((store) => store.publish(state, retained)));
+    yield* home.owned(LibraryStore.use((store) => store.save(state, imported)));
     const configuration = yield* libraryCommandConfiguration({
       home: Option.some(home.home),
       codexRoot: Option.none(),
@@ -477,11 +460,9 @@ it.effect("bare disable asks before changing a global Binding spanning Collectio
       }).pipe(Effect.provide(selection.layer)),
     );
     const after = yield* home.durable;
-    const showMe = retained.skills.find((skill) => skill.name === "show-me");
+    const showMe = imported.skills.find((skill) => skill.name === "show-me");
     assert.ok(showMe);
-    assert.deepStrictEqual(after.global_bindings[0]?.entries, [
-      { kind: "skill", skill_id: showMe.skill_id },
-    ]);
+    assert.deepStrictEqual(after.enabled, [{ skill: showMe.skill_id }]);
     const single = yield* makeScriptedInteraction(["cancel"]);
     yield* home.owned(
       presentSetEnabled({
@@ -514,25 +495,25 @@ it.effect("rejects a stale multi-destination disable before changing any Binding
     const collection = yield* home.owned(
       writingTo(
         home.home,
-        retainObservedIn(home.home)({
+        importCollectionIn(home.home)({
           source: { type: "local", path: installed },
           input: installed,
-          retainedAt: "2026-09-17T00:00:00.000Z",
+          importedAt: "2026-09-17T00:00:00.000Z",
           skills: [
             {
               name: "review",
               sourcePath: review,
               relativePath: "review",
-              observedHash: yield* deterministicTreeHashEffect(review),
+              currentHash: yield* deterministicTreeHash(review),
             },
             {
               name: "effect",
               sourcePath: effect,
               relativePath: "effect",
-              observedHash: yield* deterministicTreeHashEffect(effect),
+              currentHash: yield* deterministicTreeHash(effect),
             },
           ],
-          observations: [],
+          lockFileEntries: [],
         }),
       ),
     );
@@ -543,18 +524,11 @@ it.effect("rejects a stale multi-destination disable before changing any Binding
       writingTo(
         home.home,
         LibraryStore.use((store) =>
-          store.publish(
+          store.save(
             {
               ...state,
-              global_bindings: [
-                { scope: { kind: "global" }, entries: [{ kind: "skill", skill_id: reviewId }] },
-              ],
-              local_bindings: [
-                {
-                  scope: { kind: "repository", root },
-                  entries: [{ kind: "skill", skill_id: reviewId }],
-                },
-              ],
+              enabled: [{ skill: reviewId }],
+              repositories: [{ root, enabled: [{ skill: reviewId }] }],
             },
             state,
           ),
@@ -610,9 +584,9 @@ it.effect("rejects a stale multi-destination disable before changing any Binding
       ),
     );
     const current = yield* home.durable;
-    const concurrent = { ...current, global_bindings: [] };
+    const concurrent = { ...current, enabled: [] };
     yield* home.owned(
-      withLibraryWriter(LibraryStore.use((store) => store.publish(concurrent, current))),
+      withLibraryWriter(LibraryStore.use((store) => store.save(concurrent, current))),
     );
     yield* Deferred.succeed(resume, undefined);
     const outcome = yield* Fiber.join(command);

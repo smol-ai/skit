@@ -1,22 +1,19 @@
 import {
-  planRetainedContentEffect,
-  prepareRestoreEffect,
+  planCollectionVersions,
+  prepareRestore,
   type LibraryManifest,
   type SnapshotArchive,
-  type RestoreObserver,
+  type RestoreProgress,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
-import type { librarySyncApiEffect } from "./library-sync-api.js";
-import { silentSyncObserver, type SyncObserver } from "./library-sync-progress.js";
+import type { librarySyncApi } from "./library-sync-api.js";
+import { silentSyncProgress, type SyncProgress } from "./library-sync-progress.js";
 
-type SnapshotApi = Pick<
-  Effect.Success<ReturnType<typeof librarySyncApiEffect>>,
-  "download" | "upload"
->;
+type SnapshotApi = Pick<Effect.Success<ReturnType<typeof librarySyncApi>>, "download" | "upload">;
 type RemoteSnapshots = { readonly library_id: string; readonly manifest: LibraryManifest } | null;
 
 /** Sync owns upload selection and transport; core owns content availability and restoration. */
-export const prepareSyncTransferEffect = Effect.fn("Library.sync.prepareTransfer")(function* (
+export const prepareSyncTransfer = Effect.fn("Library.sync.prepareTransfer")(function* (
   archives: readonly SnapshotArchive[],
   desired: LibraryManifest,
   remote: RemoteSnapshots,
@@ -25,16 +22,16 @@ export const prepareSyncTransferEffect = Effect.fn("Library.sync.prepareTransfer
     readonly originalsPath: string;
     readonly origin: string;
     readonly token?: string;
-    readonly observer?: SyncObserver;
-    readonly restoreObserver?: RestoreObserver;
+    readonly progress?: SyncProgress;
+    readonly restoreProgress?: RestoreProgress;
   },
 ) {
-  const observer = options.observer ?? silentSyncObserver;
-  const content = yield* planRetainedContentEffect(desired, {
+  const progress = options.progress ?? silentSyncProgress;
+  const content = yield* planCollectionVersions(desired, {
     originalsPath: options.originalsPath,
     localArchives: archives,
   });
-  const required = new Set(desired.retained_copies.map((tree) => tree.digest));
+  const required = new Set(desired.collection_versions.map((tree) => tree.hash));
   const snapshotSet = new Set(desired.snapshot_digests);
   const uploads = archives.filter(
     (archive) =>
@@ -46,14 +43,14 @@ export const prepareSyncTransferEffect = Effect.fn("Library.sync.prepareTransfer
     snapshotCount: remote === null ? uploads.length : content.download.length,
     restore: Effect.fn("Library.sync.restoreSnapshots")(function* () {
       return yield* Effect.scoped(
-        prepareRestoreEffect(desired, content, {
+        prepareRestore(desired, content, {
           originalsPath: options.originalsPath,
-          ...(options.restoreObserver === undefined ? {} : { observer: options.restoreObserver }),
+          ...(options.restoreProgress === undefined ? {} : { progress: options.restoreProgress }),
           ...(remote === null
             ? {}
             : {
-                download: (digest: SnapshotArchive["digest"]) =>
-                  api.download(remote.library_id, digest),
+                download: (hash: SnapshotArchive["digest"]) =>
+                  api.download(remote.library_id, hash),
               }),
           registryBaseUrl: options.origin,
           ...(options.token === undefined ? {} : { registryToken: options.token }),
@@ -63,13 +60,13 @@ export const prepareSyncTransferEffect = Effect.fn("Library.sync.prepareTransfer
     upload: Effect.fn("Library.sync.uploadSnapshots")(function* () {
       if (uploads.length === 0) return;
       const phase = { kind: "upload", total: uploads.length } as const;
-      yield* observer.around(
+      yield* progress.around(
         phase,
         Effect.gen(function* () {
           for (const [index, archive] of uploads.entries()) {
-            yield* observer.tick({ phase, completed: index });
+            yield* progress.tick({ phase, completed: index });
             yield* api.upload(archive);
-            yield* observer.tick({ phase, completed: index + 1 });
+            yield* progress.tick({ phase, completed: index + 1 });
           }
         }),
       );

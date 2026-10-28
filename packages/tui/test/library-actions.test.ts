@@ -11,7 +11,7 @@ import { skitLayer } from "@smolai/skit-core";
 import {
   cancelLibraryChange,
   confirmLibraryChange,
-  probeHarnessEffect,
+  probeHarness,
   proposeLibraryCollectionChange,
 } from "../../cli/src/front-end";
 import { tuiLibrary } from "./helpers/library-fixture";
@@ -78,7 +78,7 @@ test("a confirmation applies only at the previewed revision, and the session rec
   const refused = await confirm();
   expect(refused).toMatchObject({ kind: "failed", failure: { code: "CONFLICT" } });
   const afterRefusal = await outside(library.durable);
-  expect(afterRefusal.global_bindings).toEqual([]);
+  expect(afterRefusal.enabled).toEqual([]);
   expect(afterRefusal.collections.map((collection) => collection.label).sort()).toEqual([
     "alpha-pack",
     "beta-pack",
@@ -90,9 +90,7 @@ test("a confirmation applies only at the previewed revision, and the session rec
   // The refusal left a usable session: previewing again picks up the new revision.
   expect((await propose(alpha))?.kind).toBe("preview");
   expect((await confirm())?.kind).toBe("applied");
-  expect((await outside(library.durable)).global_bindings).toEqual([
-    { entries: [{ kind: "collection", collection_id: alpha }], scope: { kind: "global" } },
-  ]);
+  expect((await outside(library.durable)).enabled).toEqual([{ collection: alpha }]);
   expect(host.state?.pending).toBeUndefined();
 });
 
@@ -113,7 +111,7 @@ test("disposing the host kills a Harness probe that is still running", async () 
       yield* fs.chmod(join(bin, "codex"), 0o755);
     }),
   );
-  const probe = host.run(probeHarnessEffect("codex", { path: bin })).then(
+  const probe = host.run(probeHarness("codex", { path: bin })).then(
     () => "completed",
     () => "interrupted",
   );

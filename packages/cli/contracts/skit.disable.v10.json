@@ -1,0 +1,298 @@
+{
+  "$id": "skit.disable.v10",
+  "type": "object",
+  "properties": {
+    "subject_id": {
+      "type": "string"
+    },
+    "skills": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "scope": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "global"
+              ]
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": true
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "repository"
+              ]
+            },
+            "root": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "root"
+          ],
+          "additionalProperties": true
+        }
+      ]
+    },
+    "action": {
+      "type": "string",
+      "enum": [
+        "enable",
+        "disable"
+      ]
+    },
+    "invocation": {
+      "type": "string"
+    },
+    "changed": {
+      "type": "boolean"
+    },
+    "repair": {
+      "type": "boolean"
+    },
+    "duplicates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "harness": {
+            "type": "string"
+          },
+          "canonicalPath": {
+            "type": "string"
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "via": {
+                  "type": "string",
+                  "enum": [
+                    "symlink",
+                    "directory",
+                    "unknown-root"
+                  ]
+                },
+                "linkPath": {
+                  "type": "string"
+                },
+                "linkTarget": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "via"
+              ],
+              "additionalProperties": true
+            }
+          },
+          "documentHash": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "harness",
+          "canonicalPath",
+          "aliases",
+          "documentHash"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "unmanaged_destinations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "type": "string",
+            "enum": [
+              "agents",
+              "claude"
+            ]
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "destination",
+          "path"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "message"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "enabled": {
+      "type": "array",
+      "items": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "collection": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "collection"
+            ],
+            "additionalProperties": true
+          },
+          {
+            "type": "object",
+            "properties": {
+              "skill": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "skill"
+            ],
+            "additionalProperties": true
+          }
+        ]
+      }
+    },
+    "invocation_policies": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "enum": [
+          "explicit",
+          "implicit",
+          "host-policy"
+        ]
+      }
+    },
+    "application": {
+      "type": "object",
+      "properties": {
+        "intent": {
+          "type": "string",
+          "enum": [
+            "saved",
+            "unchanged"
+          ]
+        },
+        "revision": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "complete",
+            "incomplete"
+          ]
+        },
+        "failure": {
+          "type": "object",
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            },
+            "remediation": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message",
+            "remediation"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "intent",
+        "revision",
+        "status"
+      ],
+      "additionalProperties": true
+    },
+    "installed_skills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "destination": {
+            "type": "string",
+            "enum": [
+              "agents",
+              "claude"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "destination",
+          "path",
+          "status"
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": [
+    "subject_id",
+    "skills",
+    "scope",
+    "action",
+    "changed",
+    "enabled",
+    "application",
+    "installed_skills"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

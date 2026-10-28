@@ -4,17 +4,17 @@ import { Effect, FileSystem, Layer } from "effect";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import {
-  captureSnapshotArchiveEffect,
-  libraryManifestFromLocalStateEffect,
+  readSnapshotArchive,
+  libraryManifestFromLocalState,
   LibraryStore,
   libraryStoreLayer,
-  retainedTreePath,
-  projectBindingEffect,
+  collectionVersionPath,
+  installEnabledSkills,
   SourceProcess,
   type SkitSource,
 } from "@smolai/skit-core";
-import { retainLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
-import { syncLibraryEffect } from "../src/workflows/library/library-sync.js";
+import { importSource } from "../src/library-application/import-source.js";
+import { syncLibrary } from "../src/workflows/library/library-sync.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { archiveBytes, writingTo } from "./helpers/library-home.js";
 import { librarySyncServer } from "./helpers/library-sync-server.js";
@@ -69,15 +69,15 @@ const fixture = Effect.gen(function* () {
       Effect.provide(libraryStoreLayer({ home })),
     );
   const sync = () =>
-    writingTo(freshHome, syncLibraryEffect({ origin, apply: true })).pipe(
+    writingTo(freshHome, syncLibrary({ origin, apply: true })).pipe(
       Effect.provide(registryHttpLayer(http)),
       Effect.provide(http),
     );
   const seed = (source: SkitSource) =>
     Effect.gen(function* () {
-      yield* writingTo(home, retainLibrarySourceEffect(source)).pipe(Effect.provide(http));
+      yield* writingTo(home, importSource(source)).pipe(Effect.provide(http));
       const state = yield* load(home);
-      const manifest = yield* libraryManifestFromLocalStateEffect(state);
+      const manifest = yield* libraryManifestFromLocalState(state);
       assert.deepStrictEqual(manifest.snapshot_digests, []);
       assert.strictEqual(
         server.respond("PUT", "/api/library/portable", { expected_revision_id: null, manifest })
@@ -106,7 +106,7 @@ const fixture = Effect.gen(function* () {
       assert.strictEqual(result.exitCode, 0);
       release = yield* fs.readFile(archive);
     }),
-    root: (digest: string) => retainedTreePath(join(freshHome, "originals"), digest),
+    root: (hash: string) => collectionVersionPath(join(freshHome, "originals"), hash),
   };
 });
 
@@ -117,50 +117,45 @@ it.effect(
       const f = yield* fixture;
       const state = yield* f.seed(registrySource);
       yield* f.sync();
-      assert.deepStrictEqual((yield* f.load(f.freshHome)).retained_copies, state.retained_copies);
-      const digest = state.retained_copies[0]!.digest;
-      assert.strictEqual((yield* captureSnapshotArchiveEffect(f.root(digest))).digest, digest);
+      assert.deepStrictEqual(
+        (yield* f.load(f.freshHome)).collection_versions,
+        state.collection_versions,
+      );
+      const hash = state.collection_versions[0]!.hash;
+      assert.strictEqual((yield* readSnapshotArchive(f.root(hash))).digest, hash);
       for (const [path, bytes] of Object.entries(f.files))
-        assert.strictEqual(yield* f.fs.readFileString(join(f.root(digest), path)), bytes);
+        assert.strictEqual(yield* f.fs.readFileString(join(f.root(hash), path)), bytes);
       const targetRoot = join(f.workspace, "agent-skills");
       yield* writingTo(
         f.freshHome,
         Effect.gen(function* () {
           const store = yield* LibraryStore;
           const restored = yield* store.load;
-          yield* store.publish(
+          yield* store.save(
             {
               ...restored,
-              global_bindings: [
-                {
-                  scope: { kind: "global" },
-                  entries: restored.skills.map((skill) => ({
-                    kind: "skill" as const,
-                    skill_id: skill.skill_id,
-                  })),
-                },
-              ],
+              enabled: restored.skills.map((skill) => ({ skill: skill.skill_id })),
             },
             restored,
           );
-          yield* projectBindingEffect({
+          yield* installEnabledSkills({
             target: "agents",
             root: targetRoot,
             variantsPath: join(f.freshHome, "variants"),
           });
         }),
       );
-      const projected = join(targetRoot, "review");
+      const installed = join(targetRoot, "review");
       assert.strictEqual(
-        yield* f.fs.readFileString(join(projected, "context.md")),
+        yield* f.fs.readFileString(join(installed, "context.md")),
         f.files["shared/context.md"],
       );
       assert.strictEqual(
-        yield* f.fs.readFileString(join(projected, "SKILL.md")),
+        yield* f.fs.readFileString(join(installed, "SKILL.md")),
         f.files["skills/review/SKILL.md"],
       );
       for (const path of ["README.md", "skit.json", ".gitignore", "skills/.gitkeep"])
-        assert.isFalse(yield* f.fs.exists(join(projected, path)));
+        assert.isFalse(yield* f.fs.exists(join(installed, path)));
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -171,18 +166,18 @@ it.effect("plain Registry restore keeps the retained subset and excludes sibling
     yield* f.repack;
     const state = yield* f.seed(registrySource);
     yield* f.sync();
-    const digest = state.retained_copies[0]!.digest;
-    assert.strictEqual((yield* captureSnapshotArchiveEffect(f.root(digest))).digest, digest);
-    assert.isFalse(yield* f.fs.exists(join(f.root(digest), "README.md")));
-    assert.isFalse(yield* f.fs.exists(join(f.root(digest), "skills/.gitkeep")));
+    const hash = state.collection_versions[0]!.hash;
+    assert.strictEqual((yield* readSnapshotArchive(f.root(hash))).digest, hash);
+    assert.isFalse(yield* f.fs.exists(join(f.root(hash), "README.md")));
+    assert.isFalse(yield* f.fs.exists(join(f.root(hash), "skills/.gitkeep")));
     assert.strictEqual(
-      yield* f.fs.readFileString(join(f.root(digest), "skills/review/SKILL.md")),
+      yield* f.fs.readFileString(join(f.root(hash), "skills/review/SKILL.md")),
       f.files["skills/review/SKILL.md"],
     );
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("changed declared source bytes fail before publishing a fresh Library", () =>
+it.effect("changed declared source bytes fail before saving a fresh Library", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
     const state = yield* f.seed(registrySource);
@@ -192,7 +187,7 @@ it.effect("changed declared source bytes fail before publishing a fresh Library"
     const error = yield* f.sync().pipe(Effect.flip);
     assert.strictEqual(error._tag, "Library.SyncSourceRestoreInvalid");
     if (error._tag === "Library.SyncSourceRestoreInvalid") {
-      assert.strictEqual(error.digest, state.retained_copies[0]!.digest);
+      assert.strictEqual(error.hash, state.collection_versions[0]!.hash);
       assert.include(error.detail, "source returned");
     }
     assert.isFalse(yield* f.fs.exists(join(f.freshHome, "state.json")));
@@ -265,16 +260,16 @@ it.effect.each(["git", "github"] as const)(
         ),
       );
       yield* f.sync().pipe(Effect.provide(localGit));
-      const digest = state.retained_copies[0]!.digest;
-      assert.strictEqual((yield* captureSnapshotArchiveEffect(f.root(digest))).digest, digest);
+      const hash = state.collection_versions[0]!.hash;
+      assert.strictEqual((yield* readSnapshotArchive(f.root(hash))).digest, hash);
       assert.strictEqual(
-        yield* f.fs.readFileString(join(f.root(digest), "skit.json")),
+        yield* f.fs.readFileString(join(f.root(hash), "skit.json")),
         f.files["skit.json"],
       );
       assert.strictEqual(
-        yield* f.fs.readFileString(join(f.root(digest), "README.md")),
+        yield* f.fs.readFileString(join(f.root(hash), "README.md")),
         f.files["README.md"],
       );
-      assert.isFalse(yield* f.fs.exists(join(f.root(digest), "outside.txt")));
+      assert.isFalse(yield* f.fs.exists(join(f.root(hash), "outside.txt")));
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

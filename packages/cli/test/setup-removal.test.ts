@@ -55,7 +55,7 @@ const fixture = Effect.gen(function* () {
             interactive: true,
             dryRun,
             ...(workDirFlag ? { workDirFlag } : {}),
-            localCustody: { bindings: home.bindings },
+            manageOptions: { installOptions: home.installOptions },
           }).pipe(Effect.provide(interaction.layer)),
         ),
       );
@@ -134,7 +134,7 @@ it.effect(
         /^[a-f0-9-]{36}$/.test(name),
       );
       const recovery = join(removed, directories[0], batch);
-      const receipt = yield* Schema.decodeUnknownEffect(
+      const moveRecord = yield* Schema.decodeUnknownEffect(
         Schema.fromJsonString(
           Schema.Struct({
             entries: Schema.Array(
@@ -147,13 +147,13 @@ it.effect(
           }),
         ),
       )(yield* f.fs.readFileString(join(recovery, "receipt.json")));
-      const directory = receipt.entries.find((entry) => entry.type === "Directory")!;
+      const directory = moveRecord.entries.find((entry) => entry.type === "Directory")!;
       expect(yield* f.fs.readDirectory(directory.recoveryPath)).toContain("empty");
       expect(yield* f.fs.readFileString(join(directory.recoveryPath, ".DS_Store"))).toBe(
         "incidental bytes",
       );
       expect((yield* f.home.durable).collections).toHaveLength(0);
-      for (const entry of receipt.entries) yield* f.fs.rename(entry.recoveryPath, entry.path);
+      for (const entry of moveRecord.entries) yield* f.fs.rename(entry.recoveryPath, entry.path);
       expect(yield* f.fs.readLink(f.link)).toBe(f.source);
       expect(yield* f.fs.readFileString(join(f.copy, "SKILL.md"))).toContain("Copy contents");
     }).pipe(Effect.provide(skitLayer)),
@@ -193,18 +193,18 @@ it.effect("rejects stale consent and replaced paths before moving any copy", () 
         f.home.home,
         Effect.gen(function* () {
           const options = { ...f.options, persistRoots: false };
-          const observed = yield* runSetup(options);
-          const candidates = observed.onboarding.candidates.filter(
+          const scan = yield* runSetup(options);
+          const candidates = scan.onboarding.candidates.filter(
             (item) => item.name === "copied" || item.name === "linked",
           );
-          const paths = yield* setupRemovablePaths(options, observed);
-          const plan = yield* planSetupRemovals(options, observed, candidates, paths);
+          const paths = yield* setupRemovablePaths(options, scan);
+          const plan = yield* planSetupRemovals(options, scan, candidates, paths);
           yield* f.fs.writeFileString(
             join(f.copy, "SKILL.md"),
             "---\nname: copied\ndescription: Changed after preview\n---\n",
           );
           expect(
-            (yield* Effect.flip(revalidateSetupPlan(options, observed.onboarding.planId)))._tag,
+            (yield* Effect.flip(revalidateSetupPlan(options, scan.onboarding.planId)))._tag,
           ).toBe("SetupPlanStale");
           yield* f.fs.rename(f.copy, `${f.copy}-original`);
           yield* f.fs.makeDirectory(f.copy);
@@ -217,7 +217,7 @@ it.effect("rejects stale consent and replaced paths before moving any copy", () 
   }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect("does not offer source trees reached through a linked skills root for removal", () =>
+it.effect("does not offer source trees reached through a linked skills directory for removal", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
     const shared = join(f.root, "shared-skills");
@@ -229,8 +229,8 @@ it.effect("does not offer source trees reached through a linked skills root for 
       writingTo(
         f.home.home,
         Effect.gen(function* () {
-          const observed = yield* runSetup({ ...f.options, persistRoots: false });
-          const paths = yield* setupRemovablePaths({ ...f.options, persistRoots: false }, observed);
+          const scan = yield* runSetup({ ...f.options, persistRoots: false });
+          const paths = yield* setupRemovablePaths({ ...f.options, persistRoots: false }, scan);
           expect([...paths.values()].flat()).toEqual([]);
           expect((yield* (yield* LinkStat).lstat(join(shared, "copied"))).type).toBe("Directory");
         }),
@@ -260,7 +260,7 @@ it.effect("removing one duplicate row preserves the independent copy in another 
           options: { ...f.options, inventory: home.inventory },
           interactive: true,
           dryRun: false,
-          localCustody: { bindings: home.bindings },
+          manageOptions: { installOptions: home.installOptions },
         }).pipe(Effect.provide(interaction.layer)),
       ),
     );

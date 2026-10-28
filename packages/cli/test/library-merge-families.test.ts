@@ -6,17 +6,17 @@ import {
   currentLibraryManifest,
   librarySnapshotDigests,
   LibraryManifest,
-  makeAcquisitionId,
+  makeImportId,
   makeCollectionId,
   makeMachineId,
-  makeRetainedCopyId,
+  makeCollectionVersionId,
   makeSkillId,
   makeSkillVersionId,
-  type Acquisition,
-  type BindingEntry,
+  type Import,
+  type Enabled,
   type Collection,
   type CollectionId,
-  type RetainedCopy,
+  type CollectionVersion,
   type Skill,
   type SkillId,
   type SkillVersion,
@@ -29,27 +29,27 @@ import { mergeLibraryManifests } from "../src/workflows/library/library-merge.js
 // merge to the union of their outcomes. No case is classified by running the merge.
 
 const machineId = makeMachineId();
-const digest = (text: string) => `sha256:${createHash("sha256").update(text).digest("hex")}`;
+const hash = (text: string) => `sha256:${createHash("sha256").update(text).digest("hex")}`;
 
 /** One side's records for one family. */
 interface Side {
   readonly collections: readonly Collection[];
   readonly skills: readonly Skill[];
-  readonly retained_copies: readonly RetainedCopy[];
-  readonly acquisitions: readonly Acquisition[];
-  readonly entries: readonly BindingEntry[];
+  readonly retained_copies: readonly CollectionVersion[];
+  readonly imports: readonly Import[];
+  readonly entries: readonly Enabled[];
 }
 const none: Side = {
   collections: [],
   skills: [],
   retained_copies: [],
-  acquisitions: [],
+  imports: [],
   entries: [],
 };
 
 interface Observation {
-  readonly acquisition: Acquisition;
-  readonly copy: RetainedCopy;
+  readonly sourceImport: Import;
+  readonly copy: CollectionVersion;
   readonly versions: Readonly<Record<string, SkillVersion>>;
 }
 
@@ -69,54 +69,54 @@ const fixture = (paths: readonly string[]) => {
     if (existing !== undefined) return existing;
     const created: SkillVersion = {
       skill_version_id: makeSkillVersionId(),
-      source_digest: digest(`source:${source}`),
-      artifact_digest: digest(`artifact:${bytes}`),
-      validation_identity_digest: digest(`artifact:${bytes}`),
+      source_hash: hash(`source:${source}`),
+      artifact_hash: hash(`artifact:${bytes}`),
+      validation_identity_hash: hash(`artifact:${bytes}`),
       materialization_profile: "plain-skill/v1",
     };
     versions.set(key, created);
     return created;
   };
   const acquire = (
-    kind: Acquisition["kind"],
+    kind: Import["kind"],
     members: Readonly<Record<string, SkillVersion>>,
     at: string,
   ): Omit<Observation, "versions"> => {
-    const retained_copy_id = makeRetainedCopyId();
-    const copy: RetainedCopy = {
-      retained_copy_id,
-      digest: digest(canonicalJson(members)),
+    const retained_copy_id = makeCollectionVersionId();
+    const copy: CollectionVersion = {
+      collection_version_id: retained_copy_id,
+      hash: hash(canonicalJson(members)),
       copy_profile: "verbatim/v1",
       members: Object.entries(members).map(([path, item]) => ({
         source_path: kind === "source" ? path : ".",
-        source_digest: item.source_digest,
-        artifact_digest: item.artifact_digest,
+        source_hash: item.source_hash,
+        artifact_hash: item.artifact_hash,
         materialization_profile: item.materialization_profile,
       })),
     };
     return {
       copy,
-      acquisition: {
-        acquisition_id: makeAcquisitionId(),
+      sourceImport: {
+        import_id: makeImportId(),
         collection_id,
         kind,
-        retained_copy_id,
+        collection_version_id: retained_copy_id,
         source_identity: {
           kind: "local",
           machine_id: machineId,
           path: { value: `/src/${collection_id}` },
         },
         input: { value: `/src/${collection_id}` },
-        acquired_at: at,
+        imported_at: at,
         machine_id: machineId,
-        observations: [],
+        lock_file_entries: [],
       },
     };
   };
   return {
     collection_id,
     skillIds,
-    /** A Source Acquisition of every path; `sources` overrides a path's source bytes. */
+    /** A source import of every path; `sources` overrides a path's source bytes. */
     observe: (
       bytes: Readonly<Record<string, string>>,
       at = "2026-01-01T00:00:00.000Z",
@@ -130,14 +130,14 @@ const fixture = (paths: readonly string[]) => {
     /** A retained local edit of one Skill. */
     edit: (path: string, bytes: string, at = "2026-01-01T00:00:00.000Z"): Observation => {
       const edited = { [path]: version(path, bytes) };
-      return { ...acquire("retained-edit", edited, at), versions: edited };
+      return { ...acquire("edit", edited, at), versions: edited };
     },
     /** This Collection as one side holds it. */
     held: (
       observations: readonly Observation[],
       options: {
         label?: string;
-        entries?: readonly BindingEntry[];
+        entries?: readonly Enabled[];
         selected?: Readonly<Record<string, SkillVersion>>;
       } = {},
     ): Side => ({
@@ -148,7 +148,7 @@ const fixture = (paths: readonly string[]) => {
           const item = observation.versions[path];
           if (
             item !== undefined &&
-            !versions.some((other) => other.artifact_digest === item.artifact_digest)
+            !versions.some((other) => other.artifact_hash === item.artifact_hash)
           )
             versions.push(item);
         }
@@ -163,13 +163,13 @@ const fixture = (paths: readonly string[]) => {
         };
       }),
       retained_copies: observations.map((item) => item.copy),
-      acquisitions: observations.map((item) => item.acquisition),
+      imports: observations.map((item) => item.sourceImport),
       entries: options.entries ?? [],
     }),
   };
 };
 
-const skill = (id: SkillId): BindingEntry => ({ kind: "skill", skill_id: id });
+const skill = (id: SkillId): Enabled => ({ skill: id });
 
 interface Family {
   readonly base: Side;
@@ -308,7 +308,7 @@ const families = {
         collections: [...mine.collections, ...theirs.collections],
         skills: [...mine.skills, ...theirs.skills],
         retained_copies: [...mine.retained_copies, ...theirs.retained_copies],
-        acquisitions: [...mine.acquisitions, ...theirs.acquisitions],
+        imports: [...mine.imports, ...theirs.imports],
         entries: [],
       },
       symmetric: true,
@@ -336,7 +336,7 @@ const families = {
       base: x.held([first]),
       local: none,
       remote: updated,
-      // One Collection choice, not separate Skill and Acquisition keys.
+      // One Collection choice, not separate Skill and import keys.
       conflicts: [`collection:${x.collection_id}`],
       resolved: updated,
       symmetric: true,
@@ -353,11 +353,11 @@ const families = {
       local: x.held([first, mine]),
       remote,
       conflicts: [`skill:${x.skillIds.alpha}`],
-      // Taking the remote Skill keeps both Acquisitions and their bytes.
+      // Taking the remote Skill keeps both imports and their bytes.
       resolved: {
         ...remote,
         retained_copies: [...remote.retained_copies, mine.copy],
-        acquisitions: [...remote.acquisitions, mine.acquisition],
+        imports: [...remote.imports, mine.sourceImport],
       },
       symmetric: true,
     };
@@ -368,7 +368,7 @@ const families = {
     const both = [skill(x.skillIds.alpha!), skill(x.skillIds.beta!)];
     return {
       base: x.held([first], { entries: both }),
-      local: x.held([first], { entries: [{ kind: "collection", collection_id: x.collection_id }] }),
+      local: x.held([first], { entries: [{ collection: x.collection_id }] }),
       remote: x.held([first], { entries: [skill(x.skillIds.beta!)] }),
       conflicts: ["binding:global"],
       resolved: x.held([first], { entries: [skill(x.skillIds.beta!)] }),
@@ -414,11 +414,11 @@ const families = {
       local: x.held([mine]),
       remote,
       conflicts: [`collection:${x.collection_id}`],
-      // The strictly older local Acquisition is kept as history; the Skill takes remote Versions.
+      // The strictly older local import is kept as history; the Skill takes remote Versions.
       resolved: {
         ...remote,
         retained_copies: [...remote.retained_copies, mine.copy],
-        acquisitions: [...remote.acquisitions, mine.acquisition],
+        imports: [...remote.imports, mine.sourceImport],
       },
       symmetric: false,
       imports: { skills: [x.skillIds.alpha!], collections: [x.collection_id] },
@@ -429,10 +429,7 @@ const families = {
     const mine = x.observe({ alpha: "same" }, undefined, { alpha: "local source" });
     const theirs = x.observe({ alpha: "same" }, later, { alpha: "remote source" });
     const remote = x.held([theirs]);
-    assert.strictEqual(
-      mine.versions.alpha!.artifact_digest,
-      theirs.versions.alpha!.artifact_digest,
-    );
+    assert.strictEqual(mine.versions.alpha!.artifact_hash, theirs.versions.alpha!.artifact_hash);
     assert.notStrictEqual(
       mine.versions.alpha!.skill_version_id,
       theirs.versions.alpha!.skill_version_id,
@@ -445,7 +442,7 @@ const families = {
       resolved: {
         ...remote,
         retained_copies: [...remote.retained_copies, mine.copy],
-        acquisitions: [...remote.acquisitions, mine.acquisition],
+        imports: [...remote.imports, mine.sourceImport],
       },
       symmetric: false,
       imports: { skills: [x.skillIds.alpha!], collections: [x.collection_id] },
@@ -471,16 +468,19 @@ type FamilyName = keyof typeof families;
 
 const manifestOf = (sides: readonly Side[]): LibraryManifest => {
   const retained_copies = sides.flatMap((side) => side.retained_copies);
-  const acquisitions = sides.flatMap((side) => side.acquisitions);
+  const imports = sides.flatMap((side) => side.imports);
   const entries = sides.flatMap((side) => side.entries);
   return Schema.decodeUnknownSync(LibraryManifest)(
     currentLibraryManifest({
       collections: sides.flatMap((side) => side.collections),
       skills: sides.flatMap((side) => side.skills),
-      retained_copies,
-      acquisitions,
-      snapshot_digests: librarySnapshotDigests({ retained_copies, acquisitions }),
-      bindings: entries.length === 0 ? [] : [{ scope: { kind: "global" }, entries }],
+      collection_versions: retained_copies,
+      imports: imports,
+      snapshot_digests: librarySnapshotDigests({
+        collection_versions: retained_copies,
+        imports: imports,
+      }),
+      enabled: entries,
     }),
   );
 };
@@ -499,15 +499,12 @@ const canonical = (manifest: LibraryManifest) => {
       })),
       (item) => item.skill_id,
     ),
-    retained_copies: sorted(manifest.retained_copies, (item) => item.retained_copy_id),
-    acquisitions: sorted(manifest.acquisitions, (item) => item.acquisition_id),
+    collection_versions: sorted(manifest.collection_versions, (item) => item.collection_version_id),
+    imports: sorted(manifest.imports, (item) => item.import_id),
     snapshot_digests: [...manifest.snapshot_digests].sort(),
-    bindings: manifest.bindings.map((binding) => ({
-      ...binding,
-      entries: sorted(binding.entries, (entry) =>
-        entry.kind === "collection" ? entry.collection_id : entry.skill_id,
-      ),
-    })),
+    enabled: sorted(manifest.enabled, (item) =>
+      "collection" in item ? item.collection : item.skill,
+    ),
   });
 };
 
@@ -589,8 +586,8 @@ it.prop(
     const expected = conflicts.has("binding:global")
       ? sides.map((side, index) => ({
           ...side,
-          entries: cases[index]!.remote.entries.filter((entry) =>
-            present.has(entry.kind === "collection" ? entry.collection_id : entry.skill_id),
+          entries: cases[index]!.remote.entries.filter((item) =>
+            present.has("collection" in item ? item.collection : item.skill),
           ),
         }))
       : sides;

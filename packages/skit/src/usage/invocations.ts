@@ -2,7 +2,7 @@ import type { UsageRow } from "./contracts.js";
 import type { UsageEvent } from "./events.js";
 
 type Row = { -readonly [K in keyof UsageRow]: UsageRow[K] };
-export interface InvocationObservation {
+export interface Invocation {
   key: string;
   row: Row;
   event: UsageEvent;
@@ -12,15 +12,15 @@ export interface InvocationObservation {
 }
 
 /** Owns evidence correlation; renderers never reconstruct invocation counts. */
-export function correlateInvocations(observations: readonly InvocationObservation[]): void {
+export function correlateInvocations(observations: readonly Invocation[]): void {
   // Claude has native activation evidence; document access is diagnostic only.
   // Multi-skill commands are inspection evidence, not separate activations.
   const activity = observations.filter(
     (o) => o.event.kind !== "reads" || (o.row.harness === "codex" && !o.event.inspection),
   );
-  const scope = (o: InvocationObservation) => JSON.stringify([o.row.harness, o.session]);
-  const calls = new Map<string, InvocationObservation>();
-  const linked = new Map<InvocationObservation, InvocationObservation>();
+  const scope = (o: Invocation) => JSON.stringify([o.row.harness, o.session]);
+  const calls = new Map<string, Invocation>();
+  const linked = new Map<Invocation, Invocation>();
   for (const o of activity)
     if (o.event.kind === "calls" && o.event.id)
       calls.set(JSON.stringify([scope(o), o.event.id]), o);
@@ -32,10 +32,10 @@ export function correlateInvocations(observations: readonly InvocationObservatio
 
   // A name-only call or slash selection can share a path identity only when unique
   // in this turn. Two different paths with the same name remain separate.
-  const callTurns = new Map<string, Map<string, InvocationObservation>>();
-  const paths = new Map<string, Map<string, InvocationObservation>>();
-  const nativePaths = new Map<string, Map<string, InvocationObservation>>();
-  const namedTurn = (o: InvocationObservation) =>
+  const callTurns = new Map<string, Map<string, Invocation>>();
+  const paths = new Map<string, Map<string, Invocation>>();
+  const nativePaths = new Map<string, Map<string, Invocation>>();
+  const namedTurn = (o: Invocation) =>
     JSON.stringify([scope(o), o.turn, o.row.name.split(":").at(-1)]);
   for (const o of activity) {
     if (o.turn && o.event.kind === "calls") {
@@ -53,7 +53,7 @@ export function correlateInvocations(observations: readonly InvocationObservatio
       nativePaths.set(namedTurn(o), nativeMatches);
     }
   }
-  const representative = (o: InvocationObservation): InvocationObservation => {
+  const representative = (o: Invocation): Invocation => {
     const load = linked.get(o);
     if (load) return load;
     if (!o.row.path && o.turn) {
@@ -107,6 +107,6 @@ export function correlateInvocations(observations: readonly InvocationObservatio
   for (const group of groups.values()) {
     group.row.uses++;
     group.row[group.explicit ? "explicit" : group.implicit ? "implicit" : "unknown"]++;
-    if (group.last > group.row.lastObservedAt) group.row.lastObservedAt = group.last;
+    if (group.last > group.row.lastSeenAt) group.row.lastSeenAt = group.last;
   }
 }

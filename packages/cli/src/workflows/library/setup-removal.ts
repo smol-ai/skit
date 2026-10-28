@@ -1,7 +1,7 @@
 import { dirname, resolve } from "node:path";
 import { Effect } from "effect";
 import { LinkStat, pathIsWithin } from "@smolai/skit-core";
-import { collectHarnessRoots, type SetupOptions } from "./setup.js";
+import { collectSkillsDirectories, type SetupOptions } from "./setup.js";
 import type { SetupResult } from "./setup-contract.js";
 import {
   prepareRecoveryMoves,
@@ -11,13 +11,13 @@ import {
 /** Only observed, unmanaged agent locations are removable. Canonical source trees stay put. */
 export const setupRemovablePaths = Effect.fn("Setup.removablePaths")(function* (
   options: SetupOptions,
-  observed: SetupResult,
+  scan: SetupResult,
 ) {
   const links = yield* LinkStat;
   const roots: string[] = [];
-  for (const { root } of collectHarnessRoots(
+  for (const { root } of collectSkillsDirectories(
     options.inventory,
-    observed.repositories.map((item) => item.path),
+    scan.repositories.map((item) => item.path),
   )) {
     const info = yield* Effect.result(links.lstat(root));
     // A whole skills-root symlink is shared source storage, not a disposable installed copy.
@@ -25,7 +25,7 @@ export const setupRemovablePaths = Effect.fn("Setup.removablePaths")(function* (
       roots.push(yield* links.realPathNative(root));
   }
   const paths = new Map<string, string[]>();
-  for (const instance of observed.instances) {
+  for (const instance of scan.instances) {
     if (
       instance.owner.kind === "skit" ||
       instance.owner.kind === "authored" ||
@@ -55,20 +55,18 @@ export const setupRemovablePaths = Effect.fn("Setup.removablePaths")(function* (
 
 export const planSetupRemovals = Effect.fn("Setup.planRemovals")(function* (
   options: SetupOptions,
-  observed: SetupResult,
+  scan: SetupResult,
   selections: readonly { readonly name: string; readonly paths: readonly string[] }[],
   removablePaths: ReadonlyMap<string, readonly string[]>,
 ) {
   const requests: RecoveryMoveRequest[] = [];
   for (const selection of selections) {
-    for (const instance of observed.instances.filter((item) =>
-      selection.paths.includes(item.path),
-    )) {
+    for (const instance of scan.instances.filter((item) => selection.paths.includes(item.path))) {
       for (const path of removablePaths.get(instance.path) ?? [])
         requests.push({
           name: selection.name,
           path,
-          observedHash: instance.contentIdentity.observedHash,
+          currentHash: instance.contentIdentity.currentHash,
         });
     }
   }

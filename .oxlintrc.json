@@ -111,7 +111,7 @@
     },
     {
       "files": [
-        "packages/cli/test/add-acquisition-lifetime.test.ts",
+        "packages/cli/test/add-source-lifetime.test.ts",
         "packages/cli/test/add-cli-lifetime.test.ts",
         "packages/cli/test/add-git-parity.test.ts",
         "packages/cli/test/application-cli.test.ts",
@@ -124,7 +124,7 @@
         "packages/cli/test/live-sources.e2e.ts",
         "packages/cli/test/publish-cli.test.ts",
         "packages/cli/test/single-machine-journey.test.ts",
-        "packages/cli/test/source-acquisition.test.ts",
+        "packages/cli/test/import-source.test.ts",
         "packages/skit-server-effect/test/e2e.test.ts",
         "packages/skit-server-effect/test/e2e-skills-sh.test.ts"
       ],

@@ -20,20 +20,18 @@ export const TreeEntry = Schema.Union([
 ]);
 export type TreeEntry = typeof TreeEntry.Type;
 
-export const TreeExcludedObservation = Schema.Struct({
+export const ExcludedTreeEntry = Schema.Struct({
   path: Schema.String,
   kind: Schema.Literals(["directory", "file", "symlink"]),
   bytes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   opaque: Schema.Boolean,
   reason: Schema.Literals(["gitignored", "normalized-control-exclusion"]),
 });
-export interface TreeExcludedObservation extends Schema.Schema.Type<
-  typeof TreeExcludedObservation
-> {}
+export interface ExcludedTreeEntry extends Schema.Schema.Type<typeof ExcludedTreeEntry> {}
 
 export const NormalizedTreeInspection = Schema.Struct({
   entries: Schema.Array(TreeEntry),
-  excluded: Schema.Array(TreeExcludedObservation),
+  excluded: Schema.Array(ExcludedTreeEntry),
 });
 export interface NormalizedTreeInspection extends Schema.Schema.Type<
   typeof NormalizedTreeInspection
@@ -154,32 +152,32 @@ function gitIncludedPaths(
 }
 
 /** Normalized trees are publishable content; verbatim trees preserve lossless source details. */
-export function walkTreeEffect(
+export function walkTree(
   root: string,
   policy: TreePolicy,
   options: { respectGitIgnore?: boolean } = {},
 ): Effect.Effect<TreeEntry[], TreeError | PlatformError, TreeRequirements> {
   if (policy === "normalized")
-    return walkTreeInternal(root, policy, { ...options, observeExcluded: false }).pipe(
+    return walkTreeInternal(root, policy, { ...options, reportExcluded: false }).pipe(
       Effect.map((inspection) => [...inspection.entries]),
     );
-  return walkTreeInternal(root, policy, { ...options, observeExcluded: false }).pipe(
+  return walkTreeInternal(root, policy, { ...options, reportExcluded: false }).pipe(
     Effect.map((inspection) => [...inspection.entries]),
   );
 }
 
 /** Inspect publish-shaped membership while retaining diagnostic evidence about omitted content. */
-export function inspectNormalizedTreeEffect(
+export function inspectNormalizedTree(
   root: string,
   options: { respectGitIgnore?: boolean } = {},
 ): Effect.Effect<NormalizedTreeInspection, TreeError | PlatformError, TreeRequirements> {
-  return walkTreeInternal(root, "normalized", { ...options, observeExcluded: true });
+  return walkTreeInternal(root, "normalized", { ...options, reportExcluded: true });
 }
 
 function walkTreeInternal(
   root: string,
   policy: TreePolicy,
-  options: { respectGitIgnore?: boolean; observeExcluded: boolean },
+  options: { respectGitIgnore?: boolean; reportExcluded: boolean },
 ): Effect.Effect<NormalizedTreeInspection, TreeError | PlatformError, TreeRequirements> {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -203,11 +201,11 @@ function walkTreeInternal(
     }
 
     const entries: TreeEntry[] = [];
-    const excluded: TreeExcludedObservation[] = [];
+    const excluded: ExcludedTreeEntry[] = [];
     const recordExcluded = (
       absolute: string,
       entryPath: string,
-      reason: TreeExcludedObservation["reason"],
+      reason: ExcludedTreeEntry["reason"],
     ): Effect.Effect<void, PlatformError, never> =>
       Effect.gen(function* () {
         const info = yield* links.lstat(absolute);
@@ -243,7 +241,7 @@ function walkTreeInternal(
             (policy === "verbatim" &&
               ((depth === 0 && name === ".git") || isCollectionControlRootEntry(name, depth)));
           if (controlExcluded) {
-            if (policy === "normalized" && options.observeExcluded)
+            if (policy === "normalized" && options.reportExcluded)
               yield* recordExcluded(absolute, entryPath, "normalized-control-exclusion");
             continue;
           }
@@ -252,7 +250,7 @@ function walkTreeInternal(
             !includedPaths.has(entryPath) &&
             !includedDirectories.has(entryPath)
           ) {
-            if (options.observeExcluded) yield* recordExcluded(absolute, entryPath, "gitignored");
+            if (options.reportExcluded) yield* recordExcluded(absolute, entryPath, "gitignored");
             continue;
           }
           const info = yield* links.lstat(absolute);

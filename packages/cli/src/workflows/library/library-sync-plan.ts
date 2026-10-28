@@ -1,5 +1,5 @@
 import {
-  BindingEntry,
+  Enabled,
   canonicalJson,
   currentSkillVersion,
   type LibraryManifest,
@@ -7,7 +7,7 @@ import {
 import { Schema } from "effect";
 import { normalizeLibraryManifest } from "./library-merge.js";
 
-import type { SyncChange, SyncBindingEntry, SyncPlan } from "./library-sync-contract.js";
+import type { SyncChange, SyncEnabledItem, SyncPlan } from "./library-sync-contract.js";
 const action = (before: unknown, after: unknown): SyncChange["action"] =>
   before === undefined ? "add" : after === undefined ? "remove" : "update";
 
@@ -16,47 +16,44 @@ const collectionSkills = (manifest: LibraryManifest, collectionId: string) =>
   new Map(
     manifest.skills
       .filter((skill) => skill.collection_id === collectionId)
-      .map((skill) => [skill.name, currentSkillVersion(manifest, skill)?.source_digest]),
+      .map((skill) => [skill.name, currentSkillVersion(manifest, skill)?.source_hash]),
   );
 
 const collectionGraph = (manifest: LibraryManifest, collectionId: string) => {
   const skills = manifest.skills.filter((skill) => skill.collection_id === collectionId);
-  const acquisitions = manifest.acquisitions.filter((item) => item.collection_id === collectionId);
-  const retainedCopyIds = new Set(acquisitions.map((item) => item.retained_copy_id));
+  const imports = manifest.imports.filter((item) => item.collection_id === collectionId);
+  const versionIds = new Set(imports.map((item) => item.collection_version_id));
   return {
     collection: manifest.collections.find((item) => item.collection_id === collectionId),
     skills,
-    acquisitions,
-    retained_copies: manifest.retained_copies.filter((item) =>
-      retainedCopyIds.has(item.retained_copy_id),
+    imports,
+    collection_versions: manifest.collection_versions.filter((item) =>
+      versionIds.has(item.collection_version_id),
     ),
   };
 };
 
-/** The entries of `from` that `to` lacks, labelled with Collection or Skill names. */
+/** The items of `from` that `to` lacks, labelled with Collection or Skill names. */
 const entriesMissing = (
   manifest: LibraryManifest,
-  from: LibraryManifest["bindings"][number] | undefined,
-  to: LibraryManifest["bindings"][number] | undefined,
-): readonly SyncBindingEntry[] =>
-  (from?.entries ?? [])
-    .filter(
-      (entry) =>
-        !(to?.entries ?? []).some((other) => Schema.toEquivalence(BindingEntry)(entry, other)),
-    )
-    .map((entry) =>
-      entry.kind === "collection"
+  from: readonly Enabled[] | undefined,
+  to: readonly Enabled[] | undefined,
+): readonly SyncEnabledItem[] =>
+  (from ?? [])
+    .filter((item) => !(to ?? []).some((other) => Schema.toEquivalence(Enabled)(item, other)))
+    .map((item) =>
+      "collection" in item
         ? {
             kind: "collection" as const,
             label:
-              manifest.collections.find((item) => item.collection_id === entry.collection_id)
-                ?.label ?? entry.collection_id,
+              manifest.collections.find(
+                (collection) => collection.collection_id === item.collection,
+              )?.label ?? item.collection,
           }
         : {
             kind: "skill" as const,
             label:
-              manifest.skills.find((skill) => skill.skill_id === entry.skill_id)?.name ??
-              entry.skill_id,
+              manifest.skills.find((skill) => skill.skill_id === item.skill)?.name ?? item.skill,
           },
     );
 
@@ -82,7 +79,7 @@ const changes = (before: LibraryManifest, after: LibraryManifest): readonly Sync
     const skills_added = [...skillsAfter.keys()].filter((name) => !skillsBefore.has(name)).sort();
     const skills_removed = [...skillsBefore.keys()].filter((name) => !skillsAfter.has(name)).sort();
     const skills_changed = [...skillsAfter.entries()]
-      .filter(([name, digest]) => skillsBefore.has(name) && skillsBefore.get(name) !== digest)
+      .filter(([name, hash]) => skillsBefore.has(name) && skillsBefore.get(name) !== hash)
       .map(([name]) => name)
       .sort();
     return [
@@ -104,24 +101,27 @@ const changes = (before: LibraryManifest, after: LibraryManifest): readonly Sync
       },
     ];
   });
-  const previousBindings = new Map(before.bindings.map((binding) => [binding.scope.kind, binding]));
-  const desiredBindings = new Map(after.bindings.map((binding) => [binding.scope.kind, binding]));
-  const bindingChanges = [...new Set([...previousBindings.keys(), ...desiredBindings.keys()])]
+  // `skit sync` reports the global list as a Binding, present while it enables something.
+  const listed = (manifest: LibraryManifest) =>
+    manifest.enabled.length > 0 ? [["global", manifest.enabled] as const] : [];
+  const previousEnabled = new Map(listed(before));
+  const desiredEnabled = new Map(listed(after));
+  const enabledChanges = [...new Set([...previousEnabled.keys(), ...desiredEnabled.keys()])]
     .sort()
     .flatMap((scope): SyncChange[] => {
-      const previous = previousBindings.get(scope);
-      const desired = desiredBindings.get(scope);
+      const previous = previousEnabled.get(scope);
+      const desired = desiredEnabled.get(scope);
       if (canonicalJson(previous ?? null) === canonicalJson(desired ?? null)) return [];
       return [
         {
-          kind: "binding",
+          kind: "enabled",
           action: action(previous, desired),
-          entries_added: entriesMissing(after, desired, previous),
-          entries_removed: entriesMissing(before, previous, desired),
+          items_added: entriesMissing(after, desired, previous),
+          items_removed: entriesMissing(before, previous, desired),
         },
       ];
     });
-  return [...collectionChanges, ...bindingChanges];
+  return [...collectionChanges, ...enabledChanges];
 };
 
 export const planLibrarySync = (

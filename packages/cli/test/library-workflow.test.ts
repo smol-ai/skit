@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
-  invocationEligibleBindings,
+  invocationEligibleScopes,
   scopeChoices,
   scopeKey,
 } from "../src/library-application/read-model.js";
@@ -20,15 +20,15 @@ describe("Library workflow choices", () => {
 
   test("finds only Bindings that carry an invocation policy", () => {
     const policy = {} as NonNullable<
-      Parameters<typeof invocationEligibleBindings>[0]["bindings"][number]["policy"]
+      Parameters<typeof invocationEligibleScopes>[0]["scopes"][number]["policy"]
     >;
     const row = {
-      bindings: [
+      scopes: [
         { scope: { kind: "global" as const }, policy },
         { scope: { kind: "repository" as const, root: "/repo" } },
       ],
     };
-    expect(invocationEligibleBindings(row).map((binding) => binding.scope.kind)).toEqual([
+    expect(invocationEligibleScopes(row).map((scopeRow) => scopeRow.scope.kind)).toEqual([
       "global",
     ]);
   });

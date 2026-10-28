@@ -6,15 +6,15 @@ import { ZipFile } from "yazl";
 import type {
   DescriptorFailure,
   HarnessMetadataInvalid,
-  ProjectedPathCollision,
+  InstalledPathCollision,
   SharedTargetCollision,
 } from "../failures.js";
 import { SkitValidationFailed } from "../failures.js";
-import { validateSkitDirectoryEffect } from "../artifact/skit.js";
+import { validateSkitDirectory } from "../artifact/skit.js";
 import type { TreeRequirements } from "../platform/tree-requirements.js";
 import type { TreeError } from "../shared/tree-error.js";
 
-export function createSkitArchiveEffect(
+export function createSkitArchive(
   root: string,
   outputPath: string,
 ): Effect.Effect<
@@ -22,7 +22,7 @@ export function createSkitArchiveEffect(
   | DescriptorFailure
   | SkitValidationFailed
   | HarnessMetadataInvalid
-  | ProjectedPathCollision
+  | InstalledPathCollision
   | SharedTargetCollision
   | TreeError
   | PlatformError,
@@ -31,7 +31,7 @@ export function createSkitArchiveEffect(
   return Effect.scoped(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const validation = yield* validateSkitDirectoryEffect(root, "archive", {
+      const validation = yield* validateSkitDirectory(root, "archive", {
         assessmentContext: "publish",
       });
       const errors = validation.diagnostics.filter((item) => item.severity === "error");

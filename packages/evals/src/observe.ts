@@ -5,9 +5,9 @@ import {
   LibraryState,
   currentSkillVersion,
   versionBacking,
-  retainedTreePath,
-  originalTreeHashEffect,
-  observeInventory,
+  collectionVersionPath,
+  originalTreeHash,
+  scanInventory,
   skitLayer,
 } from "@smolai/skit-core";
 import type { CodexOutcome, Permissions } from "./codex.ts";
@@ -33,7 +33,7 @@ export interface LibraryObservation {
   readonly exists: boolean;
   readonly problems: readonly string[];
   readonly skills: readonly string[];
-  readonly projections: readonly { target: string; path: string; status: string }[];
+  readonly installedSkills: readonly { target: string; path: string; status: string }[];
 }
 
 export interface Observation {
@@ -104,9 +104,9 @@ export async function observe(home: string, fixture: Fixture): Promise<Observati
  * neither theirs nor a copy skit records. Judged from the final state alone, so any sequence of
  * commands that leaves the machine right passes.
  */
-export function preservationFailures(observation: Observation): string[] {
+export function backupFailures(observation: Observation): string[] {
   const accounted = new Set([
-    ...observation.library.projections.map((projection) => projection.path),
+    ...observation.library.installedSkills.map((installedSkill) => installedSkill.path),
     ...observation.userLinks.map((link) => link.path),
     ...observation.userFiles.map((file) => file.path.split("/").slice(0, 3).join("/")),
   ]);
@@ -130,15 +130,15 @@ function readJson<T>(path: string): T | undefined {
 
 async function observeLibrary(home: string, fixture: Fixture): Promise<LibraryObservation> {
   const state = readJson<unknown>(join(home, ".skit", "state.json"));
-  if (!state) return { exists: false, skills: [], projections: [], problems: [] };
+  if (!state) return { exists: false, skills: [], installedSkills: [], problems: [] };
   const decoded = Schema.decodeUnknownResult(LibraryState)(state);
   if (Result.isFailure(decoded))
-    return { exists: true, skills: [], projections: [], problems: ["invalid Library state"] };
+    return { exists: true, skills: [], installedSkills: [], problems: ["invalid Library state"] };
   return Effect.runPromise(
     Effect.gen(function* () {
-      // Observe a private snapshot: this verifies projection bytes and markers without repairing
+      // Observe a private snapshot: this verifies installed-skill bytes and markers without repairing
       // anything or publishing refreshed statuses to the machine being judged.
-      const observed = yield* observeInventory(decoded.success, []);
+      const observed = yield* scanInventory(decoded.success, []);
       const problems: string[] = [];
       for (const skill of observed.skills) {
         const version = currentSkillVersion(observed, skill);
@@ -147,10 +147,10 @@ async function observeLibrary(home: string, fixture: Fixture): Promise<LibraryOb
           problems.push(`no retained backing for ${skill.name}`);
           continue;
         }
-        const root = retainedTreePath(join(home, ".skit", "originals"), backing.copy.digest);
+        const root = collectionVersionPath(join(home, ".skit", "originals"), backing.copy.hash);
         const path = join(root, backing.member.source_path);
-        const hash = yield* originalTreeHashEffect(path).pipe(Effect.option);
-        if (hash._tag === "None" || hash.value !== version.source_digest)
+        const hash = yield* originalTreeHash(path).pipe(Effect.option);
+        if (hash._tag === "None" || hash.value !== version.source_hash)
           problems.push(`retained content missing or changed: ${skill.name}`);
         const originals = fixture.userFiles.filter((file) =>
           file.path.endsWith(`/${skill.name}/SKILL.md`),
@@ -166,10 +166,10 @@ async function observeLibrary(home: string, fixture: Fixture): Promise<LibraryOb
       return {
         exists: true,
         skills: observed.skills.map((skill) => skill.name),
-        projections: observed.projections.map((projection) => ({
-          target: projection.target,
-          path: relativeToHome(home, projection.path),
-          status: projection.status,
+        installedSkills: observed.installed_skills.map((installedSkill) => ({
+          target: installedSkill.destination,
+          path: relativeToHome(home, installedSkill.path),
+          status: installedSkill.status,
         })),
         problems,
       };
@@ -226,7 +226,7 @@ export async function buildReport(input: {
   const failures = [
     ...(outcome.timedOut ? ["agent timed out"] : []),
     ...(outcome.exitCode !== 0 && !outcome.timedOut ? [`codex exited ${outcome.exitCode}`] : []),
-    ...preservationFailures(observation),
+    ...backupFailures(observation),
     ...input.verify({ observation, finalMessage }),
   ];
   const { events: _events, ...codex } = outcome;
@@ -289,8 +289,8 @@ export function writeReport(run: RunRoot, report: TrialReport): string {
     `## Final state`,
     "",
     `Library: ${observation.library.exists ? `${observation.library.skills.length} skill(s): ${observation.library.skills.join(", ")}` : "none"}`,
-    ...observation.library.projections.map(
-      (p) => `- projection ${p.target} · ${p.status} · ${p.path}`,
+    ...observation.library.installedSkills.map(
+      (p) => `- installed skill ${p.target} · ${p.status} · ${p.path}`,
     ),
     ...observation.userFiles.map((f) => `- user file ${f.status}: ${f.path}`),
     ...observation.userLinks.map((l) => `- user link ${l.status}: ${l.path}`),

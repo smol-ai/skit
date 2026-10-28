@@ -1,18 +1,18 @@
 import {
-  bindingSkillIds,
-  effectiveGlobalBindings,
+  enabledByScope,
+  enabledSkillIds,
   withLibraryWriter,
   LibraryStore,
   type LibraryState,
 } from "@smolai/skit-core";
 import { Data, Cause, Effect, FileSystem, Predicate } from "effect";
-import type { InventoryRootOptions } from "../projection/roots.js";
-import { retainLibrarySourceEffect, inspectLibrarySourceEffect } from "./source-acquisition.js";
+import type { InventoryRootOptions } from "../install/roots.js";
+import { importSource, inspectLibrarySource } from "./import-source.js";
 import type { UpdateFailure } from "../workflows/library/update-contract.js";
-import { reconcileLibraryProjections } from "../workflows/library/projection-reconciliation.js";
+import { updateInstalledSkills } from "../workflows/library/update-installed-skills.js";
 import { LibraryProgress } from "./progress.js";
 import {
-  latestSubjectAcquisition,
+  latestSourceImport,
   type LibrarySubject,
 } from "../workflows/library/subject-resolution.js";
 import { dirname, join, resolve } from "node:path";
@@ -42,7 +42,7 @@ export class CollectionNotUpdatable
   }
 }
 
-const subjectSourceEffect = Effect.fn("Library.updateSource")(function* (
+const subjectSource = Effect.fn("Library.updateSource")(function* (
   subject: LibrarySubject,
   sourceInput?: string,
 ) {
@@ -66,25 +66,21 @@ const subjectSourceEffect = Effect.fn("Library.updateSource")(function* (
 const skillChanges = (
   state: LibraryState,
   collectionId: string,
-  previous: ReadonlyArray<{ readonly source_path: string; readonly artifact_digest: string }>,
+  previous: ReadonlyArray<{ readonly source_path: string; readonly artifact_hash: string }>,
   observed: ReadonlyArray<{
     readonly source_path: string;
     readonly name: string;
-    readonly artifact_digest?: string;
+    readonly artifact_hash?: string;
   }>,
 ) => {
-  const bindings = [...effectiveGlobalBindings(state), ...state.local_bindings];
-  const followed = bindings.some((binding) =>
-    binding.entries.some(
-      (entry) => entry.kind === "collection" && entry.collection_id === collectionId,
-    ),
+  const lists = enabledByScope(state);
+  const followed = lists.some((list) =>
+    list.enabled.some((item) => "collection" in item && item.collection === collectionId),
   );
   const individual = new Set<string>(
-    bindings.flatMap((binding) =>
-      binding.entries.flatMap((entry) => (entry.kind === "skill" ? [entry.skill_id] : [])),
-    ),
+    lists.flatMap((list) => list.enabled.flatMap((item) => ("skill" in item ? [item.skill] : []))),
   );
-  const enabled = new Set<string>(bindings.flatMap((binding) => bindingSkillIds(state, binding)));
+  const enabled = new Set<string>(lists.flatMap((list) => enabledSkillIds(state, list.enabled)));
   const skillAt = (path: string) =>
     state.skills.find((skill) => skill.collection_id === collectionId && skill.path === path);
   const added = observed.filter(
@@ -103,8 +99,8 @@ const skillChanges = (
       const before = previous.find((item) => item.source_path === member.source_path);
       const skill = skillAt(member.source_path);
       return before !== undefined &&
-        member.artifact_digest !== undefined &&
-        member.artifact_digest !== before.artifact_digest &&
+        member.artifact_hash !== undefined &&
+        member.artifact_hash !== before.artifact_hash &&
         skill !== undefined &&
         enabled.has(skill.skill_id)
         ? [skill.name]
@@ -121,29 +117,33 @@ const resolveUpdate = Effect.fn("Library.resolveCollectionUpdate")(function* (
   state: LibraryState,
   subject: LibrarySubject,
 ) {
-  const acquisition = latestSubjectAcquisition(state, subject);
+  const sourceImport = latestSourceImport(state, subject);
   const priorTree =
-    acquisition === undefined
+    sourceImport === undefined
       ? undefined
-      : state.retained_copies.find(
-          (tree) => tree.retained_copy_id === acquisition.retained_copy_id,
+      : state.collection_versions.find(
+          (tree) => tree.collection_version_id === sourceImport.collection_version_id,
         );
-  if (acquisition === undefined || priorTree === undefined)
+  if (sourceImport === undefined || priorTree === undefined)
     return yield* new CollectionNotUpdatable({
       subject_id: subject.subjectId,
       label: subject.label,
     });
-  const input = yield* subjectSourceEffect(subject, acquisition.input.value);
-  return { acquisition, priorTree, input };
+  const input = yield* subjectSource(subject, sourceImport.input.value);
+  return { acquisition: sourceImport, priorTree, input };
 });
 
-/** Observe one Collection without retaining content or reconciling Projections. */
+/** Observe one Collection without retaining content or reconciling installed skills. */
 export const previewCollectionUpdate = Effect.fn("Library.previewCollectionUpdate")(function* (
   state: LibraryState,
   subject: LibrarySubject,
 ) {
-  const { acquisition, priorTree: tree, input } = yield* resolveUpdate(state, subject);
-  const inspected = yield* inspectLibrarySourceEffect(
+  const {
+    acquisition: sourceImport,
+    priorTree: tree,
+    input,
+  } = yield* resolveUpdate(state, subject);
+  const inspected = yield* inspectLibrarySource(
     input,
     undefined,
     tree.members.map((member) => member.source_path),
@@ -152,16 +152,16 @@ export const previewCollectionUpdate = Effect.fn("Library.previewCollectionUpdat
   return {
     subject_id: subject.subjectId,
     subject_kind: subject.kind,
-    current_snapshot_digest: tree.digest,
+    current_snapshot_digest: tree.hash,
     available_snapshot_digest: inspected.snapshot_digest,
-    changed: tree.digest !== inspected.snapshot_digest,
+    changed: tree.hash !== inspected.snapshot_digest,
     label: subject.label,
     ...("diagnostics" in inspected && inspected.diagnostics?.length
       ? { diagnostics: inspected.diagnostics }
       : {}),
     ...skillChanges(
       state,
-      acquisition.collection_id,
+      sourceImport.collection_id,
       tree.members,
       inspected.skills.map((skill) => ({
         source_path: skill.verbatim_path,
@@ -207,78 +207,77 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
   const storeHome = yield* canonicalStoragePath(store.home);
   let phase: UpdateFailure["phase"] = "source";
   let source = before.label;
-  let sourceRetained = false;
+  let sourceImported = false;
   return yield* Effect.scoped(
     Effect.gen(function* () {
       const { priorTree, input } = yield* resolveUpdate(state, before);
       source = sourceLocator(input);
       const subject = { id: before.subjectId, label: before.label };
-      const retained = yield* progress.around(
+      const imported = yield* progress.around(
         { kind: "source", subject },
-        retainLibrarySourceEffect(
+        importSource(
           input,
           undefined,
           priorTree.members.map((member) => member.source_path),
         ),
         (value) => ({
           kind: "source-inspected",
-          changed: value.snapshot_digest !== priorTree.digest,
+          changed: value.snapshot_digest !== priorTree.hash,
         }),
       );
-      sourceRetained = true;
-      const changed = retained.snapshot_digest !== priorTree.digest;
-      let projected = 0;
+      sourceImported = true;
+      const changed = imported.snapshot_digest !== priorTree.hash;
+      let installed = 0;
       const collectionId =
         before.kind === "collection" ? before.collection.collection_id : before.skill.collection_id;
       // Reconcile even when the Source is current: a previous run may have retained
-      // this snapshot before projection failed or temporary-source cleanup interrupted it.
+      // this snapshot before installing failed or temporary-source cleanup interrupted it.
       {
         const current = yield* (yield* LibraryStore).load;
-        phase = "projection";
-        const reconciled = yield* progress.around(
-          { kind: "projection", subject },
-          reconcileLibraryProjections({
+        phase = "install";
+        const installedSkillUpdate = yield* progress.around(
+          { kind: "install", subject },
+          updateInstalledSkills({
             roots: options.roots,
             variantsPath: store.variantsPath,
-            onlyBindings: [...effectiveGlobalBindings(current), ...current.local_bindings].filter(
-              (binding) =>
-                binding.entries.some((entry) =>
-                  entry.kind === "collection"
-                    ? entry.collection_id === collectionId
-                    : current.skills.some(
-                        (skill) =>
-                          skill.skill_id === entry.skill_id && skill.collection_id === collectionId,
-                      ),
-                ),
+            onlyScopes: enabledByScope(current).filter((list) =>
+              list.enabled.some((item) =>
+                "collection" in item
+                  ? item.collection === collectionId
+                  : current.skills.some(
+                      (skill) =>
+                        skill.skill_id === item.skill && skill.collection_id === collectionId,
+                    ),
+              ),
             ),
           }),
-          (value) => ({ kind: "projections-reconciled", projected: value.projected }),
+          (value) => ({ kind: "installed-skills-updated", installed: value.installed }),
         );
-        projected = reconciled.projected;
+        installed = installedSkillUpdate.installed;
       }
       const after = yield* (yield* LibraryStore).load;
-      const retainedTree = after.retained_copies.find(
-        (tree) => tree.retained_copy_id === retained.retained_version_id,
+      const collectionVersion = after.collection_versions.find(
+        (tree) => tree.collection_version_id === imported.collection_version_id,
       );
       return {
         subject_id: before.subjectId,
         subject_kind: before.kind,
-        previous_retained_copy_id: priorTree.retained_copy_id,
-        selected_retained_copy_id: retained.retained_version_id,
-        snapshot_digest: retained.snapshot_digest,
+        previous_collection_version_id: priorTree.collection_version_id,
+        selected_collection_version_id: imported.collection_version_id,
+        snapshot_digest: imported.snapshot_digest,
         changed,
-        projected,
+        installed: installed,
         label: before.label,
-        ...("diagnostics" in retained && retained.diagnostics?.length
-          ? { diagnostics: retained.diagnostics }
+        ...("diagnostics" in imported && imported.diagnostics?.length
+          ? { diagnostics: imported.diagnostics }
           : {}),
         ...skillChanges(
           state,
           collectionId,
           priorTree.members,
-          (retainedTree?.members ?? []).map((member) => ({
+          (collectionVersion?.members ?? []).map((member) => ({
             source_path: member.source_path,
-            artifact_digest: member.artifact_digest,
+            artifact_hash: member.artifact_hash,
             name:
               after.skills.find(
                 (skill) =>
@@ -325,12 +324,11 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
         return yield* Effect.gen(function* () {
           // Source publication can succeed before its temporary checkout fails to close.
           // Inspect persisted evidence rather than claiming that such an update was rolled back.
-          if (!sourceRetained) {
+          if (!sourceImported) {
             const current = yield* store.load;
-            const previous = latestSubjectAcquisition(state, before);
-            const latest = latestSubjectAcquisition(current, before);
-            sourceRetained =
-              latest !== undefined && latest.acquisition_id !== previous?.acquisition_id;
+            const previous = latestSourceImport(state, before);
+            const latest = latestSourceImport(current, before);
+            sourceImported = latest !== undefined && latest.import_id !== previous?.import_id;
           }
           const error = commandFailure(cause);
           return {
@@ -340,11 +338,11 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
             label: before.label,
             source,
             phase,
-            source_retained: sourceRetained,
-            error: sourceRetained
+            source_imported: sourceImported,
+            error: sourceImported
               ? {
                   ...error,
-                  remediation: `${error.remediation} Run \`skit update ${before.subjectId}\` to retry this Collection and reconcile its projections.`,
+                  remediation: `${error.remediation} Run \`skit update ${before.subjectId}\` to retry this Collection and update its installed skills.`,
                 }
               : error,
           };

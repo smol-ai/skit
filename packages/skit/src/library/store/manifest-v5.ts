@@ -1,30 +1,32 @@
 import { Schema, SchemaGetter } from "effect";
 import {
-  AcquisitionId,
+  ImportId,
   CollectionId,
   MachineId,
-  RetainedCopyId,
+  CollectionVersionId,
   SkillId,
   SkillVersionId,
 } from "../entity-ids.js";
 import {
-  type Acquisition,
-  type BindingEntry,
   type Collection,
   CollectionRelativePath,
-  currentCollectionSkills,
   HistoricalLocator,
-  librarySnapshotDigests,
   MaterializationProfile,
-  RetainedCopy,
-  type Skill,
-  SkillsShObservation,
   SourceIdentity,
   SourceRelativePath,
   SourceTracking,
 } from "../library-contracts.js";
-import { Digest, HarnessName } from "../../vocabulary.js";
+import { Hash, HarnessName } from "../../vocabulary.js";
 import { LibraryManifestFromV6, type LibraryManifestV6 } from "./manifest-v6.js";
+import {
+  type BindingEntryV7,
+  CollectionVersionV7,
+  currentCollectionSkillsV7,
+  type ImportV7,
+  librarySnapshotDigestsV7,
+  SkillsShLockFileEntryV7,
+  type SkillV7,
+} from "./manifest-v7.js";
 
 /** Frozen `skit.library.v5` entities, decoded only to migrate them to the current model. */
 export const AcquisitionSelectionV5 = Schema.Union([
@@ -44,7 +46,7 @@ export const UpstreamV5 = Schema.Struct({
   source_identity: SourceIdentity,
   tracking: SourceTracking,
   selection: AcquisitionSelectionV5,
-  last_acquisition_id: Schema.optionalKey(AcquisitionId),
+  last_acquisition_id: Schema.optionalKey(ImportId),
 });
 export const CollectionV5 = Schema.Struct({
   collection_id: CollectionId,
@@ -55,12 +57,12 @@ export type CollectionV5 = typeof CollectionV5.Type;
 
 export const SkillVersionV5 = Schema.Struct({
   skill_version_id: SkillVersionId,
-  source_digest: Digest,
-  artifact_digest: Digest,
-  validation_identity_digest: Digest,
+  source_digest: Hash,
+  artifact_digest: Hash,
+  validation_identity_digest: Hash,
   materialization_profile: MaterializationProfile,
   origins: Schema.Array(
-    Schema.Struct({ acquisition_id: AcquisitionId, source_path: CollectionRelativePath }),
+    Schema.Struct({ acquisition_id: ImportId, source_path: CollectionRelativePath }),
   ),
 });
 export const SkillV5 = Schema.Struct({
@@ -74,8 +76,8 @@ export const SkillV5 = Schema.Struct({
 export type SkillV5 = typeof SkillV5.Type;
 
 export const AcquisitionV5 = Schema.Struct({
-  acquisition_id: AcquisitionId,
-  retained_copy_id: RetainedCopyId,
+  acquisition_id: ImportId,
+  retained_copy_id: CollectionVersionId,
   source_identity: SourceIdentity,
   tracking: SourceTracking,
   selection: AcquisitionSelectionV5,
@@ -83,7 +85,7 @@ export const AcquisitionV5 = Schema.Struct({
   source_revision: Schema.optionalKey(Schema.String),
   acquired_at: Schema.String,
   machine_id: MachineId,
-  observations: Schema.Array(SkillsShObservation),
+  observations: Schema.Array(SkillsShLockFileEntryV7),
 });
 export type AcquisitionV5 = typeof AcquisitionV5.Type;
 
@@ -97,9 +99,9 @@ export const LibraryManifestV5 = Schema.Struct({
   schema: Schema.Literal("skit.library.v5"),
   collections: Schema.Array(CollectionV5),
   skills: Schema.Array(SkillV5),
-  retained_copies: Schema.Array(RetainedCopy),
+  retained_copies: Schema.Array(CollectionVersionV7),
   acquisitions: Schema.Array(AcquisitionV5),
-  snapshot_digests: Schema.Array(Digest),
+  snapshot_digests: Schema.Array(Hash),
   bindings: Schema.Array(BindingV5),
 });
 export type LibraryManifestV5 = typeof LibraryManifestV5.Type;
@@ -107,7 +109,7 @@ export type LibraryManifestV5 = typeof LibraryManifestV5.Type;
 export interface LibraryEntitiesV5 {
   readonly collections: readonly CollectionV5[];
   readonly skills: readonly SkillV5[];
-  readonly retained_copies: readonly RetainedCopy[];
+  readonly retained_copies: readonly CollectionVersionV7[];
   readonly acquisitions: readonly AcquisitionV5[];
 }
 
@@ -132,8 +134,8 @@ export const migrateLibraryEntitiesFromV5 = (input: LibraryEntitiesV5) => {
     .toSorted((left, right) => left.acquired_at.localeCompare(right.acquired_at));
 
   // A Collection's Source is its upstream, or for a local Collection its first Acquisition. Any
-  // other Acquisition of that Collection retained a local edit from a Projection path.
-  const kindOf = new Map<string, Acquisition["kind"]>();
+  // other Acquisition of that Collection retained a local edit from an installed skill path.
+  const kindOf = new Map<string, ImportV7["kind"]>();
   for (const collection of input.collections) {
     const owned = oldestFirst.filter(
       (acquisition) => collectionOf.get(acquisition.acquisition_id) === collection.collection_id,
@@ -149,7 +151,7 @@ export const migrateLibraryEntitiesFromV5 = (input: LibraryEntitiesV5) => {
       );
   }
 
-  const acquisitions: Acquisition[] = oldestFirst.map((acquisition) => {
+  const acquisitions: ImportV7[] = oldestFirst.map((acquisition) => {
     const git =
       acquisition.source_identity.kind === "github" || acquisition.source_identity.kind === "git";
     // v5 recorded a Registry Release version only in the input locator.
@@ -171,7 +173,7 @@ export const migrateLibraryEntitiesFromV5 = (input: LibraryEntitiesV5) => {
       observations: acquisition.observations,
     };
   });
-  const skills: Skill[] = input.skills.map((skill) => {
+  const skills: SkillV7[] = input.skills.map((skill) => {
     const selected = skill.versions.find(
       (version) => version.skill_version_id === skill.selected_skill_version_id,
     );
@@ -202,11 +204,11 @@ export const migrateLibraryEntitiesFromV5 = (input: LibraryEntitiesV5) => {
   }));
   const migrated = { collections, skills, acquisitions, retained_copies: input.retained_copies };
 
-  const entries = (skillIds: readonly string[]): BindingEntry[] => {
+  const entries = (skillIds: readonly string[]): BindingEntryV7[] => {
     const bound = new Set(skillIds);
-    const result: BindingEntry[] = [];
+    const result: BindingEntryV7[] = [];
     for (const collection of collections) {
-      const current = currentCollectionSkills(migrated, collection.collection_id).map(
+      const current = currentCollectionSkillsV7(migrated, collection.collection_id).map(
         (skill) => skill.skill_id,
       );
       if (current.length > 0 && current.every((skillId) => bound.has(skillId))) {
@@ -233,7 +235,7 @@ export const LibraryManifestFromV5 = LibraryManifestV5.pipe(
         skills: migrated.skills,
         retained_copies: migrated.retained_copies,
         acquisitions: migrated.acquisitions,
-        snapshot_digests: librarySnapshotDigests(migrated),
+        snapshot_digests: librarySnapshotDigestsV7(migrated),
         bindings: manifest.bindings.map((binding) => ({
           harness: binding.harness,
           scope: binding.scope,

@@ -1,7 +1,7 @@
 import { configurationForHome } from "../configuration/skit-configuration.js";
 import { Effect, Option } from "effect";
 import { libraryInstallationConfiguration } from "../library/installation-configuration.js";
-import { detectInstalledHarnessesEffect } from "../harness/catalog.js";
+import { detectInstalledHarnesses } from "../harness/catalog.js";
 import { inventoryRootOptions } from "./parameters.js";
 
 export interface LocalCommandInput {
@@ -19,7 +19,7 @@ export const libraryCommandConfiguration = Effect.fn("CLI.libraryConfiguration")
   const paths = yield* configurationForHome(Option.getOrUndefined(input.home));
   const libraryHome = paths.skitHome;
   const inventory = inventoryRootOptions(input, paths);
-  const detectedHarnesses = yield* detectInstalledHarnessesEffect({
+  const detectedHarnesses = yield* detectInstalledHarnesses({
     home: inventory.home,
     configHome: inventory.configHome,
     overrides: inventory.overrides,
@@ -31,7 +31,7 @@ export const libraryCommandConfiguration = Effect.fn("CLI.libraryConfiguration")
     detectedHarnesses: Effect.succeed(detectedHarnesses),
     pull: {
       installation,
-      bindings: inventory,
+      installOptions: inventory,
     },
   };
 });

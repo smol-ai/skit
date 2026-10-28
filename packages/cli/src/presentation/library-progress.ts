@@ -7,7 +7,7 @@ import {
 import { Renderer } from "./renderer.js";
 
 const pendingMessage = (stage: LibraryProgressStage) =>
-  `${stage.subject.label} · ${stage.kind === "source" ? "Fetching and inspecting Source" : "Updating projected Skills"}`;
+  `${stage.subject.label} · ${stage.kind === "source" ? "Fetching and inspecting Source" : "Updating installed skills"}`;
 
 const completedMessage = (stage: LibraryProgressStage, result: LibraryProgressCompletion) => {
   const message =
@@ -15,9 +15,9 @@ const completedMessage = (stage: LibraryProgressStage, result: LibraryProgressCo
       ? result.changed
         ? "New snapshot retained"
         : "Source is current"
-      : result.projected
-        ? `${result.projected} projected Skill${result.projected === 1 ? "" : "s"} updated`
-        : "No projected Skills needed updating";
+      : result.installed
+        ? `${result.installed} installed skill${result.installed === 1 ? "" : "s"} updated`
+        : "No installed skills needed updating";
   return `${stage.subject.label} · ${message}`;
 };
 

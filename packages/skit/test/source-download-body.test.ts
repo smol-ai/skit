@@ -8,7 +8,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Cause, Effect, Exit, Fiber } from "effect";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
-import { resolveSkitSourceEffect } from "../src/acquisition/sources.js";
+import { resolveSkitSource } from "../src/sources/resolve.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 const URL_ARCHIVE = "https://registry.example/source.zip";
@@ -43,7 +43,7 @@ const clientFromResponse = (response: () => Response): HttpClient.HttpClient =>
   HttpClient.make((request) => Effect.succeed(HttpClientResponse.fromWeb(request, response())));
 
 const resolve = (url: string, client: HttpClient.HttpClient) =>
-  Effect.scoped(resolveSkitSourceEffect(url)).pipe(
+  Effect.scoped(resolveSkitSource(url)).pipe(
     Effect.provideService(HttpClient.HttpClient, client),
     Effect.provide(skitLayer),
   );

@@ -1,7 +1,7 @@
 import { alignLibrary, aliasManifest, aliasDevice } from "./library-alignment.js";
 import {
-  acquisitionIsSourceRestorable,
-  sourceAcquisitions,
+  importCanBeRefetched,
+  sourceImports,
   currentCollectionSkills,
   canonicalJson,
   currentLibraryManifest,
@@ -10,17 +10,16 @@ import {
   LibraryManifest,
   LibraryState,
   emptyLibraryState,
-  bindingSkillIds,
-  mergeGlobalBindings,
+  enabledSkillIds,
+  mergeEnabled,
   currentSkillVersion,
-  type Binding,
-  type BindingEntry,
+  type Enabled,
   type CollectionId,
   type SkillId,
   type Collection,
   type Skill,
-  type RetainedCopy,
-  type Acquisition,
+  type CollectionVersion,
+  type Import,
 } from "@smolai/skit-core";
 import { Data, Effect, Result, Schema } from "effect";
 import { SyncConflictDetail } from "./library-sync-contract.js";
@@ -28,12 +27,13 @@ import { SyncConflictDetail } from "./library-sync-contract.js";
 const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
 const byKey = <T>(records: readonly T[], key: (record: T) => string) =>
   Object.fromEntries(records.map((record) => [key(record), record])) as Record<string, T>;
-const bindingKey = (binding: Binding) => binding.scope.kind;
+const enabledKind = (item: Enabled) => ("collection" in item ? "collection" : "skill");
+const enabledId = (item: Enabled) => ("collection" in item ? item.collection : item.skill);
 
 const collectionRecords = (manifest: LibraryManifest, id: CollectionId) => ({
   collection: manifest.collections.find((item) => item.collection_id === id),
   skills: manifest.skills.filter((item) => item.collection_id === id),
-  acquisitions: manifest.acquisitions.filter((item) => item.collection_id === id),
+  imports: manifest.imports.filter((item) => item.collection_id === id),
 });
 
 /** Apply a Collection-level choice to its dependent records, before the per-record merge. */
@@ -46,17 +46,19 @@ const takeCollection = (
     ...manifest.skills.filter((item) => item.collection_id !== id),
     ...remote.skills.filter((item) => item.collection_id === id),
   ];
-  const acquisitions = [
-    ...manifest.acquisitions.filter((item) => item.collection_id !== id),
-    ...remote.acquisitions.filter((item) => item.collection_id === id),
+  const imports = [
+    ...manifest.imports.filter((item) => item.collection_id !== id),
+    ...remote.imports.filter((item) => item.collection_id === id),
   ];
-  const referenced = new Set(acquisitions.map((item) => item.retained_copy_id));
+  const referenced = new Set(imports.map((item) => item.collection_version_id));
   const retained_copies = [
-    ...manifest.retained_copies,
-    ...remote.retained_copies.filter(
+    ...manifest.collection_versions,
+    ...remote.collection_versions.filter(
       (item) =>
-        referenced.has(item.retained_copy_id) &&
-        !manifest.retained_copies.some((copy) => copy.retained_copy_id === item.retained_copy_id),
+        referenced.has(item.collection_version_id) &&
+        !manifest.collection_versions.some(
+          (copy) => copy.collection_version_id === item.collection_version_id,
+        ),
     ),
   ];
   const memberIds = new Set(
@@ -64,8 +66,8 @@ const takeCollection = (
       .filter((item) => item.collection_id === id)
       .map((item) => item.skill_id),
   );
-  const belongs = (entry: BindingEntry) =>
-    entry.kind === "collection" ? entry.collection_id === id : memberIds.has(entry.skill_id);
+  const belongs = (item: Enabled) =>
+    "collection" in item ? item.collection === id : memberIds.has(item.skill);
   return {
     ...manifest,
     collections: [
@@ -73,83 +75,63 @@ const takeCollection = (
       ...remote.collections.filter((item) => item.collection_id === id),
     ],
     skills,
-    acquisitions,
-    retained_copies,
-    bindings: mergeGlobalBindings({ skills, acquisitions, retained_copies }, [
-      {
-        entries: [
-          ...manifest.bindings
-            .flatMap((binding) => binding.entries)
-            .filter((entry) => !belongs(entry)),
-          ...remote.bindings.flatMap((binding) => binding.entries).filter(belongs),
-        ],
-      },
+    imports: imports,
+    collection_versions: retained_copies,
+    enabled: mergeEnabled({ skills, imports: imports, collection_versions: retained_copies }, [
+      [...manifest.enabled.filter((item) => !belongs(item)), ...remote.enabled.filter(belongs)],
     ]),
   };
 };
 
 /** One device's global intent: which Collections it follows and which Skills are enabled now. */
-const bindingIntent = (manifest: LibraryManifest) => {
-  const entries = manifest.bindings.flatMap((binding) => binding.entries);
-  return {
-    followed: Object.fromEntries(
-      entries.flatMap((entry) =>
-        entry.kind === "collection" ? [[entry.collection_id, true] as const] : [],
-      ),
+const enabledIntent = (manifest: LibraryManifest) => ({
+  followed: Object.fromEntries(
+    manifest.enabled.flatMap((item) =>
+      "collection" in item ? [[item.collection, true] as const] : [],
     ),
-    enabled: Object.fromEntries(
-      bindingSkillIds(manifest, { entries }).map((skillId) => [skillId, true] as const),
-    ),
-  };
-};
+  ),
+  enabled: Object.fromEntries(
+    enabledSkillIds(manifest, manifest.enabled).map((skillId) => [skillId, true] as const),
+  ),
+});
 
 /**
- * Merge global Binding intent per Skill rather than per stored entry. Disabling one Skill of a
- * followed Collection rewrites the Collection entry as individual Skill entries, so merging raw
- * entries would let two devices that each disabled a different Skill re-enable both.
+ * Merge what the account enables per Skill rather than per stored item. Disabling one Skill of a
+ * followed Collection rewrites the Collection item as individual Skill items, so merging raw
+ * items would let two devices that each disabled a different Skill re-enable both.
  */
-function mergeBindingIntent(
+function mergeEnabledIntent(
   base: LibraryManifest,
   local: LibraryManifest,
   remote: LibraryManifest,
-  library: Parameters<typeof bindingSkillIds>[0] & { readonly collections: readonly Collection[] },
+  library: Parameters<typeof enabledSkillIds>[0] & { readonly collections: readonly Collection[] },
   takeRemote: ReadonlySet<string>,
 ) {
-  const [before, mine, theirs] = [base, local, remote].map(bindingIntent);
+  const [before, mine, theirs] = [base, local, remote].map(enabledIntent);
   const followed = planThreeWayRecords(before!.followed, mine!.followed, theirs!.followed, equal);
   const enabled = planThreeWayRecords(before!.enabled, mine!.enabled, theirs!.enabled, equal);
-  // A removal on either device takes the removed records' entries with it, exactly as removing
-  // them after the other device's Binding change would have.
+  // A removal on either device takes the removed records' items with it, exactly as removing
+  // them after the other device's enable change would have.
   const collectionIds = new Set<string>(library.collections.map((item) => item.collection_id));
   const skillIds = new Set<string>(library.skills.map((item) => item.skill_id));
-  const present = (entry: BindingEntry) =>
-    entry.kind === "collection"
-      ? collectionIds.has(entry.collection_id)
-      : skillIds.has(entry.skill_id);
-  const entries: BindingEntry[] = [
-    ...Object.keys(followed.records).map((collectionId): BindingEntry => ({
-      kind: "collection",
-      collection_id: collectionId as CollectionId,
+  const present = (item: Enabled) =>
+    "collection" in item ? collectionIds.has(item.collection) : skillIds.has(item.skill);
+  const items: Enabled[] = [
+    ...Object.keys(followed.records).map((collectionId): Enabled => ({
+      collection: collectionId as CollectionId,
     })),
-    ...Object.keys(enabled.records).map((skillId): BindingEntry => ({
-      kind: "skill",
-      skill_id: skillId as SkillId,
-    })),
+    ...Object.keys(enabled.records).map((skillId): Enabled => ({ skill: skillId as SkillId })),
   ].filter(present);
   // A followed Collection enables every current member, so it cannot coexist with one disabled.
-  const coherent = bindingSkillIds(library, {
-    entries: entries.filter((entry) => entry.kind === "collection"),
-  }).every((skillId) => enabled.records[skillId] !== undefined);
-  if (coherent) return { values: mergeGlobalBindings(library, [{ entries }]), conflicts: [] };
+  const coherent = enabledSkillIds(
+    library,
+    items.filter((item) => "collection" in item),
+  ).every((skillId) => enabled.records[skillId] !== undefined);
+  if (coherent) return { values: mergeEnabled(library, [items]), conflicts: [] };
+  // `binding:global` is the key users already pass to --take-remote.
   return takeRemote.has("binding:global")
-    ? {
-        values: mergeGlobalBindings(
-          library,
-          remote.bindings.map((binding) => ({ entries: binding.entries.filter(present) })),
-        ),
-        conflicts: [],
-      }
-    : { values: local.bindings, conflicts: ["binding:global"] };
+    ? { values: mergeEnabled(library, [remote.enabled.filter(present)]), conflicts: [] }
+    : { values: [...local.enabled], conflicts: ["binding:global"] };
 }
 
 export function normalizeLibraryManifest(manifest: LibraryManifest): LibraryManifest {
@@ -165,25 +147,15 @@ export function normalizeLibraryManifest(manifest: LibraryManifest): LibraryMani
         ),
       }))
       .sort((a, b) => a.skill_id.localeCompare(b.skill_id)),
-    retained_copies: [...manifest.retained_copies].sort((a, b) =>
-      a.retained_copy_id.localeCompare(b.retained_copy_id),
+    collection_versions: [...manifest.collection_versions].sort((a, b) =>
+      a.collection_version_id.localeCompare(b.collection_version_id),
     ),
-    acquisitions: [...manifest.acquisitions].sort((a, b) =>
-      a.acquisition_id.localeCompare(b.acquisition_id),
-    ),
+    imports: [...manifest.imports].sort((a, b) => a.import_id.localeCompare(b.import_id)),
     snapshot_digests: [...manifest.snapshot_digests].sort(),
-    bindings: manifest.bindings
-      .map((binding) => ({
-        ...binding,
-        entries: [...binding.entries].sort(
-          (a, b) =>
-            a.kind.localeCompare(b.kind) ||
-            (a.kind === "collection" ? a.collection_id : a.skill_id).localeCompare(
-              b.kind === "collection" ? b.collection_id : b.skill_id,
-            ),
-        ),
-      }))
-      .sort((a, b) => bindingKey(a).localeCompare(bindingKey(b))),
+    enabled: [...manifest.enabled].sort(
+      (a, b) =>
+        enabledKind(a).localeCompare(enabledKind(b)) || enabledId(a).localeCompare(enabledId(b)),
+    ),
   });
 }
 
@@ -229,7 +201,7 @@ export function mergeLibraryManifests(
   const collectionConflicts: string[] = [];
   const conflictedCollections = new Set<CollectionId>();
   const unresolvable: string[] = [];
-  // Source selection belongs to the Collection's observed Acquisition graph. A remote choice
+  // Source selection belongs to the Collection's import history. A remote choice
   // must adopt that graph, rather than pinning a Source Version as a retained local edit.
   const importCollections = new Set([
     ...independentCollections,
@@ -259,40 +231,39 @@ export function mergeLibraryManifests(
     });
     if (!membershipDiffers && !selectionDiffers) continue;
     const key = `collection:${id}`;
-    const latest = sourceAcquisitions(remote, id)[0];
+    const latest = sourceImports(remote, id)[0];
     // Selection has an ID tiebreak, but equal observation times do not authorize discarding history.
     // Preserve only strictly older history; any dropped equal-time content must be source-restorable.
-    const kept = local.acquisitions.filter(
+    const kept = local.imports.filter(
       (item) =>
-        item.collection_id === id && latest !== undefined && item.acquired_at < latest.acquired_at,
+        item.collection_id === id && latest !== undefined && item.imported_at < latest.imported_at,
     );
-    const dropped = local.acquisitions.filter(
+    const dropped = local.imports.filter(
       (item) =>
         item.collection_id === id &&
-        !remote.acquisitions.some((other) => other.acquisition_id === item.acquisition_id) &&
-        !kept.some((other) => other.acquisition_id === item.acquisition_id),
+        !remote.imports.some((other) => other.import_id === item.import_id) &&
+        !kept.some((other) => other.import_id === item.import_id),
     );
     const safe =
       !mine.some((skill) => skill.local_version_id !== undefined) &&
-      dropped.every(acquisitionIsSourceRestorable);
+      dropped.every(importCanBeRefetched);
     if (!safe) unresolvable.push(key);
     if (takeRemote.has(key) && safe) {
       const choice = {
         ...remote,
-        acquisitions: [
-          ...remote.acquisitions,
+        imports: [
+          ...remote.imports,
           ...kept.filter(
-            (item) =>
-              !remote.acquisitions.some((other) => other.acquisition_id === item.acquisition_id),
+            (item) => !remote.imports.some((other) => other.import_id === item.import_id),
           ),
         ],
-        retained_copies: [
-          ...remote.retained_copies,
-          ...local.retained_copies.filter(
+        collection_versions: [
+          ...remote.collection_versions,
+          ...local.collection_versions.filter(
             (copy) =>
-              kept.some((item) => item.retained_copy_id === copy.retained_copy_id) &&
-              !remote.retained_copies.some(
-                (other) => other.retained_copy_id === copy.retained_copy_id,
+              kept.some((item) => item.collection_version_id === copy.collection_version_id) &&
+              !remote.collection_versions.some(
+                (other) => other.collection_version_id === copy.collection_version_id,
               ),
           ),
         ],
@@ -352,9 +323,9 @@ export function mergeLibraryManifests(
     const versions = [...theirs.versions];
     let incompatible = false;
     for (const version of mine.versions) {
-      const published = versions.find((item) => item.artifact_digest === version.artifact_digest);
-      if (published === undefined) versions.push(version);
-      else if (!equal(published, version)) incompatible = true;
+      const theirsVersion = versions.find((item) => item.artifact_hash === version.artifact_hash);
+      if (theirsVersion === undefined) versions.push(version);
+      else if (!equal(theirsVersion, version)) incompatible = true;
     }
     const differs =
       incompatible ||
@@ -373,49 +344,49 @@ export function mergeLibraryManifests(
       },
     ];
   }
-  const trees = mergeRecords<RetainedCopy>(
+  const trees = mergeRecords<CollectionVersion>(
     "retained-tree",
-    base.retained_copies,
-    local.retained_copies,
-    remote.retained_copies,
-    (item) => item.retained_copy_id,
+    base.collection_versions,
+    local.collection_versions,
+    remote.collection_versions,
+    (item) => item.collection_version_id,
     takeRemote,
   );
-  const acquisitions = mergeRecords<Acquisition>(
+  const imports = mergeRecords<Import>(
     "acquisition",
-    base.acquisitions,
-    local.acquisitions,
-    remote.acquisitions,
-    (item) => item.acquisition_id,
+    base.imports,
+    local.imports,
+    remote.imports,
+    (item) => item.import_id,
     takeRemote,
   );
-  // A copy may be shared by Collections. Keep it while any surviving Acquisition references it.
-  const referencedCopies = new Set(acquisitions.values.map((item) => item.retained_copy_id));
+  // A copy may be shared by Collections. Keep it while any surviving import references it.
+  const referencedCopies = new Set(imports.values.map((item) => item.collection_version_id));
   for (const id of referencedCopies) {
-    if (trees.values.some((item) => item.retained_copy_id === id)) continue;
+    if (trees.values.some((item) => item.collection_version_id === id)) continue;
     const copy =
-      remote.retained_copies.find((item) => item.retained_copy_id === id) ??
-      local.retained_copies.find((item) => item.retained_copy_id === id);
+      remote.collection_versions.find((item) => item.collection_version_id === id) ??
+      local.collection_versions.find((item) => item.collection_version_id === id);
     if (copy !== undefined) trees.values.push(copy);
   }
-  trees.values = trees.values.filter((item) => referencedCopies.has(item.retained_copy_id));
+  trees.values = trees.values.filter((item) => referencedCopies.has(item.collection_version_id));
   const library = {
     collections: collections.values,
     skills: skills.values,
-    retained_copies: trees.values,
-    acquisitions: acquisitions.values,
+    collection_versions: trees.values,
+    imports: imports.values,
   };
-  const bindings = mergeBindingIntent(base, local, remote, library, takeRemote);
+  const enabled = mergeEnabledIntent(base, local, remote, library, takeRemote);
   const manifest = currentLibraryManifest({
     collections: collections.values,
     skills: skills.values,
-    retained_copies: trees.values,
-    acquisitions: acquisitions.values,
+    collection_versions: trees.values,
+    imports: imports.values,
     snapshot_digests: librarySnapshotDigests({
-      retained_copies: trees.values,
-      acquisitions: acquisitions.values,
+      collection_versions: trees.values,
+      imports: imports.values,
     }),
-    bindings: bindings.values,
+    enabled: enabled.values,
   });
   const conflicts = [
     ...collectionConflicts,
@@ -428,15 +399,15 @@ export function mergeLibraryManifests(
         ),
     ),
     ...trees.conflicts,
-    ...acquisitions.conflicts.filter(
+    ...imports.conflicts.filter(
       (key) =>
-        ![...base.acquisitions, ...local.acquisitions, ...remote.acquisitions].some(
+        ![...base.imports, ...local.imports, ...remote.imports].some(
           (item) =>
-            key === `acquisition:${item.acquisition_id}` &&
+            key === `acquisition:${item.import_id}` &&
             conflictedCollections.has(item.collection_id),
         ),
     ),
-    ...bindings.conflicts,
+    ...enabled.conflicts,
   ];
   if (
     conflicts.length === 0 &&

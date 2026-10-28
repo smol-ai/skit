@@ -25,11 +25,11 @@ import {
 } from "../../presentation/setup-steps.js";
 import { runSetup, type SetupOptions } from "../../workflows/library/setup.js";
 import { openSetupReview, type SetupReview } from "../../workflows/library/setup-review.js";
-import type { LocalAdoptionOptions } from "../../workflows/library/local-adoption.js";
+import type { ManageOptions } from "../../workflows/library/manage-existing.js";
 import { result } from "../contracts.js";
 import {
   setupDiscoveryOutput,
-  setupObserveAction,
+  setupScanAction,
   setupRecoveryListAction,
   setupResultActions,
   setupReviewAction,
@@ -39,11 +39,11 @@ import {
 import { LibraryStore } from "@smolai/skit-core";
 import { OptionCombinationInvalid } from "../../workflows/failures.js";
 import { SetupDuplicateAction } from "../../workflows/library/setup-decisions.js";
-import { checkSubjectsEffect } from "../../workflows/library/check.js";
+import { checkSubjects } from "../../workflows/library/check.js";
 import { renderCheck } from "../../presentation/check.js";
 import { setupReviewSkillChoices } from "../../presentation/setup-skills.js";
 
-import { renderSetupReconciliationOutcome } from "../../presentation/setup-reconciliation.js";
+import { renderChangeResult } from "../../presentation/installed-skill-changes.js";
 import {
   chooseSetupCopyDecisions,
   chooseSetupVersions,
@@ -56,20 +56,20 @@ const workDirFlag = optionalString(
   "Repository root to remember for this machine and scan.",
 );
 const dryRun = Flag.Boolean("dry-run").pipe(
-  Flag.withDescription("Observe without updating machine configuration."),
+  Flag.withDescription("Scan without saving machine settings."),
   Flag.withDefault(false),
 );
 const applyFlag = optionalString(
   "apply",
-  "Apply this observed planId without prompting; explicit selections also need --reviewed.",
+  "Apply this planId without prompting; explicit selections also need --reviewed.",
 );
 const reviewFlag = optionalString(
   "review",
-  "Preview explicit or recommended choices against this observed planId without applying.",
+  "Preview explicit or recommended choices against this planId without applying.",
 );
 const compareFlag = optionalString(
   "compare",
-  "Compare observed copies of the selected skill paths against this planId.",
+  "Compare the copies found at the selected skill paths against this planId.",
 );
 const reviewedFlag = optionalString(
   "reviewed",
@@ -96,26 +96,29 @@ const selectionFlags = {
     ),
     Flag.withDefault(false),
   ),
-  selectPath: repeated("select-path", "Choose this observed copy path; repeat to choose more."),
+  selectPath: repeated(
+    "select-path",
+    "Choose this copy path from the scan; repeat to choose more.",
+  ),
   selectSource: repeated(
     "select-source",
     "Choose this public source identifier from setup JSON; repeat to choose more.",
   ),
   removePath: repeated(
     "remove-path",
-    "Preserve this eligible installed copy in recovery; repeat to choose more.",
+    "Move this installed copy into recovery; repeat to choose more.",
   ),
 };
 const duplicatesFlag = Flag.Literals("duplicates", SetupDuplicateAction.literals).pipe(
   Flag.withDescription(
-    "Override automatic preservation for selected skills: retain-only keeps Library artifacts without enabling; keep-both keeps existing copies active; retire-aliases preserves individual links; preserve-duplicates preserves eligible equal global directories.",
+    "Choose what happens to other copies of the selected skills: retain-only imports into the Library without enabling; keep-both enables and leaves the other copies; retire-aliases enables and moves symlinks to the skill into recovery; preserve-duplicates enables and moves identical global copies into recovery.",
   ),
   Flag.optional,
 );
 
 export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   readonly options: Omit<SetupOptions, "repositoryRoots" | "persistRoots">;
-  readonly localCustody?: LocalAdoptionOptions;
+  readonly manageOptions?: ManageOptions;
   readonly interactive: boolean;
   readonly dryRun: boolean;
   readonly workDirFlag?: string;
@@ -128,17 +131,17 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
     persistRoots: false,
   };
   const renderer = yield* Renderer;
-  const guided = input.interactive && !input.dryRun && input.localCustody !== undefined;
+  const guided = input.interactive && !input.dryRun && input.manageOptions !== undefined;
   const steps = setupStepPlan({ scanRepositories: roots.length > 0 });
   if (guided) yield* renderer.note(steps.overview, setupOverviewTitle);
-  const observe = (options: SetupOptions) =>
+  const scanSetup = (options: SetupOptions) =>
     renderer.withStatus("Observing local skills", runSetup(options));
-  let observed = yield* observe(setupOptions);
+  let scan = yield* scanSetup(setupOptions);
   if (!input.interactive && persistRoots) {
     const review = yield* openSetupReview(
       { ...setupOptions, persistRoots: true },
-      observed,
-      input.localCustody ?? { bindings: setupOptions.inventory },
+      scan,
+      input.manageOptions ?? { installOptions: setupOptions.inventory },
     );
     // The explicit work-dir flag approves only this settings change, not skill enablement.
     const plan = yield* review.prepare({
@@ -148,15 +151,15 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
       reconcileExisting: false,
     });
     const applied = yield* plan.apply(renderer.withStatus);
-    const refreshed = yield* observe(setupOptions);
+    const refreshed = yield* scanSetup(setupOptions);
     return {
       ...refreshed,
       machineConfig: { ...refreshed.machineConfig, persisted: true },
       operationId: applied.operationId,
     };
   }
-  if (!guided || !input.localCustody) return observed;
-  const discoveredRepositories = observed.repositories;
+  if (!guided || !input.manageOptions) return scan;
+  const discoveredRepositories = scan.repositories;
   const displayPath = (path: string) => compactHomePath(path, input.options.inventory.home);
   const displayRoots = roots.map(displayPath).join(", ");
   if (roots.length)
@@ -191,12 +194,12 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
       repositoryDecisions,
       scanDecidedRepositories: true,
     };
-    observed = yield* observe({ ...setupOptions, persistRoots: false });
+    scan = yield* scanSetup({ ...setupOptions, persistRoots: false });
   }
   const review = yield* openSetupReview(
     { ...setupOptions, persistRoots },
-    observed,
-    input.localCustody,
+    scan,
+    input.manageOptions,
   );
   const sources = yield* chooseKnownSources(steps, review);
   const copies = yield* chooseDiscoveredSkills(steps, review, input.options.inventory.home);
@@ -206,18 +209,18 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   );
   const versionChoices = yield* chooseSetupVersions(
     review.versionAlternatives,
-    observed.reconciliation ?? [],
+    scan.changes ?? [],
     displayPath,
   );
   const plan = yield* review.prepare({ sources, copies, decisions, versionChoices });
-  if (!plan.canApply) return yield* plan.apply(renderer.withStatus).pipe(Effect.as(observed));
+  if (!plan.canApply) return yield* plan.apply(renderer.withStatus).pipe(Effect.as(scan));
   if (!plan.hasChanges) {
     yield* renderer.step(
       steps.step("confirm"),
       "Nothing was selected and the repository roots are unchanged, so there is nothing to apply.",
     );
     yield* offerSkillsShUpdateCheck();
-    return observed;
+    return scan;
   }
   yield* renderer.step(
     steps.step("confirm"),
@@ -230,7 +233,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   const prompter = yield* Prompter;
   if (!(yield* prompter.confirm(setupPrompts.confirm))) {
     yield* renderer.note("No changes were applied.", "Setup cancelled");
-    return observed;
+    return scan;
   }
   const applied = yield* plan.apply(renderer.withStatus);
   yield* renderSetupAliasRecovery(applied);
@@ -242,13 +245,13 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   yield* renderer.note(
     [
       "Selected setup changes were applied.",
-      ...applied.reconciliation.map((outcome) => renderSetupReconciliationOutcome(outcome)),
+      ...applied.changes.map((outcome) => renderChangeResult(outcome)),
       `Setup operation: ${applied.operationId}. Preview full undo with skit library undo ${applied.operationId} using the same --home.`,
     ].join("\n"),
     "Setup complete",
   );
   yield* offerSkillsShUpdateCheck();
-  return applied.observed;
+  return applied.scan;
 });
 
 const offerSkillsShUpdateCheck = Effect.fn("CLI.setup.offerSkillsShUpdateCheck")(function* () {
@@ -256,11 +259,13 @@ const offerSkillsShUpdateCheck = Effect.fn("CLI.setup.offerSkillsShUpdateCheck")
   const state = yield* store.load;
   const collectionIds = [
     ...new Set(
-      state.acquisitions
-        .filter((acquisition) =>
-          acquisition.observations.some((observation) => observation.type === "skills.sh-lock"),
+      state.imports
+        .filter((sourceImport) =>
+          sourceImport.lock_file_entries.some(
+            (lockFileEntry) => lockFileEntry.type === "skills.sh-lock",
+          ),
         )
-        .map((acquisition) => acquisition.collection_id),
+        .map((sourceImport) => sourceImport.collection_id),
     ),
   ];
   if (!collectionIds.length) return;
@@ -275,7 +280,7 @@ const offerSkillsShUpdateCheck = Effect.fn("CLI.setup.offerSkillsShUpdateCheck")
   const checks = yield* renderer.withStatus(
     "Checking retained skills.sh Sources",
     Effect.flatMap(
-      Effect.forEach(collectionIds, (collectionId) => checkSubjectsEffect(state, collectionId)),
+      Effect.forEach(collectionIds, (collectionId) => checkSubjects(state, collectionId)),
       (results) => Effect.succeed(results.flat()),
     ),
   );
@@ -425,7 +430,7 @@ export const setupCliCommand = Command.make(
                 probePath: process.env.PATH,
                 skillsStateHome: paths.xdgStateHome,
               };
-              const localCustody = { bindings: configuration.pull.bindings };
+              const manageOptions = { installOptions: configuration.pull.installOptions };
               if (
                 [apply, reviewId, compare].filter((value) => value !== undefined).length > 1 ||
                 (apply !== undefined && input.dryRun)
@@ -449,7 +454,7 @@ export const setupCliCommand = Command.make(
                 });
               const selected = {
                 options,
-                localCustody,
+                manageOptions,
                 ...(workDir === undefined ? {} : { workDirFlag: workDir }),
                 ...choice,
               };
@@ -470,19 +475,19 @@ export const setupCliCommand = Command.make(
                 const copies = yield* opened.review.compareCopies(
                   choice.selection?.copyPaths ?? [],
                 );
-                const discovery = setupDiscoveryOutput(opened.observed, opened.review, context);
+                const discovery = setupDiscoveryOutput(opened.scan, opened.review, context);
                 return result("setupComparison", {
                   planId: opened.planId,
                   copies,
                   actions: [
-                    setupObserveAction(context),
+                    setupScanAction(context),
                     ...discovery.choices
                       .filter(
                         (item) =>
                           (item.kind === "copy" &&
                             copies.some((copy) => copy.path === item.path)) ||
                           (item.kind === "version" &&
-                            opened.observed.reconciliation?.some(
+                            opened.scan.changes?.some(
                               (fact) =>
                                 fact.skillId === item.skillId &&
                                 copies.some((copy) => copy.name === fact.name),
@@ -501,13 +506,13 @@ export const setupCliCommand = Command.make(
                   canApply: prepared.plan.canApply,
                   summary: setupReviewSummary(prepared.plan.summary),
                   actions: [
-                    setupObserveAction(context),
+                    setupScanAction(context),
                     setupReviewAction(context, prepared.planId, choice),
-                    ...setupDiscoveryOutput(prepared.observed, prepared.review, context)
+                    ...setupDiscoveryOutput(prepared.scan, prepared.review, context)
                       .choices.filter(
                         (item) =>
                           item.kind === "version" &&
-                          prepared.plan.summary.reconciliation.some(
+                          prepared.plan.summary.changes.some(
                             (fact) => fact.skillId === item.skillId,
                           ),
                       )
@@ -534,7 +539,7 @@ export const setupCliCommand = Command.make(
                 interactive,
                 dryRun: input.dryRun || input.json,
                 options,
-                localCustody,
+                manageOptions,
               });
               if (interactive) return undefined;
               const setup = {
@@ -542,7 +547,7 @@ export const setupCliCommand = Command.make(
                 repositoryRoots: workDir ? [resolve(workDir)] : [],
                 persistRoots: false,
               };
-              const review = yield* openSetupReview(setup, value, localCustody);
+              const review = yield* openSetupReview(setup, value, manageOptions);
               return result("setup", setupDiscoveryOutput(value, review, context));
             }),
           );
@@ -555,7 +560,7 @@ export const setupCliCommand = Command.make(
                   code: failed.code,
                   message: failed.message,
                   remediation: failed.remediation,
-                  actions: [setupObserveAction(context), setupRecoveryListAction(selectedHome)],
+                  actions: [setupScanAction(context), setupRecoveryListAction(selectedHome)],
                 },
                 failed.exitCode,
               ),

@@ -14,7 +14,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Cause, Effect, Exit, FileSystem } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { join } from "node:path";
-import { parseSkitSourceEffect, resolveSkitSourceEffect } from "../src/acquisition/sources.js";
+import { parseSkitSource, resolveSkitSource } from "../src/sources/resolve.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 const outcome = (exit: Exit.Exit<unknown, unknown>): string => {
@@ -25,7 +25,7 @@ const outcome = (exit: Exit.Exit<unknown, unknown>): string => {
 };
 
 const parse = (input: string, cwd?: string) =>
-  Effect.exit(parseSkitSourceEffect(input, cwd)).pipe(Effect.provide(skitLayer));
+  Effect.exit(parseSkitSource(input, cwd)).pipe(Effect.provide(skitLayer));
 
 describe("the source failure channel", () => {
   it.effect.each([
@@ -65,7 +65,7 @@ describe("the source failure channel", () => {
         ),
       );
       const exit = yield* Effect.exit(
-        Effect.scoped(resolveSkitSourceEffect("https://example.com/skills/x/SKILL.md")),
+        Effect.scoped(resolveSkitSource("https://example.com/skills/x/SKILL.md")),
       ).pipe(Effect.provideService(HttpClient.HttpClient, client), Effect.provide(skitLayer));
       assert.strictEqual(outcome(exit), "DirectSkillDocumentInvalid");
     }),
@@ -81,7 +81,7 @@ describe("the source failure channel", () => {
         join(skill, "SKILL.md"),
         "---\nname: review\ndescription: Review code carefully.\n---\n\n# Review\n",
       );
-      const exit = yield* Effect.exit(parseSkitSourceEffect(skill));
+      const exit = yield* Effect.exit(parseSkitSource(skill));
       assert.strictEqual(outcome(exit), "Success");
     }).pipe(Effect.provide(skitLayer)),
   );

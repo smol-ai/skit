@@ -7,17 +7,17 @@ import {
   LibraryState,
   libraryStoreLayer,
   InvalidLibraryState,
-  captureSnapshotArchiveEffect,
-  deterministicTreeHashEffect,
-  retainedTreePath,
-  libraryManifestFromLocalStateEffect,
+  readSnapshotArchive,
+  deterministicTreeHash,
+  collectionVersionPath,
+  libraryManifestFromLocalState,
 } from "@smolai/skit-core";
 import { LibraryChangedOnServer, RegistryUnreachable } from "../src/registry/failures.js";
 import {
   LibraryApiRejected,
   LibraryManifestTooNew,
 } from "../src/workflows/library/library-sync-api.js";
-import { prepareSyncDeviceTransition } from "../src/workflows/library/library-sync-projections.js";
+import { prepareSyncDeviceTransition } from "../src/workflows/library/library-sync-installed-skills.js";
 import { SyncLocalChanged } from "../src/workflows/library/library-sync.js";
 import {
   assertDiskUnchanged,
@@ -30,7 +30,7 @@ import { devices } from "./helpers/library-sync-devices.js";
 
 type Homes = Effect.Success<typeof devices>;
 
-/** A row stopped before publication may leave orphan originals, and nothing else may change. */
+/** A row stopped before save may leave orphan originals, and nothing else may change. */
 const onlyOrphanOriginals = Effect.fn("Test.onlyOrphanOriginals")(function* (
   before: DiskSnapshot,
   home: string,
@@ -46,17 +46,86 @@ const onlyOrphanOriginals = Effect.fn("Test.onlyOrphanOriginals")(function* (
     );
 });
 
+/** A current state with nothing installed, written as the v7 document an older SKIT left. */
+const asV7 = ({
+  schemaVersion: _schemaVersion,
+  collection_versions,
+  imports,
+  enabled,
+  invocation_policies,
+  repositories,
+  installed_skills,
+  skills,
+  ...fields
+}: LibraryState) => {
+  assert.deepStrictEqual([repositories, installed_skills], [[], []]);
+  return {
+    ...fields,
+    schemaVersion: 7,
+    skills: skills.map(({ versions, ...skill }) => ({
+      ...skill,
+      versions: versions.map(
+        ({ source_hash, artifact_hash, validation_identity_hash, ...version }) => ({
+          ...version,
+          source_digest: source_hash,
+          artifact_digest: artifact_hash,
+          validation_identity_digest: validation_identity_hash,
+        }),
+      ),
+    })),
+    retained_copies: collection_versions.map(
+      ({ collection_version_id, hash, members, ...copy }) => ({
+        ...copy,
+        retained_copy_id: collection_version_id,
+        digest: hash,
+        members: members.map(({ source_hash, artifact_hash, ...member }) => ({
+          ...member,
+          source_digest: source_hash,
+          artifact_digest: artifact_hash,
+        })),
+      }),
+    ),
+    acquisitions: imports.map(
+      ({ import_id, kind, collection_version_id, imported_at, lock_file_entries, ...item }) => ({
+        ...item,
+        acquisition_id: import_id,
+        kind: kind === "edit" ? "retained-edit" : kind,
+        retained_copy_id: collection_version_id,
+        acquired_at: imported_at,
+        observations: lock_file_entries.map(
+          ({ read_at, original_entry_hash, well_known_hash, ...entry }) => ({
+            ...entry,
+            observed_at: read_at,
+            original_entry_digest: original_entry_hash,
+            ...(well_known_hash === undefined ? {} : { well_known_digest: well_known_hash }),
+          }),
+        ),
+      }),
+    ),
+    global_bindings: enabled.length
+      ? [
+          {
+            scope: { kind: "global" },
+            entries: enabled.map((item) =>
+              "skill" in item
+                ? { kind: "skill", skill_id: item.skill }
+                : { kind: "collection", collection_id: item.collection },
+            ),
+            ...(invocation_policies === undefined ? {} : { invocation_policies }),
+          },
+        ]
+      : [],
+    local_bindings: [],
+    projections: [],
+  };
+};
+
 const seed = Effect.fn("Test.seedSyncHomes")(function* ({ a, b }: Homes) {
-  yield* a.retain("first");
+  yield* a.importSource("first");
   yield* a.edit((state) => ({
     ...state,
-    global_bindings: [
-      {
-        scope: { kind: "global" },
-        entries: [{ kind: "skill", skill_id: state.skills[0]!.skill_id }],
-        invocation_policies: { [state.skills[0]!.skill_id]: "explicit" },
-      },
-    ],
+    enabled: [{ skill: state.skills[0]!.skill_id }],
+    invocation_policies: { [state.skills[0]!.skill_id]: "explicit" },
   }));
   yield* a.project();
   yield* a.sync();
@@ -101,7 +170,7 @@ const cases: readonly {
     row: "Push: before P2 (failed upload)",
     run: ({ a, inject, server }) =>
       Effect.gen(function* () {
-        yield* a.retain("first");
+        yield* a.importSource("first");
         const unchanged = yield* captureDisk(a.disk);
         inject({ _tag: "FailUpload" });
         assert.ok((yield* Effect.flip(a.sync())) instanceof LibraryApiRejected);
@@ -114,17 +183,20 @@ const cases: readonly {
     row: "Push: P2 loses the CAS on the first push",
     run: ({ a, b, inject, server }) =>
       Effect.gen(function* () {
-        yield* a.retain("from-a");
-        yield* b.retain("from-b");
+        yield* a.importSource("from-a");
+        yield* b.importSource("from-b");
         // The competitor uploads its bytes and commits before A's null-base CAS.
         const competingState = yield* b.state;
-        const archive = yield* captureSnapshotArchiveEffect(
-          retainedTreePath(join(b.home, "originals"), competingState.retained_copies[0]!.digest),
+        const archive = yield* readSnapshotArchive(
+          collectionVersionPath(
+            join(b.home, "originals"),
+            competingState.collection_versions[0]!.hash,
+          ),
         );
         assert.strictEqual(server.respond("POST", "/api/library/snapshots", archive).status, 200);
         inject({
           _tag: "CompetingWrite",
-          manifest: yield* libraryManifestFromLocalStateEffect(competingState),
+          manifest: yield* libraryManifestFromLocalState(competingState),
         });
         const unchanged = yield* captureDisk(a.disk);
         assert.instanceOf(yield* Effect.flip(a.sync()), LibraryChangedOnServer);
@@ -142,7 +214,7 @@ const cases: readonly {
     row: "Push: HTTP 500 after commit differs from a lost transport response",
     run: ({ a, inject, server }) =>
       Effect.gen(function* () {
-        yield* a.retain("first");
+        yield* a.importSource("first");
         const unchanged = yield* captureDisk(a.disk);
         inject({ _tag: "ErrorAfterCommit" });
         const error = yield* Effect.flip(a.sync());
@@ -157,7 +229,7 @@ const cases: readonly {
     row: "Push: P2 response lost before P4",
     run: ({ a, inject, server }) =>
       Effect.gen(function* () {
-        yield* a.retain("first");
+        yield* a.importSource("first");
         const unchanged = yield* captureDisk(a.disk);
         inject({ _tag: "DropAfterCommit" });
         assert.ok((yield* Effect.flip(a.sync())) instanceof RegistryUnreachable);
@@ -173,9 +245,9 @@ const cases: readonly {
     row: "Push: after P2 before P4 (failed local publish)",
     run: ({ a, inject, server }) =>
       Effect.gen(function* () {
-        yield* a.retain("first");
+        yield* a.importSource("first");
         const unchanged = yield* captureDisk(a.disk);
-        inject({ _tag: "FailPublish", anchoredOnly: false });
+        inject({ _tag: "FailSave", anchoredOnly: false });
         assert.instanceOf(yield* Effect.flip(a.sync()), InvalidLibraryState);
         yield* assertDiskUnchanged(unchanged);
         assert.ok(server.remote);
@@ -187,13 +259,13 @@ const cases: readonly {
     row: "Push: P2 response lost, then another home writes before retry",
     run: ({ a, b, inject, server }) =>
       Effect.gen(function* () {
-        yield* a.retain("first");
+        yield* a.importSource("first");
         const unchanged = yield* captureDisk(a.disk);
         inject({ _tag: "DropAfterCommit" });
         assert.ok((yield* Effect.flip(a.sync())) instanceof RegistryUnreachable);
         yield* assertDiskUnchanged(unchanged);
         yield* b.sync();
-        yield* b.retain("second");
+        yield* b.importSource("second");
         yield* b.sync();
         const winner = server.remote;
         assert.strictEqual((yield* a.sync()).status, "adoption_required");
@@ -208,11 +280,11 @@ const cases: readonly {
     row: "Pull: before U4 (failed local publish)",
     run: ({ a, b, inject, server }) =>
       Effect.gen(function* () {
-        yield* a.retain("first");
+        yield* a.importSource("first");
         yield* a.sync();
         const unchanged = yield* captureDisk(b.disk);
         const head = server.remote;
-        inject({ _tag: "FailPublish", anchoredOnly: false });
+        inject({ _tag: "FailSave", anchoredOnly: false });
         assert.instanceOf(yield* Effect.flip(b.sync()), InvalidLibraryState);
         yield* onlyOrphanOriginals(unchanged, b.home);
         assert.deepStrictEqual(server.remote, head);
@@ -224,9 +296,9 @@ const cases: readonly {
     row: "Pull: U3 finds a concurrent local write (SyncLocalChanged)",
     run: ({ fs, a, b, c, inject, server }) =>
       Effect.gen(function* () {
-        yield* a.retain("remote");
+        yield* a.importSource("remote");
         yield* a.sync();
-        yield* c.retain("concurrent-local");
+        yield* c.importSource("concurrent-local");
         const concurrent = yield* c.state;
         yield* fs.makeDirectory(b.home, { recursive: true });
         yield* fs.copy(join(c.home, "originals"), join(b.home, "originals"));
@@ -248,7 +320,7 @@ const cases: readonly {
       Effect.gen(function* () {
         const { fs, a, b, inject, server } = homes;
         yield* seed(homes);
-        yield* b.retain("remote-addition");
+        yield* b.importSource("remote-addition");
         yield* b.sync();
         const concurrent = {
           ...(yield* a.state),
@@ -281,9 +353,9 @@ const cases: readonly {
       Effect.gen(function* () {
         const { a, b, events, inject, server } = homes;
         yield* seed(homes);
-        yield* b.retain("remote-addition");
+        yield* b.importSource("remote-addition");
         yield* b.sync();
-        yield* a.retain("local-addition");
+        yield* a.importSource("local-addition");
         const concurrent = yield* a.state;
         inject({
           _tag: "ChangeStateWhenHeadRead",
@@ -307,23 +379,15 @@ const cases: readonly {
     row: "Pull: U3 stops before writing a --keep-enabled choice",
     run: ({ fs, a, b, c, events, inject, server }) =>
       Effect.gen(function* () {
-        const first = yield* a.retain("first", { name: "review" });
-        const second = yield* a.retain("second", { name: "review" });
+        const first = yield* a.importSource("first", { name: "review" });
+        const second = yield* a.importSource("second", { name: "review" });
         yield* a.edit((state) => ({
           ...state,
-          global_bindings: [
-            {
-              scope: { kind: "global" },
-              entries: [first, second].map((item) => ({
-                kind: "skill" as const,
-                skill_id: item.skills[0]!.skill_id,
-              })),
-            },
-          ],
+          enabled: [first, second].map((item) => ({ skill: item.skills[0]!.skill_id })),
         }));
         // Without enabled roots nothing collides, so the Library can be pushed as it is.
         yield* a.sync({ rootFor: () => undefined });
-        yield* c.retain("concurrent-local");
+        yield* c.importSource("concurrent-local");
         yield* fs.makeDirectory(b.home, { recursive: true });
         yield* fs.copy(join(c.home, "originals"), join(b.home, "originals"));
         inject({ _tag: "ChangeStateWhenHeadRead", home: b.home, state: yield* c.state });
@@ -343,8 +407,8 @@ const cases: readonly {
       Effect.gen(function* () {
         const { a, b, inject, server } = homes;
         yield* seed(homes);
-        yield* a.retain("from-a");
-        yield* b.retain("from-b");
+        yield* a.importSource("from-a");
+        yield* b.importSource("from-b");
         yield* b.sync();
         inject({
           _tag: "CompetingWrite",
@@ -366,7 +430,7 @@ const cases: readonly {
           server.remote!.manifest.collections.map((item) => item.collection_id),
           winner.manifest.collections.map((item) => item.collection_id),
         );
-        assert.deepStrictEqual((yield* a.state).global_bindings[0]!.invocation_policies, {
+        assert.deepStrictEqual((yield* a.state).invocation_policies, {
           [(yield* a.state).skills.find((item) => item.name === "first")!.skill_id]: "explicit",
         });
       }),
@@ -377,11 +441,11 @@ const cases: readonly {
       Effect.gen(function* () {
         const { a, b, inject, server } = homes;
         yield* seed(homes);
-        yield* a.retain("from-a");
-        yield* b.retain("from-b");
+        yield* a.importSource("from-a");
+        yield* b.importSource("from-b");
         yield* b.sync();
         const unchanged = yield* captureDisk(a.disk);
-        inject({ _tag: "FailPublish", anchoredOnly: false });
+        inject({ _tag: "FailSave", anchoredOnly: false });
         assert.instanceOf(yield* Effect.flip(a.sync()), InvalidLibraryState);
         yield* onlyOrphanOriginals(unchanged, a.home);
         const committed = server.remote!;
@@ -399,8 +463,8 @@ const cases: readonly {
       Effect.gen(function* () {
         const { a, b, inject, server } = homes;
         yield* seed(homes);
-        yield* a.retain("from-a");
-        yield* b.retain("from-b");
+        yield* a.importSource("from-a");
+        yield* b.importSource("from-b");
         yield* b.sync();
         const unchanged = yield* captureDisk(a.disk);
         const head = server.remote;
@@ -416,9 +480,9 @@ const cases: readonly {
     row: "Adoption gate: adoption_required writes nothing",
     run: ({ a, b, server }) =>
       Effect.gen(function* () {
-        yield* a.retain("remote");
+        yield* a.importSource("remote");
         yield* a.sync();
-        yield* b.retain("local");
+        yield* b.importSource("local");
         const unchanged = yield* captureDisk(b.disk);
         const before = server.stored;
         assert.strictEqual((yield* b.sync()).status, "adoption_required");
@@ -441,7 +505,7 @@ const cases: readonly {
             ...state,
             collections: state.collections.map((item) => ({ ...item, label: "from-b" })),
           }));
-        } else yield* b.retain("remote-addition");
+        } else yield* b.importSource("remote-addition");
         yield* b.sync();
         const unchanged = yield* captureDisk(a.disk);
         const before = server.stored;
@@ -471,31 +535,26 @@ const cases: readonly {
         const { fs, a, b, inject, server } = homes;
         let device = a;
         if (row.startsWith("Push")) {
-          yield* a.retain("first");
+          yield* a.importSource("first");
           yield* a.edit((state) => ({
             ...state,
-            global_bindings: [
-              {
-                scope: { kind: "global" },
-                entries: [{ kind: "skill", skill_id: state.skills[0]!.skill_id }],
-              },
-            ],
+            enabled: [{ skill: state.skills[0]!.skill_id }],
           }));
         } else {
           yield* seed(homes);
           if (row.startsWith("Pull")) device = homes.c;
           else if (row.startsWith("Merge")) {
-            yield* b.retain("remote-addition");
+            yield* b.importSource("remote-addition");
             yield* b.sync();
           }
-          // A clean sync publishes only to anchor ancestry its state lacks.
+          // A clean sync saves only to anchor ancestry its state lacks.
           else yield* a.edit(({ sync_ancestry: _ancestry, ...state }) => state);
         }
         const blockedRoot = join(device.home, "blocked-root");
         const expectedBytes = (yield* fs.exists(join(device.root, "first", "SKILL.md")))
           ? yield* fs.readFileString(join(device.root, "first", "SKILL.md"))
           : "first\n";
-        inject({ _tag: "ObstructAfterPublish", home: device.home, path: blockedRoot });
+        inject({ _tag: "ObstructAfterSave", home: device.home, path: blockedRoot });
         const first = yield* Effect.exit(
           device.sync({ rootFor: (target) => (target === "agents" ? blockedRoot : undefined) }),
         );
@@ -522,44 +581,39 @@ const cases: readonly {
     run: (homes: Homes) =>
       Effect.gen(function* () {
         const { fs, a, b, inject } = homes;
-        const first = yield* a.retain("first");
-        const second = yield* a.retain("second");
+        const first = yield* a.importSource("first");
+        const second = yield* a.importSource("second");
         const enable = (ids: readonly SkillId[]) => (state: LibraryState) => ({
           ...state,
-          global_bindings: [
-            {
-              scope: { kind: "global" as const },
-              entries: ids.map((skill_id) => ({ kind: "skill" as const, skill_id })),
-            },
-          ],
+          enabled: ids.map((skill) => ({ skill })),
         });
         yield* a.edit(enable([first.skills[0]!.skill_id]));
         yield* a.project();
-        const update = { bytes: "first v2\n", retainedAt: "2026-01-02T00:00:00.000Z" };
+        const update = { bytes: "first v2\n", importedAt: "2026-01-02T00:00:00.000Z" };
         if (path === "Merge") {
           yield* a.sync();
           yield* b.sync();
-          yield* b.retain("first", update);
+          yield* b.importSource("first", update);
           yield* b.sync();
-        } else yield* a.retain("first", update);
-        // An edit the selected Version would replace, and a Skill reconciliation must newly project.
-        const projection = (yield* a.state).projections[0]!;
-        yield* fs.writeFileString(join(projection.path, "SKILL.md"), "unretained edit\n");
+        } else yield* a.importSource("first", update);
+        // An edit the selected Version would replace, and a Skill reconciliation must newly install.
+        const installedSkill = (yield* a.state).installed_skills[0]!;
+        yield* fs.writeFileString(join(installedSkill.path, "SKILL.md"), "unretained edit\n");
         yield* a.edit(enable([first.skills[0]!.skill_id, second.skills[0]!.skill_id]));
-        inject({ _tag: "ObstructAfterPublish", home: a.home, path: join(a.root, "second") });
+        inject({ _tag: "ObstructAfterSave", home: a.home, path: join(a.root, "second") });
         assert.isTrue(Exit.isFailure(yield* Effect.exit(a.sync())));
-        const observed = yield* deterministicTreeHashEffect(projection.path);
-        const recorded = (yield* a.state).projections.find(
-          (item) => item.projection_id === projection.projection_id,
+        const currentHash = yield* deterministicTreeHash(installedSkill.path);
+        const recorded = (yield* a.state).installed_skills.find(
+          (item) => item.installed_skill_id === installedSkill.installed_skill_id,
         );
         assert.deepStrictEqual(
-          [recorded?.status, recorded?.observed_digest],
-          ["conflicted", observed],
+          [recorded?.status, recorded?.current_hash],
+          ["conflicted", currentHash],
         );
         yield* fs.remove(join(a.root, "second"));
         assert.strictEqual((yield* a.sync()).status, "clean");
         assert.strictEqual(
-          yield* fs.readFileString(join(projection.path, "SKILL.md")),
+          yield* fs.readFileString(join(installedSkill.path, "SKILL.md")),
           "unretained edit\n",
         );
         assert.strictEqual(
@@ -585,9 +639,9 @@ const cases: readonly {
         }));
         yield* b.sync();
         // Force M5 to include a local-only record as well as the resolved remote label.
-        yield* a.retain("local-only");
+        yield* a.importSource("local-only");
         const unchanged = yield* captureDisk(a.disk);
-        inject({ _tag: "FailPublish", anchoredOnly: false });
+        inject({ _tag: "FailSave", anchoredOnly: false });
         assert.instanceOf(
           yield* Effect.flip(a.sync({ takeRemote: [`collection:${id}`] })),
           InvalidLibraryState,
@@ -614,8 +668,8 @@ for (const scenario of cases)
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
   );
 
-// The commit order stated once in syncLibraryEffect: snapshots are uploaded, then the head is written
-// on exactly the revision this sync read, and only then is local state published.
+// The commit order stated once in syncLibrary: snapshots are uploaded, then the head is written
+// on exactly the revision this sync read, and only then is local state saved.
 it.effect("oracle: every applying path commits remote before local, on the revision it read", () =>
   Effect.gen(function* () {
     const { a, b, events, server } = yield* devices;
@@ -623,48 +677,32 @@ it.effect("oracle: every applying path commits remote before local, on the revis
       Effect.gen(function* () {
         events.length = 0;
         const exit = yield* Effect.exit(sync);
-        // A failure after the last expected publication must not leave the order looking right.
+        // A failure after the last expected save must not leave the order looking right.
         assert.isTrue(Exit.isSuccess(exit), `${[...events]}`);
         return [...events];
       });
-    yield* a.retain("first");
-    assert.deepStrictEqual(yield* committed(a.sync()), ["upload", "write on null", "publish a"]);
+    yield* a.importSource("first");
+    assert.deepStrictEqual(yield* committed(a.sync()), ["upload", "write on null", "save a"]);
     const pushed = server.remote!.revision_id;
-    assert.deepStrictEqual(yield* committed(b.sync()), ["publish b"]);
-    yield* b.retain("second");
-    assert.deepStrictEqual(yield* committed(b.sync()), [
-      "upload",
-      `write on ${pushed}`,
-      "publish b",
-    ]);
+    assert.deepStrictEqual(yield* committed(b.sync()), ["save b"]);
+    yield* b.importSource("second");
+    assert.deepStrictEqual(yield* committed(b.sync()), ["upload", `write on ${pushed}`, "save b"]);
     const merged = server.remote!.revision_id;
-    yield* a.retain("third");
-    assert.deepStrictEqual(yield* committed(a.sync()), [
-      "upload",
-      `write on ${merged}`,
-      "publish a",
-    ]);
+    yield* a.importSource("third");
+    assert.deepStrictEqual(yield* committed(a.sync()), ["upload", `write on ${merged}`, "save a"]);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 // A `--take-remote` key names a merge conflict to take remotely. A push or a pull has none, so the
-// key is refused before projection collisions are checked, as it is on every other path.
+// key is refused before installed-skill collisions are checked, as it is on every other path.
 it.effect("a --take-remote key is refused before collision checks on a push and a pull", () =>
   Effect.gen(function* () {
     const { fs, a, b, server } = yield* devices;
-    const first = yield* a.retain("first", { name: "review" });
-    const second = yield* a.retain("second", { name: "review" });
+    const first = yield* a.importSource("first", { name: "review" });
+    const second = yield* a.importSource("second", { name: "review" });
     yield* a.edit((state) => ({
       ...state,
-      global_bindings: [
-        {
-          scope: { kind: "global" },
-          entries: [first, second].map((item) => ({
-            kind: "skill" as const,
-            skill_id: item.skills[0]!.skill_id,
-          })),
-        },
-      ],
+      enabled: [first, second].map((item) => ({ skill: item.skills[0]!.skill_id })),
     }));
     const takeRemote = ["collection:not-a-conflict"];
     assert.strictEqual((yield* a.sync()).status, "conflicted");
@@ -684,7 +722,7 @@ it.effect("a --take-remote key is refused before collision checks on a push and 
 );
 
 // A head another SKIT wrote in a newer manifest schema is refused before sync plans, uploads, writes
-// or publishes anything. Only loader maintenance may touch the home: the writer lock creates an
+// or saves anything. Only loader maintenance may touch the home: the writer lock creates an
 // absent home, and opening a legacy state.json migrates it and keeps the pre-migration file.
 for (const home of ["current", "legacy", "absent"] as const)
   for (const apply of [false, true])
@@ -694,38 +732,33 @@ for (const home of ["current", "legacy", "absent"] as const)
         Effect.gen(function* () {
           const { fs, a, inject, server } = yield* devices;
           if (home !== "absent") {
-            yield* a.retain("first");
+            yield* a.importSource("first");
             yield* a.edit((state) => ({
               ...state,
-              global_bindings: [
-                {
-                  scope: { kind: "global" },
-                  entries: [{ kind: "skill", skill_id: state.skills[0]!.skill_id }],
-                },
-              ],
+              enabled: [{ skill: state.skills[0]!.skill_id }],
             }));
           }
           if (home === "legacy")
             yield* fs.writeFileString(
               join(a.home, "state.json"),
-              JSON.stringify({ ...(yield* a.state), schemaVersion: 7 }),
+              JSON.stringify(asV7(yield* a.state)),
             );
           const before = yield* captureDisk(a.disk);
           const stored = server.stored;
-          const publishes = a.publishes;
+          const saves = a.saves;
           const writeRequests = server.writeRequests;
           inject({
             _tag: "ServeHead",
             body: JSON.parse(
               yield* fs.readFileString(
-                join(import.meta.dirname, "fixtures/library-wire/portable-v8.json"),
+                join(import.meta.dirname, "fixtures/library-wire/portable-v9.json"),
               ),
             ),
           });
           const failure = yield* Effect.flip(a.sync({ apply }));
           assert.instanceOf(failure, LibraryManifestTooNew);
           assert.strictEqual(failure.code, "VALIDATION_FAILED");
-          assert.strictEqual(a.publishes, publishes);
+          assert.strictEqual(a.saves, saves);
           // Snapshot uploads and Library writes are both write requests.
           assert.strictEqual(server.writeRequests, writeRequests);
           assert.deepStrictEqual(server.stored, stored);
@@ -751,8 +784,8 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { a, b } = yield* devices;
-      yield* a.retain("first");
-      yield* a.retain("second");
+      yield* a.importSource("first");
+      yield* a.importSource("second");
       yield* a.sync();
       const events: string[] = [];
       const ticks: number[] = [];
@@ -761,7 +794,7 @@ it.effect(
           Effect.sync(() => {
             events.push("plan");
           }),
-        restoreObserver: {
+        restoreProgress: {
           around: (phase, operation) =>
             Effect.sync(() => {
               events.push(`start:${phase.kind}`);
@@ -795,15 +828,15 @@ it.effect(
 it.effect("a failed snapshot download retains nothing and leaves the remote unchanged", () =>
   Effect.gen(function* () {
     const { a, b, fs, inject, server } = yield* devices;
-    yield* a.retain("first");
-    yield* a.retain("second");
+    yield* a.importSource("first");
+    yield* a.importSource("second");
     yield* a.sync();
     const before = server.stored;
-    inject({ _tag: "FailDownload", digest: server.remote!.manifest.snapshot_digests[1]! });
+    inject({ _tag: "FailDownload", hash: server.remote!.manifest.snapshot_digests[1]! });
     const progress: string[] = [];
     const failure = yield* Effect.flip(
       b.sync({
-        restoreObserver: {
+        restoreProgress: {
           around: (phase, operation) =>
             Effect.sync(() => {
               progress.push(phase.kind);
@@ -816,18 +849,18 @@ it.effect("a failed snapshot download retains nothing and leaves the remote unch
     assert.notInclude(progress, "retain");
     assert.isFalse(yield* fs.exists(join(b.home, "originals")));
     assert.isFalse(yield* fs.exists(join(b.home, "state.json")));
-    assert.strictEqual(b.publishes, 0);
+    assert.strictEqual(b.saves, 0);
     assert.deepStrictEqual(server.stored, before);
     assert.strictEqual((yield* b.sync()).status, "pulled");
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("a prepared device transition cannot publish into another Library home", () =>
+it.effect("a prepared device transition cannot save into another Library home", () =>
   Effect.gen(function* () {
     const { a, b } = yield* devices;
-    yield* a.retain("first");
+    yield* a.importSource("first");
     const state = yield* a.state;
-    const manifest = yield* libraryManifestFromLocalStateEffect(state);
+    const manifest = yield* libraryManifestFromLocalState(state);
     const transition = yield* prepareSyncDeviceTransition({
       current: state,
       aligned: state,
@@ -839,7 +872,7 @@ it.effect("a prepared device transition cannot publish into another Library home
     const before = yield* captureDisk([...a.disk, ...b.disk], { identity: true });
     const failure = yield* Effect.flip(
       transition
-        .publishRestored(state, {
+        .saveRestored(state, {
           origin: "https://registry.test",
           library_id: "library_test",
           revision_id: "revision_test",
@@ -855,13 +888,13 @@ it.effect("a prepared device transition cannot publish into another Library home
 it.effect("sync reuses an orphan retained snapshot without downloading it", () =>
   Effect.gen(function* () {
     const { a, b, c, fs, inject, server } = yield* devices;
-    yield* a.retain("first");
+    yield* a.importSource("first");
     yield* a.sync();
-    const digest = server.remote!.manifest.snapshot_digests[0]!;
-    const destination = retainedTreePath(join(b.home, "originals"), digest);
+    const hash = server.remote!.manifest.snapshot_digests[0]!;
+    const destination = collectionVersionPath(join(b.home, "originals"), hash);
     yield* fs.makeDirectory(join(destination, ".."), { recursive: true });
-    yield* fs.copy(retainedTreePath(join(a.home, "originals"), digest), destination);
-    inject({ _tag: "FailDownload", digest });
+    yield* fs.copy(collectionVersionPath(join(a.home, "originals"), hash), destination);
+    inject({ _tag: "FailDownload", hash });
     const before = yield* captureDisk(b.disk);
     const preview = yield* b.sync({ apply: false });
     assert.strictEqual(preview.status, "pull_ready");
@@ -876,14 +909,14 @@ it.effect("sync reuses an orphan retained snapshot without downloading it", () =
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("sync exposes bounded completed phases in transfer and publication order", () =>
+it.effect("sync exposes bounded completed phases in transfer and save order", () =>
   Effect.gen(function* () {
     const { a, b } = yield* devices;
-    yield* a.retain("first");
-    yield* a.retain("second");
+    yield* a.importSource("first");
+    yield* a.importSource("second");
     const uploaded: number[] = [];
     yield* a.sync({
-      observer: {
+      progress: {
         around: (phase, operation) =>
           operation.pipe(
             Effect.tap(() =>
@@ -897,9 +930,9 @@ it.effect("sync exposes bounded completed phases in transfer and publication ord
     });
     assert.deepStrictEqual(uploaded, [2]);
     const completed: string[] = [];
-    const retained: number[] = [];
+    const imported: number[] = [];
     const result = yield* b.sync({
-      observer: {
+      progress: {
         around: (phase, operation) =>
           operation.pipe(
             Effect.tap(() =>
@@ -910,13 +943,13 @@ it.effect("sync exposes bounded completed phases in transfer and publication ord
           ),
         tick: () => Effect.void,
       },
-      restoreObserver: {
+      restoreProgress: {
         around: (phase, operation) =>
           operation.pipe(
             Effect.tap(() =>
               Effect.sync(() => {
                 completed.push(phase.kind);
-                if (phase.kind === "retain") retained.push(phase.total);
+                if (phase.kind === "retain") imported.push(phase.total);
               }),
             ),
           ),
@@ -924,7 +957,7 @@ it.effect("sync exposes bounded completed phases in transfer and publication ord
       },
     });
     assert.strictEqual(result.status, "pulled");
-    assert.deepStrictEqual(retained, [2]);
+    assert.deepStrictEqual(imported, [2]);
     assert.isBelow(completed.indexOf("download"), completed.indexOf("save-local"));
     assert.strictEqual(completed.at(-1), "enable");
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),

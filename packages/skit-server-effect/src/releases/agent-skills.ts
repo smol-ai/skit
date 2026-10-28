@@ -3,7 +3,6 @@ import {
   parseSkitConfig,
   parseSkitReadme,
   projectSkillFiles,
-  type SkitDescriptor,
 } from "@smolai/skit-core/universal/consumer";
 import { Effect, Schema } from "effect";
 import { unzipSync, zipSync } from "fflate";
@@ -33,23 +32,23 @@ const attempt = <A>(evaluate: () => A) =>
     catch: (cause) => new AgentSkillsArchiveInvalid({ cause }),
   });
 
-const releaseDescriptor = (files: Record<string, Uint8Array>): SkitDescriptor => {
+const releaseDescriptor = Effect.fn("AgentSkills.releaseDescriptor")(function* (
+  files: Record<string, Uint8Array>,
+) {
   const decoder = new TextDecoder();
-  if (files["skit.json"]) return parseSkitConfig(decoder.decode(files["skit.json"]));
-  if (files["README.md"]) return parseSkitReadme(decoder.decode(files["README.md"]));
-  throw new Error("DESCRIPTOR_MISSING");
-};
+  if (files["skit.json"]) return yield* parseSkitConfig(decoder.decode(files["skit.json"]));
+  if (files["README.md"]) return yield* parseSkitReadme(decoder.decode(files["README.md"]));
+  return yield* Effect.fail("DESCRIPTOR_MISSING");
+});
 
 export const discoverableSkills = Effect.fn("AgentSkills.discoverableSkills")(function* (
   release: Uint8Array,
 ) {
-  const { descriptor, entries } = yield* attempt(() => {
-    const files = unzipSync(release);
-    return {
-      descriptor: releaseDescriptor(files),
-      entries: Object.entries(files).map(([path, bytes]) => ({ path, bytes })),
-    };
-  });
+  const files = yield* attempt(() => unzipSync(release));
+  const descriptor = yield* releaseDescriptor(files).pipe(
+    Effect.mapError((cause) => new AgentSkillsArchiveInvalid({ cause })),
+  );
+  const entries = Object.entries(files).map(([path, bytes]) => ({ path, bytes }));
   // A Release published before projection limits may exceed them; serving it would build them.
   if (projectionLimitExceeded(entries, descriptor.skills))
     return yield* new AgentSkillsArchiveInvalid({ cause: "PROJECTED_CONTENT_TOO_LARGE" });
@@ -57,15 +56,15 @@ export const discoverableSkills = Effect.fn("AgentSkills.discoverableSkills")(fu
   const skills: DiscoverableSkill[] = [];
   for (const skill of descriptor.skills) {
     if (!DISCOVERABLE_NAME.test(skill.name)) continue;
-    const projected = yield* Effect.fromResult(
+    const installed = yield* Effect.fromResult(
       projectSkillFiles(entries, skill.path, skill.shared),
     ).pipe(Effect.mapError((cause) => new AgentSkillsArchiveInvalid({ cause })));
-    const primary = projected.get("SKILL.md");
+    const primary = installed.get("SKILL.md");
     if (!primary) continue;
     const frontmatter = yield* attempt(() => parseSkillFrontmatter(decoder.decode(primary.bytes)));
     const description = frontmatter?.description;
     if (typeof description !== "string" || !description || description.length > 1024) continue;
-    skills.push({ name: skill.name, description, files: projected });
+    skills.push({ name: skill.name, description, files: installed });
   }
   return skills;
 });

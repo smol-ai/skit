@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type {
-  Digest,
+  Hash,
   SkillAssessmentAcceptance,
   SkillAssessmentContext,
   SkillAssessmentDecision,
@@ -98,7 +98,7 @@ export interface AuditSkillOptions {
   declaredCapabilities?: string[];
   path?: string;
   fingerprintPath?: string;
-  artifactContentDigest?: Digest;
+  artifactContentHash?: Hash;
 }
 
 export function skillFindingFingerprint(input: {
@@ -108,7 +108,7 @@ export function skillFindingFingerprint(input: {
   line: number;
   column: number;
   matchedText: string;
-}): Digest {
+}): Hash {
   const hash = createHash("sha256");
   for (const component of [
     "skit/finding/v1",
@@ -163,9 +163,9 @@ function locationAt(text: string, index: number, matchText: string, path?: strin
 }
 
 export function auditSkill(text: string, options: AuditSkillOptions = {}): SkillAudit {
-  const artifactContentDigest =
-    options.artifactContentDigest ??
-    (`sha256:${createHash("sha256").update(text).digest("hex")}` as Digest);
+  const artifactContentHash =
+    options.artifactContentHash ??
+    (`sha256:${createHash("sha256").update(text).digest("hex")}` as Hash);
   const allMatches = RULES.flatMap((rule) => {
     const pattern = new RegExp(rule.pattern.source, `${rule.pattern.flags.replace("g", "")}g`);
     return [...text.matchAll(pattern)].map((match) => ({
@@ -189,11 +189,11 @@ export function auditSkill(text: string, options: AuditSkillOptions = {}): Skill
   ].sort(
     (left, right) => left.index - right.index || compareCodeUnits(left.rule.id, right.rule.id),
   );
-  const retainedMatchKeys = new Set(
+  const importedMatchKeys = new Set(
     matches.map((match) => `${match.rule.id}\0${match.index}\0${match.text}`),
   );
   const omittedMatches = allMatches.filter(
-    (match) => !retainedMatchKeys.has(`${match.rule.id}\0${match.index}\0${match.text}`),
+    (match) => !importedMatchKeys.has(`${match.rule.id}\0${match.index}\0${match.text}`),
   );
   const matchedRules = [
     ...new Map(allMatches.map((match) => [match.rule.id, match.rule])).values(),
@@ -245,7 +245,7 @@ export function auditSkill(text: string, options: AuditSkillOptions = {}): Skill
             : ("audited_file" as const),
         acceptanceEligible: options.fingerprintPath !== undefined,
       },
-      artifactContentDigest,
+      artifactContentHash,
       ruleId: rule.id,
       evidence,
       severity: rule.critical ? ("critical" as const) : ("medium" as const),
@@ -290,7 +290,7 @@ type EvaluateSkillAuditOptions =
   | { context: SkillAssessmentContext }
   | {
       context: SkillAssessmentContext;
-      artifactContentDigest: Digest;
+      artifactContentHash: Hash;
       acceptances: readonly SkillAssessmentAcceptance[];
       evaluatedAt: string;
     };
@@ -329,7 +329,7 @@ export function evaluateSkillAudit(
       ? options.acceptances.filter(
           (acceptance) =>
             acceptance.context === context &&
-            acceptance.artifactContentDigest === options.artifactContentDigest &&
+            acceptance.artifactContentHash === options.artifactContentHash &&
             (!acceptance.expiresAt || options.evaluatedAt < acceptance.expiresAt),
         )
       : [];
@@ -359,7 +359,7 @@ export function evaluateSkillAudit(
     };
   const code = {
     author: "AUTHOR_REVIEW_RECOMMENDED",
-    retain: "RETAIN_REVIEW_RECOMMENDED",
+    import: "IMPORT_REVIEW_RECOMMENDED",
     project: "PROJECT_REVIEW_RECOMMENDED",
   }[context];
   return {

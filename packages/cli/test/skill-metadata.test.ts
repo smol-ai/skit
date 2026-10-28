@@ -4,11 +4,11 @@ import { expect } from "vitest";
 import { Effect, FileSystem, Schema } from "effect";
 import { join } from "node:path";
 import {
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   LibraryStore,
   skitLayer,
-  retainAuthoredCollectionUnderLockEffect,
-  type SkillsShObservation,
+  importAuthoredCollection,
+  type SkillsShLockFileEntry,
 } from "@smolai/skit-core";
 import {
   readLibrarySkillMetadata,
@@ -24,7 +24,7 @@ import { makeScriptedInteraction } from "../src/presentation/interaction-recorde
 import {
   libraryHome,
   initializeLibraryMachine,
-  retainObservedIn,
+  importCollectionIn,
   writingTo,
 } from "./helpers/library-home.js";
 
@@ -38,7 +38,7 @@ it.effect(
       yield* initializeLibraryMachine(home.home);
       const source = join(root, "review");
       yield* fs.makeDirectory(source);
-      for (const [index, retainedAt] of [
+      for (const [index, importedAt] of [
         "2026-05-01T00:00:00.000Z",
         "2026-09-29T00:00:00.000Z",
       ].entries()) {
@@ -46,29 +46,29 @@ it.effect(
         yield* home.owned(
           writingTo(
             home.home,
-            retainObservedIn(home.home)({
+            importCollectionIn(home.home)({
               source: { type: "github", owner: "example", repository: "skills" },
               revision: { kind: "commit", commit: String(index + 1).repeat(40) },
               input: "example/skills",
-              retainedAt,
+              importedAt,
               skills: [
                 {
                   name: "review",
                   sourcePath: source,
                   relativePath: "review",
-                  observedHash: yield* deterministicTreeHashEffect(source),
+                  currentHash: yield* deterministicTreeHash(source),
                 },
               ],
-              observations: [],
+              lockFileEntries: [],
             }),
           ),
         );
       }
       const state = yield* home.durable;
-      const observation = (index: number): SkillsShObservation => ({
+      const observation = (index: number): SkillsShLockFileEntry => ({
         type: "skills.sh-lock",
-        machine_id: state.acquisitions[index]!.machine_id,
-        observed_at: state.acquisitions[index]!.acquired_at,
+        machine_id: state.imports[index]!.machine_id,
+        read_at: state.imports[index]!.imported_at,
         source_updated_at: index === 0 ? "2026-04-20T00:00:00.000Z" : "2026-09-25T00:00:00.000Z",
         lock_path: { value: "/fixture/skills-lock.json" },
         lock_version: 3,
@@ -79,7 +79,7 @@ it.effect(
         skill_name: "review",
         skill_path: "review",
         content_agreement: "agrees",
-        original_entry_digest: `sha256:${"b".repeat(64)}`,
+        original_entry_hash: `sha256:${"b".repeat(64)}`,
         original_entry: { source: "example/skills" },
       });
       const selected = {
@@ -88,15 +88,15 @@ it.effect(
           ...skill,
           local_version_id: skill.versions[0]!.skill_version_id,
         })),
-        acquisitions: state.acquisitions.map((acquisition, index) => ({
-          ...acquisition,
-          observations: [observation(index)],
+        imports: state.imports.map((sourceImport, index) => ({
+          ...sourceImport,
+          lock_file_entries: [observation(index)],
         })),
       };
       yield* home.owned(
         writingTo(
           home.home,
-          LibraryStore.use((store) => store.publish(selected, state)),
+          LibraryStore.use((store) => store.save(selected, state)),
         ),
       );
       const view = yield* home.owned(openLibraryView());
@@ -113,7 +113,7 @@ it.effect(
                 source: "example/skills",
                 revision: "1".repeat(40),
                 source_updated_at: "2026-04-20T00:00:00.000Z",
-                acquired_at: "2026-05-01T00:00:00.000Z",
+                imported_at: "2026-05-01T00:00:00.000Z",
               },
             ],
           },
@@ -125,14 +125,14 @@ it.effect(
         source_updated_at: "2026-04-20T00:00:00.000Z",
       });
       expect(renderLibraryList(listing)).toContain(
-        "Source updated: 2026-04-20 · Acquired: 2026-05-01",
+        "Source updated: 2026-04-20 · Imported: 2026-05-01",
       );
       const unavailable = yield* readLibrarySkillMetadata(
         {
           ...selected,
-          acquisitions: selected.acquisitions.map((acquisition) => ({
-            ...acquisition,
-            observations: [{ ...observation(0), content_agreement: "mismatch" }],
+          imports: selected.imports.map((sourceImport) => ({
+            ...sourceImport,
+            lock_file_entries: [{ ...observation(0), content_agreement: "mismatch" }],
           })),
         },
         home.originals,
@@ -141,9 +141,9 @@ it.effect(
       const conflicting = yield* readLibrarySkillMetadata(
         {
           ...selected,
-          acquisitions: selected.acquisitions.map((acquisition) => ({
-            ...acquisition,
-            observations: [
+          imports: selected.imports.map((sourceImport) => ({
+            ...sourceImport,
+            lock_file_entries: [
               observation(0),
               { ...observation(0), source_updated_at: "2026-04-21T00:00:00.000Z" },
             ],
@@ -162,7 +162,7 @@ it.effect(
       yield* home.owned(
         writingTo(
           home.home,
-          LibraryStore.use((store) => store.publish(state, selected)),
+          LibraryStore.use((store) => store.save(state, selected)),
         ),
       );
       view.collections.length = 0;
@@ -259,11 +259,11 @@ skills:
       yield* home.owned(
         writingTo(
           home.home,
-          retainAuthoredCollectionUnderLockEffect({
+          importAuthoredCollection({
             root: source,
             source: { type: "local", path: source },
             input: source,
-            retainedAt: "2026-09-29T00:00:00.000Z",
+            importedAt: "2026-09-29T00:00:00.000Z",
           }),
         ),
       );
@@ -271,7 +271,7 @@ skills:
       const metadata = yield* readLibrarySkillMetadata(state, home.originals);
       expect(metadata.get(state.skills[0]!.skill_id)).toMatchObject({
         source_updated_at: "2026-04-20T00:00:00.000Z",
-        acquired_at: "2026-09-29T00:00:00.000Z",
+        imported_at: "2026-09-29T00:00:00.000Z",
         revision: null,
       });
     }).pipe(Effect.provide(skitLayer), Effect.scoped),

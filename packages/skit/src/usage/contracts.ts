@@ -21,7 +21,7 @@ export const UsageRow = Schema.Struct({
   explicit: Count,
   implicit: Count,
   unknown: Count,
-  lastObservedAt: Schema.String,
+  lastSeenAt: Schema.String,
 });
 export interface UsageRow extends Schema.Schema.Type<typeof UsageRow> {}
 export const UsageCoverage = Schema.Struct({
@@ -69,7 +69,7 @@ export interface UsageRoot {
   readonly harness: UsageHarness;
   readonly root: string;
 }
-export interface UsageProjection {
+export interface InstalledSkillUsage {
   readonly path: string;
   readonly skillId: string;
   readonly name: string;
@@ -79,6 +79,6 @@ export interface UsageOptions {
   readonly days?: number;
   readonly end?: string;
   readonly project?: string;
-  readonly projections?: readonly UsageProjection[];
+  readonly installedSkills?: readonly InstalledSkillUsage[];
   readonly progress?: (completed: number, total: number) => import("effect").Effect.Effect<void>;
 }

@@ -241,7 +241,7 @@ describe("CLI contracts", () => {
       encoding: "utf8",
     });
     expect(list.status, list.stderr).toBe(0);
-    expect(JSON.parse(list.stdout)).toMatchObject({ schema: "skit.list.v6" });
+    expect(JSON.parse(list.stdout)).toMatchObject({ schema: "skit.list.v7" });
 
     const add = spawnSync(
       process.execPath,
@@ -359,7 +359,7 @@ describe("CLI contracts", () => {
             : JSON.parse(processResult.stderr).error;
         expect(failure.code).toBe("VALIDATION_FAILED");
         expect(failure.message).toContain("schema v2");
-        expect(failure.message).toContain("supports v4–v9");
+        expect(failure.message).toContain("supports v4–v10");
         expect(failure.remediation).toContain("Back up the state file");
         expect(failure.remediation).toContain("skit setup");
         expect(failure.remediation).not.toContain("author validate");
@@ -370,7 +370,7 @@ describe("CLI contracts", () => {
     },
   );
 
-  test("reviews and optionally accepts a retained finding without blocking Projection", async () => {
+  test("reviews and optionally accepts a retained finding without blocking install", async () => {
     const root = await mkdtemp(join(tmpdir(), "skit-security-cli-"));
     const source = join(root, "source");
     const home = join(root, "home");
@@ -387,7 +387,7 @@ describe("CLI contracts", () => {
     );
     expect(reviewed.status).toBe(0);
     const review = JSON.parse(reviewed.stdout);
-    expect(review.schema).toBe("skit.security.review.v3");
+    expect(review.schema).toBe("skit.security.review.v4");
     const fingerprint = review.data.audit.findings[0].fingerprint as string;
     expect(review.data.assessment.outcome).toBe("warn");
 
@@ -399,8 +399,8 @@ describe("CLI contracts", () => {
     expect(enabled.status).toBe(0);
     expect(JSON.parse(enabled.stdout)).toEqual(
       expect.objectContaining({
-        schema: "skit.enable.v9",
-        data: expect.objectContaining({ enabled: true }),
+        schema: "skit.enable.v10",
+        data: expect.objectContaining({ action: "enable" }),
       }),
     );
 
@@ -427,7 +427,7 @@ describe("CLI contracts", () => {
     const acceptedReview = JSON.parse(accepted.stdout);
     expect(acceptedReview).toEqual(
       expect.objectContaining({
-        schema: "skit.security.accept.v3",
+        schema: "skit.security.accept.v4",
         data: expect.objectContaining({
           assessment: expect.objectContaining({ outcome: "warn" }),
           acceptances: expect.arrayContaining([
@@ -460,8 +460,8 @@ describe("CLI contracts", () => {
     });
     expect(result.status, result.stderr).toBe(0);
     expect(JSON.parse(result.stdout)).toEqual({
-      schema: "skit.list.v6",
-      data: { subjects: [], bindings: [] },
+      schema: "skit.list.v7",
+      data: { subjects: [], enabled: [], enabled_skills: [] },
     });
     expect(result.stderr).toBe("");
   });
@@ -507,7 +507,7 @@ describe("CLI contracts", () => {
     expect(result.stderr).toBe("");
     expect(JSON.parse(result.stdout)).toEqual(
       expect.objectContaining({
-        schema: "skit.doctor.v7",
+        schema: "skit.doctor.v8",
         data: expect.objectContaining({ ok: false, issues: expect.any(Array) }),
       }),
     );
@@ -549,7 +549,7 @@ describe("CLI contracts", () => {
     expect(machine.stderr).toBe("");
     expect(JSON.parse(machine.stdout)).toEqual(
       expect.objectContaining({
-        schema: "skit.add.v6",
+        schema: "skit.add.v7",
         data: expect.objectContaining({
           collection_id: expect.any(String),
           skills: [expect.objectContaining({ name: "review" })],
@@ -605,15 +605,15 @@ describe("CLI contracts", () => {
       { encoding: "utf8" },
     );
     expect(result.status).toBe(0);
-    expect(JSON.parse(result.stdout).schema).toBe("skit.enable.plan.v8");
+    expect(JSON.parse(result.stdout).schema).toBe("skit.enable.plan.v9");
     expect(existsSync(join(repo, ".agents", "skills", "review"))).toBe(false);
     const state = Schema.decodeUnknownSync(LibraryStateDocument)(
       await readFile(join(home, "state.json"), "utf8"),
     );
-    expect(state.global_bindings).toEqual([]);
+    expect(state.enabled).toEqual([]);
   });
 
-  test("both targets and lifecycle dry-runs preserve exact state and projections", async () => {
+  test("both destinations and lifecycle dry-runs preserve exact state and installed skills", async () => {
     const root = await mkdtemp(join(tmpdir(), "skit-cli-matrix-"));
     const home = join(root, "home");
     const configHome = join(root, "config");
@@ -671,7 +671,7 @@ describe("CLI contracts", () => {
     expect(existsSync(join(repo, ".agents", "skills", "review"))).toBe(false);
   });
 
-  test("projection drift exits with conflict status through the executable", async () => {
+  test("installed-skill drift exits with conflict status through the executable", async () => {
     const root = await mkdtemp(join(tmpdir(), "skit-cli-conflict-"));
     const home = join(root, "home"),
       source = join(root, "source"),
@@ -693,7 +693,7 @@ describe("CLI contracts", () => {
     expect(result.stderr).toBe("");
   });
 
-  test("retains selected Projection bytes through the built CLI without overwriting disagreement", async () => {
+  test("retains selected installed-skill bytes through the built CLI without overwriting disagreement", async () => {
     const root = await mkdtemp(join(tmpdir(), "skit-cli-projection-retention-"));
     const home = join(root, "home");
     const source = join(root, "source");
@@ -746,13 +746,15 @@ describe("CLI contracts", () => {
     const preview = Schema.decodeUnknownSync(ProjectionRetentionPlanDocument)(
       previewProcess.stdout,
     );
-    expect(preview.data.projections.map(({ target, agreement }) => [target, agreement])).toEqual([
+    expect(
+      preview.data.installed_skills.map(({ destination, agreement }) => [destination, agreement]),
+    ).toEqual([
       ["agents", "different"],
       ["claude", "selected"],
     ]);
-    expect(preview.data.observed_digest).not.toBe("");
+    expect(preview.data.current_hash).not.toBe("");
     expect(preview.data.snapshot_digest).not.toBe("");
-    expect(existsSync(preview.data.retained_path)).toBe(false);
+    expect(existsSync(preview.data.original_path)).toBe(false);
     expect(await readFile(join(home, "state.json"), "utf8")).toBe(stateBeforePreview);
     expect(await readFile(join(paths.agents, ".skit-ownership.json"), "utf8")).toBe(
       markerBefore.agents,
@@ -764,28 +766,30 @@ describe("CLI contracts", () => {
       applyProcess.stdout,
     );
     expect(applied.data.previous_skill_version_id).toBe(preview.data.previous_skill_version_id);
-    expect(applied.data.retained_skill_version_id).not.toBe(applied.data.previous_skill_version_id);
-    expect(applied.data.retained).toBe(true);
-    expect(applied.data.projections.map(({ target, status }) => [target, status])).toEqual([
+    expect(applied.data.imported_skill_version_id).not.toBe(applied.data.previous_skill_version_id);
+    expect(applied.data.imported).toBe(true);
+    expect(
+      applied.data.installed_skills.map(({ destination, status }) => [destination, status]),
+    ).toEqual([
       ["agents", "conflicted"],
-      ["claude", "projected"],
+      ["claude", "installed"],
     ]);
 
     const state = Schema.decodeUnknownSync(LibraryStateDocument)(
       await readFile(join(home, "state.json"), "utf8"),
     );
-    const retainedSkill = state.skills.find((skill) => skill.skill_id === preview.data.skill_id);
-    expect(retainedSkill?.versions).toHaveLength(2);
-    expect(retainedSkill?.local_version_id).toBe(applied.data.retained_skill_version_id);
-    expect(state.acquisitions.at(-1)).toMatchObject({
-      kind: "retained-edit",
+    const importedSkill = state.skills.find((skill) => skill.skill_id === preview.data.skill_id);
+    expect(importedSkill?.versions).toHaveLength(2);
+    expect(importedSkill?.local_version_id).toBe(applied.data.imported_skill_version_id);
+    expect(state.imports.at(-1)).toMatchObject({
+      kind: "edit",
       source_identity: {
         kind: "local",
         path: { value: paths.claude },
       },
       input: { value: paths.claude },
     });
-    expect(await readFile(join(preview.data.retained_path, "SKILL.md"), "utf8")).toBe(
+    expect(await readFile(join(preview.data.original_path, "SKILL.md"), "utf8")).toBe(
       selectedBytes,
     );
     expect(await readFile(join(paths.claude, "SKILL.md"), "utf8")).toBe(selectedBytes);
@@ -807,16 +811,16 @@ describe("CLI contracts", () => {
     ]);
 
     const partialState = JSON.parse(await readFile(join(home, "state.json"), "utf8"));
-    const selectedDigest = preview.data.observed_digest;
+    const selectedHash = preview.data.current_hash;
     const marker = JSON.parse(markerBefore.claude);
     await writeFile(join(paths.claude, ".skit-ownership.json"), markerBefore.claude);
-    const projection = partialState.projections.find(
+    const installedSkill = partialState.installed_skills.find(
       (candidate: { path: string }) => candidate.path === paths.claude,
     );
-    projection.skill_version_id = marker.skill_version_id;
-    projection.expected_digest = marker.expected_digest;
-    projection.observed_digest = selectedDigest;
-    projection.status = "conflicted";
+    installedSkill.skill_version_id = marker.skill_version_id;
+    installedSkill.expected_hash = marker.expected_hash;
+    installedSkill.current_hash = selectedHash;
+    installedSkill.status = "conflicted";
     await writeFile(join(home, "state.json"), `${JSON.stringify(partialState, null, 2)}\n`);
     const beforeRecovery = Schema.decodeUnknownSync(LibraryStateDocument)(
       await readFile(join(home, "state.json"), "utf8"),
@@ -826,11 +830,13 @@ describe("CLI contracts", () => {
     const recovered = Schema.decodeUnknownSync(ProjectionRetentionResultDocument)(
       recoveredProcess.stdout,
     );
-    expect(recovered.data.retained).toBe(false);
-    expect(recovered.data.retained_skill_version_id).toBe(applied.data.retained_skill_version_id);
-    expect(recovered.data.projections.map(({ target, status }) => [target, status])).toEqual([
+    expect(recovered.data.imported).toBe(false);
+    expect(recovered.data.imported_skill_version_id).toBe(applied.data.imported_skill_version_id);
+    expect(
+      recovered.data.installed_skills.map(({ destination, status }) => [destination, status]),
+    ).toEqual([
       ["agents", "conflicted"],
-      ["claude", "projected"],
+      ["claude", "installed"],
     ]);
     const afterRecovery = Schema.decodeUnknownSync(LibraryStateDocument)(
       await readFile(join(home, "state.json"), "utf8"),
@@ -838,7 +844,7 @@ describe("CLI contracts", () => {
     expect(afterRecovery.skills[0]?.versions.length).toBe(
       beforeRecovery.skills[0]?.versions.length,
     );
-    expect(afterRecovery.acquisitions.length).toBe(beforeRecovery.acquisitions.length);
+    expect(afterRecovery.imports.length).toBe(beforeRecovery.imports.length);
 
     const stateBeforeRepeat = await readFile(join(home, "state.json"), "utf8");
     const repeated = run("update", "review", "--from-projection", "claude-code");

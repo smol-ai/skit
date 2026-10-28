@@ -12,11 +12,11 @@ import {
   DESTINATION_QUESTION,
   destinationLabel,
   invocationChoices,
-  invocationEligibleBindings,
+  invocationEligibleScopes,
   invocationBriefing,
   invocationRowSummary,
 } from "../library-application/read-model.js";
-import type { ProjectionOptions } from "../workflows/library/projection-options.js";
+import type { InstalledSkillOptions } from "../workflows/library/installed-skill-options.js";
 import {
   cancelLibraryChange,
   confirmLibraryChange,
@@ -25,7 +25,7 @@ import {
   proposeLibraryCollectionChange,
   libraryCollectionScopes,
   proposeLibraryInvocation,
-  type LibraryBindingRow,
+  type ScopeRow,
   type LibrarySessionState,
   type LibrarySkillRow,
   type PendingLibraryChange,
@@ -37,7 +37,7 @@ import { promptForScope } from "./scope-prompt.js";
 const DONE = "Done";
 const BACK_TO_COLLECTIONS = "Back to collections";
 const BACK_TO_SKILLS = "Back to skills";
-const ALL_BINDINGS = "all";
+const ALL_SCOPES = "all";
 const ENABLE_COLLECTION = "Enable whole collection";
 const DISABLE_COLLECTION = "Disable whole collection";
 
@@ -74,7 +74,7 @@ export function pendingReviewText(pending: PendingLibraryChange): string {
 
 const applyWithConfirmation = Effect.fn("CLI.libraryBrowse.apply")(function* (
   session: LibrarySessionState,
-  configuration: ProjectionOptions,
+  configuration: InstalledSkillOptions,
   progress: string,
 ) {
   const prompter = yield* Prompter;
@@ -116,7 +116,7 @@ const applyWithConfirmation = Effect.fn("CLI.libraryBrowse.apply")(function* (
 
 const enableSkill = Effect.fn("CLI.libraryBrowse.enable")(function* (
   session: LibrarySessionState,
-  configuration: ProjectionOptions,
+  configuration: InstalledSkillOptions,
   row: LibrarySkillRow,
 ) {
   const scope = yield* promptForScope(resolve(process.cwd()));
@@ -124,30 +124,30 @@ const enableSkill = Effect.fn("CLI.libraryBrowse.enable")(function* (
   return yield* applyWithConfirmation(proposed, configuration, "Projecting Skill");
 });
 
-const chooseBinding = Effect.fn("CLI.libraryBrowse.chooseBinding")(function* (
+const chooseScope = Effect.fn("CLI.libraryBrowse.chooseScope")(function* (
   message: string,
-  bindings: readonly LibraryBindingRow[],
+  scopes: readonly ScopeRow[],
 ) {
-  if (bindings.length === 1) return bindings[0];
+  if (scopes.length === 1) return scopes[0];
   const choice = yield* (yield* Prompter).autocomplete(
     message,
-    bindings.map((binding, index) => ({
+    scopes.map((scopeRow, index) => ({
       value: String(index),
-      label: destinationLabel(binding.scope),
-      ...(binding.policy === undefined ? {} : { hint: invocationRowSummary(binding.policy) }),
+      label: destinationLabel(scopeRow.scope),
+      ...(scopeRow.policy === undefined ? {} : { hint: invocationRowSummary(scopeRow.policy) }),
     })),
   );
-  const selected = bindings[Number(choice)];
-  return selected === undefined ? yield* Effect.die(`Unknown Binding choice: ${choice}`) : selected;
+  const selected = scopes[Number(choice)];
+  return selected === undefined ? yield* Effect.die(`Unknown scope choice: ${choice}`) : selected;
 });
 
 const changeInvocation = Effect.fn("CLI.libraryBrowse.invocation")(function* (
   session: LibrarySessionState,
-  configuration: ProjectionOptions,
+  configuration: InstalledSkillOptions,
   row: LibrarySkillRow,
 ) {
   const renderer = yield* Renderer;
-  const eligible = invocationEligibleBindings(row);
+  const eligible = invocationEligibleScopes(row);
   if (eligible.length === 0) {
     yield* renderer.note(
       "None of this Skill's current Bindings carries an invocation policy.",
@@ -155,18 +155,18 @@ const changeInvocation = Effect.fn("CLI.libraryBrowse.invocation")(function* (
     );
     return session;
   }
-  const binding = yield* chooseBinding(DESTINATION_QUESTION, eligible);
-  if (binding.policy === undefined) return session;
-  yield* renderer.note(invocationBriefing(binding.policy), "Invocation");
+  const scopeRow = yield* chooseScope(DESTINATION_QUESTION, eligible);
+  if (scopeRow.policy === undefined) return session;
+  yield* renderer.note(invocationBriefing(scopeRow.policy), "Invocation");
   const invocation = yield* (yield* Prompter).autocomplete<InvocationOption>(
-    binding.policy.question,
-    invocationChoices(binding),
+    scopeRow.policy.question,
+    invocationChoices(scopeRow),
   );
   const proposed = yield* proposeLibraryInvocation(
     session,
     configuration,
     row,
-    binding,
+    scopeRow,
     invocation,
   );
   return yield* applyWithConfirmation(
@@ -178,32 +178,30 @@ const changeInvocation = Effect.fn("CLI.libraryBrowse.invocation")(function* (
 
 const disableSkill = Effect.fn("CLI.libraryBrowse.disable")(function* (
   session: LibrarySessionState,
-  configuration: ProjectionOptions,
+  configuration: InstalledSkillOptions,
   row: LibrarySkillRow,
 ) {
-  const options = row.bindings.map((binding, index) => ({
+  const options = row.scopes.map((scopeRow, index) => ({
     value: String(index),
-    label: binding.label,
+    label: scopeRow.label,
   }));
   const choice =
     options.length === 1
       ? "0"
       : yield* (yield* Prompter).autocomplete(DESTINATION_QUESTION, [
-          { value: ALL_BINDINGS, label: "All shown" },
+          { value: ALL_SCOPES, label: "All shown" },
           ...options,
         ]);
-  const selected = choice === ALL_BINDINGS ? row.bindings : [row.bindings[Number(choice)]];
-  const bindings = selected.filter(
-    (binding): binding is LibraryBindingRow => binding !== undefined,
-  );
-  const proposed = yield* proposeLibraryDisable(session, configuration, row, bindings);
-  return yield* applyWithConfirmation(proposed, configuration, "Removing Projections");
+  const selected = choice === ALL_SCOPES ? row.scopes : [row.scopes[Number(choice)]];
+  const scopes = selected.filter((scopeRow): scopeRow is ScopeRow => scopeRow !== undefined);
+  const proposed = yield* proposeLibraryDisable(session, configuration, row, scopes);
+  return yield* applyWithConfirmation(proposed, configuration, "Removing installed skills");
 });
 
 /** Interactive Library browser backed by the portable enable and disable workflows. */
-export const browseLibraryEffect = Effect.fn("CLI.libraryBrowse")(function* (
+export const browseLibrary = Effect.fn("CLI.libraryBrowse")(function* (
   initial: LibrarySessionState,
-  configuration: ProjectionOptions,
+  configuration: InstalledSkillOptions,
 ) {
   const prompter = yield* Prompter;
   const renderer = yield* Renderer;
@@ -241,7 +239,7 @@ export const browseLibraryEffect = Effect.fn("CLI.libraryBrowse")(function* (
             : []),
           ...rows.map((row) => ({
             value: row.skillVersionId,
-            label: row.bindings.length > 0 ? `${row.name} · enabled` : row.name,
+            label: row.scopes.length > 0 ? `${row.name} · enabled` : row.name,
             hint: `${metadataSource(row.source)} · revision ${metadataRevision(row.revision)} · source updated ${metadataDate(row.source_updated_at)}`,
           })),
           { value: BACK_TO_COLLECTIONS, label: BACK_TO_COLLECTIONS },
@@ -258,7 +256,7 @@ export const browseLibraryEffect = Effect.fn("CLI.libraryBrowse")(function* (
                 : enabledScopes.length === 1
                   ? "0"
                   : yield* prompter.autocomplete(DESTINATION_QUESTION, [
-                      { value: ALL_BINDINGS, label: "All shown" },
+                      { value: ALL_SCOPES, label: "All shown" },
                       ...enabledScopes.map((scope, index) => ({
                         value: String(index),
                         label: destinationLabel(scope),
@@ -267,7 +265,7 @@ export const browseLibraryEffect = Effect.fn("CLI.libraryBrowse")(function* (
             const scopes =
               skillId === ENABLE_COLLECTION
                 ? [yield* promptForScope(resolve(process.cwd()))]
-                : choice === ALL_BINDINGS
+                : choice === ALL_SCOPES
                   ? enabledScopes
                   : [enabledScopes[Number(choice)]!];
             const proposed = yield* proposeLibraryCollectionChange(
@@ -280,7 +278,7 @@ export const browseLibraryEffect = Effect.fn("CLI.libraryBrowse")(function* (
             return yield* applyWithConfirmation(
               proposed,
               configuration,
-              "Updating Collection Projections",
+              "Updating the Collection's installed skills",
             );
           }),
           session,
@@ -296,15 +294,15 @@ export const browseLibraryEffect = Effect.fn("CLI.libraryBrowse")(function* (
             `  ${terminalColors().bold(row.name)}`,
             ...skillMetadataLines(row).map((line) => `    ${terminalColors().dim(line)}`),
             ...(row.invocationWarning ? [`    ${row.invocationWarning}`] : []),
-            `  ${row.bindings.length === 0 ? "not enabled" : row.bindings.map((binding) => binding.label).join("\n  ")}`,
+            `  ${row.scopes.length === 0 ? "not enabled" : row.scopes.map((scopeRow) => scopeRow.label).join("\n  ")}`,
           ].join("\n"),
           "Skill",
         );
         const action = yield* prompter
           .select<"enable" | "disable" | "invocation" | "back" | "done">("What next?", [
             { value: "enable", label: "Enable" },
-            ...(row.bindings.length > 0 ? [{ value: "disable" as const, label: "Disable" }] : []),
-            ...(invocationEligibleBindings(row).length > 0
+            ...(row.scopes.length > 0 ? [{ value: "disable" as const, label: "Disable" }] : []),
+            ...(invocationEligibleScopes(row).length > 0
               ? [{ value: "invocation" as const, label: "Change when it may be used" }]
               : []),
             { value: "back", label: BACK_TO_SKILLS },

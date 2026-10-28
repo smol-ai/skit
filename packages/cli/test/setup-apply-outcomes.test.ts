@@ -5,7 +5,7 @@ import { assert, it } from "@effect/vitest";
 import {
   InvalidLibraryState,
   LibraryStore,
-  ProjectionRootNotWritable,
+  SkillsDirectoryNotWritable,
   skitLayer,
 } from "@smolai/skit-core";
 import { withSandboxDenying } from "./helpers/sandbox.js";
@@ -25,10 +25,10 @@ import { PlanIsStale } from "../src/library/failures.js";
 import { SetupDiscovery, SetupPlanStale } from "../src/workflows/library/setup.js";
 import { captureDisk, diskChanges, noDiskChanges, type DiskDiff } from "./helpers/disk-snapshot.js";
 import {
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   initializeLibraryMachine,
   libraryHome,
-  retainObservedIn,
+  importCollectionIn,
   scratch,
   testMachineId,
   writingTo,
@@ -43,9 +43,9 @@ const skillBytes = (name: string, body = `${name} body`) =>
 interface Gates {
   /** Runs once the confirmation prompt has approved the plan. */
   readonly approved?: Effect.Effect<void, unknown>;
-  /** Runs once the first Library state has been published. */
+  /** Runs once the first Library state has been saved. */
   readonly published?: Effect.Effect<void, unknown>;
-  /** Refuses the nth Library state publication. */
+  /** Refuses the nth Library state save. */
   readonly failPublish?: number;
   /** Runs before every rename; a failure refuses that rename. */
   readonly rename?: (from: string, to: string) => Effect.Effect<void, PlatformError>;
@@ -89,7 +89,7 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
             interactive: flags.interactive ?? true,
             dryRun: flags.dryRun ?? false,
             ...(flags.workDirFlag ? { workDirFlag: flags.workDirFlag } : {}),
-            localCustody: { bindings: home.bindings },
+            manageOptions: { installOptions: home.installOptions },
           }).pipe(
             Effect.provideServiceEffect(
               Prompter,
@@ -112,15 +112,15 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
               LibraryStore,
               Effect.map(LibraryStore, (store) => ({
                 ...store,
-                publish: (next: Parameters<typeof store.publish>[0], base: typeof next) =>
+                save: (next: Parameters<typeof store.save>[0], base: typeof next) =>
                   Effect.gen(function* () {
                     publishes++;
                     if (publishes === gates.failPublish)
                       return yield* new InvalidLibraryState({
                         path: home.statePath,
-                        detail: "Test refusal of a Library publication",
+                        detail: "Test refusal of a Library save",
                       });
-                    yield* store.publish(next, base);
+                    yield* store.save(next, base);
                     if (publishes === 1) yield* Effect.orDie(gates.published ?? Effect.void);
                   }),
               })),
@@ -192,22 +192,22 @@ const refuseRename = (path: string) =>
     }),
   );
 
-const Receipt = Schema.fromJsonString(
+const MoveRecord = Schema.fromJsonString(
   Schema.Struct({
     entries: Schema.Array(Schema.Struct({ path: Schema.String, recoveryPath: Schema.String })),
   }),
 );
 
-const readReceipt = Effect.fn("Test.readSetupReceipt")(function* (home: string) {
+const readMoveRecord = Effect.fn("Test.readSetupMoveRecord")(function* (home: string) {
   const fs = yield* FileSystem.FileSystem;
   const [directory] = yield* fs.readDirectory(join(home, "removed"));
   for (const batch of yield* fs.readDirectory(join(home, "removed", directory!))) {
     if ((yield* fs.stat(join(home, "removed", directory!, batch))).type !== "Directory") continue;
     const path = join(home, "removed", directory!, batch, "receipt.json");
     if (yield* fs.exists(path))
-      return yield* Schema.decodeUnknownEffect(Receipt)(yield* fs.readFileString(path));
+      return yield* Schema.decodeUnknownEffect(MoveRecord)(yield* fs.readFileString(path));
   }
-  return yield* Effect.die(new Error("No removal receipt was published"));
+  return yield* Effect.die(new Error("No removal move record was written"));
 });
 
 const holds = (changes: DiskDiff, bytes: string) =>
@@ -234,7 +234,7 @@ it.effect("declining or previewing the plan applies nothing after one scan", () 
 );
 
 it.effect(
-  "protected foreign projections refuse setup after only the loader's backed-up migration",
+  "protected foreign installed skills refuse setup after only the loader's backed-up migration",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture({ machine: true });
@@ -248,7 +248,7 @@ it.effect(
       const before = yield* captureDisk(f.disk);
       const { exit } = yield* f.setup([["alpha"]]);
       assert.isTrue(Exit.isFailure(exit));
-      if (Exit.isFailure(exit)) assert.match(String(exit.cause), /SetupReconciliationRequired/);
+      if (Exit.isFailure(exit)) assert.match(String(exit.cause), /ChangeChoiceRequired/);
       const paths = changedPaths(f.root, yield* diskChanges(before));
       assert.deepStrictEqual(paths.deleted, []);
       assert.deepStrictEqual(paths.changed, ["library/state.json"]);
@@ -310,7 +310,7 @@ it.effect("a selected file changed after approval fails stale before any effect"
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-// One scan after approval however many stages run: here machine identity, custody and a removal.
+// One scan after approval however many stages run: here machine identity, ownership and a removal.
 // The stages work from that scan and never observe again.
 it.effect("an approved apply scans once after approval, whatever stages it runs", () =>
   Effect.gen(function* () {
@@ -328,7 +328,7 @@ it.effect("an approved apply scans once after approval, whatever stages it runs"
 );
 
 // No stage observes again, so a selected copy changed after the apply-time scan, here while machine
-// identity is written ahead of custody, cannot pass as approved: custody checks its bytes first.
+// identity is written ahead of ownership, cannot pass as approved: ownership checks its bytes first.
 it.effect("bytes changed between the apply-time scan and a later stage fail stale", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: false });
@@ -403,8 +403,8 @@ it.effect("a failed additive stage leaves every selected removal in place", () =
 );
 
 // Codex's default sandbox keeps `.agents` read-only inside its writable workspace. Setup must refuse
-// whole rather than adopt a copy into a Library whose Projections it cannot then write.
-it.effect("an unwritable projection root fails the apply before any stage writes", () =>
+// whole rather than manage a copy into a Library whose installed skills it cannot then write.
+it.effect("an unwritable skills directory fails the apply before any stage writes", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: false });
     const before = yield* captureDisk(f.disk);
@@ -412,7 +412,7 @@ it.effect("an unwritable projection root fails the apply before any stage writes
       .setup([["alpha", "remove\0gamma"], true])
       .pipe(withSandboxDenying(join(f.root, ".codex")));
     const error = failure(exit);
-    assert.instanceOf(error, ProjectionRootNotWritable);
+    assert.instanceOf(error, SkillsDirectoryNotWritable);
     assert.strictEqual(error.root, join(f.root, ".codex", "skills"));
     assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -437,9 +437,9 @@ it.effect("a removal selection edited after the first additive stage stays in pl
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-// A custody marker leaves the tree hash unchanged, so removal checks custody on its own: a copy
+// An ownership marker leaves the tree hash unchanged, so removal checks ownership on its own: a copy
 // that gains a marker after the apply-time scan, even an invalid one, is no longer removable.
-it.effect("a removal selection that gains a custody marker after the scan stays in place", () =>
+it.effect("a removal selection that gains an ownership marker after the scan stays in place", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: true });
     const marker = join(f.path("gamma"), ".skit-ownership.json");
@@ -484,7 +484,7 @@ it.effect(
 );
 
 // Each entry is checked again immediately before its own move, so a later entry replaced while an
-// earlier one moves is left alone; the earlier move stays, recorded in the receipt.
+// earlier one moves is left alone; the earlier move stays, recorded in the move record.
 it.effect("a removal entry replaced during an earlier move stays untouched", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: true });
@@ -505,14 +505,14 @@ it.effect("a removal entry replaced during an earlier move stays untouched", () 
           : Effect.void,
     });
     assert.instanceOf(failure(exit), PlanIsStale);
-    const receipt = yield* readReceipt(f.home.home);
+    const moveRecord = yield* readMoveRecord(f.home.home);
     const [operation] = yield* listRecoveryOperations(f.home.home);
     const inspection = yield* inspectRecoveryOperation(f.home.home, operation!);
     assert.deepStrictEqual(
       inspection.entries.map((entry) => entry.status),
       ["saved", "conflict"],
     );
-    const [moved, kept] = receipt.entries;
+    const [moved, kept] = moveRecord.entries;
     assert.strictEqual(
       yield* f.fs.readFileString(join(moved!.recoveryPath, "SKILL.md")),
       skillBytes(basename(moved!.path)),
@@ -526,7 +526,7 @@ it.effect("a removal entry replaced during an earlier move stays untouched", () 
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("a failed removal move leaves a moved prefix, the rest in place, and a receipt", () =>
+it.effect("a failed removal move leaves a moved prefix, the rest in place, and a move record", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: true });
     const before = yield* captureDisk(f.disk);
@@ -536,7 +536,7 @@ it.effect("a failed removal move leaves a moved prefix, the rest in place, and a
         from.startsWith(f.path("")) && ++moves === 2 ? refuseRename(from) : Effect.void,
     });
     assert.instanceOf(failure(exit), PlatformError);
-    const receipt = yield* readReceipt(f.home.home);
+    const moveRecord = yield* readMoveRecord(f.home.home);
     assert.deepStrictEqual(
       (yield* inspectRecoveryOperation(
         f.home.home,
@@ -544,7 +544,7 @@ it.effect("a failed removal move leaves a moved prefix, the rest in place, and a
       )).entries.map((entry) => entry.status),
       ["saved", "at-original"],
     );
-    const [moved, kept] = receipt.entries;
+    const [moved, kept] = moveRecord.entries;
     const paths = changedPaths(f.root, yield* diskChanges(before));
     assert.deepStrictEqual(paths.changed, []);
     assert.deepStrictEqual(paths.deleted, [
@@ -559,18 +559,20 @@ it.effect("a failed removal move leaves a moved prefix, the rest in place, and a
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-// A receipt is no longer rewritten after moves; an injected second-write failure is unreachable.
-it.effect("removal publishes one immutable receipt before moving files", () =>
+// A move record is no longer rewritten after moves; an injected second-write failure is unreachable.
+it.effect("removal writes one immutable move record before moving files", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: true });
-    let receiptRenames = 0;
+    let moveRecordRenames = 0;
     const { exit } = yield* f.setup([["remove\0gamma"], true], {
       rename: (from, to) =>
-        basename(to) === "receipt.json" && ++receiptRenames > 0 ? refuseRename(from) : Effect.void,
+        basename(to) === "receipt.json" && ++moveRecordRenames > 0
+          ? refuseRename(from)
+          : Effect.void,
     });
     assert.isTrue(Exit.isSuccess(exit));
-    assert.strictEqual(receiptRenames, 0); // exclusive publication uses link, not replacement
-    const [entry] = (yield* readReceipt(f.home.home)).entries;
+    assert.strictEqual(moveRecordRenames, 0); // exclusive publication uses link, not replacement
+    const [entry] = (yield* readMoveRecord(f.home.home)).entries;
     assert.isFalse(yield* f.fs.exists(entry!.path));
     assert.strictEqual(
       yield* f.fs.readFileString(join(entry!.recoveryPath, "SKILL.md")),
@@ -580,7 +582,7 @@ it.effect("removal publishes one immutable receipt before moving files", () =>
 );
 
 /** Another writer retains `delta` into the same Library, through its own Library services. */
-const retainDelta = (f: Effect.Success<ReturnType<typeof fixture>>) =>
+const importDelta = (f: Effect.Success<ReturnType<typeof fixture>>) =>
   Effect.gen(function* () {
     const source = join(f.root, "sources", "delta");
     yield* f.fs.makeDirectory(source, { recursive: true });
@@ -588,20 +590,20 @@ const retainDelta = (f: Effect.Success<ReturnType<typeof fixture>>) =>
     yield* writingTo(
       f.home.home,
       Effect.gen(function* () {
-        yield* retainObservedIn(f.home.home)({
+        yield* importCollectionIn(f.home.home)({
           machineId: testMachineId,
           source: { type: "github", owner: "fixture", repository: "delta" },
           input: source,
-          retainedAt: "2026-01-01T00:00:00.000Z",
+          importedAt: "2026-01-01T00:00:00.000Z",
           skills: [
             {
               name: "delta",
               sourcePath: source,
               relativePath: ".",
-              observedHash: yield* deterministicTreeHashEffect(source),
+              currentHash: yield* deterministicTreeHash(source),
             },
           ],
-          observations: [],
+          lockFileEntries: [],
         });
       }),
     );
@@ -612,7 +614,7 @@ it.effect("a Library change committed after approval fails stale before any effe
   Effect.gen(function* () {
     const f = yield* fixture({ machine: true });
     const { exit } = yield* f.setup([["alpha", "remove\0gamma"], true], {
-      approved: retainDelta(f),
+      approved: importDelta(f),
     });
     assert.instanceOf(failure(exit), SetupPlanStale);
     assert.deepStrictEqual(
@@ -623,14 +625,14 @@ it.effect("a Library change committed after approval fails stale before any effe
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-// Every publication must build on the approved revision or on the apply's own previous one, so a
+// Every save must build on the approved revision or on the apply's own previous one, so a
 // Library change between stages is never rebased onto and stops every further effect. The stage
-// whose publication meets the changed base reports it as its own conflict.
+// whose save meets the changed base reports it as its own conflict.
 it.effect("a Library change committed after the first additive stage stops the apply", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: true });
     const { exit } = yield* f.setup([["alpha", "beta", "remove\0gamma"], true], {
-      published: retainDelta(f),
+      published: importDelta(f),
     });
     assert.propertyVal(failure(exit), "code", "CONFLICT");
     assert.deepStrictEqual((yield* f.home.durable).skills.map((skill) => skill.name).sort(), [

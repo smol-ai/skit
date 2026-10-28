@@ -3,8 +3,8 @@ import { execFileSync } from "node:child_process";
 import { Effect, FileSystem } from "effect";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { resolveSkitSourceEffect } from "../src/acquisition/sources.js";
-import { readPluginUnitsEffect } from "../src/acquisition/plugin-manifests.js";
+import { resolveSkitSource } from "../src/sources/resolve.js";
+import { readPluginUnits } from "../src/sources/plugin-manifests.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 const fixture = Effect.gen(function* () {
@@ -19,7 +19,7 @@ const fixture = Effect.gen(function* () {
     write(`${path}/SKILL.md`, `---\nname: ${name}\ndescription: Review changes.\n---\n\n${body}\n`);
   const json = (path: string, value: unknown) => write(path, JSON.stringify(value));
   const discover = (previousSkillPaths?: readonly string[]) =>
-    resolveSkitSourceEffect(root, { previousSkillPaths }).pipe(
+    resolveSkitSource(root, { previousSkillPaths }).pipe(
       Effect.map((resolved) => {
         assert(resolved.descriptorKind === "observed");
         return resolved;
@@ -37,7 +37,7 @@ it.effect(
       yield* f.skill("plugins/tools/skills/review/examples/nested", "nested");
       yield* f.skill("plugins/tools/examples/demo", "demo");
       yield* f.json("plugins/tools/.claude-plugin/plugin.json", { name: "tools" });
-      assert.deepStrictEqual((yield* f.discover()).observedSkillPaths, [
+      assert.deepStrictEqual((yield* f.discover()).foundSkillPaths, [
         "plugins/tools/skills/review",
       ]);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -50,7 +50,7 @@ it.effect("merges identical declared mirrors while retaining distinct plugin Ski
     yield* f.skill(".github/plugins/tools/skills/review");
     yield* f.skill(".github/plugins/tools/skills/deploy", "deploy");
     yield* f.json(".github/plugins/tools/.claude-plugin/plugin.json", { name: "tools" });
-    assert.deepStrictEqual((yield* f.discover()).observedSkillPaths, [
+    assert.deepStrictEqual((yield* f.discover()).foundSkillPaths, [
       "skills/review",
       ".github/plugins/tools/skills/deploy",
     ]);
@@ -72,7 +72,7 @@ it.effect(
           "plugins/tools/skills/review",
           "plugins/tools/legacy",
           "plugins/tools/deleted",
-        ])).observedSkillPaths,
+        ])).foundSkillPaths,
         ["plugins/tools/legacy", "plugins/tools/skills/review", "plugins/tools/skills/added"],
       );
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -100,9 +100,9 @@ it.effect("does not merge different same-name Skills across plugin namespaces", 
         ["commercial", "finance", "legal"].map((name) => join(f.root, "plugins", name)),
       );
     }
-    const selected = yield* resolveSkitSourceEffect(join(f.root, "plugins/legal"));
+    const selected = yield* resolveSkitSource(join(f.root, "plugins/legal"));
     assert(selected.descriptorKind === "observed");
-    assert.deepStrictEqual(selected.observedSkillPaths, ["skills/review"]);
+    assert.deepStrictEqual(selected.foundSkillPaths, ["skills/review"]);
     // Equal names and bytes alone do not establish an alias between separate packages.
     for (const name of ["legal", "finance", "commercial"]) {
       yield* f.skill(`plugins/${name}/skills/review`, "review", "Identical instructions");
@@ -121,13 +121,13 @@ it.effect("accepts string and array direct Skill declarations in addition to def
       name: "tools",
       skills: ["./direct", "./extras"],
     });
-    assert.deepStrictEqual((yield* f.discover()).observedSkillPaths, [
+    assert.deepStrictEqual((yield* f.discover()).foundSkillPaths, [
       "tools/direct",
       "tools/extras/other",
       "tools/skills/default",
     ]);
     yield* f.json("tools/.claude-plugin/plugin.json", { name: "tools", skills: "./direct" });
-    assert.deepStrictEqual((yield* f.discover()).observedSkillPaths, [
+    assert.deepStrictEqual((yield* f.discover()).foundSkillPaths, [
       "tools/direct",
       "tools/skills/default",
     ]);
@@ -146,7 +146,7 @@ it.effect("keeps shared-root marketplace selections separate in the declaration 
         { name: "finance", source: ".", skills: ["./finance"] },
       ],
     });
-    const units = yield* readPluginUnitsEffect(f.root, [f.root]);
+    const units = yield* readPluginUnits(f.root, [f.root]);
     assert.deepStrictEqual(
       units.map((unit) => ({
         name: unit.name,
@@ -157,7 +157,7 @@ it.effect("keeps shared-root marketplace selections separate in the declaration 
         { name: "finance", skills: ["finance"] },
       ],
     );
-    assert.deepStrictEqual((yield* f.discover()).observedSkillPaths, [
+    assert.deepStrictEqual((yield* f.discover()).foundSkillPaths, [
       "skills/review",
       "finance",
       "legal",
@@ -175,7 +175,7 @@ it.effect(
         metadata: { pluginRoot: "./bundles" },
         plugins: [{ name: "tools", source: "tools" }],
       });
-      assert.deepStrictEqual((yield* f.discover()).observedSkillPaths, [
+      assert.deepStrictEqual((yield* f.discover()).foundSkillPaths, [
         "bundles/tools/skills/review",
       ]);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -190,7 +190,7 @@ it.effect("reports strict:false conflicts without blocking unrelated Skill impor
       plugins: [{ name: "tools", source: "./tools", strict: false, skills: "./skills" }],
     });
     const discovered = yield* f.discover();
-    assert.deepStrictEqual(discovered.observedSkillPaths, ["tools/skills/review"]);
+    assert.deepStrictEqual(discovered.foundSkillPaths, ["tools/skills/review"]);
     assert.include(discovered.diagnostics?.[0]?.message ?? "", "strict:false");
     // An explicitly selected Git subpath enforces its plugin declarations.
     for (const args of [
@@ -199,7 +199,7 @@ it.effect("reports strict:false conflicts without blocking unrelated Skill impor
       ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "tools"],
     ])
       execFileSync("git", args, { cwd: f.root });
-    const error = yield* resolveSkitSourceEffect({
+    const error = yield* resolveSkitSource({
       type: "git",
       remote: pathToFileURL(f.root).href,
       subpath: ".",
@@ -234,7 +234,7 @@ for (const scenario of [
         yield* f.skill("tools/skills/review");
         yield* f.write(scenario.path, scenario.text);
         const result = yield* f.discover();
-        assert.deepStrictEqual(result.observedSkillPaths?.toSorted(), [
+        assert.deepStrictEqual(result.foundSkillPaths?.toSorted(), [
           "skills/standalone",
           "tools/skills/review",
         ]);
@@ -251,7 +251,7 @@ it.effect("retains standalone agent and developer Skills alongside a repository-
     yield* f.skill(".claude/skills/agent", "agent");
     yield* f.skill("dev-skills/develop", "develop");
     yield* f.json(".claude-plugin/plugin.json", { name: "tools" });
-    assert.deepStrictEqual((yield* f.discover()).observedSkillPaths?.toSorted(), [
+    assert.deepStrictEqual((yield* f.discover()).foundSkillPaths?.toSorted(), [
       ".claude/skills/agent",
       "dev-skills/develop",
       "skills/review",
@@ -272,7 +272,7 @@ it.effect("reads Codex local marketplace declarations and portable nested manife
       $schema: "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
       name: "portable",
     });
-    assert.deepStrictEqual((yield* f.discover()).observedSkillPaths, [
+    assert.deepStrictEqual((yield* f.discover()).foundSkillPaths, [
       "codex/extra",
       "portable/skills/review",
     ]);
@@ -288,7 +288,7 @@ it.effect(
       yield* f.json("single/.claude-plugin/plugin.json", { name: "single" });
       yield* f.skill("hooks-only/examples/check", "check");
       yield* f.json("hooks-only/.claude-plugin/plugin.json", { name: "hooks-only" });
-      assert.deepStrictEqual((yield* f.discover()).observedSkillPaths, [
+      assert.deepStrictEqual((yield* f.discover()).foundSkillPaths, [
         "hooks-only/examples/check",
         "single",
       ]);
@@ -320,14 +320,14 @@ it.effect(
       yield* f.fs.makeDirectory(join(f.root, "tools/skills"), { recursive: true });
       yield* f.fs.symlink("../../.claude/skills/review", join(f.root, "tools/skills/review"));
       yield* f.json("tools/.claude-plugin/plugin.json", { name: "tools" });
-      const retained = yield* f.discover(["tools/skills/review"]);
-      assert.deepStrictEqual(retained.observedSkillPaths, ["tools/skills/review"]);
+      const imported = yield* f.discover(["tools/skills/review"]);
+      assert.deepStrictEqual(imported.foundSkillPaths, ["tools/skills/review"]);
       assert.strictEqual(
-        (yield* f.fs.stat(join(retained.originalRoot, "tools/skills/review"))).type,
+        (yield* f.fs.stat(join(imported.originalRoot, "tools/skills/review"))).type,
         "Directory",
       );
       assert.strictEqual(
-        yield* f.fs.readFileString(join(retained.originalRoot, "tools/skills/review/SKILL.md")),
+        yield* f.fs.readFileString(join(imported.originalRoot, "tools/skills/review/SKILL.md")),
         yield* f.fs.readFileString(join(f.root, ".claude/skills/review/SKILL.md")),
       );
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -342,7 +342,7 @@ it.effect("keeps declared SKIT descriptor precedence inside plugin directories",
       slug: "tools",
       skills: [{ name: "review", path: "skills/review" }],
     });
-    const resolved = yield* resolveSkitSourceEffect(f.root);
+    const resolved = yield* resolveSkitSource(f.root);
     assert(resolved.descriptorKind === "declared");
     assert.strictEqual(resolved.root, join(f.root, "plugins/tools"));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -361,9 +361,9 @@ it.effect(
         extensions: { "com.openai": {} },
       });
       yield* f.json("tools/.codex-plugin/plugin.json", { name: "tools", skills: "./legacy" });
-      assert.deepStrictEqual((yield* f.discover()).observedSkillPaths, ["tools/skills/review"]);
+      assert.deepStrictEqual((yield* f.discover()).foundSkillPaths, ["tools/skills/review"]);
       yield* f.write("tools/.codex-plugin/plugin.json", "invalid ignored overlay");
-      assert.deepStrictEqual((yield* f.discover()).observedSkillPaths, ["tools/skills/review"]);
+      assert.deepStrictEqual((yield* f.discover()).foundSkillPaths, ["tools/skills/review"]);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -377,7 +377,7 @@ it.effect(
       yield* f.json("nested/.claude-plugin/marketplace.json", {
         plugins: [{ name: "selected", source: ".", skills: "./selected" }],
       });
-      assert.deepStrictEqual((yield* f.discover()).observedSkillPaths, ["nested/selected"]);
+      assert.deepStrictEqual((yield* f.discover()).foundSkillPaths, ["nested/selected"]);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -393,6 +393,6 @@ it.effect("skips paths the source's skit.config.json excludes from discovery", (
       schema: "skit.config.v1",
       discovery: { exclude: ["packages/cli/test/fixtures/**"], collections: [] },
     });
-    assert.deepStrictEqual((yield* f.discover()).observedSkillPaths, ["skills/skit"]);
+    assert.deepStrictEqual((yield* f.discover()).foundSkillPaths, ["skills/skit"]);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

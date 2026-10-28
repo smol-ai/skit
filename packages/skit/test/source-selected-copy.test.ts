@@ -12,7 +12,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber, FileSystem } from "effect";
 import { execFileSync } from "node:child_process";
 import { join, sep } from "node:path";
-import { resolveSkitSourceEffect } from "../src/acquisition/sources.js";
+import { resolveSkitSource } from "../src/sources/resolve.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 const SKILL = `---\nname: Review Notes\ndescription: A skill\n---\n\n# Review Notes\n`;
@@ -54,7 +54,7 @@ describe("the selected Git member copy", () => {
       );
       const staged = yield* Effect.scoped(
         Effect.gen(function* () {
-          const resolved = yield* resolveSkitSourceEffect(source);
+          const resolved = yield* resolveSkitSource(source);
           const directory = join(resolved.originalRoot, "review-notes");
           return {
             // Read inside the Scope: the workspace is gone once it closes.
@@ -85,7 +85,7 @@ describe("the selected Git member copy", () => {
       const staging = `${sep}git-selected-original${sep}`;
       const gated = Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        return yield* resolveSkitSourceEffect(source).pipe(
+        return yield* resolveSkitSource(source).pipe(
           Effect.provideService(FileSystem.FileSystem, {
             ...fs,
             open: (path: string, options?: Parameters<typeof fs.open>[1]) =>

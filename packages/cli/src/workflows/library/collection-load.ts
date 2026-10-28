@@ -1,7 +1,7 @@
 import {
   currentSkillVersion,
   versionBacking,
-  retainedTreePath,
+  collectionVersionPath,
   parseSkillFrontmatter,
   type LibraryState,
 } from "@smolai/skit-core";
@@ -31,7 +31,7 @@ export const readDescriptionLoad = Effect.fn("Library.descriptionLoad")(function
         : yield* fs
             .readFileString(
               join(
-                retainedTreePath(originalsPath, backing.copy.digest),
+                collectionVersionPath(originalsPath, backing.copy.hash),
                 backing.member.source_path,
                 "SKILL.md",
               ),

@@ -1,6 +1,6 @@
 import {
-  artifactUsesSymlinkEffect,
-  inspectOwnershipMarkerEffect,
+  artifactUsesSymlink,
+  inspectOwnershipMarker,
   isJsonObject,
   stringAt,
   type JsonObject,
@@ -8,7 +8,7 @@ import {
 import { dirname, join, normalize, sep } from "node:path";
 import { Effect } from "effect";
 import { canonical } from "./io.js";
-import { pnpmSkillOwner, type PnpmSkillObserver } from "../projection/pnpm-skills.js";
+import { pnpmSkillOwner, type PnpmSkillCheck } from "../install/pnpm-skills.js";
 
 function codexSystemSkillsRoot(path: string): string | null {
   const parts = normalize(path).split(sep);
@@ -24,7 +24,7 @@ export const fileProvenance = Effect.fn("Audit.fileProvenance")(function* (
   lock: JsonObject,
   name: string,
   occurrences = 1,
-  observePnpm: PnpmSkillObserver = pnpmSkillOwner,
+  observePnpm: PnpmSkillCheck = pnpmSkillOwner,
 ) {
   const pnpm = yield* observePnpm(dirname(path));
   if (pnpm)
@@ -34,14 +34,14 @@ export const fileProvenance = Effect.fn("Audit.fileProvenance")(function* (
       evidence: pnpm.ledgerPath,
     };
   const markerPath = join(dirname(path), ".skit-ownership.json");
-  const markerInspection = yield* inspectOwnershipMarkerEffect(dirname(path)).pipe(
+  const markerInspection = yield* inspectOwnershipMarker(dirname(path)).pipe(
     Effect.orElseSucceed(() => ({ kind: "absent" }) as const),
   );
   if (markerInspection.kind === "valid") {
     const marker = markerInspection.marker;
     const claim = {
       skillId: marker.skill_id,
-      expectedHash: marker.expected_digest,
+      expectedHash: marker.expected_hash,
     };
     return {
       confidence: "exact" as const,
@@ -66,7 +66,7 @@ export const fileProvenance = Effect.fn("Audit.fileProvenance")(function* (
         ? (stringAt(locked, "sourceUrl") ?? stringAt(locked, "source") ?? path)
         : path,
     };
-  if (yield* artifactUsesSymlinkEffect(path))
+  if (yield* artifactUsesSymlink(path))
     return { confidence: "exact" as const, source: "symlink", evidence: yield* canonical(path) };
   return { confidence: "unknown" as const, source: null, evidence: path };
 });

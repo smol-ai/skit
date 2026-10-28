@@ -28,10 +28,10 @@ it.effect("presentation retains primary and cleanup failures", () =>
 it.effect("presentation waits for cleanup and reports its defect after interruption", () =>
   Effect.gen(function* () {
     const interaction = yield* makeScriptedInteraction([]);
-    const acquired = yield* Deferred.make<void>();
+    const imported = yield* Deferred.make<void>();
     let cleaned = false;
     const fiber = yield* renderCommandFailures(
-      Effect.acquireRelease(Deferred.succeed(acquired, undefined), () =>
+      Effect.acquireRelease(Deferred.succeed(imported, undefined), () =>
         Effect.yieldNow.pipe(
           Effect.andThen(
             Effect.sync(() => {
@@ -43,7 +43,7 @@ it.effect("presentation waits for cleanup and reports its defect after interrupt
       ).pipe(Effect.andThen(Effect.never), Effect.scoped),
     ).pipe(Effect.provide(interaction.layer), Effect.forkChild);
 
-    yield* Deferred.await(acquired);
+    yield* Deferred.await(imported);
     yield* Fiber.interrupt(fiber);
 
     expect(cleaned).toBe(true);

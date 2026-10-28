@@ -16,7 +16,7 @@ const instance = (path: string, extra: Partial<CodexDoctorInstance> = {}): Codex
   canonicalPath: path,
   scope: "user",
   skitManaged: false,
-  documentDigest: "hash-a",
+  documentHash: "hash-a",
   ...extra,
 });
 
@@ -34,7 +34,7 @@ test("separates distinct copies from aliases, across scopes and plugin ownership
   ]);
   const project = instance("/project/review/SKILL.md", {
     scope: "repo",
-    documentDigest: "hash-b",
+    documentHash: "hash-b",
     pluginId: "example",
   });
   expect(codexDuplicateFindings([copy, project])[0]).toEqual(
@@ -45,8 +45,7 @@ test("separates distinct copies from aliases, across scopes and plugin ownership
     }),
   );
   expect(
-    codexDuplicateFindings([copy, instance("/missing", { documentDigest: undefined })])[0]
-      .documents,
+    codexDuplicateFindings([copy, instance("/missing", { documentHash: undefined })])[0].documents,
   ).toBe("unknown");
 });
 

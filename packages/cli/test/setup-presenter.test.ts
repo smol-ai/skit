@@ -2,7 +2,7 @@ import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import {
   makeCollectionId,
-  makeProjectionId,
+  makeInstalledSkillId,
   makeSkillId,
   makeSkillVersionId,
 } from "@smolai/skit-core";
@@ -24,7 +24,7 @@ it("shows all physical copies, groups actual sources, and leaves conflicts and C
     locks: [],
     contentIdentity: {
       status: "none",
-      observedHash: `sha256:${hash.repeat(64)}`,
+      currentHash: `sha256:${hash.repeat(64)}`,
       libraryMatches: [],
     },
   });
@@ -106,7 +106,7 @@ it("shows all physical copies, groups actual sources, and leaves conflicts and C
   expect(new Set(choices.map((item) => item.value)).size).toBe(instances.length);
 });
 
-it("omits managed Library projections while preserving unmanaged copies and orphaned markers", () => {
+it("omits managed installed skills while preserving unmanaged copies and orphaned markers", () => {
   const unmanaged: SetupSkillInstance = {
     name: "review",
     path: "/home/.claude/skills/review",
@@ -119,7 +119,7 @@ it("omits managed Library projections while preserving unmanaged copies and orph
     contentIdentity: { status: "none", libraryMatches: [] },
   };
   const membership = {
-    projectionId: makeProjectionId(),
+    installedSkillId: makeInstalledSkillId(),
     skillId: makeSkillId(),
     skillVersionId: makeSkillVersionId(),
   };
@@ -131,7 +131,7 @@ it("omits managed Library projections while preserving unmanaged copies and orph
       kind: "skit",
       membership: {
         ...membership,
-        kind: "retained",
+        kind: "in-library",
         collectionId: makeCollectionId(),
         displayName: "review",
       },
@@ -178,7 +178,7 @@ it("separates installed, repository-authored, and loose skills", () => {
       ],
       repositoryConfigs: [],
       authoredCollections: [],
-      projections: [
+      installedSkills: [
         {
           collectionId: managedCollectionId,
           collectionDisplayName: "Managed tools",
@@ -230,7 +230,7 @@ it("separates installed, repository-authored, and loose skills", () => {
           owner: { kind: "unknown" },
           contentIdentity: {
             status: "none",
-            observedHash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            currentHash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             libraryMatches: [],
           },
           git: { status: "ignored", repository: "/work/large-collection" },
@@ -245,7 +245,7 @@ it("separates installed, repository-authored, and loose skills", () => {
           owner: { kind: "unknown" },
           contentIdentity: {
             status: "none",
-            observedHash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            currentHash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             libraryMatches: [],
           },
           git: { status: "committed", repository: "/work/large-collection" },
@@ -260,7 +260,7 @@ it("separates installed, repository-authored, and loose skills", () => {
           owner: { kind: "unknown" },
           contentIdentity: {
             status: "exact",
-            observedHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            currentHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             libraryMatches: [
               {
                 subjectId: makeCollectionId(),
@@ -307,8 +307,8 @@ it("separates installed, repository-authored, and loose skills", () => {
           owner: {
             kind: "skit",
             membership: {
-              kind: "retained",
-              projectionId: makeProjectionId(),
+              kind: "in-library",
+              installedSkillId: makeInstalledSkillId(),
               collectionId: managedCollectionId,
               skillId: managedSkillId,
               skillVersionId: managedSkillVersionId,
@@ -395,7 +395,7 @@ it("rolls up collections with more than five skill names", () => {
       ],
       repositoryConfigs: [],
       authoredCollections: [],
-      projections: [],
+      installedSkills: [],
       onboarding: {
         planId: `sha256:${"0".repeat(64)}`,
         candidates: [],
@@ -445,7 +445,7 @@ it("presents authored SKITs without treating their source skills as inferred col
           skills: [{ name: "council", path: "/work/skills/skills/council" }],
         },
       ],
-      projections: [
+      installedSkills: [
         {
           collectionId,
           collectionDisplayName: "tim/skills",
@@ -472,7 +472,7 @@ it("presents authored SKITs without treating their source skills as inferred col
           owner: { kind: "authored", skitLocator, collectionId },
           contentIdentity: {
             status: "exact",
-            observedHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            currentHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             libraryMatches: [
               {
                 subjectId: makeCollectionId(),
@@ -494,8 +494,8 @@ it("presents authored SKITs without treating their source skills as inferred col
 
   expect(output).toContain("Authored SKITs");
   expect(output).toContain("tim/skills · /work/skills");
-  expect(output).toContain("1 authored skill · library present · 1 current projection");
+  expect(output).toContain("1 authored skill · library present · 1 current installed copy");
   expect(output).toContain("council · project · author-source · committed");
   expect(output).not.toContain("Repository collections (inferred)");
-  expect(output).not.toContain("Existing SKIT projections");
+  expect(output).not.toContain("Existing SKIT installed skills");
 });

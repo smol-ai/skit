@@ -4,12 +4,12 @@ import {
   LinkStat,
   LibraryStore,
   harnessProfile,
-  inspectOwnershipMarkerEffect,
-  observeInventory,
+  inspectOwnershipMarker,
+  scanInventory,
   parseSkillFrontmatter,
   pathIsWithin,
-  readSkitDescriptorEffect,
-  resolveHarnessRoot,
+  readSkitDescriptor,
+  resolveSkillsDirectory,
   sourceLocator,
   SourceIdentity,
   SourceProcess,
@@ -19,14 +19,14 @@ import {
   type LibraryState,
 } from "@smolai/skit-core";
 import { readSkillsLock } from "./skills-sh-lock-source.js";
-import { readableHarnessRoots } from "../../projection/harness-shadows.js";
-import type { InventoryRootOptions } from "../../projection/roots.js";
+import { readableSkillsDirectories } from "../../install/duplicates.js";
+import type { InventoryRootOptions } from "../../install/roots.js";
 import { readRepositoryConfig, repositoryPathExcluded } from "./setup-config.js";
 import type { SetupOptions } from "./setup.js";
 import type {
   SetupBrokenLink,
   SetupAuthoredCollection,
-  SetupGitPreservation,
+  SetupGitStatus,
   SetupRepositoryConfig,
   SetupSuppressed,
 } from "./setup-contract.js";
@@ -82,7 +82,7 @@ export interface SkillHit {
   readonly realPath: string;
   readonly name: string;
   readonly repository?: string;
-  readonly git: SetupGitPreservation;
+  readonly git: SetupGitStatus;
 }
 
 interface WalkResult {
@@ -228,7 +228,7 @@ function catalogRoots(
   if (scope === "project" && !context.repository) return [];
   return harnessProfile(harness)
     .roots.filter((root) => root.scope === scope && root.readable)
-    .map((root) => resolveHarnessRoot(root, context));
+    .map((root) => resolveSkillsDirectory(root, context));
 }
 
 const skillNameAt = Effect.fn("Setup.skillName")(function* (directory: string) {
@@ -303,12 +303,12 @@ const gitStatusRecords = (output: string) => {
   return records;
 };
 
-const preservationStatus = (
+const folderGitStatus = (
   repository: string,
   directory: string,
   tracked: ReadonlySet<string>,
   changed: readonly { code: string; path: string }[],
-): SetupGitPreservation => {
+): SetupGitStatus => {
   const document = posix.join(directory, "SKILL.md");
   const codes = changed
     .filter(
@@ -325,7 +325,7 @@ const preservationStatus = (
   const staged = codes.some((code) => ![" ", "?", "!"].includes(code[0] ?? " "));
   const modified = codes.some((code) => ![" ", "?", "!"].includes(code[1] ?? " "));
   const kinds = [hasTracked, ignored, untracked, staged, modified].filter(Boolean).length;
-  const status: SetupGitPreservation["status"] =
+  const status: SetupGitStatus["status"] =
     kinds > 1 && (ignored || untracked)
       ? "mixed"
       : staged
@@ -398,7 +398,7 @@ const scanSetupRepository = Effect.fn("Setup.scanRepository")(function* (
       name: yield* skillNameAt(path),
       repository,
       git: Result.isSuccess(statusResult)
-        ? preservationStatus(repository, posix.dirname(document), tracked, changed)
+        ? folderGitStatus(repository, posix.dirname(document), tracked, changed)
         : { status: "unavailable", repository },
     });
   }
@@ -411,21 +411,21 @@ const scanSetupRepository = Effect.fn("Setup.scanRepository")(function* (
   };
 });
 
-export const custodyAt = Effect.fn("Setup.custody")(function* (path: string) {
-  const inspection = yield* inspectOwnershipMarkerEffect(path);
-  if (inspection.kind === "absent") return { custody: "unmanaged" as const };
+export const ownershipAt = Effect.fn("Setup.ownership")(function* (path: string) {
+  const inspection = yield* inspectOwnershipMarker(path);
+  if (inspection.kind === "absent") return { ownership: "unmanaged" as const };
   return inspection.kind === "valid"
-    ? { custody: "skit-managed" as const, marker: inspection.marker }
-    : { custody: "invalid-marker" as const };
+    ? { ownership: "skit-managed" as const, marker: inspection.marker }
+    : { ownership: "invalid-marker" as const };
 });
 
-export const collectHarnessRoots = (
+export const collectSkillsDirectories = (
   inventory: InventoryRootOptions,
   repositories: readonly string[],
 ) => {
   const roots: Array<{ harness: Harness; scope: "global" | "project"; root: string }> = [];
   for (const harness of HarnessName.literals) {
-    for (const { root } of readableHarnessRoots(inventory, { kind: "global" }, [harness]))
+    for (const { root } of readableSkillsDirectories(inventory, { kind: "global" }, [harness]))
       roots.push({ harness, scope: "global", root });
     for (const repository of repositories)
       for (const root of catalogRoots(harness, "project", {
@@ -441,7 +441,7 @@ export const collectHarnessRoots = (
 /** Discover selected locations, routing every copy to its nearest selected repository. */
 const scanSetupLocations = Effect.fn("Setup.scanLocations")(function* (
   walk: WalkResult,
-  harnessRoots: ReturnType<typeof collectHarnessRoots>,
+  harnessRoots: ReturnType<typeof collectSkillsDirectories>,
 ) {
   const repositoryConfigs = yield* Effect.forEach(walk.repositories, readRepositoryConfig);
   const roots = [
@@ -510,7 +510,7 @@ const collectAuthoredCollections = Effect.fn("Setup.authoredCollections")(functi
     const descriptorPath = join(repository, "skit.json");
     const remotePath = join(repository, "skit.remote.json");
     if (!(yield* fs.exists(descriptorPath)) || !(yield* fs.exists(remotePath))) continue;
-    const descriptor = yield* readSkitDescriptorEffect(repository).pipe(
+    const descriptor = yield* readSkitDescriptor(repository).pipe(
       Effect.orElseSucceed(() => undefined),
     );
     const remote = yield* fs.readFileString(remotePath).pipe(
@@ -576,7 +576,7 @@ const setupMachineScope = (options: SetupOptions, prior: MachineSettings.Setting
 export const saveSetupMachineConfig = Effect.fn("Setup.saveMachineConfig")(function* <
   E = never,
   R = never,
->(options: SetupOptions, beforePublish?: MachineSettings.BeforePublish<E, R>) {
+>(options: SetupOptions, beforeSave?: MachineSettings.BeforeSave<E, R>) {
   return yield* MachineSettings.updateDiscovery(
     options.libraryHome,
     {
@@ -587,7 +587,7 @@ export const saveSetupMachineConfig = Effect.fn("Setup.saveMachineConfig")(funct
         ? {}
         : { displayName: options.machineDisplayName }),
     },
-    beforePublish,
+    beforeSave,
   );
 });
 
@@ -605,11 +605,11 @@ export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function*
         [...existingDecisions].filter(([, status]) => status === "watched").map(([path]) => path),
       );
   const machineConfig = options.persistRoots ? yield* saveSetupMachineConfig(options) : prior;
-  const harnessRoots = collectHarnessRoots(options.inventory, walk.repositories);
+  const harnessRoots = collectSkillsDirectories(options.inventory, walk.repositories);
   const store = yield* LibraryStore;
   const library = yield* store.load;
   const authoredCollections = yield* collectAuthoredCollections(walk.repositories, library);
-  const observedLibrary = yield* observeInventory(
+  const libraryInventory = yield* scanInventory(
     library,
     harnessRoots.map(({ harness, root }) => ({ harness, root })),
   );
@@ -634,7 +634,7 @@ export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function*
     harnessRoots,
     library,
     authoredCollections,
-    observedLibrary,
+    libraryInventory,
     discoveryComplete: complete,
     hits,
     locks,
@@ -644,7 +644,7 @@ export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function*
 export type SetupEvidence = Effect.Success<ReturnType<typeof collectSetupEvidence>>;
 
 /**
- * The full setup discovery scan: every harness root, git in every repository, and a tree hash per
+ * The full setup discovery scan: every skills directory, git in every repository, and a tree hash per
  * Skill. Setup scans through this reference so a caller can observe how often it scans.
  */
 export const SetupDiscovery = Context.Reference<{

@@ -9,7 +9,7 @@ import {
   stringAt,
   type JsonObject,
 } from "@smolai/skit-core";
-import type { AuditFinding, AuditObservation } from "./types.js";
+import type { AuditFinding, AuditEntry } from "./types.js";
 import { canonical, pathExists, read, readJson, walk } from "./io.js";
 import { addMcp } from "./mcp.js";
 import { fileProvenance } from "./provenance.js";
@@ -33,7 +33,7 @@ export const auditClaude = Effect.fn("Audit.claude")(function* (
   cwd: string,
   lock: JsonObject,
 ) {
-  const observations: AuditObservation[] = [];
+  const observations: AuditEntry[] = [];
   const findings: AuditFinding[] = [];
   const advertisedMcp = new Map<string, Set<string>>();
   const skills: SkillCandidate[] = [];

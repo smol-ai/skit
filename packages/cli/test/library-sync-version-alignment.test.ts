@@ -2,55 +2,46 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { join } from "node:path";
-import {
-  LibraryManifest,
-  inspectOwnershipMarkerEffect,
-  makeSkillVersionId,
-} from "@smolai/skit-core";
+import { LibraryManifest, inspectOwnershipMarker, makeSkillVersionId } from "@smolai/skit-core";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
 import { devices } from "./helpers/library-sync-devices.js";
 
 it.effect(
-  "syncs independent identical updates with projected custody and a read-only preview",
+  "syncs independent identical updates with installed-skill custody and a read-only preview",
   () =>
     Effect.gen(function* () {
       const { fs, a, b, server } = yield* devices;
-      const initial = yield* a.retain("skills", {
+      const initial = yield* a.importSource("skills", {
         name: "review",
         bytes: "initial bytes\n",
-        retainedAt: "2026-01-01T00:00:00.000Z",
+        importedAt: "2026-01-01T00:00:00.000Z",
       });
       const skillId = initial.skills[0]?.skill_id;
       assert.ok(skillId);
       yield* a.edit((state) => ({
         ...state,
-        global_bindings: [
-          {
-            scope: { kind: "global" },
-            entries: [{ kind: "skill", skill_id: skillId }],
-          },
-        ],
+        enabled: [{ skill: skillId }],
       }));
       yield* a.project();
       assert.strictEqual((yield* a.sync()).status, "pushed");
       assert.strictEqual((yield* b.sync()).status, "pulled");
-      yield* a.retain("skills", {
+      yield* a.importSource("skills", {
         name: "review",
         bytes: "updated identical bytes\n",
-        retainedAt: "2026-01-02T00:00:00.000Z",
+        importedAt: "2026-01-02T00:00:00.000Z",
       });
-      yield* b.retain("skills", {
+      yield* b.importSource("skills", {
         name: "review",
         bytes: "updated identical bytes\n",
-        retainedAt: "2026-01-02T00:00:01.000Z",
+        importedAt: "2026-01-02T00:00:01.000Z",
       });
       yield* a.project();
       yield* b.project();
       const aBefore = yield* a.state;
       const bBefore = yield* b.state;
-      const publishedId = aBefore.projections[0]?.skill_version_id;
+      const publishedId = aBefore.installed_skills[0]?.skill_version_id;
       assert.ok(publishedId);
-      assert.notStrictEqual(publishedId, bBefore.projections[0]?.skill_version_id);
+      assert.notStrictEqual(publishedId, bBefore.installed_skills[0]?.skill_version_id);
       assert.strictEqual((yield* a.sync()).status, "merged");
       const writesBeforePreview = server.writes;
       const previewUntouched = yield* captureDisk(b.disk);
@@ -65,18 +56,18 @@ it.effect(
       );
       assert.strictEqual((yield* b.sync()).status, "merged");
       const bAfter = yield* b.state;
-      assert.strictEqual(bAfter.projections[0]?.skill_version_id, publishedId);
+      assert.strictEqual(bAfter.installed_skills[0]?.skill_version_id, publishedId);
       assert.strictEqual(
-        bAfter.projections[0]?.projection_id,
-        bBefore.projections[0]?.projection_id,
+        bAfter.installed_skills[0]?.installed_skill_id,
+        bBefore.installed_skills[0]?.installed_skill_id,
       );
       assert.strictEqual(
-        bAfter.projections[0]?.expected_digest,
-        bBefore.projections[0]?.expected_digest,
+        bAfter.installed_skills[0]?.expected_hash,
+        bBefore.installed_skills[0]?.expected_hash,
       );
-      assert.strictEqual(bAfter.acquisitions.length, 3);
-      assert.strictEqual(bAfter.retained_copies.length, 3);
-      const marker = yield* inspectOwnershipMarkerEffect(join(b.root, "review"));
+      assert.strictEqual(bAfter.imports.length, 3);
+      assert.strictEqual(bAfter.collection_versions.length, 3);
+      const marker = yield* inspectOwnershipMarker(join(b.root, "review"));
       assert.strictEqual(marker.kind, "valid");
       if (marker.kind === "valid") assert.strictEqual(marker.marker.skill_version_id, publishedId);
       assert.strictEqual(
@@ -108,8 +99,8 @@ it.effect(
               : version,
           ),
         })),
-        projections: state.projections.map((projection) => ({
-          ...projection,
+        installed_skills: state.installed_skills.map((installedSkill) => ({
+          ...installedSkill,
           skill_version_id: equivalentId,
         })),
       }));
@@ -120,7 +111,7 @@ it.effect(
       assert.strictEqual((yield* b.sync({ takeRemote: [`skill:${skillId}`] })).status, "merged");
       const resolved = yield* b.state;
       assert.strictEqual(resolved.skills[0]?.local_version_id, oldVersionId);
-      assert.strictEqual(resolved.projections[0]?.skill_version_id, oldVersionId);
+      assert.strictEqual(resolved.installed_skills[0]?.skill_version_id, oldVersionId);
       assert.strictEqual(
         yield* fs.readFileString(join(b.root, "review", "SKILL.md")),
         "initial bytes\n",

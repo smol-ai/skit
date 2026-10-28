@@ -65,13 +65,13 @@ const replay = Effect.fn("Test.replayTuiKeys")(function* (
 /** What the Library binds in `scope`: Collection labels and Skill names. */
 const bound = (library: TuiLibrary, scope: "global" | "repository") =>
   Effect.map(library.durable, (state) =>
-    (scope === "global" ? state.global_bindings : state.local_bindings)
-      .flatMap((binding) => binding.entries)
-      .map((entry) =>
-        entry.kind === "collection"
-          ? state.collections.find((candidate) => candidate.collection_id === entry.collection_id)
+    (scope === "global" ? [state.enabled] : state.repositories.map((item) => item.enabled))
+      .flat()
+      .map((item) =>
+        "collection" in item
+          ? state.collections.find((candidate) => candidate.collection_id === item.collection)
               ?.label
-          : state.skills.find((candidate) => candidate.skill_id === entry.skill_id)?.name,
+          : state.skills.find((candidate) => candidate.skill_id === item.skill)?.name,
       )
       .sort(),
   );

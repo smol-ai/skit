@@ -3,13 +3,13 @@ import { HttpClient, HttpClientResponse } from "effect/http";
 import { join } from "node:path";
 import {
   LibraryStore,
-  captureSnapshotArchiveEffect,
-  deterministicTreeHashEffect,
-  libraryManifestFromLocalStateEffect,
+  readSnapshotArchive,
+  deterministicTreeHash,
+  libraryManifestFromLocalState,
   libraryStoreLayer,
   makeMachineId,
-  retainedTreePath,
-  retainObservedCollectionEffect,
+  collectionVersionPath,
+  importCollection,
   skitLayer,
   withLibraryWriter,
 } from "@smolai/skit-core";
@@ -40,39 +40,31 @@ export const syncJourney = (failDownload: boolean) =>
             join(sourcePath, "SKILL.md"),
             `# ${name}\nFixture Skill for sync preview.\n`,
           );
-          yield* retainObservedCollectionEffect({
+          yield* importCollection({
             machineId,
             source: { type: "github", owner: "fixture", repository: name },
             input: sourcePath,
-            retainedAt: "2026-01-01T00:00:00.000Z",
+            importedAt: "2026-01-01T00:00:00.000Z",
             skills: [
               {
                 name,
                 sourcePath,
                 relativePath: ".",
-                observedHash: yield* deterministicTreeHashEffect(sourcePath),
+                currentHash: yield* deterministicTreeHash(sourcePath),
               },
             ],
-            observations: [],
+            lockFileEntries: [],
           });
         }
         const store = yield* LibraryStore;
         const state = yield* store.load;
         const bound = {
           ...state,
-          global_bindings: [
-            {
-              scope: { kind: "global" as const },
-              entries: state.skills.map((skill) => ({
-                kind: "skill" as const,
-                skill_id: skill.skill_id,
-              })),
-            },
-          ],
+          enabled: state.skills.map((skill) => ({ skill: skill.skill_id })),
         };
-        const manifest = yield* libraryManifestFromLocalStateEffect(bound);
-        const archives = yield* Effect.forEach(state.retained_copies, (tree) =>
-          captureSnapshotArchiveEffect(retainedTreePath(store.originalsPath, tree.digest)),
+        const manifest = yield* libraryManifestFromLocalState(bound);
+        const archives = yield* Effect.forEach(state.collection_versions, (tree) =>
+          readSnapshotArchive(collectionVersionPath(store.originalsPath, tree.hash)),
         );
         return { manifest, archives };
       }).pipe(withLibraryWriter, Effect.provide(libraryStoreLayer({ home: seedHome })));
@@ -92,8 +84,8 @@ export const syncJourney = (failDownload: boolean) =>
               if (request.method === "GET" && path === "/api/library/portable") {
                 response = Response.json(Schema.encodeSync(LibraryResponse)({ library: remote }));
               } else if (request.method === "GET" && path.startsWith("/api/libraries/")) {
-                const digest = decodeURIComponent(path.slice(path.lastIndexOf("/") + 1));
-                const archive = seeded.archives.find((candidate) => candidate.digest === digest);
+                const hash = decodeURIComponent(path.slice(path.lastIndexOf("/") + 1));
+                const archive = seeded.archives.find((candidate) => candidate.digest === hash);
                 downloads++;
                 response =
                   failDownload && downloads === 2
@@ -124,7 +116,7 @@ export const syncJourney = (failDownload: boolean) =>
         }),
         apply: true,
         adopt: false,
-        projection: {
+        installedSkill: {
           rootFor: (target) => (target === "agents" ? join(workspace, "agents-skills") : undefined),
         },
       }).pipe(

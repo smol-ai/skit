@@ -5,13 +5,13 @@ import {
   currentLibraryManifest,
   librarySnapshotDigests,
   LibraryManifest,
-  makeAcquisitionId,
+  makeImportId,
   makeCollectionId,
   makeMachineId,
-  makeRetainedCopyId,
+  makeCollectionVersionId,
   makeSkillId,
   makeSkillVersionId,
-  type BindingEntry,
+  type Enabled,
 } from "@smolai/skit-core";
 import {
   mergeLibraryManifests,
@@ -21,10 +21,10 @@ import {
 const machineId = makeMachineId();
 /** A fixed pool of one-Skill Collections; every side of a merge is drawn from the same records. */
 const pool = Array.from({ length: 4 }, (_, index) => {
-  const digest = `sha256:${String(index).repeat(64)}`;
+  const hash = `sha256:${String(index).repeat(64)}`;
   const collectionId = makeCollectionId();
   const skillId = makeSkillId();
-  const retainedCopyId = makeRetainedCopyId();
+  const collectionVersionId = makeCollectionVersionId();
   return {
     collectionId,
     skillId,
@@ -40,40 +40,40 @@ const pool = Array.from({ length: 4 }, (_, index) => {
       versions: [
         {
           skill_version_id: makeSkillVersionId(),
-          source_digest: digest,
-          artifact_digest: digest,
-          validation_identity_digest: digest,
+          source_hash: hash,
+          artifact_hash: hash,
+          validation_identity_hash: hash,
           materialization_profile: "plain-skill/v1" as const,
         },
       ],
     },
-    retainedCopy: {
-      retained_copy_id: retainedCopyId,
-      digest,
+    collectionVersion: {
+      collection_version_id: collectionVersionId,
+      hash: hash,
       copy_profile: "verbatim/v1" as const,
       members: [
         {
           source_path: "." as const,
-          source_digest: digest,
-          artifact_digest: digest,
+          source_hash: hash,
+          artifact_hash: hash,
           materialization_profile: "plain-skill/v1" as const,
         },
       ],
     },
-    acquisition: {
-      acquisition_id: makeAcquisitionId(),
+    sourceImport: {
+      import_id: makeImportId(),
       collection_id: collectionId,
       kind: "source" as const,
-      retained_copy_id: retainedCopyId,
+      collection_version_id: collectionVersionId,
       source_identity: {
         kind: "local" as const,
         machine_id: machineId,
         path: { value: `/tmp/pool-${index}` },
       },
       input: { value: `/tmp/pool-${index}` },
-      acquired_at: "2026-01-01T00:00:00.000Z",
+      imported_at: "2026-01-01T00:00:00.000Z",
       machine_id: machineId,
-      observations: [],
+      lock_file_entries: [],
     },
   };
 });
@@ -95,23 +95,26 @@ const manifestOf = (choices: Side): LibraryManifest => {
     const choice = choices[index];
     return choice === undefined ? [] : [{ entry, choice }];
   });
-  const entries = present.flatMap(({ entry, choice }): BindingEntry[] =>
+  const entries = present.flatMap(({ entry, choice }): Enabled[] =>
     choice.binding === "skill"
-      ? [{ kind: "skill", skill_id: entry.skillId }]
+      ? [{ skill: entry.skillId }]
       : choice.binding === "collection"
-        ? [{ kind: "collection", collection_id: entry.collectionId }]
+        ? [{ collection: entry.collectionId }]
         : [],
   );
-  const retained_copies = present.map(({ entry }) => entry.retainedCopy);
-  const acquisitions = present.map(({ entry }) => entry.acquisition);
+  const retained_copies = present.map(({ entry }) => entry.collectionVersion);
+  const imports = present.map(({ entry }) => entry.sourceImport);
   return Schema.decodeUnknownSync(LibraryManifest)(
     currentLibraryManifest({
       collections: present.map(({ entry, choice }) => entry.collection(choice.label)),
       skills: present.map(({ entry }) => entry.skill),
-      retained_copies,
-      acquisitions,
-      snapshot_digests: librarySnapshotDigests({ retained_copies, acquisitions }),
-      bindings: entries.length === 0 ? [] : [{ scope: { kind: "global" }, entries }],
+      collection_versions: retained_copies,
+      imports: imports,
+      snapshot_digests: librarySnapshotDigests({
+        collection_versions: retained_copies,
+        imports: imports,
+      }),
+      enabled: entries,
     }),
   );
 };

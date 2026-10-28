@@ -23,5 +23,5 @@ export const skillMetadataLines = (metadata: SkillMetadata): readonly string[] =
   `Source: ${metadataSource(metadata.source)}`,
   `Revision: ${metadataRevision(metadata.revision)}`,
   `Source updated: ${metadataDate(metadata.source_updated_at)}`,
-  `Acquired: ${metadataDate(metadata.acquired_at)}`,
+  `Imported: ${metadataDate(metadata.imported_at)}`,
 ];

@@ -1,8 +1,8 @@
 import { Data, Effect } from "effect";
 import { join } from "node:path";
 import { LibraryChanged } from "../../failures.js";
-import { withProjectionMutationEffect } from "../../projection/mutation.js";
-import { removeBindingEntities } from "../binding-intent.js";
+import { withInstalledSkillMutation } from "../../install/mutation.js";
+import { removeFromEnabled } from "../enabled.js";
 import { libraryStateRevision, type LibraryState } from "../library-state.js";
 import { LibraryStore } from "../store/library-store.js";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
@@ -39,11 +39,11 @@ export class SkillRemovalRequiresCollection
 }
 
 /**
- * Remove a Collection with its Skills, Acquisitions, Binding entries and Projections, exactly as
+ * Remove a Collection with its Skills, imports, Binding entries and installed skills, exactly as
  * `planned` records them. The caller holds the writer lock; a Library that moved on since it was
- * planned is refused before any Projection is touched, so nothing outside the plan is removed.
+ * planned is refused before any installed skill is touched, so nothing outside the plan is removed.
  */
-export const removeCollectionEffect = Effect.fn("Library.removeCollection")(function* (
+export const removeCollection = Effect.fn("Library.removeCollection")(function* (
   planned: LibraryState,
   options: { collectionId: string; variantsPath: string },
 ) {
@@ -60,55 +60,64 @@ export const removeCollectionEffect = Effect.fn("Library.removeCollection")(func
       .filter((skill) => skill.collection_id === options.collectionId)
       .map((skill) => skill.skill_id),
   );
-  const result = yield* withProjectionMutationEffect(
+  const result = yield* withInstalledSkillMutation(
     planned,
     {
       rootFor: () => undefined,
       variantsPath: options.variantsPath,
       originalsPath: store.originalsPath,
-      publish: store.publish,
+      save: store.save,
     },
     (mutation) =>
       Effect.gen(function* () {
-        let retired = 0;
-        for (const projection of mutation.state.projections.filter((item) =>
+        let uninstalled = 0;
+        for (const installedSkill of mutation.state.installed_skills.filter((item) =>
           removedSkillIds.has(item.skill_id),
         )) {
-          const skill = mutation.state.skills.find((item) => item.skill_id === projection.skill_id);
-          if (skill === undefined) continue;
-          const outcome = yield* mutation.retire(
-            projection,
-            "throw",
-            `Refusing to remove modified ${skill.name} at ${projection.path}`,
+          const skill = mutation.state.skills.find(
+            (item) => item.skill_id === installedSkill.skill_id,
           );
-          if (outcome.kind === "retired") retired++;
+          if (skill === undefined) continue;
+          const outcome = yield* mutation.uninstall(
+            installedSkill,
+            "throw",
+            `Refusing to remove modified ${skill.name} at ${installedSkill.path}`,
+          );
+          if (outcome.kind === "uninstalled") uninstalled++;
         }
-        // Only a batch that retired every copy removes the Collection. A failed one publishes just
+        // Only a batch that retired every copy removes the Collection. A failed one saves just
         // the copies it moved aside.
         const candidate = mutation.state;
-        const acquisitions = candidate.acquisitions.filter(
-          (acquisition) => acquisition.collection_id !== options.collectionId,
+        const imports = candidate.imports.filter(
+          (sourceImport) => sourceImport.collection_id !== options.collectionId,
         );
         const survivingCopyIds = new Set(
-          acquisitions.map((acquisition) => acquisition.retained_copy_id),
+          imports.map((sourceImport) => sourceImport.collection_version_id),
         );
+        const { invocation_policies, ...enabled } = removeFromEnabled(candidate, {
+          skills: removedSkillIds,
+          collections: new Set([options.collectionId]),
+        });
         Object.assign(candidate, {
-          ...removeBindingEntities(candidate, {
-            skills: removedSkillIds,
-            collections: new Set([options.collectionId]),
-          }),
+          ...enabled,
           collections: candidate.collections.filter(
             (item) => item.collection_id !== options.collectionId,
           ),
-          projections: candidate.projections.filter((item) => !removedSkillIds.has(item.skill_id)),
+          installed_skills: candidate.installed_skills.filter(
+            (item) => !removedSkillIds.has(item.skill_id),
+          ),
           skills: candidate.skills.filter((skill) => !removedSkillIds.has(skill.skill_id)),
-          acquisitions,
-          retained_copies: candidate.retained_copies.filter((copy) =>
-            survivingCopyIds.has(copy.retained_copy_id),
+          imports: imports,
+          collection_versions: candidate.collection_versions.filter((copy) =>
+            survivingCopyIds.has(copy.collection_version_id),
           ),
         });
-        return retired;
+        // Assigning cannot remove a key, so overrides left for no remaining Skill go explicitly.
+        if (invocation_policies === undefined)
+          delete (candidate as { invocation_policies?: unknown }).invocation_policies;
+        else Object.assign(candidate, { invocation_policies });
+        return uninstalled;
       }),
   );
-  return { collection_id: options.collectionId, retired: result.value };
+  return { collection_id: options.collectionId, uninstalled: result.value };
 });

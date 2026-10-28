@@ -8,14 +8,14 @@ import {
 } from "../../artifact/control-files.js";
 import { InvocationPolicy } from "../../contracts.js";
 import {
-  applyHarnessInvocationPolicyEffect,
+  applyHarnessInvocationPolicy,
   type HarnessInvocationWriteFailure,
-} from "../../harnesses/projection.js";
+} from "../../harnesses/write-invocation.js";
 import {
   AuthoredInvocationHarness,
   invocationMetadataAdapters,
 } from "../../harnesses/invocation-metadata.js";
-import { readSkitDescriptorEffect } from "../../artifact/skit.js";
+import { readSkitDescriptor } from "../../artifact/skit.js";
 import { NotAnAuthorWorkspace } from "../../failures.js";
 
 export const InvocationMetadataGeneration = Schema.Struct({
@@ -27,7 +27,7 @@ export const InvocationMetadataGeneration = Schema.Struct({
 });
 export type InvocationMetadataGeneration = typeof InvocationMetadataGeneration.Type;
 
-export function isAuthorWorkspaceEffect(
+export function isAuthorWorkspace(
   root: string,
 ): Effect.Effect<boolean, PlatformError, FileSystem.FileSystem> {
   return Effect.gen(function* () {
@@ -48,7 +48,7 @@ export type InvocationMetadataGenerationFailure =
  * author-owned step: it rewrites files the author owns, so it runs only inside an Author Workspace
  * and never during validation, publication, synchronization, or acquisition.
  */
-export function generateInvocationMetadataEffect(
+export function generateInvocationMetadata(
   root: string,
   options: { dryRun?: boolean } = {},
 ): Effect.Effect<
@@ -58,9 +58,9 @@ export function generateInvocationMetadataEffect(
 > {
   return Effect.gen(function* () {
     const absolute = resolve(root);
-    if (!(yield* isAuthorWorkspaceEffect(absolute)))
+    if (!(yield* isAuthorWorkspace(absolute)))
       return yield* Effect.fail(new NotAnAuthorWorkspace({ path: absolute }));
-    const descriptor = yield* readSkitDescriptorEffect(absolute);
+    const descriptor = yield* readSkitDescriptor(absolute);
     const results: InvocationMetadataGeneration[] = [];
     for (const skill of descriptor.skills) {
       if (!skill.invocation) continue;
@@ -71,7 +71,7 @@ export function generateInvocationMetadataEffect(
           harness,
           path: posix.join(skill.path, invocationMetadataAdapters[harness].file),
           policy: skill.invocation,
-          changed: yield* applyHarnessInvocationPolicyEffect(directory, harness, skill.invocation, {
+          changed: yield* applyHarnessInvocationPolicy(directory, harness, skill.invocation, {
             dryRun: options.dryRun,
           }),
         });

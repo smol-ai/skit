@@ -3,12 +3,12 @@ import { metadataDate } from "./skill-metadata.js";
 import { basename, dirname, sep } from "node:path";
 import { compactHomePath } from "./home-path.js";
 import {
-  projectionTargetHarnesses,
+  installDestinationHarnesses,
   type HarnessName,
   type LibraryInventory,
 } from "@smolai/skit-core";
 import { harnessLabel } from "../harness/catalog.js";
-import { conditionHeadline, projectionStatusLabel } from "./condition-language.js";
+import { conditionHeadline, installedSkillStatusLabel } from "./condition-language.js";
 import type { MachineInventoryResult } from "../workflows/library/machine-inventory-contract.js";
 
 type MachineInstance = MachineInventoryResult["machine"]["instances"][number];
@@ -20,7 +20,7 @@ const ownerLines = (owner: MachineInstance["owner"]): readonly string[] => {
     case "skills-sh":
       return ["Installed by: skills.sh", `Source: ${owner.source}`];
     case "skit":
-      return owner.membership.kind === "retained"
+      return owner.membership.kind === "in-library"
         ? [
             `Collection: ${owner.membership.displayName}`,
             ...(owner.membership.source ? [`Source: ${owner.membership.source}`] : []),
@@ -168,23 +168,23 @@ export function renderMachineSkills(
       "",
       `${color.cyan(color.bold(locationLabel))} · ${locationNames.size} Skill${locationNames.size === 1 ? "" : "s"}${instances.length === locationNames.size ? "" : ` · ${instances.length} instances`}`,
     );
-    const custodyGroups = new Map<string, typeof instances>();
+    const ownershipGroups = new Map<string, typeof instances>();
     for (const instance of instances) {
-      const custody = ownerLabel(instance.owner);
-      custodyGroups.set(custody, [...(custodyGroups.get(custody) ?? []), instance]);
+      const ownership = ownerLabel(instance.owner);
+      ownershipGroups.set(ownership, [...(ownershipGroups.get(ownership) ?? []), instance]);
     }
-    for (const [custody, custodyInstances] of custodyGroups) {
-      const bySkill = new Map<string, { name: string; instances: typeof custodyInstances }>();
-      for (const instance of custodyInstances) {
+    for (const [ownership, ownershipInstances] of ownershipGroups) {
+      const bySkill = new Map<string, { name: string; instances: typeof ownershipInstances }>();
+      for (const instance of ownershipInstances) {
         const key = `${explicitCollectionKey(instance) ?? "standalone"}\0${instance.name}`;
         const skill = bySkill.get(key) ?? { name: instance.name, instances: [] };
         bySkill.set(key, { ...skill, instances: [...skill.instances, instance] });
       }
-      const instanceCount = custodyInstances.length;
+      const instanceCount = ownershipInstances.length;
       const skillCount = bySkill.size;
       lines.push(
         "",
-        `  ${custody} · ${skillCount} Skill${skillCount === 1 ? "" : "s"}${instanceCount === skillCount ? "" : ` · ${instanceCount} instances`}`,
+        `  ${ownership} · ${skillCount} Skill${skillCount === 1 ? "" : "s"}${instanceCount === skillCount ? "" : ` · ${instanceCount} instances`}`,
       );
       const cohorts = new Map<
         string,
@@ -270,11 +270,11 @@ const renderScanScope = (machine: MachineInventoryResult["machine"]): string => 
 
 const inventoryFindings = (state: LibraryInventory): string[] => {
   const lines: string[] = [];
-  if (state.custodyIssues?.length) {
-    lines.push(`Custody issues · ${state.custodyIssues.length}`);
-    for (const issue of state.custodyIssues)
+  if (state.ownershipIssues?.length) {
+    lines.push(`Ownership issues · ${state.ownershipIssues.length}`);
+    for (const issue of state.ownershipIssues)
       lines.push(
-        `  ${conditionHeadline(issue.code, "Local custody issue")}`,
+        `  ${conditionHeadline(issue.code, "Local ownership issue")}`,
         `    Path: ${compactHomePath(issue.path)}`,
       );
     lines.push("  Run skit doctor for details.");
@@ -309,7 +309,7 @@ export function renderInventory(
   machine?: MachineInventoryResult["machine"],
   color = createColors(false),
 ): string {
-  // One group per Skill root, headed by every Harness known to read it.
+  // One group per skills directory, headed by every Harness known to read it.
   const groups = new Map<string, { harnesses: Set<HarnessName>; rows: string[] }>();
   const add = (harnesses: readonly HarnessName[], path: string, row: string) => {
     const group = groups.get(dirname(path)) ?? { harnesses: new Set<HarnessName>(), rows: [] };
@@ -321,26 +321,26 @@ export function renderInventory(
     string,
     { name: string; statuses: Set<string>; harnesses: Set<HarnessName> }
   >();
-  for (const projection of state.projections) {
-    const path = projection.path;
-    const skill = state.skills.find((candidate) => candidate.skill_id === projection.skill_id);
+  for (const installedSkill of state.installed_skills) {
+    const path = installedSkill.path;
+    const skill = state.skills.find((candidate) => candidate.skill_id === installedSkill.skill_id);
     if (skill === undefined) continue;
     const row = managed.get(path) ?? {
       name: skill.name,
       statuses: new Set<string>(),
       harnesses: new Set<HarnessName>(),
     };
-    if (projection.target !== "legacy")
-      for (const harness of projectionTargetHarnesses[projection.target])
+    if (installedSkill.destination !== "legacy")
+      for (const harness of installDestinationHarnesses[installedSkill.destination])
         row.harnesses.add(harness);
-    row.statuses.add(projection.status);
+    row.statuses.add(installedSkill.status);
     managed.set(path, row);
   }
   for (const [path, row] of managed)
     add(
       [...row.harnesses],
       path,
-      `  ${row.name} · managed · ${[...row.statuses].sort().map(projectionStatusLabel).join(", ")}\n    ${path}`,
+      `  ${row.name} · managed · ${[...row.statuses].sort().map(installedSkillStatusLabel).join(", ")}\n    ${path}`,
     );
   for (const item of state.unmanaged) {
     const paths = item.paths ?? [item.path];
@@ -353,7 +353,7 @@ export function renderInventory(
   const lines: string[] = [];
   for (const [root, group] of groups)
     lines.push(
-      `${[...group.harnesses].sort().map(harnessLabel).join(", ") || "Former Harness root"} · ${root}`,
+      `${[...group.harnesses].sort().map(harnessLabel).join(", ") || "Former skills directory"} · ${root}`,
       ...group.rows,
       "",
     );
@@ -362,7 +362,7 @@ export function renderInventory(
   if (findings.length) lines.push("", ...findings);
   const library = lines.join("\n").trimEnd();
   if (!machine) return library;
-  const summary = `Library projections · ${managed.size} managed · ${state.unmanaged.length} unmanaged`;
+  const summary = `Installed skills ·${managed.size} managed · ${state.unmanaged.length} unmanaged`;
   return [
     renderMachineSkills(machine, color),
     summary,

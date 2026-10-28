@@ -87,10 +87,12 @@ it.effect(
       if (result.contract !== "setupApplied")
         return yield* Effect.die(new Error("Expected applied setup"));
       expect(result.data.added).toEqual([{ name: "review", sourcePath: f.source }]);
-      expect(result.data.projections.length).toBeGreaterThan(0);
-      expect(result.data.projections.every((projection) => projection.status === "installed")).toBe(
-        true,
-      );
+      expect(result.data.installedSkills.length).toBeGreaterThan(0);
+      expect(
+        result.data.installedSkills.every(
+          (installedSkill) => installedSkill.status === "installed",
+        ),
+      ).toBe(true);
       expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toContain(
         "Original review bytes",
       );
@@ -151,7 +153,7 @@ it.effect(
       expect(applied.data.removed).toEqual([{ name: "review", path: f.source }]);
       expect(applied.data.leftAlone.some((copy) => copy.name === "review")).toBe(false);
       expect(yield* f.fs.exists(f.source)).toBe(false);
-      expect(applied.data.projections).toEqual([]);
+      expect(applied.data.installedSkills).toEqual([]);
       const recovered = yield* invoke(actionFor(applied.data.actions, "inspect-recovery").argv);
       if (recovered.contract !== "recovery")
         return yield* Effect.die(new Error("Expected recovery inspection"));

@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { Digest } from "@smolai/skit-core";
+import { Hash } from "@smolai/skit-core";
 
 const SkillsShMemberCheck = Schema.Struct({
   skill_name: Schema.String,
@@ -16,7 +16,7 @@ const SkillsShMemberCheck = Schema.Struct({
   ]),
   baseline_commit: Schema.optionalKey(Schema.String),
   baseline_tree: Schema.optionalKey(Schema.String),
-  baseline_verification: Schema.optionalKey(Schema.Literals(["lock-only", "lock+retained-bytes"])),
+  baseline_verification: Schema.optionalKey(Schema.Literals(["lock-only", "lock+original-bytes"])),
   upstream_commit: Schema.optionalKey(Schema.String),
   upstream_tree: Schema.optionalKey(Schema.String),
   reason: Schema.optionalKey(Schema.String),
@@ -27,18 +27,18 @@ export const CheckResult = Schema.Array(
     subject_id: Schema.String,
     subject_kind: Schema.Literals(["collection", "skill"]),
     label: Schema.String,
-    retained_copies: Schema.Array(
+    collection_versions: Schema.Array(
       Schema.Struct({
-        retained_copy_id: Schema.String,
-        digest: Digest,
-        retained_bytes_current: Schema.Boolean,
+        collection_version_id: Schema.String,
+        hash: Hash,
+        original_intact: Schema.Boolean,
       }),
     ),
     unresolved_skill_selections: Schema.Number,
     source_status: Schema.Literals(["current", "changed", "unverified", "not-applicable"]),
-    current_snapshot_digest: Schema.optionalKey(Digest),
-    available_snapshot_digest: Schema.optionalKey(Digest),
-    acquisition_provenance: Schema.Boolean,
+    current_snapshot_digest: Schema.optionalKey(Hash),
+    available_snapshot_digest: Schema.optionalKey(Hash),
+    has_imports: Schema.Boolean,
     skills_sh: Schema.optionalKey(
       Schema.Struct({
         checked_at: Schema.String,

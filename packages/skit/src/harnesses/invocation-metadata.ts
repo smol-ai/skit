@@ -183,7 +183,7 @@ const opencodeDocumentResult = (frontmatter: string, path: string) =>
 
 /**
  * OpenCode V2 reads `opencode/autoinvoke` from the portable Agent Skills metadata map. V1
- * accepts and ignores the extension, so projection is version-independent even though enforcement
+ * accepts and ignores the extension, so installing is version-independent even though enforcement
  * is not. Strings keep the metadata map valid for other Agent Skills consumers.
  */
 const opencodeAdapter: InvocationMetadataAdapter = {
@@ -241,7 +241,7 @@ const devinTriggers = (policy: NativeInvocationPolicy) =>
  * See https://docs.devin.ai/product-guides/skills.
  *
  * SKIT never holds the author to it: `triggers` names permitted invokers rather than a SKIT-owned
- * switch, so SKIT reads what the author wrote and writes it into Projections, but never demands the
+ * switch, so SKIT reads what the author wrote and writes it into installed skills, but never demands the
  * artifact carry it.
  */
 const devinAdapter: InvocationMetadataAdapter = {

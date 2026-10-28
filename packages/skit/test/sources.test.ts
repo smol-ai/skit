@@ -8,16 +8,16 @@ import { HttpClient, HttpClientResponse } from "effect/http";
 import { assert, it } from "@effect/vitest";
 import {
   assertArchivePaths,
-  auditExtractedSourceEffect,
-  parseSkitSourceEffect,
+  auditExtractedSource,
+  parseSkitSource,
   sourceLocator,
   sourceLocatorProfiles,
-  sourceInputWithVersionEffect,
-  resolveSkitSourceEffect,
-} from "../src/acquisition/sources.js";
-import { deterministicTreeHashEffect } from "../src/artifact/skit.js";
+  sourceInputWithVersion,
+  resolveSkitSource,
+} from "../src/sources/resolve.js";
+import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { skitLayer, type SkitServices } from "../src/platform/layer.js";
-import { prepareObservedCollectionEffect } from "../src/library/observed-import.js";
+import { prepareImport } from "../src/library/import-collection.js";
 
 const git = (cwd: string, ...args: string[]) =>
   Effect.sync(() => execFileSync("git", args, { cwd, encoding: "utf8" }).trim());
@@ -28,8 +28,8 @@ const readText = (path: string) =>
 const writeText = (path: string, text: string) =>
   Effect.flatMap(FileSystem.FileSystem, (fs) => fs.writeFileString(path, text));
 /** A Source of plain Agent Skills whose workspace the surrounding test Scope releases. */
-const resolve = (...args: Parameters<typeof resolveSkitSourceEffect>) =>
-  resolveSkitSourceEffect(...args).pipe(
+const resolve = (...args: Parameters<typeof resolveSkitSource>) =>
+  resolveSkitSource(...args).pipe(
     Effect.map((resolved) => {
       assert(resolved.descriptorKind === "observed");
       return resolved;
@@ -112,14 +112,14 @@ describe("source contracts", () => {
         for (const selected of selections) {
           const source = { type: "git" as const, remote: fixture.remote, ...selected.source };
           const observed = yield* resolve(source);
-          expect(observed.observedSkillPaths).toEqual([selected.path]);
+          expect(observed.foundSkillPaths).toEqual([selected.path]);
           const sourcePath = join(observed.originalRoot, selected.path);
-          const prepared = yield* prepareObservedCollectionEffect([
+          const prepared = yield* prepareImport([
             {
               name: "review",
               sourcePath,
               relativePath: selected.path,
-              observedHash: yield* deterministicTreeHashEffect(sourcePath),
+              currentHash: yield* deterministicTreeHash(sourcePath),
             },
           ]);
           expect(yield* readText(join(prepared.staged, selected.path, "SKILL.md"))).toEqual(
@@ -188,7 +188,7 @@ describe("source contracts", () => {
             fs.makeTempDirectoryScoped({ ...options, directory: alias }),
         }),
       );
-      expect(resolved.observedSkillPaths).toEqual(["."]);
+      expect(resolved.foundSkillPaths).toEqual(["."]);
       expect(yield* readText(join(resolved.originalRoot, "SKILL.md"))).toEqual(fixture.content);
     }).pipe(provide),
   );
@@ -196,7 +196,7 @@ describe("source contracts", () => {
     Effect.gen(function* () {
       const fixture = yield* gitLinkFixture;
       const selected = yield* resolve({ type: "git", remote: fixture.remote, subpath: "example" });
-      expect(selected.observedSkillPaths?.toSorted()).toEqual([
+      expect(selected.foundSkillPaths?.toSorted()).toEqual([
         "plugins/bundle/skills/review",
         "skills/review",
       ]);
@@ -219,7 +219,7 @@ describe("source contracts", () => {
         );
       }
       const discovered = yield* resolve(root);
-      expect(discovered.observedSkillPaths?.toSorted()).toEqual([
+      expect(discovered.foundSkillPaths?.toSorted()).toEqual([
         ".github/plugins/bundle/skills/review",
         "examples/plugins/demo",
         "plugins/bundle/skills/review",
@@ -238,11 +238,11 @@ describe("source contracts", () => {
         "---\nname: review\ndescription: Review.\n---\n",
       );
       const direct = yield* resolve(join(root, path));
-      expect(direct.observedSkillPaths).toEqual(["."]);
+      expect(direct.foundSkillPaths).toEqual(["."]);
       yield* fs.symlink(join(root, path), join(root, "selected-link"));
       const linked = yield* resolve(join(root, "selected-link"));
       expect(linked.originalRoot).toEqual(yield* fs.realPath(join(root, path)));
-      expect(linked.observedSkillPaths).toEqual(["."]);
+      expect(linked.foundSkillPaths).toEqual(["."]);
     }).pipe(provide),
   );
   it.effect("imports plugin-only Sources with their original member paths", () =>
@@ -255,7 +255,7 @@ describe("source contracts", () => {
         "---\nname: review\ndescription: Review.\n---\n",
       );
       const source = yield* resolve(root);
-      expect(source.observedSkillPaths).toEqual(["plugins/bundle/skills/review"]);
+      expect(source.foundSkillPaths).toEqual(["plugins/bundle/skills/review"]);
     }).pipe(provide),
   );
   it.effect(
@@ -277,7 +277,7 @@ describe("source contracts", () => {
           join(root, ".claude/skills/dev-link"),
         );
         const discovered = yield* resolve(root);
-        expect(discovered.observedSkillPaths?.toSorted()).toEqual([
+        expect(discovered.foundSkillPaths?.toSorted()).toEqual([
           ".claude/skills/asb-positioning",
           "dev-skills/doc-skills",
         ]);
@@ -294,33 +294,31 @@ describe("source contracts", () => {
   );
   it.effect("resolves shorthand deterministically before acquisition", () =>
     Effect.gen(function* () {
-      expect(yield* parseSkitSourceEffect("tim/dad-joke@1.0.0")).toEqual({
+      expect(yield* parseSkitSource("tim/dad-joke@1.0.0")).toEqual({
         type: "registry",
         namespace: "tim",
         slug: "dad-joke",
         version: "1.0.0",
       });
-      expect(yield* parseSkitSourceEffect("humanlayer/skills")).toEqual({
+      expect(yield* parseSkitSource("humanlayer/skills")).toEqual({
         type: "github",
         owner: "humanlayer",
         repository: "skills",
       });
-      expect(yield* sourceInputWithVersionEffect("humanlayer/skills", "1.2.0")).toBe(
+      expect(yield* sourceInputWithVersion("humanlayer/skills", "1.2.0")).toBe(
         "skit:humanlayer/skills",
       );
-      expect(yield* parseSkitSourceEffect("gh:humanlayer/skills")).toEqual({
+      expect(yield* parseSkitSource("gh:humanlayer/skills")).toEqual({
         type: "github",
         owner: "humanlayer",
         repository: "skills",
       });
-      expect(yield* parseSkitSourceEffect("skit:humanlayer/skills")).toEqual({
+      expect(yield* parseSkitSource("skit:humanlayer/skills")).toEqual({
         type: "registry",
         namespace: "humanlayer",
         slug: "skills",
       });
-      const canonical = yield* parseSkitSourceEffect(
-        "skit://registry.example/humanlayer/skills@1.2.0",
-      );
+      const canonical = yield* parseSkitSource("skit://registry.example/humanlayer/skills@1.2.0");
       expect(canonical).toEqual({
         type: "registry",
         namespace: "humanlayer",
@@ -329,9 +327,7 @@ describe("source contracts", () => {
         authority: "https://registry.example",
       });
       expect(sourceLocator(canonical)).toBe("skit://registry.example/humanlayer/skills@1.2.0");
-      const loopback = yield* parseSkitSourceEffect(
-        "skit+http://127.0.0.1:8787/humanlayer/skills@1.2.0",
-      );
+      const loopback = yield* parseSkitSource("skit+http://127.0.0.1:8787/humanlayer/skills@1.2.0");
       expect(loopback).toEqual({
         type: "registry",
         namespace: "humanlayer",
@@ -348,10 +344,10 @@ describe("source contracts", () => {
       const root = yield* scratch("skit-local-shorthand-");
       const fs = yield* FileSystem.FileSystem;
       yield* fs.makeDirectory(join(root, "humanlayer", "skills"), { recursive: true });
-      expect(yield* sourceInputWithVersionEffect("humanlayer/skills", "1.2.0", root)).toBe(
+      expect(yield* sourceInputWithVersion("humanlayer/skills", "1.2.0", root)).toBe(
         "humanlayer/skills",
       );
-      expect(yield* parseSkitSourceEffect("humanlayer/skills", root)).toEqual({
+      expect(yield* parseSkitSource("humanlayer/skills", root)).toEqual({
         type: "local",
         path: join(root, "humanlayer", "skills"),
       });
@@ -365,7 +361,7 @@ describe("source contracts", () => {
         "https://github.com/mattpocock/skills/",
         "https://github.com/mattpocock/skills.git",
       ])
-        expect(yield* parseSkitSourceEffect(input)).toEqual({
+        expect(yield* parseSkitSource(input)).toEqual({
           type: "github",
           owner: "mattpocock",
           repository: "skills",
@@ -374,18 +370,21 @@ describe("source contracts", () => {
         "https://github.com/mattpocock/skills/tree/main/skills/code-review",
         "https://github.com/mattpocock/skills/tree/main/skills/code-review/",
       ])
-        expect(yield* parseSkitSourceEffect(input)).toEqual({
+        expect(yield* parseSkitSource(input)).toEqual({
           type: "github",
           owner: "mattpocock",
           repository: "skills",
           ref: "main",
           subpath: "skills/code-review",
         });
+      expect(yield* parseSkitSource("https://github.com/mattpocock/skills/tree/v1.2.0")).toEqual({
+        type: "github",
+        owner: "mattpocock",
+        repository: "skills",
+        ref: "v1.2.0",
+      });
       expect(
-        yield* parseSkitSourceEffect("https://github.com/mattpocock/skills/tree/v1.2.0"),
-      ).toEqual({ type: "github", owner: "mattpocock", repository: "skills", ref: "v1.2.0" });
-      expect(
-        (yield* parseSkitSourceEffect(
+        (yield* parseSkitSource(
           "https://github.com/mattpocock/skills/tree/main/skills/../../escape",
         ).pipe(Effect.flip))._tag,
       ).toBe("UnsafeGitSubpath");
@@ -394,9 +393,7 @@ describe("source contracts", () => {
         "https://github.com/mattpocock/skills.git#skill=review%2FSKILL.md",
         "https://github.com/mattpocock/skills/tree/main/skills#top",
       ])
-        expect((yield* parseSkitSourceEffect(input).pipe(Effect.flip))._tag).toBe(
-          "GitSourceFragment",
-        );
+        expect((yield* parseSkitSource(input).pipe(Effect.flip))._tag).toBe("GitSourceFragment");
     }).pipe(provide),
   );
 
@@ -413,7 +410,7 @@ describe("source contracts", () => {
           subpath: "skills/review",
         },
       ])
-        expect(yield* parseSkitSourceEffect(sourceLocator(source))).toEqual(source);
+        expect(yield* parseSkitSource(sourceLocator(source))).toEqual(source);
       expect(
         sourceLocator({
           type: "github",
@@ -464,8 +461,8 @@ describe("source contracts", () => {
         skillDirectories: ["skills/review"],
       };
       const first = yield* resolve(source);
-      expect(first.observedSkillPaths).toEqual(["skills/review"]);
-      const firstHash = yield* deterministicTreeHashEffect(first.originalRoot);
+      expect(first.foundSkillPaths).toEqual(["skills/review"]);
+      const firstHash = yield* deterministicTreeHash(first.originalRoot);
       expect(yield* readText(join(first.originalRoot, "skills", "review", "SKILL.md"))).toContain(
         "# review",
       );
@@ -494,7 +491,7 @@ describe("source contracts", () => {
         "second",
       );
       const second = yield* resolve(source);
-      expect(yield* deterministicTreeHashEffect(second.originalRoot)).toBe(firstHash);
+      expect(yield* deterministicTreeHash(second.originalRoot)).toBe(firstHash);
       expect(second.revision).not.toEqual(first.revision);
     }).pipe(provide),
   );
@@ -503,7 +500,7 @@ describe("source contracts", () => {
     Effect.gen(function* () {
       const base = "https://skills.example";
       const skill = "---\nname: review\ndescription: Review code.\n---\n\n# Review\n";
-      const digest = `sha256:${createHash("sha256").update(skill).digest("hex")}`;
+      const hash = `sha256:${createHash("sha256").update(skill).digest("hex")}`;
       const index = JSON.stringify({
         $schema: "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
         skills: [
@@ -512,7 +509,7 @@ describe("source contracts", () => {
             description: "Review code.",
             type: "skill-md",
             url: "/review/SKILL.md",
-            digest,
+            digest: hash,
           },
         ],
       });
@@ -538,15 +535,15 @@ describe("source contracts", () => {
             ),
           ),
         );
-      expect(yield* parseSkitSourceEffect(`wellknown:${base}`)).toEqual({
+      expect(yield* parseSkitSource(`wellknown:${base}`)).toEqual({
         type: "well-known",
         origin: base,
       });
-      expect(yield* parseSkitSourceEffect(base)).toEqual({
+      expect(yield* parseSkitSource(base)).toEqual({
         type: "well-known",
         origin: base,
       });
-      expect(yield* parseSkitSourceEffect(`${base}/`)).toEqual({
+      expect(yield* parseSkitSource(`${base}/`)).toEqual({
         type: "well-known",
         origin: base,
       });
@@ -555,7 +552,7 @@ describe("source contracts", () => {
       );
       expect(resolved.source.type).toBe("well-known");
       expect(sourceLocator(resolved.source)).toBe(`wellknown:${base}`);
-      expect(resolved.observedSkillPaths).toEqual(["review"]);
+      expect(resolved.foundSkillPaths).toEqual(["review"]);
       expect(yield* readText(join(resolved.originalRoot, "review", "SKILL.md"))).toBe(skill);
       const failure = yield* resolve(`wellknown:${base}`).pipe(
         Effect.provideService(HttpClient.HttpClient, client(`${skill}changed`)),
@@ -569,11 +566,11 @@ describe("source contracts", () => {
 
   it.effect("keeps HTTPS paths as direct document sources", () =>
     Effect.gen(function* () {
-      expect(yield* parseSkitSourceEffect("https://skills.example/SKILL.md")).toEqual({
+      expect(yield* parseSkitSource("https://skills.example/SKILL.md")).toEqual({
         type: "url",
         url: "https://skills.example/SKILL.md",
       });
-      expect(yield* parseSkitSourceEffect("https://skills.example/catalog")).toEqual({
+      expect(yield* parseSkitSource("https://skills.example/catalog")).toEqual({
         type: "url",
         url: "https://skills.example/catalog",
       });
@@ -583,7 +580,7 @@ describe("source contracts", () => {
         "https://skills.example/#",
         "https://skills.example/?",
       ]) {
-        const failure = yield* parseSkitSourceEffect(input).pipe(Effect.flip);
+        const failure = yield* parseSkitSource(input).pipe(Effect.flip);
         expect(failure._tag).toBe("UnsafeSourceUrl");
       }
     }).pipe(provide),
@@ -629,8 +626,8 @@ describe("source contracts", () => {
       expect(yield* readText(join(second.originalRoot, "review", "references", "guide.md"))).toBe(
         "second",
       );
-      expect(yield* deterministicTreeHashEffect(first.originalRoot)).not.toBe(
-        yield* deterministicTreeHashEffect(second.originalRoot),
+      expect(yield* deterministicTreeHash(first.originalRoot)).not.toBe(
+        yield* deterministicTreeHash(second.originalRoot),
       );
     }).pipe(provide),
   );
@@ -647,7 +644,7 @@ describe("source contracts", () => {
         execFileSync("zip", ["-q", "-", "SKILL.md", "references/guide.md"], { cwd: root }),
       );
       const base = "https://archive.example";
-      const digest = `sha256:${createHash("sha256").update(archive).digest("hex")}`;
+      const hash = `sha256:${createHash("sha256").update(archive).digest("hex")}`;
       const index = JSON.stringify({
         $schema: "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
         skills: [
@@ -656,7 +653,7 @@ describe("source contracts", () => {
             description: "Review code.",
             type: "archive",
             url: "/review.zip",
-            digest,
+            digest: hash,
           },
           {
             name: "other",
@@ -682,9 +679,7 @@ describe("source contracts", () => {
           ),
         );
       });
-      const rejected = yield* parseSkitSourceEffect(`wellknown:${base}#skills=review`).pipe(
-        Effect.flip,
-      );
+      const rejected = yield* parseSkitSource(`wellknown:${base}#skills=review`).pipe(Effect.flip);
       expect(rejected._tag).toBe("UnsafeSourceUrl");
       const parsed = { type: "well-known" as const, origin: base, skillNames: ["review"] };
       expect(sourceLocator(parsed)).toBe(`wellknown:${base}`);
@@ -770,7 +765,7 @@ describe("source contracts", () => {
     Effect.gen(function* () {
       // A line anchor is not a Git fragment: the page URL is still a direct document.
       expect(
-        yield* parseSkitSourceEffect(
+        yield* parseSkitSource(
           "https://github.com/cursor/plugins/blob/main/cursor-team-kit/skills/review/SKILL.md#L1",
         ),
       ).toEqual({
@@ -778,7 +773,7 @@ describe("source contracts", () => {
         url: "https://raw.githubusercontent.com/cursor/plugins/main/cursor-team-kit/skills/review/SKILL.md#L1",
       });
       expect(
-        yield* parseSkitSourceEffect(
+        yield* parseSkitSource(
           "https://github.com/cursor/plugins/blob/main/cursor-team-kit/skills/review/SKILL.md",
         ),
       ).toEqual({
@@ -786,7 +781,7 @@ describe("source contracts", () => {
         url: "https://raw.githubusercontent.com/cursor/plugins/main/cursor-team-kit/skills/review/SKILL.md",
       });
       expect(
-        yield* parseSkitSourceEffect(
+        yield* parseSkitSource(
           "https://raw.githubusercontent.com/cursor/plugins/refs/heads/main/cursor-team-kit/skills/review/SKILL.md",
         ),
       ).toEqual({
@@ -813,7 +808,7 @@ describe("source contracts", () => {
       const resolved = yield* resolve(url).pipe(
         Effect.provideService(HttpClient.HttpClient, client(skill, "text/plain")),
       );
-      expect(resolved.observedSkillPaths).toEqual(["."]);
+      expect(resolved.foundSkillPaths).toEqual(["."]);
       expect(yield* readText(join(resolved.originalRoot, "SKILL.md"))).toBe(skill);
 
       const failure = yield* resolve(url).pipe(
@@ -836,7 +831,7 @@ describe("source contracts", () => {
       const root = yield* scratch("skit-archive-link-");
       yield* writeText(join(root, "SKILL.md"), "# Skill\n");
       yield* fs.symlink("SKILL.md", join(root, "linked.md"));
-      const failure = yield* Effect.flip(auditExtractedSourceEffect(root));
+      const failure = yield* Effect.flip(auditExtractedSource(root));
       assert.match(failure.message, /unsupported entry/);
     }).pipe(provide),
   );
@@ -862,7 +857,7 @@ describe("source contracts", () => {
             ),
           );
           yield* Effect.scoped(
-            resolveSkitSourceEffect("https://example.test/source.zip").pipe(
+            resolveSkitSource("https://example.test/source.zip").pipe(
               Effect.provideService(HttpClient.HttpClient, client),
             ),
           ).pipe(Effect.flip);
@@ -886,7 +881,7 @@ describe("source contracts", () => {
         (path) => writeText(path, ""),
         { concurrency: 16, discard: true },
       );
-      const failure = yield* Effect.flip(auditExtractedSourceEffect(root));
+      const failure = yield* Effect.flip(auditExtractedSource(root));
       assert.match(failure.message, /too many files/);
     }).pipe(provide),
   );
@@ -898,18 +893,18 @@ describe("source contracts", () => {
       const path = join(root, "large.bin");
       yield* writeText(path, "");
       yield* fs.truncate(path, 25 * 1024 * 1024 + 1);
-      const failure = yield* Effect.flip(auditExtractedSourceEffect(root));
+      const failure = yield* Effect.flip(auditExtractedSource(root));
       assert.match(failure.message, /extracted size limit/);
     }).pipe(provide),
   );
 
   it.effect("keeps SSH and enterprise Git remotes as plain remotes without fragments", () =>
     Effect.gen(function* () {
-      expect(yield* parseSkitSourceEffect("git@github.com:private/tools.git")).toEqual({
+      expect(yield* parseSkitSource("git@github.com:private/tools.git")).toEqual({
         type: "git",
         remote: "git@github.com:private/tools.git",
       });
-      expect(yield* parseSkitSourceEffect("https://git.corp.example/agents/tools.git")).toEqual({
+      expect(yield* parseSkitSource("https://git.corp.example/agents/tools.git")).toEqual({
         type: "git",
         remote: "https://git.corp.example/agents/tools.git",
       });
@@ -917,9 +912,7 @@ describe("source contracts", () => {
         "git@github.com:private/tools.git#ref=main&path=skills/review",
         "https://git.corp.example/agents/tools.git#ref=v1",
       ])
-        expect((yield* parseSkitSourceEffect(input).pipe(Effect.flip))._tag).toBe(
-          "GitSourceFragment",
-        );
+        expect((yield* parseSkitSource(input).pipe(Effect.flip))._tag).toBe("GitSourceFragment");
     }).pipe(provide),
   );
 

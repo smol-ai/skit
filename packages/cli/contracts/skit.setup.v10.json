@@ -1,0 +1,3975 @@
+{
+  "$id": "skit.setup.v10",
+  "type": "object",
+  "properties": {
+    "operationId": {
+      "type": "string"
+    },
+    "machineConfig": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "machineId": {
+          "type": "string"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "repositoryRoots": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "repositoryDecisions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "watched",
+                  "ignored"
+                ]
+              }
+            },
+            "required": [
+              "path",
+              "status"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "persisted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "path",
+        "repositoryRoots",
+        "repositoryDecisions",
+        "persisted"
+      ],
+      "additionalProperties": true
+    },
+    "suggestedRepositoryRoots": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "probes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "harness": {
+            "type": "string",
+            "enum": [
+              "codex",
+              "claude-code",
+              "opencode",
+              "devin"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "installed",
+              "missing",
+              "failed"
+            ]
+          },
+          "command": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "harness",
+          "status",
+          "command"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "scan": {
+      "type": "object",
+      "properties": {
+        "complete": {
+          "type": "boolean"
+        },
+        "directoriesExamined": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991,
+          "allOf": [
+            {
+              "minimum": 0
+            }
+          ]
+        },
+        "repositorySearchDepth": {
+          "type": "number",
+          "enum": [
+            1
+          ]
+        },
+        "missingRepositories": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "complete",
+        "directoriesExamined",
+        "repositorySearchDepth"
+      ],
+      "additionalProperties": true
+    },
+    "repositories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "watched",
+              "ignored",
+              "undecided"
+            ]
+          }
+        },
+        "required": [
+          "path",
+          "skills",
+          "status"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "repositoryConfigs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "missing",
+              "valid",
+              "malformed",
+              "unsupported"
+            ]
+          },
+          "schema": {
+            "type": "string"
+          },
+          "exclude": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "collections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path"
+              ],
+              "additionalProperties": true
+            }
+          }
+        },
+        "required": [
+          "repository",
+          "path",
+          "status",
+          "exclude",
+          "collections"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "authoredCollections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "descriptorPath": {
+            "type": "string"
+          },
+          "remotePath": {
+            "type": "string"
+          },
+          "skitLocator": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string"
+          },
+          "namespace": {
+            "type": "string"
+          },
+          "skit": {
+            "type": "string"
+          },
+          "collectionId": {
+            "type": "string"
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "path"
+              ],
+              "additionalProperties": true
+            }
+          }
+        },
+        "required": [
+          "repository",
+          "descriptorPath",
+          "remotePath",
+          "skitLocator",
+          "origin",
+          "namespace",
+          "skit",
+          "skills"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "installedSkills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "collectionId": {
+            "type": "string"
+          },
+          "collectionDisplayName": {
+            "type": "string"
+          },
+          "skillId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "harnesses": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "codex",
+                "claude-code",
+                "opencode",
+                "devin"
+              ]
+            }
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "current",
+              "modified",
+              "missing"
+            ]
+          }
+        },
+        "required": [
+          "collectionDisplayName",
+          "skillId",
+          "name",
+          "harnesses",
+          "status"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "installedSkillId": {
+            "type": "string"
+          },
+          "skillId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "destination": {
+            "type": "string",
+            "enum": [
+              "agents",
+              "claude"
+            ]
+          },
+          "baselineHash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "currentHash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "desiredHash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "desiredVersionId": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "unchanged",
+              "incoming-update",
+              "local-only",
+              "competing",
+              "protected",
+              "native-delete"
+            ]
+          },
+          "metadataChanged": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "installedSkillId",
+          "skillId",
+          "name",
+          "path",
+          "destination",
+          "baselineHash",
+          "evidence",
+          "status",
+          "metadataChanged"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "onboarding": {
+      "type": "object",
+      "properties": {
+        "planId": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "candidates": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "duplicates": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "harness": {
+                          "type": "string"
+                        },
+                        "canonicalPath": {
+                          "type": "string"
+                        },
+                        "aliases": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "via": {
+                                "type": "string",
+                                "enum": [
+                                  "symlink",
+                                  "directory",
+                                  "unknown-root"
+                                ]
+                              },
+                              "linkPath": {
+                                "type": "string"
+                              },
+                              "linkTarget": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "via"
+                            ],
+                            "additionalProperties": true
+                          }
+                        },
+                        "documentHash": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "harness",
+                        "canonicalPath",
+                        "aliases",
+                        "documentHash"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "destinationLinks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "owner": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "pnpm"
+                            ]
+                          },
+                          "package": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "ledgerPath": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "package",
+                          "version",
+                          "ledgerPath"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "skit"
+                            ]
+                          },
+                          "membership": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "in-library"
+                                    ]
+                                  },
+                                  "installedSkillId": {
+                                    "type": "string"
+                                  },
+                                  "collectionId": {
+                                    "type": "string"
+                                  },
+                                  "skillId": {
+                                    "type": "string"
+                                  },
+                                  "skillVersionId": {
+                                    "type": "string"
+                                  },
+                                  "displayName": {
+                                    "type": "string"
+                                  },
+                                  "source": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "installedSkillId",
+                                  "skillId",
+                                  "skillVersionId",
+                                  "displayName"
+                                ],
+                                "additionalProperties": true
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "missing-from-library"
+                                    ]
+                                  },
+                                  "installedSkillId": {
+                                    "type": "string"
+                                  },
+                                  "collectionId": {
+                                    "type": "string"
+                                  },
+                                  "skillId": {
+                                    "type": "string"
+                                  },
+                                  "skillVersionId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "installedSkillId",
+                                  "skillId",
+                                  "skillVersionId"
+                                ],
+                                "additionalProperties": true
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "membership"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "invalid-marker"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "authored"
+                            ]
+                          },
+                          "skitLocator": {
+                            "type": "string"
+                          },
+                          "collectionId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "skitLocator"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "skills-sh"
+                            ]
+                          },
+                          "source": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "source"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "harness"
+                            ]
+                          },
+                          "harness": {
+                            "type": "string",
+                            "enum": [
+                              "codex",
+                              "claude-code",
+                              "opencode",
+                              "devin"
+                            ]
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "bundled": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "harness",
+                          "source",
+                          "bundled"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "repository"
+                            ]
+                          },
+                          "repository": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "repository"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "unknown"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": true
+                      }
+                    ]
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "import-observed-collection"
+                    ]
+                  },
+                  "groupKey": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  },
+                  "lockContentHash": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                  },
+                  "contentAgreement": {
+                    "type": "string",
+                    "enum": [
+                      "agrees",
+                      "mismatch",
+                      "unverifiable"
+                    ]
+                  },
+                  "skillPath": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "paths",
+                  "owner",
+                  "action",
+                  "groupKey",
+                  "source",
+                  "lockContentHash",
+                  "contentAgreement"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "duplicates": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "harness": {
+                          "type": "string"
+                        },
+                        "canonicalPath": {
+                          "type": "string"
+                        },
+                        "aliases": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "via": {
+                                "type": "string",
+                                "enum": [
+                                  "symlink",
+                                  "directory",
+                                  "unknown-root"
+                                ]
+                              },
+                              "linkPath": {
+                                "type": "string"
+                              },
+                              "linkTarget": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "via"
+                            ],
+                            "additionalProperties": true
+                          }
+                        },
+                        "documentHash": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "harness",
+                        "canonicalPath",
+                        "aliases",
+                        "documentHash"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "destinationLinks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "owner": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "pnpm"
+                            ]
+                          },
+                          "package": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "ledgerPath": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "package",
+                          "version",
+                          "ledgerPath"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "skit"
+                            ]
+                          },
+                          "membership": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "in-library"
+                                    ]
+                                  },
+                                  "installedSkillId": {
+                                    "type": "string"
+                                  },
+                                  "collectionId": {
+                                    "type": "string"
+                                  },
+                                  "skillId": {
+                                    "type": "string"
+                                  },
+                                  "skillVersionId": {
+                                    "type": "string"
+                                  },
+                                  "displayName": {
+                                    "type": "string"
+                                  },
+                                  "source": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "installedSkillId",
+                                  "skillId",
+                                  "skillVersionId",
+                                  "displayName"
+                                ],
+                                "additionalProperties": true
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "missing-from-library"
+                                    ]
+                                  },
+                                  "installedSkillId": {
+                                    "type": "string"
+                                  },
+                                  "collectionId": {
+                                    "type": "string"
+                                  },
+                                  "skillId": {
+                                    "type": "string"
+                                  },
+                                  "skillVersionId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "installedSkillId",
+                                  "skillId",
+                                  "skillVersionId"
+                                ],
+                                "additionalProperties": true
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "membership"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "invalid-marker"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "authored"
+                            ]
+                          },
+                          "skitLocator": {
+                            "type": "string"
+                          },
+                          "collectionId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "skitLocator"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "skills-sh"
+                            ]
+                          },
+                          "source": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "source"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "harness"
+                            ]
+                          },
+                          "harness": {
+                            "type": "string",
+                            "enum": [
+                              "codex",
+                              "claude-code",
+                              "opencode",
+                              "devin"
+                            ]
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "bundled": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "harness",
+                          "source",
+                          "bundled"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "repository"
+                            ]
+                          },
+                          "repository": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "repository"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "unknown"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": true
+                      }
+                    ]
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "bind-existing-entry"
+                    ]
+                  },
+                  "subjectId": {
+                    "type": "string"
+                  },
+                  "skillVersionId": {
+                    "type": "string"
+                  },
+                  "collectionDisplayName": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "paths",
+                  "owner",
+                  "action",
+                  "subjectId",
+                  "skillVersionId"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "duplicates": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "harness": {
+                          "type": "string"
+                        },
+                        "canonicalPath": {
+                          "type": "string"
+                        },
+                        "aliases": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "via": {
+                                "type": "string",
+                                "enum": [
+                                  "symlink",
+                                  "directory",
+                                  "unknown-root"
+                                ]
+                              },
+                              "linkPath": {
+                                "type": "string"
+                              },
+                              "linkTarget": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "via"
+                            ],
+                            "additionalProperties": true
+                          }
+                        },
+                        "documentHash": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "harness",
+                        "canonicalPath",
+                        "aliases",
+                        "documentHash"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "destinationLinks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "owner": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "pnpm"
+                            ]
+                          },
+                          "package": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "ledgerPath": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "package",
+                          "version",
+                          "ledgerPath"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "skit"
+                            ]
+                          },
+                          "membership": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "in-library"
+                                    ]
+                                  },
+                                  "installedSkillId": {
+                                    "type": "string"
+                                  },
+                                  "collectionId": {
+                                    "type": "string"
+                                  },
+                                  "skillId": {
+                                    "type": "string"
+                                  },
+                                  "skillVersionId": {
+                                    "type": "string"
+                                  },
+                                  "displayName": {
+                                    "type": "string"
+                                  },
+                                  "source": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "installedSkillId",
+                                  "skillId",
+                                  "skillVersionId",
+                                  "displayName"
+                                ],
+                                "additionalProperties": true
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "missing-from-library"
+                                    ]
+                                  },
+                                  "installedSkillId": {
+                                    "type": "string"
+                                  },
+                                  "collectionId": {
+                                    "type": "string"
+                                  },
+                                  "skillId": {
+                                    "type": "string"
+                                  },
+                                  "skillVersionId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "installedSkillId",
+                                  "skillId",
+                                  "skillVersionId"
+                                ],
+                                "additionalProperties": true
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "membership"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "invalid-marker"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "authored"
+                            ]
+                          },
+                          "skitLocator": {
+                            "type": "string"
+                          },
+                          "collectionId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "skitLocator"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "skills-sh"
+                            ]
+                          },
+                          "source": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "source"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "harness"
+                            ]
+                          },
+                          "harness": {
+                            "type": "string",
+                            "enum": [
+                              "codex",
+                              "claude-code",
+                              "opencode",
+                              "devin"
+                            ]
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "bundled": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "harness",
+                          "source",
+                          "bundled"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "repository"
+                            ]
+                          },
+                          "repository": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "repository"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "unknown"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": true
+                      }
+                    ]
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "manage-locally"
+                    ]
+                  },
+                  "sourceSelection": {
+                    "type": "string",
+                    "enum": [
+                      "automatic"
+                    ]
+                  },
+                  "sourcePath": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "paths",
+                  "owner",
+                  "action",
+                  "sourceSelection",
+                  "sourcePath"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "duplicates": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "harness": {
+                          "type": "string"
+                        },
+                        "canonicalPath": {
+                          "type": "string"
+                        },
+                        "aliases": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "via": {
+                                "type": "string",
+                                "enum": [
+                                  "symlink",
+                                  "directory",
+                                  "unknown-root"
+                                ]
+                              },
+                              "linkPath": {
+                                "type": "string"
+                              },
+                              "linkTarget": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "via"
+                            ],
+                            "additionalProperties": true
+                          }
+                        },
+                        "documentHash": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "harness",
+                        "canonicalPath",
+                        "aliases",
+                        "documentHash"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "destinationLinks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "owner": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "pnpm"
+                            ]
+                          },
+                          "package": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "ledgerPath": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "package",
+                          "version",
+                          "ledgerPath"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "skit"
+                            ]
+                          },
+                          "membership": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "in-library"
+                                    ]
+                                  },
+                                  "installedSkillId": {
+                                    "type": "string"
+                                  },
+                                  "collectionId": {
+                                    "type": "string"
+                                  },
+                                  "skillId": {
+                                    "type": "string"
+                                  },
+                                  "skillVersionId": {
+                                    "type": "string"
+                                  },
+                                  "displayName": {
+                                    "type": "string"
+                                  },
+                                  "source": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "installedSkillId",
+                                  "skillId",
+                                  "skillVersionId",
+                                  "displayName"
+                                ],
+                                "additionalProperties": true
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "missing-from-library"
+                                    ]
+                                  },
+                                  "installedSkillId": {
+                                    "type": "string"
+                                  },
+                                  "collectionId": {
+                                    "type": "string"
+                                  },
+                                  "skillId": {
+                                    "type": "string"
+                                  },
+                                  "skillVersionId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "installedSkillId",
+                                  "skillId",
+                                  "skillVersionId"
+                                ],
+                                "additionalProperties": true
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "membership"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "invalid-marker"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "authored"
+                            ]
+                          },
+                          "skitLocator": {
+                            "type": "string"
+                          },
+                          "collectionId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "skitLocator"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "skills-sh"
+                            ]
+                          },
+                          "source": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "source"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "harness"
+                            ]
+                          },
+                          "harness": {
+                            "type": "string",
+                            "enum": [
+                              "codex",
+                              "claude-code",
+                              "opencode",
+                              "devin"
+                            ]
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "bundled": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "harness",
+                          "source",
+                          "bundled"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "repository"
+                            ]
+                          },
+                          "repository": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "repository"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "unknown"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": true
+                      }
+                    ]
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "manage-locally"
+                    ]
+                  },
+                  "sourceSelection": {
+                    "type": "string",
+                    "enum": [
+                      "required"
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "paths",
+                  "owner",
+                  "action",
+                  "sourceSelection"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "duplicates": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "harness": {
+                          "type": "string"
+                        },
+                        "canonicalPath": {
+                          "type": "string"
+                        },
+                        "aliases": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "via": {
+                                "type": "string",
+                                "enum": [
+                                  "symlink",
+                                  "directory",
+                                  "unknown-root"
+                                ]
+                              },
+                              "linkPath": {
+                                "type": "string"
+                              },
+                              "linkTarget": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "via"
+                            ],
+                            "additionalProperties": true
+                          }
+                        },
+                        "documentHash": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "harness",
+                        "canonicalPath",
+                        "aliases",
+                        "documentHash"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "destinationLinks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "owner": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "pnpm"
+                            ]
+                          },
+                          "package": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "ledgerPath": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "package",
+                          "version",
+                          "ledgerPath"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "skit"
+                            ]
+                          },
+                          "membership": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "in-library"
+                                    ]
+                                  },
+                                  "installedSkillId": {
+                                    "type": "string"
+                                  },
+                                  "collectionId": {
+                                    "type": "string"
+                                  },
+                                  "skillId": {
+                                    "type": "string"
+                                  },
+                                  "skillVersionId": {
+                                    "type": "string"
+                                  },
+                                  "displayName": {
+                                    "type": "string"
+                                  },
+                                  "source": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "installedSkillId",
+                                  "skillId",
+                                  "skillVersionId",
+                                  "displayName"
+                                ],
+                                "additionalProperties": true
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "missing-from-library"
+                                    ]
+                                  },
+                                  "installedSkillId": {
+                                    "type": "string"
+                                  },
+                                  "collectionId": {
+                                    "type": "string"
+                                  },
+                                  "skillId": {
+                                    "type": "string"
+                                  },
+                                  "skillVersionId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "installedSkillId",
+                                  "skillId",
+                                  "skillVersionId"
+                                ],
+                                "additionalProperties": true
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "membership"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "invalid-marker"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "authored"
+                            ]
+                          },
+                          "skitLocator": {
+                            "type": "string"
+                          },
+                          "collectionId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "skitLocator"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "skills-sh"
+                            ]
+                          },
+                          "source": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "source"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "harness"
+                            ]
+                          },
+                          "harness": {
+                            "type": "string",
+                            "enum": [
+                              "codex",
+                              "claude-code",
+                              "opencode",
+                              "devin"
+                            ]
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "bundled": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "harness",
+                          "source",
+                          "bundled"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "repository"
+                            ]
+                          },
+                          "repository": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "repository"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "unknown"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": true
+                      }
+                    ]
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "harness-owned"
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "paths",
+                  "owner",
+                  "action"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "duplicates": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "harness": {
+                          "type": "string"
+                        },
+                        "canonicalPath": {
+                          "type": "string"
+                        },
+                        "aliases": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "via": {
+                                "type": "string",
+                                "enum": [
+                                  "symlink",
+                                  "directory",
+                                  "unknown-root"
+                                ]
+                              },
+                              "linkPath": {
+                                "type": "string"
+                              },
+                              "linkTarget": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "via"
+                            ],
+                            "additionalProperties": true
+                          }
+                        },
+                        "documentHash": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "harness",
+                        "canonicalPath",
+                        "aliases",
+                        "documentHash"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "destinationLinks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "owner": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "pnpm"
+                            ]
+                          },
+                          "package": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "ledgerPath": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "package",
+                          "version",
+                          "ledgerPath"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "skit"
+                            ]
+                          },
+                          "membership": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "in-library"
+                                    ]
+                                  },
+                                  "installedSkillId": {
+                                    "type": "string"
+                                  },
+                                  "collectionId": {
+                                    "type": "string"
+                                  },
+                                  "skillId": {
+                                    "type": "string"
+                                  },
+                                  "skillVersionId": {
+                                    "type": "string"
+                                  },
+                                  "displayName": {
+                                    "type": "string"
+                                  },
+                                  "source": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "installedSkillId",
+                                  "skillId",
+                                  "skillVersionId",
+                                  "displayName"
+                                ],
+                                "additionalProperties": true
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "missing-from-library"
+                                    ]
+                                  },
+                                  "installedSkillId": {
+                                    "type": "string"
+                                  },
+                                  "collectionId": {
+                                    "type": "string"
+                                  },
+                                  "skillId": {
+                                    "type": "string"
+                                  },
+                                  "skillVersionId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "installedSkillId",
+                                  "skillId",
+                                  "skillVersionId"
+                                ],
+                                "additionalProperties": true
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "membership"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "invalid-marker"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "authored"
+                            ]
+                          },
+                          "skitLocator": {
+                            "type": "string"
+                          },
+                          "collectionId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "skitLocator"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "skills-sh"
+                            ]
+                          },
+                          "source": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "source"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "harness"
+                            ]
+                          },
+                          "harness": {
+                            "type": "string",
+                            "enum": [
+                              "codex",
+                              "claude-code",
+                              "opencode",
+                              "devin"
+                            ]
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "bundled": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "harness",
+                          "source",
+                          "bundled"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "repository"
+                            ]
+                          },
+                          "repository": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "repository"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "unknown"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": true
+                      }
+                    ]
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "repository-owned"
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "paths",
+                  "owner",
+                  "action"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "duplicates": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "harness": {
+                          "type": "string"
+                        },
+                        "canonicalPath": {
+                          "type": "string"
+                        },
+                        "aliases": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "via": {
+                                "type": "string",
+                                "enum": [
+                                  "symlink",
+                                  "directory",
+                                  "unknown-root"
+                                ]
+                              },
+                              "linkPath": {
+                                "type": "string"
+                              },
+                              "linkTarget": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "via"
+                            ],
+                            "additionalProperties": true
+                          }
+                        },
+                        "documentHash": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "harness",
+                        "canonicalPath",
+                        "aliases",
+                        "documentHash"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "destinationLinks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "owner": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "pnpm"
+                            ]
+                          },
+                          "package": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "ledgerPath": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "package",
+                          "version",
+                          "ledgerPath"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "skit"
+                            ]
+                          },
+                          "membership": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "in-library"
+                                    ]
+                                  },
+                                  "installedSkillId": {
+                                    "type": "string"
+                                  },
+                                  "collectionId": {
+                                    "type": "string"
+                                  },
+                                  "skillId": {
+                                    "type": "string"
+                                  },
+                                  "skillVersionId": {
+                                    "type": "string"
+                                  },
+                                  "displayName": {
+                                    "type": "string"
+                                  },
+                                  "source": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "installedSkillId",
+                                  "skillId",
+                                  "skillVersionId",
+                                  "displayName"
+                                ],
+                                "additionalProperties": true
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "missing-from-library"
+                                    ]
+                                  },
+                                  "installedSkillId": {
+                                    "type": "string"
+                                  },
+                                  "collectionId": {
+                                    "type": "string"
+                                  },
+                                  "skillId": {
+                                    "type": "string"
+                                  },
+                                  "skillVersionId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "installedSkillId",
+                                  "skillId",
+                                  "skillVersionId"
+                                ],
+                                "additionalProperties": true
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "membership"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "invalid-marker"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "authored"
+                            ]
+                          },
+                          "skitLocator": {
+                            "type": "string"
+                          },
+                          "collectionId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "skitLocator"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "skills-sh"
+                            ]
+                          },
+                          "source": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "source"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "harness"
+                            ]
+                          },
+                          "harness": {
+                            "type": "string",
+                            "enum": [
+                              "codex",
+                              "claude-code",
+                              "opencode",
+                              "devin"
+                            ]
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "bundled": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "harness",
+                          "source",
+                          "bundled"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "repository"
+                            ]
+                          },
+                          "repository": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "repository"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "unknown"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": true
+                      }
+                    ]
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "blocked"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "invalid-ownership-marker",
+                      "content-unhashable",
+                      "ambiguous-library-match",
+                      "library-skill-name-mismatch",
+                      "divergent-copies",
+                      "contested-lock-claim"
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "paths",
+                  "owner",
+                  "action",
+                  "reason"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "duplicates": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "harness": {
+                          "type": "string"
+                        },
+                        "canonicalPath": {
+                          "type": "string"
+                        },
+                        "aliases": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "via": {
+                                "type": "string",
+                                "enum": [
+                                  "symlink",
+                                  "directory",
+                                  "unknown-root"
+                                ]
+                              },
+                              "linkPath": {
+                                "type": "string"
+                              },
+                              "linkTarget": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "via"
+                            ],
+                            "additionalProperties": true
+                          }
+                        },
+                        "documentHash": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "harness",
+                        "canonicalPath",
+                        "aliases",
+                        "documentHash"
+                      ],
+                      "additionalProperties": true
+                    }
+                  },
+                  "destinationLinks": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "paths": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "owner": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "pnpm"
+                            ]
+                          },
+                          "package": {
+                            "type": "string"
+                          },
+                          "version": {
+                            "type": "string"
+                          },
+                          "ledgerPath": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "package",
+                          "version",
+                          "ledgerPath"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "skit"
+                            ]
+                          },
+                          "membership": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "in-library"
+                                    ]
+                                  },
+                                  "installedSkillId": {
+                                    "type": "string"
+                                  },
+                                  "collectionId": {
+                                    "type": "string"
+                                  },
+                                  "skillId": {
+                                    "type": "string"
+                                  },
+                                  "skillVersionId": {
+                                    "type": "string"
+                                  },
+                                  "displayName": {
+                                    "type": "string"
+                                  },
+                                  "source": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "installedSkillId",
+                                  "skillId",
+                                  "skillVersionId",
+                                  "displayName"
+                                ],
+                                "additionalProperties": true
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "missing-from-library"
+                                    ]
+                                  },
+                                  "installedSkillId": {
+                                    "type": "string"
+                                  },
+                                  "collectionId": {
+                                    "type": "string"
+                                  },
+                                  "skillId": {
+                                    "type": "string"
+                                  },
+                                  "skillVersionId": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "installedSkillId",
+                                  "skillId",
+                                  "skillVersionId"
+                                ],
+                                "additionalProperties": true
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "membership"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "invalid-marker"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "authored"
+                            ]
+                          },
+                          "skitLocator": {
+                            "type": "string"
+                          },
+                          "collectionId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "skitLocator"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "skills-sh"
+                            ]
+                          },
+                          "source": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "source"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "harness"
+                            ]
+                          },
+                          "harness": {
+                            "type": "string",
+                            "enum": [
+                              "codex",
+                              "claude-code",
+                              "opencode",
+                              "devin"
+                            ]
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "bundled": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "harness",
+                          "source",
+                          "bundled"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "repository"
+                            ]
+                          },
+                          "repository": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "repository"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "unknown"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "kind"
+                        ],
+                        "additionalProperties": true
+                      }
+                    ]
+                  },
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "leave-alone"
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "paths",
+                  "owner",
+                  "action"
+                ],
+                "additionalProperties": true
+              }
+            ]
+          }
+        },
+        "applyCommand": {
+          "type": "string"
+        },
+        "recommended": {
+          "type": "object",
+          "properties": {
+            "sources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "groupKey": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  },
+                  "names": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "groupKey",
+                  "source",
+                  "names"
+                ],
+                "additionalProperties": true
+              }
+            },
+            "copies": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "sourcePath": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "sourcePath"
+                ],
+                "additionalProperties": true
+              }
+            }
+          },
+          "required": [
+            "sources",
+            "copies"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "planId",
+        "candidates",
+        "recommended"
+      ],
+      "additionalProperties": true
+    },
+    "locks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "scope": {
+            "type": "string",
+            "enum": [
+              "project",
+              "global"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "valid",
+              "malformed",
+              "unsupported"
+            ]
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "Infinity",
+                  "-Infinity",
+                  "NaN"
+                ]
+              }
+            ]
+          },
+          "contentHash": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                },
+                "sourceType": {
+                  "type": "string"
+                },
+                "sourceUrl": {
+                  "type": "string"
+                },
+                "sourceBaseUrl": {
+                  "type": "string"
+                },
+                "ref": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "type": "string"
+                },
+                "skillPath": {
+                  "type": "string"
+                },
+                "computedHash": {
+                  "type": "string"
+                },
+                "skillFolderHash": {
+                  "type": "string"
+                },
+                "wellKnownHash": {
+                  "type": "string"
+                },
+                "originalEntry": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "name",
+                "source",
+                "sourceType",
+                "originalEntry"
+              ],
+              "additionalProperties": true
+            }
+          }
+        },
+        "required": [
+          "scope",
+          "path",
+          "status",
+          "entries"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "instances": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "global",
+              "project",
+              "standalone"
+            ]
+          },
+          "harnesses": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "codex",
+                "claude-code",
+                "opencode",
+                "devin"
+              ]
+            }
+          },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "pnpm"
+                    ]
+                  },
+                  "package": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "string"
+                  },
+                  "ledgerPath": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "package",
+                  "version",
+                  "ledgerPath"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "skit"
+                    ]
+                  },
+                  "membership": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "in-library"
+                            ]
+                          },
+                          "installedSkillId": {
+                            "type": "string"
+                          },
+                          "collectionId": {
+                            "type": "string"
+                          },
+                          "skillId": {
+                            "type": "string"
+                          },
+                          "skillVersionId": {
+                            "type": "string"
+                          },
+                          "displayName": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "installedSkillId",
+                          "skillId",
+                          "skillVersionId",
+                          "displayName"
+                        ],
+                        "additionalProperties": true
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "missing-from-library"
+                            ]
+                          },
+                          "installedSkillId": {
+                            "type": "string"
+                          },
+                          "collectionId": {
+                            "type": "string"
+                          },
+                          "skillId": {
+                            "type": "string"
+                          },
+                          "skillVersionId": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "installedSkillId",
+                          "skillId",
+                          "skillVersionId"
+                        ],
+                        "additionalProperties": true
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "membership"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "invalid-marker"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "authored"
+                    ]
+                  },
+                  "skitLocator": {
+                    "type": "string"
+                  },
+                  "collectionId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "skitLocator"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "skills-sh"
+                    ]
+                  },
+                  "source": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "source"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "harness"
+                    ]
+                  },
+                  "harness": {
+                    "type": "string",
+                    "enum": [
+                      "codex",
+                      "claude-code",
+                      "opencode",
+                      "devin"
+                    ]
+                  },
+                  "source": {
+                    "type": "string"
+                  },
+                  "bundled": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "harness",
+                  "source",
+                  "bundled"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "repository"
+                    ]
+                  },
+                  "repository": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "repository"
+                ],
+                "additionalProperties": true
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "unknown"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": true
+              }
+            ]
+          },
+          "contentIdentity": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "exact",
+                  "ambiguous",
+                  "none",
+                  "unhashable"
+                ]
+              },
+              "currentHash": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "libraryMatches": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "subjectId": {
+                      "type": "string"
+                    },
+                    "skillId": {
+                      "type": "string"
+                    },
+                    "skillVersionId": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "subjectId",
+                    "skillId",
+                    "skillVersionId",
+                    "name"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            },
+            "required": [
+              "status",
+              "libraryMatches"
+            ],
+            "additionalProperties": true
+          },
+          "git": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "committed",
+                  "modified",
+                  "staged",
+                  "untracked",
+                  "ignored",
+                  "mixed",
+                  "outside-git",
+                  "unavailable"
+                ]
+              },
+              "repository": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "status"
+            ],
+            "additionalProperties": true
+          },
+          "locks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "scope": {
+                  "type": "string",
+                  "enum": [
+                    "project",
+                    "global"
+                  ]
+                },
+                "lockPath": {
+                  "type": "string"
+                },
+                "lockVersion": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "string",
+                      "enum": [
+                        "Infinity",
+                        "-Infinity",
+                        "NaN"
+                      ]
+                    }
+                  ]
+                },
+                "lockContentHash": {
+                  "type": "string",
+                  "pattern": "^sha256:[a-f0-9]{64}$"
+                },
+                "content": {
+                  "type": "string",
+                  "enum": [
+                    "agrees",
+                    "mismatch",
+                    "unverifiable"
+                  ]
+                },
+                "entry": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "sourceType": {
+                      "type": "string"
+                    },
+                    "sourceUrl": {
+                      "type": "string"
+                    },
+                    "sourceBaseUrl": {
+                      "type": "string"
+                    },
+                    "ref": {
+                      "type": "string"
+                    },
+                    "updatedAt": {
+                      "type": "string"
+                    },
+                    "skillPath": {
+                      "type": "string"
+                    },
+                    "computedHash": {
+                      "type": "string"
+                    },
+                    "skillFolderHash": {
+                      "type": "string"
+                    },
+                    "wellKnownHash": {
+                      "type": "string"
+                    },
+                    "originalEntry": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "name",
+                    "source",
+                    "sourceType",
+                    "originalEntry"
+                  ],
+                  "additionalProperties": true
+                }
+              },
+              "required": [
+                "scope",
+                "lockPath",
+                "lockVersion",
+                "lockContentHash",
+                "content",
+                "entry"
+              ],
+              "additionalProperties": true
+            }
+          }
+        },
+        "required": [
+          "name",
+          "path",
+          "aliases",
+          "scope",
+          "harnesses",
+          "owner",
+          "contentIdentity",
+          "git",
+          "locks"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "brokenLinks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "harnesses": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "codex",
+                "claude-code",
+                "opencode",
+                "devin"
+              ]
+            }
+          }
+        },
+        "required": [
+          "path",
+          "target",
+          "harnesses"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "suppressed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "cache",
+              "dependency",
+              "generated",
+              "build",
+              "skit-state"
+            ]
+          }
+        },
+        "required": [
+          "path",
+          "reason"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "rel": {
+            "type": "string"
+          },
+          "argv": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "effect": {
+            "type": "string",
+            "enum": [
+              "read",
+              "write"
+            ]
+          }
+        },
+        "required": [
+          "rel",
+          "argv",
+          "effect"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "choices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "copy",
+              "source",
+              "removal",
+              "existing",
+              "version"
+            ]
+          },
+          "label": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "skillId": {
+            "type": "string"
+          },
+          "duplicateActions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "retain-only",
+                "retire-aliases",
+                "keep-both",
+                "preserve-duplicates"
+              ]
+            }
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "rel": {
+                  "type": "string"
+                },
+                "argv": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "effect": {
+                  "type": "string",
+                  "enum": [
+                    "read",
+                    "write"
+                  ]
+                }
+              },
+              "required": [
+                "rel",
+                "argv",
+                "effect"
+              ],
+              "additionalProperties": true
+            }
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "duplicateActions",
+          "actions"
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": [
+    "machineConfig",
+    "suggestedRepositoryRoots",
+    "probes",
+    "scan",
+    "repositories",
+    "repositoryConfigs",
+    "authoredCollections",
+    "installedSkills",
+    "onboarding",
+    "locks",
+    "instances",
+    "brokenLinks",
+    "suppressed",
+    "actions",
+    "choices"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

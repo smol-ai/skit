@@ -8,11 +8,11 @@ import { libraryCommandConfiguration } from "../../commands/library-configuratio
 import {
   CommandMetadata,
   credentialStoreReadSubprocesses,
-  sourceAcquisitionSubprocesses,
+  sourceFetchSubprocesses,
 } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags, optionalString, optionValue } from "../../commands/parameters.js";
-import { syncLibraryEffect } from "../../workflows/library/library-sync.js";
+import { syncLibrary } from "../../workflows/library/library-sync.js";
 import type { LibraryInstallationConfiguration } from "../../library/installation-configuration.js";
 import { officialRegistryOrigin } from "../../registry/accounts.js";
 import { Renderer } from "../../presentation/renderer.js";
@@ -22,7 +22,7 @@ import { terminalSyncProgress } from "../../presentation/sync-progress.js";
 import { renderLibrarySyncPlan } from "../../presentation/library-sync.js";
 import { terminalData } from "../../presentation/terminal-text.js";
 import { OptionCombinationInvalid } from "../../workflows/failures.js";
-import type { InventoryRootOptions } from "../../projection/roots.js";
+import type { InventoryRootOptions } from "../../install/roots.js";
 
 export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthError>(options: {
   readonly authState: Result.Result<ResolvedAuth, AuthError>;
@@ -30,7 +30,7 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
   readonly adopt: boolean;
   readonly takeRemote?: readonly string[];
   readonly keepEnabled?: readonly string[];
-  readonly projection: Pick<LibraryInstallationConfiguration, "rootFor">;
+  readonly installedSkill: Pick<LibraryInstallationConfiguration, "rootFor">;
   readonly inventory?: InventoryRootOptions;
   readonly deviceSelection?:
     | "follow-account"
@@ -40,7 +40,7 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
   const renderer = yield* Renderer;
   const progress = terminalSyncProgress(renderer);
   return yield* Effect.scoped(
-    syncLibraryEffect({
+    syncLibrary({
       // With no Registry configured, sync asks the hosted Registry, which then asks for a login.
       origin: auth.origin ?? officialRegistryOrigin,
       ...(auth.token === undefined ? {} : { token: auth.token }),
@@ -48,13 +48,13 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
       adopt: options.adopt,
       ...(options.takeRemote === undefined ? {} : { takeRemote: options.takeRemote }),
       ...(options.keepEnabled === undefined ? {} : { keepEnabled: options.keepEnabled }),
-      projection: options.projection,
+      installedSkill: options.installedSkill,
       ...(options.inventory === undefined ? {} : { inventory: options.inventory }),
       ...(options.deviceSelection === undefined
         ? {}
         : { deviceSelection: options.deviceSelection }),
-      observer: progress.sync,
-      restoreObserver: progress.restore,
+      progress: progress.sync,
+      restoreProgress: progress.restore,
       ...(options.apply
         ? {
             onPlan: (plan) =>
@@ -69,7 +69,7 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
 });
 
 const apply = Flag.Boolean("apply").pipe(
-  Flag.withDescription("Apply the current Library reconciliation plan."),
+  Flag.withDescription("Apply the current sync plan."),
   Flag.withDefault(false),
 );
 const adopt = Flag.Boolean("adopt").pipe(
@@ -87,7 +87,7 @@ const takeRemote = Flag.String("take-remote").pipe(
 const registry = optionalString("registry", "Select the Registry to synchronize.");
 const keepEnabled = Flag.String("keep-enabled").pipe(
   Flag.withDescription(
-    "Resolve a destination collision by keeping this Skill ID enabled; retain the other Skills without enabling them.",
+    "Resolve a destination collision by keeping this Skill ID enabled; keep the other Skills in the Library without enabling them.",
   ),
   Flag.atLeast(0),
 );
@@ -145,7 +145,7 @@ export const librarySyncCliCommand = Command.make(
           adopt: input.adopt,
           takeRemote: input.takeRemote,
           keepEnabled: input.keepEnabled,
-          projection: configuration.pull.installation,
+          installedSkill: configuration.pull.installation,
           inventory: configuration.inventory,
           ...(input.followAccount
             ? { deviceSelection: "follow-account" as const }
@@ -174,7 +174,7 @@ export const librarySyncCliCommand = Command.make(
       }),
     ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
-  Command.withDescription("Synchronize private retained Library bytes with skit-server."),
+  Command.withDescription("Sync your Library with skit-server."),
   Command.withExamples([{ command: "skit sync" }, { command: "skit sync --apply" }]),
   Command.annotate(CommandMetadata, {
     effects: {
@@ -185,7 +185,7 @@ export const librarySyncCliCommand = Command.make(
         "network.write",
         "process.execute",
       ],
-      subprocesses: [...sourceAcquisitionSubprocesses, ...credentialStoreReadSubprocesses],
+      subprocesses: [...sourceFetchSubprocesses, ...credentialStoreReadSubprocesses],
     },
     outputSchemas: [outputContracts.librarySync],
     exitCodes: [0, 11, 12, 13, 64, 65],

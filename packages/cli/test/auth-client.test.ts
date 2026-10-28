@@ -5,13 +5,13 @@ import { it } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem, Layer, Schema } from "effect";
 import { HttpClientResponse } from "effect/http";
 import {
-  addRegistryRemoteEffect,
+  addRegistryRemote,
   authStatusCommand,
   loginEffect,
   logoutEffect,
-  resolveAuthEffect,
-  resolveAuthForOriginEffect,
-  resolveLoginTargetEffect,
+  resolveAuth,
+  resolveAuthForOrigin,
+  resolveLoginTarget,
 } from "../src/registry/auth.js";
 import { cliBuild } from "../src/build-info.js";
 import { RegistryHttp, registryHttpLayer } from "../src/registry/registry-http.js";
@@ -184,7 +184,7 @@ describe("saved login reuse", () => {
       const home = yield* authHome;
       yield* seed(home);
       const interaction = yield* makeScriptedInteraction(["user@example.test", "not-stored"]);
-      const observed: Array<{ url: string; init?: RequestInit }> = [];
+      const requests: Array<{ url: string; init?: RequestInit }> = [];
       const value = yield* authLoginCommand({
         home,
         scopes: ["library:sync"],
@@ -192,7 +192,7 @@ describe("saved login reuse", () => {
         relogin: true,
       }).pipe(
         Effect.provide(interaction.layer),
-        Effect.provide(registryHttpLayer(testHttpClientLayer(successfulServer(observed)))),
+        Effect.provide(registryHttpLayer(testHttpClientLayer(successfulServer(requests)))),
       );
       expect(value).toMatchObject({
         alreadyAuthenticated: false,
@@ -202,7 +202,7 @@ describe("saved login reuse", () => {
         "text",
         "password",
       ]);
-      expect((yield* resolveAuthEffect(home)).token).toBe("skit_pat_secret_one");
+      expect((yield* resolveAuth(home)).token).toBe("skit_pat_secret_one");
     }).pipe(Effect.provide(testPlatformLayer)),
   );
 });
@@ -254,13 +254,13 @@ const MintedToken = Schema.Struct({
   expires_at: Schema.optional(Schema.String),
 });
 
-function successfulServer(observed: Array<{ url: string; init?: RequestInit }>): TestHttpHandler {
+function successfulServer(requests: Array<{ url: string; init?: RequestInit }>): TestHttpHandler {
   let minted = 0;
   return (request) =>
     Effect.sync(() => {
       const url = request.url;
       const init = requestInit(request);
-      observed.push({ url, init });
+      requests.push({ url, init });
       if (url.endsWith("/.well-known/skit"))
         return Response.json({
           schema: "skit.server.v1",
@@ -297,8 +297,8 @@ describe("CLI authentication journey", () => {
   it.effect("signs in to the hosted Registry when no Registry is configured", () =>
     Effect.gen(function* () {
       const home = yield* authHome;
-      expect(yield* resolveLoginTargetEffect(undefined, home)).toBe("https://skit.smol.ai");
-      expect(yield* Effect.flip(resolveLoginTargetEffect("missing", home))).toMatchObject({
+      expect(yield* resolveLoginTarget(undefined, home)).toBe("https://skit.smol.ai");
+      expect(yield* Effect.flip(resolveLoginTarget("missing", home))).toMatchObject({
         _tag: "RegistryAliasNotFound",
         name: "missing",
       });
@@ -342,7 +342,7 @@ describe("CLI authentication journey", () => {
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         const home = yield* authHome;
-        const observed: Array<{ url: string; init?: RequestInit }> = [];
+        const requests: Array<{ url: string; init?: RequestInit }> = [];
         yield* login(
           {
             origin: "https://skit.example",
@@ -351,16 +351,16 @@ describe("CLI authentication journey", () => {
             scopes: ["library:sync"],
             home,
           },
-          successfulServer(observed),
+          successfulServer(requests),
         );
 
-        expect(observed.map(({ url }) => new URL(url).pathname)).toEqual([
+        expect(requests.map(({ url }) => new URL(url).pathname)).toEqual([
           "/.well-known/skit",
           "/api/auth/sign-in/email",
           "/api/tokens",
           "/api/auth/sign-out",
         ]);
-        const mint = observed[2].init!;
+        const mint = requests[2].init!;
         expect(new Headers(mint.headers).get("origin")).toBe("https://skit.example");
         expect(new Headers(mint.headers).get("cookie")).toContain("skit-auth.session_token=");
         expect(payload(mint)).not.toContain("not-stored");
@@ -373,23 +373,23 @@ describe("CLI authentication journey", () => {
           defaultRegistry: "default",
           registryAliases: { default: "https://skit.example" },
         });
-        expect(yield* resolveAuthEffect(home)).toMatchObject({
+        expect(yield* resolveAuth(home)).toMatchObject({
           origin: "https://skit.example",
           token: "skit_pat_secret_one",
           tokenId: "pat_one",
           scopes: ["library:sync"],
           source: "stored",
         });
-        expect(yield* resolveLoginTargetEffect(undefined, home)).toBe("https://skit.example");
-        expect(yield* resolveLoginTargetEffect("default", home)).toBe("https://skit.example");
+        expect(yield* resolveLoginTarget(undefined, home)).toBe("https://skit.example");
+        expect(yield* resolveLoginTarget("default", home)).toBe("https://skit.example");
       }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("reports an unknown expiry honestly when an older server omits it", () =>
     Effect.gen(function* () {
       const home = yield* authHome;
-      const observed: Array<{ url: string; init?: RequestInit }> = [];
-      const base = successfulServer(observed);
+      const requests: Array<{ url: string; init?: RequestInit }> = [];
+      const base = successfulServer(requests);
       const server: TestHttpHandler = (request, url, signal) =>
         Effect.gen(function* () {
           const response = yield* base(request, url, signal);
@@ -414,7 +414,7 @@ describe("CLI authentication journey", () => {
       );
 
       expect(result).not.toHaveProperty("expiresAt");
-      expect(yield* resolveAuthEffect(home)).toMatchObject({
+      expect(yield* resolveAuth(home)).toMatchObject({
         source: "stored",
         expiresAt: undefined,
       });
@@ -425,8 +425,8 @@ describe("CLI authentication journey", () => {
   it.effect("a second login preserves the first configured default", () =>
     Effect.gen(function* () {
       const home = yield* authHome;
-      const observed: Array<{ url: string; init?: RequestInit }> = [];
-      const server = successfulServer(observed);
+      const requests: Array<{ url: string; init?: RequestInit }> = [];
+      const server = successfulServer(requests);
       for (const origin of ["https://one.example", "https://two.example"])
         yield* login(
           {
@@ -439,11 +439,11 @@ describe("CLI authentication journey", () => {
           server,
         );
 
-      expect(yield* resolveAuthEffect(home)).toMatchObject({
+      expect(yield* resolveAuth(home)).toMatchObject({
         origin: "https://one.example",
         token: "skit_pat_secret_one",
       });
-      expect(yield* resolveAuthForOriginEffect("https://one.example", home)).toMatchObject({
+      expect(yield* resolveAuthForOrigin("https://one.example", home)).toMatchObject({
         origin: "https://one.example",
         token: "skit_pat_secret_one",
         source: "stored",
@@ -454,8 +454,8 @@ describe("CLI authentication journey", () => {
   it.effect("revokes the active PAT before removing it locally", () =>
     Effect.gen(function* () {
       const home = yield* authHome;
-      const observed: Array<{ url: string; init?: RequestInit }> = [];
-      const server = successfulServer(observed);
+      const requests: Array<{ url: string; init?: RequestInit }> = [];
+      const server = successfulServer(requests);
       yield* login(
         {
           origin: "https://skit.example",
@@ -466,29 +466,29 @@ describe("CLI authentication journey", () => {
         },
         server,
       );
-      observed.length = 0;
+      requests.length = 0;
 
       expect(yield* logout(server, home)).toEqual({
         origin: "https://skit.example",
         revoked: true,
       });
-      expect(observed).toHaveLength(1);
-      expect(new Headers(observed[0].init?.headers).get("authorization")).toBe(
+      expect(requests).toHaveLength(1);
+      expect(new Headers(requests[0].init?.headers).get("authorization")).toBe(
         "Bearer skit_pat_secret_one",
       );
-      expect(yield* resolveAuthEffect(home)).toMatchObject({ source: "none", token: undefined });
+      expect(yield* resolveAuth(home)).toMatchObject({ source: "none", token: undefined });
     }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("revokes a minted PAT when temporary-session sign-out fails", () =>
     Effect.gen(function* () {
       const home = yield* authHome;
-      const observed: Array<{ url: string; init?: RequestInit }> = [];
-      const base = successfulServer(observed);
+      const requests: Array<{ url: string; init?: RequestInit }> = [];
+      const base = successfulServer(requests);
       const server: TestHttpHandler = (request, url, signal) =>
         request.url.endsWith("/api/auth/sign-out")
           ? Effect.sync(() => {
-              observed.push({ url: request.url, init: requestInit(request) });
+              requests.push({ url: request.url, init: requestInit(request) });
               return new Response(null, { status: 503 });
             })
           : base(request, url, signal);
@@ -506,16 +506,16 @@ describe("CLI authentication journey", () => {
         ),
       );
       expect(failure.message).toContain("Sign out failed");
-      expect(observed.map(({ url }) => new URL(url).pathname)).toContain("/api/tokens/pat_one");
-      expect(yield* resolveAuthEffect(home)).toMatchObject({ source: "none" });
+      expect(requests.map(({ url }) => new URL(url).pathname)).toContain("/api/tokens/pat_one");
+      expect(yield* resolveAuth(home)).toMatchObject({ source: "none" });
     }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("reports when both temporary-session cleanup operations fail", () =>
     Effect.gen(function* () {
       const home = yield* authHome;
-      const observed: Array<{ url: string; init?: RequestInit }> = [];
-      const base = successfulServer(observed);
+      const requests: Array<{ url: string; init?: RequestInit }> = [];
+      const base = successfulServer(requests);
       const server: TestHttpHandler = (request, url, signal) =>
         request.url.endsWith("/api/auth/sign-out") || request.url.includes("/api/tokens/pat_")
           ? Effect.succeed(new Response(null, { status: 503 }))
@@ -540,8 +540,8 @@ describe("CLI authentication journey", () => {
   it.effect("logging in again rotates the credential for that origin", () =>
     Effect.gen(function* () {
       const home = yield* authHome;
-      const observed: Array<{ url: string; init?: RequestInit }> = [];
-      const server = successfulServer(observed);
+      const requests: Array<{ url: string; init?: RequestInit }> = [];
+      const server = successfulServer(requests);
       const credentials = (scopes: Array<"library:sync" | "authoring:write">) => ({
         origin: "https://skit.example",
         email: "user@example.test",
@@ -552,12 +552,12 @@ describe("CLI authentication journey", () => {
       yield* login(credentials(["library:sync"]), server);
       yield* login(credentials(["library:sync", "authoring:write"]), server);
 
-      expect(yield* resolveAuthEffect(home)).toMatchObject({
+      expect(yield* resolveAuth(home)).toMatchObject({
         tokenId: "pat_two",
         token: "skit_pat_secret_two",
         scopes: ["library:sync", "authoring:write"],
       });
-      expect(observed.map(({ url }) => new URL(url).pathname)).toContain("/api/tokens/pat_one");
+      expect(requests.map(({ url }) => new URL(url).pathname)).toContain("/api/tokens/pat_one");
     }).pipe(Effect.provide(testPlatformLayer)),
   );
 
@@ -565,8 +565,8 @@ describe("CLI authentication journey", () => {
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const home = yield* authHome;
-      const observed: Array<{ url: string; init?: RequestInit }> = [];
-      const server = successfulServer(observed);
+      const requests: Array<{ url: string; init?: RequestInit }> = [];
+      const server = successfulServer(requests);
       const input = {
         origin: "https://skit.example",
         email: "user@example.test",
@@ -575,7 +575,7 @@ describe("CLI authentication journey", () => {
         home,
       };
       yield* login({ ...input, scopes: [...input.scopes] }, server);
-      observed.length = 0;
+      requests.length = 0;
       const unwritableAfterMint: TestHttpHandler = (request, url, signal) =>
         server(request, url, signal).pipe(
           Effect.tap(() => {
@@ -591,8 +591,8 @@ describe("CLI authentication journey", () => {
       ).pipe(Effect.ensuring(fs.chmod(home, 0o700).pipe(Effect.orDie)));
       expect(exit._tag).toBe("Failure");
 
-      expect(yield* resolveAuthEffect(home)).toMatchObject({ tokenId: "pat_one" });
-      const revoked = observed
+      expect(yield* resolveAuth(home)).toMatchObject({ tokenId: "pat_one" });
+      const revoked = requests
         .filter(({ init }) => init?.method === "DELETE")
         .map(({ url }) => new URL(url).pathname);
       expect(revoked).toEqual(["/api/tokens/pat_two"]);
@@ -602,12 +602,12 @@ describe("CLI authentication journey", () => {
   it.effect("keeps the new credential and warns when the previous token cannot be revoked", () =>
     Effect.gen(function* () {
       const home = yield* authHome;
-      const observed: Array<{ url: string; init?: RequestInit }> = [];
-      const base = successfulServer(observed);
+      const requests: Array<{ url: string; init?: RequestInit }> = [];
+      const base = successfulServer(requests);
       const server: TestHttpHandler = (request, url, signal) =>
         request.url.endsWith("/api/tokens/pat_one") && request.method === "DELETE"
           ? Effect.sync(() => {
-              observed.push({ url: request.url, init: requestInit(request) });
+              requests.push({ url: request.url, init: requestInit(request) });
               return new Response(null, { status: 503 });
             })
           : base(request, url, signal);
@@ -622,15 +622,15 @@ describe("CLI authentication journey", () => {
       const result = yield* login({ ...input, scopes: [...input.scopes] }, server);
 
       expect(result.warning).toMatch(/pat_one.*may still be live/);
-      expect(yield* resolveAuthEffect(home)).toMatchObject({ tokenId: "pat_two" });
+      expect(yield* resolveAuth(home)).toMatchObject({ tokenId: "pat_two" });
     }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("logout preserves a default even when its credential is removed", () =>
     Effect.gen(function* () {
       const home = yield* authHome;
-      const observed: Array<{ url: string; init?: RequestInit }> = [];
-      const server = successfulServer(observed);
+      const requests: Array<{ url: string; init?: RequestInit }> = [];
+      const server = successfulServer(requests);
       yield* login(
         {
           origin: "https://one.example",
@@ -653,7 +653,7 @@ describe("CLI authentication journey", () => {
       );
 
       yield* logout(server, home, "https://one.example");
-      expect(yield* resolveAuthEffect(home)).toMatchObject({
+      expect(yield* resolveAuth(home)).toMatchObject({
         origin: "https://one.example",
         token: undefined,
       });
@@ -663,7 +663,7 @@ describe("CLI authentication journey", () => {
   it.effect("environment origin and token override stored authentication", () =>
     Effect.gen(function* () {
       const home = yield* authHome;
-      const observed: Array<{ url: string; init?: RequestInit }> = [];
+      const requests: Array<{ url: string; init?: RequestInit }> = [];
       yield* login(
         {
           origin: "https://stored.example",
@@ -672,11 +672,9 @@ describe("CLI authentication journey", () => {
           scopes: ["library:sync"],
           home,
         },
-        successfulServer(observed),
+        successfulServer(requests),
       );
-      expect(
-        yield* resolveAuthEffect(home).pipe(withEnvironment(environmentCredential)),
-      ).toMatchObject({
+      expect(yield* resolveAuth(home).pipe(withEnvironment(environmentCredential))).toMatchObject({
         origin: "https://environment.example",
         token: "skit_pat_environment",
         source: "environment",
@@ -706,11 +704,11 @@ describe("CLI authentication journey", () => {
         }),
       );
 
-      expect(yield* Effect.flip(resolveAuthEffect(home))).toMatchObject({
+      expect(yield* Effect.flip(resolveAuth(home))).toMatchObject({
         _tag: "RegistrySelectionAmbiguous",
         origins: ["https://one.example", "https://two.example"],
       });
-      yield* addRegistryRemoteEffect("one", "https://one.example", home);
+      yield* addRegistryRemote("one", "https://one.example", home);
       const stored = JSON.parse(yield* fs.readFileString(join(home, "auth.json")));
       expect(stored).not.toHaveProperty("activeOrigin");
       expect(stored).not.toHaveProperty("defaultRegistry");
@@ -720,8 +718,8 @@ describe("CLI authentication journey", () => {
   it.effect("logout without a target refuses multiple credentials", () =>
     Effect.gen(function* () {
       const home = yield* authHome;
-      const observed: Array<{ url: string; init?: RequestInit }> = [];
-      const server = successfulServer(observed);
+      const requests: Array<{ url: string; init?: RequestInit }> = [];
+      const server = successfulServer(requests);
       for (const origin of ["https://one.example", "https://two.example"])
         yield* login(
           {
@@ -733,20 +731,20 @@ describe("CLI authentication journey", () => {
           },
           server,
         );
-      observed.length = 0;
+      requests.length = 0;
 
       expect(yield* Effect.flip(logout(server, home))).toMatchObject({
         _tag: "RegistrySelectionAmbiguous",
         origins: ["https://one.example", "https://two.example"],
       });
-      expect(observed).toEqual([]);
+      expect(requests).toEqual([]);
     }).pipe(Effect.provide(testPlatformLayer)),
   );
 
   it.effect("status lists environment credentials as a distinct row", () =>
     Effect.gen(function* () {
       const home = yield* authHome;
-      const observed: Array<{ url: string; init?: RequestInit }> = [];
+      const requests: Array<{ url: string; init?: RequestInit }> = [];
       yield* login(
         {
           origin: "https://stored.example",
@@ -755,7 +753,7 @@ describe("CLI authentication journey", () => {
           scopes: ["library:sync"],
           home,
         },
-        successfulServer(observed),
+        successfulServer(requests),
       );
       const status = yield* authStatusCommand(home).pipe(withEnvironment(environmentCredential));
       expect(status.credentials).toMatchObject([
@@ -771,7 +769,7 @@ describe("CLI authentication journey", () => {
       const fs = yield* FileSystem.FileSystem;
       yield* fs.writeFileString(join(home, "auth.json"), "{");
       expect(
-        yield* resolveAuthForOriginEffect("https://environment.example", home).pipe(
+        yield* resolveAuthForOrigin("https://environment.example", home).pipe(
           withEnvironment(environmentCredential),
         ),
       ).toMatchObject({
@@ -785,7 +783,7 @@ describe("CLI authentication journey", () => {
   it.effect("an environment origin does not disguise a stored token as an environment token", () =>
     Effect.gen(function* () {
       const home = yield* authHome;
-      const observed: Array<{ url: string; init?: RequestInit }> = [];
+      const requests: Array<{ url: string; init?: RequestInit }> = [];
       yield* login(
         {
           origin: "https://stored.example",
@@ -794,10 +792,10 @@ describe("CLI authentication journey", () => {
           scopes: ["library:sync"],
           home,
         },
-        successfulServer(observed),
+        successfulServer(requests),
       );
       expect(
-        yield* resolveAuthEffect(home).pipe(
+        yield* resolveAuth(home).pipe(
           withEnvironment({ SKIT_SERVER_URL: "https://stored.example" }),
         ),
       ).toMatchObject({

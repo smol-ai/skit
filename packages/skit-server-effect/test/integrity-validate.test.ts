@@ -1,7 +1,7 @@
 import { BrowserCrypto } from "@effect/platform-browser";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { sha256Digest } from "@smolai/skit-core/universal/consumer";
+import { sha256Hash } from "@smolai/skit-core/universal/consumer";
 import { validateArtifactBundle } from "../src/integrity/validate.js";
 
 const file = Effect.fn("Test.file")(function* (path: string, contents: string) {
@@ -9,7 +9,7 @@ const file = Effect.fn("Test.file")(function* (path: string, contents: string) {
   return {
     path,
     bytes,
-    digest: yield* sha256Digest(bytes),
+    digest: yield* sha256Hash(bytes),
     media_type: "text/plain",
     executable: false,
   };
@@ -127,6 +127,30 @@ describe("Integrity draft validation", () => {
 
       expect(validated.descriptor.id).toBe("alice/tools");
       expect(validated.diagnostics).toEqual([]);
+    }).pipe(Effect.provide(BrowserCrypto.layer)),
+  );
+
+  it.effect("translates conflicting invocation declarations at the Worker boundary", () =>
+    Effect.gen(function* () {
+      const config = yield* file(
+        "skit.json",
+        JSON.stringify({
+          slug: "tools",
+          skills: [
+            {
+              name: "review",
+              path: "skills/review",
+              invocation: "explicit",
+              trigger_modes: ["implicit"],
+            },
+          ],
+        }),
+      );
+      const failure = yield* Effect.flip(validateArtifactBundle("alice", "tools", {}, [config]));
+      expect(failure).toMatchObject({
+        _tag: "Integrity.Error",
+        code: "CONFLICTING_INVOCATION_DECLARATIONS",
+      });
     }).pipe(Effect.provide(BrowserCrypto.layer)),
   );
 

@@ -1,7 +1,7 @@
 import { createColors } from "picocolors";
 import type { ContractDataForId } from "../commands/output-contracts.js";
 
-type SyncData = ContractDataForId<"skit.library.sync.v10">;
+type SyncData = ContractDataForId<"skit.library.sync.v11">;
 type SyncPlan = NonNullable<SyncData["plan"]>;
 
 /** Name a few Skills; past that, count them so a large Collection stays readable. */
@@ -28,7 +28,7 @@ export function renderLibrarySyncPlan(plan: SyncPlan, color = createColors(false
     lines.push("", color.cyan(color.bold(title)));
     if (changes.length === 0) lines.push(color.dim("  No changes."));
     const collections = changes.filter((change) => change.kind === "collection");
-    const bindings = changes.filter((change) => change.kind === "binding");
+    const enabled = changes.filter((change) => change.kind === "enabled");
     if (collections.length) lines.push("  Collections");
     for (const change of collections) {
       const marker = markerFor(change.action);
@@ -48,14 +48,14 @@ export function renderLibrarySyncPlan(plan: SyncPlan, color = createColors(false
           `        ${change.skills_added.length} Skill${change.skills_added.length === 1 ? "" : "s"}`,
         );
     }
-    if (bindings.length) lines.push("  Bindings");
-    for (const change of bindings) {
+    if (enabled.length) lines.push("  Enabled");
+    for (const change of enabled) {
       const marker = markerFor(change.action);
       lines.push(`    ${marker} Enabled Skills`);
-      for (const entry of change.entries_added)
-        lines.push(`        ${markerFor("add")} ${entry.label}`);
-      for (const entry of change.entries_removed)
-        lines.push(`        ${markerFor("remove")} ${entry.label}`);
+      for (const item of change.items_added)
+        lines.push(`        ${markerFor("add")} ${item.label}`);
+      for (const item of change.items_removed)
+        lines.push(`        ${markerFor("remove")} ${item.label}`);
     }
   }
   const changes = [...shown(plan.local), ...shown(plan.remote)];
@@ -70,8 +70,8 @@ export function renderLibrarySyncPlan(plan: SyncPlan, color = createColors(false
 export function renderLibrarySync(data: SyncData, color = createColors(false)): string {
   const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
   // What syncing did to this device, when it did anything worth knowing.
-  const notes = data.retired
-    ? [`Removed ${plural(data.retired, "Skill")} no longer enabled from this device.`]
+  const notes = data.uninstalled
+    ? [`Removed ${plural(data.uninstalled, "Skill")} no longer enabled from this device.`]
     : [];
   const withNotes = (message: string) =>
     notes.length ? `${message}\n\n${notes.join("\n")}` : message;

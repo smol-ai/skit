@@ -172,7 +172,7 @@ test.runIf(realGit)(
       const previewed = Schema.decodeUnknownSync(AddPreviewDocument)(preview.stdout).data;
       expect(previewed.kind).toBe("authored");
       expect(previewed.skills.map((skill) => skill.name).sort()).toEqual(["audit", "review"]);
-      // Preview retains nothing: no state, no Original, no projected bytes.
+      // Preview retains nothing: no state, no Original, no installed bytes.
       expect(existsSync(join(roots.home, "state.json"))).toBe(false);
       expect(existsSync(join(roots.home, "originals"))).toBe(false);
       expect(
@@ -190,14 +190,14 @@ test.runIf(realGit)(
       const state = Schema.decodeUnknownSync(LibraryStateDocument)(
         await readFile(join(roots.home, "state.json"), "utf8"),
       );
-      expect(state.schemaVersion).toBe(9);
+      expect(state.schemaVersion).toBe(10);
       expect(state.collections.map((item) => item.collection_id)).toEqual([entry.collection_id]);
-      expect(state.retained_copies).toHaveLength(1);
-      expect(state.retained_copies[0].digest).toBe(entry.snapshot_digest);
-      expect(state.projections).toEqual([]);
-      // A new add creates no Binding and no Projection.
-      expect(state.global_bindings).toEqual([]);
-      expect(state.local_bindings).toEqual([]);
+      expect(state.collection_versions).toHaveLength(1);
+      expect(state.collection_versions[0].hash).toBe(entry.snapshot_digest);
+      expect(state.installed_skills).toEqual([]);
+      // A new add creates no Binding and no installed skill.
+      expect(state.enabled).toEqual([]);
+      expect(state.repositories).toEqual([]);
       expect(existsSync(join(roots.claudeRoot, "review"))).toBe(false);
 
       // A fresh clone of unchanged history reuses the exact retained Version and records nothing new.
@@ -206,7 +206,7 @@ test.runIf(realGit)(
       expect(again.code, again.stderr).toBe(0);
       const repeated = addResult(again.stdout);
       expect(repeated.snapshot_digest).toBe(entry.snapshot_digest);
-      expect(repeated.retained_version_id).toBe(entry.retained_version_id);
+      expect(repeated.collection_version_id).toBe(entry.collection_version_id);
       expect((await gitInvocations(shim.log)).slice(beforeRepeat).map((args) => args[0])).toEqual([
         "clone",
         "checkout",
@@ -216,9 +216,9 @@ test.runIf(realGit)(
         await readFile(join(roots.home, "state.json"), "utf8"),
       );
       expect(after.collections).toHaveLength(1);
-      expect(after.retained_copies).toHaveLength(1);
-      expect(after.acquisitions).toHaveLength(1);
-      expect(after.projections).toEqual([]);
+      expect(after.collection_versions).toHaveLength(1);
+      expect(after.imports).toHaveLength(1);
+      expect(after.installed_skills).toEqual([]);
 
       // Preview after add still agrees and still writes nothing of its own.
       const previewAgain = await run("add", REMOTE, "--list");
@@ -295,12 +295,12 @@ test.runIf(realGit)(
       const firstState = Schema.decodeUnknownSync(LibraryStateDocument)(
         await readFile(join(roots.home, "state.json"), "utf8"),
       );
-      const hex = firstState.retained_copies[0].digest.slice("sha256:".length);
+      const hex = firstState.collection_versions[0].hash.slice("sha256:".length);
       const originalPath = join(roots.home, "originals", hex.slice(0, 2), hex);
       expect(existsSync(join(originalPath, "README.md"))).toBe(false);
       expect(existsSync(join(originalPath, "skit.json"))).toBe(false);
       expect(existsSync(join(originalPath, "outside-skill"))).toBe(false);
-      expect(firstState.acquisitions[0]).toMatchObject({ kind: "source", revision: fixture.head });
+      expect(firstState.imports[0]).toMatchObject({ kind: "source", revision: fixture.head });
 
       // Refreshing reacquires the whole Source at its subpath and finds nothing new.
       const planned = await run("update", "--dry-run");
@@ -315,16 +315,16 @@ test.runIf(realGit)(
       expect(again.code, again.stderr).toBe(0);
       const repeated = addResult(again.stdout);
       expect(repeated.snapshot_digest).toBe(entry.snapshot_digest);
-      expect(repeated.retained_version_id).toBe(entry.retained_version_id);
+      expect(repeated.collection_version_id).toBe(entry.collection_version_id);
       const state = Schema.decodeUnknownSync(LibraryStateDocument)(
         await readFile(join(roots.home, "state.json"), "utf8"),
       );
       expect(state.collections).toHaveLength(1);
-      expect(state.retained_copies).toHaveLength(1);
-      expect(state.acquisitions).toHaveLength(1);
-      expect(state.projections).toEqual([]);
-      expect(state.global_bindings).toEqual([]);
-      expect(state.local_bindings).toEqual([]);
+      expect(state.collection_versions).toHaveLength(1);
+      expect(state.imports).toHaveLength(1);
+      expect(state.installed_skills).toEqual([]);
+      expect(state.enabled).toEqual([]);
+      expect(state.repositories).toEqual([]);
 
       // Following the whole Collection, an upstream change installs and retires Skills.
       const collectionId = entry.collection_id;

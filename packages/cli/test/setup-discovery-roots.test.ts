@@ -31,7 +31,7 @@ it.effect("preserves saved v1 discovery roots when plain setup imports a Collect
             sourceType: "well-known",
             sourceUrl: "https://skills.example/review/SKILL.md",
             sourceBaseUrl: "https://skills.example",
-            wellKnownDigest: `sha256:${createHash("sha256").update(text).digest("hex")}`,
+            wellKnownHash: `sha256:${createHash("sha256").update(text).digest("hex")}`,
           },
         },
       }),
@@ -69,7 +69,7 @@ it.effect("preserves saved v1 discovery roots when plain setup imports a Collect
           options,
           interactive: true,
           dryRun: false,
-          localCustody: { bindings: home.bindings },
+          manageOptions: { installOptions: home.installOptions },
         }).pipe(Effect.provide(interaction.layer)),
       ),
     );

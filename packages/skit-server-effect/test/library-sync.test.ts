@@ -5,7 +5,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import {
   LibraryManifest,
-  LibraryReceipt,
+  RemoteLibrary,
   SnapshotArchive,
 } from "@smolai/skit-core/universal/consumer";
 import { RevisionConflictResponse } from "@smolai/skit-core/universal/api";
@@ -18,7 +18,7 @@ import emptyManifestFixture from "./fixtures/library-sync/empty-manifest.json" w
 
 const archive = Schema.decodeUnknownSync(SnapshotArchive)(archiveFixture);
 const manifest = Schema.decodeUnknownSync(LibraryManifest)(manifestFixture);
-const receipt = Schema.Struct({ library: LibraryReceipt });
+const remote = Schema.Struct({ library: RemoteLibrary });
 const origin = "https://registry.test";
 
 beforeEach(async () => {
@@ -168,7 +168,7 @@ describe("Library sync Worker persistence", () => {
         { concurrency: "unbounded" },
       );
       expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
-      const winner = Schema.decodeUnknownSync(receipt)(
+      const winner = Schema.decodeUnknownSync(remote)(
         yield* Effect.promise(() => responses.find((response) => response.status === 200)!.json()),
       ).library;
       const libraries = yield* Effect.promise(() =>
@@ -196,11 +196,11 @@ describe("Library sync Worker persistence", () => {
       const headers = yield* session();
       const { library_id } = yield* upload(headers);
       const first = yield* write(headers, null, manifest);
-      const base = Schema.decodeUnknownSync(receipt)(
+      const base = Schema.decodeUnknownSync(remote)(
         yield* Effect.promise(() => first.json()),
       ).library;
       const advance = yield* write(headers, base.revision_id, changed);
-      const winner = Schema.decodeUnknownSync(receipt)(
+      const winner = Schema.decodeUnknownSync(remote)(
         yield* Effect.promise(() => advance.json()),
       ).library;
       yield* Effect.promise(() =>
@@ -231,12 +231,12 @@ describe("Library sync Worker persistence", () => {
       const { library_id } = yield* upload(headers);
       const first = yield* write(headers, null, manifest);
       expect(first.status).toBe(200);
-      const base = Schema.decodeUnknownSync(receipt)(
+      const base = Schema.decodeUnknownSync(remote)(
         yield* Effect.promise(() => first.json()),
       ).library;
       const advance = yield* write(headers, base.revision_id, changed);
       expect(advance.status).toBe(200);
-      const accepted = Schema.decodeUnknownSync(receipt)(
+      const accepted = Schema.decodeUnknownSync(remote)(
         yield* Effect.promise(() => advance.json()),
       ).library;
       const before = yield* stored(library_id);
@@ -279,7 +279,7 @@ describe("Library sync Worker persistence", () => {
           let expected: string | null = null;
           if (baseKind === "existing") {
             const first = yield* write(headers, null, manifest);
-            expected = Schema.decodeUnknownSync(receipt)(yield* Effect.promise(() => first.json()))
+            expected = Schema.decodeUnknownSync(remote)(yield* Effect.promise(() => first.json()))
               .library.revision_id;
           }
           // Let the actual Worker commit, then discard its response instead of fabricating an outage.
@@ -293,14 +293,14 @@ describe("Library sync Worker persistence", () => {
             SELF.fetch(`${origin}/api/library/portable`, { headers }),
           );
           expect(recovered.status).toBe(200);
-          const head = Schema.decodeUnknownSync(receipt)(
+          const head = Schema.decodeUnknownSync(remote)(
             yield* Effect.promise(() => recovered.json()),
           ).library;
           expect(head.manifest).toEqual(changed);
           const retry = yield* write(headers, head.revision_id, changed);
           expect(retry.status).toBe(200);
           expect(
-            Schema.decodeUnknownSync(receipt)(yield* Effect.promise(() => retry.json())).library,
+            Schema.decodeUnknownSync(remote)(yield* Effect.promise(() => retry.json())).library,
           ).toEqual(head);
           expect(yield* stored(library_id)).toEqual(before);
           yield* assertArchive(library_id);

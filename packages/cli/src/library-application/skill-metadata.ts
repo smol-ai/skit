@@ -1,7 +1,7 @@
 import {
   currentSkillVersion,
-  readSkitDescriptorEffect,
-  retainedTreePath,
+  readSkitDescriptor,
+  collectionVersionPath,
   versionBacking,
   type LibraryState,
   type SkitDescriptor,
@@ -15,7 +15,7 @@ export const SkillMetadata = Schema.Struct({
   revision: Schema.NullOr(Schema.String),
   source_updated_at: Schema.NullOr(Schema.String),
   /** When the selected bytes were acquired; this is not a source modification time. */
-  acquired_at: Schema.NullOr(Schema.String),
+  imported_at: Schema.NullOr(Schema.String),
 });
 export type SkillMetadata = typeof SkillMetadata.Type;
 
@@ -63,37 +63,37 @@ export const readLibrarySkillMetadata = Effect.fn("Library.readSkillMetadata")(f
   for (const skill of state.skills) {
     const selected = currentSkillVersion(state, skill);
     const backing = selected === undefined ? undefined : versionBacking(state, skill, selected);
-    const acquisition = backing?.acquisition;
+    const sourceImport = backing?.acquisition;
     const source =
-      acquisition?.source_identity ??
+      sourceImport?.source_identity ??
       state.collections.find((collection) => collection.collection_id === skill.collection_id)
         ?.upstream?.source_identity;
     let sourceUpdated: string | null = null;
-    // Observations whose bytes disagree cannot establish the selected Skill's source date.
+    // Lock file entries whose bytes disagree cannot establish the selected Skill's source date.
     const dates =
-      acquisition?.observations
+      sourceImport?.lock_file_entries
         .filter(
-          (observation) =>
-            observation.content_agreement === "agrees" &&
-            observation.skill_name === skill.name &&
-            (observation.skill_path === undefined || observation.skill_path === skill.path),
+          (lockFileEntry) =>
+            lockFileEntry.content_agreement === "agrees" &&
+            lockFileEntry.skill_name === skill.name &&
+            (lockFileEntry.skill_path === undefined || lockFileEntry.skill_path === skill.path),
         )
-        .flatMap((observation) => {
-          const date = validTimestamp(observation.source_updated_at);
+        .flatMap((lockFileEntry) => {
+          const date = validTimestamp(lockFileEntry.source_updated_at);
           return date === null ? [] : [date];
         }) ?? [];
     // Contradictory observations do not establish a single date.
     if (new Set(dates).size === 1) sourceUpdated = dates[0]!;
     if (backing?.member.materialization_profile === "declared-skit-skill/v1") {
-      if (!descriptors.has(backing.copy.digest))
+      if (!descriptors.has(backing.copy.hash))
         descriptors.set(
-          backing.copy.digest,
-          yield* readSkitDescriptorEffect(
-            retainedTreePath(originalsPath, backing.copy.digest),
-          ).pipe(Effect.orElseSucceed(() => undefined)),
+          backing.copy.hash,
+          yield* readSkitDescriptor(collectionVersionPath(originalsPath, backing.copy.hash)).pipe(
+            Effect.orElseSucceed(() => undefined),
+          ),
         );
       const descriptor = descriptors
-        .get(backing.copy.digest)
+        .get(backing.copy.hash)
         ?.skills.find(
           (member) => member.path === backing.member.source_path && member.name === skill.name,
         );
@@ -101,9 +101,9 @@ export const readLibrarySkillMetadata = Effect.fn("Library.readSkillMetadata")(f
     }
     metadata.set(skill.skill_id, {
       source: source === undefined ? null : sourceIdentityLabel(source),
-      revision: acquisition?.revision ?? null,
+      revision: sourceImport?.revision ?? null,
       source_updated_at: sourceUpdated,
-      acquired_at: validTimestamp(acquisition?.acquired_at),
+      imported_at: validTimestamp(sourceImport?.imported_at),
     });
   }
   return metadata;

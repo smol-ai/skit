@@ -43,7 +43,7 @@ const list = Command.make("list", flags, (input) =>
   ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription(
-    "List machine-local saved-file recovery operations; files are retained until manually removed.",
+    "List machine-local saved-file recovery operations; files are kept until you remove them.",
   ),
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read"] },
@@ -71,7 +71,7 @@ const inspect = Command.make("inspect", { operation, ...flags }, (input) =>
   ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription(
-    "Inspect receipts and actual original/saved files without changing them.",
+    "Inspect the move records and the original and saved files without changing them.",
   ),
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read"] },
@@ -147,7 +147,7 @@ const restore = Command.make("restore", { operation, apply, ...flags }, (input) 
   ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription(
-    "Preview or restore verified saved files into free original paths. Does not undo Library bindings or settings.",
+    "Preview or restore verified saved files into free original paths. Does not change what is enabled or any settings.",
   ),
   Command.withExamples([{ command: "skit library recovery restore OPERATION --json" }]),
   Command.annotate(CommandMetadata, {

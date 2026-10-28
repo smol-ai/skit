@@ -9,16 +9,16 @@ import { dirname, join, resolve } from "node:path";
 import {
   LibraryStore,
   libraryStoreLayer,
-  inspectOwnershipMarkerEffect,
+  inspectOwnershipMarker,
   objectAt,
-  observationPathIdentityEffect,
+  physicalPath,
 } from "@smolai/skit-core";
 import { auditClaude } from "./claude.js";
 import { auditCodex } from "./codex.js";
 import { pathExists, readJson as json } from "./io.js";
-import { runAuditProbesEffect, type ProbeResult } from "./probes.js";
+import { runAuditProbes, type ProbeResult } from "./probes.js";
 import { auditSkills } from "./skills.js";
-import type { AuditFinding, AuditObservation } from "./types.js";
+import type { AuditFinding, AuditEntry } from "./types.js";
 import { normalizeAuditReport } from "./normalize.js";
 
 /** Harnesses that read Agent Skills but that SKIT does not yet audit or drive. */
@@ -35,7 +35,7 @@ export interface AuditOptions {
 type LedgerInspection =
   | { kind: "absent" }
   | { kind: "unreadable"; path: string }
-  | { kind: "readable"; retained: Set<string> };
+  | { kind: "readable"; imported: Set<string> };
 
 const inspectLibraryLedger = Effect.fn("Audit.ledger")(function* (
   library: ResolvedSkitConfiguration,
@@ -47,7 +47,7 @@ const inspectLibraryLedger = Effect.fn("Audit.ledger")(function* (
         inspected.present
           ? {
               kind: "readable",
-              retained: new Set(inspected.state.skills.map((skill) => skill.skill_id)),
+              imported: new Set(inspected.state.skills.map((skill) => skill.skill_id)),
             }
           : { kind: "absent" },
       ),
@@ -56,9 +56,9 @@ const inspectLibraryLedger = Effect.fn("Audit.ledger")(function* (
   }).pipe(Effect.provide(libraryStoreLayer({ home: library.skitHome })));
 });
 
-const auditProjectionCustody = Effect.fn("Audit.custody")(function* (
+const auditOwnershipClaims = Effect.fn("Audit.ownershipClaims")(function* (
   library: ResolvedSkitConfiguration,
-  observations: readonly AuditObservation[],
+  observations: readonly AuditEntry[],
 ) {
   const ledger = yield* inspectLibraryLedger(library);
   const inspected = new Set<string>();
@@ -78,12 +78,12 @@ const auditProjectionCustody = Effect.fn("Audit.custody")(function* (
   for (const observation of observations) {
     if (observation.kind !== "skill" || !observation.path) continue;
     const directory = dirname(observation.path);
-    const identity = yield* observationPathIdentityEffect(directory);
-    if (inspected.has(identity.comparisonKey)) continue;
-    inspected.add(identity.comparisonKey);
+    const identity = yield* physicalPath(directory);
+    if (inspected.has(identity.key)) continue;
+    inspected.add(identity.key);
     const markerPath = join(directory, ".skit-ownership.json");
     // An unreadable marker is no evidence either way, like an absent one.
-    const inspection = yield* inspectOwnershipMarkerEffect(directory).pipe(
+    const inspection = yield* inspectOwnershipMarker(directory).pipe(
       Effect.orElseSucceed(() => ({ kind: "absent" }) as const),
     );
     if (inspection.kind === "invalid") {
@@ -100,14 +100,14 @@ const auditProjectionCustody = Effect.fn("Audit.custody")(function* (
     if (
       inspection.kind === "valid" &&
       ledger.kind !== "unreadable" &&
-      !(ledger.kind === "readable" && ledger.retained.has(inspection.marker.skill_id))
+      !(ledger.kind === "readable" && ledger.imported.has(inspection.marker.skill_id))
     ) {
       const claim = {
         skillId: inspection.marker.skill_id,
-        expectedHash: inspection.marker.expected_digest,
+        expectedHash: inspection.marker.expected_hash,
         transactionId: undefined,
       };
-      // A marker claim without a retained ledger entry is custody evidence, not proof that the
+      // A marker claim without a retained ledger entry is ownership evidence, not proof that the
       // collection still exists. Keep it out of the TUI's retained-collection grouping.
       observation.provenance = {
         confidence: "matched",
@@ -124,7 +124,7 @@ const auditProjectionCustody = Effect.fn("Audit.custody")(function* (
         severity: "error",
         code: "orphaned-projection-claim",
         subject: observation.path,
-        problem: "Projection claims SKIT ownership, but its Library entry is missing",
+        problem: "Installed skill claims SKIT ownership, but its Library entry is missing",
         locations: [observation.path, markerPath],
         details: {
           markerPath,
@@ -145,14 +145,14 @@ const auditProjectionCustody = Effect.fn("Audit.custody")(function* (
  * fiber rather than re-entering a runtime per path. `suppliedProbes` carries subprocess results the caller already ran, so nothing spawns from
  * inside the observation.
  */
-export const auditLocalCapabilitiesEffect = Effect.fn("Audit.capabilities")(function* (
+export const auditLocalCapabilities = Effect.fn("Audit.capabilities")(function* (
   options: AuditOptions = {},
   suppliedProbes?: readonly ProbeResult[],
 ) {
   const paths = yield* configurationForHome();
   const home = resolve(options.home ?? paths.userHome);
   const cwd = resolve(options.cwd ?? process.cwd());
-  const observations: AuditObservation[] = [];
+  const observations: AuditEntry[] = [];
   const findings: AuditFinding[] = [];
   const stateHome = options.stateHome ?? paths.xdgStateHome;
   let lockPath: string | undefined;
@@ -176,7 +176,7 @@ export const auditLocalCapabilitiesEffect = Effect.fn("Audit.capabilities")(func
   // An audited home other than the configured one has its own Library, unless SKIT_HOME names one.
   const library =
     options.home === undefined ? paths : yield* resolveSkitConfiguration(undefined, home);
-  findings.push(...(yield* auditProjectionCustody(library, skills.observations)));
+  findings.push(...(yield* auditOwnershipClaims(library, skills.observations)));
 
   const codex = yield* auditCodex(home, cwd);
   observations.push(...codex.observations);
@@ -249,9 +249,9 @@ export const auditLocalCapabilitiesEffect = Effect.fn("Audit.capabilities")(func
  * The filesystem reads stay synchronous on purpose: `audit/io.ts` is the audit's one read
  * chokepoint and the same code serves the synchronous consumer above.
  */
-export const auditLocalCapabilitiesV1Alpha4Effect = Effect.fn("Audit.local")(function* (
+export const auditLocalCapabilitiesV1Alpha4 = Effect.fn("Audit.local")(function* (
   options: AuditOptions = {},
 ) {
-  const probes = yield* runAuditProbesEffect(options);
-  return normalizeAuditReport(yield* auditLocalCapabilitiesEffect(options, probes));
+  const probes = yield* runAuditProbes(options);
+  return normalizeAuditReport(yield* auditLocalCapabilities(options, probes));
 });

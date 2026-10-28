@@ -3,7 +3,7 @@ const conditionHeadlines: Readonly<Record<string, string>> = {
   DANGLING_SYMLINK: "Dangling symlink",
   INVALID_OWNERSHIP_MARKER: "Invalid SKIT ownership marker",
   MISSING_ROOT: "Harness skills directory is absent",
-  ORPHANED_PROJECTION_CLAIM: "Skill copy claims an unknown Library entry",
+  ORPHANED_OWNERSHIP_MARKER: "Skill copy claims an unknown Library entry",
   PROJECTION_CONFLICT: "Local skill copy conflicts with the Library",
   PROJECTION_DRIFT: "Local skill copy differs from the Library",
   UNREADABLE_PATH: "Harness skills directory could not be read",
@@ -16,7 +16,7 @@ export function conditionHeadline(code: string, fallback: string): string {
 /** What resolves a condition, where the resolution does not depend on the user's intent alone. */
 const conditionNextSteps: Readonly<Record<string, string>> = {
   PROJECTION_CONFLICT:
-    "A folder SKIT does not manage is where this skill's copy belongs. `skit enable <skill>` takes custody of it if its content matches; otherwise move it aside and enable again, or `skit disable <skill>` to leave it and drop SKIT's record.",
+    "A folder SKIT does not manage is where this skill's copy belongs. `skit enable <skill>` starts managing it if its content matches; otherwise move it aside and enable again, or `skit disable <skill>` to leave it and drop SKIT's record.",
 };
 
 export function conditionNextStep(code: string): string | undefined {
@@ -50,7 +50,7 @@ export function changeActionLabel(action: "add" | "update" | "remove"): string {
   return { add: "Add", update: "Update", remove: "Remove" }[action];
 }
 
-export function projectionStatusLabel(status: string): string {
+export function installedSkillStatusLabel(status: string): string {
   return (
     {
       pending: "waiting to be installed",
@@ -62,7 +62,7 @@ export function projectionStatusLabel(status: string): string {
   );
 }
 
-export function reconciliationOperationLabel(operation: string): string {
+export function operationLabel(operation: string): string {
   return (
     {
       install: "Installed",

@@ -2,22 +2,22 @@ import { assert } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Schema } from "effect";
 import { join } from "node:path";
 import {
-  retainChangedProjectionEffect,
-  type ManagedProjection,
+  importEdit,
+  type InstalledSkill,
   InvalidLibraryState,
   LibraryStore,
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   libraryStoreLayer,
   makeMachineId,
-  projectBindingEffect,
-  removeCollectionEffect,
-  retainObservedCollectionEffect,
+  installEnabledSkills,
+  removeCollection,
+  importCollection,
   withLibraryWriter,
   LibraryState,
-  type ProjectionTarget,
+  type InstallDestination,
 } from "@smolai/skit-core";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
-import { syncLibraryEffect } from "../../src/workflows/library/library-sync.js";
+import { syncLibrary } from "../../src/workflows/library/library-sync.js";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 import { faultQueue, librarySyncServer } from "./library-sync-server.js";
 
@@ -67,19 +67,19 @@ export const devices = Effect.gen(function* () {
   );
   const device = (name: string) => {
     const home = join(workspace, name);
-    let publishes = 0;
+    let saves = 0;
     const layer = Layer.effect(
       LibraryStore,
       Effect.map(LibraryStore, (store) => ({
         ...store,
-        publish: Effect.fn("Test.LibraryStore.publish")(function* (
+        save: Effect.fn("Test.LibraryStore.save")(function* (
           state: LibraryState,
           base: LibraryState,
         ) {
-          publishes++;
+          saves++;
           if (
             faults.take(
-              "FailPublish",
+              "FailSave",
               (fault) =>
                 !fault.anchoredOnly ||
                 state.sync_ancestry?.revision_id === server.remote?.revision_id,
@@ -87,11 +87,11 @@ export const devices = Effect.gen(function* () {
           )
             return yield* new InvalidLibraryState({
               path: home,
-              detail: "Test interruption before merged state publication",
+              detail: "Test interruption before merged state save",
             });
-          yield* store.publish(state, base);
-          events.push(`publish ${name}`);
-          const obstruction = faults.take("ObstructAfterPublish", (fault) => fault.home === home);
+          yield* store.save(state, base);
+          events.push(`save ${name}`);
+          const obstruction = faults.take("ObstructAfterSave", (fault) => fault.home === home);
           if (obstruction) yield* fs.writeFileString(obstruction.path, "occupied by a file\n");
         }),
       })),
@@ -101,43 +101,43 @@ export const devices = Effect.gen(function* () {
     return {
       home,
       root,
-      /** Every root a sync may write: the home, its projections, and their backups. */
+      /** Every root a sync may write: the home, its installed skills, and their backups. */
       disk: [home, root, join(workspace, ".skit-backups")],
-      /** Local state publications attempted through this home's LibraryStore, refused or not. */
-      get publishes() {
-        return publishes;
+      /** Local state saves attempted through this home's LibraryStore, refused or not. */
+      get saves() {
+        return saves;
       },
       corruptOriginal: Effect.gen(function* () {
         const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
           Effect.provide(layer),
         );
-        const digest = state.retained_copies[0]!.digest.slice("sha256:".length);
+        const hash = state.collection_versions[0]!.hash.slice("sha256:".length);
         yield* fs.writeFileString(
-          join(home, "originals", digest.slice(0, 2), digest, "SKILL.md"),
+          join(home, "originals", hash.slice(0, 2), hash, "SKILL.md"),
           "corrupted original\n",
         );
       }),
       state: Effect.flatMap(LibraryStore, (store) => store.load).pipe(Effect.provide(layer)),
-      retainProjectionEdit: (projection: ManagedProjection) =>
+      importInstalledSkillEdit: (installedSkill: InstalledSkill) =>
         Effect.gen(function* () {
-          return yield* retainChangedProjectionEffect({
-            skillId: projection.skill_id,
-            projectionId: projection.projection_id,
-            path: projection.path,
-            observedHash: yield* deterministicTreeHashEffect(projection.path),
-            retainedAt: "2026-02-01T00:00:00Z",
+          return yield* importEdit({
+            skillId: installedSkill.skill_id,
+            installedSkillId: installedSkill.installed_skill_id,
+            path: installedSkill.path,
+            currentHash: yield* deterministicTreeHash(installedSkill.path),
+            importedAt: "2026-02-01T00:00:00Z",
           });
         }).pipe(withLibraryWriter, Effect.provide(layer)),
       /** A local edit made outside sync, as any Library command makes one. */
       edit: (change: (state: LibraryState) => LibraryState) =>
         withLibraryWriter(
           Effect.flatMap(LibraryStore, (store) =>
-            Effect.flatMap(store.load, (state) => store.publish(change(state), state)),
+            Effect.flatMap(store.load, (state) => store.save(change(state), state)),
           ),
         ).pipe(Effect.provide(layer)),
-      retain: (
+      importSource: (
         repository: string,
-        options: { name?: string; bytes?: string; retainedAt?: string } = {},
+        options: { name?: string; bytes?: string; importedAt?: string } = {},
       ) =>
         Effect.gen(function* () {
           const sourcePath = join(workspace, repository);
@@ -146,23 +146,23 @@ export const devices = Effect.gen(function* () {
             join(sourcePath, "SKILL.md"),
             options.bytes ?? `${repository}\n`,
           );
-          return yield* retainObservedCollectionEffect({
+          return yield* importCollection({
             machineId,
             source: { type: "github", owner: "fixture", repository },
             input: sourcePath,
-            retainedAt: options.retainedAt ?? "2026-01-01T00:00:00.000Z",
+            importedAt: options.importedAt ?? "2026-01-01T00:00:00.000Z",
             skills: [
               {
                 name: options.name ?? repository,
                 sourcePath,
                 relativePath: ".",
-                observedHash: yield* deterministicTreeHashEffect(sourcePath),
+                currentHash: yield* deterministicTreeHash(sourcePath),
               },
             ],
-            observations: [],
+            lockFileEntries: [],
           });
         }).pipe(withLibraryWriter, Effect.provide(layer)),
-      retainMany: (repository: string, names: readonly string[], retainedAt: string) =>
+      importMany: (repository: string, names: readonly string[], importedAt: string) =>
         Effect.gen(function* () {
           const sourcePath = join(workspace, repository);
           const skills = yield* Effect.forEach(names, (skillName) =>
@@ -174,57 +174,57 @@ export const devices = Effect.gen(function* () {
                 name: skillName,
                 sourcePath: path,
                 relativePath: skillName,
-                observedHash: yield* deterministicTreeHashEffect(path),
+                currentHash: yield* deterministicTreeHash(path),
               };
             }),
           );
-          return yield* retainObservedCollectionEffect({
+          return yield* importCollection({
             machineId,
             source: { type: "github", owner: "fixture", repository },
             input: sourcePath,
-            retainedAt,
+            importedAt,
             skills,
-            observations: [],
+            lockFileEntries: [],
           });
         }).pipe(withLibraryWriter, Effect.provide(layer)),
       remove: (collectionId: string) =>
         Effect.flatMap(LibraryStore, (store) => store.load).pipe(
           Effect.flatMap((state) =>
-            removeCollectionEffect(state, { collectionId, variantsPath: join(home, "variants") }),
+            removeCollection(state, { collectionId, variantsPath: join(home, "variants") }),
           ),
           withLibraryWriter,
           Effect.provide(layer),
         ),
       project: (
         scope: { kind: "global" } | { kind: "repository"; root: string } = { kind: "global" },
-        projectionRoot = root,
+        skillsDirectory = root,
       ) =>
-        projectBindingEffect({
+        installEnabledSkills({
           target: "agents",
           scope,
-          root: projectionRoot,
+          root: skillsDirectory,
           variantsPath: join(home, "variants"),
         }).pipe(withLibraryWriter, Effect.provide(layer)),
       sync: (
         options: {
-          observer?: Parameters<typeof syncLibraryEffect>[0]["observer"];
-          restoreObserver?: Parameters<typeof syncLibraryEffect>[0]["restoreObserver"];
-          onPlan?: Parameters<typeof syncLibraryEffect>[0]["onPlan"];
+          progress?: Parameters<typeof syncLibrary>[0]["progress"];
+          restoreProgress?: Parameters<typeof syncLibrary>[0]["restoreProgress"];
+          onPlan?: Parameters<typeof syncLibrary>[0]["onPlan"];
           apply?: boolean;
           adopt?: boolean;
           takeRemote?: readonly string[];
           keepEnabled?: readonly string[];
-          deviceSelection?: Parameters<typeof syncLibraryEffect>[0]["deviceSelection"];
-          inventory?: Parameters<typeof syncLibraryEffect>[0]["inventory"];
-          rootFor?: (target: ProjectionTarget) => string | undefined;
+          deviceSelection?: Parameters<typeof syncLibrary>[0]["deviceSelection"];
+          inventory?: Parameters<typeof syncLibrary>[0]["inventory"];
+          rootFor?: (target: InstallDestination) => string | undefined;
         } = {},
       ) =>
-        syncLibraryEffect({
+        syncLibrary({
           origin: "https://registry.test",
           token: "test",
           apply: true,
           ...options,
-          projection: {
+          installedSkill: {
             rootFor: options.rootFor ?? ((target) => (target === "agents" ? root : undefined)),
           },
         }).pipe(withLibraryWriter, Effect.provide(layer), Effect.provide(http), Effect.scoped),

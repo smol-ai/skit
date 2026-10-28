@@ -1,11 +1,9 @@
 import {
   encodeHashParts,
   normalizeDescriptorDeclarations as normalizeDescriptor,
-  parseSkitConfigEffect,
-  parseSkitReadmeEffect,
-  projectedSkillHashParts,
+  installedSkillHashParts,
   projectSkillFiles as projectFiles,
-  sha256Digest,
+  sha256Hash,
   type SharedMapping,
 } from "@smolai/skit-core/universal/consumer";
 import { Effect } from "effect";
@@ -16,7 +14,7 @@ interface SharedFailure {
   readonly message?: string;
 }
 
-const descriptorError = (cause: SharedFailure) =>
+export const descriptorError = (cause: SharedFailure) =>
   new IntegrityError({
     code:
       cause._tag === "ConflictingInvocationDeclaration"
@@ -34,13 +32,7 @@ export const normalizeDescriptorDeclarations = Effect.fn(
   }),
 );
 
-export const parseSkitReadme = (text: string) =>
-  parseSkitReadmeEffect(text).pipe(Effect.mapError(descriptorError));
-
-export const parseSkitConfig = (text: string) =>
-  parseSkitConfigEffect(text).pipe(Effect.mapError(descriptorError));
-
-export interface ProjectedFile {
+export interface InstalledFile {
   readonly path: string;
   readonly bytes: Uint8Array;
   readonly executable?: boolean;
@@ -56,7 +48,7 @@ const projectionError = (cause: SharedFailure) =>
   });
 
 export const projectSkillFiles = Effect.fn("Integrity.projectSkillFiles")(function* (
-  files: ReadonlyArray<ProjectedFile>,
+  files: ReadonlyArray<InstalledFile>,
   skillPath: string,
   shared: ReadonlyArray<SharedMapping> = [],
 ) {
@@ -65,13 +57,13 @@ export const projectSkillFiles = Effect.fn("Integrity.projectSkillFiles")(functi
   );
 });
 
-export const hashProjectedSkillFiles = Effect.fn("Integrity.hashProjectedSkillFiles")(function* (
-  files: ReadonlyArray<ProjectedFile>,
+export const hashInstalledSkillFiles = Effect.fn("Integrity.hashProjectedSkillFiles")(function* (
+  files: ReadonlyArray<InstalledFile>,
   skillPath: string,
   shared: ReadonlyArray<SharedMapping> = [],
 ) {
   const parts = yield* Effect.fromResult(
-    projectedSkillHashParts([...files], skillPath, [...shared]),
+    installedSkillHashParts([...files], skillPath, [...shared]),
   ).pipe(Effect.mapError(projectionError));
-  return yield* sha256Digest(encodeHashParts(parts));
+  return yield* sha256Hash(encodeHashParts(parts));
 });

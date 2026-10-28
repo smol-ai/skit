@@ -2,13 +2,13 @@ import { assert, it } from "@effect/vitest";
 import { Schema } from "effect";
 import { fromString, toUUID } from "typeid-js";
 import {
-  AcquisitionId,
+  ImportId,
   CollectionId,
   MachineId,
   OperationId,
-  ProjectionId,
+  InstalledSkillId,
   AdoptionReceiptId,
-  RetainedCopyId,
+  CollectionVersionId,
   SkillId,
   SkillVersionId,
   deterministicMigrationId,
@@ -33,8 +33,8 @@ it("derives byte-stable, domain-separated UUIDv7 TypeIDs", () => {
     collection: deterministicMigrationId("collection", source, seed),
     skill: first,
     version: deterministicMigrationId("skillVersion", source, seed),
-    retained: deterministicMigrationId("retainedCopy", source, seed),
-    acquisition: deterministicMigrationId("acquisition", source, seed),
+    imported: deterministicMigrationId("retainedCopy", source, seed),
+    sourceImport: deterministicMigrationId("acquisition", source, seed),
     projection: deterministicMigrationId("projection", source, seed),
     machine: deterministicMigrationId("machine", source, seed),
     operation: deterministicMigrationId("operation", source, seed),
@@ -44,9 +44,9 @@ it("derives byte-stable, domain-separated UUIDv7 TypeIDs", () => {
   assert.strictEqual(Schema.is(CollectionId)(ids.collection), true);
   assert.strictEqual(Schema.is(SkillId)(ids.skill), true);
   assert.strictEqual(Schema.is(SkillVersionId)(ids.version), true);
-  assert.strictEqual(Schema.is(RetainedCopyId)(ids.retained), true);
-  assert.strictEqual(Schema.is(AcquisitionId)(ids.acquisition), true);
-  assert.strictEqual(Schema.is(ProjectionId)(ids.projection), true);
+  assert.strictEqual(Schema.is(CollectionVersionId)(ids.imported), true);
+  assert.strictEqual(Schema.is(ImportId)(ids.sourceImport), true);
+  assert.strictEqual(Schema.is(InstalledSkillId)(ids.projection), true);
   assert.strictEqual(Schema.is(MachineId)(ids.machine), true);
   assert.strictEqual(Schema.is(OperationId)(ids.operation), true);
   assert.strictEqual(Schema.is(AdoptionReceiptId)(ids.receipt), true);
@@ -64,7 +64,7 @@ it("uses an explicit timestamp without reading the clock", () => {
     new Date("2026-09-16T00:00:00.000Z"),
     "legacy-projection",
   );
-  assert.strictEqual(Schema.is(ProjectionId)(id), true);
+  assert.strictEqual(Schema.is(InstalledSkillId)(id), true);
   assert.strictEqual(
     new Date(
       Number.parseInt(toUUID(fromString(id)).replaceAll("-", "").slice(0, 12), 16),

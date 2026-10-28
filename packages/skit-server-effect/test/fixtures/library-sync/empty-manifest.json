@@ -1,9 +1,9 @@
 {
-  "schema": "skit.library.v7",
+  "schema": "skit.library.v8",
   "collections": [],
   "skills": [],
-  "retained_copies": [],
-  "acquisitions": [],
+  "collection_versions": [],
+  "imports": [],
   "snapshot_digests": [],
-  "bindings": []
+  "enabled": []
 }

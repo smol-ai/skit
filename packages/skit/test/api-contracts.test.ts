@@ -1,7 +1,7 @@
 import { it } from "@effect/vitest";
 import { Effect, JsonSchema, Schema } from "effect";
 import { expect } from "vitest";
-import { parseContractEffect } from "../src/distribution/api-contracts.js";
+import { parseContract } from "../src/distribution/api-contracts.js";
 
 import {
   apiSemverPattern,
@@ -9,7 +9,7 @@ import {
   semver,
   skitDescriptorRequestSchema,
 } from "../src/protocol/api-contracts.js";
-import { Digest } from "../src/vocabulary.js";
+import { Hash } from "../src/vocabulary.js";
 import { kebabNameSchema } from "../src/schemas.js";
 
 const ExampleContract = Schema.Struct({
@@ -21,9 +21,7 @@ const invalidExample = { name: 1, nested: { count: "many" } };
 
 it.effect("preserves every Effect Schema issue path", () =>
   Effect.gen(function* () {
-    const error = yield* Effect.flip(
-      parseContractEffect("example", ExampleContract, invalidExample),
-    );
+    const error = yield* Effect.flip(parseContract("example", ExampleContract, invalidExample));
 
     expect(error.issues.map((issue) => issue.path)).toEqual(["name", "nested.count"]);
   }),
@@ -37,7 +35,7 @@ it.effect(
         skit: 1,
         id: "team/tools",
         slug: "tools",
-        extension: { retained: true },
+        extension: { imported: true },
         author: { name: "Team", extension: "author" },
         skills: [
           {
@@ -62,7 +60,7 @@ it.effect("exported JSON schemas retain the name, digest, and version constraint
   Effect.sync(() => {
     for (const [schema, pattern] of [
       [kebabNameSchema, "^[a-z0-9]+(?:-[a-z0-9]+)*$"],
-      [Digest, "^sha256:[a-f0-9]{64}$"],
+      [Hash, "^sha256:[a-f0-9]{64}$"],
       [semver, apiSemverPattern.source],
     ] as const) {
       const document = JsonSchema.toDocumentDraft07(Schema.toJsonSchemaDocument(schema));

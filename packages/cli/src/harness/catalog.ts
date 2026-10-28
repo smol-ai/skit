@@ -1,24 +1,16 @@
 import { configurationForHome } from "../configuration/skit-configuration.js";
 import { Effect } from "effect";
 import { LinkStat } from "@smolai/skit-core";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import {
   HarnessName,
   harnessDrivers,
-  resolveHarnessRoot,
-  type HarnessRootOverrides,
+  resolveSkillsDirectory,
+  type SkillsDirectoryOverrides,
 } from "@smolai/skit-core";
 
 export function harnessLabel(harness: HarnessName): string {
   return harnessDrivers[harness].label;
-}
-
-export interface HarnessProbeOptions {
-  home: string;
-  configHome?: string;
-  overrides?: HarnessRootOverrides;
-  /** Whether a filesystem marker is present. Detection is a pure decision over this probe. */
-  exists: (path: string) => boolean;
 }
 
 /** The filesystem markers whose presence shows a Harness installed. */
@@ -28,28 +20,14 @@ function installMarkers(harness: HarnessName, context: { home: string; configHom
     (root) => root.scope === "global" && root.role === "native",
   );
   return [
-    ...(native ? [dirname(resolveHarnessRoot(native, context))] : []),
+    ...(native ? [dirname(resolveSkillsDirectory(native, context))] : []),
     ...driver.installMarkers,
   ];
 }
 
-/** The detection policy over an answered marker probe; `detectInstalledHarnessesEffect` asks the filesystem. */
-export function detectInstalledHarnesses(options: HarnessProbeOptions): HarnessName[] {
-  const context = {
-    home: options.home,
-    configHome: options.configHome ?? join(options.home, ".config"),
-  };
-  return HarnessName.literals.filter(
-    (harness) =>
-      (harnessDrivers[harness].rootOverride === "replaces" &&
-        Boolean(options.overrides?.[harness]?.some(Boolean))) ||
-      installMarkers(harness, context).some(options.exists),
-  );
-}
-
-/** Resolve the same synchronous detection policy with application-owned filesystem probes. */
-export const detectInstalledHarnessesEffect = Effect.fn("Harness.detectInstalled")(function* (
-  options: Partial<Omit<HarnessProbeOptions, "exists">> = {},
+/** The Harnesses installed on this device: those with a marker on disk or a replacing override. */
+export const detectInstalledHarnesses = Effect.fn("Harness.detectInstalled")(function* (
+  options: { home?: string; configHome?: string; overrides?: SkillsDirectoryOverrides } = {},
 ) {
   const configuration = yield* configurationForHome();
   const home = options.home ?? configuration.userHome;
@@ -66,10 +44,10 @@ export const detectInstalledHarnessesEffect = Effect.fn("Harness.detectInstalled
       ),
     { concurrency: "unbounded", discard: true },
   );
-  return detectInstalledHarnesses({
-    ...options,
-    home,
-    configHome,
-    exists: (path) => found.has(path),
-  });
+  return HarnessName.literals.filter(
+    (harness) =>
+      (harnessDrivers[harness].rootOverride === "replaces" &&
+        Boolean(options.overrides?.[harness]?.some(Boolean))) ||
+      installMarkers(harness, { home, configHome }).some((path) => found.has(path)),
+  );
 });

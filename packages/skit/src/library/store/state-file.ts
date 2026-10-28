@@ -5,14 +5,14 @@ import { Clock, Effect, FileSystem, Schema, SchemaIssue } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { join, resolve } from "node:path";
 import { InvalidLibraryState, LibraryBusy, LibraryChanged } from "../../failures.js";
-import { writeJsonAtomicEffect, writeRawAtomicEffect } from "../../platform/atomic-write.js";
+import { writeJsonAtomic, writeRawAtomic } from "../../platform/atomic-write.js";
 import {
   decodeLibraryState,
   encodeLibraryState,
   CURRENT_LIBRARY_STATE_VERSION,
   emptyLibraryState,
   LibraryState,
-  libraryManifestFromLocalStateEffect,
+  libraryManifestFromLocalState,
   libraryStateRevision,
 } from "../library-state.js";
 import { LibraryStateFromV4 } from "./state-schema-v4.js";
@@ -20,6 +20,7 @@ import { LibraryStateFromV5 } from "./state-schema-v5.js";
 import { LibraryStateFromV6 } from "./state-schema-v6.js";
 import { LibraryStateFromV7 } from "./state-schema-v7.js";
 import { LibraryStateFromV8 } from "./state-schema-v8.js";
+import { LibraryStateFromV9 } from "./state-schema-v9.js";
 import { withLibraryStateReplacement } from "./writer-lock.js";
 
 export type InspectedLibraryState =
@@ -50,7 +51,7 @@ const decodeCurrentState = Effect.fn("Library.decodeCurrentState")(function* (
   const state = yield* decodeLibraryState(value).pipe(
     Effect.mapError(() => new InvalidLibraryState({ path, detail: "invalid Library state" })),
   );
-  yield* libraryManifestFromLocalStateEffect(state).pipe(
+  yield* libraryManifestFromLocalState(state).pipe(
     Effect.mapError(
       (issue) =>
         new InvalidLibraryState({
@@ -64,10 +65,11 @@ const decodeCurrentState = Effect.fn("Library.decodeCurrentState")(function* (
 
 /**
  * v4 is what the first public SKIT wrote. Each legacy version steps through the linear
- * v4 → v5 → v6 → v7 → v9 chain, with v8 decoded separately.
+ * v4 → v5 → v6 → v7 → v9 → v10 chain, with v8 joining at v9.
  */
 const OLDEST_LIBRARY_STATE_VERSION = 4;
 const LegacyLibraryState = Schema.Union([
+  LibraryStateFromV9,
   LibraryStateFromV8,
   LibraryStateFromV7,
   LibraryStateFromV6,
@@ -131,17 +133,17 @@ const openPresentState = Effect.fn("Library.openPresentState")(function* (
         ),
       );
       // Keep the pre-migration file: migration drops history it can no longer represent.
-      yield* writeJsonAtomicEffect(
+      yield* writeJsonAtomic(
         `${path}.v${lockedVersion.schemaVersion}.backup-${new Date(yield* Clock.currentTimeMillis).toISOString().replaceAll(":", "")}`,
         lockedValue,
       );
-      yield* writeJsonAtomicEffect(path, migrated);
+      yield* writeJsonAtomic(path, migrated);
       return migrated;
     }),
   );
 });
 
-export const inspectLocalLibraryStateEffect = Effect.fn("Library.inspectState")(function* (
+export const inspectLocalLibraryState = Effect.fn("Library.inspectState")(function* (
   home: string,
 ): Effect.fn.Return<
   InspectedLibraryState,
@@ -155,16 +157,16 @@ export const inspectLocalLibraryStateEffect = Effect.fn("Library.inspectState")(
 });
 
 /**
- * Replace `base` with `next`, checking and writing under the writer lock and publish mutex. Fails
+ * Replace `base` with `next`, checking and writing under the writer lock and save mutex. Fails
  * with `LibraryChanged`, writing nothing, when the Library on disk is no longer `base`.
  */
-export const publishLibraryStateEffect = Effect.fn("Library.publishState")(function* (
+export const saveLibraryState = Effect.fn("Library.saveState")(function* (
   home: string,
   next: LibraryState,
   base: LibraryState,
 ) {
   const path = join(resolve(home), "state.json");
-  // Refuse what the loader would refuse, so a publish can never strand the Library unreadable.
+  // Refuse what the loader would refuse, so a save can never strand the Library unreadable.
   yield* decodeCurrentState(path, next);
   const text = yield* encodeLibraryState(next).pipe(
     Effect.mapError(
@@ -176,17 +178,10 @@ export const publishLibraryStateEffect = Effect.fn("Library.publishState")(funct
     Effect.gen(function* () {
       const value = yield* readStateValue(path);
       const current =
-        value === undefined
-          ? yield* emptyLibraryStateEffect(path)
-          : yield* decodeCurrentState(path, value);
+        value === undefined ? emptyLibraryState() : yield* decodeCurrentState(path, value);
       if (libraryStateRevision(current) !== libraryStateRevision(base))
         return yield* new LibraryChanged({ path });
-      yield* writeRawAtomicEffect(path, `${text}\n`);
+      yield* writeRawAtomic(path, `${text}\n`);
     }),
   );
 });
-
-export const emptyLibraryStateEffect = (path: string) =>
-  LibraryState.makeEffect(emptyLibraryState()).pipe(
-    Effect.mapError((error) => new InvalidLibraryState({ path, detail: String(error) })),
-  );

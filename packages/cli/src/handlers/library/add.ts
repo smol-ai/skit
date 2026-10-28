@@ -1,6 +1,6 @@
 import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
 import { Effect, Option, Result } from "effect";
-import { LibraryStore, sourceInputWithVersionEffect } from "@smolai/skit-core";
+import { LibraryStore, sourceInputWithVersion } from "@smolai/skit-core";
 import {
   readDescriptionLoad,
   descriptionLoadMessage,
@@ -11,18 +11,15 @@ import { MissingRequirement } from "../../workflows/failures.js";
 import {
   CommandMetadata,
   credentialStoreReadSubprocesses,
-  sourceAcquisitionSubprocesses,
+  sourceFetchSubprocesses,
 } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags, optionalString } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
 import { RegistryAuth, type RegistryAuthAccess } from "../../registry/auth-service.js";
-import {
-  retainLibrarySourceEffect,
-  previewLibrarySourceEffect,
-} from "../../library-application/source-acquisition.js";
-import { rejectDedicatedInstallerSourceEffect } from "../../workflows/library/dedicated-installer-catalog.js";
+import { importSource, previewLibrarySource } from "../../library-application/import-source.js";
+import { rejectDedicatedInstallerSource } from "../../workflows/library/dedicated-installer-catalog.js";
 
 const source = Argument.String("source");
 const version = optionalString("version", "Select a source version.");
@@ -42,7 +39,7 @@ export const addCliCommand = Command.make(
         const registryAuth = yield* RegistryAuth;
         const requestedVersion = Option.getOrUndefined(input.version);
         const source = input.source
-          ? yield* sourceInputWithVersionEffect(input.source, requestedVersion)
+          ? yield* sourceInputWithVersion(input.source, requestedVersion)
           : undefined;
         const locator = source
           ? yield* registryAuth.resolveLocator(source, Option.getOrUndefined(input.registry))
@@ -74,40 +71,40 @@ export const addCliCommand = Command.make(
             requires: "<source>",
             hint: "A source is `owner/repo`, a Git or GitHub URL, or a local path; `--list` previews it without adding.",
           });
-        yield* rejectDedicatedInstallerSourceEffect(selectedSource);
+        yield* rejectDedicatedInstallerSource(selectedSource);
         if (input.preview) {
           const value = yield* renderer.withStatus(
             `Inspecting ${selectedSource}`,
-            withSelectedRegistry(previewLibrarySourceEffect(selectedSource, requestedVersion)),
+            withSelectedRegistry(previewLibrarySource(selectedSource, requestedVersion)),
           );
           return yield* renderer.result(result("addPreview", value));
         }
-        const retained = yield* renderer.withStatus(
+        const imported = yield* renderer.withStatus(
           "Retaining source",
-          withSelectedRegistry(retainLibrarySourceEffect(selectedSource, requestedVersion)),
+          withSelectedRegistry(importSource(selectedSource, requestedVersion)),
         );
         yield* renderer.result(
           result("add", {
-            action: retained.action,
-            ...(retained.collection_id === undefined
+            action: imported.action,
+            ...(imported.collection_id === undefined
               ? {}
-              : { collection_id: retained.collection_id }),
-            skill_ids: retained.skill_ids,
-            retained_version_id: retained.retained_version_id,
-            snapshot_digest: retained.snapshot_digest,
-            skills: retained.skills.map((skill) => ({
+              : { collection_id: imported.collection_id }),
+            skill_ids: imported.skill_ids,
+            collection_version_id: imported.collection_version_id,
+            snapshot_digest: imported.snapshot_digest,
+            skills: imported.skills.map((skill) => ({
               name: skill.name,
               verbatim_path: skill.verbatim_path,
             })),
-            ...("diagnostics" in retained && retained.diagnostics?.length
-              ? { diagnostics: retained.diagnostics }
+            ...("diagnostics" in imported && imported.diagnostics?.length
+              ? { diagnostics: imported.diagnostics }
               : {}),
           }),
         );
         const measurement = yield* Effect.gen(function* () {
           const store = yield* LibraryStore;
           const state = yield* store.load;
-          const ids = new Set<string>(retained.skill_ids);
+          const ids = new Set<string>(imported.skill_ids);
           const load = yield* readDescriptionLoad(
             state,
             store.originalsPath,
@@ -128,7 +125,7 @@ export const addCliCommand = Command.make(
   Command.annotate(CommandMetadata, {
     effects: {
       capabilities: ["filesystem.read", "filesystem.write", "network.read", "process.execute"],
-      subprocesses: [...sourceAcquisitionSubprocesses, ...credentialStoreReadSubprocesses],
+      subprocesses: [...sourceFetchSubprocesses, ...credentialStoreReadSubprocesses],
     },
     outputSchemas: [outputContracts.add, outputContracts.addPreview],
     exitCodes: [0, 11, 12, 64, 65],

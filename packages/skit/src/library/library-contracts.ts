@@ -1,14 +1,14 @@
 import { Schema } from "effect";
 import { canonicalJson } from "../shared/json.js";
 import {
-  AcquisitionId,
+  ImportId,
   CollectionId,
   MachineId,
-  RetainedCopyId,
+  CollectionVersionId,
   SkillId,
   SkillVersionId,
 } from "./entity-ids.js";
-import { Digest } from "../vocabulary.js";
+import { Hash } from "../vocabulary.js";
 
 export const SourceRelativePath = Schema.String.check(
   Schema.makeFilter(
@@ -126,15 +126,15 @@ export const Upstream = Schema.Struct({
 });
 export type Upstream = typeof Upstream.Type;
 
-export const SkillsShObservation = Schema.Struct({
+export const SkillsShLockFileEntry = Schema.Struct({
   type: Schema.Literal("skills.sh-lock"),
   machine_id: MachineId,
-  observed_at: Schema.String,
+  read_at: Schema.String,
   source_updated_at: Schema.optionalKey(Schema.String),
   lock_path: HistoricalLocator,
   lock_version: Schema.Number,
   lock_scope: Schema.Literals(["project", "global"]),
-  lock_content_hash: Digest,
+  lock_content_hash: Hash,
   source: Schema.String,
   source_type: Schema.String,
   source_url: Schema.optionalKey(Schema.String),
@@ -144,9 +144,9 @@ export const SkillsShObservation = Schema.Struct({
   skill_path: Schema.optionalKey(SourceRelativePath),
   computed_hash: Schema.optionalKey(Schema.String),
   skill_folder_hash: Schema.optionalKey(Schema.String),
-  well_known_digest: Schema.optionalKey(Schema.String),
+  well_known_hash: Schema.optionalKey(Schema.String),
   content_agreement: Schema.Literals(["agrees", "mismatch", "unverifiable"]),
-  original_entry_digest: Digest,
+  original_entry_hash: Hash,
   original_entry: BoundedOriginalEntry,
   upstream_baseline: Schema.optionalKey(
     Schema.Struct({
@@ -161,16 +161,16 @@ export const SkillsShObservation = Schema.Struct({
     }),
   ),
 });
-export interface SkillsShObservation extends Schema.Schema.Type<typeof SkillsShObservation> {}
+export interface SkillsShLockFileEntry extends Schema.Schema.Type<typeof SkillsShLockFileEntry> {}
 
 export const MaterializationProfile = Schema.Literals(["plain-skill/v1", "declared-skit-skill/v1"]);
 export type MaterializationProfile = typeof MaterializationProfile.Type;
 
 export const SkillVersion = Schema.Struct({
   skill_version_id: SkillVersionId,
-  source_digest: Digest,
-  artifact_digest: Digest,
-  validation_identity_digest: Digest,
+  source_hash: Hash,
+  artifact_hash: Hash,
+  validation_identity_hash: Hash,
   materialization_profile: MaterializationProfile,
 });
 export interface SkillVersion extends Schema.Schema.Type<typeof SkillVersion> {}
@@ -193,162 +193,144 @@ export const Collection = Schema.Struct({
 });
 export interface Collection extends Schema.Schema.Type<typeof Collection> {}
 
-export const RetainedCopyMember = Schema.Struct({
+export const CollectionVersionSkill = Schema.Struct({
   source_path: CollectionRelativePath,
-  source_digest: Digest,
-  artifact_digest: Digest,
+  source_hash: Hash,
+  artifact_hash: Hash,
   materialization_profile: MaterializationProfile,
 });
-export type RetainedCopyMember = typeof RetainedCopyMember.Type;
+export type CollectionVersionSkill = typeof CollectionVersionSkill.Type;
 
-export const RetainedCopy = Schema.Struct({
-  retained_copy_id: RetainedCopyId,
-  digest: Digest,
+export const CollectionVersion = Schema.Struct({
+  collection_version_id: CollectionVersionId,
+  hash: Hash,
   copy_profile: Schema.Literal("verbatim/v1"),
-  members: Schema.Array(RetainedCopyMember),
+  members: Schema.Array(CollectionVersionSkill),
 });
-export interface RetainedCopy extends Schema.Schema.Type<typeof RetainedCopy> {}
+export interface CollectionVersion extends Schema.Schema.Type<typeof CollectionVersion> {}
 
 /**
  * One observation of bytes for a Collection: either its Source, or a local edit the user retained
- * from a Projection. `revision` is the exact Git commit or Registry Release when there is one.
+ * from an installed skill. `revision` is the exact Git commit or Registry Release when there is one.
  */
-export const Acquisition = Schema.Struct({
-  acquisition_id: AcquisitionId,
+export const Import = Schema.Struct({
+  import_id: ImportId,
   collection_id: CollectionId,
-  kind: Schema.Literals(["source", "retained-edit"]),
-  retained_copy_id: RetainedCopyId,
+  kind: Schema.Literals(["source", "edit"]),
+  collection_version_id: CollectionVersionId,
   source_identity: SourceIdentity,
   /** Where the bytes were read from, for provenance and display. Never parsed back. */
   input: HistoricalLocator,
   revision: Schema.optionalKey(Schema.NonEmptyString),
-  acquired_at: Schema.String,
+  imported_at: Schema.String,
   machine_id: MachineId,
-  observations: Schema.Array(SkillsShObservation),
+  lock_file_entries: Schema.Array(SkillsShLockFileEntry),
 });
-export interface Acquisition extends Schema.Schema.Type<typeof Acquisition> {}
+export interface Import extends Schema.Schema.Type<typeof Import> {}
 
 const gitObjectId = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
 /** True only when the acquisition names exact bytes another device can retrieve and verify. */
-export const acquisitionIsSourceRestorable = (acquisition: Acquisition): boolean => {
-  if (acquisition.kind !== "source" || acquisition.revision === undefined) return false;
-  switch (acquisition.source_identity.kind) {
+export const importCanBeRefetched = (sourceImport: Import): boolean => {
+  if (sourceImport.kind !== "source" || sourceImport.revision === undefined) return false;
+  switch (sourceImport.source_identity.kind) {
     case "github":
     case "git":
-      return gitObjectId.test(acquisition.revision);
+      return gitObjectId.test(sourceImport.revision);
     case "registry":
-      return acquisition.revision !== "latest";
+      return sourceImport.revision !== "latest";
     default:
       return false;
   }
 };
 
 export const librarySnapshotDigests = (input: {
-  readonly retained_copies: readonly RetainedCopy[];
-  readonly acquisitions: readonly Acquisition[];
+  readonly collection_versions: readonly CollectionVersion[];
+  readonly imports: readonly Import[];
 }): string[] =>
   [
     ...new Set(
-      input.retained_copies
+      input.collection_versions
         .filter(
           (copy) =>
-            !input.acquisitions.some(
-              (acquisition) =>
-                acquisition.retained_copy_id === copy.retained_copy_id &&
-                acquisitionIsSourceRestorable(acquisition),
+            !input.imports.some(
+              (sourceImport) =>
+                sourceImport.collection_version_id === copy.collection_version_id &&
+                importCanBeRefetched(sourceImport),
             ),
         )
-        .map((copy) => copy.digest),
+        .map((copy) => copy.hash),
     ),
   ].sort();
 
-/** What a Binding enables: a whole Collection, which follows its Source, or one Skill. */
-export const BindingEntry = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal("collection"), collection_id: CollectionId }),
-  Schema.Struct({ kind: Schema.Literal("skill"), skill_id: SkillId }),
+/** One enabled item: a whole Collection, which follows its Source, or one Skill. */
+export const Enabled = Schema.Union([
+  Schema.Struct({ collection: CollectionId }),
+  Schema.Struct({ skill: SkillId }),
 ]);
-export type BindingEntry = typeof BindingEntry.Type;
+export type Enabled = typeof Enabled.Type;
+
+const sameEnabled = Schema.toEquivalence(Enabled);
 
 /**
- * Skills enabled at a Scope. A Binding does not name a Harness: every Harness that reads a
- * projection target sees its copies, so naming one would promise isolation SKIT cannot give.
+ * Combine several lists of enabled items into one. A Skill item is dropped only when a
+ * whole-Collection item already enables it now; a Skill deleted upstream stays enabled by its own
+ * item.
  */
-export const Binding = Schema.Struct({
-  scope: Schema.Struct({ kind: Schema.Literal("global") }),
-  entries: Schema.Array(BindingEntry),
-});
-export interface Binding extends Schema.Schema.Type<typeof Binding> {}
-
-/**
- * Combine the entries of several Bindings into one, as when per-Harness Bindings merge. A Skill
- * entry is dropped only when a whole-Collection entry already enables it now; a Skill deleted
- * upstream stays enabled by its own entry.
- */
-export const mergeBindingEntries = (
+export const mergeEnabled = (
   library: LibraryEntities,
-  bindings: readonly { readonly entries: readonly BindingEntry[] }[],
-): BindingEntry[] => {
-  const entries = bindings.flatMap((binding) => binding.entries);
+  lists: readonly (readonly Enabled[])[],
+): Enabled[] => {
+  const items = lists.flat();
   const followed = new Set<string>(
-    bindingSkillIds(library, {
-      entries: entries.filter((entry) => entry.kind === "collection"),
-    }),
+    enabledSkillIds(
+      library,
+      items.filter((item) => "collection" in item),
+    ),
   );
-  const merged: BindingEntry[] = [];
-  for (const entry of entries) {
-    if (merged.some((other) => Schema.toEquivalence(BindingEntry)(entry, other))) continue;
-    if (entry.kind === "skill" && followed.has(entry.skill_id)) continue;
-    merged.push(entry);
+  const merged: Enabled[] = [];
+  for (const item of items) {
+    if (merged.some((other) => sameEnabled(item, other))) continue;
+    if ("skill" in item && followed.has(item.skill)) continue;
+    merged.push(item);
   }
   return merged;
 };
 
-/** The single global Binding that per-Harness global Bindings become, if any enable something. */
-export const mergeGlobalBindings = (
-  library: LibraryEntities,
-  bindings: readonly { readonly entries: readonly BindingEntry[] }[],
-): Binding[] => {
-  const entries = mergeBindingEntries(library, bindings);
-  return entries.length === 0 ? [] : [{ scope: { kind: "global" }, entries }];
-};
-
 interface LibraryEntities {
   readonly skills: readonly Skill[];
-  readonly retained_copies: readonly RetainedCopy[];
-  readonly acquisitions: readonly Acquisition[];
+  readonly collection_versions: readonly CollectionVersion[];
+  readonly imports: readonly Import[];
 }
 
 /**
- * A Collection's Acquisitions, newest first. IDs break observation-time ties so serialization
+ * A Collection's imports, newest first. IDs break observation-time ties so serialization
  * and sync normalization cannot change selected content merely by reordering the array.
  */
-const collectionAcquisitions = (
-  library: Pick<LibraryEntities, "acquisitions">,
+const collectionImports = (
+  library: Pick<LibraryEntities, "imports">,
   collectionId: CollectionId,
-): Acquisition[] =>
-  library.acquisitions
-    .filter((acquisition) => acquisition.collection_id === collectionId)
+): Import[] =>
+  library.imports
+    .filter((sourceImport) => sourceImport.collection_id === collectionId)
     .toSorted(
       (left, right) =>
-        right.acquired_at.localeCompare(left.acquired_at) ||
-        right.acquisition_id.localeCompare(left.acquisition_id),
+        right.imported_at.localeCompare(left.imported_at) ||
+        right.import_id.localeCompare(left.import_id),
     );
 
-/** A Collection's Source Acquisitions, newest first. */
-export const sourceAcquisitions = (
-  library: Pick<LibraryEntities, "acquisitions">,
+/** A Collection's source imports, newest first. */
+export const sourceImports = (
+  library: Pick<LibraryEntities, "imports">,
   collectionId: CollectionId,
-): Acquisition[] =>
-  collectionAcquisitions(library, collectionId).filter(
-    (acquisition) => acquisition.kind === "source",
-  );
+): Import[] =>
+  collectionImports(library, collectionId).filter((sourceImport) => sourceImport.kind === "source");
 
-/** The Skills present in a Collection's latest Source Acquisition. */
+/** The Skills present in a Collection's latest source import. */
 export const currentCollectionSkills = (library: LibraryEntities, collectionId: CollectionId) => {
-  const latest = sourceAcquisitions(library, collectionId)[0];
-  const copy = library.retained_copies.find(
-    (candidate) => candidate.retained_copy_id === latest?.retained_copy_id,
+  const latest = sourceImports(library, collectionId)[0];
+  const copy = library.collection_versions.find(
+    (candidate) => candidate.collection_version_id === latest?.collection_version_id,
   );
   return library.skills.filter(
     (skill) =>
@@ -358,40 +340,40 @@ export const currentCollectionSkills = (library: LibraryEntities, collectionId: 
 };
 
 /**
- * The Acquisition and retained bytes behind one Skill Version, newest first. A Source Acquisition
+ * The import and retained bytes behind one Skill Version, newest first. A source import
  * holds the Skill at its path; a retained edit holds the one edited Skill at its root.
  */
 export const versionBacking = (library: LibraryEntities, skill: Skill, version: SkillVersion) => {
-  for (const acquisition of collectionAcquisitions(library, skill.collection_id)) {
-    const copy = library.retained_copies.find(
-      (candidate) => candidate.retained_copy_id === acquisition.retained_copy_id,
+  for (const sourceImport of collectionImports(library, skill.collection_id)) {
+    const copy = library.collection_versions.find(
+      (candidate) => candidate.collection_version_id === sourceImport.collection_version_id,
     );
-    const path = acquisition.kind === "source" ? skill.path : ".";
+    const path = sourceImport.kind === "source" ? skill.path : ".";
     const member = copy?.members.find((candidate) => candidate.source_path === path);
     if (
       copy !== undefined &&
       member !== undefined &&
-      member.source_digest === version.source_digest &&
-      member.artifact_digest === version.artifact_digest &&
+      member.source_hash === version.source_hash &&
+      member.artifact_hash === version.artifact_hash &&
       member.materialization_profile === version.materialization_profile
     )
-      return { acquisition, copy, member };
+      return { acquisition: sourceImport, copy, member };
   }
   return undefined;
 };
 
 /**
- * The Version the newest Source Acquisition that still contains a Skill observed. An Acquisition
+ * The Version the newest source import that still contains a Skill observed. An import
  * whose bytes this Skill holds no Version for (for example after a merge kept another device's
  * Versions) is skipped rather than leaving the Skill without one.
  */
-const lastObservedVersion = (library: LibraryEntities, skill: Skill) => {
-  for (const acquisition of sourceAcquisitions(library, skill.collection_id)) {
-    const member = library.retained_copies
-      .find((copy) => copy.retained_copy_id === acquisition.retained_copy_id)
+const lastImportedVersion = (library: LibraryEntities, skill: Skill) => {
+  for (const sourceImport of sourceImports(library, skill.collection_id)) {
+    const member = library.collection_versions
+      .find((copy) => copy.collection_version_id === sourceImport.collection_version_id)
       ?.members.find((candidate) => candidate.source_path === skill.path);
     const version = skill.versions.find(
-      (candidate) => candidate.artifact_digest === member?.artifact_digest,
+      (candidate) => candidate.artifact_hash === member?.artifact_hash,
     );
     if (version !== undefined) return version;
   }
@@ -399,7 +381,7 @@ const lastObservedVersion = (library: LibraryEntities, skill: Skill) => {
 };
 
 /**
- * The Version a Skill uses: its retained local edit, else what the newest Source Acquisition that
+ * The Version a Skill uses: its retained local edit, else what the newest source import that
  * still contains it observed. A Skill deleted upstream keeps its last observed Version.
  */
 export const currentSkillVersion = (
@@ -407,19 +389,19 @@ export const currentSkillVersion = (
   skill: Skill,
 ): SkillVersion | undefined =>
   skill.local_version_id === undefined
-    ? lastObservedVersion(library, skill)
+    ? lastImportedVersion(library, skill)
     : skill.versions.find((version) => version.skill_version_id === skill.local_version_id);
 
-/** The Skill IDs a Binding enables, expanding whole-Collection entries to their current Skills. */
-export const bindingSkillIds = (
+/** The Skill IDs a list enables, expanding whole-Collection items to their current Skills. */
+export const enabledSkillIds = (
   library: LibraryEntities,
-  binding: { readonly entries: readonly BindingEntry[] },
+  enabled: readonly Enabled[],
 ): SkillId[] => [
   ...new Set(
-    binding.entries.flatMap((entry) =>
-      entry.kind === "skill"
-        ? [entry.skill_id]
-        : currentCollectionSkills(library, entry.collection_id).map((skill) => skill.skill_id),
+    enabled.flatMap((item) =>
+      "skill" in item
+        ? [item.skill]
+        : currentCollectionSkills(library, item.collection).map((skill) => skill.skill_id),
     ),
   ),
 ];
@@ -427,16 +409,17 @@ export const bindingSkillIds = (
 const isNested = (left: string, right: string) =>
   left !== "." && right !== "." && (left.startsWith(`${right}/`) || right.startsWith(`${left}/`));
 
-export const CURRENT_PORTABLE_LIBRARY_SCHEMA = "skit.library.v7" as const;
+export const CURRENT_PORTABLE_LIBRARY_SCHEMA = "skit.library.v8" as const;
 
 export const LibraryManifest = Schema.Struct({
   schema: Schema.Literal(CURRENT_PORTABLE_LIBRARY_SCHEMA),
   collections: Schema.Array(Collection),
   skills: Schema.Array(Skill),
-  retained_copies: Schema.Array(RetainedCopy),
-  acquisitions: Schema.Array(Acquisition),
-  snapshot_digests: Schema.Array(Digest),
-  bindings: Schema.Array(Binding),
+  collection_versions: Schema.Array(CollectionVersion),
+  imports: Schema.Array(Import),
+  snapshot_digests: Schema.Array(Hash),
+  /** What the account enables for every project. */
+  enabled: Schema.Array(Enabled),
 }).check(
   Schema.makeFilter((manifest) => {
     const collections = new Set(manifest.collections.map((item) => item.collection_id));
@@ -444,18 +427,19 @@ export const LibraryManifest = Schema.Struct({
     const versionIds = manifest.skills.flatMap((skill) =>
       skill.versions.map((version) => version.skill_version_id),
     );
-    const copies = new Map(manifest.retained_copies.map((copy) => [copy.retained_copy_id, copy]));
+    const copies = new Map(
+      manifest.collection_versions.map((copy) => [copy.collection_version_id, copy]),
+    );
     if (
       collections.size !== manifest.collections.length ||
       skills.size !== manifest.skills.length ||
-      copies.size !== manifest.retained_copies.length ||
-      new Set(manifest.acquisitions.map((item) => item.acquisition_id)).size !==
-        manifest.acquisitions.length ||
+      copies.size !== manifest.collection_versions.length ||
+      new Set(manifest.imports.map((item) => item.import_id)).size !== manifest.imports.length ||
       new Set(versionIds).size !== versionIds.length
     )
       return {
         path: ["collections"],
-        issue: "Duplicate Collection, Skill, Acquisition, retained-copy or Version IDs",
+        issue: "Duplicate Collection, Skill, import, retained-copy or Version IDs",
       };
 
     for (const collection of manifest.collections) {
@@ -464,7 +448,7 @@ export const LibraryManifest = Schema.Struct({
       );
       const paths = owned.map((skill) => skill.path);
       // A Skill whose path moved upstream leaves its old row behind with its retained history, so
-      // only the Skills the newest Source Acquisition still contains must have distinct names.
+      // only the Skills the newest source import still contains must have distinct names.
       const names = currentCollectionSkills(manifest, collection.collection_id).map(
         (skill) => skill.name,
       );
@@ -503,23 +487,26 @@ export const LibraryManifest = Schema.Struct({
         };
     }
 
-    for (const acquisition of manifest.acquisitions)
-      if (!collections.has(acquisition.collection_id) || !copies.has(acquisition.retained_copy_id))
+    for (const acquisition of manifest.imports)
+      if (
+        !collections.has(acquisition.collection_id) ||
+        !copies.has(acquisition.collection_version_id)
+      )
         return {
-          path: ["acquisitions"],
-          issue: `Acquisition ${acquisition.acquisition_id} references missing Collection ${acquisition.collection_id} or retained copy ${acquisition.retained_copy_id}`,
+          path: ["imports"],
+          issue: `Import ${acquisition.import_id} references missing Collection ${acquisition.collection_id} or retained copy ${acquisition.collection_version_id}`,
         };
-    for (const copy of manifest.retained_copies)
+    for (const copy of manifest.collection_versions)
       if (
         copy.members.length === 0 ||
         new Set(copy.members.map((member) => member.source_path)).size !== copy.members.length ||
-        !manifest.acquisitions.some(
-          (acquisition) => acquisition.retained_copy_id === copy.retained_copy_id,
+        !manifest.imports.some(
+          (acquisition) => acquisition.collection_version_id === copy.collection_version_id,
         )
       )
         return {
-          path: ["retained_copies"],
-          issue: `Retained copy ${copy.retained_copy_id} has invalid members or no owning Acquisition`,
+          path: ["collection_versions"],
+          issue: `Retained copy ${copy.collection_version_id} has invalid members or no owning import`,
         };
 
     for (const skill of manifest.skills) {
@@ -538,19 +525,19 @@ export const LibraryManifest = Schema.Struct({
         };
       for (const version of skill.versions) {
         if (
-          skill.versions.filter((other) => other.artifact_digest === version.artifact_digest)
-            .length !== 1
+          skill.versions.filter((other) => other.artifact_hash === version.artifact_hash).length !==
+          1
         )
           return {
             path: ["skills"],
-            issue: `Skill ${skill.name} (${skill.skill_id}) contains more than one Version for ${version.artifact_digest}`,
+            issue: `Skill ${skill.name} (${skill.skill_id}) contains more than one Version for ${version.artifact_hash}`,
           };
-        // Every retained Version is backed by bytes one of its Collection's Acquisitions holds.
+        // Every retained Version is backed by bytes one of its Collection's imports holds.
         const backed = versionBacking(manifest, skill, version) !== undefined;
         if (!backed)
           return {
             path: ["skills"],
-            issue: `Skill ${skill.name} (${skill.skill_id}) Version ${version.skill_version_id} has no retained Acquisition backing`,
+            issue: `Skill ${skill.name} (${skill.skill_id}) Version ${version.skill_version_id} has no retained import backing`,
           };
       }
     }
@@ -566,30 +553,19 @@ export const LibraryManifest = Schema.Struct({
         path: ["snapshot_digests"],
         issue: "Snapshot digests do not match the retained copies that require private snapshots",
       };
-    for (const binding of manifest.bindings) {
-      if (
-        binding.entries.some((entry, index) =>
-          binding.entries
-            .slice(index + 1)
-            .some((other) => Schema.toEquivalence(BindingEntry)(entry, other)),
-        )
+    if (
+      manifest.enabled.some((item, index) =>
+        manifest.enabled.slice(index + 1).some((other) => sameEnabled(item, other)),
       )
-        return { path: ["bindings"], issue: "The global Binding contains duplicate entries" };
-      if (
-        binding.entries.some((entry) =>
-          entry.kind === "collection"
-            ? !collections.has(entry.collection_id)
-            : !skills.has(entry.skill_id),
-        )
+    )
+      return { path: ["enabled"], issue: "The enabled list contains duplicate items" };
+    if (
+      manifest.enabled.some((item) =>
+        "collection" in item ? !collections.has(item.collection) : !skills.has(item.skill),
       )
-        return {
-          path: ["bindings"],
-          issue: "The global Binding references a missing Skill or Collection",
-        };
-    }
-    return (
-      manifest.bindings.length <= 1 || { path: ["bindings"], issue: "More than one global Binding" }
-    );
+    )
+      return { path: ["enabled"], issue: "The enabled list names a missing Skill or Collection" };
+    return true;
   }),
 );
 export interface LibraryManifest extends Schema.Schema.Type<typeof LibraryManifest> {}
@@ -598,20 +574,20 @@ export const currentLibraryManifest = (
   fields: Omit<LibraryManifest, "schema">,
 ): LibraryManifest => ({ ...fields, schema: CURRENT_PORTABLE_LIBRARY_SCHEMA });
 
-export const LibraryReceipt = Schema.Struct({
+export const RemoteLibrary = Schema.Struct({
   library_id: Schema.String,
   revision_id: Schema.String,
   manifest: LibraryManifest,
 });
-export interface LibraryReceipt extends Schema.Schema.Type<typeof LibraryReceipt> {}
-export const LibraryResponse = Schema.Struct({ library: LibraryReceipt });
+export interface RemoteLibrary extends Schema.Schema.Type<typeof RemoteLibrary> {}
+export const LibraryResponse = Schema.Struct({ library: RemoteLibrary });
 export const LibraryWriteRequest = Schema.Struct({
   expected_revision_id: Schema.NullOr(Schema.String),
   manifest: LibraryManifest,
 });
 export const SnapshotUploadResponse = Schema.Struct({
   library_id: Schema.String,
-  snapshot_digest: Digest,
+  snapshot_digest: Hash,
   reused: Schema.Boolean,
 });
 
@@ -633,7 +609,7 @@ export type SnapshotArchiveEntry = Schema.Schema.Type<typeof SnapshotArchiveEntr
 
 export const SnapshotArchive = Schema.Struct({
   profile: Schema.Literal("verbatim/v1"),
-  digest: Digest,
+  digest: Hash,
   entries: Schema.Array(SnapshotArchiveEntry),
 });
 export interface SnapshotArchive extends Schema.Schema.Type<typeof SnapshotArchive> {}

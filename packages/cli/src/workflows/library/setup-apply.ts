@@ -5,52 +5,51 @@ import {
   currentSkillVersion,
   canonicalJson,
   LibraryStore,
-  ensureProjectionRootWritable,
+  ensureSkillsDirectoryWritable,
   libraryStateRevision,
   withLibraryWriter,
-  type Digest,
+  type Hash,
   type SkillId,
 } from "@smolai/skit-core";
-import { activeProjectionTargetsEffect, bindingRoot } from "../../projection/roots.js";
-import type { LocalAdoptionOptions } from "./local-adoption.js";
+import { activeInstallDestinations, skillsDirectoryFor } from "../../install/roots.js";
+import type { ManageOptions } from "./manage-existing.js";
 import { revalidateSetupPlan, saveSetupMachineConfig, type SetupOptions } from "./setup.js";
 import type {
   SetupKnownSourceSelection,
-  SetupReconciliationFact,
+  InstalledSkillChange,
   SetupVersionChoice,
-  SetupReconciliationOutcome,
+  InstalledSkillChangeResult,
 } from "./setup-contract.js";
-import { isSetupProjectionTarget, type SetupCopySelection } from "./setup-decisions.js";
-import { applySetupExistingBindings } from "./setup-existing-binding.js";
-import { applySetupLocalCustody } from "./setup-local-custody.js";
-import { applySetupObservedCollections } from "./setup-observed-collections.js";
+import { isSetupInstallDestination, type SetupCopySelection } from "./setup-decisions.js";
+import { manageSetupCopies } from "./setup-manage.js";
+import { importSetupCollections } from "./setup-import.js";
 import { beginSetupOperation } from "../../library-application/setup-operation.js";
 import type { PreparedRecoveryMoves } from "../../library-application/recovery-moves.js";
 import {
-  applyRoutineSetupReconciliation,
-  setupReconciliationChanges,
-  SetupReconciliationRequired,
-  unresolvedSetupReconciliation,
-} from "./setup-reconciliation.js";
+  installSelectedVersions,
+  hasChangesToApply,
+  ChangeChoiceRequired,
+  changesNeedingChoice,
+} from "./installed-skill-changes.js";
 import { applyChosenSetupVersions, setupVersionAlternatives } from "./setup-version-choice.js";
 import { PlanIsStale } from "../../library/failures.js";
 
 /** What the user reviewed and approved: the plan ID they saw and the selections they made. */
 export interface SetupApproval {
   readonly setup: SetupOptions;
-  readonly planId: Digest;
+  readonly planId: Hash;
   /** Save the discovery roots and repository decisions this setup observes. */
   readonly persistRoots: boolean;
   readonly imports: readonly SetupKnownSourceSelection[];
   readonly bindings: readonly SetupCopySelection[];
-  readonly custody: readonly SetupCopySelection[];
+  readonly ownership: readonly SetupCopySelection[];
   readonly removals: PreparedRecoveryMoves;
   readonly versionChoices?: readonly SetupVersionChoice[];
-  readonly reconciliation?: readonly SetupReconciliationFact[];
+  readonly changes?: readonly InstalledSkillChange[];
 }
 
 export interface SetupApplyOptions {
-  readonly adoption: LocalAdoptionOptions;
+  readonly manage: ManageOptions;
   /** Runs each stage under its progress message. */
   readonly withStatus: <A, E, R>(
     message: string,
@@ -69,33 +68,34 @@ export interface SetupApplyOptions {
  */
 export const applySetupPlan = Effect.fn("Setup.applyPlan")(
   function* (options: SetupApplyOptions, approval: SetupApproval) {
-    const scan = yield* options.withStatus(
+    const revalidated = yield* options.withStatus(
       "Revalidating the approved setup plan",
       revalidateSetupPlan(approval.setup, approval.planId),
     );
-    const reconciliation = approval.reconciliation ?? scan.observed.reconciliation ?? [];
+    const installedSkillChanges = approval.changes ?? revalidated.scan.changes ?? [];
     const reviewedIds = new Set<string>();
-    for (const fact of reconciliation) {
+    for (const fact of installedSkillChanges) {
       if (
-        reviewedIds.has(fact.projectionId) ||
+        reviewedIds.has(fact.installedSkillId) ||
         canonicalJson(fact) !==
           canonicalJson(
-            scan.observed.reconciliation?.find((item) => item.projectionId === fact.projectionId) ??
-              null,
+            revalidated.scan.changes?.find(
+              (item) => item.installedSkillId === fact.installedSkillId,
+            ) ?? null,
           )
       )
         return yield* new PlanIsStale();
-      reviewedIds.add(fact.projectionId);
+      reviewedIds.add(fact.installedSkillId);
     }
-    const reviewedSkills = new Set(reconciliation.map((fact) => fact.skillId));
+    const reviewedSkills = new Set(installedSkillChanges.map((fact) => fact.skillId));
     if (
-      (scan.observed.reconciliation ?? []).some(
-        (fact) => reviewedSkills.has(fact.skillId) && !reviewedIds.has(fact.projectionId),
+      (revalidated.scan.changes ?? []).some(
+        (fact) => reviewedSkills.has(fact.skillId) && !reviewedIds.has(fact.installedSkillId),
       )
     )
       return yield* new PlanIsStale();
     const versionChoices = approval.versionChoices ?? [];
-    const alternatives = setupVersionAlternatives(reconciliation);
+    const alternatives = setupVersionAlternatives(installedSkillChanges);
     if (
       new Set(versionChoices.map((choice) => choice.skillId)).size !== versionChoices.length ||
       versionChoices.some(
@@ -104,60 +104,60 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
       )
     )
       return yield* new PlanIsStale();
-    const unresolved = unresolvedSetupReconciliation(reconciliation, versionChoices);
-    if (unresolved.length) return yield* new SetupReconciliationRequired({ facts: unresolved });
-    // Only enabled global copies project into this device's roots. Prove those roots
+    const unresolved = changesNeedingChoice(installedSkillChanges, versionChoices);
+    if (unresolved.length) return yield* new ChangeChoiceRequired({ facts: unresolved });
+    // Only enabled global copies install into this device's skills directories. Prove those roots
     // are writable before any stage writes, so a sandboxed or read-only root (Codex keeps `.agents`
     // read-only) fails the apply whole instead of leaving a Library with no copies behind.
-    const projectedCopies = [...approval.bindings, ...approval.custody].filter(
+    const installedCopies = [...approval.bindings, ...approval.ownership].filter(
       (copy) =>
         copy.duplicateAction !== "retain-only" &&
-        isSetupProjectionTarget(
-          scan.observed.instances.find((instance) => instance.path === copy.sourcePath),
+        isSetupInstallDestination(
+          revalidated.scan.instances.find((instance) => instance.path === copy.sourcePath),
         ) &&
-        !scan.observed.onboarding.candidates.some(
+        !revalidated.scan.onboarding.candidates.some(
           (candidate) =>
             candidate.action === "repository-owned" && candidate.paths.includes(copy.sourcePath),
         ),
     );
-    const enablingCopies = projectedCopies.length > 0;
-    const projects = enablingCopies || setupReconciliationChanges(reconciliation, versionChoices);
+    const enablingCopies = installedCopies.length > 0;
+    const projects = enablingCopies || hasChangesToApply(installedSkillChanges, versionChoices);
     if (projects)
-      for (const target of yield* activeProjectionTargetsEffect(approval.setup.inventory))
+      for (const target of yield* activeInstallDestinations(approval.setup.inventory))
         if (
           enablingCopies ||
-          reconciliation.some(
+          installedSkillChanges.some(
             (fact) =>
-              fact.target === target &&
+              fact.destination === target &&
               (fact.status === "incoming-update" ||
                 fact.metadataChanged ||
                 (fact.status !== "native-delete" &&
                   versionChoices.some((choice) => choice.skillId === fact.skillId))),
           )
         )
-          yield* ensureProjectionRootWritable(
-            bindingRoot(target, { kind: "global" }, approval.setup.inventory),
+          yield* ensureSkillsDirectoryWritable(
+            skillsDirectoryFor(target, { kind: "global" }, approval.setup.inventory),
           );
-    let current = scan.observed;
+    let current = revalidated.scan;
     const store = yield* LibraryStore;
-    let revision = libraryStateRevision(scan.library);
+    let revision = libraryStateRevision(revalidated.library);
     const operation = yield* beginSetupOperation(
-      { ...approval, reconciliation },
-      scan.library,
+      { ...approval, changes: installedSkillChanges },
+      revalidated.library,
       projects,
-      projectedCopies.map((copy) => copy.name),
+      installedCopies.map((copy) => copy.name),
     );
     const warnings: { name: string; message: string }[] = [];
     const recoveryDirectories: string[] = [];
-    const reconciliationOutcomes: SetupReconciliationOutcome[] = [];
-    const adoption = {
-      ...options.adoption,
+    const changeOutcomes: InstalledSkillChangeResult[] = [];
+    const manage = {
+      ...options.manage,
       recoveryOperationDirectory: approval.removals.operationDirectory,
     };
     yield* Effect.gen(function* () {
       if (
         approval.persistRoots ||
-        ((approval.imports.length || approval.custody.length) && !current.machineConfig.machineId)
+        ((approval.imports.length || approval.ownership.length) && !current.machineConfig.machineId)
       ) {
         const saved = yield* options.withStatus(
           current.machineConfig.machineId
@@ -168,7 +168,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
             operation.recordSettings,
           ),
         );
-        yield* operation.settingsPublished();
+        yield* operation.settingsSaved();
         current = {
           ...current,
           machineConfig: {
@@ -183,7 +183,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
         const collections = new Set(approval.imports.map((selection) => selection.groupKey)).size;
         yield* options.withStatus(
           `Importing ${collections} installed Collection${collections === 1 ? "" : "s"} (${approval.imports.length} Skill${approval.imports.length === 1 ? "" : "s"})`,
-          applySetupObservedCollections({ setup: approval.setup }, current, approval.imports),
+          importSetupCollections({ setup: approval.setup }, current, approval.imports),
         );
       }
       if (approval.bindings.length) {
@@ -194,19 +194,19 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
           reconnects
             ? `Reconnecting ${reconnects} existing Library match${reconnects === 1 ? "" : "es"}`
             : "Keeping existing Library matches without enabling",
-          applySetupExistingBindings(adoption, current, approval.bindings),
+          manageSetupCopies(manage, current, approval.bindings, "existing"),
         );
         warnings.push(...applied.warnings);
         recoveryDirectories.push(...applied.recoveryDirectories);
       }
-      if (approval.custody.length) {
+      if (approval.ownership.length) {
         const names =
-          approval.custody.length <= 5
-            ? `: ${approval.custody.map((selection) => selection.name).join(", ")}`
+          approval.ownership.length <= 5
+            ? `: ${approval.ownership.map((selection) => selection.name).join(", ")}`
             : "";
         const applied = yield* options.withStatus(
-          `Taking custody of ${approval.custody.length} local Skill${approval.custody.length === 1 ? "" : "s"}${names}`,
-          applySetupLocalCustody(adoption, current, approval.custody),
+          `Managing ${approval.ownership.length} existing local Skill${approval.ownership.length === 1 ? "" : "s"}${names}`,
+          manageSetupCopies(manage, current, approval.ownership, "new"),
         );
         warnings.push(...applied.warnings);
         recoveryDirectories.push(...applied.recoveryDirectories);
@@ -216,7 +216,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
         const imported = yield* store.load;
         if (libraryStateRevision(imported) !== revision)
           return yield* new LibraryChanged({ path: join(store.home, "state.json") });
-        for (const fact of scan.observed.reconciliation ?? []) {
+        for (const fact of revalidated.scan.changes ?? []) {
           const skill = imported.skills.find((item) => item.skill_id === fact.skillId);
           if (
             skill &&
@@ -225,10 +225,10 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
             deferredSkills.add(fact.skillId);
         }
       }
-      for (const fact of scan.observed.reconciliation ?? []) {
+      for (const fact of revalidated.scan.changes ?? []) {
         if (!deferredSkills.has(fact.skillId)) continue;
-        reconciliationOutcomes.push({
-          projectionId: fact.projectionId,
+        changeOutcomes.push({
+          installedSkillId: fact.installedSkillId,
           name: fact.name,
           path: fact.path,
           status: fact.status === "native-delete" ? "native-delete" : "pending",
@@ -242,20 +242,20 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
         const chosen = yield* options.withStatus(
           "Applying the selected active versions",
           applyChosenSetupVersions(
-            reconciliation,
+            installedSkillChanges,
             currentChoices,
             approval.removals.operationDirectory,
           ),
         );
-        reconciliationOutcomes.push(...chosen.outcomes);
+        changeOutcomes.push(...chosen.outcomes);
         recoveryDirectories.push(chosen.recoveryDirectory);
       }
-      if (reconciliation.length)
-        reconciliationOutcomes.push(
+      if (installedSkillChanges.length)
+        changeOutcomes.push(
           ...(yield* options.withStatus(
             "Reconciling reviewed existing copies",
-            applyRoutineSetupReconciliation(
-              reconciliation.filter(
+            installSelectedVersions(
+              installedSkillChanges.filter(
                 (fact) => !chosenSkills.has(fact.skillId) && !deferredSkills.has(fact.skillId),
               ),
             ),
@@ -264,9 +264,9 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
     }).pipe(
       Effect.provideService(LibraryStore, {
         ...store,
-        publish: (next, base) =>
+        save: (next, base) =>
           libraryStateRevision(base) === revision
-            ? Effect.tap(operation.publish(next, base), () =>
+            ? Effect.tap(operation.save(next, base), () =>
                 Effect.sync(() => {
                   revision = libraryStateRevision(next);
                 }),
@@ -284,10 +284,10 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
     }
     yield* operation.complete();
     return {
-      observed: current,
+      scan: current,
       warnings,
       recoveryDirectories,
-      reconciliation: reconciliationOutcomes,
+      changes: changeOutcomes,
       operationId: operation.operationId,
     };
   },

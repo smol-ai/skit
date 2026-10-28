@@ -1,0 +1,82 @@
+import { copyLocalTree } from "../platform/copy-tree.js";
+import { createHash } from "node:crypto";
+import { dirname, join } from "node:path";
+import { Effect, FileSystem } from "effect";
+import { walkTree } from "../artifact/tree.js";
+import { ContentAddressCollision } from "../failures.js";
+import { deterministicTreeHash } from "../artifact/skit.js";
+import type { Hash } from "../contracts.js";
+
+export const collectionVersionPath = (objectsPath: string, hash: Hash) =>
+  join(objectsPath, hash.slice(7, 9), hash.slice(7));
+
+/** Materialize exactly the normalized inventory; excluded source residue never enters an object. */
+const copyNormalizedTree = Effect.fn("CollectionVersion.copyNormalizedTree")(function* (
+  root: string,
+  destination: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  yield* fs.makeDirectory(destination, { recursive: true, mode: 0o700 });
+  for (const entry of yield* walkTree(root, "normalized")) {
+    if (entry.kind !== "file") continue;
+    const path = join(destination, entry.path);
+    yield* fs.makeDirectory(dirname(path), { recursive: true, mode: 0o700 });
+    yield* fs.writeFile(path, entry.bytes, { flag: "wx", mode: entry.mode });
+  }
+});
+
+export const originalTreeHash = Effect.fn("CollectionVersion.originalHash")(function* (
+  root: string,
+) {
+  const hash = createHash("sha256");
+  const append = (value: string | Uint8Array) => {
+    const bytes = typeof value === "string" ? Buffer.from(value) : value;
+    hash.update(`${bytes.byteLength}:`);
+    hash.update(bytes);
+    hash.update("\0");
+  };
+  for (const entry of yield* walkTree(root, "verbatim")) {
+    append(entry.path);
+    append(entry.kind);
+    if (entry.kind === "file") {
+      append(String(entry.mode));
+      append(entry.bytes);
+    } else if (entry.kind === "symlink") append(entry.target);
+  }
+  return `sha256:${hash.digest("hex")}` as Hash;
+});
+
+/** Saved immutable objects are never rollback-owned, even when this call created them. */
+export const writeCollectionVersion = Effect.fn("CollectionVersion.write")(function* (
+  root: string,
+  objectsPath: string,
+  expected: Hash,
+  verbatim: boolean,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = collectionVersionPath(objectsPath, expected);
+  const hash = verbatim ? originalTreeHash : deterministicTreeHash;
+  if (yield* fs.exists(path)) {
+    if ((yield* hash(path)) !== expected) return yield* new ContentAddressCollision();
+    return path;
+  }
+  yield* fs.makeDirectory(dirname(path), { recursive: true, mode: 0o700 });
+  yield* Effect.scoped(
+    Effect.gen(function* () {
+      const directory = yield* fs.makeTempDirectoryScoped({
+        directory: dirname(path),
+        prefix: "retain.tmp-",
+      });
+      const temporary = join(directory, "tree");
+      if (verbatim)
+        yield* copyLocalTree(root, temporary, [join(root, ".skit"), join(root, ".git")], true);
+      else yield* copyNormalizedTree(root, temporary);
+      if ((yield* hash(temporary)) !== expected) return yield* new ContentAddressCollision();
+      // Another writer's immutable object is never replaced or removed on rollback.
+      if (yield* fs.exists(path)) {
+        if ((yield* hash(path)) !== expected) return yield* new ContentAddressCollision();
+      } else yield* fs.rename(temporary, path).pipe(Effect.uninterruptible);
+    }),
+  );
+  return path;
+});

@@ -1,20 +1,24 @@
 import { Schema, SchemaGetter } from "effect";
 import { resolve } from "node:path";
 import { SkillId } from "../entity-ids.js";
+import { Collection } from "../library-contracts.js";
+import { SkillV7 } from "./manifest-v7.js";
+import { AbsoluteDevicePath } from "../library-state.js";
 import {
-  Acquisition,
-  BindingEntry,
-  bindingSkillIds,
-  Collection,
-  mergeBindingEntries,
-  RetainedCopy,
-  Skill,
-} from "../library-contracts.js";
-import { AbsoluteDevicePath, ManagedProjection } from "../library-state.js";
-import { HarnessName, InvocationPolicy, type RecordedProjectionTarget } from "../../vocabulary.js";
+  HarnessName,
+  InvocationPolicy,
+  type RecordedInstallDestination,
+} from "../../vocabulary.js";
 import { BindingV6 } from "./manifest-v6.js";
-import { LibraryDeviceStateFields } from "./state-schema.js";
+import {
+  BindingEntryV7,
+  bindingSkillIdsV7,
+  CollectionVersionV7,
+  ImportV7,
+  mergeBindingEntriesV7,
+} from "./manifest-v7.js";
 import { LibraryStateFromV7, type LibraryStateV7 } from "./state-schema-v7.js";
+import { InstalledSkillV9, LibraryDeviceStateFieldsV9 } from "./state-schema-v9.js";
 
 const DeviceBindingV6 = Schema.Struct({
   ...BindingV6.fields,
@@ -23,20 +27,20 @@ const DeviceBindingV6 = Schema.Struct({
 const RepositoryBindingV6 = Schema.Struct({
   harness: HarnessName,
   scope: Schema.Struct({ kind: Schema.Literal("repository"), root: AbsoluteDevicePath }),
-  entries: Schema.Array(BindingEntry),
+  entries: Schema.Array(BindingEntryV7),
   invocation_policies: Schema.optionalKey(Schema.Record(SkillId, InvocationPolicy)),
 });
-const { target: _target, ...projectionFields } = ManagedProjection.fields;
+const { target: _target, ...projectionFields } = InstalledSkillV9.fields;
 const ManagedProjectionV6 = Schema.Struct({ ...projectionFields, harness: HarnessName });
 
-/** Frozen v6 state: Bindings and Projections were keyed by Harness. */
+/** Frozen v6 state: Bindings and installed skills were keyed by Harness. */
 export const LibraryStateV6 = Schema.Struct({
-  ...LibraryDeviceStateFields,
+  ...LibraryDeviceStateFieldsV9,
   schemaVersion: Schema.Literal(6),
   collections: Schema.Array(Collection),
-  skills: Schema.Array(Skill),
-  retained_copies: Schema.Array(RetainedCopy),
-  acquisitions: Schema.Array(Acquisition),
+  skills: Schema.Array(SkillV7),
+  retained_copies: Schema.Array(CollectionVersionV7),
+  acquisitions: Schema.Array(ImportV7),
   global_bindings: Schema.Array(DeviceBindingV6),
   local_bindings: Schema.Array(RepositoryBindingV6),
   projections: Schema.Array(ManagedProjectionV6),
@@ -48,7 +52,7 @@ const projectionTargets = {
   "claude-code": "claude",
   opencode: "legacy",
   devin: "legacy",
-} as const satisfies Record<HarnessName, RecordedProjectionTarget>;
+} as const satisfies Record<HarnessName, RecordedInstallDestination>;
 
 /**
  * Merge per-Harness Bindings at one Scope. An invocation override survives only when every
@@ -59,12 +63,12 @@ const mergeScopeBindings = (
   state: LibraryStateV6,
   bindings: readonly (typeof DeviceBindingV6.Type | typeof RepositoryBindingV6.Type)[],
 ) => {
-  const entries = mergeBindingEntries(state, bindings);
+  const entries = mergeBindingEntriesV7(state, bindings);
   const policies: Record<string, InvocationPolicy> = {};
-  for (const skillId of new Set(bindings.flatMap((binding) => bindingSkillIds(state, binding)))) {
+  for (const skillId of new Set(bindings.flatMap((binding) => bindingSkillIdsV7(state, binding)))) {
     const chosen = new Set(
       bindings
-        .filter((binding) => bindingSkillIds(state, binding).includes(skillId))
+        .filter((binding) => bindingSkillIdsV7(state, binding).includes(skillId))
         .map((binding) => binding.invocation_policies?.[skillId]),
     );
     const [policy] = chosen;
@@ -102,7 +106,7 @@ const migrateLibraryStateFromV6 = (state: LibraryStateV6): LibraryStateV7 => {
   };
 };
 
-/** v6 → v7: per-Harness Bindings merge per Scope and Projections record a target. */
+/** v6 → v7: per-Harness Bindings merge per Scope and installed skills record a target. */
 export const LibraryStateFromV6 = Schema.Unknown.pipe(
   Schema.refine(Schema.is(LibraryStateV6)),
   Schema.decodeTo(LibraryStateFromV7, {

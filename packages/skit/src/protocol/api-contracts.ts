@@ -73,7 +73,7 @@ function contractIssues(error: Schema.SchemaError): Array<{ path: string; messag
     message: issue.message,
   }));
 }
-export function parseContractEffect<S extends Schema.ConstraintDecoder<unknown>>(
+export function parseContract<S extends Schema.ConstraintDecoder<unknown>>(
   contract: string,
   schema: S,
   value: unknown,

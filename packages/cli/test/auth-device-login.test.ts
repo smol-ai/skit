@@ -5,13 +5,13 @@ import { Deferred, Effect, Fiber, FileSystem } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import {
-  addRegistryRemoteEffect,
-  awaitDeviceApprovalEffect,
+  addRegistryRemote,
+  awaitDeviceApproval,
   loginEffect,
-  readConfigEffect,
+  readConfig,
   readPendingLogin,
   savePendingLogin,
-  startDeviceLoginEffect,
+  startDeviceLogin,
 } from "../src/registry/auth.js";
 import { authLoginCommand } from "../src/handlers/auth/login.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
@@ -101,19 +101,19 @@ const deviceLogin = (polls: ReadonlyArray<Response>) =>
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-device-login-" });
     const server = deviceServer(polls);
     const scopes = ["library:sync" as const];
-    const started = yield* Effect.scoped(startDeviceLoginEffect({ origin, scopes })).pipe(
+    const started = yield* Effect.scoped(startDeviceLogin({ origin, scopes })).pipe(
       Effect.provide(registryHttpLayer(testHttpClientLayer(server.handler))),
     );
     const approvals = [started];
     const result = yield* Effect.result(
       Effect.scoped(
         Effect.gen(function* () {
-          const approvedSessionToken = yield* awaitDeviceApprovalEffect(started, scopes);
+          const approvedSessionToken = yield* awaitDeviceApproval(started, scopes);
           return yield* loginEffect({ origin, scopes: [...scopes], home, approvedSessionToken });
         }),
       ).pipe(Effect.provide(registryHttpLayer(testHttpClientLayer(server.handler)))),
     );
-    const config = yield* readConfigEffect(home).pipe(Effect.provide(skitConfigurationLayer(home)));
+    const config = yield* readConfig(home).pipe(Effect.provide(skitConfigurationLayer(home)));
     return { result, approvals, seen: server.seen, stored: config.servers[origin]?.token };
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped);
 
@@ -317,7 +317,7 @@ it.live("waiting for approval leaves the configuration writer free for other com
     yield* Deferred.await(polled);
 
     // A configuration write succeeds while the login waits on the person.
-    yield* addRegistryRemoteEffect("other", "https://other.example", home).pipe(
+    yield* addRegistryRemote("other", "https://other.example", home).pipe(
       Effect.provide(skitConfigurationLayer(home)),
     );
     yield* Deferred.succeed(approve, undefined);

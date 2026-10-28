@@ -6,13 +6,13 @@ import {
   evaluateSkillFrontmatter,
   harnessProfile,
   harnessProfileIds,
-  harnessRoot,
-  projectionRoot,
-  resolveHarnessRoot,
+  skillsDirectory,
+  installSkillsDirectory,
+  resolveSkillsDirectory,
   type HarnessDocumentationSource,
   type HarnessName,
   type HarnessProfile,
-  type HarnessRoot,
+  type SkillsDirectory,
 } from "../src/index.js";
 
 const harnessProfiles = Object.fromEntries(
@@ -117,7 +117,7 @@ function assertHarnessCatalog(profiles: Readonly<Record<string, HarnessProfile>>
           throw new Error(`Unknown source ${sourceId} for ${profile.id}`);
     }
     const rootIds = new Set<string>();
-    const pathClaims = new Map<string, Pick<HarnessRoot, "role" | "evidence">>();
+    const pathClaims = new Map<string, Pick<SkillsDirectory, "role" | "evidence">>();
     for (const root of profile.roots) {
       if (rootIds.has(root.id)) throw new Error(`Duplicate root id for ${profile.id}: ${root.id}`);
       rootIds.add(root.id);
@@ -133,13 +133,13 @@ function assertHarnessCatalog(profiles: Readonly<Record<string, HarnessProfile>>
       pathClaims.set(pathKey, root);
     }
     for (const [scope, target] of [
-      ["global", profile.projection.globalTarget],
-      ["project", profile.projection.projectTarget],
+      ["global", profile.installedSkill.globalTarget],
+      ["project", profile.installedSkill.projectTarget],
     ] as const) {
       if (!target) continue;
-      const root = harnessRoot(profile, target);
-      if (!root.writable) throw new Error(`Projection target is not writable: ${target}`);
-      if (root.scope !== scope) throw new Error(`Projection target has wrong scope: ${target}`);
+      const root = skillsDirectory(profile, target);
+      if (!root.writable) throw new Error(`Install destination is not writable: ${target}`);
+      if (root.scope !== scope) throw new Error(`Install destination has wrong scope: ${target}`);
     }
   }
 }
@@ -179,18 +179,21 @@ describe("Harness Profile catalog", () => {
     expect(() => assertHarnessCatalog(harnessProfiles)).not.toThrow();
   });
 
-  test("profiles and projection targets are serializable and unique", () => {
+  test("profiles and install destinations are serializable and unique", () => {
     const profiles = Object.values(harnessProfiles);
     expect(new Set(profiles.map((item) => item.profile.id)).size).toBe(profiles.length);
     expect(() => JSON.stringify(profiles)).not.toThrow();
     for (const profile of profiles)
-      for (const target of [profile.projection.globalTarget, profile.projection.projectTarget])
-        if (target) expect(harnessRoot(profile, target).writable).toBe(true);
+      for (const target of [
+        profile.installedSkill.globalTarget,
+        profile.installedSkill.projectTarget,
+      ])
+        if (target) expect(skillsDirectory(profile, target).writable).toBe(true);
   });
 
-  test("preserves the existing Codex compatibility projection target", () => {
+  test("preserves the existing Codex compatibility install destination", () => {
     const profile = harnessProfile("codex");
-    const target = harnessRoot(profile, profile.projection.globalTarget!);
+    const target = skillsDirectory(profile, profile.installedSkill.globalTarget!);
     expect(target).toEqual(
       expect.objectContaining({ role: "compatibility", path: ".agents/skills", writable: true }),
     );
@@ -198,26 +201,26 @@ describe("Harness Profile catalog", () => {
     expect(profile.roots.find((root) => root.id === "codex-global-native")).toEqual(
       expect.objectContaining({ path: ".codex/skills", role: "native" }),
     );
-    expect(harnessRoot(profile, "codex-project-agents")).toMatchObject({
+    expect(skillsDirectory(profile, "codex-project-agents")).toMatchObject({
       role: "compatibility",
       evidence: "observed",
       writable: true,
     });
-    expect(harnessRoot(profile, "codex-project-codex")).toMatchObject({
+    expect(skillsDirectory(profile, "codex-project-codex")).toMatchObject({
       role: "native",
       evidence: "documented",
       writable: false,
     });
   });
 
-  test("preserves the existing OpenCode projection root when XDG_CONFIG_HOME differs", () => {
+  test("preserves the existing OpenCode skills directory when XDG_CONFIG_HOME differs", () => {
     const context = { home: "/users/test", configHome: "/xdg/config" };
-    expect(projectionRoot("opencode", "global", context)).toBe(
+    expect(installSkillsDirectory("opencode", "global", context)).toBe(
       resolve("/users/test/.config/opencode/skills"),
     );
     expect(
-      resolveHarnessRoot(
-        harnessRoot(harnessProfile("opencode"), "opencode-global-native"),
+      resolveSkillsDirectory(
+        skillsDirectory(harnessProfile("opencode"), "opencode-global-native"),
         context,
       ),
     ).toBe(resolve("/xdg/config/opencode/skills"));
@@ -251,11 +254,13 @@ describe("Harness Profile catalog", () => {
       repository: "/work/project",
     };
 
-    expect(projectionRoot("devin", "global", context)).toBe(resolve("/xdg/config/devin/skills"));
-    expect(projectionRoot("devin", "project", context)).toBe(
+    expect(installSkillsDirectory("devin", "global", context)).toBe(
+      resolve("/xdg/config/devin/skills"),
+    );
+    expect(installSkillsDirectory("devin", "project", context)).toBe(
       resolve("/work/project/.devin/skills"),
     );
-    expect(harnessRoot(profile, "devin-global-cognition")).toMatchObject({
+    expect(skillsDirectory(profile, "devin-global-cognition")).toMatchObject({
       path: "cognition/skills",
       readable: true,
       writable: false,
@@ -263,7 +268,7 @@ describe("Harness Profile catalog", () => {
     expect(
       profile.roots.find((root) => root.scope === "project" && root.path === ".cognition/skills"),
     ).toMatchObject({ readable: true, writable: false });
-    expect(harnessRoot(profile, "devin-global-agents")).toMatchObject({
+    expect(skillsDirectory(profile, "devin-global-agents")).toMatchObject({
       path: ".agents/skills",
       readable: true,
       writable: false,
@@ -299,7 +304,7 @@ describe("Harness Profile catalog", () => {
     }
   });
 
-  test("rejects duplicate root ids and projection targets with the wrong scope", () => {
+  test("rejects duplicate directory ids and install destinations with the wrong scope", () => {
     const profiles = structuredClone(harnessProfiles) as unknown as Record<string, HarnessProfile>;
     profiles.codex.roots[1].id = profiles.codex.roots[0].id;
     expect(() => assertHarnessCatalog(profiles)).toThrow("Duplicate root id");
@@ -308,8 +313,8 @@ describe("Harness Profile catalog", () => {
       string,
       HarnessProfile
     >;
-    wrongScope.codex.projection.globalTarget = "codex-project-agents";
-    expect(() => assertHarnessCatalog(wrongScope)).toThrow("Projection target has wrong scope");
+    wrongScope.codex.installedSkill.globalTarget = "codex-project-agents";
+    expect(() => assertHarnessCatalog(wrongScope)).toThrow("Install destination has wrong scope");
   });
 
   test("validates profile-level invariants even when frontmatter is empty", () => {

@@ -1,24 +1,24 @@
 import { assert, it } from "@effect/vitest";
 import { Schema } from "effect";
 import {
-  makeAcquisitionId,
+  makeImportId,
   makeCollectionId,
   makeMachineId,
-  makeRetainedCopyId,
+  makeCollectionVersionId,
   makeSkillId,
   makeSkillVersionId,
 } from "../src/library/entity-ids.js";
 import { LibraryManifest } from "../src/library/library-contracts.js";
 import { StoredLibraryManifest } from "../src/library/store/stored-manifest.js";
 
-const digest = `sha256:${"a".repeat(64)}`;
+const hash = `sha256:${"a".repeat(64)}`;
 const collectionId = makeCollectionId();
 const skillId = makeSkillId();
 const otherSkillId = makeSkillId();
 const versionId = makeSkillVersionId();
 const otherVersionId = makeSkillVersionId();
-const acquisitionId = makeAcquisitionId();
-const retainedCopyId = makeRetainedCopyId();
+const importId = makeImportId();
+const collectionVersionId = makeCollectionVersionId();
 const machineId = makeMachineId();
 const sourceIdentity = {
   kind: "registry" as const,
@@ -26,22 +26,22 @@ const sourceIdentity = {
   namespace: "test",
   slug: "library",
 };
-const retainedCopy = {
-  retained_copy_id: retainedCopyId,
-  digest,
+const collectionVersion = {
+  retained_copy_id: collectionVersionId,
+  digest: hash,
   copy_profile: "verbatim/v1",
   members: ["review", "lint"].map((source_path) => ({
     source_path,
-    source_digest: digest,
-    artifact_digest: digest,
+    source_digest: hash,
+    artifact_digest: hash,
     materialization_profile: "plain-skill/v1",
   })),
 };
 const version = (skill_version_id: string) => ({
   skill_version_id,
-  source_digest: digest,
-  artifact_digest: digest,
-  validation_identity_digest: digest,
+  source_digest: hash,
+  artifact_digest: hash,
+  validation_identity_digest: hash,
   materialization_profile: "plain-skill/v1",
 });
 
@@ -56,7 +56,7 @@ it("migrates a v5 manifest through v6 to the current model", () => {
           source_identity: sourceIdentity,
           tracking: { kind: "default" },
           selection: { kind: "full-tree" },
-          last_acquisition_id: acquisitionId,
+          last_acquisition_id: importId,
         },
       },
     ],
@@ -72,15 +72,15 @@ it("migrates a v5 manifest through v6 to the current model", () => {
       versions: [
         {
           ...version(skill_version_id!),
-          origins: [{ acquisition_id: acquisitionId, source_path: name }],
+          origins: [{ acquisition_id: importId, source_path: name }],
         },
       ],
     })),
-    retained_copies: [retainedCopy],
+    retained_copies: [collectionVersion],
     acquisitions: [
       {
-        acquisition_id: acquisitionId,
-        retained_copy_id: retainedCopyId,
+        acquisition_id: importId,
+        retained_copy_id: collectionVersionId,
         source_identity: sourceIdentity,
         tracking: { kind: "default" },
         selection: { kind: "full-tree" },
@@ -90,14 +90,14 @@ it("migrates a v5 manifest through v6 to the current model", () => {
         observations: [],
       },
     ],
-    snapshot_digests: [digest],
+    snapshot_digests: [hash],
     bindings: [
       { harness: "codex", scope: { kind: "global" }, skills: [skillId, otherSkillId] },
       { harness: "claude-code", scope: { kind: "global" }, skills: [skillId] },
     ],
   });
 
-  assert.strictEqual(decoded.schema, "skit.library.v7");
+  assert.strictEqual(decoded.schema, "skit.library.v8");
   assert.deepStrictEqual(decoded.collections, [
     {
       collection_id: collectionId,
@@ -106,7 +106,7 @@ it("migrates a v5 manifest through v6 to the current model", () => {
     },
   ]);
   assert.deepStrictEqual(
-    decoded.acquisitions.map(({ collection_id, kind, revision }) => ({
+    decoded.imports.map(({ collection_id, kind, revision }) => ({
       collection_id,
       kind,
       revision,
@@ -123,9 +123,7 @@ it("migrates a v5 manifest through v6 to the current model", () => {
   // A pinned Registry Release restores from its Source, so no private snapshot is required.
   assert.deepStrictEqual(decoded.snapshot_digests, []);
   // Codex bound the whole Collection, which covers Claude Code's single Skill.
-  assert.deepStrictEqual(decoded.bindings, [
-    { scope: { kind: "global" }, entries: [{ kind: "collection", collection_id: collectionId }] },
-  ]);
+  assert.deepStrictEqual(decoded.enabled, [{ collection: collectionId }]);
 });
 
 it("merges a v6 manifest's per-Harness Bindings into one global Binding", () => {
@@ -141,13 +139,13 @@ it("merges a v6 manifest's per-Harness Bindings into one global Binding", () => 
         versions: [version(versionId)],
       },
     ],
-    retained_copies: [{ ...retainedCopy, members: [retainedCopy.members[0]] }],
+    retained_copies: [{ ...collectionVersion, members: [collectionVersion.members[0]] }],
     acquisitions: [
       {
-        acquisition_id: acquisitionId,
+        acquisition_id: importId,
         collection_id: collectionId,
         kind: "source",
-        retained_copy_id: retainedCopyId,
+        retained_copy_id: collectionVersionId,
         source_identity: { kind: "local", machine_id: machineId, path: { value: "/tmp/library" } },
         input: { value: "/tmp/library" },
         acquired_at: "2026-09-20T00:00:00.000Z",
@@ -155,7 +153,7 @@ it("merges a v6 manifest's per-Harness Bindings into one global Binding", () => 
         observations: [],
       },
     ],
-    snapshot_digests: [digest],
+    snapshot_digests: [hash],
     bindings: [
       {
         harness: "codex",
@@ -170,11 +168,9 @@ it("merges a v6 manifest's per-Harness Bindings into one global Binding", () => 
     ],
   });
 
-  assert.strictEqual(decoded.schema, "skit.library.v7");
+  assert.strictEqual(decoded.schema, "skit.library.v8");
   // The Skill entry is covered by its whole-Collection entry, so only the Collection remains.
-  assert.deepStrictEqual(decoded.bindings, [
-    { scope: { kind: "global" }, entries: [{ kind: "collection", collection_id: collectionId }] },
-  ]);
+  assert.deepStrictEqual(decoded.enabled, [{ collection: collectionId }]);
 });
 
 it("encodes a migrated manifest as the current model only", () => {
@@ -188,12 +184,84 @@ it("encodes a migrated manifest as the current model only", () => {
     bindings: [],
   });
   assert.deepStrictEqual(Schema.encodeSync(LibraryManifest)(decoded), {
-    schema: "skit.library.v7",
+    schema: "skit.library.v8",
     collections: [],
     skills: [],
-    retained_copies: [],
-    acquisitions: [],
+    collection_versions: [],
+    imports: [],
     snapshot_digests: [],
-    bindings: [],
+    enabled: [],
   });
+});
+
+it("migrates a v7 manifest to plain names and a list of enabled items", () => {
+  const editId = makeImportId();
+  const decoded = Schema.decodeUnknownSync(StoredLibraryManifest)({
+    schema: "skit.library.v7",
+    collections: [{ collection_id: collectionId, label: "test/library" }],
+    skills: [
+      {
+        skill_id: skillId,
+        collection_id: collectionId,
+        path: "review",
+        name: "review",
+        versions: [version(versionId)],
+      },
+    ],
+    retained_copies: [{ ...collectionVersion, members: [collectionVersion.members[0]] }],
+    acquisitions: [
+      {
+        acquisition_id: importId,
+        collection_id: collectionId,
+        kind: "source",
+        retained_copy_id: collectionVersionId,
+        source_identity: { kind: "local", machine_id: machineId, path: { value: "/tmp/library" } },
+        input: { value: "/tmp/library" },
+        acquired_at: "2026-09-20T00:00:00.000Z",
+        machine_id: machineId,
+        observations: [],
+      },
+      {
+        acquisition_id: editId,
+        collection_id: collectionId,
+        kind: "retained-edit",
+        retained_copy_id: collectionVersionId,
+        source_identity: { kind: "local", machine_id: machineId, path: { value: "/tmp/library" } },
+        input: { value: "/tmp/edit" },
+        acquired_at: "2026-09-21T00:00:00.000Z",
+        machine_id: machineId,
+        observations: [],
+      },
+    ],
+    snapshot_digests: [hash],
+    bindings: [
+      {
+        scope: { kind: "global" },
+        entries: [
+          { kind: "collection", collection_id: collectionId },
+          { kind: "skill", skill_id: skillId },
+        ],
+      },
+    ],
+  });
+
+  assert.strictEqual(decoded.schema, "skit.library.v8");
+  assert.deepStrictEqual(
+    decoded.collection_versions.map((item) => item.collection_version_id),
+    [collectionVersionId],
+  );
+  assert.deepStrictEqual(
+    decoded.imports.map((item) => [
+      item.import_id,
+      item.kind,
+      item.collection_version_id,
+      item.imported_at,
+      item.lock_file_entries,
+    ]),
+    [
+      [importId, "source", collectionVersionId, "2026-09-20T00:00:00.000Z", []],
+      [editId, "edit", collectionVersionId, "2026-09-21T00:00:00.000Z", []],
+    ],
+  );
+  assert.deepStrictEqual(decoded.enabled, [{ collection: collectionId }, { skill: skillId }]);
 });

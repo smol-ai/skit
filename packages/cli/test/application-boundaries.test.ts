@@ -1,6 +1,6 @@
 import { sourceApplicationLayer } from "../src/application.js";
 import { testPlatformLayer } from "./helpers/platform.js";
-import { addRegistryRemoteEffect, readConfigEffect } from "../src/registry/auth.js";
+import { addRegistryRemote, readConfig } from "../src/registry/auth.js";
 import {
   resolveSkitConfiguration,
   skitConfigurationLayer,
@@ -27,7 +27,7 @@ it.effect("configuration writers honor ConfigProvider and explicit home override
       Effect.gen(function* () {
         assert.isTrue(yield* fs.exists(join(home, ".lock")));
         assert.isFalse(yield* fs.exists(join(home, "state.json")));
-        yield* addRegistryRemoteEffect("fixture", "https://registry.example.test", undefined).pipe(
+        yield* addRegistryRemote("fixture", "https://registry.example.test", undefined).pipe(
           Effect.provide(
             ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: join(root, "ignored") })),
           ),
@@ -46,7 +46,7 @@ it.effect("configuration writers honor ConfigProvider and explicit home override
     assert.isFalse(yield* fs.exists(join(explicit, ".lock")));
     assert.isFalse(yield* fs.exists(join(root, "ignored")));
     for (const home of [configured, explicit]) {
-      const config = yield* readConfigEffect(home);
+      const config = yield* readConfig(home);
       assert.strictEqual(config.registryAliases?.fixture, "https://registry.example.test");
     }
   }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),
@@ -131,7 +131,7 @@ it.effect(
         Effect.gen(function* () {
           const store = yield* LibraryStore;
           const state = yield* store.load;
-          yield* store.publish(state, state);
+          yield* store.save(state, state);
           yield* Deferred.succeed(ready, undefined);
           yield* Deferred.await(release);
         }),
@@ -160,7 +160,7 @@ it.effect(
       );
       assert.deepStrictEqual(failures, []);
       assert.strictEqual(results.length, 1);
-      assert.strictEqual(results[0]?.schema, "skit.list.v6");
+      assert.strictEqual(results[0]?.schema, "skit.list.v7");
       assert.isTrue(yield* fs.exists(join(home, ".lock")));
       yield* Deferred.succeed(release, undefined);
       yield* Fiber.join(writer);
@@ -224,7 +224,7 @@ it.effect("application layers consume the supplied paths without re-reading conf
       const supplied = yield* SkitConfiguration;
       assert.strictEqual(store.home, paths.skitHome);
       assert.strictEqual(supplied.userHome, paths.userHome);
-      yield* addRegistryRemoteEffect("fixture", "https://registry.example.test", undefined);
+      yield* addRegistryRemote("fixture", "https://registry.example.test", undefined);
       assert.isTrue(yield* fs.exists(paths.authPath));
       assert.isFalse(yield* fs.exists(join(root, "ignored")));
     }).pipe(

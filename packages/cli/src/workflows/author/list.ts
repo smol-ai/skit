@@ -28,7 +28,7 @@ import {
   RegistryUnreachable,
 } from "../../registry/failures.js";
 import { handleRegistryCommand } from "../../application.js";
-import { resolveAuthEffect } from "../../registry/auth.js";
+import { resolveAuth } from "../../registry/auth.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homeFlag, jsonFlag, optionalString } from "../../commands/parameters.js";
@@ -109,7 +109,7 @@ const classifyListFailure = (origin: string, error: unknown): AuthorListFailure 
   return new AuthorListResponseError({ message: "Registry returned an invalid response" });
 };
 
-export const listAuthorSkitsEffect = Effect.fn("listAuthorSkitsEffect")(function* (input: {
+export const listAuthorSkits = Effect.fn("listAuthorSkits")(function* (input: {
   origin?: string;
   token?: string;
 }): Effect.fn.Return<AuthorSkitInventory, AuthorListFailure, RegistryHttp | Scope.Scope> {
@@ -175,7 +175,7 @@ export const authorListCommand = Effect.fn("CLI.authorList")(function* <E>(
   const renderer = yield* Renderer;
   return yield* renderer.withStatus(
     "Listing authored SKITs",
-    listAuthorSkitsEffect({ origin: selected.origin, token: selected.token }),
+    listAuthorSkits({ origin: selected.origin, token: selected.token }),
   );
 });
 
@@ -193,7 +193,7 @@ export const authorListCliCommand = Command.make(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
           const selectedRegistry = Option.getOrUndefined(registry);
-          const authState = yield* resolveAuthEffect(
+          const authState = yield* resolveAuth(
             selectedHome,
             selectedRegistry,
             undefined,

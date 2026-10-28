@@ -11,30 +11,30 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { FetchHttpClient, type HttpClient } from "effect/http";
 import {
-  createSkitArchiveEffect,
-  deterministicTreeHashEffect,
-  initSkitEffect,
+  createSkitArchive,
+  deterministicTreeHash,
+  initSkit,
   libraryStoreLayer,
   libraryAuditLogLayer,
   treeHasherLayer,
   TreeHasher,
   LibraryStore,
   LibraryAuditLog,
-  readSkitDescriptorEffect,
-  validateSkitDirectoryEffect,
+  readSkitDescriptor,
+  validateSkitDirectory,
   type HarnessName,
-  type HarnessRootOverrides,
+  type SkillsDirectoryOverrides,
   type LibraryState,
   makeMachineId,
-  retainObservedCollectionEffect,
+  importCollection,
   withLibraryWriter,
 } from "@smolai/skit-core";
-import type { ProjectionOptions } from "../../src/workflows/library/projection-options.js";
+import type { InstalledSkillOptions } from "../../src/workflows/library/installed-skill-options.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./http-test-client.js";
 import { registryAuthAccessLayer } from "../../src/registry/auth-service.js";
 import { RegistryHttp, registryHttpLayer } from "../../src/registry/registry-http.js";
 
-export type HarnessRoots = HarnessRootOverrides;
+export type HarnessRoots = SkillsDirectoryOverrides;
 
 export interface LibraryHomeInput {
   readonly home: string;
@@ -93,7 +93,7 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
     configHome: join(input.inventoryHome ?? home, "config"),
     overrides: roots,
   };
-  const bindings: ProjectionOptions = inventory;
+  const installOptions: InstalledSkillOptions = inventory;
   const transport: Layer.Layer<HttpClient.HttpClient> = input.transport
     ? testHttpClientLayer(input.transport)
     : FetchHttpClient.layer;
@@ -146,12 +146,12 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
     statePath,
     originals: join(home, "originals"),
     inventory,
-    bindings,
+    installOptions,
     variantsPath: join(home, "variants"),
     owned,
     durable,
     writeDurable,
-    projection: (harness: HarnessName, ...segments: string[]) =>
+    installedSkill: (harness: HarnessName, ...segments: string[]) =>
       harness === "devin"
         ? join(inventory.configHome, "devin", "skills", ...segments)
         : join(harnessRoot, directoryFor(harness), ...segments),
@@ -177,13 +177,13 @@ export const copySkitFixtureEffect = (name: SkitFixtureName, root: string) =>
     fs.copy(fileURLToPath(new URL(`../fixtures/${name}`, import.meta.url)), root),
   );
 
-export const bindInitializedSkitEffect = Effect.fn("Test.bindInitializedSkit")(function* (
+export const bindInitializedSkit = Effect.fn("Test.bindInitializedSkit")(function* (
   root: string,
   namespace: string,
   origin = "https://registry.example",
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const descriptor = yield* readSkitDescriptorEffect(root);
+  const descriptor = yield* readSkitDescriptor(root);
   yield* fs.writeFileString(
     join(root, "skit.remote.json"),
     `${JSON.stringify({ schema: "skit.remote.v1", origin, namespace, skit: descriptor.slug })}\n`,
@@ -191,13 +191,13 @@ export const bindInitializedSkitEffect = Effect.fn("Test.bindInitializedSkit")(f
 });
 
 export const boundSkit = Effect.fn("Test.boundSkit")(function* (path: string, namespace: string) {
-  yield* initSkitEffect(path);
-  yield* bindInitializedSkitEffect(path, namespace);
+  yield* initSkit(path);
+  yield* bindInitializedSkit(path, namespace);
   return path;
 });
 
 export const releaseIdentity = (source: string, release: string) =>
-  validateSkitDirectoryEffect(source, release, { assessmentContext: "retain" }).pipe(
+  validateSkitDirectory(source, release, { assessmentContext: "import" }).pipe(
     Effect.map((validated) => validated.identity),
   );
 
@@ -206,16 +206,16 @@ export const archiveBytes = Effect.fn("Test.archiveBytes")(function* (
   archivePath: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
-  yield* createSkitArchiveEffect(source, archivePath);
+  yield* createSkitArchive(source, archivePath);
   return yield* fs.readFile(archivePath);
 });
 
-export { deterministicTreeHashEffect };
+export { deterministicTreeHash };
 
 /** Retain observed bytes into the Library at `home`, through the store production consumes. */
-export const retainObservedIn =
-  (home: string) => (request: Parameters<typeof retainObservedCollectionEffect>[0]) =>
-    retainObservedCollectionEffect(request).pipe(Effect.provide(libraryStoreLayer({ home })));
+export const importCollectionIn =
+  (home: string) => (request: Parameters<typeof importCollection>[0]) =>
+    importCollection(request).pipe(Effect.provide(libraryStoreLayer({ home })));
 
 /** Mutate the Library at `home` the way a front end does: under the recording writer lock. */
 export const writingTo = <A, E, R>(home: string, effect: Effect.Effect<A, E, R>) =>

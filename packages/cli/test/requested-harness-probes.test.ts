@@ -1,11 +1,11 @@
 import { assert, it } from "@effect/vitest";
 import { skitLayer } from "@smolai/skit-core";
 import { Effect } from "effect";
-import { probeRequestedHarnessesEffect } from "../src/harness/probe.js";
+import { probeRequestedHarnesses } from "../src/harness/probe.js";
 
 it.effect("probes every supported Harness when no subject is requested", () =>
   Effect.gen(function* () {
-    const probes = yield* probeRequestedHarnessesEffect(undefined, { path: "" });
+    const probes = yield* probeRequestedHarnesses(undefined, { path: "" });
     assert.deepStrictEqual(
       probes.map((probe) => probe.harnessId),
       ["codex", "claude-code", "opencode", "devin"],
@@ -15,7 +15,7 @@ it.effect("probes every supported Harness when no subject is requested", () =>
 
 it.effect("probes only the Harness selected by a valid alias", () =>
   Effect.gen(function* () {
-    const probes = yield* probeRequestedHarnessesEffect("claude", { path: "" });
+    const probes = yield* probeRequestedHarnesses("claude", { path: "" });
     assert.deepStrictEqual(
       probes.map((probe) => probe.harnessId),
       ["claude-code"],
@@ -24,7 +24,7 @@ it.effect("probes only the Harness selected by a valid alias", () =>
 );
 
 it.effect("rejects an unknown Harness without starting probes", () =>
-  probeRequestedHarnessesEffect("mystery").pipe(
+  probeRequestedHarnesses("mystery").pipe(
     Effect.provide(skitLayer),
     Effect.flip,
     Effect.map((failure) => {

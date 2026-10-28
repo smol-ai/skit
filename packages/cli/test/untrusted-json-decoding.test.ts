@@ -8,8 +8,8 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, describe, it } from "@effect/vitest";
 import { Cause, Effect, Exit, FileSystem } from "effect";
 import { join } from "node:path";
-import { resolveAuthEffect } from "../src/registry/auth.js";
-import { readAuthorRemoteEffect } from "../src/workflows/author/sync.js";
+import { resolveAuth } from "../src/registry/auth.js";
+import { readAuthorRemote } from "../src/workflows/author/sync.js";
 
 const ORIGIN = "https://registry.example";
 const credential = { token: "t", tokenId: "i", tokenPrefix: "p", scopes: ["library:sync"] };
@@ -18,14 +18,14 @@ const withAuth = Effect.fn("withAuth")(function* (config: string) {
   const fs = yield* FileSystem.FileSystem;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-auth-" });
   yield* fs.writeFileString(join(home, "auth.json"), config);
-  return yield* Effect.exit(resolveAuthEffect(home));
+  return yield* Effect.exit(resolveAuth(home));
 });
 
 const withRemote = Effect.fn("withRemote")(function* (document: string) {
   const fs = yield* FileSystem.FileSystem;
   const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-remote-" });
   yield* fs.writeFileString(join(root, "skit.remote.json"), document);
-  return yield* Effect.exit(readAuthorRemoteEffect(root));
+  return yield* Effect.exit(readAuthorRemote(root));
 });
 
 /** The tag of the single reason in a failed exit, or how it failed instead. */

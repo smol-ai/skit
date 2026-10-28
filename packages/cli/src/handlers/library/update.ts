@@ -7,29 +7,22 @@ import { libraryCommandConfiguration } from "../../commands/library-configuratio
 import {
   CommandMetadata,
   credentialStoreReadSubprocesses,
-  sourceAcquisitionSubprocesses,
+  sourceFetchSubprocesses,
 } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
-import {
-  planUpdatesEffect,
-  updateSubjectsEffect,
-  updateExitCode,
-} from "../../library-application/update.js";
-import {
-  prepareProjectionRetention,
-  ProjectionRetentionMissing,
-} from "../../workflows/library/projection-retention.js";
+import { planUpdates, updateSubjects, updateExitCode } from "../../library-application/update.js";
+import { prepareEditImport, EditImportMissing } from "../../workflows/library/import-edit.js";
 
-const subject = Argument.String("skit-or-skill").pipe(Argument.optional);
+const subject = Argument.String("skill-or-collection").pipe(Argument.optional);
 const dryRun = Flag.Boolean("dry-run").pipe(
   Flag.withDescription("Report changes without applying them."),
   Flag.withDefault(false),
 );
 const fromProjection = Flag.String("from-projection").pipe(
-  Flag.withDescription("Retain changed bytes from this Projection ID, Harness, or path."),
+  Flag.withDescription("Import edits from this installed skill, given by its ID, harness or path."),
   Flag.optional,
 );
 
@@ -41,18 +34,18 @@ export const updateCliCommand = Command.make(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const query = Option.getOrUndefined(input.subject);
-        const projectionSelector = Option.getOrUndefined(input.fromProjection);
-        if (projectionSelector !== undefined) {
+        const installedSkillSelector = Option.getOrUndefined(input.fromProjection);
+        if (installedSkillSelector !== undefined) {
           if (query === undefined)
-            return yield* new ProjectionRetentionMissing({
+            return yield* new EditImportMissing({
               message: "A Skill is required with --from-projection",
             });
           const value = yield* renderer.withStatus(
             input.dryRun
-              ? "Inspecting changed Projection bytes"
-              : "Retaining changed Projection bytes",
+              ? "Inspecting changed installed-skill bytes"
+              : "Retaining changed installed-skill bytes",
             Effect.gen(function* () {
-              const prepared = yield* prepareProjectionRetention(query, projectionSelector);
+              const prepared = yield* prepareEditImport(query, installedSkillSelector);
               return input.dryRun
                 ? result("projectionRetentionPlan", prepared.preview)
                 : result("projectionRetention", yield* prepared.apply());
@@ -63,12 +56,12 @@ export const updateCliCommand = Command.make(
         if (input.dryRun) {
           const value = yield* renderer.withStatus(
             "Checking Source observations",
-            planUpdatesEffect(query),
+            planUpdates(query),
           );
           return yield* renderer.result(result("updatePlan", value));
         }
         const configuration = yield* libraryCommandConfiguration(input);
-        const value = yield* updateSubjectsEffect({ roots: configuration.inventory }, query).pipe(
+        const value = yield* updateSubjects({ roots: configuration.inventory }, query).pipe(
           Effect.provide(terminalLibraryProgressLayer),
         );
         yield* renderer.result(result("update", value, updateExitCode(value)));
@@ -83,7 +76,7 @@ export const updateCliCommand = Command.make(
   Command.annotate(CommandMetadata, {
     effects: {
       capabilities: ["filesystem.read", "filesystem.write", "network.read", "process.execute"],
-      subprocesses: [...sourceAcquisitionSubprocesses, ...credentialStoreReadSubprocesses],
+      subprocesses: [...sourceFetchSubprocesses, ...credentialStoreReadSubprocesses],
     },
     outputSchemas: [
       outputContracts.update,

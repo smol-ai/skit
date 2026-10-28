@@ -1,44 +1,44 @@
 import { assert, it } from "@effect/vitest";
 import { Schema } from "effect";
 import {
-  makeAcquisitionId,
+  makeImportId,
   makeCollectionId,
   makeMachineId,
-  makeRetainedCopyId,
+  makeCollectionVersionId,
   makeSkillId,
   makeSkillVersionId,
 } from "../src/library/entity-ids.js";
 import {
-  acquisitionIsSourceRestorable,
+  importCanBeRefetched,
   librarySnapshotDigests,
-  type Acquisition,
+  type Import,
   type LibraryManifest,
-  type RetainedCopy,
+  type CollectionVersion,
 } from "../src/library/library-contracts.js";
 import { StoredLibraryManifest } from "../src/library/store/stored-manifest.js";
 
 const digest = `sha256:${"a".repeat(64)}`;
-const retainedCopyId = makeRetainedCopyId();
+const collectionVersionId = makeCollectionVersionId();
 const machineId = makeMachineId();
-const copy: RetainedCopy = {
-  retained_copy_id: retainedCopyId,
-  digest,
+const copy: CollectionVersion = {
+  collection_version_id: collectionVersionId,
+  hash: digest,
   copy_profile: "verbatim/v1",
   members: [
     {
       source_path: ".",
-      source_digest: digest,
-      artifact_digest: digest,
+      source_hash: digest,
+      artifact_hash: digest,
       materialization_profile: "plain-skill/v1",
     },
   ],
 };
 const collectionId = makeCollectionId();
-const acquisition = (overrides: Partial<Acquisition>): Acquisition => ({
-  acquisition_id: makeAcquisitionId(),
+const sourceImport = (overrides: Partial<Import>): Import => ({
+  import_id: makeImportId(),
   collection_id: collectionId,
   kind: "source",
-  retained_copy_id: retainedCopyId,
+  collection_version_id: collectionVersionId,
   source_identity: {
     kind: "github",
     owner: "example-org",
@@ -47,24 +47,24 @@ const acquisition = (overrides: Partial<Acquisition>): Acquisition => ({
   },
   input: { value: "https://github.com/example-org/skills" },
   revision: "e0219e96214ac420bdb8d15141340625fda63bbb",
-  acquired_at: "2026-09-16T00:00:00.000Z",
+  imported_at: "2026-09-16T00:00:00.000Z",
   machine_id: machineId,
-  observations: [],
+  lock_file_entries: [],
   ...overrides,
 });
 
 it("omits GitHub bytes pinned to a commit from private snapshot planning", () => {
-  const pinned = acquisition({});
-  assert.strictEqual(acquisitionIsSourceRestorable(pinned), true);
+  const pinned = sourceImport({});
+  assert.strictEqual(importCanBeRefetched(pinned), true);
   assert.deepStrictEqual(
-    librarySnapshotDigests({ retained_copies: [copy], acquisitions: [pinned] }),
+    librarySnapshotDigests({ collection_versions: [copy], imports: [pinned] }),
     [],
   );
 });
 
 it("restores by revision whatever the collection root or input text", () => {
   for (const restorable of [
-    acquisition({
+    sourceImport({
       source_identity: {
         kind: "github",
         owner: "example-org",
@@ -73,7 +73,7 @@ it("restores by revision whatever the collection root or input text", () => {
       },
       input: { value: "https://github.com/example-org/skills/tree/main/skills" },
     }),
-    acquisition({
+    sourceImport({
       source_identity: {
         kind: "registry",
         authority: "default",
@@ -84,52 +84,51 @@ it("restores by revision whatever the collection root or input text", () => {
       revision: "1.2.0",
     }),
   ])
-    assert.strictEqual(acquisitionIsSourceRestorable(restorable), true);
+    assert.strictEqual(importCanBeRefetched(restorable), true);
 });
 
-it("keeps unpinned, local, and retained-edit acquisitions snapshot-backed", () => {
-  const { revision: _revision, ...unpinned } = acquisition({});
-  const local = acquisition({
+it("keeps unpinned, local, and edit imports snapshot-backed", () => {
+  const { revision: _revision, ...unpinned } = sourceImport({});
+  const local = sourceImport({
     source_identity: { kind: "local", machine_id: machineId, path: { value: "/tmp/skill" } },
     input: { value: "/tmp/skill" },
   });
-  const edit = acquisition({ kind: "retained-edit" });
-  for (const item of [unpinned, local, edit])
-    assert.strictEqual(acquisitionIsSourceRestorable(item), false);
+  const edit = sourceImport({ kind: "edit" });
+  for (const item of [unpinned, local, edit]) assert.strictEqual(importCanBeRefetched(item), false);
   assert.deepStrictEqual(
-    librarySnapshotDigests({ retained_copies: [copy], acquisitions: [unpinned] }),
+    librarySnapshotDigests({ collection_versions: [copy], imports: [unpinned] }),
     [digest],
   );
   assert.deepStrictEqual(
-    librarySnapshotDigests({ retained_copies: [copy, { ...copy }], acquisitions: [local] }),
+    librarySnapshotDigests({ collection_versions: [copy, { ...copy }], imports: [local] }),
     [digest],
   );
 });
 
-const sourceDigest = `sha256:${"b".repeat(64)}`;
-const sourceCopyId = makeRetainedCopyId();
-const sourceCopy: RetainedCopy = {
+const sourceHash = `sha256:${"b".repeat(64)}`;
+const sourceCopyId = makeCollectionVersionId();
+const sourceCopy: CollectionVersion = {
   ...copy,
-  retained_copy_id: sourceCopyId,
-  digest: sourceDigest,
+  collection_version_id: sourceCopyId,
+  hash: sourceHash,
 };
-const { revision: _unpinnedRevision, ...unpinnedAcquisition } = acquisition({});
+const { revision: _unpinnedRevision, ...unpinnedImport } = sourceImport({});
 const mixedManifest: LibraryManifest = {
-  schema: "skit.library.v7",
+  schema: "skit.library.v8",
   collections: [{ collection_id: collectionId, label: "skills" }],
   skills: [],
-  retained_copies: [copy, sourceCopy],
-  acquisitions: [unpinnedAcquisition, acquisition({ retained_copy_id: sourceCopyId })],
+  collection_versions: [copy, sourceCopy],
+  imports: [unpinnedImport, sourceImport({ collection_version_id: sourceCopyId })],
   snapshot_digests: [digest],
-  bindings: [],
+  enabled: [],
 };
 
 it("decodes a v4 manifest into the current model without selections", () => {
   const skillId = makeSkillId();
   const versionId = makeSkillVersionId();
-  const legacyAcquisition = {
-    acquisition_id: makeAcquisitionId(),
-    retained_copy_id: retainedCopyId,
+  const legacyImport = {
+    acquisition_id: makeImportId(),
+    retained_copy_id: collectionVersionId,
     source_identity: { kind: "url", url: { value: "https://skills.example#skills=review" } },
     tracking: { kind: "default" },
     selection: { kind: "full-tree" },
@@ -155,15 +154,24 @@ it("decodes a v4 manifest into the current model without selections", () => {
             artifact_digest: digest,
             validation_identity_digest: digest,
             materialization_profile: "plain-skill/v1",
-            origins: [{ acquisition_id: legacyAcquisition.acquisition_id, source_path: "review" }],
+            origins: [{ acquisition_id: legacyImport.acquisition_id, source_path: "review" }],
           },
         ],
       },
     ],
     retained_copies: [
       {
-        ...copy,
-        members: [{ ...copy.members[0]!, source_path: "review" }],
+        retained_copy_id: copy.collection_version_id,
+        digest: copy.hash,
+        copy_profile: copy.copy_profile,
+        members: [
+          {
+            source_path: "review",
+            source_digest: digest,
+            artifact_digest: digest,
+            materialization_profile: "plain-skill/v1",
+          },
+        ],
         v3_normalized_tree: {
           digest,
           profile: "legacy/v1",
@@ -171,24 +179,24 @@ it("decodes a v4 manifest into the current model without selections", () => {
         },
       },
     ],
-    acquisitions: [legacyAcquisition],
+    acquisitions: [legacyImport],
     snapshot_digests: [digest],
     bindings: [],
   });
-  assert.strictEqual(decoded.schema, "skit.library.v7");
-  assert.strictEqual("v3_normalized_tree" in decoded.retained_copies[0]!, false);
-  assert.deepStrictEqual(decoded.acquisitions[0]?.source_identity, {
+  assert.strictEqual(decoded.schema, "skit.library.v8");
+  assert.strictEqual("v3_normalized_tree" in decoded.collection_versions[0]!, false);
+  assert.deepStrictEqual(decoded.imports[0]?.source_identity, {
     kind: "well-known",
     locator: { value: "https://skills.example" },
   });
-  assert.strictEqual(decoded.acquisitions[0]?.kind, "source");
-  assert.strictEqual(decoded.acquisitions[0]?.collection_id, collectionId);
+  assert.strictEqual(decoded.imports[0]?.kind, "source");
+  assert.strictEqual(decoded.imports[0]?.collection_id, collectionId);
   assert.deepStrictEqual(decoded.skills[0]?.versions[0]?.skill_version_id, versionId);
 });
 
-it("rejects a Skill Version that no Acquisition of its Collection backs", () => {
+it("rejects a Skill Version that no import of its Collection backs", () => {
   const versionId = makeSkillVersionId();
-  const otherDigest = `sha256:${"c".repeat(64)}`;
+  const otherHash = `sha256:${"c".repeat(64)}`;
   assert.throws(() =>
     Schema.decodeUnknownSync(StoredLibraryManifest)({
       ...mixedManifest,
@@ -201,9 +209,9 @@ it("rejects a Skill Version that no Acquisition of its Collection backs", () => 
           versions: [
             {
               skill_version_id: versionId,
-              source_digest: otherDigest,
-              artifact_digest: otherDigest,
-              validation_identity_digest: otherDigest,
+              source_digest: otherHash,
+              artifact_digest: otherHash,
+              validation_identity_digest: otherHash,
               materialization_profile: "plain-skill/v1",
             },
           ],

@@ -6,8 +6,8 @@ import { Effect, Result, Schema } from "effect";
 // Hashing is deterministic computation, not IO, so it stays on node:crypto.
 import { createHash } from "node:crypto";
 import { parse as parseYaml } from "yaml";
-import { encodeHashParts } from "../shared/digest.js";
-import type { Digest, SkillExampleManifest, SkitDescriptor } from "../contracts.js";
+import { encodeHashParts } from "../shared/hash.js";
+import type { Hash, SkillExampleManifest, SkitDescriptor } from "../contracts.js";
 import {
   containedSkillSchema,
   skillExampleSchema,
@@ -19,7 +19,7 @@ import {
   ConflictingInvocationDeclaration,
   DuplicateSkillNames,
   DuplicateSkillPaths,
-  ProjectedPathCollision,
+  InstalledPathCollision,
   ReadmeFrontmatterMissing,
   SharedTargetCollision,
 } from "../failures.js";
@@ -80,10 +80,46 @@ function normalizeContainedSkill(skill: ParsedSkill): SkitDescriptor["skills"][n
   } as SkitDescriptor["skills"][number];
 }
 
-export function parseSkitReadme(text: string): SkitDescriptor {
+const malformed = (format: "json" | "yaml", detail: string) =>
+  new DescriptorMalformed({ format, detail });
+
+const JsonDocument = Schema.fromJsonString(Schema.Unknown);
+
+const normalizeSkills = Effect.fn("Descriptor.normalizeSkills")(function* (
+  skills: readonly ParsedSkill[],
+) {
+  for (const skill of skills) {
+    const legacy = legacyInvocation((skill as DescriptorObject).trigger_modes);
+    if (typeof skill.invocation === "string" && legacy && skill.invocation !== legacy)
+      return yield* new ConflictingInvocationDeclaration({ skill: skill.name });
+  }
+  return skills.map(normalizeContainedSkill);
+});
+
+const validateDescriptor = Effect.fn("Descriptor.validate")(function* (
+  input: unknown,
+  format: "json" | "yaml",
+) {
+  const parsed = yield* Schema.decodeUnknownEffect(skitDescriptorSchema, {
+    onExcessProperty: "error",
+    errors: "all",
+  })(input).pipe(Effect.mapError((error) => malformed(format, error.message)));
+  const skills = yield* normalizeSkills(parsed.skills);
+  const descriptor: SkitDescriptor = { ...parsed, skills };
+  if (new Set(skills.map((skill) => skill.name)).size !== skills.length)
+    return yield* new DuplicateSkillNames();
+  if (new Set(skills.map((skill) => skill.path)).size !== skills.length)
+    return yield* new DuplicateSkillPaths();
+  return descriptor;
+});
+
+export const parseSkitReadme = Effect.fn("Descriptor.parseReadme")(function* (text: string) {
   const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
-  if (!match) throw new ReadmeFrontmatterMissing();
-  const input = parseYaml(match[1]);
+  if (!match) return yield* new ReadmeFrontmatterMissing();
+  const input = yield* Effect.try({
+    try: () => parseYaml(match[1]) as unknown,
+    catch: (error) => malformed("yaml", String(error)),
+  });
   // Generated Agent Skills wrappers used these sentinel IDs before Descriptor
   // identity moved to `slug`. Retained artifacts are immutable, so normalize
   // only the two values SKIT itself emitted rather than accepting legacy IDs
@@ -98,94 +134,10 @@ export function parseSkitReadme(text: string): SkitDescriptor {
       delete descriptor.id;
     }
   }
-  const parsed = Schema.decodeUnknownSync(skitDescriptorSchema, {
-    onExcessProperty: "error",
-  })(input);
-  const descriptor: SkitDescriptor = {
-    ...parsed,
-    skills: parsed.skills.map(normalizeContainedSkill),
-  };
-  if (new Set(descriptor.skills.map((skill) => skill.name)).size !== descriptor.skills.length)
-    throw new DuplicateSkillNames();
-  if (new Set(descriptor.skills.map((skill) => skill.path)).size !== descriptor.skills.length)
-    throw new DuplicateSkillPaths();
-  return descriptor;
-}
-
-export function parseSkitConfig(text: string): SkitDescriptor {
-  const config = Schema.decodeUnknownSync(skitConfigSchema, {
-    onExcessProperty: "error",
-  })(JSON.parse(text));
-  const descriptor: SkitDescriptor = {
-    skit: 1,
-    slug: config.slug,
-    ...(config.sameAs ? { sameAs: config.sameAs } : {}),
-    ...(config.author ? { author: config.author } : {}),
-    skills: config.skills.map((skill) =>
-      normalizeContainedSkill({ ...skill, default_enabled: skill.default_enabled ?? true }),
-    ),
-  };
-  if (new Set(descriptor.skills.map((skill) => skill.name)).size !== descriptor.skills.length)
-    throw new DuplicateSkillNames();
-  if (new Set(descriptor.skills.map((skill) => skill.path)).size !== descriptor.skills.length)
-    throw new DuplicateSkillPaths();
-  return descriptor;
-}
-
-const malformed = (format: "json" | "yaml", detail: string) =>
-  new DescriptorMalformed({ format, detail });
-
-const JsonDocument = Schema.fromJsonString(Schema.Unknown);
-
-const normalizeSkillsEffect = Effect.fn("Descriptor.normalizeSkills")(function* (
-  skills: readonly ParsedSkill[],
-) {
-  for (const skill of skills) {
-    const legacy = legacyInvocation((skill as DescriptorObject).trigger_modes);
-    if (typeof skill.invocation === "string" && legacy && skill.invocation !== legacy)
-      return yield* new ConflictingInvocationDeclaration({ skill: skill.name });
-  }
-  return skills.map(normalizeContainedSkill);
+  return yield* validateDescriptor(input, "yaml");
 });
 
-const validateDescriptorEffect = Effect.fn("Descriptor.validate")(function* (
-  input: unknown,
-  format: "json" | "yaml",
-) {
-  const parsed = yield* Schema.decodeUnknownEffect(skitDescriptorSchema, {
-    onExcessProperty: "error",
-    errors: "all",
-  })(input).pipe(Effect.mapError((error) => malformed(format, error.message)));
-  const skills = yield* normalizeSkillsEffect(parsed.skills);
-  const descriptor: SkitDescriptor = { ...parsed, skills };
-  if (new Set(skills.map((skill) => skill.name)).size !== skills.length)
-    return yield* new DuplicateSkillNames();
-  if (new Set(skills.map((skill) => skill.path)).size !== skills.length)
-    return yield* new DuplicateSkillPaths();
-  return descriptor;
-});
-
-export const parseSkitReadmeEffect = Effect.fn("Descriptor.parseReadme")(function* (text: string) {
-  const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
-  if (!match) return yield* new ReadmeFrontmatterMissing();
-  const input = yield* Effect.try({
-    try: () => parseYaml(match[1]) as unknown,
-    catch: (error) => malformed("yaml", String(error)),
-  });
-  if (input && typeof input === "object") {
-    const descriptor = input as DescriptorObject;
-    if (
-      !("slug" in descriptor) &&
-      (descriptor.id === "internal/normalized" || descriptor.id === "local/internal-normalized")
-    ) {
-      descriptor.slug = "internal-normalized";
-      delete descriptor.id;
-    }
-  }
-  return yield* validateDescriptorEffect(input, "yaml");
-});
-
-export const parseSkitConfigEffect = Effect.fn("Descriptor.parseConfig")(function* (text: string) {
+export const parseSkitConfig = Effect.fn("Descriptor.parseConfig")(function* (text: string) {
   const input = yield* Schema.decodeUnknownEffect(JsonDocument)(text).pipe(
     Effect.mapError((error) => malformed("json", error.message)),
   );
@@ -193,7 +145,7 @@ export const parseSkitConfigEffect = Effect.fn("Descriptor.parseConfig")(functio
     onExcessProperty: "error",
     errors: "all",
   })(input).pipe(Effect.mapError((error) => malformed("json", error.message)));
-  return yield* validateDescriptorEffect(
+  return yield* validateDescriptor(
     {
       skit: 1,
       slug: parsed.slug,
@@ -214,11 +166,11 @@ export function parseSkillExample(text: string): SkillExampleManifest {
   );
 }
 
-export function hashParts(parts: Array<string | Uint8Array>): Digest {
+export function hashParts(parts: Array<string | Uint8Array>): Hash {
   return `sha256:${createHash("sha256").update(encodeHashParts(parts)).digest("hex")}`;
 }
 
-export interface ProjectedSkillFile {
+export interface InstalledSkillFile {
   bytes: Uint8Array;
   executable?: boolean;
 }
@@ -231,13 +183,13 @@ export function projectSkillFiles(
   files: Array<{ path: string; bytes: Uint8Array; executable?: boolean }>,
   skillPath: string,
   shared: Array<{ from: string; to: string }> = [],
-): Result.Result<Map<string, ProjectedSkillFile>, SharedTargetCollision> {
-  const projected = new Map<string, ProjectedSkillFile>();
+): Result.Result<Map<string, InstalledSkillFile>, SharedTargetCollision> {
+  const installed = new Map<string, InstalledSkillFile>();
   const normalizedSkillPath = skillPath.normalize("NFC");
   for (const file of files) {
     const path = file.path.normalize("NFC");
     if (path.startsWith(`${normalizedSkillPath}/`))
-      projected.set(path.slice(normalizedSkillPath.length + 1), file);
+      installed.set(path.slice(normalizedSkillPath.length + 1), file);
   }
   for (const mapping of shared)
     for (const file of files) {
@@ -246,10 +198,10 @@ export function projectSkillFiles(
       if (path !== from && !path.startsWith(`${from}/`)) continue;
       const suffix = path === from ? "" : path.slice(from.length + 1);
       const target = (suffix ? `${mapping.to}/${suffix}` : mapping.to).normalize("NFC");
-      if (projected.has(target)) return Result.fail(new SharedTargetCollision({ target }));
-      projected.set(target, file);
+      if (installed.has(target)) return Result.fail(new SharedTargetCollision({ target }));
+      installed.set(target, file);
     }
-  return Result.succeed(projected);
+  return Result.succeed(installed);
 }
 
 /** A Release's file paths, NFC-normalised and sorted so every directory is one contiguous range. */
@@ -317,28 +269,28 @@ export function measureSkillProjection(
   return measured;
 }
 
-export function hashProjectedSkillFiles(
+export function hashInstalledSkillFiles(
   files: Array<{ path: string; bytes: Uint8Array; executable?: boolean }>,
   skillPath: string,
   shared: Array<{ from: string; to: string }> = [],
-): Result.Result<Digest, SharedTargetCollision | ProjectedPathCollision> {
-  return Result.map(projectedSkillHashParts(files, skillPath, shared), hashParts);
+): Result.Result<Hash, SharedTargetCollision | InstalledPathCollision> {
+  return Result.map(installedSkillHashParts(files, skillPath, shared), hashParts);
 }
 
 /** Canonical digest inputs, separated so every runtime can supply its native SHA-256. */
-export function projectedSkillHashParts(
+export function installedSkillHashParts(
   files: Array<{ path: string; bytes: Uint8Array; executable?: boolean }>,
   skillPath: string,
   shared: Array<{ from: string; to: string }> = [],
-): Result.Result<Array<string | Uint8Array>, SharedTargetCollision | ProjectedPathCollision> {
-  const projected = projectSkillFiles(files, skillPath, shared);
-  if (Result.isFailure(projected)) return Result.fail(projected.failure);
-  interface ProjectedNode {
-    children: Map<string, ProjectedNode>;
+): Result.Result<Array<string | Uint8Array>, SharedTargetCollision | InstalledPathCollision> {
+  const installed = projectSkillFiles(files, skillPath, shared);
+  if (Result.isFailure(installed)) return Result.fail(installed.failure);
+  interface InstalledNode {
+    children: Map<string, InstalledNode>;
     file?: { bytes: Uint8Array; executable?: boolean };
   }
-  const root: ProjectedNode = { children: new Map() };
-  for (const [path, file] of projected.success) {
+  const root: InstalledNode = { children: new Map() };
+  for (const [path, file] of installed.success) {
     const segments = path.split("/");
     let node = root;
     for (const [index, segment] of segments.entries()) {
@@ -348,14 +300,14 @@ export function projectedSkillHashParts(
         node.children.set(segment, child);
       }
       if (node.file || (index === segments.length - 1 && child.children.size > 0))
-        return Result.fail(new ProjectedPathCollision({ path, kind: "file-or-directory" }));
+        return Result.fail(new InstalledPathCollision({ path, kind: "file-or-directory" }));
       node = child;
     }
-    if (node.file) return Result.fail(new ProjectedPathCollision({ path, kind: "file" }));
+    if (node.file) return Result.fail(new InstalledPathCollision({ path, kind: "file" }));
     node.file = file;
   }
   const parts: Array<string | Uint8Array> = [];
-  function walk(node: ProjectedNode, parent = ""): void {
+  function walk(node: InstalledNode, parent = ""): void {
     for (const name of [...node.children.keys()].sort()) {
       const child = node.children.get(name)!;
       const path = parent ? `${parent}/${name}` : name;

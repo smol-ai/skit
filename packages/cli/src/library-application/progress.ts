@@ -7,11 +7,11 @@ export interface LibraryProgressSubject {
 
 export type LibraryProgressStage =
   | { readonly kind: "source"; readonly subject: LibraryProgressSubject }
-  | { readonly kind: "projection"; readonly subject: LibraryProgressSubject };
+  | { readonly kind: "install"; readonly subject: LibraryProgressSubject };
 
 export type LibraryProgressCompletion =
   | { readonly kind: "source-inspected"; readonly changed: boolean }
-  | { readonly kind: "projections-reconciled"; readonly projected: number };
+  | { readonly kind: "installed-skills-updated"; readonly installed: number };
 
 export type LibraryProgressEvent =
   | { readonly kind: "started"; readonly stage: LibraryProgressStage }

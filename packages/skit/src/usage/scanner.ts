@@ -6,13 +6,13 @@ import { createHash } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
 import { harnessDrivers } from "../harnesses/drivers.js";
 import { LinkStat } from "../platform/link-stat.js";
-import { correlateInvocations, type InvocationObservation } from "./invocations.js";
+import { correlateInvocations, type Invocation } from "./invocations.js";
 import { extractUsage, object, type UsageEvent } from "./events.js";
 import {
   InvalidUsageOptions,
   type UsageCoverage,
   type UsageOptions,
-  type UsageProjection,
+  type InstalledSkillUsage,
   type UsageReport,
   type UsageRow,
 } from "./contracts.js";
@@ -25,7 +25,7 @@ interface SourceFile {
   modified: number;
   coverage: Coverage;
 }
-interface Observation {
+interface TranscriptEvent {
   event: UsageEvent;
   timestamp: string;
   cwd?: string;
@@ -171,7 +171,7 @@ export const skillUsageLayer = Layer.effect(
         for (const name of names.sort()) yield* walk(join(dir, name), c);
       });
       for (const c of coverage) yield* walk(c.root, c, true);
-      const observations: Observation[] = [];
+      const observations: TranscriptEvent[] = [];
       let completed = 0;
       for (const file of files) {
         const c = file.coverage;
@@ -180,7 +180,7 @@ export const skillUsageLayer = Layer.effect(
         let agent = /\/subagents\/agent-([^/]+)\.jsonl(?:\.zst)?$/.exec(file.path)?.[1];
         let sessionKnown = false;
         let turn: string | undefined;
-        let observedBytes = 0;
+        let bytesRead = 0;
         const projectCwds = new Map<string, string>();
         const consume = Effect.fn("SkillUsage.record")(function* (line: string) {
           if (!line.length) return;
@@ -306,7 +306,7 @@ export const skillUsageLayer = Layer.effect(
         const bytes = fs.stream(file.path, { chunkSize: 256 * 1024, bytesToRead: file.size }).pipe(
           Stream.tap((chunk) =>
             Effect.sync(() => {
-              observedBytes += chunk.length;
+              bytesRead += chunk.length;
               c.bytesRead += chunk.length;
             }),
           ),
@@ -340,7 +340,7 @@ export const skillUsageLayer = Layer.effect(
         if (
           !after ||
           Number(after.size) !== file.size ||
-          observedBytes !== file.size ||
+          bytesRead !== file.size ||
           Option.match(after.mtime, { onNone: () => 0, onSome: (d) => d.getTime() }) !==
             file.modified
         )
@@ -349,15 +349,16 @@ export const skillUsageLayer = Layer.effect(
         if (options.progress) yield* options.progress(completed, files.length);
       }
       // Resolve only the small observed identity set, never every advertised skill.
-      const projections = new Map<string, UsageProjection[]>();
-      for (const projection of options.projections ?? []) {
-        const document = projection.path.endsWith("/SKILL.md")
-          ? projection.path
-          : join(projection.path, "SKILL.md");
+      const installedSkills = new Map<string, InstalledSkillUsage[]>();
+      for (const installedSkill of options.installedSkills ?? []) {
+        const document = installedSkill.path.endsWith("/SKILL.md")
+          ? installedSkill.path
+          : join(installedSkill.path, "SKILL.md");
         for (const key of new Set([resolve(document), yield* physical(resolve(document))])) {
-          const values = projections.get(key) ?? [];
-          if (!values.some((v) => v.skillId === projection.skillId)) values.push(projection);
-          projections.set(key, values);
+          const values = installedSkills.get(key) ?? [];
+          if (!values.some((v) => v.skillId === installedSkill.skillId))
+            values.push(installedSkill);
+          installedSkills.set(key, values);
         }
       }
       const identities = new Map<
@@ -371,7 +372,7 @@ export const skillUsageLayer = Layer.effect(
       >();
       const rows = new Map<string, Mutable<UsageRow>>();
       const seen = new Set<string>();
-      const invocationObservations: InvocationObservation[] = [];
+      const invocations: Invocation[] = [];
       for (const observation of observations) {
         const { event, cwd, timestamp, coverage: c } = observation;
         const rawPath = event.path;
@@ -393,7 +394,7 @@ export const skillUsageLayer = Layer.effect(
         if (!identity) {
           const canonical = lexical ? yield* physical(lexical) : null;
           const matches = canonical
-            ? (projections.get(canonical) ?? projections.get(lexical ?? "") ?? [])
+            ? (installedSkills.get(canonical) ?? installedSkills.get(lexical ?? "") ?? [])
             : [];
           const match = matches.length === 1 ? matches[0] : undefined;
           identity = {
@@ -434,10 +435,10 @@ export const skillUsageLayer = Layer.effect(
           explicit: 0,
           implicit: 0,
           unknown: 0,
-          lastObservedAt: timestamp,
+          lastSeenAt: timestamp,
         };
         if (event.kind !== "selections") row[event.kind]++;
-        invocationObservations.push({
+        invocations.push({
           key,
           row,
           event,
@@ -445,10 +446,10 @@ export const skillUsageLayer = Layer.effect(
           turn: observation.turn,
           timestamp,
         });
-        if (timestamp > row.lastObservedAt) row.lastObservedAt = timestamp;
+        if (timestamp > row.lastSeenAt) row.lastSeenAt = timestamp;
         rows.set(key, row);
       }
-      correlateInvocations(invocationObservations);
+      correlateInvocations(invocations);
       const durationEnd = yield* Clock.monotonicTimeNanos;
       return {
         window,

@@ -7,8 +7,8 @@ This document is the test oracle for guided `skit setup`. It lists the durable e
 | Consent, staleness, ordering, partial failure, and scan counts of guided apply, with lossless disk snapshots | `packages/cli/test/setup-apply-outcomes.test.ts` |
 | Lossless snapshot of declared roots (type, mode, link target, bytes) and its self-test | `packages/cli/test/helpers/disk-snapshot.ts`, `packages/cli/test/disk-snapshot.test.ts` |
 | Removal previews, archive layout, linked sources, and stale removal plans | `packages/cli/test/setup-removal.test.ts` |
-| skills.sh lock adoption and observed-source imports | `packages/cli/test/setup-lock-source-adoption.test.ts` |
-| Local custody, alias retirement, and duplicate choices | `packages/cli/test/setup-local-custody.test.ts`, `packages/cli/test/setup-discovered-copies.test.ts` |
+| skills.sh lock adoption and observed-source imports | `packages/cli/test/setup-lock-source-import.test.ts` |
+| Local custody, alias retirement, and duplicate choices | `packages/cli/test/setup-manage.test.ts`, `packages/cli/test/setup-discovered-copies.test.ts` |
 
 The acceptance tests drive `setupCommand` itself with `interactive: true`, a scripted prompter and renderer (`makeScriptedInteraction`), a real temporary filesystem and real Library services. `skit setup --json` cannot reach guided apply: it forces a dry run. Tests assert the typed `Exit`, validate a successful `SetupResult` against `outputContracts.setup`, and compare `captureDisk` snapshots of the Library home, the agent roots with their backups, and the skills.sh state directory. Scans are counted at the scan seam: every full discovery scan goes through the `SetupDiscovery` reference (`packages/cli/src/workflows/library/setup-discovery.ts`), and the tests wrap it with a counter, in all and after approval. Changes "after approval" and "after the first additive stage" are made at explicit gates (the approving prompt, the first Library publication, a named rename), never after a delay.
 
@@ -32,14 +32,14 @@ Preview runs without the Library writer lock. On approval, `applySetupPlan` runs
 
 | Step | Effect | Source |
 | --- | --- | --- |
-| S0 | Preview: `runSetup` with `persistRoots: false`, plus a second observation if repository decisions were asked. The plan ID covers the candidates, the instances, the repository configs and the Library revision | handler `setupCommand`; `workflows/library/setup.ts` `observeSetup` |
+| S0 | Preview: `runSetup` with `persistRoots: false`, plus a second observation if repository decisions were asked. The plan ID covers the candidates, the instances, the repository configs and the Library revision | handler `setupCommand`; `workflows/library/setup.ts` `scanForSetup` |
 | S1 | Confirmation prompt; declining returns the preview | handler `setupCommand` |
 | S2 | The one apply-time scan, held to the approved plan ID | `setup-apply.ts`; `workflows/library/setup.ts` `revalidateSetupPlan` |
 | S2a | Capture the original filesystem and desired-intent evidence in a setup operation, after approved-plan revalidation and projection-root preflight | `library-application/setup-operation.ts` |
 | S3 | If the plan saves roots, or imports or adds without a machine identity: write `machine.json`, without scanning | `setup-apply.ts`; `setup-discovery.ts` `saveSetupMachineConfig` |
-| S4 | Observed-source imports, one Collection group at a time, each retained and published before the next; each lockfile's hash is checked first | `setup-observed-collections.ts` |
-| S5 | Existing-entry binds: per selection bind and project against the approved content hash, then retire aliases | `setup-existing-binding.ts`; `setup-local-custody.ts` `bindSetupCopy` |
-| S6 | Local custody: per selection, check the copy still hashes to its approved identity, then `retainLibrarySourceEffect`, bind and project, then retire aliases | `setup-local-custody.ts` |
+| S4 | Observed-source imports, one Collection group at a time, each retained and published before the next; each lockfile's hash is checked first | `setup-import.ts` |
+| S5 | Existing-entry binds: per selection bind and project against the approved content hash, then retire aliases | `setup-manage.ts` `manageSetupCopies(…, "existing")` → `manage-existing.ts` `manageCopy` |
+| S6 | Local custody: per selection, check the copy still hashes to its approved identity, then `importSource`, bind and project, then retire aliases | `setup-manage.ts` `manageSetupCopies(…, "new")` → `manage-existing.ts` `manageCopy` |
 | S7 | Explicit removals, last: check the Library is still at the apply's revision, preflight every entry (identity and link target; for a directory also its approved content hash and no new custody marker), create checked recovery containers, publish the immutable receipt exclusively, then for each entry check it again and rename it | `setup-apply.ts`; `setup-removal.ts` |
 | S8 | Outside the writer: offer a skills.sh update check, which loads the Library and may prompt | handler `offerSkillsShUpdateCheck` |
 
@@ -76,7 +76,7 @@ Guided apply lives in one workflow. Every requirement holds today:
 | --- | --- |
 | Exactly one full discovery scan after approval, distinct from the preview scan, counted at the `SetupDiscovery` seam. Cheap identity and hash checks immediately before touching bytes are still required | `an approved apply scans once after approval, whatever stages it runs`; the S4 to S7 checks |
 | The approved plan ID stays fixed; internal re-observation never refreshes consent | `a selected file changed after approval fails stale before any effect`, `bytes changed between the apply-time scan and a later stage fail stale` |
-| A stale approval, or a change after an additive stage (a selected file, lockfile, symlink target or Library revision), means no further effects and a clear stale failure | `a selected copy changed after the first additive stage fails stale`, `a Library change committed after the first additive stage stops the apply`, `a removal selection edited after the first additive stage stays in place`, `a removal selection that gains a custody marker after the scan stays in place`, `a removal entry replaced during an earlier move stays untouched`; lockfiles in `setup-lock-source-adoption.test.ts`, symlink targets in `harness-shadows.test.ts` |
+| A stale approval, or a change after an additive stage (a selected file, lockfile, symlink target or Library revision), means no further effects and a clear stale failure | `a selected copy changed after the first additive stage fails stale`, `a Library change committed after the first additive stage stops the apply`, `a removal selection edited after the first additive stage stays in place`, `a removal selection that gains a custody marker after the scan stays in place`, `a removal entry replaced during an earlier move stays untouched`; lockfiles in `setup-lock-source-import.test.ts`, symlink targets in `duplicates.test.ts` |
 | Additive stages run before removals; an additive failure means no removals | `a failed additive stage leaves every selected removal in place` |
 | If a removal fails, the durable partial state is documented and a recovery receipt is kept | The S7 rows and recovery filesystem tests. Immutable receipts describe the full inventory before any rename; inspection derives progress from both actual paths, including interrupted batches |
 | A concurrent Library change is never silently rebased | `a Library change committed after approval fails stale before any effect`, `a Library change committed after the first additive stage stops the apply` |
@@ -98,11 +98,11 @@ their original inode, stale-plan refusal, occupied and redirected destinations,
 marker symlinks, receipt publication failure, interrupted Library/settings inverse
 publication, repeated undo preserving later choices, and executable CLI actions
 through the parser and rendered result. Changed-projection, partial-forward and baseline reconciliation cases are covered
-by `setup-reconciliation.test.ts`; see `setup-recovery-refactor.md` for the complete
+by `installed-skill-changes.test.ts`; see `setup-recovery-refactor.md` for the complete
 requirement mapping and remaining deliberate custody boundaries.
 
 Automatic preservation now has final-state proof in
-`setup-duplicate-preservation.test.ts`: equal direct global directories move only
+`setup-duplicate-backup.test.ts`: equal direct global directories move only
 after every affected reader has a verified replacement, complete original bytes
 remain recoverable, and full undo returns the original inode. Authored controls,
 new repository ownership and changed replacements keep the old copy in place.

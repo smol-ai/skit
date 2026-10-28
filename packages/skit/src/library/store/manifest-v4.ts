@@ -1,7 +1,7 @@
 import { Schema, SchemaGetter } from "effect";
 import { canonicalJson } from "../../shared/json.js";
 import { CollectionId, SkillId, SkillVersionId } from "../entity-ids.js";
-import { CollectionRelativePath, RetainedCopy, SourceRelativePath } from "../library-contracts.js";
+import { CollectionRelativePath, SourceRelativePath } from "../library-contracts.js";
 import {
   AcquisitionV5,
   BindingV5,
@@ -12,13 +12,14 @@ import {
   SkillVersionV5,
   UpstreamV5,
 } from "./manifest-v5.js";
-import { Digest, HarnessName } from "../../vocabulary.js";
+import { CollectionVersionV7 } from "./manifest-v7.js";
+import { Hash, HarnessName } from "../../vocabulary.js";
 
 export const RetainedCopyV4 = Schema.Struct({
-  ...RetainedCopy.fields,
+  ...CollectionVersionV7.fields,
   v3_normalized_tree: Schema.optionalKey(
     Schema.Struct({
-      digest: Digest,
+      digest: Hash,
       profile: Schema.NonEmptyString,
       source_updated_at: Schema.optionalKey(Schema.String),
     }),
@@ -68,7 +69,7 @@ export const LibraryManifestV4 = Schema.Struct({
   skills: Schema.Array(SkillV4),
   retained_copies: Schema.Array(RetainedCopyV4),
   acquisitions: Schema.Array(AcquisitionV4),
-  snapshot_digests: Schema.Array(Digest),
+  snapshot_digests: Schema.Array(Hash),
   bindings: Schema.Array(BindingV4),
 });
 export type LibraryManifestV4 = typeof LibraryManifestV4.Type;

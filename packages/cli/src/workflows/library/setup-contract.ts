@@ -1,15 +1,15 @@
-import { HarnessShadow } from "../../projection/harness-shadows.js";
+import { DuplicateCopy } from "../../install/duplicates.js";
 import {
   CollectionId,
-  Digest,
+  Hash,
   HarnessName,
   MachineId,
-  ProjectionId,
+  InstalledSkillId,
   SkillId,
   SkillVersionId,
 } from "@smolai/skit-core";
 import { Schema } from "effect";
-import { PnpmSkillOwner } from "../../projection/pnpm-skills.js";
+import { PnpmSkillOwner } from "../../install/pnpm-skills.js";
 
 export const SetupVersionChoice = Schema.Struct({
   skillId: SkillId,
@@ -25,7 +25,7 @@ export const SetupProbe = Schema.Struct({
 });
 export type SetupProbe = typeof SetupProbe.Type;
 
-export const SetupGitPreservation = Schema.Struct({
+export const SetupGitStatus = Schema.Struct({
   status: Schema.Literals([
     "committed",
     "modified",
@@ -38,7 +38,7 @@ export const SetupGitPreservation = Schema.Struct({
   ]),
   repository: Schema.optionalKey(Schema.String),
 });
-export type SetupGitPreservation = typeof SetupGitPreservation.Type;
+export type SetupGitStatus = typeof SetupGitStatus.Type;
 
 export const SetupSkillsLockEntry = Schema.Struct({
   name: Schema.String,
@@ -51,7 +51,7 @@ export const SetupSkillsLockEntry = Schema.Struct({
   skillPath: Schema.optionalKey(Schema.String),
   computedHash: Schema.optionalKey(Schema.String),
   skillFolderHash: Schema.optionalKey(Schema.String),
-  wellKnownDigest: Schema.optionalKey(Schema.String),
+  wellKnownHash: Schema.optionalKey(Schema.String),
   originalEntry: Schema.JsonObject,
 });
 export type SetupSkillsLockEntry = typeof SetupSkillsLockEntry.Type;
@@ -61,7 +61,7 @@ export const SetupSkillsLock = Schema.Struct({
   path: Schema.String,
   status: Schema.Literals(["valid", "malformed", "unsupported"]),
   version: Schema.optionalKey(Schema.Number),
-  contentHash: Schema.optionalKey(Digest),
+  contentHash: Schema.optionalKey(Hash),
   entries: Schema.Array(SetupSkillsLockEntry),
 });
 export type SetupSkillsLock = typeof SetupSkillsLock.Type;
@@ -70,7 +70,7 @@ export const SetupLockMatch = Schema.Struct({
   scope: Schema.Literals(["project", "global"]),
   lockPath: Schema.String,
   lockVersion: Schema.Number,
-  lockContentHash: Digest,
+  lockContentHash: Hash,
   content: Schema.Literals(["agrees", "mismatch", "unverifiable"]),
   entry: SetupSkillsLockEntry,
 });
@@ -78,7 +78,7 @@ export type SetupLockMatch = typeof SetupLockMatch.Type;
 
 export const SetupContentIdentity = Schema.Struct({
   status: Schema.Literals(["exact", "ambiguous", "none", "unhashable"]),
-  observedHash: Schema.optionalKey(Digest),
+  currentHash: Schema.optionalKey(Hash),
   libraryMatches: Schema.Array(
     Schema.Struct({
       subjectId: Schema.String,
@@ -92,8 +92,8 @@ export type SetupContentIdentity = typeof SetupContentIdentity.Type;
 
 export const SetupManagedMembership = Schema.Union([
   Schema.Struct({
-    kind: Schema.tag("retained"),
-    projectionId: ProjectionId,
+    kind: Schema.tag("in-library"),
+    installedSkillId: InstalledSkillId,
     collectionId: Schema.optionalKey(CollectionId),
     skillId: SkillId,
     skillVersionId: SkillVersionId,
@@ -102,7 +102,7 @@ export const SetupManagedMembership = Schema.Union([
   }),
   Schema.Struct({
     kind: Schema.tag("missing-from-library"),
-    projectionId: ProjectionId,
+    installedSkillId: InstalledSkillId,
     collectionId: Schema.optionalKey(CollectionId),
     skillId: SkillId,
     skillVersionId: SkillVersionId,
@@ -139,7 +139,7 @@ export const SetupSkillInstance = Schema.Struct({
   harnesses: Schema.Array(HarnessName),
   owner: SetupInstanceOwner,
   contentIdentity: SetupContentIdentity,
-  git: SetupGitPreservation,
+  git: SetupGitStatus,
   locks: Schema.Array(SetupLockMatch),
 });
 export type SetupSkillInstance = typeof SetupSkillInstance.Type;
@@ -200,7 +200,7 @@ export const SetupAuthoredCollection = Schema.Struct({
 });
 export type SetupAuthoredCollection = typeof SetupAuthoredCollection.Type;
 
-export const SetupProjection = Schema.Struct({
+export const SetupInstalledSkill = Schema.Struct({
   collectionId: Schema.optionalKey(CollectionId),
   collectionDisplayName: Schema.String,
   skillId: SkillId,
@@ -209,19 +209,19 @@ export const SetupProjection = Schema.Struct({
   harnesses: Schema.Array(HarnessName),
   status: Schema.Literals(["current", "modified", "missing"]),
 });
-export type SetupProjection = typeof SetupProjection.Type;
+export type SetupInstalledSkill = typeof SetupInstalledSkill.Type;
 
-export const SetupReconciliationFact = Schema.Struct({
-  projectionId: ProjectionId,
+export const InstalledSkillChange = Schema.Struct({
+  installedSkillId: InstalledSkillId,
   skillId: SkillId,
   name: Schema.String,
   path: Schema.String,
-  target: Schema.Literals(["agents", "claude"]),
-  baselineHash: Digest,
-  currentHash: Schema.optionalKey(Digest),
-  desiredHash: Schema.optionalKey(Digest),
+  destination: Schema.Literals(["agents", "claude"]),
+  baselineHash: Hash,
+  currentHash: Schema.optionalKey(Hash),
+  desiredHash: Schema.optionalKey(Hash),
   desiredVersionId: Schema.optionalKey(SkillVersionId),
-  evidence: Digest,
+  evidence: Hash,
   status: Schema.Literals([
     "unchanged",
     "incoming-update",
@@ -233,18 +233,18 @@ export const SetupReconciliationFact = Schema.Struct({
   metadataChanged: Schema.Boolean,
   reason: Schema.optionalKey(Schema.String),
 });
-export type SetupReconciliationFact = typeof SetupReconciliationFact.Type;
-export const SetupReconciliationOutcome = Schema.Struct({
+export type InstalledSkillChange = typeof InstalledSkillChange.Type;
+export const InstalledSkillChangeResult = Schema.Struct({
   reason: Schema.optionalKey(Schema.String),
-  projectionId: ProjectionId,
+  installedSkillId: InstalledSkillId,
   name: Schema.String,
   path: Schema.String,
   status: Schema.Literals(["updated", "unchanged", "local-kept", "native-delete", "pending"]),
 });
-export type SetupReconciliationOutcome = typeof SetupReconciliationOutcome.Type;
+export type InstalledSkillChangeResult = typeof InstalledSkillChangeResult.Type;
 
 const SetupOnboardingBase = {
-  shadows: Schema.optionalKey(Schema.Array(HarnessShadow)),
+  duplicates: Schema.optionalKey(Schema.Array(DuplicateCopy)),
   /** Links at SKIT's own destinations that enabling this skill would replace with copies. */
   destinationLinks: Schema.optionalKey(Schema.Array(Schema.String)),
   name: Schema.String,
@@ -258,7 +258,7 @@ export const SetupOnboardingCandidate = Schema.Union([
     action: Schema.tag("import-observed-collection"),
     groupKey: Schema.String,
     source: Schema.String,
-    lockContentHash: Digest,
+    lockContentHash: Hash,
     contentAgreement: Schema.Literals(["agrees", "mismatch", "unverifiable"]),
     skillPath: Schema.optionalKey(Schema.String),
   }),
@@ -341,14 +341,14 @@ export const SetupResult = Schema.Struct({
   repositories: Schema.Array(SetupRepository),
   repositoryConfigs: Schema.Array(SetupRepositoryConfig),
   authoredCollections: Schema.Array(SetupAuthoredCollection),
-  projections: Schema.Array(SetupProjection),
-  reconciliation: Schema.optionalKey(Schema.Array(SetupReconciliationFact)),
+  installedSkills: Schema.Array(SetupInstalledSkill),
+  changes: Schema.optionalKey(Schema.Array(InstalledSkillChange)),
   onboarding: Schema.Struct({
-    planId: Digest,
+    planId: Hash,
     candidates: Schema.Array(SetupOnboardingCandidate),
     /** The command that applies the recommendation, with absolute paths; absent when empty. */
     applyCommand: Schema.optionalKey(Schema.String),
-    /** Exactly what `skit setup --apply <planId>` imports and takes custody of. */
+    /** Exactly what `skit setup --apply <planId>` imports and starts managing. */
     recommended: Schema.Struct({
       sources: Schema.Array(
         Schema.Struct({
@@ -371,22 +371,22 @@ export type SetupResult = typeof SetupResult.Type;
 /** What `skit setup --apply` did: what it brought under SKIT, the copies that resulted, and why
  * every other observed skill was left alone. */
 export const SetupApplied = Schema.Struct({
-  reconciliation: Schema.optionalKey(Schema.Array(SetupReconciliationOutcome)),
+  changes: Schema.optionalKey(Schema.Array(InstalledSkillChangeResult)),
   operationId: Schema.optionalKey(Schema.String),
   removed: Schema.optionalKey(
     Schema.Array(Schema.Struct({ name: Schema.String, path: Schema.String })),
   ),
   recoveryDirectories: Schema.optionalKey(Schema.Array(Schema.String)),
-  planId: Digest,
+  planId: Hash,
   imported: Schema.Array(
     Schema.Struct({ source: Schema.String, names: Schema.Array(Schema.String) }),
   ),
   added: Schema.Array(Schema.Struct({ name: Schema.String, sourcePath: Schema.String })),
   reconnected: Schema.Array(Schema.Struct({ name: Schema.String, sourcePath: Schema.String })),
-  projections: Schema.Array(
+  installedSkills: Schema.Array(
     Schema.Struct({
       name: Schema.String,
-      target: Schema.String,
+      destination: Schema.String,
       path: Schema.String,
       status: Schema.String,
     }),
@@ -399,11 +399,11 @@ export const SetupApplied = Schema.Struct({
     }),
   ),
   /**
-   * With `--duplicates retire-aliases`: where each retired symlink and its restoration receipt
+   * With `--duplicates retire-aliases`: where each backed-up symlink and its move record
    * were saved, and any symlink kept because it could not be retired safely.
    */
   aliasRecoveryDirectories: Schema.optionalKey(Schema.Array(Schema.String)),
-  preservationWarnings: Schema.optionalKey(
+  backupWarnings: Schema.optionalKey(
     Schema.Array(Schema.Struct({ name: Schema.String, message: Schema.String })),
   ),
   aliasesKept: Schema.optionalKey(

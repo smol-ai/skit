@@ -1,6 +1,6 @@
 // Which requests carry the Registry credential, and where it must not follow.
 //
-// Acquisition sends `authorization` only for a Registry source, and only when a token was
+// Fetching sends `authorization` only for a Registry source, and only when a token was
 // selected. A Registry download is also allowed to redirect, and the credential must not travel
 // to whatever origin it lands on — a redirect is attacker-influenceable whenever the Registry is.
 //
@@ -20,9 +20,9 @@ import { createServer, type Server } from "node:http";
 import { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
-import { resolveSkitSourceEffect } from "../src/acquisition/sources.js";
-import { createSkitArchiveEffect } from "../src/authoring/archive.js";
-import { initSkitEffect } from "../src/authoring/scaffold.js";
+import { resolveSkitSource } from "../src/sources/resolve.js";
+import { createSkitArchive } from "../src/authoring/archive.js";
+import { initSkit } from "../src/authoring/scaffold.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 const archive = Effect.scoped(
@@ -30,9 +30,9 @@ const archive = Effect.scoped(
     const fs = yield* FileSystem.FileSystem;
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-credentials-" });
     const source = join(root, "tools");
-    yield* initSkitEffect(source);
+    yield* initSkit(source);
     const path = join(root, "tools.zip");
-    yield* createSkitArchiveEffect(source, path);
+    yield* createSkitArchive(source, path);
     return yield* fs.readFile(path);
   }),
 );
@@ -81,7 +81,7 @@ describe("the Registry credential", () => {
         close,
       );
       const registryPort = yield* listen(registry);
-      yield* resolveSkitSourceEffect("skit:alice/tools", {
+      yield* resolveSkitSource("skit:alice/tools", {
         registryBaseUrl: `http://127.0.0.1:${registryPort}`,
         registryToken: "secret-token",
         version: "1.0.0",
@@ -108,7 +108,7 @@ describe("the Registry credential", () => {
         close,
       );
       const port = yield* listen(registry);
-      yield* resolveSkitSourceEffect("skit:alice/tools", {
+      yield* resolveSkitSource("skit:alice/tools", {
         registryBaseUrl: `http://127.0.0.1:${port}`,
         version: "1.0.0",
       });

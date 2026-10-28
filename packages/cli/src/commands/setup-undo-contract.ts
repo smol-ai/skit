@@ -1,17 +1,17 @@
 import { Schema } from "effect";
-import { CollectionId, Digest } from "@smolai/skit-core";
+import { CollectionId, Hash } from "@smolai/skit-core";
 import { CommandAction } from "./command-actions.js";
 
 export const SetupUndoOutput = Schema.Struct({
   operationId: Schema.String,
-  planId: Schema.optionalKey(Digest),
+  planId: Schema.optionalKey(Hash),
   status: Schema.Literals(["ready", "conflicted", "undone", "already-undone"]),
   phase: Schema.Literals(["preview", "applied", "stale", "failed"]),
   conflicts: Schema.Array(Schema.String),
   files: Schema.Array(
     Schema.Struct({
       path: Schema.String,
-      kind: Schema.Literals(["release-custody", "restore", "remove-created"]),
+      kind: Schema.Literals(["release-ownership", "restore", "remove-created"]),
     }),
   ),
   intentChanged: Schema.Boolean,
@@ -20,11 +20,11 @@ export const SetupUndoOutput = Schema.Struct({
     Schema.Struct({
       collectionId: CollectionId,
       label: Schema.String,
-      fromSnapshot: Digest,
-      toSnapshot: Digest,
+      fromSnapshot: Hash,
+      toSnapshot: Hash,
     }),
   ),
-  preservationId: Schema.optionalKey(Schema.String),
+  backupId: Schema.optionalKey(Schema.String),
   failure: Schema.optionalKey(Schema.String),
   actions: Schema.Array(CommandAction),
 });

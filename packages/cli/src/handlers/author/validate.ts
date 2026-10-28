@@ -1,4 +1,4 @@
-import { validateSkitDirectoryEffect } from "@smolai/skit-core";
+import { validateSkitDirectory } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { resolve } from "node:path";
 import { Argument, Command, Flag } from "effect/cli";
@@ -14,7 +14,7 @@ export const validateCommand = Effect.fn("CLI.validate")(function* (
   input: string,
   assessmentContext: "author" | "publish",
 ) {
-  const value = yield* validateSkitDirectoryEffect(resolve(input), "draft", {
+  const value = yield* validateSkitDirectory(resolve(input), "draft", {
     assessmentContext,
   });
   const structurallyValid = !value.diagnostics.some(

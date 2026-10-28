@@ -3,18 +3,15 @@ import { dirname, join, resolve } from "node:path";
 import type { HarnessName } from "../../contracts.js";
 import type { LibraryState } from "../library-state.js";
 import { LinkStat } from "../../platform/link-stat.js";
-import { deterministicTreeHashEffect } from "../../artifact/skit.js";
-import { observationPathIdentityEffect, pathIsWithin } from "../../platform/path-identity.js";
+import { deterministicTreeHash } from "../../artifact/skit.js";
+import { physicalPath, pathIsWithin } from "../../platform/path-identity.js";
 import {
-  expectedProjectionHashResult,
-  projectionDisplacedEffect,
-  readOwnershipMarkerEffect,
-  inspectOwnershipMarkerEffect,
-} from "../../projection/mutation.js";
-import {
-  keepProjectionBackupEffect,
-  pendingProjectionBackupsEffect,
-} from "../../projection/backups.js";
+  expectedInstalledSkillHashResult,
+  installedSkillDisplaced,
+  readOwnershipMarker,
+  inspectOwnershipMarker,
+} from "../../install/mutation.js";
+import { keepInstalledSkillBackup, pendingInstalledSkillBackups } from "../../install/backups.js";
 import { LibraryStore } from "../store/library-store.js";
 export interface InventoryScanRoot {
   readonly harness: HarnessName;
@@ -33,7 +30,7 @@ export function deduplicateInventoryRoots(
   ];
 }
 /** Observe a private snapshot without persistence or recovery capabilities. */
-export const observeInventory = Effect.fn("Library.observeInventory")(function* (
+export const scanInventory = Effect.fn("Library.scanInventory")(function* (
   loaded: LibraryState,
   scanRoots: readonly InventoryScanRoot[],
 ) {
@@ -42,48 +39,48 @@ export const observeInventory = Effect.fn("Library.observeInventory")(function* 
     (item) => !scanRoots.some(({ root }) => pathIsWithin(root, item.path)),
   );
   const fs = yield* FileSystem.FileSystem;
-  for (const projection of state.projections) {
-    const skill = state.skills.find((item) => item.skill_id === projection.skill_id);
+  for (const installedSkill of state.installed_skills) {
+    const skill = state.skills.find((item) => item.skill_id === installedSkill.skill_id);
     const version = skill?.versions.find(
-      (item) => item.skill_version_id === projection.skill_version_id,
+      (item) => item.skill_version_id === installedSkill.skill_version_id,
     );
     if (skill === undefined || version === undefined) continue;
-    if (!(yield* fs.exists(projection.path))) {
+    if (!(yield* fs.exists(installedSkill.path))) {
       // Pending copies may be between managed retirement and sync rematerialization. Their
       // absence is not evidence that the user deleted an installed copy.
-      if (projection.status === "pending" || projection.status === "suppressed") continue;
-      // Nor is the absence of the very copy SKIT moved aside before it could publish why.
-      if (yield* projectionDisplacedEffect(projection)) projection.status = "pending";
+      if (installedSkill.status === "pending" || installedSkill.status === "suppressed") continue;
+      // Nor is the absence of the very copy SKIT moved aside before it could save why.
+      if (yield* installedSkillDisplaced(installedSkill)) installedSkill.status = "pending";
       else {
-        projection.status = "suppressed";
-        projection.suppression_reason = "native_delete";
-        projection.suppressed_at = new Date(yield* Clock.currentTimeMillis).toISOString();
+        installedSkill.status = "suppressed";
+        installedSkill.suppression_reason = "native_delete";
+        installedSkill.suppressed_at = new Date(yield* Clock.currentTimeMillis).toISOString();
       }
       continue;
     }
-    const observed = yield* deterministicTreeHashEffect(projection.path);
-    const marker = yield* readOwnershipMarkerEffect(projection.path);
-    projection.observed_digest = observed;
-    const expected = expectedProjectionHashResult(projection, marker);
-    projection.status =
-      marker && Result.isSuccess(expected) && observed === expected.success
+    const currentHash = yield* deterministicTreeHash(installedSkill.path);
+    const marker = yield* readOwnershipMarker(installedSkill.path);
+    installedSkill.current_hash = currentHash;
+    const expected = expectedInstalledSkillHashResult(installedSkill, marker);
+    installedSkill.status =
+      marker && Result.isSuccess(expected) && currentHash === expected.success
         ? "installed"
         : "conflicted";
   }
   const managed = new Set<string>();
-  for (const projection of state.projections)
-    managed.add((yield* observationPathIdentityEffect(projection.path)).comparisonKey);
+  for (const installedSkill of state.installed_skills)
+    managed.add((yield* physicalPath(installedSkill.path)).key);
   const priorUnmanaged = new Map<string, LibraryState["unmanaged"][number]>();
   for (const item of state.unmanaged)
-    priorUnmanaged.set((yield* observationPathIdentityEffect(item.path)).comparisonKey, item);
+    priorUnmanaged.set((yield* physicalPath(item.path)).key, item);
   state.unmanaged = state.unmanaged.filter(
     (item) =>
       typeof item.path !== "string" || !scanRoots.some(({ root }) => pathIsWithin(root, item.path)),
   );
-  state.custodyIssues = (state.custodyIssues ?? []).filter(
+  state.ownershipIssues = (state.ownershipIssues ?? []).filter(
     (item) => !scanRoots.some(({ root }) => pathIsWithin(root, item.path)),
   );
-  const observedPaths = new Map<
+  const foundPaths = new Map<
     string,
     {
       path: string;
@@ -162,62 +159,60 @@ export const observeInventory = Effect.fn("Library.observeInventory")(function* 
             return Effect.succeed(false);
           }),
         );
-        if (!skill && (!directory || (yield* inspectOwnershipMarkerEffect(path)).kind === "absent"))
+        if (!skill && (!directory || (yield* inspectOwnershipMarker(path)).kind === "absent"))
           continue;
-        const identity = yield* observationPathIdentityEffect(path);
-        if (managed.has(identity.comparisonKey)) continue;
-        const observed = observedPaths.get(identity.comparisonKey) ?? {
+        const identity = yield* physicalPath(path);
+        if (managed.has(identity.key)) continue;
+        const observed = foundPaths.get(identity.key) ?? {
           path,
           harness,
           paths: new Set<string>(),
-          canonicalPath: identity.canonicalPath,
+          canonicalPath: identity.realPath,
           harnesses: new Set<HarnessName>(),
         };
         observed.harnesses.add(harness);
         observed.paths.add(path);
-        observedPaths.set(identity.comparisonKey, observed);
+        foundPaths.set(identity.key, observed);
       }
     }
-  for (const observed of observedPaths.values()) {
+  for (const observed of foundPaths.values()) {
     const harnesses = [...observed.harnesses].sort();
-    const observedHash = yield* deterministicTreeHashEffect(observed.canonicalPath);
-    const marker = yield* inspectOwnershipMarkerEffect(observed.path);
+    const currentHash = yield* deterministicTreeHash(observed.canonicalPath);
+    const marker = yield* inspectOwnershipMarker(observed.path);
     if (marker.kind === "invalid") {
-      state.custodyIssues.push({
+      state.ownershipIssues.push({
         code: "INVALID_OWNERSHIP_MARKER",
         path: observed.path,
         canonicalPath: observed.canonicalPath,
         harnesses,
-        observedHash,
+        currentHash,
         detail: marker.detail,
       });
     } else if (marker.kind === "valid") {
       const claim = {
         skillId: marker.marker.skill_id,
-        projectionId: marker.marker.projection_id,
-        expectedHash: marker.marker.expected_digest,
+        installedSkillId: marker.marker.installed_skill_id,
+        expectedHash: marker.marker.expected_hash,
       };
-      state.custodyIssues.push({
-        code: "ORPHANED_PROJECTION_CLAIM",
+      state.ownershipIssues.push({
+        code: "ORPHANED_OWNERSHIP_MARKER",
         path: observed.path,
         canonicalPath: observed.canonicalPath,
         harnesses,
-        observedHash,
+        currentHash,
         ...claim,
-        matchesExpectedHash: observedHash === claim.expectedHash,
+        matchesExpectedHash: currentHash === claim.expectedHash,
         detail: "Ownership marker is not independently authenticated and cannot authorize removal",
       });
     } else {
-      const prior = priorUnmanaged.get(
-        (yield* observationPathIdentityEffect(observed.path)).comparisonKey,
-      );
+      const prior = priorUnmanaged.get((yield* physicalPath(observed.path)).key);
       state.unmanaged.push({
         harness: observed.harness,
         harnesses,
         path: observed.path,
         paths: [...observed.paths],
-        observedHash,
-        ...(prior ? { lastObservedHash: prior.observedHash } : {}),
+        currentHash,
+        ...(prior ? { lastHash: prior.currentHash } : {}),
       });
     }
   }
@@ -232,20 +227,20 @@ export const refreshLibraryInventory = Effect.fn("Library.refreshLibraryInventor
 ) {
   const store = yield* LibraryStore;
   const roots = deduplicateInventoryRoots(selectRoots(loaded));
-  const state = yield* observeInventory(loaded, roots);
-  yield* store.publish(state, loaded);
-  // A verified installation resolves every older displacement of its Projection. Those backups
+  const state = yield* scanInventory(loaded, roots);
+  yield* store.save(state, loaded);
+  // A verified installation resolves every older displacement of its installed skill. Those backups
   // no longer explain an absence, so they are kept, never discarded.
-  for (const projection of state.projections) {
-    if (projection.status !== "installed") continue;
-    const marker = yield* readOwnershipMarkerEffect(projection.path);
+  for (const installedSkill of state.installed_skills) {
+    if (installedSkill.status !== "installed") continue;
+    const marker = yield* readOwnershipMarker(installedSkill.path);
     if (
-      marker?.projection_id === projection.projection_id &&
-      marker.skill_id === projection.skill_id &&
-      projection.observed_digest === projection.expected_digest
+      marker?.installed_skill_id === installedSkill.installed_skill_id &&
+      marker.skill_id === installedSkill.skill_id &&
+      installedSkill.current_hash === installedSkill.expected_hash
     )
-      for (const backup of yield* pendingProjectionBackupsEffect(projection))
-        yield* keepProjectionBackupEffect(backup);
+      for (const backup of yield* pendingInstalledSkillBackups(installedSkill))
+        yield* keepInstalledSkillBackup(backup);
   }
   return { state, roots };
 });

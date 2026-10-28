@@ -1,11 +1,11 @@
 import { join } from "node:path";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Result } from "effect";
-import { skitLayer, deterministicTreeHashEffect } from "@smolai/skit-core";
+import { skitLayer, deterministicTreeHash } from "@smolai/skit-core";
 import { openSetupReview } from "../src/workflows/library/setup-review.js";
 import { runSetup } from "../src/workflows/library/setup.js";
 import { captureDisk } from "./helpers/disk-snapshot.js";
-import { libraryHome, retainObservedIn, scratch, writingTo } from "./helpers/library-home.js";
+import { libraryHome, importCollectionIn, scratch, writingTo } from "./helpers/library-home.js";
 
 const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -33,19 +33,19 @@ const fixture = Effect.gen(function* () {
   yield* Effect.scoped(
     writingTo(
       home.home,
-      retainObservedIn(home.home)({
+      importCollectionIn(home.home)({
         source: { type: "local", path: existing },
         input: existing,
-        retainedAt: "2026-10-16T00:00:00.000Z",
+        importedAt: "2026-10-16T00:00:00.000Z",
         skills: [
           {
             name: "alpha",
             sourcePath: existing,
             relativePath: ".",
-            observedHash: yield* deterministicTreeHashEffect(existing),
+            currentHash: yield* deterministicTreeHash(existing),
           },
         ],
-        observations: [],
+        lockFileEntries: [],
       }),
     ),
   );
@@ -56,10 +56,12 @@ const fixture = Effect.gen(function* () {
     probePath: "",
     skillsStateHome: join(root, "state"),
   };
-  const observed = yield* home.owned(runSetup(options));
-  const review = yield* home.owned(openSetupReview(options, observed, { bindings: home.bindings }));
+  const scan = yield* home.owned(runSetup(options));
+  const review = yield* home.owned(
+    openSetupReview(options, scan, { installOptions: home.installOptions }),
+  );
   const apply = <A, E, R>(_message: string, effect: Effect.Effect<A, E, R>) => effect;
-  return { fs, root, home, agentRoot, linked, alias, options, observed, review, apply };
+  return { fs, root, home, agentRoot, linked, alias, options, observed: scan, review, apply };
 });
 
 it.effect("prepares mixed choices without writes and applies their captured meaning", () =>
@@ -98,7 +100,7 @@ it.effect("prepares mixed choices without writes and applies their captured mean
     yield* f.home.owned(plan.apply(f.apply));
     const state = yield* f.home.durable;
     assert.deepStrictEqual(state.skills.map((skill) => skill.name).sort(), ["alpha", "beta"]);
-    assert.deepStrictEqual(state.global_bindings, []);
+    assert.deepStrictEqual(state.enabled, []);
     assert.strictEqual(yield* f.fs.exists(f.alias), false);
     assert.strictEqual(
       yield* f.fs.readFileString(join(f.linked, "SKILL.md")),

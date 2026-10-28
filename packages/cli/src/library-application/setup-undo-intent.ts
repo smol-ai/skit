@@ -1,68 +1,79 @@
 import { Schema } from "effect";
 import {
   canonicalJson,
-  AcquisitionId,
+  ImportId,
   CollectionId,
   currentCollectionSkills,
   currentSkillVersion,
-  DeviceBinding,
   DeviceSkillSelection,
-  RepositoryBinding,
-  RetainedCopyId,
+  Enabled,
+  InvocationPolicies,
+  Repository,
+  CollectionVersionId,
   SkillId,
   SkillVersionId,
   CurrentMachineDocument,
-  sourceAcquisitions,
+  sourceImports,
   type LibraryState,
-  type Acquisition,
+  type Import,
   type MachineSettingsSnapshot,
 } from "@smolai/skit-core";
 
+const Memberships = Schema.optionalKey(
+  Schema.Array(
+    Schema.Struct({
+      collectionId: CollectionId,
+      skillIds: Schema.Array(SkillId),
+    }),
+  ),
+);
+const Versions = Schema.Array(
+  Schema.Struct({
+    skillId: SkillId,
+    selected: Schema.NullOr(SkillVersionId),
+    local: Schema.NullOr(SkillVersionId),
+  }),
+);
+
 /** The desired fields setup can change. Retained artifacts and audit history are not inverse data. */
 export const SetupIntent = Schema.Struct({
-  global: Schema.Array(DeviceBinding),
-  repositories: Schema.Array(RepositoryBinding),
+  /** The account's global list. */
+  global: Schema.Struct({
+    enabled: Schema.Array(Enabled),
+    invocation_policies: Schema.optionalKey(InvocationPolicies),
+  }),
+  repositories: Schema.Array(Repository),
   device: Schema.NullOr(DeviceSkillSelection),
   sources: Schema.optionalKey(
     Schema.Array(
       Schema.Struct({
         collectionId: CollectionId,
-        acquisitionId: AcquisitionId,
-        retainedCopyId: RetainedCopyId,
+        importId: ImportId,
+        collectionVersionId: CollectionVersionId,
       }),
     ),
   ),
-  memberships: Schema.optionalKey(
-    Schema.Array(
-      Schema.Struct({
-        collectionId: CollectionId,
-        skillIds: Schema.Array(SkillId),
-      }),
-    ),
-  ),
-  versions: Schema.Array(
-    Schema.Struct({
-      skillId: SkillId,
-      selected: Schema.NullOr(SkillVersionId),
-      local: Schema.NullOr(SkillVersionId),
-    }),
-  ),
+  memberships: Memberships,
+  versions: Versions,
 });
 export type SetupIntent = typeof SetupIntent.Type;
 
+const withPolicies = (invocation_policies: InvocationPolicies | undefined) =>
+  invocation_policies === undefined ? {} : { invocation_policies };
+
 export const setupIntent = (state: LibraryState): SetupIntent => ({
-  global: structuredClone(state.global_bindings),
-  repositories: structuredClone(state.local_bindings),
+  global: { enabled: [...state.enabled], ...withPolicies(state.invocation_policies) },
+  repositories: structuredClone(state.repositories),
   device: structuredClone(state.device_skill_selection ?? null),
   sources: state.collections
     .flatMap((collection) => {
-      const selected = sourceAcquisitions(state, collection.collection_id)[0];
+      const selected = sourceImports(state, collection.collection_id)[0];
       return selected
         ? [
             {
               collectionId: collection.collection_id,
-              acquisitionId: selected.acquisition_id,
-              retainedCopyId: selected.retained_copy_id,
+              importId: selected.import_id,
+              collectionVersionId: selected.collection_version_id,
             },
           ]
         : [];
@@ -103,23 +114,25 @@ export const setupDiscoverySettings = (
 
 const equal = (left: unknown, right: unknown) =>
   canonicalJson(left ?? null) === canonicalJson(right ?? null);
-type Binding = DeviceBinding | RepositoryBinding;
-const entryKey = (entry: Binding["entries"][number]) =>
-  entry.kind === "skill" ? `skill:${entry.skill_id}` : `collection:${entry.collection_id}`;
+interface EnabledList {
+  readonly enabled: readonly Enabled[];
+  readonly invocation_policies?: InvocationPolicies;
+}
+const itemKey = (item: Enabled) =>
+  "skill" in item ? `skill:${item.skill}` : `collection:${item.collection}`;
 
-const hasAdditionalFields = (binding: Binding) =>
-  Object.keys(binding).some((key) => !["scope", "entries", "invocation_policies"].includes(key)) ||
-  Object.keys(binding.scope).some((key) => !["kind", "root"].includes(key));
+const hasAdditionalFields = (repository: Repository) =>
+  Object.keys(repository).some((key) => !["root", "enabled", "invocation_policies"].includes(key));
 
-/** Compute an inverse without publishing it. Only the operation's changed keys can be reversed. */
+/** Compute an inverse without saving it. Only the operation's changed keys can be reversed. */
 export const reverseSetupIntent = (
   state: LibraryState,
   before: SetupIntent,
   expected: SetupIntent,
-  restoredSources: readonly Acquisition[] = [],
+  restoredSources: readonly Import[] = [],
 ) => {
   const selectedSourceState = restoredSources.length
-    ? { ...state, acquisitions: [...state.acquisitions, ...restoredSources] }
+    ? { ...state, imports: [...state.imports, ...restoredSources] }
     : state;
   const conflicts: string[] = [];
   const restore = <A>(label: string, prior: A, after: A, current: A): A => {
@@ -128,31 +141,29 @@ export const reverseSetupIntent = (
     conflicts.push(label);
     return current;
   };
-  const reverseBinding = (
+  const reverseList = (
     label: string,
-    prior: Binding | undefined,
-    after: Binding | undefined,
-    current: Binding | undefined,
+    prior: EnabledList | undefined,
+    after: EnabledList | undefined,
+    current: EnabledList | undefined,
   ) => {
-    const entries = [...(current?.entries ?? [])];
-    const old = new Map((prior?.entries ?? []).map((entry) => [entryKey(entry), entry]));
-    const next = new Map((after?.entries ?? []).map((entry) => [entryKey(entry), entry]));
+    const items = [...(current?.enabled ?? [])];
+    const old = new Map((prior?.enabled ?? []).map((item) => [itemKey(item), item]));
+    const next = new Map((after?.enabled ?? []).map((item) => [itemKey(item), item]));
     for (const key of new Set([...old.keys(), ...next.keys()])) {
       const was = old.get(key);
       const wanted = next.get(key);
-      const enabled = entries.some((entry) => entryKey(entry) === key);
+      const enabled = items.some((item) => itemKey(item) === key);
       const reversed = restore(`${label} ${key}`, was !== undefined, wanted !== undefined, enabled);
       if (!reversed) {
-        const index = entries.findIndex((entry) => entryKey(entry) === key);
-        if (index >= 0) entries.splice(index, 1);
+        const index = items.findIndex((item) => itemKey(item) === key);
+        if (index >= 0) items.splice(index, 1);
       } else if (!enabled && was) {
-        const retained =
-          was.kind === "skill"
-            ? state.skills.some((skill) => skill.skill_id === was.skill_id)
-            : state.collections.some(
-                (collection) => collection.collection_id === was.collection_id,
-              );
-        if (retained) entries.push(was);
+        const imported =
+          "skill" in was
+            ? state.skills.some((skill) => skill.skill_id === was.skill)
+            : state.collections.some((collection) => collection.collection_id === was.collection);
+        if (imported) items.push(was);
         else conflicts.push(`${label} missing retained ${key}`);
       }
     }
@@ -171,76 +182,53 @@ export const reverseSetupIntent = (
       if (policy === undefined) delete policies[key];
       else policies[key] = policy;
     }
-    if (!current && !entries.length && !Object.keys(policies).length) return undefined;
-    const shape = current ?? prior ?? after;
-    if (!shape) return undefined;
-    const { invocation_policies: _policies, ...rest } = shape;
+    if (!current && !items.length && !Object.keys(policies).length) return undefined;
     return {
-      ...rest,
-      entries,
+      enabled: items,
       ...(Object.keys(policies).length ? { invocation_policies: policies } : {}),
     };
   };
-  const global = reverseBinding(
-    "account binding",
-    before.global[0],
-    expected.global[0],
-    state.global_bindings[0],
-  );
-  const global_bindings: DeviceBinding[] = equal(before.global, expected.global)
-    ? state.global_bindings
-    : global &&
-        (global.entries.length ||
-          before.global.length ||
-          Object.keys(global.invocation_policies ?? {}).length ||
-          hasAdditionalFields(global))
-      ? [{ ...global, scope: global.scope.kind === "global" ? global.scope : { kind: "global" } }]
-      : [];
-  const local_bindings = [...state.local_bindings];
+  const currentGlobal = { enabled: state.enabled, ...withPolicies(state.invocation_policies) };
+  const global = equal(before.global, expected.global)
+    ? currentGlobal
+    : (reverseList("account binding", before.global, expected.global, currentGlobal) ??
+      currentGlobal);
+  const repositories = [...state.repositories];
   const roots = new Set(
-    [...before.repositories, ...expected.repositories].map((binding) => binding.scope.root),
+    [...before.repositories, ...expected.repositories].map((repository) => repository.root),
   );
   for (const root of roots) {
-    const prior = before.repositories.find((binding) => binding.scope.root === root);
-    const after = expected.repositories.find((binding) => binding.scope.root === root);
-    const index = local_bindings.findIndex((binding) => binding.scope.root === root);
-    const reversed = reverseBinding(
-      `repository binding ${root}`,
-      prior,
-      after,
-      local_bindings[index],
-    );
+    const prior = before.repositories.find((repository) => repository.root === root);
+    const after = expected.repositories.find((repository) => repository.root === root);
+    const index = repositories.findIndex((repository) => repository.root === root);
+    const current = repositories[index];
+    const reversed = reverseList(`repository binding ${root}`, prior, after, current);
     if (equal(prior, after)) continue;
     if (
       reversed &&
-      (reversed.entries.length ||
+      (reversed.enabled.length ||
         prior ||
         Object.keys(reversed.invocation_policies ?? {}).length ||
-        hasAdditionalFields(reversed))
+        hasAdditionalFields(current ?? prior ?? after ?? { root, enabled: [] }))
     ) {
-      const binding: RepositoryBinding = {
-        ...reversed,
-        scope: { ...reversed.scope, kind: "repository", root },
-      };
-      if (index >= 0) local_bindings[index] = binding;
-      else local_bindings.push(binding);
-    } else if (index >= 0) local_bindings.splice(index, 1);
+      // Keep fields a newer SKIT stored on the record; replace only what undo reverses.
+      const {
+        enabled: _enabled,
+        invocation_policies: _policies,
+        ...kept
+      } = current ?? prior ?? after ?? { root, enabled: [] };
+      const repository: Repository = { ...kept, ...reversed, root };
+      if (index >= 0) repositories[index] = repository;
+      else repositories.push(repository);
+    } else if (index >= 0) repositories.splice(index, 1);
   }
   let device = state.device_skill_selection ?? null;
   if (before.device?.mode === "choose" && expected.device?.mode === "choose") {
     if (device?.mode !== "choose") {
       if (!equal(before.device, expected.device)) conflicts.push("device binding selection mode");
     } else {
-      const reversed = reverseBinding(
-        "device binding",
-        before.device.binding,
-        expected.device.binding,
-        device.binding,
-      );
-      device = {
-        mode: "choose",
-        binding: { ...(reversed ?? device.binding), scope: { kind: "global" } },
-      };
+      const reversed = reverseList("device binding", before.device, expected.device, device);
+      device = { mode: "choose", ...(reversed ?? device) };
     }
   } else device = restore("device selection", before.device, expected.device, device);
   const skills = state.skills.map((skill) => {
@@ -281,46 +269,39 @@ export const reverseSetupIntent = (
     )
       conflicts.push(`missing retained Skill ${prior.skillId}`);
   }
-  const { device_skill_selection: _device, ...rest } = state;
+  const { device_skill_selection: _device, invocation_policies: _policies, ...rest } = state;
   const next: LibraryState = {
     ...rest,
-    global_bindings,
-    local_bindings,
+    enabled: [...global.enabled],
+    ...withPolicies(global.invocation_policies),
+    repositories,
     skills,
-    acquisitions: selectedSourceState.acquisitions,
+    imports: selectedSourceState.imports,
     ...(device === null ? {} : { device_skill_selection: device }),
   };
   // Per-Skill inverses alone cannot restore a followed Collection's members. Verify the
   // resulting membership after any separately verified source observations were composed.
-  const priorBindings = [
-    ...before.global,
+  const priorLists: readonly EnabledList[] = [
+    before.global,
     ...before.repositories,
-    ...(before.device?.mode === "choose" ? [before.device.binding] : []),
+    ...(before.device?.mode === "choose" ? [before.device] : []),
   ];
-  const currentBindings = [
-    ...next.global_bindings,
-    ...next.local_bindings,
-    ...(next.device_skill_selection?.mode === "choose"
-      ? [next.device_skill_selection.binding]
-      : []),
+  const currentLists: readonly EnabledList[] = [
+    { enabled: next.enabled },
+    ...next.repositories,
+    ...(next.device_skill_selection?.mode === "choose" ? [next.device_skill_selection] : []),
   ];
   for (const prior of before.memberships ?? []) {
     const after = expected.memberships?.find((item) => item.collectionId === prior.collectionId);
     if (!after || equal(prior, after)) continue;
-    const follows = (bindings: typeof priorBindings) =>
-      bindings.some((binding) =>
-        binding.entries.some(
-          (entry) => entry.kind === "collection" && entry.collection_id === prior.collectionId,
-        ),
+    const follows = (lists: readonly EnabledList[]) =>
+      lists.some((list) =>
+        list.enabled.some((item) => "collection" in item && item.collection === prior.collectionId),
       );
     const currentMembers = currentCollectionSkills(next, prior.collectionId)
       .map((skill) => skill.skill_id)
       .sort();
-    if (
-      follows(priorBindings) &&
-      follows(currentBindings) &&
-      !equal(currentMembers, prior.skillIds)
-    )
+    if (follows(priorLists) && follows(currentLists) && !equal(currentMembers, prior.skillIds))
       conflicts.push(
         `Collection source membership ${prior.collectionId} requires restoration before undo`,
       );

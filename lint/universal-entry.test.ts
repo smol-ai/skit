@@ -100,7 +100,7 @@ describe("optional capability boundaries", () => {
     const roots = [
       "packages/skit/src/artifact",
       "packages/skit/src/library",
-      "packages/skit/src/projection",
+      "packages/skit/src/install",
       "packages/cli/src/library",
       "packages/cli/src/invocation",
       "packages/cli/src/workflows/library",

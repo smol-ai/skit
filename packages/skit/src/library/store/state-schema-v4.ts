@@ -4,11 +4,11 @@ import {
   AdoptionReceiptId,
   CollectionId,
   MachineId,
-  ProjectionId,
+  InstalledSkillId,
   SkillId,
   SkillVersionId,
 } from "../entity-ids.js";
-import { Digest, HarnessName, InvocationPolicy } from "../../vocabulary.js";
+import { Hash, HarnessName, InvocationPolicy } from "../../vocabulary.js";
 import {
   AcquisitionV4,
   BindingV4,
@@ -17,12 +17,13 @@ import {
   SkillV4,
   migrateLibraryEntitiesFromV4,
 } from "./manifest-v4.js";
-import { HarnessInstallStatus, LibraryDeviceStateFields } from "./state-schema.js";
+import { HarnessInstallStatus } from "./state-schema.js";
 import { LibraryStateFromV5, type LibraryStateV5 } from "./state-schema-v5.js";
+import { LibraryDeviceStateFieldsV9 } from "./state-schema-v9.js";
 
 const SkillAssessmentAcceptanceV4 = Schema.Struct({
-  fingerprint: Digest,
-  artifactContentDigest: Digest,
+  fingerprint: Hash,
+  artifactContentDigest: Hash,
   skillRef: SkillVersionId,
   context: Schema.Literal("project"),
   principal: Schema.String,
@@ -43,15 +44,15 @@ const RepositoryBindingV4 = Schema.Struct({
   invocation_policies: Schema.optionalKey(Schema.Record(SkillId, InvocationPolicy)),
 });
 const ManagedProjectionV4 = Schema.Struct({
-  projection_id: ProjectionId,
+  projection_id: InstalledSkillId,
   collection_id: CollectionId,
   skill_id: SkillId,
   skill_version_id: SkillVersionId,
   harness: HarnessName,
   root: AbsoluteDevicePath,
   path: AbsoluteDevicePath,
-  expected_digest: Digest,
-  observed_digest: Schema.mutableKey(Schema.optional(Digest)),
+  expected_digest: Hash,
+  observed_digest: Schema.mutableKey(Schema.optional(Hash)),
   status: Schema.mutableKey(HarnessInstallStatus),
   suppression_reason: Schema.mutableKey(Schema.optional(Schema.Literal("native_delete"))),
   suppressed_at: Schema.mutableKey(Schema.optional(Schema.String)),
@@ -62,13 +63,13 @@ const AdoptionReceiptV4 = Schema.Struct({
   adopted_at: Schema.String,
   machine_id: MachineId,
   path: AbsoluteDevicePath,
-  observed_digest: Digest,
+  observed_digest: Hash,
   skill_version_id: SkillVersionId,
-  projection_ids: Schema.Array(ProjectionId),
+  projection_ids: Schema.Array(InstalledSkillId),
 });
 
 export const LibraryStateV4 = Schema.Struct({
-  ...LibraryDeviceStateFields,
+  ...LibraryDeviceStateFieldsV9,
   assessmentAcceptances: Schema.mutableKey(
     Schema.optional(Schema.mutable(Schema.Array(SkillAssessmentAcceptanceV4))),
   ),

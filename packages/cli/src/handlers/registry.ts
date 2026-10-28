@@ -10,10 +10,10 @@ import {
 import { outputContracts } from "../commands/output-contracts.js";
 import { homeFlag, jsonFlag } from "../commands/parameters.js";
 import {
-  addRegistryRemoteEffect,
-  defaultRegistryRemoteEffect,
-  listRegistryRemotesEffect,
-  removeRegistryRemoteEffect,
+  addRegistryRemote,
+  defaultRegistryRemote,
+  listRegistryRemotes,
+  removeRegistryRemote,
 } from "../registry/auth.js";
 import { Renderer } from "../presentation/renderer.js";
 import { result } from "./contracts.js";
@@ -32,7 +32,7 @@ export const registryAddCliCommand = Command.make(
       return yield* handlePlatformCommand(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
-          const value = yield* addRegistryRemoteEffect(name, origin, selectedHome);
+          const value = yield* addRegistryRemote(name, origin, selectedHome);
           yield* renderer.result(result("registryRemote", { ...value, action: "added" }));
         }),
       );
@@ -62,7 +62,7 @@ export const registryListCliCommand = Command.make(
       return yield* handlePlatformCommand(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
-          const registries = yield* listRegistryRemotesEffect(selectedHome);
+          const registries = yield* listRegistryRemotes(selectedHome);
           yield* renderer.result(result("registryList", { registries }));
         }),
       );
@@ -92,7 +92,7 @@ export const registryDefaultCliCommand = Command.make(
       return yield* handlePlatformCommand(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
-          const value = yield* defaultRegistryRemoteEffect(name, selectedHome);
+          const value = yield* defaultRegistryRemote(name, selectedHome);
           yield* renderer.result(
             result("registryRemote", {
               ...value,
@@ -127,7 +127,7 @@ export const registryRemoveCliCommand = Command.make(
       return yield* handlePlatformCommand(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
-          const value = yield* removeRegistryRemoteEffect(name, selectedHome);
+          const value = yield* removeRegistryRemote(name, selectedHome);
           yield* renderer.result(
             result("registryRemote", {
               ...value,

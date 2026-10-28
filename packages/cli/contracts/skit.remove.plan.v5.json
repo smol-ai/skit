@@ -1,0 +1,102 @@
+{
+  "$id": "skit.remove.plan.v5",
+  "type": "object",
+  "properties": {
+    "subject_id": {
+      "type": "string"
+    },
+    "subject_kind": {
+      "type": "string",
+      "enum": [
+        "collection",
+        "skill"
+      ]
+    },
+    "versions": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    },
+    "skills": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    },
+    "global_enabled": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    },
+    "repositories": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    },
+    "installed_skills": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "enum": [
+            "Infinity",
+            "-Infinity",
+            "NaN"
+          ]
+        }
+      ]
+    }
+  },
+  "required": [
+    "subject_id",
+    "subject_kind",
+    "versions",
+    "skills",
+    "global_enabled",
+    "repositories",
+    "installed_skills"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

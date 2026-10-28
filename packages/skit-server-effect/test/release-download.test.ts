@@ -3,7 +3,7 @@ import { D1Client } from "@effect/sql-d1";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { makeWebHandler } from "../src/http.js";
-import { Bindings, blobStorageEffect, databaseLayer } from "../src/platform/cloudflare.js";
+import { Bindings, blobStorage, databaseLayer } from "../src/platform/cloudflare.js";
 
 const bindingsLayer = Layer.merge(
   Layer.succeed(Bindings, { database: env.DB, blobs: env.SKIT_BLOBS }),
@@ -100,7 +100,7 @@ describe("anonymous Release downloads", () => {
         publishedAt: "2026-09-11T00:00:00.000Z",
         visibility: "public",
       });
-      yield* blobStorageEffect("write release fixture", (blobs) =>
+      yield* blobStorage("write release fixture", (blobs) =>
         blobs.put("releases/public.zip", "public archive"),
       );
       const token = "skit_pat_public_download";
@@ -160,7 +160,7 @@ describe("anonymous Release downloads", () => {
         publishedAt: "2026-09-11T02:00:00.000Z",
         visibility: "private",
       });
-      yield* blobStorageEffect("write release fixture", (blobs) =>
+      yield* blobStorage("write release fixture", (blobs) =>
         blobs.put("releases/unlisted-latest.zip", "unlisted archive"),
       );
 
@@ -239,7 +239,7 @@ describe("anonymous Release downloads", () => {
         publishedAt: "2026-09-11T02:00:00.000Z",
         visibility: "private",
       });
-      yield* blobStorageEffect("write private release fixture", (blobs) =>
+      yield* blobStorage("write private release fixture", (blobs) =>
         blobs.put("releases/private-accessible.zip", "private archive"),
       );
 

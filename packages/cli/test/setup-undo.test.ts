@@ -7,10 +7,10 @@ import {
   LibraryStore,
   LinkStat,
   MachineSettings,
-  prepareProjectionRebuildEffect,
+  prepareInstalledSkillRebuild,
   skitLayer,
 } from "@smolai/skit-core";
-import { checkSetupGlobalContent } from "../src/library-application/setup-content-custody.js";
+import { checkSetupGlobalContent } from "../src/library-application/setup-external-ownership.js";
 import { recoveryFingerprint } from "../src/library-application/recovery-evidence.js";
 import { prepareSetupUndo } from "../src/library-application/setup-undo.js";
 import { setupResultActions } from "../src/commands/setup-actions.js";
@@ -43,7 +43,7 @@ const fixture = Effect.fn("Test.setupUndoFixture")(function* (removeOnly = false
     probePath: "",
     skillsStateHome: join(root, "state"),
   };
-  const observed = yield* home.owned(
+  const scan = yield* home.owned(
     runSetup({ ...options, repositoryRoots: [root], persistRoots: false }),
   );
   const interaction = yield* makeScriptedInteraction([]);
@@ -51,8 +51,8 @@ const fixture = Effect.fn("Test.setupUndoFixture")(function* (removeOnly = false
     options,
     workDirFlag: root,
     ...(removeOnly ? { selection: { sourceIds: [], copyPaths: [], removePaths: [source] } } : {}),
-    localCustody: { bindings: home.bindings },
-    planId: observed.onboarding.planId,
+    manageOptions: { installOptions: home.installOptions },
+    planId: scan.onboarding.planId,
   };
   const applied = yield* home.owned(
     Effect.gen(function* () {
@@ -68,7 +68,7 @@ const fixture = Effect.fn("Test.setupUndoFixture")(function* (removeOnly = false
 });
 
 it.effect(
-  "the projection byte owner reconstructs a former independent copy from retained artifacts",
+  "the installed-skill byte owner reconstructs a former independent copy from retained artifacts",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -76,8 +76,10 @@ it.effect(
         Effect.gen(function* () {
           const store = yield* LibraryStore;
           const state = yield* store.load;
-          const prior = state.projections.find((projection) => projection.path === f.successor)!;
-          const rebuilt = yield* prepareProjectionRebuildEffect(state, store.originalsPath, prior, {
+          const prior = state.installed_skills.find(
+            (installedSkill) => installedSkill.path === f.successor,
+          )!;
+          const rebuilt = yield* prepareInstalledSkillRebuild(state, store.originalsPath, prior, {
             source: "declared",
           });
           const stage = join(f.root, "reconstructed");
@@ -93,29 +95,27 @@ it.effect(
     }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect(
-  "undo of an explicit removal restores the original inode and recovery receipt state",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture(true);
-      yield* f.home.owned(
-        Effect.gen(function* () {
-          const links = yield* LinkStat;
-          const receipt = yield* inspectRecoveryOperation(f.home.home, f.operationId);
-          expect(receipt.entries[0].status).toBe("saved");
-          const identity = yield* links.identity.lstat(receipt.entries[0].recoveryPath);
-          const preview = yield* prepareSetupUndo(f.operationId);
-          expect(preview.summary.conflicts).toEqual([]);
-          expect(preview.summary.files).toEqual([{ path: f.source, kind: "restore" }]);
-          expect((yield* preview.apply()).status).toBe("undone");
-          expect(yield* links.identity.lstat(f.source)).toEqual(identity);
-          expect(
-            (yield* inspectRecoveryOperation(f.home.home, f.operationId)).entries[0].status,
-          ).toBe("at-original");
-          expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe(f.markdown);
-        }),
-      );
-    }).pipe(Effect.provide(skitLayer)),
+it.effect("undo of an explicit removal restores the original inode and move record state", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture(true);
+    yield* f.home.owned(
+      Effect.gen(function* () {
+        const links = yield* LinkStat;
+        const recovery = yield* inspectRecoveryOperation(f.home.home, f.operationId);
+        expect(recovery.entries[0].status).toBe("saved");
+        const identity = yield* links.identity.lstat(recovery.entries[0].recoveryPath);
+        const preview = yield* prepareSetupUndo(f.operationId);
+        expect(preview.summary.conflicts).toEqual([]);
+        expect(preview.summary.files).toEqual([{ path: f.source, kind: "restore" }]);
+        expect((yield* preview.apply()).status).toBe("undone");
+        expect(yield* links.identity.lstat(f.source)).toEqual(identity);
+        expect(
+          (yield* inspectRecoveryOperation(f.home.home, f.operationId)).entries[0].status,
+        ).toBe("at-original");
+        expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe(f.markdown);
+      }),
+    );
+  }).pipe(Effect.provide(skitLayer)),
 );
 
 it.effect("undo refuses an occupied removal destination and redirected original parent", () =>
@@ -154,8 +154,8 @@ it.effect(
           const installed = yield* store.load;
           yield* (yield* prepareSetupUndo(f.operationId)).apply();
           const undone = yield* store.load;
-          const later = { ...undone, global_bindings: installed.global_bindings };
-          yield* store.publish(later, undone);
+          const later = { ...undone, enabled: installed.enabled };
+          yield* store.save(later, undone);
           const repeat = yield* prepareSetupUndo(f.operationId);
           expect(repeat.summary.status).toBe("already-undone");
           expect((yield* repeat.apply()).status).toBe("already-undone");
@@ -175,7 +175,7 @@ const refusedPublication = (path: string) =>
     }),
   );
 
-it.effect("an inverse receipt must publish before any copy or intent changes", () =>
+it.effect("an inverse record must save before any copy or intent changes", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     yield* f.home.owned(
@@ -203,7 +203,7 @@ it.effect("an inverse receipt must publish before any copy or intent changes", (
   }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect("a symlink replacing setup's marker never grants custody of its target", () =>
+it.effect("a symlink replacing setup's marker never grants ownership of its target", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     yield* f.home.owned(
@@ -235,7 +235,7 @@ it.effect(
           const interrupted = yield* prepareSetupUndo(f.operationId).pipe(
             Effect.provideService(LibraryStore, {
               ...store,
-              publish: () => refusedPublication(store.statePath),
+              save: () => refusedPublication(store.statePath),
             }),
           );
           const failure = yield* Effect.flip(interrupted.apply());
@@ -247,7 +247,7 @@ it.effect(
           const refreshed = yield* prepareSetupUndo(f.operationId);
           expect(refreshed.summary.conflicts).toEqual([]);
           expect((yield* refreshed.apply()).status).toBe("undone");
-          expect((yield* store.load).global_bindings).toEqual([]);
+          expect((yield* store.load).enabled).toEqual([]);
           expect((yield* MachineSettings.read(f.home.home)).discoveryRoots).toEqual([]);
         }),
       );
@@ -274,7 +274,7 @@ it.effect(
             ),
           );
           expect(failure._tag).toBe("PlatformError");
-          expect((yield* (yield* LibraryStore).load).global_bindings).toEqual([]);
+          expect((yield* (yield* LibraryStore).load).enabled).toEqual([]);
           const refreshed = yield* prepareSetupUndo(f.operationId);
           expect(refreshed.summary.intentChanged).toBe(false);
           expect(refreshed.summary.settingsChanged).toBe(true);
@@ -320,7 +320,7 @@ it.effect(
 );
 
 it.effect(
-  "full undo releases adopted custody, preserves new installed copies, restores intent and discovery, and keeps retained artifacts",
+  "full undo releases managed ownership, preserves new installed copies, restores intent and discovery, and keeps retained artifacts",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -328,12 +328,12 @@ it.effect(
         Effect.gen(function* () {
           const store = yield* LibraryStore;
           const before = yield* store.load;
-          expect(before.global_bindings[0].entries.length).toBeGreaterThan(0);
+          expect(before.enabled.length).toBeGreaterThan(0);
           expect(yield* f.fs.exists(join(f.successor, ".skit-ownership.json"))).toBe(true);
           const plan = yield* prepareSetupUndo(f.operationId);
           expect(plan.summary.conflicts).toEqual([]);
           expect(plan.summary.files.map((file) => file.kind).sort()).toEqual([
-            "release-custody",
+            "release-ownership",
             "remove-created",
           ]);
           expect(yield* f.fs.exists(join(f.home.home, "removed", f.operationId, "undo"))).toBe(
@@ -342,10 +342,10 @@ it.effect(
           const undone = yield* plan.apply();
           expect(undone.status).toBe("undone");
           const state = yield* store.load;
-          expect(state.global_bindings).toEqual([]);
-          expect(state.projections).toEqual([]);
+          expect(state.enabled).toEqual([]);
+          expect(state.installed_skills).toEqual([]);
           expect(state.skills).toEqual(before.skills);
-          expect(state.retained_copies).toEqual(before.retained_copies);
+          expect(state.collection_versions).toEqual(before.collection_versions);
           expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe(f.markdown);
           expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(false);
           expect(yield* f.fs.exists(f.successor)).toBe(false);
@@ -354,9 +354,9 @@ it.effect(
           expect(settings.repositories).toEqual([]);
           expect(settings.repositoryDecisionsInitialized).toBe(false);
           expect(settings.machineId).toBeDefined();
-          if (!("preservationId" in undone))
+          if (!("backupId" in undone))
             return yield* Effect.die(new Error("Missing preservation identity"));
-          const recovery = yield* inspectRecoveryOperation(f.home.home, undone.preservationId);
+          const recovery = yield* inspectRecoveryOperation(f.home.home, undone.backupId);
           expect(recovery.entries).toHaveLength(1);
           expect(recovery.entries[0].status).toBe("saved");
           expect((yield* prepareSetupUndo(f.operationId)).summary.status).toBe("already-undone");
@@ -379,9 +379,9 @@ it.effect(
           const reviewed = yield* prepareSetupUndo(f.operationId);
           expect(reviewed.summary.conflicts).toEqual([]);
           const undone = yield* reviewed.apply();
-          if (!("preservationId" in undone))
+          if (!("backupId" in undone))
             return yield* Effect.die(new Error("Missing preservation identity"));
-          const recovery = yield* inspectRecoveryOperation(f.home.home, undone.preservationId);
+          const recovery = yield* inspectRecoveryOperation(f.home.home, undone.backupId);
           expect(
             yield* f.fs.readFileString(join(recovery.entries[0].recoveryPath, "notes.txt")),
           ).toBe("Later user edits");
@@ -391,7 +391,7 @@ it.effect(
 );
 
 it.effect(
-  "a changed adopted original blocks the entire inverse and keeps bindings and settings",
+  "a changed managed original blocks the entire inverse and keeps bindings and settings",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();

@@ -25,7 +25,7 @@ const AuditProvenance = Schema.Struct({
   transactionId: Schema.optionalKey(Schema.String),
 });
 
-export const AuditObservation = Schema.Struct({
+export const AuditEntry = Schema.Struct({
   kind: AuditKind,
   name: Schema.String,
   harnesses: Schema.Array(HarnessName),
@@ -51,7 +51,7 @@ export const AuditObservation = Schema.Struct({
   staticAudit: Schema.optionalKey(SkillAudit),
   frontmatterCompatibility: Schema.optionalKey(Schema.Array(FrontmatterCompatibilityResult)),
 });
-export type AuditObservation = typeof AuditObservation.Type;
+export type AuditEntry = typeof AuditEntry.Type;
 
 export const AuditFinding = Schema.Struct({
   severity: Schema.Literals(["warning", "error"]),
@@ -92,7 +92,7 @@ export const AuditReport = Schema.Struct({
     ),
     deferred: StringArray,
   }),
-  observations: Schema.Array(AuditObservation),
+  observations: Schema.Array(AuditEntry),
   findings: Schema.Array(AuditFinding),
   probes: Schema.Array(AuditProbe),
   summary: Schema.Struct({ capabilities: Schema.Number, findings: Schema.Number }),

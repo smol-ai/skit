@@ -1,4 +1,4 @@
-import { sourceAcquisitions, type LibraryState } from "@smolai/skit-core";
+import { sourceImports, type LibraryState } from "@smolai/skit-core";
 import { Data, Effect } from "effect";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
@@ -114,14 +114,14 @@ export const resolveLibrarySubject = Effect.fn("Library.resolveSubject")(functio
 const subjectCollectionId = (subject: LibrarySubject) =>
   subject.kind === "collection" ? subject.collection.collection_id : subject.skill.collection_id;
 
-export const subjectAcquisitionIds = (
+export const subjectImportIds = (
   state: LibraryState,
   subject: LibrarySubject,
 ): ReadonlySet<string> =>
   new Set(
-    state.acquisitions
-      .filter((acquisition) => acquisition.collection_id === subjectCollectionId(subject))
-      .map((acquisition) => acquisition.acquisition_id),
+    state.imports
+      .filter((sourceImport) => sourceImport.collection_id === subjectCollectionId(subject))
+      .map((sourceImport) => sourceImport.import_id),
   );
 
 export const owningCollectionSubject = (
@@ -151,6 +151,6 @@ export const resolveOwningLibrarySubjects = Effect.fn("Library.resolveOwningSubj
   ]);
 });
 
-/** The subject's Collection's latest Source Acquisition. */
-export const latestSubjectAcquisition = (state: LibraryState, subject: LibrarySubject) =>
-  sourceAcquisitions(state, subjectCollectionId(subject))[0];
+/** The subject's Collection's latest source import. */
+export const latestSourceImport = (state: LibraryState, subject: LibrarySubject) =>
+  sourceImports(state, subjectCollectionId(subject))[0];

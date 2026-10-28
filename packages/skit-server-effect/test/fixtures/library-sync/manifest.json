@@ -1,5 +1,5 @@
 {
-  "schema": "skit.library.v7",
+  "schema": "skit.library.v8",
   "collections": [
     {
       "collection_id": "coll_01m3zbtrpafvnv1t4x42qh2ypz",
@@ -26,35 +26,35 @@
       "versions": [
         {
           "skill_version_id": "skv_01m3zbtrpafvnv1t5fydawp848",
-          "source_digest": "sha256:9ec882b884d45a33226847dfa32c88d2c52e08024d3a381137b15db7860a7d10",
-          "artifact_digest": "sha256:9ec882b884d45a33226847dfa32c88d2c52e08024d3a381137b15db7860a7d10",
-          "validation_identity_digest": "sha256:9ec882b884d45a33226847dfa32c88d2c52e08024d3a381137b15db7860a7d10",
+          "source_hash": "sha256:9ec882b884d45a33226847dfa32c88d2c52e08024d3a381137b15db7860a7d10",
+          "artifact_hash": "sha256:9ec882b884d45a33226847dfa32c88d2c52e08024d3a381137b15db7860a7d10",
+          "validation_identity_hash": "sha256:9ec882b884d45a33226847dfa32c88d2c52e08024d3a381137b15db7860a7d10",
           "materialization_profile": "plain-skill/v1"
         }
       ]
     }
   ],
-  "retained_copies": [
+  "collection_versions": [
     {
-      "retained_copy_id": "ret_01m3zbtrpafvnv1t5h19j8ar3j",
-      "digest": "sha256:9ec882b884d45a33226847dfa32c88d2c52e08024d3a381137b15db7860a7d10",
+      "collection_version_id": "ret_01m3zbtrpafvnv1t5h19j8ar3j",
+      "hash": "sha256:9ec882b884d45a33226847dfa32c88d2c52e08024d3a381137b15db7860a7d10",
       "copy_profile": "verbatim/v1",
       "members": [
         {
           "source_path": ".",
-          "source_digest": "sha256:9ec882b884d45a33226847dfa32c88d2c52e08024d3a381137b15db7860a7d10",
-          "artifact_digest": "sha256:9ec882b884d45a33226847dfa32c88d2c52e08024d3a381137b15db7860a7d10",
+          "source_hash": "sha256:9ec882b884d45a33226847dfa32c88d2c52e08024d3a381137b15db7860a7d10",
+          "artifact_hash": "sha256:9ec882b884d45a33226847dfa32c88d2c52e08024d3a381137b15db7860a7d10",
           "materialization_profile": "plain-skill/v1"
         }
       ]
     }
   ],
-  "acquisitions": [
+  "imports": [
     {
-      "acquisition_id": "acq_01m3zbtrpafvnv1t5r1m976d2b",
+      "import_id": "acq_01m3zbtrpafvnv1t5r1m976d2b",
       "collection_id": "coll_01m3zbtrpafvnv1t4x42qh2ypz",
       "kind": "source",
-      "retained_copy_id": "ret_01m3zbtrpafvnv1t5h19j8ar3j",
+      "collection_version_id": "ret_01m3zbtrpafvnv1t5h19j8ar3j",
       "input": {
         "value": "private:test/library"
       },
@@ -64,11 +64,11 @@
         "namespace": "test",
         "slug": "library"
       },
-      "acquired_at": "2026-01-01T00:00:00.000Z",
+      "imported_at": "2026-01-01T00:00:00.000Z",
       "machine_id": "mach_01m3zbtrpafvnv1t60wfrkgkw3",
-      "observations": []
+      "lock_file_entries": []
     }
   ],
   "snapshot_digests": ["sha256:9ec882b884d45a33226847dfa32c88d2c52e08024d3a381137b15db7860a7d10"],
-  "bindings": []
+  "enabled": []
 }

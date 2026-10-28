@@ -8,7 +8,7 @@ import {
   type JsonObject,
   type JsonValue,
 } from "@smolai/skit-core";
-import type { AuditFinding, AuditObservation } from "./types.js";
+import type { AuditFinding, AuditEntry } from "./types.js";
 import { Effect } from "effect";
 import { errorMessage } from "../failure-classification.js";
 import { canonical, read, walk } from "./io.js";
@@ -95,7 +95,7 @@ const codexProjectMcp = Effect.fn("Audit.codexProjectMcp")(function* (
   config: JsonObject,
   cwd: string,
 ) {
-  const observations: AuditObservation[] = [];
+  const observations: AuditEntry[] = [];
   const findings: AuditFinding[] = [];
   const canonicalCwd = yield* canonical(cwd);
   const projects = objectAt(config, "projects") ?? {};
@@ -132,7 +132,7 @@ const codexProjectMcp = Effect.fn("Audit.codexProjectMcp")(function* (
 });
 
 export const auditCodex = Effect.fn("Audit.codex")(function* (home: string, cwd: string) {
-  const observations: AuditObservation[] = [];
+  const observations: AuditEntry[] = [];
   const findings: AuditFinding[] = [];
   const configPath = join(home, ".codex", "config.toml");
   const parsed = parseToml(yield* read(configPath));

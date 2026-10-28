@@ -3,8 +3,8 @@ import type { HarnessName } from "../contracts.js";
 import {
   defineHarnessProfile,
   type HarnessProfile,
-  type HarnessRoot,
-  type HarnessRootContext,
+  type SkillsDirectory,
+  type SkillsDirectoryContext,
 } from "./contracts.js";
 import {
   CODEX_SKILL_METADATA_CONTRACTS,
@@ -181,7 +181,7 @@ export const harnessProfiles = {
       },
     ],
     skillMetadata: CODEX_SKILL_METADATA_CONTRACTS,
-    projection: {
+    installedSkill: {
       globalTarget: "codex-global-shared",
       projectTarget: "codex-project-agents",
       strategy: "copy",
@@ -324,7 +324,7 @@ export const harnessProfiles = {
         ],
       },
     ],
-    projection: {
+    installedSkill: {
       globalTarget: "claude-global-native",
       projectTarget: "claude-project-native",
       strategy: "copy",
@@ -464,7 +464,7 @@ export const harnessProfiles = {
         ],
       },
     ],
-    projection: {
+    installedSkill: {
       globalTarget: "opencode-global-legacy",
       projectTarget: "opencode-project-native",
       strategy: "copy",
@@ -607,7 +607,7 @@ export const harnessProfiles = {
         ],
       },
     ],
-    projection: {
+    installedSkill: {
       globalTarget: "devin-global-native",
       projectTarget: "devin-project-native",
       strategy: "copy",
@@ -627,13 +627,16 @@ export function harnessProfileIds(): readonly HarnessName[] {
   return Object.values(harnessProfiles).map((profile) => profile.id);
 }
 
-export function harnessRoot(profile: HarnessProfile, id: string): HarnessRoot {
+export function skillsDirectory(profile: HarnessProfile, id: string): SkillsDirectory {
   const root = profile.roots.find((candidate) => candidate.id === id);
   if (!root) throw new Error(`Unknown root ${id} for ${profile.id}`);
   return root;
 }
 
-export function resolveHarnessRoot(root: HarnessRoot, context: HarnessRootContext): string {
+export function resolveSkillsDirectory(
+  root: SkillsDirectory,
+  context: SkillsDirectoryContext,
+): string {
   const base =
     root.base === "home"
       ? context.home
@@ -644,13 +647,13 @@ export function resolveHarnessRoot(root: HarnessRoot, context: HarnessRootContex
   return resolve(join(base, root.path));
 }
 
-export function projectionRoot(
+export function installSkillsDirectory(
   harness: HarnessName,
   scope: "global" | "project",
-  context: HarnessRootContext,
+  context: SkillsDirectoryContext,
 ): string | null {
   const profile = harnessProfile(harness);
   const id =
-    scope === "global" ? profile.projection.globalTarget : profile.projection.projectTarget;
-  return id ? resolveHarnessRoot(harnessRoot(profile, id), context) : null;
+    scope === "global" ? profile.installedSkill.globalTarget : profile.installedSkill.projectTarget;
+  return id ? resolveSkillsDirectory(skillsDirectory(profile, id), context) : null;
 }

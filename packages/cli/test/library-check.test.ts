@@ -1,12 +1,17 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Ref } from "effect";
 import { join } from "node:path";
-import { libraryStoreLayer, LibraryStore, retainedTreePath, skitLayer } from "@smolai/skit-core";
-import { checkSubjectsEffect } from "../src/workflows/library/check.js";
-import { retainLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
+import {
+  libraryStoreLayer,
+  LibraryStore,
+  collectionVersionPath,
+  skitLayer,
+} from "@smolai/skit-core";
+import { checkSubjects } from "../src/workflows/library/check.js";
+import { importSource } from "../src/library-application/import-source.js";
 import { initializeLibraryMachine } from "./helpers/library-home.js";
 
-it.effect("checks retained custody without treating an observed local copy as an upstream", () =>
+it.effect("checks retained files without treating an observed local copy as an upstream", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const workspace = yield* fs.makeTempDirectoryScoped({ prefix: "skit-check-" });
@@ -15,78 +20,76 @@ it.effect("checks retained custody without treating an observed local copy as an
     yield* fs.makeDirectory(source, { recursive: true });
     yield* initializeLibraryMachine(home);
     yield* fs.writeFileString(join(source, "SKILL.md"), "observed raw Skill\n");
-    const retained = yield* retainLibrarySourceEffect(source).pipe(
-      Effect.provide(libraryStoreLayer({ home })),
-    );
+    const imported = yield* importSource(source).pipe(Effect.provide(libraryStoreLayer({ home })));
     const loaded = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
     assert.strictEqual(loaded.present, true);
     if (!loaded.present) return;
     const checkedCollections = yield* Ref.make<ReadonlyArray<string>>([]);
-    const current = yield* checkSubjectsEffect(loaded.state, retained.collection_id, (collection) =>
+    const current = yield* checkSubjects(loaded.state, imported.collection_id, (collection) =>
       Ref.update(checkedCollections, (names) => [...names, collection.display_name]),
     ).pipe(
       Effect.provideService(LibraryStore, {
         load: Effect.succeed(loaded.state),
         inspect: Effect.succeed(loaded),
-        publish: () => Effect.void,
+        save: () => Effect.void,
         home,
         originalsPath: join(home, "originals"),
         statePath: join(home, "state.json"),
         variantsPath: join(home, "variants"),
       }),
     );
-    assert.strictEqual(current[0]?.retained_copies[0]?.retained_bytes_current, true);
+    assert.strictEqual(current[0]?.collection_versions[0]?.original_intact, true);
     assert.deepStrictEqual(yield* Ref.get(checkedCollections), []);
     assert.strictEqual(current[0]?.source_status, "not-applicable");
     assert.strictEqual(current[0]?.available_snapshot_digest, undefined);
     yield* fs.writeFileString(join(source, "SKILL.md"), "changed source bytes\n");
-    const path = retainedTreePath(join(home, "originals"), loaded.state.retained_copies[0]!.digest);
+    const path = collectionVersionPath(
+      join(home, "originals"),
+      loaded.state.collection_versions[0]!.hash,
+    );
     yield* fs.writeFileString(join(path, "SKILL.md"), "changed retained bytes\n");
-    const changed = yield* checkSubjectsEffect(loaded.state, retained.collection_id).pipe(
+    const changed = yield* checkSubjects(loaded.state, imported.collection_id).pipe(
       Effect.provideService(LibraryStore, {
         load: Effect.succeed(loaded.state),
         inspect: Effect.succeed(loaded),
-        publish: () => Effect.void,
+        save: () => Effect.void,
         home,
         originalsPath: join(home, "originals"),
         statePath: join(home, "state.json"),
         variantsPath: join(home, "variants"),
       }),
     );
-    assert.strictEqual(changed[0]?.retained_copies[0]?.retained_bytes_current, false);
+    assert.strictEqual(changed[0]?.collection_versions[0]?.original_intact, false);
     assert.strictEqual(changed[0]?.source_status, "not-applicable");
     assert.strictEqual(changed[0]?.available_snapshot_digest, undefined);
     yield* fs.remove(source, { recursive: true });
-    const withoutObservedCopy = yield* checkSubjectsEffect(
-      loaded.state,
-      retained.collection_id,
-    ).pipe(
+    const withoutCopy = yield* checkSubjects(loaded.state, imported.collection_id).pipe(
       Effect.provideService(LibraryStore, {
         load: Effect.succeed(loaded.state),
         inspect: Effect.succeed(loaded),
-        publish: () => Effect.void,
+        save: () => Effect.void,
         home,
         originalsPath: join(home, "originals"),
         statePath: join(home, "state.json"),
         variantsPath: join(home, "variants"),
       }),
     );
-    assert.strictEqual(withoutObservedCopy[0]?.source_status, "not-applicable");
+    assert.strictEqual(withoutCopy[0]?.source_status, "not-applicable");
     assert.strictEqual(
-      withoutObservedCopy[0]?.current_snapshot_digest,
-      loaded.state.retained_copies[0]!.digest,
+      withoutCopy[0]?.current_snapshot_digest,
+      loaded.state.collection_versions[0]!.hash,
     );
-    assert.strictEqual(withoutObservedCopy[0]?.available_snapshot_digest, undefined);
+    assert.strictEqual(withoutCopy[0]?.available_snapshot_digest, undefined);
     const reloaded = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
     assert.strictEqual(reloaded.present, true);
     if (!reloaded.present) return;
     assert.deepStrictEqual(
-      reloaded.state.retained_copies[0]?.digest,
-      loaded.state.retained_copies[0]?.digest,
+      reloaded.state.collection_versions[0]?.hash,
+      loaded.state.collection_versions[0]?.hash,
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

@@ -175,12 +175,12 @@ export function auditPresentation(report: AuditReportV1Alpha4) {
     ["rule", report.rules],
     ["marketplace", report.marketplaces],
   ];
-  const observedItems = capabilityGroups.flatMap(([kind, capabilities]) =>
+  const foundItems = capabilityGroups.flatMap(([kind, capabilities]) =>
     capabilities.map((capability) => itemFromCapability(kind, capability)),
   );
   const unmatchedFindings = report.findings.filter((finding) => finding.entryIds.length === 0);
   const items: AuditItem[] = [
-    ...observedItems,
+    ...foundItems,
     ...unmatchedFindings.map((finding): AuditItem => ({
       name: finding.unresolvedSubject ?? finding.code,
       kind: "finding",
@@ -202,7 +202,7 @@ export function auditPresentation(report: AuditReportV1Alpha4) {
       kind: "finding",
       location: report.roots.cwd,
       status: "warning",
-      summary: "The supported Harness roots contained no auditable entries.",
+      summary: "The supported skills directories contained no auditable entries.",
       evidence: [`deferred harnesses: ${report.coverage.deferredHarnessIds.join(", ") || "none"}`],
       agents: [],
     });
@@ -290,18 +290,18 @@ export function auditPresentation(report: AuditReportV1Alpha4) {
 }
 
 function libraryRow(row: LibrarySkillRow): LibraryRow {
-  const enabled = row.bindings.length > 0;
+  const enabled = row.scopes.length > 0;
   return {
     name: row.name,
     kind: "library-skill",
     location: row.heading,
     status: row.invocationWarning ? "warning" : "clear",
     summary: enabled
-      ? `Active in ${row.bindings.length} place${row.bindings.length === 1 ? "" : "s"}.`
+      ? `Active in ${row.scopes.length} place${row.scopes.length === 1 ? "" : "s"}.`
       : "Not active anywhere.",
     evidence: [
       ...(enabled
-        ? row.bindings.map((binding) => binding.label)
+        ? row.scopes.map((scopeRow) => scopeRow.label)
         : ["not active anywhere · press e to enable"]),
       ...(row.invocationWarning ? [row.invocationWarning] : []),
     ],
@@ -331,7 +331,7 @@ export function libraryRows(
       left[0]!.heading.localeCompare(right[0]!.heading, undefined, { sensitivity: "base" }),
     )
     .map(([collectionId, members]): LibraryCollectionRow => {
-      const enabled = members.filter((row) => row.bindings.length > 0).length;
+      const enabled = members.filter((row) => row.scopes.length > 0).length;
       return {
         kind: "library-collection",
         collectionId,
@@ -341,7 +341,7 @@ export function libraryRows(
         status: "clear",
         summary: `${members.length} Skill${members.length === 1 ? "" : "s"} · ${enabled} enabled`,
         evidence: members.map(
-          (row) => `${row.name} · ${row.bindings.length ? "enabled" : "not enabled"}`,
+          (row) => `${row.name} · ${row.scopes.length ? "enabled" : "not enabled"}`,
         ),
         agents: [],
       };
@@ -356,7 +356,7 @@ function changeSummary(pending: Pick<PendingLibraryChange, "facts">): string {
   return pending.facts
     .map(
       (fact) =>
-        `${fact.action === "enable" ? "Enable" : "Disable"} ${fact.collectionLabel ?? fact.skills.join(", ")} for every agent (${fact.destination})`,
+        `${fact.action === "enable" ? "Enable" : "Disable"} ${fact.collectionLabel ?? fact.skills.join(", ")} for every harness (${fact.destination})`,
     )
     .join("; ");
 }
@@ -406,12 +406,12 @@ function inventoryDescription(item: InventoryItem): string {
       : `${(item.kind === "skill-group" ? groupKindLabel(item.group.identity) : item.kind).toUpperCase()}  ${findingLabel(item).toLowerCase()}`;
 }
 
-export interface ReceiptField {
+export interface DetailField {
   readonly label: string;
   readonly value: string;
   readonly status?: AuditItem["status"];
 }
-const field = (label: string, value: string): ReceiptField => ({ label, value });
+const field = (label: string, value: string): DetailField => ({ label, value });
 
 export function detailPresentation(
   item: Exclude<InventoryItem, LibraryRow>,
@@ -429,7 +429,7 @@ export function detailPresentation(
     "well-known": "Well-known endpoint",
   };
   const collection = item.kind === "library-collection";
-  const fields: ReceiptField[] = collection
+  const fields: DetailField[] = collection
     ? []
     : [
         field(
@@ -515,8 +515,8 @@ export function detailPresentation(
           ? item.findingCodes?.some((code) =>
               ["orphaned-projection-claim", "invalid-ownership-marker"].includes(code),
             )
-            ? "Inspect custody evidence; this legacy marker does not authorize removal"
-            : "Disable projection and inspect content"
+            ? "Inspect ownership evidence; this legacy marker does not authorize removal"
+            : "Disable the installed skill and inspect its content"
           : "Inspect the warnings listed above",
   };
 }
@@ -526,7 +526,7 @@ export function confirmationPresentation(
   showSkills: boolean,
   compact: boolean,
 ) {
-  const fields = pending.facts.flatMap((fact, index): ReceiptField[] => [
+  const fields = pending.facts.flatMap((fact, index): DetailField[] => [
     ...(fact.collectionLabel === undefined
       ? [field("skills", fact.skills.join(", "))]
       : [

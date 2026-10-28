@@ -9,7 +9,7 @@ import {
   type EvalCase,
 } from "../src/cases.ts";
 import { baseCaseFixture } from "../src/fixtures.ts";
-import { observe, preservationFailures } from "../src/observe.ts";
+import { observe, backupFailures } from "../src/observe.ts";
 import { startLocalRegistry, type LocalRegistry } from "../src/registry.ts";
 import { createRunRoot, removeRunRoot, type RunRoot } from "../src/run-root.ts";
 import { installSkitPackage, linkTools, runSkit } from "../src/skit-package.ts";
@@ -63,12 +63,12 @@ describe("observe", () => {
       { recursive: true },
     );
 
-    expect(preservationFailures(await observe(run.home, fixture))).toContain(
+    expect(backupFailures(await observe(run.home, fixture))).toContain(
       "skill folder skit does not record: .agents/skills/release-notes",
     );
   });
 
-  it("reads the Library and its projections from skit's own state", async () => {
+  it("reads the Library and its installed skills from skit's own state", async () => {
     const run = controlRun();
     const fixture = baseCaseFixture(run.home);
     await runSkit(run, "add", join(run.home, ".claude/skills/release-notes"));
@@ -78,10 +78,9 @@ describe("observe", () => {
 
     expect(observation.library.exists).toBe(true);
     expect(observation.library.skills).toEqual(["release-notes"]);
-    expect(observation.library.projections.map((projection) => projection.target).sort()).toEqual([
-      "agents",
-      "claude",
-    ]);
+    expect(
+      observation.library.installedSkills.map((installedSkill) => installedSkill.target).sort(),
+    ).toEqual(["agents", "claude"]);
   });
 });
 
@@ -93,7 +92,7 @@ async function judge(
 ) {
   const observation = await observe(run.home, fixture);
   return [
-    ...preservationFailures(observation),
+    ...backupFailures(observation),
     ...evalCase.verify({ observation, finalMessage, issued: registry.issued }),
   ];
 }
@@ -152,7 +151,7 @@ describe("setup verifier rejects broken final states", () => {
       join(run.home, ".skit", "state.json"),
       JSON.stringify({
         skills: [{ name: "release-notes" }],
-        projections: ["agents", "claude"].map((target) => ({
+        installedSkills: ["agents", "claude"].map((target) => ({
           target,
           path: join(run.home, target === "agents" ? ".agents" : ".claude", "skills/release-notes"),
           status: "installed",
@@ -182,9 +181,9 @@ describe("setup verifier rejects broken final states", () => {
       rmSync(join(run.home, ".skit/originals"), { recursive: true });
     if (damage === "changed retention") {
       const state = JSON.parse(readFileSync(join(run.home, ".skit/state.json"), "utf8"));
-      const digest = state.retained_copies[0].digest.slice(7);
+      const hash = state.collection_versions[0].hash.slice(7);
       writeFileSync(
-        join(run.home, ".skit/originals", digest.slice(0, 2), digest, "SKILL.md"),
+        join(run.home, ".skit/originals", hash.slice(0, 2), hash, "SKILL.md"),
         "broken\n",
       );
     }

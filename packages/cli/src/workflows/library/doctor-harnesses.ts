@@ -1,10 +1,10 @@
 import {
-  HarnessShadow,
-  observeHarnessSkills,
-  readableHarnessRoots,
-  type ShadowObservationError,
-} from "../../projection/harness-shadows.js";
-import type { InventoryRootOptions } from "../../projection/roots.js";
+  DuplicateCopy,
+  scanSkillsDirectory,
+  readableSkillsDirectories,
+  type DuplicateScanError,
+} from "../../install/duplicates.js";
+import type { InventoryRootOptions } from "../../install/roots.js";
 import { Data, Effect, FileSystem, Option, Record, Schema, Stream } from "effect";
 import { dirname, join, resolve } from "node:path";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
@@ -17,7 +17,7 @@ import {
   SourceProcess,
   type SourceProcessResult,
 } from "@smolai/skit-core";
-import { probeHarnessEffect } from "../../harness/probe.js";
+import { probeHarness } from "../../harness/probe.js";
 import { CodexDoctorCheck, doctorCodexCheck } from "./doctor-codex.js";
 import { readOpenCodeV2Skills } from "./doctor-opencode-v2.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
@@ -57,7 +57,7 @@ export const HarnessDoctorCheck = Schema.Struct({
   coverage: Schema.Literals(["callable-commands", "resolved-skills", "native-skills"]),
   limitations: Schema.Array(Schema.String),
   skills: Schema.Array(HarnessDoctorSkill),
-  locations: Schema.optionalKey(Schema.Array(HarnessShadow)),
+  locations: Schema.optionalKey(Schema.Array(DuplicateCopy)),
   warnings: Schema.Array(Schema.String),
 });
 export type HarnessDoctorCheck = typeof HarnessDoctorCheck.Type;
@@ -298,7 +298,7 @@ export interface NativeDiscovery {
     unknown,
     ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | SourceProcess
   >;
-  /** Drop diagnostics that only restate SKIT's own expected Projections. */
+  /** Drop diagnostics that only restate SKIT's own expected installed skills. */
   readonly classifyWarnings?: (
     check: HarnessDoctorCheck,
     state: LibraryState,
@@ -365,9 +365,9 @@ export const doctorHarnessCheck = Effect.fn("Doctor.harness")(function* (
       ...empty,
       status: "skipped" as const,
       detail:
-        "Custom projection roots do not describe the harness's native discovery. Run doctor without root overrides.",
+        "Custom skills directories do not describe the harness's native discovery. Run doctor without root overrides.",
     };
-  const probe = yield* probeHarnessEffect(harness);
+  const probe = yield* probeHarness(harness);
   const version = probe.version ? { version: probe.version } : {};
   if (probe.status !== "installed" || !probe.executablePath)
     return {
@@ -415,23 +415,23 @@ export function classifyOpenCodeWarnings(
   for (const skill of check.skills) {
     if (!skill.path) continue;
     const selectedPath = resolve(skill.path);
-    const agents = state.projections.find(
-      (projection) =>
-        projection.target === "agents" &&
-        projection.status === "installed" &&
-        resolve(join(projection.path, "SKILL.md")) === selectedPath,
+    const agents = state.installed_skills.find(
+      (installedSkill) =>
+        installedSkill.destination === "agents" &&
+        installedSkill.status === "installed" &&
+        resolve(join(installedSkill.path, "SKILL.md")) === selectedPath,
     );
-    if (!agents || agents.observed_digest !== agents.expected_digest) continue;
-    const claude = state.projections.find(
-      (projection) =>
-        projection.target === "claude" &&
-        projection.status === "installed" &&
-        projection.skill_id === agents.skill_id &&
-        projection.skill_version_id === agents.skill_version_id &&
+    if (!agents || agents.current_hash !== agents.expected_hash) continue;
+    const claude = state.installed_skills.find(
+      (installedSkill) =>
+        installedSkill.destination === "claude" &&
+        installedSkill.status === "installed" &&
+        installedSkill.skill_id === agents.skill_id &&
+        installedSkill.skill_version_id === agents.skill_version_id &&
         // Targets render the same retained Version with different native invocation fields.
         // Each copy must match its own recorded rendering, not the other target's bytes.
-        projection.observed_digest === projection.expected_digest &&
-        dirname(dirname(projection.root)) === dirname(dirname(agents.root)),
+        installedSkill.current_hash === installedSkill.expected_hash &&
+        dirname(dirname(installedSkill.root)) === dirname(dirname(agents.root)),
     );
     if (!claude) continue;
     const paths = new Set([
@@ -478,11 +478,11 @@ export const inspectNativeDiscovery = Effect.fn("Doctor.inspectNativeDiscovery")
     },
     { concurrency: 3 },
   );
-  const aliasErrors: ShadowObservationError[] = [];
-  const locations = yield* observeHarnessSkills(
+  const aliasErrors: DuplicateScanError[] = [];
+  const locations = yield* scanSkillsDirectory(
     [
-      ...readableHarnessRoots(options, { kind: "global" }),
-      ...readableHarnessRoots(options, { kind: "repository", root: cwd }),
+      ...readableSkillsDirectories(options, { kind: "global" }),
+      ...readableSkillsDirectories(options, { kind: "repository", root: cwd }),
     ],
     { errors: aliasErrors },
   );

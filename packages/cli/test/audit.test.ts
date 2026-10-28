@@ -6,14 +6,11 @@ import { ConfigProvider, Effect, FileSystem, Schema } from "effect";
 import * as TestClock from "effect/testing/TestClock";
 import {
   makeCollectionId,
-  makeProjectionId,
+  makeInstalledSkillId,
   makeSkillId,
   makeSkillVersionId,
 } from "@smolai/skit-core";
-import {
-  auditLocalCapabilitiesEffect,
-  auditLocalCapabilitiesV1Alpha4Effect,
-} from "../src/audit/local.js";
+import { auditLocalCapabilities, auditLocalCapabilitiesV1Alpha4 } from "../src/audit/local.js";
 import { AuditReportV1Alpha4 } from "../src/audit/schema.js";
 import { normalizeAuditReport } from "../src/audit/normalize.js";
 import { outputContracts } from "../src/commands/output-contracts.js";
@@ -39,7 +36,7 @@ describe("experimental capability audit", () => {
         skill,
         '---\nname: review\ndescription: Review code.\n---\n\nCall spawn("sh").\n',
       );
-      const report = yield* auditLocalCapabilitiesV1Alpha4Effect({
+      const report = yield* auditLocalCapabilitiesV1Alpha4({
         home: join(root, "home"),
         cwd: root,
       });
@@ -82,7 +79,7 @@ describe("experimental capability audit", () => {
         '---\nname: imagegen\ndescription: Generate images.\nmetadata:\n  short-description: "Generate and edit images"\n---\n',
       );
 
-      const report = yield* auditLocalCapabilitiesEffect({ home, cwd: root });
+      const report = yield* auditLocalCapabilities({ home, cwd: root });
       const observed = report.observations.find(
         (item) => item.kind === "skill" && item.path === skill,
       );
@@ -115,7 +112,7 @@ describe("experimental capability audit", () => {
       );
 
       yield* TestClock.setTime(new Date("2026-01-01T00:00:00.000Z").getTime());
-      const report = yield* auditLocalCapabilitiesEffect({ home, cwd: root });
+      const report = yield* auditLocalCapabilities({ home, cwd: root });
       const skills = report.observations.filter((item) => item.kind === "skill");
       expect(skills).toHaveLength(2);
       expect(new Set(skills.map((item) => item.canonicalPath)).size).toBe(1);
@@ -165,7 +162,7 @@ describe("experimental capability audit", () => {
           JSON.stringify({
             schemaVersion: 2,
             projectionPolicyVersion: 1,
-            projection_id: makeProjectionId(),
+            projection_id: makeInstalledSkillId(),
             collection_id: makeCollectionId(),
             skill_id: makeSkillId(),
             skill_version_id: makeSkillVersionId(),
@@ -174,7 +171,7 @@ describe("experimental capability audit", () => {
           }),
         );
 
-        const observed = (yield* auditLocalCapabilitiesEffect({
+        const observed = (yield* auditLocalCapabilities({
           home,
           cwd: root,
         })).observations.find((item) => item.kind === "skill" && item.name === "ask-matt");
@@ -186,12 +183,12 @@ describe("experimental capability audit", () => {
         });
         expect(observed?.provenance.transactionId).toBeUndefined();
 
-        const report = yield* auditLocalCapabilitiesV1Alpha4Effect({ home, cwd: root });
+        const report = yield* auditLocalCapabilitiesV1Alpha4({ home, cwd: root });
         expect(Schema.is(outputContracts.experimentalAuditV1Alpha4.schema)(report)).toBe(true);
       }).pipe(Effect.provide(testPlatformLayer)),
   );
 
-  it.effect("reports unretained and invalid ownership markers as custody findings", () =>
+  it.effect("reports unretained and invalid ownership markers as ownership findings", () =>
     Effect.gen(function* () {
       const root = yield* scratch("skit-audit-custody-");
       const home = join(root, "home");
@@ -203,7 +200,7 @@ describe("experimental capability audit", () => {
         JSON.stringify({
           schemaVersion: 2,
           projectionPolicyVersion: 1,
-          projection_id: makeProjectionId(),
+          projection_id: makeInstalledSkillId(),
           collection_id: makeCollectionId(),
           skill_id: makeSkillId(),
           skill_version_id: makeSkillVersionId(),
@@ -214,7 +211,7 @@ describe("experimental capability audit", () => {
       yield* write(join(invalid, "SKILL.md"), "---\nname: invalid\ndescription: Invalid.\n---\n");
       yield* write(join(invalid, ".skit-ownership.json"), "{}");
 
-      const report = yield* auditLocalCapabilitiesV1Alpha4Effect({ home, cwd: root });
+      const report = yield* auditLocalCapabilitiesV1Alpha4({ home, cwd: root });
 
       expect(report.findings).toEqual(
         expect.arrayContaining([
@@ -258,7 +255,7 @@ describe("experimental capability audit", () => {
         JSON.stringify({
           schemaVersion: 3,
           projectionPolicyVersion: 1,
-          projection_id: makeProjectionId(),
+          projection_id: makeInstalledSkillId(),
           skill_id: makeSkillId(),
           skill_version_id: makeSkillVersionId(),
           expected_digest: `sha256:${"a".repeat(64)}`,
@@ -267,7 +264,7 @@ describe("experimental capability audit", () => {
       );
       yield* write(join(home, ".skit", "state.json"), "{");
 
-      const report = yield* auditLocalCapabilitiesV1Alpha4Effect({ home, cwd: root });
+      const report = yield* auditLocalCapabilitiesV1Alpha4({ home, cwd: root });
 
       expect(report.findings).toContainEqual(
         expect.objectContaining({ severity: "error", code: "unreadable-library-ledger" }),
@@ -285,7 +282,7 @@ describe("experimental capability audit", () => {
       const statePath = join(root, "library", "state.json");
       yield* write(statePath, "{");
 
-      const report = yield* auditLocalCapabilitiesV1Alpha4Effect({ home, cwd: root }).pipe(
+      const report = yield* auditLocalCapabilitiesV1Alpha4({ home, cwd: root }).pipe(
         Effect.provide(
           ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: join(root, "library") })),
         ),
@@ -311,7 +308,7 @@ describe("experimental capability audit", () => {
       );
       yield* write(join(library, "state.json"), legacy);
 
-      const report = yield* auditLocalCapabilitiesV1Alpha4Effect({ home, cwd: root }).pipe(
+      const report = yield* auditLocalCapabilitiesV1Alpha4({ home, cwd: root }).pipe(
         Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: library }))),
       );
 
@@ -319,7 +316,7 @@ describe("experimental capability audit", () => {
         false,
       );
       const migrated = JSON.parse(yield* fs.readFileString(join(library, "state.json")));
-      expect(migrated.schemaVersion).toBe(9);
+      expect(migrated.schemaVersion).toBe(10);
       const backups = (yield* fs.readDirectory(library)).filter((name) =>
         name.startsWith("state.json.v4.backup-"),
       );
@@ -353,7 +350,7 @@ describe("experimental capability audit", () => {
         JSON.stringify({ version: "1.0.0" }),
       );
 
-      const report = yield* auditLocalCapabilitiesEffect({ home, cwd: root });
+      const report = yield* auditLocalCapabilities({ home, cwd: root });
       expect(
         report.observations
           .filter((item) => item.kind === "plugin")
@@ -389,7 +386,7 @@ describe("experimental capability audit", () => {
         `[projects."${cwd}"]\ntrust_level = "untrusted"\n`,
       );
       expect(
-        (yield* auditLocalCapabilitiesEffect({ home, cwd })).observations.some(
+        (yield* auditLocalCapabilities({ home, cwd })).observations.some(
           (item) => item.kind === "mcp-server" && item.name === "project-review",
         ),
       ).toBe(false);
@@ -398,7 +395,7 @@ describe("experimental capability audit", () => {
         join(home, ".codex", "config.toml"),
         `[projects."${cwd}"]\ntrust_level = "trusted"\n`,
       );
-      expect((yield* auditLocalCapabilitiesEffect({ home, cwd })).observations).toContainEqual(
+      expect((yield* auditLocalCapabilities({ home, cwd })).observations).toContainEqual(
         expect.objectContaining({
           kind: "mcp-server",
           name: "project-review",
@@ -424,9 +421,7 @@ describe("experimental capability audit", () => {
         join(home, ".codex", "config.toml"),
         `[projects."${project}"]\ntrust_level = "trusted"\n`,
       );
-      expect(
-        (yield* auditLocalCapabilitiesEffect({ home, cwd: linked })).observations,
-      ).toContainEqual(
+      expect((yield* auditLocalCapabilities({ home, cwd: linked })).observations).toContainEqual(
         expect.objectContaining({ kind: "mcp-server", name: "project-review", scope: "project" }),
       );
     }).pipe(Effect.provide(testPlatformLayer)),
@@ -450,7 +445,7 @@ describe("experimental capability audit", () => {
         JSON.stringify({ plugins: { "review@vendor": [{ scope: "user", installPath }] } }),
       );
 
-      const report = yield* auditLocalCapabilitiesEffect({ home, cwd: root });
+      const report = yield* auditLocalCapabilities({ home, cwd: root });
       const skills = report.observations.filter(
         (item) => item.kind === "skill" && item.name.includes("review"),
       );
@@ -481,7 +476,7 @@ describe("experimental capability audit", () => {
         JSON.stringify({
           schemaVersion: 2,
           projectionPolicyVersion: 1,
-          projection_id: makeProjectionId(),
+          projection_id: makeInstalledSkillId(),
           collection_id: makeCollectionId(),
           skill_id: makeSkillId(),
           skill_version_id: makeSkillVersionId(),
@@ -494,7 +489,7 @@ describe("experimental capability audit", () => {
         JSON.stringify({ plugins: { "review@vendor": [{ scope: "user", installPath }] } }),
       );
 
-      const observed = (yield* auditLocalCapabilitiesEffect({ home, cwd: root })).observations.find(
+      const observed = (yield* auditLocalCapabilities({ home, cwd: root })).observations.find(
         (item) => item.kind === "skill" && item.name === "review@vendor:review",
       );
       expect(observed?.provenance).toEqual(
@@ -524,7 +519,7 @@ describe("experimental capability audit", () => {
           JSON.stringify({ plugins: { "review@vendor": [{ scope: "user", installPath }] } }),
         );
 
-        const pluginSkill = (yield* auditLocalCapabilitiesEffect({
+        const pluginSkill = (yield* auditLocalCapabilities({
           home,
           cwd: root,
         })).observations.find(
@@ -547,7 +542,7 @@ describe("experimental capability audit", () => {
         join(home, ".codex", "config.toml"),
         `[mcp_servers.phantom]\ncommand = "server"\nthis is not toml\n`,
       );
-      const report = yield* auditLocalCapabilitiesEffect({ home, cwd: root });
+      const report = yield* auditLocalCapabilities({ home, cwd: root });
       expect(report.observations.filter((item) => item.kind === "mcp-server")).toEqual([]);
       expect(report.findings.map((item) => item.code)).toEqual(["codex-config-parse-failed"]);
     }).pipe(Effect.provide(testPlatformLayer)),
@@ -569,7 +564,7 @@ describe("experimental capability audit", () => {
         join(home, ".claude", "settings.json"),
         JSON.stringify({ enabledPlugins: { review: true } }),
       );
-      const report = yield* auditLocalCapabilitiesEffect({ home, cwd: root });
+      const report = yield* auditLocalCapabilities({ home, cwd: root });
       expect(
         report.observations
           .filter((item) => item.kind === "plugin" && item.harnesses.includes("claude-code"))
@@ -603,7 +598,7 @@ describe("experimental capability audit", () => {
       const previous = process.cwd();
       process.chdir(root);
       try {
-        const report = yield* auditLocalCapabilitiesEffect({ home, cwd: auditedCwd });
+        const report = yield* auditLocalCapabilities({ home, cwd: auditedCwd });
         expect(report.observations.some((item) => item.name.includes("leaked"))).toBe(false);
         expect(report.observations.some((item) => item.name === "ghost@vendor")).toBe(false);
         expect(
@@ -623,7 +618,7 @@ describe("experimental capability audit", () => {
       const second = join(home, ".claude", "rules", "review.md");
       yield* write(first, "Use mcp__reviewer__review when needed.");
       yield* write(second, "Call mcp__reviewer__reply for follow-up.");
-      const report = yield* auditLocalCapabilitiesEffect({ home, cwd: root });
+      const report = yield* auditLocalCapabilities({ home, cwd: root });
       expect(report.findings).toEqual([
         expect.objectContaining({
           severity: "warning",
@@ -661,7 +656,7 @@ describe("experimental capability audit", () => {
         }),
       );
 
-      const report = yield* auditLocalCapabilitiesEffect({ home, cwd: root });
+      const report = yield* auditLocalCapabilities({ home, cwd: root });
 
       expect(report.findings).toEqual([]);
       expect(report.observations).toContainEqual(
@@ -686,7 +681,7 @@ describe("experimental capability audit", () => {
         JSON.stringify({ mcpServers: { reviewer: { command: "reviewer" } } }),
       );
 
-      const report = yield* auditLocalCapabilitiesEffect({ home, cwd: root });
+      const report = yield* auditLocalCapabilities({ home, cwd: root });
 
       expect(report.findings).toEqual([
         expect.objectContaining({

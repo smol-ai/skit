@@ -1,17 +1,17 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { deterministicTreeHashEffect } from "../src/artifact/skit.js";
+import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
-import { retainObservedCollectionEffect } from "../src/library/observed-import.js";
-import { libraryManifestFromLocalStateEffect } from "../src/library/library-state.js";
-import { planRetainedContentEffect } from "../src/library/retained-content-plan.js";
-import { prepareRestoreEffect } from "../src/library/library-restore.js";
-import { retainedTreePath } from "../src/library/retention/retain-tree.js";
-import { captureSnapshotArchiveEffect } from "../src/library/snapshot-archive.js";
+import { importCollection } from "../src/library/import-collection.js";
+import { libraryManifestFromLocalState } from "../src/library/library-state.js";
+import { planCollectionVersions } from "../src/library/collection-version-plan.js";
+import { prepareRestore } from "../src/library/library-restore.js";
+import { collectionVersionPath } from "../src/library/collection-version.js";
+import { readSnapshotArchive } from "../src/library/snapshot-archive.js";
 import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
-import { inLibrary, inspectLibrary, publishLibrary } from "./helpers/library-store.js";
+import { inLibrary, inspectLibrary, saveLibrary } from "./helpers/library-store.js";
 
 const machineId = migratedMachineId("019950c0-4c00-7000-8000-000000000001", "portable-local-test");
 
@@ -26,57 +26,57 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
     yield* fs.writeFileString(join(installed, "SKILL.md"), "observed locally\n");
     yield* fs.writeFileString(join(installed, "notes.txt"), "retained too\n");
 
-    const retained = yield* Effect.scoped(
+    const imported = yield* Effect.scoped(
       withLibraryWriterLock(
         firstHome,
-        retainObservedCollectionEffect({
+        importCollection({
           machineId,
           source: { type: "local", path: installed },
           input: installed,
-          retainedAt: "2026-09-16T00:00:00.000Z",
+          importedAt: "2026-09-16T00:00:00.000Z",
           skills: [
             {
               name: "review",
               sourcePath: installed,
               relativePath: ".",
-              observedHash: yield* deterministicTreeHashEffect(installed),
+              currentHash: yield* deterministicTreeHash(installed),
             },
           ],
-          observations: [],
+          lockFileEntries: [],
         }).pipe(inLibrary(firstHome)),
       ),
     );
     const saved = yield* inspectLibrary(firstHome);
     assert.strictEqual(saved.present, true);
     if (!saved.present) return;
-    assert.ok(retained.collection?.label.length);
-    assert.strictEqual(retained.collection?.upstream, undefined);
-    assert.strictEqual(saved.state.acquisitions[0]?.machine_id, machineId);
-    assert.strictEqual(saved.state.acquisitions[0]?.input.value, installed);
-    const tree = saved.state.retained_copies[0];
+    assert.ok(imported.collection?.label.length);
+    assert.strictEqual(imported.collection?.upstream, undefined);
+    assert.strictEqual(saved.state.imports[0]?.machine_id, machineId);
+    assert.strictEqual(saved.state.imports[0]?.input.value, installed);
+    const tree = saved.state.collection_versions[0];
     assert.ok(tree);
-    const firstOriginal = retainedTreePath(join(firstHome, "originals"), tree.digest);
+    const firstOriginal = collectionVersionPath(join(firstHome, "originals"), tree.hash);
     assert.strictEqual(
       yield* fs.readFileString(join(firstOriginal, "notes.txt")),
       "retained too\n",
     );
 
-    const manifest = yield* libraryManifestFromLocalStateEffect(saved.state);
-    assert.deepStrictEqual(manifest.snapshot_digests, [tree.digest]);
-    const archive = yield* captureSnapshotArchiveEffect(firstOriginal);
+    const manifest = yield* libraryManifestFromLocalState(saved.state);
+    assert.deepStrictEqual(manifest.snapshot_digests, [tree.hash]);
+    const archive = yield* readSnapshotArchive(firstOriginal);
     const originalsPath = join(secondHome, "originals");
-    const plan = yield* planRetainedContentEffect(manifest, {
+    const plan = yield* planCollectionVersions(manifest, {
       originalsPath,
       localArchives: [archive],
     });
-    const restored = yield* Effect.scoped(prepareRestoreEffect(manifest, plan, { originalsPath }));
-    yield* publishLibrary(secondHome, restored.state);
+    const restored = yield* Effect.scoped(prepareRestore(manifest, plan, { originalsPath }));
+    yield* saveLibrary(secondHome, restored.state);
     const second = yield* inspectLibrary(secondHome);
     assert.strictEqual(second.present, true);
     if (!second.present) return;
-    assert.deepStrictEqual(second.state.acquisitions, saved.state.acquisitions);
-    assert.deepStrictEqual(second.state.local_bindings, []);
-    const secondOriginal = retainedTreePath(join(secondHome, "originals"), tree.digest);
+    assert.deepStrictEqual(second.state.imports, saved.state.imports);
+    assert.deepStrictEqual(second.state.repositories, []);
+    const secondOriginal = collectionVersionPath(join(secondHome, "originals"), tree.hash);
     assert.strictEqual(
       yield* fs.readFileString(join(secondOriginal, "SKILL.md")),
       "observed locally\n",
@@ -84,7 +84,7 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("reuses an unchanged Skill Version and keeps every Acquisition", () =>
+it.effect("reuses an unchanged Skill Version and keeps every import", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-portable-reuse-" });
@@ -95,41 +95,41 @@ it.effect("reuses an unchanged Skill Version and keeps every Acquisition", () =>
     yield* fs.writeFileString(join(review, "SKILL.md"), "first\n");
     yield* fs.writeFileString(join(stable, "SKILL.md"), "stable\n");
 
-    const retain = Effect.fn("Test.retainPair")(function* (retainedAt: string) {
+    const importSource = Effect.fn("Test.retainPair")(function* (importedAt: string) {
       return yield* Effect.scoped(
         withLibraryWriterLock(
           home,
-          retainObservedCollectionEffect({
+          importCollection({
             machineId,
             source: { type: "github", owner: "fixture", repository: "skills" },
             input: "https://github.com/fixture/skills",
-            retainedAt,
+            importedAt,
             skills: [
               {
                 name: "review",
                 sourcePath: review,
                 relativePath: "review",
-                observedHash: yield* deterministicTreeHashEffect(review),
+                currentHash: yield* deterministicTreeHash(review),
               },
               {
                 name: "stable",
                 sourcePath: stable,
                 relativePath: "stable",
-                observedHash: yield* deterministicTreeHashEffect(stable),
+                currentHash: yield* deterministicTreeHash(stable),
               },
             ],
-            observations: [],
+            lockFileEntries: [],
           }).pipe(inLibrary(home)),
         ),
       );
     });
-    yield* retain("2026-09-16T01:00:00.000Z");
+    yield* importSource("2026-09-16T01:00:00.000Z");
     const first = yield* inspectLibrary(home);
     assert.strictEqual(first.present, true);
     if (!first.present) return;
     const stableVersion = first.state.skills.find((skill) => skill.name === "stable")?.versions[0];
     yield* fs.writeFileString(join(review, "SKILL.md"), "second\n");
-    yield* retain("2026-09-16T02:00:00.000Z");
+    yield* importSource("2026-09-16T02:00:00.000Z");
 
     const saved = yield* inspectLibrary(home);
     assert.strictEqual(saved.present, true);
@@ -141,7 +141,7 @@ it.effect("reuses an unchanged Skill Version and keeps every Acquisition", () =>
     assert.deepStrictEqual(saved.state.skills.find((skill) => skill.name === "stable")?.versions, [
       stableVersion,
     ]);
-    assert.strictEqual(saved.state.retained_copies.length, 2);
-    assert.strictEqual(saved.state.acquisitions.length, 2);
+    assert.strictEqual(saved.state.collection_versions.length, 2);
+    assert.strictEqual(saved.state.imports.length, 2);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

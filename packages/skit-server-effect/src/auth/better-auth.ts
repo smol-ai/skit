@@ -9,7 +9,7 @@ import { schemaBodyJsonLimited } from "../api/request-body.js";
 import { normalizeNamespace } from "../domain/identifiers.js";
 import {
   Bindings,
-  rateLimitEffect,
+  rateLimit,
   type DatabaseSqlClient,
   type RuntimeEnv,
 } from "../platform/cloudflare.js";
@@ -484,7 +484,7 @@ export const handleRequest = Effect.fn("BetterAuthHttp.handleRequest")(function*
     ].includes(pathname)
   ) {
     const clientIp = webRequest.headers.get("cf-connecting-ip") ?? "unknown";
-    const outcome = yield* rateLimitEffect(env.AUTH_RATE_LIMITER, `${pathname}:${clientIp}`).pipe(
+    const outcome = yield* rateLimit(env.AUTH_RATE_LIMITER, `${pathname}:${clientIp}`).pipe(
       Effect.tapError((error) => Effect.logError("authentication rate limit failed", error)),
       Effect.catchTag("Cloudflare.RateLimitError", () => Effect.succeed(undefined)),
     );

@@ -1,0 +1,273 @@
+{
+  "$id": "skit.setup.applied.v3",
+  "type": "object",
+  "properties": {
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "installedSkillId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "updated",
+              "unchanged",
+              "local-kept",
+              "native-delete",
+              "pending"
+            ]
+          }
+        },
+        "required": [
+          "installedSkillId",
+          "name",
+          "path",
+          "status"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "operationId": {
+      "type": "string"
+    },
+    "removed": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "path"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "recoveryDirectories": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "planId": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "imported": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "source",
+          "names"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "added": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "sourcePath": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "sourcePath"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "reconnected": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "sourcePath": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "sourcePath"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "installedSkills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "destination": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "destination",
+          "path",
+          "status"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "leftAlone": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "paths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "paths",
+          "reason"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "aliasRecoveryDirectories": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "backupWarnings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "message"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "aliasesKept": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "message"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "rel": {
+            "type": "string"
+          },
+          "argv": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "effect": {
+            "type": "string",
+            "enum": [
+              "read",
+              "write"
+            ]
+          }
+        },
+        "required": [
+          "rel",
+          "argv",
+          "effect"
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": [
+    "planId",
+    "imported",
+    "added",
+    "reconnected",
+    "installedSkills",
+    "leftAlone",
+    "actions"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { SkillId } from "../entity-ids.js";
-import { HarnessName, RecordedProjectionTarget } from "../../vocabulary.js";
+import { HarnessName, RecordedInstallDestination } from "../../vocabulary.js";
 import type { LibraryState } from "../library-state.js";
 
 /** One diagnostic report over an observed inventory snapshot. Pure: the caller does the reading. */
@@ -8,7 +8,7 @@ export const LibraryDoctorIssue = Schema.Struct({
   code: Schema.String,
   skillId: Schema.optional(SkillId),
   path: Schema.optional(Schema.String),
-  target: Schema.optional(RecordedProjectionTarget),
+  target: Schema.optional(RecordedInstallDestination),
   harnesses: Schema.optional(Schema.Array(HarnessName)),
 });
 export type LibraryDoctorIssue = typeof LibraryDoctorIssue.Type;
@@ -20,19 +20,19 @@ export const LibraryDoctorReport = Schema.Struct({
 export type LibraryDoctorReport = typeof LibraryDoctorReport.Type;
 
 export function libraryDoctorReport(state: LibraryState): LibraryDoctorReport {
-  const issues: LibraryDoctorIssue[] = state.projections
+  const issues: LibraryDoctorIssue[] = state.installed_skills
     .filter((item) => item.status !== "installed" && item.status !== "unsupported")
     .map((item) => ({
       code: item.status === "conflicted" ? "PROJECTION_CONFLICT" : "PROJECTION_DRIFT",
       skillId: item.skill_id,
       path: item.path,
-      target: item.target,
+      target: item.destination,
     }));
   issues.push(
     ...(state.scanIssues ?? [])
       .filter((item) => item.code === "UNREADABLE_PATH")
       .map((item) => ({ ...item })),
-    ...(state.custodyIssues ?? []).map((item) => ({
+    ...(state.ownershipIssues ?? []).map((item) => ({
       code: item.code,
       skillId: item.skillId,
       path: item.path,

@@ -1,8 +1,8 @@
 import { Schema } from "effect";
-import { Digest } from "../vocabulary.js";
+import { Hash } from "../vocabulary.js";
 import {
   apiSemverPattern,
-  parseContractEffect,
+  parseContract,
   parseWireDescriptor,
   semver,
   SKIT_API_CONTRACT_VERSION,
@@ -16,7 +16,7 @@ import {
 
 /** Consumer-facing Registry contracts: Distribution reads and Server discovery. */
 export {
-  parseContractEffect,
+  parseContract,
   parseWireDescriptor,
   semver,
   SKIT_API_CONTRACT_VERSION,
@@ -32,7 +32,7 @@ export const releaseSchema = Schema.Struct({
   release_id: Schema.NonEmptyString,
   version: Schema.String.check(Schema.isPattern(apiSemverPattern)),
   revision_id: Schema.optionalKey(Schema.NonEmptyString),
-  archive_digest: Digest,
+  archive_digest: Hash,
   download_path: Schema.String.check(Schema.isStartingWith("/api/skits/")),
 });
 export type Release = typeof releaseSchema.Type;

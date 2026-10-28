@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem } from "effect";
 import { join } from "node:path";
 import {
-  createSkitArchiveEffect,
+  createSkitArchive,
   LibraryActor,
   LibraryAuditLog,
   LibraryStore,
@@ -13,8 +13,8 @@ import {
   libraryProgressLayer,
   type LibraryProgressEvent,
 } from "../src/library-application/progress.js";
-import { updateSubjectsEffect } from "../src/library-application/update.js";
-import { retainLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
+import { updateSubjects } from "../src/library-application/update.js";
+import { importSource } from "../src/library-application/import-source.js";
 import { copySkitFixtureEffect, libraryHome } from "./helpers/library-home.js";
 
 it.effect("a headless update emits domain progress and records one attributed transaction", () =>
@@ -26,7 +26,7 @@ it.effect("a headless update emits domain progress and records one attributed tr
     const archivePath = join(root, "source.zip");
     const archive = Effect.gen(function* () {
       yield* fs.remove(archivePath, { force: true });
-      yield* createSkitArchiveEffect(source, archivePath);
+      yield* createSkitArchive(source, archivePath);
       return yield* fs.readFile(archivePath);
     });
     let bytes = yield* archive;
@@ -39,9 +39,7 @@ it.effect("a headless update emits domain progress and records one attributed tr
           }),
         ),
     });
-    yield* home.owned(
-      retainLibrarySourceEffect({ type: "archive", url: "https://fixtures.test/source.zip" }),
-    );
+    yield* home.owned(importSource({ type: "archive", url: "https://fixtures.test/source.zip" }));
     const before = yield* home.durable;
     const events: LibraryProgressEvent[] = [];
     const history = home.owned(LibraryAuditLog.use((log) => log.list()));
@@ -51,7 +49,7 @@ it.effect("a headless update emits domain progress and records one attributed tr
     bytes = yield* archive;
     const results = yield* home
       .owned(
-        updateSubjectsEffect({
+        updateSubjects({
           roots: home.inventory,
         }).pipe(
           Effect.provide(
@@ -71,14 +69,14 @@ it.effect("a headless update emits domain progress and records one attributed tr
       [
         ["started", "source"],
         ["completed", "source"],
-        ["started", "projection"],
-        ["completed", "projection"],
+        ["started", "install"],
+        ["completed", "install"],
       ],
     );
     const after = yield* home.owned(LibraryStore.use((store) => store.load));
     assert.notStrictEqual(
-      after.retained_copies.at(-1)?.digest,
-      before.retained_copies.at(-1)?.digest,
+      after.collection_versions.at(-1)?.hash,
+      before.collection_versions.at(-1)?.hash,
     );
     const recorded = yield* history;
     assert.strictEqual(recorded.length, previousEvents + 1);

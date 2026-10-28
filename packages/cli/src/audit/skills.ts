@@ -4,18 +4,18 @@ import {
   evaluateSkillFrontmatter,
   harnessDrivers,
   HarnessName,
-  observationPathIdentityEffect,
-  resolveHarnessRoot,
+  physicalPath,
+  resolveSkillsDirectory,
   type HarnessProfile,
-  type HarnessRoot,
-  type HarnessRootRole,
+  type SkillsDirectory,
+  type SkillsDirectoryRole,
   type JsonObject,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
 import { canonical, read, walk } from "./io.js";
 import { fileProvenance } from "./provenance.js";
-import { makePnpmSkillObserver } from "../projection/pnpm-skills.js";
-import type { AuditFinding, AuditObservation } from "./types.js";
+import { makePnpmSkillCheck } from "../install/pnpm-skills.js";
+import type { AuditFinding, AuditEntry } from "./types.js";
 
 function frontmatterProblem(
   issue: ReturnType<typeof evaluateSkillFrontmatter>["issues"][number],
@@ -39,7 +39,7 @@ function frontmatterProblem(
 
 export interface SkillAuditResult {
   profiles: HarnessProfile[];
-  observations: AuditObservation[];
+  observations: AuditEntry[];
   findings: AuditFinding[];
 }
 
@@ -48,14 +48,14 @@ export interface SkillCandidate {
   canonicalPath: string;
   name: string;
   harnesses: readonly HarnessName[];
-  role: HarnessRootRole;
+  role: SkillsDirectoryRole;
   scope: "user" | "project";
-  provenance?: AuditObservation["provenance"];
+  provenance?: AuditEntry["provenance"];
 }
 
 export interface InspectSkillInput extends SkillCandidate {
   aliases: string[];
-  provenance: AuditObservation["provenance"];
+  provenance: AuditEntry["provenance"];
 }
 
 export const inspectSkill = Effect.fn("Audit.inspectSkill")(function* (input: InspectSkillInput) {
@@ -99,7 +99,7 @@ export const inspectSkill = Effect.fn("Audit.inspectSkill")(function* (input: In
 
 interface AuditedRoot {
   harnesses: Set<HarnessName>;
-  roles: Set<HarnessRootRole>;
+  roles: Set<SkillsDirectoryRole>;
   scope: "user" | "project";
   path: string;
 }
@@ -115,9 +115,9 @@ export const auditSkills = Effect.fn("Audit.skills")(function* (
   const context = { home, configHome: join(home, ".config"), repository: cwd };
   for (const profile of profiles)
     for (const root of profile.roots.filter((candidate) => candidate.readable)) {
-      const path = resolveHarnessRoot(root as HarnessRoot, context);
+      const path = resolveSkillsDirectory(root as SkillsDirectory, context);
       const scope = root.scope === "global" ? "user" : "project";
-      const key = `${scope}\0${(yield* observationPathIdentityEffect(path)).comparisonKey}`;
+      const key = `${scope}\0${(yield* physicalPath(path)).key}`;
       const entry = roots.get(key) ?? { harnesses: new Set(), roles: new Set(), scope, path };
       if (root.role === "native" && !entry.roles.has("native")) entry.path = path;
       entry.harnesses.add(profile.id);
@@ -153,9 +153,9 @@ export const auditSkills = Effect.fn("Audit.skills")(function* (
     aliases.set(skill.canonicalPath, [...(aliases.get(skill.canonicalPath) ?? []), skill.path]);
   }
 
-  const observations: AuditObservation[] = [];
+  const observations: AuditEntry[] = [];
   const findings: AuditFinding[] = [];
-  const observePnpm = yield* makePnpmSkillObserver();
+  const observePnpm = yield* makePnpmSkillCheck();
   for (const skill of candidates) {
     const baseName = basename(dirname(skill.path));
     const occurrences = lockTargets.get(baseName)?.size ?? 1;
@@ -173,7 +173,7 @@ export const auditSkills = Effect.fn("Audit.skills")(function* (
     const inspected = yield* inspectSkill({
       ...skill,
       aliases: [...new Set(aliases.get(skill.canonicalPath) ?? [skill.path])],
-      // A projection ownership marker or lockfile is authoritative; adapter provenance is the
+      // An installed-skill ownership marker or lockfile is authoritative; adapter provenance is the
       // fallback. fileProvenance checks the marker before consulting the lockfile.
       provenance: {
         ...provenance,

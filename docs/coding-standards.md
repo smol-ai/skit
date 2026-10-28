@@ -16,6 +16,47 @@ Judge a boundary by what callers no longer need to know. Explain what a new
 abstraction hides and why that justifies its interface. Avoid wrappers that leave
 callers responsible for assembling the same lifecycle or enforcing the same rules.
 
+## Name things plainly
+
+Use the simplest words that say what a thing is or does. A reader who knows
+SKIT's commands, but not its internals, should understand a name without a
+glossary. Name the concrete thing, not the category it belongs to: a skills.sh
+lock file entry is `SkillsShLockFileEntry`, not an observation; the folder SKIT
+writes into an agent's skills directory is an `InstalledSkill`, not a
+projection.
+
+Give each word one meaning across the codebase. Before introducing a term, check
+`CONTEXT.md` and existing code; if the word already means something else, pick
+another. When code uses one word for two things, rename one of them rather than
+qualifying it in comments.
+
+Use the verbs in `CONTEXT.md`'s verb table, each in its one meaning, and none
+of the words it lists to avoid. A function that loads saved state says `load`; one
+that walks skills directories says `scan`; one that scans and saves says
+`refresh`. If an operation needs a verb the table lacks, add it there first.
+Call a hash a hash: a `sha256:…` value is a `Hash`, not a digest.
+
+Do not introduce intermediate terms or types. If data passes through a second
+shape that differs only by being unchecked, recased, or partially built, remove
+that shape: let the producer build the final value through one constructor that
+does the checking. Two names for one thing ("entry" and "record", "observation"
+and "evidence") are a sign that one of them should not exist.
+
+Say one or many in the noun. A function acting on one thing takes the singular
+(`uninstallSkill(copy)`), one acting on several things it is given takes the
+plural (`uninstallSkills(copies)`), and one that also decides which things names
+its rule (`leftoverSkills(state)`, `installEnabledSkills(...)`). Prefer separating
+choosing from acting when the choice is useful on its own.
+
+Do not encode the type in the name. An Effect-returning function is not named
+`...Effect`; a schema is not named `...Schema` unless a plain value of the same
+name also exists.
+
+Rename stored names (state file fields, manifest keys, ownership markers, history
+event names) only together with a migration in the store loader. Published
+contract names, released CLI flags, and Registry wire names change only with a
+contract or compatibility decision.
+
 ## Investigate Effect v4 APIs before building utilities
 
 Before hand-rolling infrastructure or general-purpose helpers, check whether the

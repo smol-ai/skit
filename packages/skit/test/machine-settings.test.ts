@@ -218,7 +218,7 @@ it.effect("saving discovery roots alone leaves repository decisions undecided", 
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("publishes no settings when pre-publication inverse evidence fails", () =>
+it.effect("saves no settings when pre-save inverse evidence fails", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-evidence-" });
@@ -234,11 +234,11 @@ it.effect("publishes no settings when pre-publication inverse evidence fails", (
           assert.deepStrictEqual(before.discoveryRoots, ["/before"]);
           assert.deepStrictEqual(after.discoveryRoots, ["/after"]);
           assert.strictEqual(yield* fs.readFileString(path), bytes);
-          return yield* Effect.fail("receipt-refused");
+          return yield* Effect.fail("inverse-refused");
         }),
       ),
     );
-    assert.strictEqual(failure, "receipt-refused");
+    assert.strictEqual(failure, "inverse-refused");
     assert.strictEqual(yield* fs.readFileString(path), bytes);
     assert.isFalse(yield* fs.exists(join(home, ".lock")));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),

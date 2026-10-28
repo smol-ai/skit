@@ -11,13 +11,13 @@ import {
   indexSetupOnboardingEvidence,
   lockEvidenceKey,
   type SetupOnboardingEvidence,
-  type SetupRetainedEvidence,
+  type SetupImportEvidence,
 } from "./setup-evidence.js";
 import type { SetupLockMatch } from "./setup-contract.js";
 import { setupLockCollection, setupLockGroupKey } from "./skills-sh-lock-source.js";
 import type { SetupOnboardingCandidate, SetupSkillInstance } from "./setup-contract.js";
 
-export const classifyObservedOwner = (input: {
+export const classifyOwner = (input: {
   readonly canonicalPath: string;
   readonly home: string;
   readonly harnesses: readonly Harness[];
@@ -68,14 +68,14 @@ const classifyLockClaims = (
         decision = { _tag: "Contested" };
       continue;
     }
-    const observedInstances = group.filter((instance) =>
+    const foundInstances = group.filter((instance) =>
       instance.locks.some((candidate) => setupLockGroupKey(candidate) === groupKey),
     );
     let matchingCollections: Set<string> | undefined;
-    for (const instance of observedInstances) {
-      const observedHash = instance.contentIdentity.observedHash;
+    for (const instance of foundInstances) {
+      const currentHash = instance.contentIdentity.currentHash;
       const matchingLock = instance.locks.find((item) => setupLockGroupKey(item) === groupKey);
-      if (observedHash === undefined || matchingLock === undefined) {
+      if (currentHash === undefined || matchingLock === undefined) {
         matchingCollections = new Set();
         break;
       }
@@ -84,9 +84,9 @@ const classifyLockClaims = (
         matchingLock.lockContentHash,
         instance.name,
         matchingLock.entry.skillPath,
-        observedHash,
+        currentHash,
       );
-      const collections = evidence.retainedByLockEvidence.get(key) ?? new Set<string>();
+      const collections = evidence.importedByLockEvidence.get(key) ?? new Set<string>();
       matchingCollections =
         matchingCollections === undefined
           ? collections
@@ -97,7 +97,7 @@ const classifyLockClaims = (
       continue;
     }
     imports.push({
-      paths: observedInstances.map((instance) => instance.path).sort(),
+      paths: foundInstances.map((instance) => instance.path).sort(),
       action: "import-observed-collection",
       groupKey,
       source: lock.entry.source,
@@ -121,11 +121,11 @@ export const setupInstanceGroupKey = (instance: SetupSkillInstance): string => {
 
 export const classifySetupOnboarding = (
   instances: ReadonlyArray<SetupSkillInstance>,
-  retained?: SetupRetainedEvidence,
+  imported?: SetupImportEvidence,
 ): SetupOnboardingCandidate[] => {
-  const evidence = indexSetupOnboardingEvidence(instances, retained);
-  const collections = retained?.library?.collections ?? [];
-  const skills = retained?.library?.skills ?? [];
+  const evidence = indexSetupOnboardingEvidence(instances, imported);
+  const collections = imported?.library?.collections ?? [];
+  const skills = imported?.library?.skills ?? [];
   const groups = new Map<string, SetupSkillInstance[]>();
   for (const instance of instances) {
     if (
@@ -162,7 +162,7 @@ export const classifySetupOnboarding = (
     }
     const hashes = new Set(
       group.flatMap((instance) =>
-        instance.contentIdentity.observedHash ? [instance.contentIdentity.observedHash] : [],
+        instance.contentIdentity.currentHash ? [instance.contentIdentity.currentHash] : [],
       ),
     );
     if (hashes.size > 1) {
@@ -231,28 +231,28 @@ export const classifySetupOnboarding = (
         if (
           importableLocks.some(([, lock]) => {
             const source = setupLockCollection(lock)?.source;
-            const retainedSkill = skills.find(
+            const importedSkill = skills.find(
               (skill) =>
                 skill.skill_id === match.subjectId || skill.collection_id === match.subjectId,
             );
-            const retainedSource =
-              retainedSkill === undefined
+            const importedSource =
+              importedSkill === undefined
                 ? undefined
                 : collections.findLast(
-                    (collection) => collection.collection_id === retainedSkill.collection_id,
+                    (collection) => collection.collection_id === importedSkill.collection_id,
                   )?.upstream?.source_identity;
-            if (source === undefined || retainedSource === undefined) return false;
-            const lockSource = sourceIdentityFromSource(source, retained?.machineId);
+            if (source === undefined || importedSource === undefined) return false;
+            const lockSource = sourceIdentityFromSource(source, imported?.machineId);
             if (lockSource === undefined) return false;
             // Pre-v5 state recorded a well-known Source without a member selection as `url`.
             const legacyUrl =
               (lockSource.kind === "well-known" &&
-                retainedSource.kind === "url" &&
-                lockSource.locator.value === retainedSource.url.value) ||
+                importedSource.kind === "url" &&
+                lockSource.locator.value === importedSource.url.value) ||
               (lockSource.kind === "url" &&
-                retainedSource.kind === "well-known" &&
-                lockSource.url.value === retainedSource.locator.value);
-            return legacyUrl || Schema.toEquivalence(SourceIdentity)(lockSource, retainedSource);
+                importedSource.kind === "well-known" &&
+                lockSource.url.value === importedSource.locator.value);
+            return legacyUrl || Schema.toEquivalence(SourceIdentity)(lockSource, importedSource);
           })
         )
           continue;
@@ -298,10 +298,10 @@ export const classifySetupOnboarding = (
       });
       continue;
     }
-    const projectionTargets = group.filter(
+    const installDestinations = group.filter(
       (instance) => instance.scope === "global" && instance.harnesses.length > 0,
     );
-    if (projectionTargets.length === group.length && hashes.size === 1) {
+    if (installDestinations.length === group.length && hashes.size === 1) {
       candidates.push({
         ...base,
         action: "manage-locally",

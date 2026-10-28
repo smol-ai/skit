@@ -9,14 +9,14 @@ import { commandApplicationLayer } from "../src/application.js";
 import { result } from "../src/handlers/contracts.js";
 import { defaultTerminalEnvironment, renderResultFrame } from "../src/presentation/output-frame.js";
 import { renderUsage } from "../src/presentation/usage.js";
-import { emptyUsageStory, observedUsageStory } from "../src/storybook/usage-stories.js";
+import { emptyUsageStory, usageStory } from "../src/storybook/usage-stories.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 import type { CommandResult } from "../src/commands/types.js";
 
 test("presents skill activity without internal counters; preserves the public JSON contract", () => {
   expect(renderUsage(emptyUsageStory)).toContain("No skill activity observed.");
-  const body = renderUsage(observedUsageStory);
+  const body = renderUsage(usageStory);
   expect(body).toMatch(/Skill\s+Harness\s+Uses\s+Explicit\s+Implicit\s+Last seen/);
   expect(body).not.toMatch(/\b(?:Calls|Loads|Reads)\b/);
   expect(body).toMatch(/example\s+claude-code, codex\s+3\s+1\s+2\s+7 Oct/);
@@ -28,22 +28,22 @@ test("presents skill activity without internal counters; preserves the public JS
   expect(body).not.toContain("2026-10-07T");
   expect(body).not.toContain("Unknown");
   expect(body.trimEnd().split("\n").at(-1)).toMatch(/^example\s+/);
-  const json = renderResultFrame(result("usage", observedUsageStory), {
+  const json = renderResultFrame(result("usage", usageStory), {
     ...defaultTerminalEnvironment,
     format: "json",
   });
   expect(JSON.parse(json?.stdout ?? "{}")).toEqual({
-    schema: "skit.usage.v3",
-    data: observedUsageStory,
+    schema: "skit.usage.v4",
+    data: usageStory,
   });
 });
 
 test("does not render terminal controls embedded in observed names or paths", () => {
   const report = {
-    ...observedUsageStory,
+    ...usageStory,
     rows: [
       {
-        ...observedUsageStory.rows[0],
+        ...usageStory.rows[0],
         name: "example\x1b[31m",
         path: "/synthetic/\nexample/SKILL.md",
       },
@@ -56,11 +56,11 @@ test("does not render terminal controls embedded in observed names or paths", ()
 });
 
 test("summarizes by name without dumping paths, scan internals, or test-fixture reads", () => {
-  const base = observedUsageStory.rows[0];
+  const base = usageStory.rows[0];
   const report = {
-    ...observedUsageStory,
+    ...usageStory,
     rows: [
-      ...observedUsageStory.rows,
+      ...usageStory.rows,
       {
         ...base,
         name: "library",
@@ -101,7 +101,7 @@ test("keeps infrequent skills visible in the compact table", () => {
   const report = {
     ...emptyUsageStory,
     rows: Array.from({ length: 12 }, (_, i) => ({
-      ...observedUsageStory.rows[0],
+      ...usageStory.rows[0],
       name: `skill-${i}`,
       reads: 12 - i,
       loads: 0,
@@ -119,7 +119,7 @@ it.effect("exposes the read-only command and output schema", () =>
     expect(usage).toMatchObject({
       stability: "experimental",
       effects: { capabilities: ["filesystem.read"] },
-      outputSchemas: expect.arrayContaining(["skit.usage.v3"]),
+      outputSchemas: expect.arrayContaining(["skit.usage.v4"]),
       interactive: false,
     });
   }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-usage-contract"))),
@@ -177,7 +177,7 @@ it.effect("runs the real command against isolated transcripts without creating L
         }),
       ),
     );
-    expect(captured?.schema).toBe("skit.usage.v3");
+    expect(captured?.schema).toBe("skit.usage.v4");
     const report = yield* Schema.decodeUnknownEffect(UsageReport)(captured?.data);
     expect(report.rows).toMatchObject([
       {
@@ -197,12 +197,12 @@ it.effect("runs the real command against isolated transcripts without creating L
 );
 
 test("orders by invocation counts rather than repeated evidence", () => {
-  const base = observedUsageStory.rows[0];
+  const base = usageStory.rows[0];
   const report = {
     ...emptyUsageStory,
     rows: [
-      { ...base, name: "older", uses: 1, reads: 100, lastObservedAt: "2026-10-02T12:00:00Z" },
-      { ...base, name: "recent", uses: 2, reads: 1, lastObservedAt: "2026-10-07T12:00:00Z" },
+      { ...base, name: "older", uses: 1, reads: 100, lastSeenAt: "2026-10-02T12:00:00Z" },
+      { ...base, name: "recent", uses: 2, reads: 1, lastSeenAt: "2026-10-07T12:00:00Z" },
     ],
   };
   const body = renderUsage(report);

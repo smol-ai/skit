@@ -7,18 +7,18 @@ import { TestClock } from "effect/testing";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import {
-  bindingSkillIds,
+  enabledSkillIds,
   type LibraryState,
   currentSkillVersion,
-  libraryManifestFromLocalStateEffect,
+  libraryManifestFromLocalState,
   LibraryStore,
-  projectBindingEffect,
+  installEnabledSkills,
   MachineSettings,
-  retainedTreePath,
-  sourceAcquisitions,
+  collectionVersionPath,
+  sourceImports,
   skitLayer,
 } from "@smolai/skit-core";
-import { bindingRoot } from "../src/projection/roots.js";
+import { skillsDirectoryFor } from "../src/install/roots.js";
 import { prepareSetupCommand, setupApplyCommand } from "../src/handlers/library/setup-machine.js";
 import { prepareSetupUndo } from "../src/library-application/setup-undo.js";
 import { inspectSetupOperation } from "../src/library-application/setup-operation.js";
@@ -30,9 +30,9 @@ import { runCommandTree } from "../src/commands/runtime.js";
 import { renderContract } from "../src/presentation/contract-presenters.js";
 import { mergeLibraryManifests } from "../src/workflows/library/library-merge.js";
 import {
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   libraryHome,
-  retainObservedIn,
+  importCollectionIn,
   scratch,
   writingTo,
 } from "./helpers/library-home.js";
@@ -59,7 +59,7 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
   const origin = { type: "well-known" as const, origin: "https://skills.example" };
   yield* TestClock.setTime(Date.parse("2026-10-01T00:00:00.000Z"));
   yield* fs.writeFileString(join(existing, "SKILL.md"), document("existing", "Before setup"));
-  const retain = (paths: readonly { name: string; path: string }[]) =>
+  const importSource = (paths: readonly { name: string; path: string }[]) =>
     Effect.gen(function* () {
       const skills = yield* Effect.forEach(paths, (item) =>
         Effect.gen(function* () {
@@ -67,18 +67,18 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
             name: item.name,
             sourcePath: item.path,
             relativePath: item.name,
-            observedHash: yield* deterministicTreeHashEffect(item.path),
+            currentHash: yield* deterministicTreeHash(item.path),
           };
         }),
       );
       return yield* writingTo(
         home.home,
-        retainObservedIn(home.home)({
+        importCollectionIn(home.home)({
           input: origin.origin,
           source: origin,
-          retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
+          importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
           skills,
-          observations: [],
+          lockFileEntries: [],
         }),
       );
     });
@@ -87,20 +87,17 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
       join(existing, "SKILL.md"),
       document("existing", "Earlier selected version"),
     );
-    yield* retain([{ name: "existing", path: existing }]);
+    yield* importSource([{ name: "existing", path: existing }]);
     yield* TestClock.adjust("1 second");
     yield* fs.writeFileString(join(existing, "SKILL.md"), document("existing", "Before setup"));
   }
-  yield* retain([{ name: "existing", path: existing }]);
+  yield* importSource([{ name: "existing", path: existing }]);
   const initial = yield* home.durable;
   const collectionId = initial.collections[0].collection_id;
-  const binding = {
-    scope: { kind: "global" as const },
-    entries: [{ kind: "collection" as const, collection_id: collectionId }],
-  };
+  const enabled = [{ collection: collectionId }];
   let before: LibraryState = {
     ...initial,
-    global_bindings: [binding],
+    enabled,
     skills: selectedOverride
       ? initial.skills.map((skill) => ({
           ...skill,
@@ -108,14 +105,14 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
         }))
       : initial.skills,
   };
-  yield* home.owned(Effect.flatMap(LibraryStore, (store) => store.publish(before, initial)));
+  yield* home.owned(Effect.flatMap(LibraryStore, (store) => store.save(before, initial)));
   if (projectExisting) {
     yield* home.owned(
       writingTo(
         home.home,
-        projectBindingEffect({
+        installEnabledSkills({
           target: "agents",
-          root: bindingRoot("agents", { kind: "global" }, home.inventory),
+          root: skillsDirectoryFor("agents", { kind: "global" }, home.inventory),
           variantsPath: home.variantsPath,
         }),
       ),
@@ -153,18 +150,18 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
     probePath: "",
     skillsStateHome: join(root, "state"),
   };
-  const observed = yield* home.owned(
+  const scan = yield* home.owned(
     runSetup({ ...options, repositoryRoots: [root], persistRoots: false }),
   );
-  expect(observed.onboarding.recommended.sources).toHaveLength(1);
+  expect(scan.onboarding.recommended.sources).toHaveLength(1);
   const interaction = yield* makeScriptedInteraction([]);
   const executed = yield* Effect.result(
     home.owned(
       setupApplyCommand({
         options,
         workDirFlag: root,
-        localCustody: { bindings: home.bindings },
-        planId: observed.onboarding.planId,
+        manageOptions: { installOptions: home.installOptions },
+        planId: scan.onboarding.planId,
       }).pipe(
         Effect.provide(interaction.layer),
         Effect.provideService(FileSystem.FileSystem, {
@@ -209,8 +206,8 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
     existing,
     introduced,
     before,
-    binding,
-    retain,
+    enabled,
+    importSource,
     operationId,
     collectionId,
   };
@@ -223,13 +220,13 @@ it.effect(
       const f = yield* fixture(false, true);
       const operation = yield* inspectSetupOperation(f.home.home, f.operationId);
       expect(operation.complete).toBeUndefined();
-      expect(operation.changes.at(-1)?.published).toBe(false);
-      expect(bindingSkillIds(yield* f.home.durable, f.binding)).toHaveLength(2);
+      expect(operation.changes.at(-1)?.saved).toBe(false);
+      expect(enabledSkillIds(yield* f.home.durable, f.enabled)).toHaveLength(2);
       const inverse = yield* f.home.owned(prepareSetupUndo(f.operationId));
       expect(inverse.summary.conflicts).toEqual([]);
       expect(inverse.summary.sourceSelections).toHaveLength(1);
       yield* f.home.owned(inverse.apply());
-      expect(bindingSkillIds(yield* f.home.durable, f.binding)).toHaveLength(1);
+      expect(enabledSkillIds(yield* f.home.durable, f.enabled)).toHaveLength(1);
       expect((yield* f.home.durable).skills).toHaveLength(2);
       expect((yield* MachineSettings.read(f.home.home)).discoveryRoots).toEqual([]);
     }).pipe(Effect.provide(skitLayer)),
@@ -267,7 +264,7 @@ it.effect(
       const action = preview.data.actions.find((item) => item.rel === "apply-undo");
       if (!action) return yield* Effect.die(new Error("Missing source undo action"));
       expect((yield* invoke(action.argv)).data.status).toBe("undone");
-      expect(bindingSkillIds(yield* f.home.durable, f.binding)).toHaveLength(1);
+      expect(enabledSkillIds(yield* f.home.durable, f.enabled)).toHaveLength(1);
     }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -290,8 +287,8 @@ it.effect(
       expect(currentSkillVersion(restored, skill)?.skill_version_id).toBe(
         currentSkillVersion(f.before, f.before.skills[0])?.skill_version_id,
       );
-      expect(bindingSkillIds(restored, f.binding)).toHaveLength(1);
-      expect(restored.retained_copies).toEqual(after.retained_copies);
+      expect(enabledSkillIds(restored, f.enabled)).toHaveLength(1);
+      expect(restored.collection_versions).toEqual(after.collection_versions);
     }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -301,43 +298,43 @@ it.effect(
     Effect.gen(function* () {
       const f = yield* fixture();
       const after = yield* f.home.durable;
-      expect(bindingSkillIds(after, f.binding)).toHaveLength(2);
+      expect(enabledSkillIds(after, f.enabled)).toHaveLength(2);
       const inverse = yield* f.home.owned(prepareSetupUndo(f.operationId));
       expect(inverse.summary.conflicts).toEqual([]);
       expect(inverse.summary.sourceSelections).toHaveLength(1);
       yield* f.home.owned(inverse.apply());
       const restored = yield* f.home.durable;
-      expect(restored.global_bindings).toEqual(f.before.global_bindings);
-      expect(bindingSkillIds(restored, f.binding)).toEqual(bindingSkillIds(f.before, f.binding));
+      expect(restored.enabled).toEqual(f.before.enabled);
+      expect(enabledSkillIds(restored, f.enabled)).toEqual(enabledSkillIds(f.before, f.enabled));
       expect(restored.skills).toHaveLength(2);
-      expect(restored.retained_copies).toEqual(after.retained_copies);
-      expect(restored.acquisitions).toHaveLength(after.acquisitions.length + 1);
-      for (const acquisition of after.acquisitions)
-        expect(restored.acquisitions).toContainEqual(acquisition);
+      expect(restored.collection_versions).toEqual(after.collection_versions);
+      expect(restored.imports).toHaveLength(after.imports.length + 1);
+      for (const sourceImport of after.imports)
+        expect(restored.imports).toContainEqual(sourceImport);
       const prior = f.before.skills[0];
       const selected = restored.skills.find((skill) => skill.skill_id === prior.skill_id)!;
       expect(currentSkillVersion(restored, selected)?.skill_version_id).toBe(
         currentSkillVersion(f.before, prior)?.skill_version_id,
       );
       expect(selected.local_version_id).toBeUndefined();
-      const observation = sourceAcquisitions(restored, f.collectionId)[0];
-      const original = sourceAcquisitions(f.before, f.collectionId)[0];
-      expect(observation.retained_copy_id).toBe(original.retained_copy_id);
-      expect(observation.observations).toEqual([]);
-      const copy = restored.retained_copies.find(
-        (item) => item.retained_copy_id === original.retained_copy_id,
+      const observation = sourceImports(restored, f.collectionId)[0];
+      const original = sourceImports(f.before, f.collectionId)[0];
+      expect(observation.collection_version_id).toBe(original.collection_version_id);
+      expect(observation.lock_file_entries).toEqual([]);
+      const copy = restored.collection_versions.find(
+        (item) => item.collection_version_id === original.collection_version_id,
       )!;
       expect(observation.input.value).toBe(
-        retainedTreePath(join(f.home.home, "originals"), copy.digest),
+        collectionVersionPath(join(f.home.home, "originals"), copy.hash),
       );
-      const afterManifest = yield* libraryManifestFromLocalStateEffect(after);
-      const restoredManifest = yield* libraryManifestFromLocalStateEffect(restored);
-      expect(restoredManifest.acquisitions).toEqual(restored.acquisitions);
+      const afterManifest = yield* libraryManifestFromLocalState(after);
+      const restoredManifest = yield* libraryManifestFromLocalState(restored);
+      expect(restoredManifest.imports).toEqual(restored.imports);
       const synced = mergeLibraryManifests(afterManifest, restoredManifest, afterManifest);
       expect(synced.conflicts).toEqual([]);
-      expect(bindingSkillIds(synced.manifest, f.binding)).toHaveLength(1);
-      expect(synced.manifest.acquisitions.map((item) => item.acquisition_id).sort()).toEqual(
-        restored.acquisitions.map((item) => item.acquisition_id).sort(),
+      expect(enabledSkillIds(synced.manifest, f.enabled)).toHaveLength(1);
+      expect(synced.manifest.imports.map((item) => item.import_id).sort()).toEqual(
+        restored.imports.map((item) => item.import_id).sort(),
       );
       expect((yield* MachineSettings.read(f.home.home)).discoveryRoots).toEqual([]);
       expect((yield* f.home.owned(prepareSetupUndo(f.operationId))).summary.status).toBe(
@@ -348,12 +345,12 @@ it.effect(
         join(f.existing, "SKILL.md"),
         document("existing", "Later source refresh"),
       );
-      yield* f.retain([
+      yield* f.importSource([
         { name: "existing", path: f.existing },
         { name: "introduced", path: f.introduced },
       ]);
       const refreshed = yield* f.home.durable;
-      expect(bindingSkillIds(refreshed, f.binding)).toHaveLength(2);
+      expect(enabledSkillIds(refreshed, f.enabled)).toHaveLength(2);
       expect(
         currentSkillVersion(
           refreshed,
@@ -391,14 +388,14 @@ it.effect(
       );
       expect(failure._tag).toBe("PlatformError");
       const partial = yield* f.home.durable;
-      expect(bindingSkillIds(partial, f.binding)).toHaveLength(1);
+      expect(enabledSkillIds(partial, f.enabled)).toHaveLength(1);
       expect((yield* Effect.flip(f.home.owned(inverse.apply())))._tag).toBe("PlanIsStale");
       const refreshed = yield* f.home.owned(prepareSetupUndo(f.operationId));
       expect(refreshed.summary.conflicts).toEqual([]);
       expect(refreshed.summary.sourceSelections).toEqual([]);
       expect(refreshed.summary.intentChanged).toBe(false);
       yield* f.home.owned(refreshed.apply());
-      expect((yield* f.home.durable).acquisitions).toEqual(partial.acquisitions);
+      expect((yield* f.home.durable).imports).toEqual(partial.imports);
     }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -407,12 +404,12 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const original = sourceAcquisitions(f.before, f.collectionId)[0];
-      const copy = f.before.retained_copies.find(
-        (item) => item.retained_copy_id === original.retained_copy_id,
+      const original = sourceImports(f.before, f.collectionId)[0];
+      const copy = f.before.collection_versions.find(
+        (item) => item.collection_version_id === original.collection_version_id,
       )!;
       const path = join(
-        retainedTreePath(join(f.home.home, "originals"), copy.digest),
+        collectionVersionPath(join(f.home.home, "originals"), copy.hash),
         "existing",
         "SKILL.md",
       );
@@ -438,7 +435,7 @@ it.effect(
         `Clock has not advanced past the current source observation: ${f.collectionId}`,
       );
       expect((yield* Effect.flip(f.home.owned(inverse.apply())))._tag).toBe("RecoveryInvalid");
-      expect(bindingSkillIds(yield* f.home.durable, f.binding)).toHaveLength(2);
+      expect(enabledSkillIds(yield* f.home.durable, f.enabled)).toHaveLength(2);
     }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -451,7 +448,7 @@ it.effect(
         join(f.introduced, "SKILL.md"),
         document("introduced", "Newer source choice"),
       );
-      yield* f.retain([
+      yield* f.importSource([
         { name: "existing", path: f.existing },
         { name: "introduced", path: f.introduced },
       ]);
@@ -463,7 +460,7 @@ it.effect(
       );
       expect((yield* Effect.flip(f.home.owned(inverse.apply())))._tag).toBe("RecoveryInvalid");
       expect(yield* f.home.durable).toEqual(current);
-      expect(bindingSkillIds(current, f.binding)).toHaveLength(2);
+      expect(enabledSkillIds(current, f.enabled)).toHaveLength(2);
     }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -472,25 +469,25 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture(false, false, true);
-      const original = f.before.projections[0];
-      expect(f.applied?.reconciliation?.find((item) => item.path === original.path)?.status).toBe(
+      const original = f.before.installed_skills[0];
+      expect(f.applied?.changes?.find((item) => item.path === original.path)?.status).toBe(
         "pending",
       );
-      expect(
-        f.applied?.reconciliation?.find((item) => item.path === original.path)?.reason,
-      ).toContain("review");
+      expect(f.applied?.changes?.find((item) => item.path === original.path)?.reason).toContain(
+        "review",
+      );
       expect(yield* f.fs.readFileString(join(original.path, "SKILL.md"))).toBe(
         document("existing", "Before setup"),
       );
-      expect((yield* f.home.durable).projections).toEqual(f.before.projections);
-      const observed = yield* f.home.owned(
+      expect((yield* f.home.durable).installed_skills).toEqual(f.before.installed_skills);
+      const scan = yield* f.home.owned(
         runSetup({ ...f.options, persistRoots: false, repositoryRoots: [f.root] }),
       );
       const input = {
         options: f.options,
         workDirFlag: f.root,
-        localCustody: { bindings: f.home.bindings },
-        planId: observed.onboarding.planId,
+        manageOptions: { installOptions: f.home.installOptions },
+        planId: scan.onboarding.planId,
         selection: {
           sourceIds: [],
           copyPaths: [],
@@ -523,7 +520,7 @@ it.effect(
         document("existing", "Before setup"),
       );
       const state = yield* f.home.durable;
-      expect(state.projections).toEqual(f.before.projections);
+      expect(state.installed_skills).toEqual(f.before.installed_skills);
       expect(
         currentSkillVersion(
           state,

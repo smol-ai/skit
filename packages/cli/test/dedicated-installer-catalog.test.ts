@@ -5,7 +5,7 @@ import { classifyFailure } from "../src/failure-classification.js";
 import {
   DedicatedInstallerRequired,
   dedicatedInstallerForSource,
-  rejectDedicatedInstallerSourceEffect,
+  rejectDedicatedInstallerSource,
 } from "../src/workflows/library/dedicated-installer-catalog.js";
 
 it.effect("rejects known GitHub Sources with their dedicated installer guidance", () =>
@@ -18,7 +18,7 @@ it.effect("rejects known GitHub Sources with their dedicated installer guidance"
       "https://github.com/PBAKAUS/IMPECCABLE.git",
       "https://github.com/PBAKAUS/IMPECCABLE/tree/main",
     ]) {
-      const failure = yield* rejectDedicatedInstallerSourceEffect(input).pipe(Effect.flip);
+      const failure = yield* rejectDedicatedInstallerSource(input).pipe(Effect.flip);
       assert.instanceOf(failure, DedicatedInstallerRequired);
       assert.strictEqual(failure.sourceCoordinate, "github:pbakaus/impeccable");
       assert.strictEqual(failure.command, "npx impeccable install");

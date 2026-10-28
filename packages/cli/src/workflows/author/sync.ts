@@ -37,13 +37,13 @@ export type { AuthorVisibility } from "./sync-contract.js";
 import {
   draftCreateRequestSchema,
   draftUpdateRequestSchema,
-  Digest,
-  parseContractEffect,
+  Hash,
+  parseContract,
   planThreeWaySync,
   normalizeRegistryNamespace,
   normalizeRegistrySkitSlug,
-  validateSkitDirectoryEffect,
-  walkTreeEffect,
+  validateSkitDirectory,
+  walkTree,
   type SyncFileVersion,
   SkitContractError,
 } from "@smolai/skit-core";
@@ -73,16 +73,16 @@ export class SyncRejected
   readonly remediation = "Check the Registry's reason, then sync again.";
 }
 
-type StoredFile = { digest: Digest; mediaType: string; contentBase64: string };
+type StoredFile = { digest: Hash; mediaType: string; contentBase64: string };
 type SyncBinding = {
   skitId: string;
   revisionId: string;
-  bundleDigest: Digest;
+  bundleDigest: Hash;
   baseFiles: Record<string, StoredFile>;
 };
 type SyncState = Record<string, SyncBinding>;
 const StoredFileSchema = Schema.Struct({
-  digest: Digest,
+  digest: Hash,
   mediaType: Schema.String,
   contentBase64: Schema.String,
 });
@@ -92,7 +92,7 @@ const SyncStateDocument = Schema.fromJsonString(
     Schema.Struct({
       skitId: Schema.String,
       revisionId: Schema.String,
-      bundleDigest: Digest,
+      bundleDigest: Hash,
       baseFiles: Schema.Record(Schema.String, StoredFileSchema),
     }),
   ),
@@ -124,50 +124,6 @@ function remotePath(root: string) {
   return join(root, "skit.remote.json");
 }
 
-function normalizeRemote(value: Omit<AuthorRemoteHome, "schema">): AuthorRemoteHome {
-  const origin = new URL(value.origin).origin;
-  if (
-    !origin.startsWith("https://") &&
-    !/^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/.test(origin)
-  )
-    throw new InsecureOrigin({ purpose: "author remote" });
-  const namespace = normalizeRegistryNamespace(value.namespace);
-  const skit = normalizeRegistrySkitSlug(value.skit);
-  if (!namespace || !skit) throw new AuthorDestinationInvalid({ form: "bare" });
-  return { schema: "skit.remote.v1", origin, namespace, skit };
-}
-
-export function parseAuthorDestination(input: string, registryOrigin?: string): AuthorRemoteHome {
-  if (input.startsWith("skit://")) {
-    const url = new URL(input);
-    const parts = url.pathname.split("/").filter(Boolean);
-    if (parts.length !== 2 || url.search || url.hash)
-      throw new DestinationFormInvalid({ form: "canonical" });
-    return normalizeRemote({
-      origin: `https://${url.host}`,
-      namespace: decodeURIComponent(parts[0]),
-      skit: decodeURIComponent(parts[1]),
-    });
-  }
-  if (/^https?:\/\//.test(input)) {
-    const url = new URL(input);
-    const parts = url.pathname.split("/").filter(Boolean);
-    if (parts.length !== 2 || url.search || url.hash)
-      throw new AuthorDestinationInvalid({ form: "https" });
-    return normalizeRemote({
-      origin: url.origin,
-      namespace: decodeURIComponent(parts[0]),
-      skit: decodeURIComponent(parts[1]),
-    });
-  }
-  const parts = input.split("/");
-  if (parts.length !== 2 || !registryOrigin)
-    throw registryOrigin
-      ? new AuthorDestinationInvalid({ form: "bare" })
-      : new DestinationFormInvalid({ form: "relative-without-registry" });
-  return normalizeRemote({ origin: registryOrigin, namespace: parts[0], skit: parts[1] });
-}
-
 const decodeUrl = (input: string) =>
   Schema.decodeUnknownEffect(Schema.URLFromString)(input).pipe(
     Effect.mapError(() => new AuthorDestinationMalformed({ message: "Invalid URL" })),
@@ -178,7 +134,7 @@ const decodeAuthorSegment = (input: string) =>
     Effect.mapError(() => new AuthorDestinationMalformed({ message: "URI malformed" })),
   );
 
-const normalizeRemoteEffect = Effect.fn("Author.normalizeRemote")(function* (
+const normalizeRemote = Effect.fn("Author.normalizeRemote")(function* (
   value: Omit<AuthorRemoteHome, "schema">,
 ) {
   const origin = (yield* decodeUrl(value.origin)).origin;
@@ -193,7 +149,7 @@ const normalizeRemoteEffect = Effect.fn("Author.normalizeRemote")(function* (
   return { schema: "skit.remote.v1" as const, origin, namespace, skit };
 });
 
-export const parseAuthorDestinationEffect = Effect.fn("Author.parseDestination")(function* (
+export const parseAuthorDestination = Effect.fn("Author.parseDestination")(function* (
   input: string,
   registryOrigin?: string,
 ) {
@@ -202,7 +158,7 @@ export const parseAuthorDestinationEffect = Effect.fn("Author.parseDestination")
     const parts = url.pathname.split("/").filter(Boolean);
     if (parts.length !== 2 || url.search || url.hash)
       return yield* new DestinationFormInvalid({ form: "canonical" });
-    return yield* normalizeRemoteEffect({
+    return yield* normalizeRemote({
       origin: `https://${url.host}`,
       namespace: yield* decodeAuthorSegment(parts[0]),
       skit: yield* decodeAuthorSegment(parts[1]),
@@ -213,7 +169,7 @@ export const parseAuthorDestinationEffect = Effect.fn("Author.parseDestination")
     const parts = url.pathname.split("/").filter(Boolean);
     if (parts.length !== 2 || url.search || url.hash)
       return yield* new AuthorDestinationInvalid({ form: "https" });
-    return yield* normalizeRemoteEffect({
+    return yield* normalizeRemote({
       origin: url.origin,
       namespace: yield* decodeAuthorSegment(parts[0]),
       skit: yield* decodeAuthorSegment(parts[1]),
@@ -224,7 +180,7 @@ export const parseAuthorDestinationEffect = Effect.fn("Author.parseDestination")
     return yield* registryOrigin
       ? new AuthorDestinationInvalid({ form: "bare" })
       : new DestinationFormInvalid({ form: "relative-without-registry" });
-  return yield* normalizeRemoteEffect({
+  return yield* normalizeRemote({
     origin: registryOrigin,
     namespace: parts[0],
     skit: parts[1],
@@ -236,7 +192,7 @@ export function skitLocator(remote: AuthorRemoteHome): string {
   return `skit://${authority}/${remote.namespace}/${remote.skit}`;
 }
 
-export function readAuthorRemoteEffect(
+export function readAuthorRemote(
   root: string,
 ): Effect.Effect<AuthorRemoteHome | undefined, AuthorRemoteMetadataInvalid, FileSystem.FileSystem> {
   return Effect.gen(function* () {
@@ -254,7 +210,7 @@ export function readAuthorRemoteEffect(
     // Metadata parsing classifies all malformed remote values as a conflict.
     const invalid = () => new AuthorRemoteMetadataInvalid({ path: remotePath(root) });
     const document = yield* decodeAuthorRemote(text).pipe(Effect.mapError(invalid));
-    const normalized = yield* normalizeRemoteEffect(document).pipe(
+    const normalized = yield* normalizeRemote(document).pipe(
       Effect.catchTags({
         AuthorDestinationInvalid: () => Effect.fail(invalid()),
         AuthorDestinationMalformed: () => Effect.fail(invalid()),
@@ -282,7 +238,7 @@ const writeRemote = Effect.fn("Sync.writeRemote")(function* (
   yield* fs.rename(temporary, path);
 });
 
-function hash(bytes: Uint8Array): Digest {
+function hash(bytes: Uint8Array): Hash {
   return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 }
 function fromBase64(contentBase64: string, mediaType: string): SyncFileVersion {
@@ -317,7 +273,7 @@ const writeState = Effect.fn("Sync.writeState")(function* (
 });
 const readTree = Effect.fn("Sync.readTree")(function* (root: string) {
   const result: Record<string, SyncFileVersion> = {};
-  for (const entry of yield* walkTreeEffect(root, "normalized", { respectGitIgnore: true })) {
+  for (const entry of yield* walkTree(root, "normalized", { respectGitIgnore: true })) {
     if (entry.kind !== "file") continue;
     result[entry.path] = {
       bytes: entry.bytes,
@@ -353,7 +309,7 @@ function filesForWire(files: Record<string, SyncFileVersion>) {
   }));
 }
 
-export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
+export const syncDraft = Effect.fn("Sync.draft")(function* (
   rootInput: string,
   options: {
     apply: boolean;
@@ -367,7 +323,7 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
   const fs = yield* FileSystem.FileSystem;
   const root = resolve(rootInput);
   const configuredBase = options.baseUrl;
-  const storedRemote = yield* readAuthorRemoteEffect(root);
+  const storedRemote = yield* readAuthorRemote(root);
   if (storedRemote && options.to)
     return yield* new AuthorRemoteAlreadyExists({ locator: skitLocator(storedRemote) });
   if (storedRemote && options.visibility)
@@ -379,14 +335,14 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
     });
   if (!storedRemote && options.to && !options.visibility)
     return yield* new VisibilityNotAccepted({ reason: "required" });
-  const validation = yield* validateSkitDirectoryEffect(root, "draft", {
+  const validation = yield* validateSkitDirectory(root, "draft", {
     assessmentContext: "author",
   });
   if (validation.diagnostics.some((item) => item.severity === "error"))
     return yield* new SyncBlockedByValidation({ stage: "local" });
   const remote =
     storedRemote ??
-    (options.to ? yield* parseAuthorDestinationEffect(options.to, configuredBase) : undefined);
+    (options.to ? yield* parseAuthorDestination(options.to, configuredBase) : undefined);
   if (!remote) return yield* new NoAuthorRemote();
   const base = remote.origin;
   const owner = remote.namespace;
@@ -451,7 +407,7 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
       };
     const created = yield* client.drafts
       .create({
-        payload: yield* parseContractEffect("draft create request", draftCreateRequestSchema, {
+        payload: yield* parseContract("draft create request", draftCreateRequestSchema, {
           owner,
           slug,
           title: slug,
@@ -545,7 +501,7 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
     yield* fs.makeDirectory(dirname(staged), { recursive: true });
     yield* fs.writeFile(staged, file.bytes);
   }
-  const mergedValidation = yield* validateSkitDirectoryEffect(staging, "draft", {
+  const mergedValidation = yield* validateSkitDirectory(staging, "draft", {
     assessmentContext: "author",
   });
   if (mergedValidation.diagnostics.some((item) => item.severity === "error"))
@@ -556,7 +512,7 @@ export const syncDraftEffect = Effect.fn("Sync.draft")(function* (
       remote: mergedValidation.descriptor.slug,
       local: localDescriptor.slug,
     });
-  const body = yield* parseContractEffect("draft update request", draftUpdateRequestSchema, {
+  const body = yield* parseContract("draft update request", draftUpdateRequestSchema, {
     title: remoteResponse.draft.title,
     description: remoteResponse.draft.description ?? undefined,
     visibility: remoteResponse.draft.visibility,

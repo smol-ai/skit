@@ -6,7 +6,6 @@ export { openLibraryView } from "./library-view.js";
 export {
   openLibrarySession,
   readLibrarySkillContent,
-  refreshLibrarySession,
   proposeLibraryEnable,
   proposeLibraryCollectionChange,
   libraryCollectionScopes,
@@ -15,12 +14,12 @@ export {
   confirmLibraryChange,
   cancelLibraryChange,
   type LibraryActionOutcome,
-  type LibraryBindingRow,
+  type ScopeRow,
   type LibrarySessionState,
   type LibrarySkillRow,
   type PendingLibraryChange,
 } from "./session.js";
-export { planUpdatesEffect, updateSubjectsEffect, updateExitCode } from "./update.js";
+export { planUpdates, updateSubjects, updateExitCode } from "./update.js";
 export {
   LibraryProgress,
   libraryProgressLayer,
@@ -34,7 +33,7 @@ export {
   destinationLabel,
   invocationChoices,
   invocationBriefing,
-  invocationEligibleBindings,
+  invocationEligibleScopes,
   invocationRowSummary,
   scopeChoices,
   scopeKey,
@@ -50,10 +49,10 @@ export {
 } from "../configuration/skit-configuration.js";
 
 export {
-  applyBindingChanges,
-  BindingChangeIncomplete,
-  openBindingChangeSelection,
-  type BindingChangeIntent,
-  type BindingPlacement,
-  type BindingChangePlan,
-} from "./binding-changes.js";
+  applySetEnabledPlan,
+  SetEnabledIncomplete,
+  openSetEnabledSession,
+  type SetEnabledIntent,
+  type EnabledCollection,
+  type SetEnabledPlan,
+} from "./set-enabled.js";

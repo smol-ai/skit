@@ -16,15 +16,15 @@ type Device = Homes["a"];
 const empty: LibraryManifest = currentLibraryManifest({
   collections: [],
   skills: [],
-  retained_copies: [],
-  acquisitions: [],
+  collection_versions: [],
+  imports: [],
   snapshot_digests: [],
-  bindings: [],
+  enabled: [],
 });
 
 /**
  * Assert that a sync published no local state, sent the Registry no write request, and left the
- * durable state of both unchanged. The counters see every publication and write request, including
+ * durable state of both unchanged. The counters see every save and write request, including
  * an identical rewrite in place or an idempotent write the Registry answers with its head. The
  * snapshot captures file identity, so it also sees an atomic replacement of identical bytes. Taking
  * the writer lock creates the home when it did not exist yet, as the fault-matrix rows allow; it
@@ -33,10 +33,10 @@ const empty: LibraryManifest = currentLibraryManifest({
 const unwritten = Effect.fn("Test.unwritten")(function* ({ server }: Homes, device: Device) {
   const before = yield* captureDisk(device.disk, { identity: true });
   const stored = server.stored;
-  const publishes = device.publishes;
+  const saves = device.saves;
   const writeRequests = server.writeRequests;
   return Effect.gen(function* () {
-    assert.strictEqual(device.publishes, publishes);
+    assert.strictEqual(device.saves, saves);
     assert.strictEqual(server.writeRequests, writeRequests);
     const changes = yield* diskChanges(before);
     assert.deepStrictEqual(
@@ -69,7 +69,7 @@ const emptyRemote = ({ server }: Homes) =>
     );
   });
 
-/** A state.json that exists and holds an empty Library, as a fresh home publishes one. */
+/** A state.json that exists and holds an empty Library, as a fresh home saves one. */
 const emptyLocal = (device: Device) => device.edit((state) => state);
 
 it.effect("absent R and absent L: clean, and nothing is created anywhere", () =>
@@ -109,7 +109,7 @@ it.effect("absent R with ancestry: base_mismatch, never a push of the old Librar
   Effect.gen(function* () {
     const homes = yield* devices;
     const { a, server } = homes;
-    yield* a.retain("first");
+    yield* a.importSource("first");
     yield* a.sync();
     yield* homes.resetRemote;
     const unchanged = yield* unwritten(homes, a);
@@ -133,7 +133,7 @@ it.effect("empty R and absent L: the empty Library is pulled and anchored", () =
     assert.strictEqual((yield* a.sync()).status, "pulled");
     const state = yield* a.state;
     assert.deepStrictEqual(
-      [state.collections, state.skills, state.acquisitions, state.retained_copies],
+      [state.collections, state.skills, state.imports, state.collection_versions],
       [[], [], [], []],
     );
     assert.strictEqual(state.sync_ancestry?.revision_id, head.revision_id);
@@ -151,28 +151,23 @@ it.effect("empty R and empty L without ancestry: clean, anchoring only local anc
     const unchanged = yield* unwritten(homes, a);
     assert.strictEqual((yield* a.sync({ apply: false })).status, "clean");
     yield* unchanged;
-    const publishes = a.publishes;
+    const saves = a.saves;
     const writeRequests = server.writeRequests;
     assert.strictEqual((yield* a.sync()).status, "clean");
     // Anchoring is one local publication and no Registry write.
-    assert.strictEqual(a.publishes, publishes + 1);
+    assert.strictEqual(a.saves, saves + 1);
     assert.strictEqual(server.writeRequests, writeRequests);
     assert.strictEqual((yield* a.state).sync_ancestry?.revision_id, head.revision_id);
     assert.strictEqual(server.writes, 1);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-/** A home whose state, projections and ancestry already match the remote head. */
+/** A home whose state, installed skills and ancestry already match the remote head. */
 const anchored = Effect.fn("Test.anchoredHome")(function* (device: Device) {
-  yield* device.retain("first");
+  yield* device.importSource("first");
   yield* device.edit((state) => ({
     ...state,
-    global_bindings: [
-      {
-        scope: { kind: "global" },
-        entries: [{ kind: "skill", skill_id: state.skills[0]!.skill_id }],
-      },
-    ],
+    enabled: [{ skill: state.skills[0]!.skill_id }],
   }));
   yield* device.project();
   assert.strictEqual((yield* device.sync()).status, "pushed");
@@ -190,7 +185,7 @@ it.effect("an anchored home that matches the remote: a clean preview writes noth
 );
 
 // A clean sync whose ancestry already names the head has nothing to anchor, and reconciliation of
-// Projections that are already current publishes nothing either.
+// Installed skills that are already current save nothing either.
 it.effect("an anchored home that matches the remote: an applied clean writes nothing", () =>
   Effect.gen(function* () {
     const homes = yield* devices;
@@ -201,8 +196,8 @@ it.effect("an anchored home that matches the remote: an applied clean writes not
       status: "clean",
       changed: false,
       revision_id: server.remote!.revision_id,
-      projected: 0,
-      retired: 0,
+      installed: 0,
+      uninstalled: 0,
     });
     yield* unchanged;
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -212,7 +207,7 @@ it.effect("empty R is not absent R: a Library without ancestry requires adoption
   Effect.gen(function* () {
     const homes = yield* devices;
     const { a, server } = homes;
-    yield* a.retain("first");
+    yield* a.importSource("first");
     yield* emptyRemote(homes);
     const head = server.remote!;
     const unchanged = yield* unwritten(homes, a);
@@ -238,7 +233,7 @@ it.effect("empty L is not absent L: an empty state without ancestry requires ado
   Effect.gen(function* () {
     const homes = yield* devices;
     const { a, b, server } = homes;
-    yield* a.retain("first");
+    yield* a.importSource("first");
     yield* a.sync();
     const head = server.remote!;
     yield* emptyLocal(b);
@@ -264,7 +259,7 @@ it.effect("absent L with a non-empty R pulls", () =>
   Effect.gen(function* () {
     const homes = yield* devices;
     const { a, b, server } = homes;
-    yield* a.retain("first");
+    yield* a.importSource("first");
     yield* a.sync();
     assert.strictEqual((yield* b.sync()).status, "pulled");
     assert.strictEqual(
@@ -279,7 +274,7 @@ it.effect("empty L with an accepted base removes what the base held, and only th
   Effect.gen(function* () {
     const homes = yield* devices;
     const { a, b, server } = homes;
-    const first = yield* a.retain("first");
+    const first = yield* a.importSource("first");
     yield* a.sync();
     yield* b.sync();
     yield* b.remove(first.collection.collection_id);

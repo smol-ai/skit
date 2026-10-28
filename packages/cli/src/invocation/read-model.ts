@@ -1,5 +1,5 @@
 // The structured account of invocation policy both front ends render: author declarations,
-// the local override, and what projection will write. Pure: no filesystem, prompts or streams.
+// the local override, and what installing will write. Pure: no filesystem, prompts or streams.
 // Author evidence is per agent; a plain Skill can carry different policies in one shared copy.
 import {
   DeclaredInvocation,
@@ -15,7 +15,7 @@ import {
 import { Record, Schema } from "effect";
 import { harnessLabel } from "../harness/catalog.js";
 import type { InvocationOption } from "./policy.js";
-import type { SkitBindingScope as Scope } from "@smolai/skit-core";
+import type { InstallScope as Scope } from "@smolai/skit-core";
 
 export type { ResolvedDeclaredPolicy };
 
@@ -86,7 +86,7 @@ const authorPreference = (model: Pick<InvocationReadModel, "agents">): string =>
     : "Varies by agent";
 };
 
-/** Match projection: an override or descriptor policy is written; otherwise native fields survive. */
+/** Match installing: an override or descriptor policy is written; otherwise native fields survive. */
 export function invocationReadModel(input: {
   skill: string;
   author: AuthorInvocation;

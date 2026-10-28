@@ -3,12 +3,12 @@ import { expect } from "vitest";
 import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
 import {
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   HarnessName,
   LibraryStore,
-  retainedTreePath,
+  collectionVersionPath,
   resolveDeclaredInvocation,
-  retainAuthoredCollectionUnderLockEffect,
+  importAuthoredCollection,
   skitLayer,
 } from "@smolai/skit-core";
 import {
@@ -23,7 +23,7 @@ import { invocationBriefing, invocationRowSummary } from "../src/invocation/read
 import {
   initializeLibraryMachine,
   libraryHome,
-  retainObservedIn,
+  importCollectionIn,
   writingTo,
 } from "./helpers/library-home.js";
 
@@ -52,37 +52,37 @@ const fixture = Effect.fn("Test.invocationLibrary")(function* () {
   );
   const home = yield* libraryHome({ home: join(root, "home") });
   yield* initializeLibraryMachine(home.home);
-  const retain = (at: string) =>
+  const importSource = (at: string) =>
     home.owned(
       writingTo(
         home.home,
         Effect.gen(function* () {
-          return yield* retainObservedIn(home.home)({
+          return yield* importCollectionIn(home.home)({
             source: { type: "local", path: source },
             input: source,
-            retainedAt: at,
+            importedAt: at,
             skills: [
               {
                 name: "review",
                 sourcePath: source,
                 relativePath: ".",
-                observedHash: yield* deterministicTreeHashEffect(source),
+                currentHash: yield* deterministicTreeHash(source),
               },
             ],
-            observations: [],
+            lockFileEntries: [],
           });
         }),
       ),
     );
-  return { fs, source, home, retain };
+  return { fs, source, home, importSource };
 });
 
 it.effect(
-  "a session reads native per-agent policy from retained bytes and previews the same projection behavior",
+  "a session reads native per-agent policy from retained bytes and previews the same install behavior",
   () =>
     Effect.gen(function* () {
-      const { fs, source, home, retain } = yield* fixture();
-      yield* retain("2026-10-01T00:00:00.000Z");
+      const { fs, source, home, importSource } = yield* fixture();
+      yield* importSource("2026-10-01T00:00:00.000Z");
       // The working source is not the authority for a Library row.
       yield* fs.writeFileString(join(source, "SKILL.md"), text(false));
       const before = yield* home.durable;
@@ -92,26 +92,26 @@ it.effect(
       expect(Result.getOrThrow(row.authorInvocation)["claude-code"].policy).toBe("explicit");
       expect(Result.getOrThrow(row.authorInvocation).codex.policy).toBe("implicit");
       const proposed = yield* home.owned(
-        proposeLibraryEnable(session, home.bindings, row, { scope: { kind: "global" } }),
+        proposeLibraryEnable(session, home.installOptions, row, { scope: { kind: "global" } }),
       );
       expect(proposed.pending?.plan.changes[0]?.subject_id).toBe(row.skillId);
       const enabled = yield* home.owned(confirmLibraryChange(proposed));
       expect(enabled.outcome?.kind).toBe("applied");
-      const policy = enabled.skills[0]!.bindings[0]!.policy!;
+      const policy = enabled.skills[0]!.scopes[0]!.policy!;
       expect(policy.agents["claude-code"].effectivePolicy).toBe("explicit");
       expect(policy.agents.codex.effectivePolicy).toBe("implicit");
       expect(invocationRowSummary(policy)).toBe("Varies by agent");
       expect(invocationBriefing(policy)).toContain("Claude Code: Only when asked");
       expect(invocationBriefing(policy)).toContain("Codex: Automatically");
 
-      const projection = (yield* home.durable).projections.find(
-        (copy) => copy.target === "agents",
+      const installedSkill = (yield* home.durable).installed_skills.find(
+        (copy) => copy.destination === "agents",
       )!;
       const files = new Map([
-        ["SKILL.md", yield* fs.readFileString(join(projection.path, "SKILL.md"))],
+        ["SKILL.md", yield* fs.readFileString(join(installedSkill.path, "SKILL.md"))],
         [
           "agents/openai.yaml",
-          yield* fs.readFileString(join(projection.path, "agents/openai.yaml")),
+          yield* fs.readFileString(join(installedSkill.path, "agents/openai.yaml")),
         ],
       ]);
       const actual = Result.getOrThrow(
@@ -133,9 +133,9 @@ it.effect(
       const disabled = yield* home.owned(
         proposeLibraryDisable(
           enabled,
-          home.bindings,
+          home.installOptions,
           enabled.skills[0]!,
-          enabled.skills[0]!.bindings,
+          enabled.skills[0]!.scopes,
         ),
       );
       expect(disabled.pending?.plan.changes[0]?.subject_id).toBe(row.skillId);
@@ -146,16 +146,16 @@ it.effect(
   "session invocation evidence follows the selected retained version rather than the latest acquisition",
   () =>
     Effect.gen(function* () {
-      const { fs, source, home, retain } = yield* fixture();
-      yield* retain("2026-10-01T00:00:00.000Z");
+      const { fs, source, home, importSource } = yield* fixture();
+      yield* importSource("2026-10-01T00:00:00.000Z");
       yield* fs.writeFileString(join(source, "SKILL.md"), text(false));
-      yield* retain("2026-10-02T00:00:00.000Z");
+      yield* importSource("2026-10-02T00:00:00.000Z");
       const state = yield* home.durable;
       yield* home.owned(
         writingTo(
           home.home,
           LibraryStore.use((store) =>
-            store.publish(
+            store.save(
               {
                 ...state,
                 skills: state.skills.map((skill) => ({
@@ -203,11 +203,11 @@ Tools
       yield* home.owned(
         writingTo(
           home.home,
-          retainAuthoredCollectionUnderLockEffect({
+          importAuthoredCollection({
             root: source,
             source: { type: "local", path: source },
             input: source,
-            retainedAt: "2026-10-01T00:00:00.000Z",
+            importedAt: "2026-10-01T00:00:00.000Z",
           }),
         ),
       );
@@ -223,8 +223,8 @@ Tools
         ).every((agent) => agent.effectivePolicy === "explicit"),
       ).toBe(true);
       const state = yield* home.durable;
-      const retained = retainedTreePath(home.originals, state.retained_copies[0]!.digest);
-      yield* fs.writeFileString(join(retained, "agents", "openai.yaml"), "policy: [\n");
+      const imported = collectionVersionPath(home.originals, state.collection_versions[0]!.hash);
+      yield* fs.writeFileString(join(imported, "agents", "openai.yaml"), "policy: [\n");
       const broken = yield* home.owned(openLibrarySession());
       expect(Result.isFailure(broken.skills[0]!.authorInvocation)).toBe(true);
       expect(broken.skills[0]?.invocationWarning).toContain("Retained copy for review changed");
@@ -257,11 +257,11 @@ Tools
     yield* home.owned(
       writingTo(
         home.home,
-        retainAuthoredCollectionUnderLockEffect({
+        importAuthoredCollection({
           root: source,
           source: { type: "local", path: source },
           input: source,
-          retainedAt: "2026-10-01T00:00:00.000Z",
+          importedAt: "2026-10-01T00:00:00.000Z",
         }),
       ),
     );
@@ -276,14 +276,17 @@ Tools
 for (const problem of ["missing-skill", "malformed-metadata"] as const)
   it.effect(`an unavailable ${problem} row leaves healthy Skills and disable actions usable`, () =>
     Effect.gen(function* () {
-      const { fs, source, home, retain } = yield* fixture();
+      const { fs, source, home, importSource } = yield* fixture();
       if (problem === "malformed-metadata")
         yield* fs.writeFileString(join(source, "agents", "openai.yaml"), "policy: [\n");
-      yield* retain("2026-10-01T00:00:00.000Z");
+      yield* importSource("2026-10-01T00:00:00.000Z");
       const badState = yield* home.durable;
       if (problem === "missing-skill")
         yield* fs.remove(
-          join(retainedTreePath(home.originals, badState.retained_copies[0]!.digest), "SKILL.md"),
+          join(
+            collectionVersionPath(home.originals, badState.collection_versions[0]!.hash),
+            "SKILL.md",
+          ),
         );
       const healthy = join(source, "..", "healthy");
       yield* fs.makeDirectory(healthy);
@@ -294,19 +297,19 @@ for (const problem of ["missing-skill", "malformed-metadata"] as const)
       yield* home.owned(
         writingTo(
           home.home,
-          retainObservedIn(home.home)({
+          importCollectionIn(home.home)({
             source: { type: "local", path: healthy },
             input: healthy,
-            retainedAt: "2026-10-02T00:00:00.000Z",
+            importedAt: "2026-10-02T00:00:00.000Z",
             skills: [
               {
                 name: "healthy",
                 sourcePath: healthy,
                 relativePath: ".",
-                observedHash: yield* deterministicTreeHashEffect(healthy),
+                currentHash: yield* deterministicTreeHash(healthy),
               },
             ],
-            observations: [],
+            lockFileEntries: [],
           }),
         ),
       );
@@ -315,15 +318,10 @@ for (const problem of ["missing-skill", "malformed-metadata"] as const)
         writingTo(
           home.home,
           LibraryStore.use((store) =>
-            store.publish(
+            store.save(
               {
                 ...state,
-                global_bindings: [
-                  {
-                    scope: { kind: "global" },
-                    entries: [{ kind: "skill", skill_id: badState.skills[0]!.skill_id }],
-                  },
-                ],
+                enabled: [{ skill: badState.skills[0]!.skill_id }],
               },
               state,
             ),
@@ -336,23 +334,25 @@ for (const problem of ["missing-skill", "malformed-metadata"] as const)
       expect(Result.isFailure(bad.authorInvocation)).toBe(true);
       expect(bad.invocationWarning).toContain("Author preference unavailable");
       expect(Result.isSuccess(good.authorInvocation)).toBe(true);
-      expect(bad.bindings[0]?.policy).toBeUndefined();
+      expect(bad.scopes[0]?.policy).toBeUndefined();
       expect(Result.isFailure(libraryPolicyAfter(bad, "declared"))).toBe(true);
       const policyChange = yield* home.owned(
-        proposeLibraryInvocation(session, home.bindings, bad, bad.bindings[0]!, "explicit"),
+        proposeLibraryInvocation(session, home.installOptions, bad, bad.scopes[0]!, "explicit"),
       );
       expect(policyChange.outcome?.kind).toBe("failed");
       expect(policyChange.pending).toBeUndefined();
       const disabled = yield* home.owned(
-        proposeLibraryDisable(session, home.bindings, bad, bad.bindings),
+        proposeLibraryDisable(session, home.installOptions, bad, bad.scopes),
       );
       expect(disabled.outcome?.kind).toBe("preview");
       const confirmed = yield* home.owned(confirmLibraryChange(disabled));
       expect(confirmed.outcome?.kind).toBe("applied");
       const remaining = confirmed.skills.find((row) => row.skillId === bad.skillId)!;
-      expect(remaining.bindings).toHaveLength(0);
+      expect(remaining.scopes).toHaveLength(0);
       const enable = yield* home.owned(
-        proposeLibraryEnable(confirmed, home.bindings, remaining, { scope: { kind: "global" } }),
+        proposeLibraryEnable(confirmed, home.installOptions, remaining, {
+          scope: { kind: "global" },
+        }),
       );
       expect(enable.outcome?.kind).toBe("preview");
       expect(enable.pending?.policies).toEqual([]);
@@ -393,21 +393,21 @@ Tools
       yield* home.owned(
         writingTo(
           home.home,
-          retainAuthoredCollectionUnderLockEffect({
+          importAuthoredCollection({
             root: source,
             source: { type: "local", path: source },
             input: source,
-            retainedAt: "2026-10-01T00:00:00.000Z",
+            importedAt: "2026-10-01T00:00:00.000Z",
           }),
         ),
       );
       const state = yield* home.durable;
       const payload = join(
-        retainedTreePath(home.originals, state.retained_copies[0]!.digest),
+        collectionVersionPath(home.originals, state.collection_versions[0]!.hash),
         "retained-payload.txt",
       );
       let payloadReads = 0;
-      const observedFs = {
+      const recordingFs = {
         ...fs,
         readFile: (path: string) =>
           fs.readFile(path).pipe(
@@ -421,7 +421,7 @@ Tools
       const view = yield* home.owned(openLibraryView());
       const read = home
         .owned(view.readSkills())
-        .pipe(Effect.provideService(FileSystem.FileSystem, observedFs));
+        .pipe(Effect.provideService(FileSystem.FileSystem, recordingFs));
       const first = yield* read;
       expect(first).toHaveLength(2);
       expect(first.every((row) => Result.isSuccess(row.authorInvocation))).toBe(true);

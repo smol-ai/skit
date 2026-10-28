@@ -17,6 +17,6 @@ export * from "./harnesses/contracts.js";
 export * from "./harnesses/frontmatter.js";
 export * from "./invocation/conformance.js";
 export * from "./shared/json.js";
-export * from "./shared/digest.js";
+export * from "./shared/hash.js";
 export * from "./distribution/registry-identity.js";
 export * from "./schemas.js";

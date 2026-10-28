@@ -1,6 +1,6 @@
 import { SkillMetadata } from "../../library-application/skill-metadata.js";
 import { Schema } from "effect";
-import { CollectionId, Digest, SkillId, SkillVersionId } from "@smolai/skit-core";
+import { CollectionId, Hash, SkillId, SkillVersionId } from "@smolai/skit-core";
 
 export const ListResult = Schema.Struct({
   subjects: Schema.Array(
@@ -17,30 +17,21 @@ export const ListResult = Schema.Struct({
           versions: Schema.Array(
             Schema.Struct({
               skill_version_id: SkillVersionId,
-              artifact_digest: Digest,
+              artifact_hash: Hash,
             }),
           ),
         }),
       ),
     }),
   ),
-  bindings: Schema.Array(
-    Schema.Struct({
-      scope: Schema.Struct({ kind: Schema.Literal("global") }),
-      /** What was enabled: a whole Collection that follows its Source, or one Skill. */
-      entries: Schema.Array(
-        Schema.Union([
-          Schema.Struct({
-            kind: Schema.Literal("collection"),
-            collection_id: CollectionId,
-            label: Schema.String,
-          }),
-          Schema.Struct({ kind: Schema.Literal("skill"), skill_id: SkillId, name: Schema.String }),
-        ]),
-      ),
-      /** The Skills those entries enable now. */
-      skills: Schema.Array(Schema.String),
-    }),
+  /** What is enabled for every project: a whole Collection that follows its Source, or one Skill. */
+  enabled: Schema.Array(
+    Schema.Union([
+      Schema.Struct({ collection: CollectionId, label: Schema.String }),
+      Schema.Struct({ skill: SkillId, name: Schema.String }),
+    ]),
   ),
+  /** The Skills those items enable now. */
+  enabled_skills: Schema.Array(Schema.String),
 });
 export type ListResult = typeof ListResult.Type;

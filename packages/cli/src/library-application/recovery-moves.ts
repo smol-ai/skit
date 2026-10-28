@@ -2,22 +2,22 @@ import { RecoveryInvalid, recoveryFingerprint as fingerprint } from "./recovery-
 export { RecoveryInvalid } from "./recovery-evidence.js";
 import { createHash, randomUUID } from "node:crypto";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
-import { Effect, FileSystem, Schema } from "effect";
+import { Effect, FileSystem, Schema, SchemaGetter } from "effect";
 import {
-  deterministicTreeHashEffect,
-  Digest,
+  deterministicTreeHash,
+  Hash,
   LinkStat,
   LibraryStore,
   canonicalJson,
-  inspectOwnershipMarkerEffect,
-  type ManagedProjection,
+  inspectOwnershipMarker,
+  type InstalledSkill,
   type LibraryStateReadError,
   pathIsWithin,
   withLibraryWriterLock,
-  writeJsonExclusiveEffect,
+  writeJsonExclusive,
 } from "@smolai/skit-core";
 import { PlanIsStale } from "../library/failures.js";
-import { leavePnpmSkillEffect } from "../projection/pnpm-skills.js";
+import { leavePnpmSkill } from "../install/pnpm-skills.js";
 
 const Identity = Schema.Struct({ path: Schema.String, dev: Schema.Number, ino: Schema.Number });
 const EntryFields = {
@@ -28,17 +28,31 @@ const EntryFields = {
   dev: Schema.Number,
   ino: Schema.Number,
   linkTarget: Schema.optionalKey(Schema.String),
-  observedHash: Schema.optionalKey(Schema.String),
+  currentHash: Schema.optionalKey(Schema.String),
 };
 const RecoveryEntry = Schema.Struct({
   ...EntryFields,
-  contentHash: Digest,
+  contentHash: Hash,
   approvedMarker: Schema.optionalKey(Schema.String),
   parent: Identity,
 });
 interface RecoveryEntry extends Schema.Schema.Type<typeof RecoveryEntry> {}
-const LegacyEntry = Schema.Struct({ ...EntryFields, moved: Schema.Boolean });
-const Receipt = Schema.Union([
+// 0.3.0 wrote v1 records, where the hash of a moved folder was `observedHash`.
+const { currentHash: _currentHash, ...LegacyFields } = EntryFields;
+const LegacyEntry = Schema.Struct({
+  ...LegacyFields,
+  observedHash: Schema.optionalKey(Schema.String),
+  moved: Schema.Boolean,
+}).pipe(
+  Schema.decodeTo(Schema.Struct({ ...EntryFields, moved: Schema.Boolean }), {
+    decode: SchemaGetter.transform(({ observedHash, ...entry }) => ({
+      ...entry,
+      ...(observedHash === undefined ? {} : { currentHash: observedHash }),
+    })),
+    encode: SchemaGetter.forbidden(() => "v1 move records are decode-only"),
+  }),
+);
+const MoveRecord = Schema.Union([
   Schema.Struct({ schemaVersion: Schema.Literal(1), entries: Schema.Array(LegacyEntry) }),
   Schema.Struct({ schemaVersion: Schema.Literal(2), entries: Schema.Array(RecoveryEntry) }),
 ]);
@@ -54,7 +68,7 @@ export const RecoveryFact = Schema.Struct({
 export const RecoveryInspection = Schema.Struct({
   operationId: Schema.String,
   directory: Schema.String,
-  planId: Digest,
+  planId: Hash,
   entries: Schema.Array(RecoveryFact),
   legacy: Schema.Boolean,
 });
@@ -63,7 +77,7 @@ export interface RecoveryMoveRequest {
   readonly name: string;
   readonly path: string;
   /** Required for directories; links are moved without touching their target's bytes. */
-  readonly observedHash?: string;
+  readonly currentHash?: string;
   readonly approvedLink?: {
     readonly dev: number;
     readonly ino: number;
@@ -149,8 +163,8 @@ const prepareMoves = Effect.fn("RecoveryMoves.prepare")(function* (
       contentHash: yield* fingerprint(path),
       ...(owned.get(path) ? { approvedMarker: owned.get(path)?.marker } : {}),
       ...(linkTarget === undefined ? {} : { linkTarget }),
-      ...(info.type === "Directory" && request.observedHash !== undefined
-        ? { observedHash: request.observedHash }
+      ...(info.type === "Directory" && request.currentHash !== undefined
+        ? { currentHash: request.currentHash }
         : {}),
     });
   }
@@ -167,16 +181,16 @@ const prepareMoves = Effect.fn("RecoveryMoves.prepare")(function* (
       ),
   };
 });
-/** Unmanaged copies never acquire authority to move a custody marker. */
+/** Unmanaged copies never acquire authority to move an ownership marker. */
 export const prepareRecoveryMoves = (
   home: string,
   requests: readonly RecoveryMoveRequest[],
   operationDirectory = recoveryOperationDirectory(home),
 ) => prepareMoves(home, requests, operationDirectory);
 
-/** Preserve exactly reviewed, registered projections; marker text alone never grants custody. */
+/** Preserve exactly reviewed, registered installed skills; marker text alone never grants ownership. */
 export const prepareOwnedRecoveryMoves = Effect.fn("RecoveryMoves.prepareOwned")(function* (
-  requests: readonly { name: string; projection: ManagedProjection }[],
+  requests: readonly { name: string; installedSkill: InstalledSkill }[],
   operationDirectory?: string,
 ) {
   const store = yield* LibraryStore;
@@ -187,24 +201,24 @@ export const prepareOwnedRecoveryMoves = Effect.fn("RecoveryMoves.prepareOwned")
   >();
   const moves: RecoveryMoveRequest[] = [];
   for (const request of requests) {
-    const expected = structuredClone(request.projection);
+    const expected = structuredClone(request.installedSkill);
     const path = resolve(expected.path);
     const check = Effect.gen(function* () {
       const state = yield* store.load;
-      const current = state.projections.find(
-        (projection) => projection.projection_id === expected.projection_id,
+      const current = state.installed_skills.find(
+        (installedSkill) => installedSkill.installed_skill_id === expected.installed_skill_id,
       );
       if (canonicalJson(current ?? null) !== canonicalJson(expected))
         return yield* new PlanIsStale();
     });
     yield* check;
-    const observed = yield* inspectOwnershipMarkerEffect(path);
+    const observed = yield* inspectOwnershipMarker(path);
     if (
       observed.kind !== "valid" ||
-      observed.marker.projection_id !== expected.projection_id ||
+      observed.marker.installed_skill_id !== expected.installed_skill_id ||
       observed.marker.skill_id !== expected.skill_id ||
       observed.marker.skill_version_id !== expected.skill_version_id ||
-      observed.marker.expected_digest !== expected.expected_digest
+      observed.marker.expected_hash !== expected.expected_hash
     )
       return yield* new PlanIsStale();
     const marker = yield* fs.readFileString(join(path, ".skit-ownership.json"));
@@ -212,7 +226,7 @@ export const prepareOwnedRecoveryMoves = Effect.fn("RecoveryMoves.prepareOwned")
     moves.push({
       name: request.name,
       path,
-      observedHash: yield* deterministicTreeHashEffect(path),
+      currentHash: yield* deterministicTreeHash(path),
     });
   }
   return yield* prepareMoves(
@@ -238,7 +252,7 @@ const applyRecoveryMoves = Effect.fn("RecoveryMoves.apply")(
       entry: RecoveryEntry,
     ) {
       yield* checkRegistered;
-      yield* leavePnpmSkillEffect(entry.path);
+      yield* leavePnpmSkill(entry.path);
       const current = yield* links.identity.lstat(entry.path);
       const physicalParent = yield* links.realPathNative(dirname(entry.path));
       const parent = yield* links.identity.lstat(physicalParent);
@@ -254,7 +268,7 @@ const applyRecoveryMoves = Effect.fn("RecoveryMoves.apply")(
       )
         return yield* new PlanIsStale();
       if (entry.type !== "Directory") return;
-      const hash = yield* Effect.result(deterministicTreeHashEffect(entry.path));
+      const hash = yield* Effect.result(deterministicTreeHash(entry.path));
       const marker = yield* fs
         .readFileString(join(entry.path, ".skit-ownership.json"))
         .pipe(
@@ -266,7 +280,7 @@ const applyRecoveryMoves = Effect.fn("RecoveryMoves.apply")(
         );
       if (
         hash._tag === "Failure" ||
-        hash.success !== entry.observedHash ||
+        hash.success !== entry.currentHash ||
         marker !== entry.approvedMarker
       )
         return yield* new PlanIsStale();
@@ -275,8 +289,8 @@ const applyRecoveryMoves = Effect.fn("RecoveryMoves.apply")(
     if (!entries.length) return;
     yield* ensureRecoveryOperation(home, dirname(recoveryDirectory));
     yield* fs.makeDirectory(recoveryDirectory, { mode: 0o700 });
-    // Publish once, exclusively, before any move. Filesystem evidence supplies progress.
-    yield* writeJsonExclusiveEffect(join(recoveryDirectory, "receipt.json"), {
+    // Write once, exclusively, before any move. Filesystem evidence supplies progress.
+    yield* writeJsonExclusive(join(recoveryDirectory, "receipt.json"), {
       schemaVersion: 2,
       entries,
     });
@@ -299,7 +313,7 @@ const missingStat = Effect.fn("Recovery.stat")(function* (path: string) {
     );
 });
 
-/** No symlink may redirect a receipt or archive container; the configured home may be an alias. */
+/** No symlink may redirect a move record or archive container; the configured home may be an alias. */
 const checkedDirectory = Effect.fn("Recovery.directory")(function* (path: string) {
   const links = yield* LinkStat;
   if ((yield* links.identity.lstat(path)).type !== "Directory")
@@ -338,7 +352,7 @@ export const recoveryOperationPath = Effect.fn("Recovery.operationPath")(functio
   return directory;
 });
 
-const observeRecovery = Effect.fn("Recovery.observe")(function* (
+const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
   home: string,
   operationId: string,
 ) {
@@ -350,23 +364,23 @@ const observeRecovery = Effect.fn("Recovery.observe")(function* (
   yield* checkedDirectory(removed);
   const directory = join(removed, operationId);
   yield* checkedDirectory(directory);
-  const legacyReceipt = yield* missingStat(join(directory, "receipt.json"));
+  const legacyMoveRecord = yield* missingStat(join(directory, "receipt.json"));
   const metadata: string[] = [];
-  const names = legacyReceipt ? [] : (yield* fs.readDirectory(directory)).sort();
+  const names = legacyMoveRecord ? [] : (yield* fs.readDirectory(directory)).sort();
   for (const name of names.filter((name) => name === "setup.json" || name === "complete.json")) {
     const path = join(directory, name);
     if ((yield* links.identity.lstat(path)).type !== "File")
       return yield* new RecoveryInvalid({ detail: `Redirected setup evidence at ${path}` });
     metadata.push(yield* fs.readFileString(path));
   }
-  const batches = legacyReceipt
+  const batches = legacyMoveRecord
     ? [directory]
     : names
         .filter((name) => name !== "setup.json" && name !== "complete.json")
         .map((id) => join(directory, id));
   const facts: (typeof RecoveryFact.Type)[] = [];
   const witnesses: string[] = [];
-  const receipts: string[] = [...metadata];
+  const moveRecords: string[] = [...metadata];
   const content: { original: string | undefined; saved: string | undefined }[] = [];
   const evidence: unknown[] = [...metadata];
   let legacy = false;
@@ -374,23 +388,27 @@ const observeRecovery = Effect.fn("Recovery.observe")(function* (
   for (const batch of batches) {
     yield* checkedDirectory(batch);
     evidence.push({ batch, identity: yield* links.identity.lstat(batch) });
-    const receiptPath = join(batch, "receipt.json");
-    // A crash before receipt publication left no authorized moves in this batch.
-    if (!(yield* missingStat(receiptPath))) continue;
-    if ((yield* links.identity.lstat(receiptPath)).type !== "File")
+    const moveRecordPath = join(batch, "receipt.json");
+    // A crash before the move record was written left no authorized moves in this batch.
+    if (!(yield* missingStat(moveRecordPath))) continue;
+    if ((yield* links.identity.lstat(moveRecordPath)).type !== "File")
       return yield* new RecoveryInvalid({
-        detail: `Receipt is not a regular file: ${receiptPath}`,
+        detail: `Move record is not a regular file: ${moveRecordPath}`,
       });
-    const raw = yield* fs.readFileString(receiptPath);
-    const receipt = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Receipt))(raw).pipe(
-      Effect.mapError(() => new RecoveryInvalid({ detail: `Invalid receipt: ${receiptPath}` })),
+    const raw = yield* fs.readFileString(moveRecordPath);
+    const moveRecord = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(MoveRecord))(
+      raw,
+    ).pipe(
+      Effect.mapError(
+        () => new RecoveryInvalid({ detail: `Invalid move record: ${moveRecordPath}` }),
+      ),
     );
     evidence.push(raw);
-    receipts.push(raw);
-    legacy ||= receipt.schemaVersion === 1;
-    for (const [index, storedEntry] of receipt.entries.entries()) {
+    moveRecords.push(raw);
+    legacy ||= moveRecord.schemaVersion === 1;
+    for (const [index, storedEntry] of moveRecord.entries.entries()) {
       const expectedArchive = join(batch, `${index + 1}-${basename(storedEntry.path)}`);
-      const logicalBatch = legacyReceipt
+      const logicalBatch = legacyMoveRecord
         ? join(resolve(home), "removed", operationId)
         : join(resolve(home), "removed", operationId, basename(batch));
       if (
@@ -398,7 +416,7 @@ const observeRecovery = Effect.fn("Recovery.observe")(function* (
         storedEntry.recoveryPath !==
           join(logicalBatch, `${index + 1}-${basename(storedEntry.path)}`)
       )
-        return yield* new RecoveryInvalid({ detail: `Unsafe archive path in ${receiptPath}` });
+        return yield* new RecoveryInvalid({ detail: `Unsafe archive path in ${moveRecordPath}` });
       const entry = { ...storedEntry, recoveryPath: expectedArchive };
       if (
         !isAbsolute(entry.path) ||
@@ -410,10 +428,10 @@ const observeRecovery = Effect.fn("Recovery.observe")(function* (
         entry.recoveryPath !== join(batch, `${index + 1}-${basename(entry.path)}`) ||
         paths.has(entry.path) ||
         (entry.type === "SymbolicLink" && entry.linkTarget === undefined) ||
-        (entry.type === "Directory" && entry.observedHash === undefined)
+        (entry.type === "Directory" && entry.currentHash === undefined)
       )
         return yield* new RecoveryInvalid({
-          detail: `Unsafe or incomplete entry in ${receiptPath}`,
+          detail: `Unsafe or incomplete entry in ${moveRecordPath}`,
         });
       paths.add(entry.path);
       const parentStat = yield* missingStat(dirname(entry.path));
@@ -447,8 +465,8 @@ const observeRecovery = Effect.fn("Recovery.observe")(function* (
         else if (matches && entry.type === "SymbolicLink")
           matches = (yield* fs.readLink(path)) === entry.linkTarget;
         else if (matches) {
-          const normalized = yield* Effect.result(deterministicTreeHashEffect(path));
-          matches = normalized._tag === "Success" && normalized.success === entry.observedHash;
+          const normalized = yield* Effect.result(deterministicTreeHash(path));
+          matches = normalized._tag === "Success" && normalized.success === entry.currentHash;
         }
         return { exists: true, matches, stat, hash };
       });
@@ -474,7 +492,7 @@ const observeRecovery = Effect.fn("Recovery.observe")(function* (
               ? "Neither original nor saved entry exists"
               : original.exists && saved.matches
                 ? "Original destination is occupied; preserve both entries"
-                : "Saved or original entry differs from the receipt";
+                : "Saved or original entry differs from its move record";
       facts.push({
         name: entry.name,
         path: entry.path,
@@ -490,7 +508,7 @@ const observeRecovery = Effect.fn("Recovery.observe")(function* (
       });
     }
   }
-  const planId = Digest.make(
+  const planId = Hash.make(
     `sha256:${createHash("sha256")
       .update(JSON.stringify([operationId, evidence, facts]))
       .digest("hex")}`,
@@ -498,7 +516,7 @@ const observeRecovery = Effect.fn("Recovery.observe")(function* (
   return {
     inspection: { operationId, directory, planId, entries: facts, legacy },
     witnesses,
-    receipts,
+    moveRecords,
     content,
   };
 });
@@ -507,7 +525,7 @@ export const inspectRecoveryOperation = Effect.fn("Recovery.inspect")(function* 
   home: string,
   operationId: string,
 ) {
-  return (yield* observeRecovery(home, operationId)).inspection;
+  return (yield* readRecoveryOperation(home, operationId)).inspection;
 });
 
 export const listRecoveryOperations = Effect.fn("Recovery.list")(function* (home: string) {
@@ -523,25 +541,25 @@ export const prepareRecoveryRestore = Effect.fn("Recovery.prepareRestore")(funct
   home: string,
   operationId: string,
 ) {
-  const observed = yield* observeRecovery(home, operationId);
+  const observed = yield* readRecoveryOperation(home, operationId);
   const approvedId = observed.inspection.planId;
   return {
     summary: structuredClone(observed.inspection),
     apply: () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
-        let current = yield* observeRecovery(home, operationId);
+        let current = yield* readRecoveryOperation(home, operationId);
         if (current.inspection.planId !== approvedId) return yield* new PlanIsStale();
         for (const [index, fact] of observed.inspection.entries.entries()) {
           if (fact.status !== "saved") continue;
           // Recheck the whole observed operation after each move. Never refresh consent for a changed entry.
-          const refreshed = yield* observeRecovery(home, operationId);
+          const refreshed = yield* readRecoveryOperation(home, operationId);
           if (refreshed.inspection.planId !== current.inspection.planId)
             return yield* new PlanIsStale();
           yield* fs.rename(fact.recoveryPath, fact.path);
-          const after = yield* observeRecovery(home, operationId);
+          const after = yield* readRecoveryOperation(home, operationId);
           if (
-            JSON.stringify(after.receipts) !== JSON.stringify(current.receipts) ||
+            JSON.stringify(after.moveRecords) !== JSON.stringify(current.moveRecords) ||
             after.witnesses.length !== current.witnesses.length ||
             after.witnesses.some((witness, i) => i !== index && witness !== current.witnesses[i]) ||
             after.inspection.entries[index]?.status !== "at-original" ||

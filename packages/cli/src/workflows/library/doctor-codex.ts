@@ -1,11 +1,11 @@
 import { configurationForHome } from "../../configuration/skit-configuration.js";
 import {
   SkillAlias,
-  type HarnessShadow,
-  observeHarnessSkills,
-  readableHarnessRoots,
-} from "../../projection/harness-shadows.js";
-import type { InventoryRootOptions } from "../../projection/roots.js";
+  type DuplicateCopy,
+  scanSkillsDirectory,
+  readableSkillsDirectories,
+} from "../../install/duplicates.js";
+import type { InventoryRootOptions } from "../../install/roots.js";
 import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { Effect, FileSystem, Schema } from "effect";
@@ -16,7 +16,7 @@ import {
   type LibraryState,
 } from "@smolai/skit-core";
 export { readCodexSkills, CodexDoctorFailure } from "@smolai/skit-core";
-import { probeHarnessEffect } from "../../harness/probe.js";
+import { probeHarness } from "../../harness/probe.js";
 
 export const CodexDoctorInstance = Schema.Struct({
   name: Schema.String,
@@ -26,7 +26,7 @@ export const CodexDoctorInstance = Schema.Struct({
   scope: Schema.String,
   pluginId: Schema.optionalKey(Schema.String),
   skitManaged: Schema.Boolean,
-  documentDigest: Schema.optionalKey(Schema.String),
+  documentHash: Schema.optionalKey(Schema.String),
   aliases: Schema.optionalKey(Schema.Array(SkillAlias)),
 });
 export type CodexDoctorInstance = typeof CodexDoctorInstance.Type;
@@ -51,7 +51,7 @@ export type CodexDoctorCheck = typeof CodexDoctorCheck.Type;
 export function codexSkillAliases(
   canonicalDocument: string,
   reportedDocument: string,
-  index: readonly HarnessShadow[],
+  index: readonly DuplicateCopy[],
 ): readonly SkillAlias[] {
   return (
     index.find((instance) => instance.canonicalPath === dirname(canonicalDocument))?.aliases ?? [
@@ -91,7 +91,7 @@ export function codexDuplicateFindings(
       if (group.length < 2) continue;
       if (kind === "display-name-collision" && new Set(group.map((item) => item.name)).size < 2)
         continue;
-      const hashes = group.map((item) => item.documentDigest);
+      const hashes = group.map((item) => item.documentHash);
       findings.push({
         kind,
         name: scopedName.slice(scopedName.indexOf("\0") + 1),
@@ -108,7 +108,7 @@ export function codexDuplicateFindings(
   for (const item of unique) layered.set(item.name, [...(layered.get(item.name) ?? []), item]);
   for (const [name, group] of layered) {
     if (new Set(group.map((item) => item.scope)).size < 2) continue;
-    const hashes = group.map((item) => item.documentDigest);
+    const hashes = group.map((item) => item.documentHash);
     findings.push({
       kind: "layered-name",
       name,
@@ -143,7 +143,7 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
       detail:
         "A custom --codex-root does not describe Codex's configured discovery. Run doctor without that override to check native discovery.",
     };
-  const probe = yield* probeHarnessEffect("codex");
+  const probe = yield* probeHarness("codex");
   if (probe.status !== "installed" || !probe.executablePath)
     return {
       ...empty,
@@ -156,8 +156,10 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
     const entry = yield* readCodexSkills(executable, cwd, undefined, true);
     const fs = yield* FileSystem.FileSystem;
     const managed = new Set(
-      yield* Effect.forEach(state.projections, (projection) =>
-        fs.realPath(projection.path).pipe(Effect.orElseSucceed(() => resolve(projection.path))),
+      yield* Effect.forEach(state.installed_skills, (installedSkill) =>
+        fs
+          .realPath(installedSkill.path)
+          .pipe(Effect.orElseSucceed(() => resolve(installedSkill.path))),
       ),
     );
     const errors = [...entry.errors];
@@ -168,10 +170,10 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
         configHome: paths.configHome,
         overrides: {},
       })));
-    const aliasIndex = yield* observeHarnessSkills(
+    const aliasIndex = yield* scanSkillsDirectory(
       [
-        ...readableHarnessRoots(roots, { kind: "global" }, ["codex"]),
-        ...readableHarnessRoots(roots, { kind: "repository", root: cwd }, ["codex"]),
+        ...readableSkillsDirectories(roots, { kind: "global" }, ["codex"]),
+        ...readableSkillsDirectories(roots, { kind: "repository", root: cwd }, ["codex"]),
       ],
       { errors },
     ).pipe(
@@ -190,7 +192,7 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
           const canonicalPath = yield* fs
             .realPath(skill.path)
             .pipe(Effect.orElseSucceed(() => resolve(skill.path)));
-          const documentDigest = yield* fs.readFile(skill.path).pipe(
+          const documentHash = yield* fs.readFile(skill.path).pipe(
             Effect.map((bytes) => "sha256:" + createHash("sha256").update(bytes).digest("hex")),
             Effect.catchTag("PlatformError", () => {
               errors.push({
@@ -209,7 +211,7 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
             aliases: codexSkillAliases(canonicalPath, skill.path, aliasIndex),
             ...(skill.pluginId ? { pluginId: skill.pluginId } : {}),
             skitManaged: managed.has(dirname(canonicalPath)),
-            ...(documentDigest ? { documentDigest } : {}),
+            ...(documentHash ? { documentHash } : {}),
           };
         }),
     );

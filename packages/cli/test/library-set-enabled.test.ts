@@ -3,22 +3,22 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import {
-  deterministicTreeHashEffect,
+  deterministicTreeHash,
   LibraryStore,
   libraryStoreLayer,
   makeCollectionId,
   makeSkillId,
-  type ObservedSkill,
+  type ImportRequestSkill,
 } from "@smolai/skit-core";
 import { isolatedRoots } from "./helpers/isolated-library.js";
-import { setLibraryBindings, previewTestBindings } from "./helpers/binding-changes.js";
-import { calculateBindingChange } from "../src/workflows/library/binding-selection.js";
-import { applyBindingChanges } from "../src/library-application/binding-changes.js";
-import { planRemoveEffect } from "../src/workflows/library/remove.js";
-import { planUpdatesEffect } from "../src/library-application/update.js";
-import { checkSubjectsEffect } from "../src/workflows/library/check.js";
+import { setLibraryEnabled, planLibraryEnabled } from "./helpers/set-enabled.js";
+import { calculateSetEnabled } from "../src/workflows/library/set-enabled-request.js";
+import { applySetEnabledPlan } from "../src/library-application/set-enabled.js";
+import { planRemove } from "../src/workflows/library/remove.js";
+import { planUpdates } from "../src/library-application/update.js";
+import { checkSubjects } from "../src/workflows/library/check.js";
 import { matchingLibrarySubjects } from "../src/workflows/library/subject-resolution.js";
-import { initializeLibraryMachine, retainObservedIn, writingTo } from "./helpers/library-home.js";
+import { initializeLibraryMachine, importCollectionIn, writingTo } from "./helpers/library-home.js";
 
 it.effect("partially binds raw Skills and converges after enable and disable", () =>
   Effect.gen(function* () {
@@ -36,25 +36,25 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
     const collection = yield* Effect.scoped(
       writingTo(
         home,
-        retainObservedIn(home)({
+        importCollectionIn(home)({
           source: { type: "local", path: observed },
           input: observed,
-          retainedAt: "2026-09-16T00:00:00.000Z",
+          importedAt: "2026-09-16T00:00:00.000Z",
           skills: [
             {
               name: "review",
               sourcePath: review,
               relativePath: "review",
-              observedHash: yield* deterministicTreeHashEffect(review),
+              currentHash: yield* deterministicTreeHash(review),
             },
             {
               name: "test",
               sourcePath: test,
               relativePath: "test",
-              observedHash: yield* deterministicTreeHashEffect(test),
+              currentHash: yield* deterministicTreeHash(test),
             },
           ],
-          observations: [],
+          lockFileEntries: [],
         }),
       ),
     );
@@ -92,7 +92,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       ["skill"],
     );
     assert.strictEqual(
-      (yield* planRemoveEffect(state, member.skill_id).pipe(Effect.flip))._tag,
+      (yield* planRemove(state, member.skill_id).pipe(Effect.flip))._tag,
       "Library.SkillRemovalRequiresCollection",
     );
     const sameNamed = {
@@ -103,7 +103,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       matchingLibrarySubjects(sameNamed, "review").map((subject) => subject.kind),
       ["collection"],
     );
-    assert.strictEqual((yield* planRemoveEffect(sameNamed, "review")).subject_kind, "collection");
+    assert.strictEqual((yield* planRemove(sameNamed, "review")).subject_kind, "collection");
     const secondCollectionId = makeCollectionId();
     const ambiguous = {
       ...sameNamed,
@@ -119,23 +119,22 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
     assert.strictEqual(matchingLibrarySubjects(ambiguous, "review").length, 2);
     const previewStore = yield* LibraryStore.pipe(Effect.provide(layer));
     assert.strictEqual(
-      (yield* planRemoveEffect(ambiguous, "review").pipe(Effect.flip))._tag,
+      (yield* planRemove(ambiguous, "review").pipe(Effect.flip))._tag,
       "Library.SubjectAmbiguous",
     );
     assert.strictEqual(
-      (yield* planUpdatesEffect("review").pipe(
+      (yield* planUpdates("review").pipe(
         Effect.provideService(LibraryStore, { ...previewStore, load: Effect.succeed(ambiguous) }),
         Effect.flip,
       ))._tag,
       "Library.SubjectAmbiguous",
     );
     assert.strictEqual(
-      (yield* checkSubjectsEffect(ambiguous, "review").pipe(Effect.provide(layer), Effect.flip))
-        ._tag,
+      (yield* checkSubjects(ambiguous, "review").pipe(Effect.provide(layer), Effect.flip))._tag,
       "Library.SubjectAmbiguous",
     );
     assert.strictEqual(
-      (yield* calculateBindingChange(ambiguous, {
+      (yield* calculateSetEnabled(ambiguous, {
         ...base,
         query: "review",
         scope: invocation.scope,
@@ -143,7 +142,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       }).pipe(Effect.flip))._tag,
       "Library.SubjectAmbiguous",
     );
-    const planned = yield* setLibraryBindings({
+    const planned = yield* setLibraryEnabled({
       ...base,
       invocation,
     }).pipe(Effect.provide(layer));
@@ -151,23 +150,23 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
     assert.deepEqual(planned.value.skills, ["review"]);
     assert.strictEqual(yield* fs.exists(join(roots.codexRoot, "review")), false);
     const beforeApply = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
-    assert.deepEqual(beforeApply?.global_bindings, []);
+    assert.deepEqual(beforeApply?.enabled, []);
 
-    const previewed = yield* previewTestBindings({ ...base, invocation }).pipe(
+    const previewed = yield* planLibraryEnabled({ ...base, invocation }).pipe(
       Effect.provide(layer),
     );
     yield* writingTo(
       home,
       LibraryStore.use((store) =>
-        store.publish({ ...state, custodyIssues: state.custodyIssues ?? [] }, state),
+        store.save({ ...state, ownershipIssues: state.ownershipIssues ?? [] }, state),
       ).pipe(Effect.provide(layer)),
     );
-    const stale = yield* applyBindingChanges(previewed).pipe(Effect.provide(layer), Effect.flip);
+    const stale = yield* applySetEnabledPlan(previewed).pipe(Effect.provide(layer), Effect.flip);
     assert.strictEqual(stale._tag, "Library.SetEnabledStale");
     yield* writingTo(
       home,
       LibraryStore.use((store) =>
-        Effect.flatMap(store.load, (current) => store.publish(state, current)),
+        Effect.flatMap(store.load, (current) => store.save(state, current)),
       ).pipe(Effect.provide(layer)),
     );
 
@@ -175,7 +174,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       Effect.gen(function* () {
         const current = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
         assert.ok(current);
-        return yield* setLibraryBindings({
+        return yield* setLibraryEnabled({
           ...base,
           invocation: { ...invocation, enabled, dryRun: false },
         }).pipe(Effect.provide(layer));
@@ -188,12 +187,10 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       "review raw bytes\n",
     );
     assert.strictEqual(yield* fs.exists(join(roots.codexRoot, "test")), false);
-    const retained = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
-    const reviewSkillId = retained?.skills.find((skill) => skill.name === "review")?.skill_id;
+    const imported = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
+    const reviewSkillId = imported?.skills.find((skill) => skill.name === "review")?.skill_id;
     assert.ok(reviewSkillId);
-    assert.deepEqual(retained?.global_bindings[0]?.entries, [
-      { kind: "skill", skill_id: reviewSkillId },
-    ]);
+    assert.deepEqual(imported?.enabled, [{ skill: reviewSkillId }]);
     const repeated = yield* writingTo(home, apply(true));
     assert.strictEqual(repeated.value.changed, false);
     assert.strictEqual(repeated.value.repair, undefined);
@@ -209,7 +206,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
     assert.strictEqual(disabled.value.changed, true);
     assert.strictEqual(yield* fs.exists(join(roots.codexRoot, "review")), false);
     const final = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
-    assert.deepEqual(final?.global_bindings, []);
+    assert.deepEqual(final?.enabled, []);
     assert.strictEqual(final?.skills.find((skill) => skill.name === "review")?.versions.length, 1);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
@@ -222,7 +219,7 @@ it.effect("enables a whole Collection and converts it to Skills when one is disa
     const home = roots.home;
     const observed = join(workspace, "observed");
     yield* initializeLibraryMachine(home);
-    const skills: ObservedSkill[] = [];
+    const skills: ImportRequestSkill[] = [];
     for (const name of ["review", "test", "docs"]) {
       const path = join(observed, name);
       yield* fs.makeDirectory(path, { recursive: true });
@@ -231,32 +228,32 @@ it.effect("enables a whole Collection and converts it to Skills when one is disa
         name,
         sourcePath: path,
         relativePath: name,
-        observedHash: yield* deterministicTreeHashEffect(path),
+        currentHash: yield* deterministicTreeHash(path),
       });
     }
-    const retain = (members: readonly ObservedSkill[], retainedAt: string) =>
+    const importSource = (members: readonly ImportRequestSkill[], importedAt: string) =>
       Effect.scoped(
         writingTo(
           home,
-          retainObservedIn(home)({
+          importCollectionIn(home)({
             source: { type: "local", path: observed },
             input: observed,
-            retainedAt,
+            importedAt,
             skills: members,
-            observations: [],
+            lockFileEntries: [],
           }),
         ),
       );
-    const retained = yield* retain(skills, "2026-09-16T00:00:00.000Z");
-    const collectionId = retained.collection!.collection_id;
+    const imported = yield* importSource(skills, "2026-09-16T00:00:00.000Z");
+    const collectionId = imported.collection!.collection_id;
     const skillId = (name: string) =>
-      retained.skills.find((skill) => skill.name === name)!.skill_id;
+      imported.skills.find((skill) => skill.name === name)!.skill_id;
     const layer = libraryStoreLayer({ home });
     const set = (query: string, enabled: boolean, all: boolean) =>
       Effect.gen(function* () {
         yield* writingTo(
           home,
-          setLibraryBindings({
+          setLibraryEnabled({
             query,
             all,
             roots: {
@@ -273,27 +270,25 @@ it.effect("enables a whole Collection and converts it to Skills when one is disa
           }).pipe(Effect.provide(layer)),
         );
         const settled = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
-        return settled.global_bindings[0]?.entries ?? [];
+        return settled.enabled ?? [];
       });
 
     assert.deepStrictEqual(yield* set(skillId("review"), true, false), [
-      { kind: "skill", skill_id: skillId("review") },
+      { skill: skillId("review") },
     ]);
     // `--all` follows the Collection and replaces its individual entries.
-    assert.deepStrictEqual(yield* set(collectionId, true, true), [
-      { kind: "collection", collection_id: collectionId },
-    ]);
+    assert.deepStrictEqual(yield* set(collectionId, true, true), [{ collection: collectionId }]);
     // Disabling one Skill keeps the Collection's other current Skills individually.
     assert.deepStrictEqual(yield* set(skillId("test"), false, false), [
-      { kind: "skill", skill_id: skillId("review") },
-      { kind: "skill", skill_id: skillId("docs") },
+      { skill: skillId("review") },
+      { skill: skillId("docs") },
     ]);
     assert.deepStrictEqual((yield* fs.readDirectory(roots.codexRoot)).sort(), ["docs", "review"]);
     // Disabling the whole Collection removes every entry for it.
     assert.deepStrictEqual(yield* set(collectionId, false, true), []);
     // A Skill gone from the Source stays while its own entry enables it, and `--all` ends that too.
     yield* set(skillId("review"), true, false);
-    yield* retain(
+    yield* importSource(
       skills.filter((skill) => skill.name !== "review"),
       "2026-09-16T01:00:00.000Z",
     );

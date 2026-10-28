@@ -19,11 +19,11 @@ import { renderAuditV1Alpha4 } from "./audit.js";
 import { conditionHeadline, conditionNextStep, severityHeadline } from "./condition-language.js";
 import { terminalData } from "./terminal-text.js";
 import {
-  renderSetupReconciliation,
-  renderSetupReconciliationOutcome,
+  renderInstalledSkillChange,
+  renderChangeResult,
   renderSetupVersionChoice,
-  renderReviewedReconciliation,
-} from "./setup-reconciliation.js";
+  renderReviewedChanges,
+} from "./installed-skill-changes.js";
 import { createColors } from "picocolors";
 
 export interface RenderContext {
@@ -68,7 +68,7 @@ function renderValidation(data: ContractDataForId<"skit.validate.v3">): string {
   ].join("\n");
 }
 
-function renderSecurityReview(data: ContractDataForId<"skit.security.review.v3">): string {
+function renderSecurityReview(data: ContractDataForId<"skit.security.review.v4">): string {
   return data.audit.findings.length
     ? data.assessment.findingDecisions
         .map((finding) => `${finding.fingerprint} ${finding.disposition} (${finding.ruleId})`)
@@ -131,7 +131,7 @@ function skillChangeLines(
   ];
 }
 
-function renderUpdate(data: ContractDataForId<"skit.update.v8">): string {
+function renderUpdate(data: ContractDataForId<"skit.update.v9">): string {
   if (!data.length) return "No device-local Sources to update";
   const failures = data.filter((item) => "status" in item);
   const successful = data.filter((item) => "changed" in item);
@@ -139,9 +139,9 @@ function renderUpdate(data: ContractDataForId<"skit.update.v8">): string {
   const current = successful.length - updated.length;
   if (updated.length === 0 && failures.length === 0)
     return [
-      successful.some((item) => item.projected > 0)
-        ? `Sources are current; projections reconciled\n${plural(current, "Source")} checked; no retained snapshots changed.`
-        : `Everything is current\n${plural(current, "Source")} checked; no retained snapshots or projected Skills changed.`,
+      successful.some((item) => item.installed > 0)
+        ? `Sources are current; installed skills updated\n${plural(current, "Source")} checked; no retained snapshots changed.`
+        : `Everything is current\n${plural(current, "Source")} checked; no retained snapshots or installed skills changed.`,
       ...successful.flatMap((item) =>
         item.diagnostics?.length ? [item.label, ...sourceDiagnosticLines(item.diagnostics)] : [],
       ),
@@ -151,9 +151,9 @@ function renderUpdate(data: ContractDataForId<"skit.update.v8">): string {
     lines.push(item.label, ...skillChangeLines(item), ...sourceDiagnosticLines(item.diagnostics));
   for (const item of failures)
     lines.push(
-      `${item.label} · failed while ${item.phase === "source" ? "fetching or retaining Source" : "updating projections"}`,
+      `${item.label} · failed while ${item.phase === "source" ? "fetching or retaining Source" : "updating installed skills"}`,
       `  Source: ${item.source}`,
-      ...(item.source_retained
+      ...(item.source_imported
         ? ["  Source snapshot retained; this Collection did not finish updating."]
         : []),
       ...item.error.message.split("\n").map((line) => `  ${line}`),
@@ -226,7 +226,7 @@ function renderAuthorList(data: ContractDataForId<"skit.author.list.v1">): strin
   ].join("\n");
 }
 
-function renderDoctor(data: ContractDataForId<"skit.doctor.v7">, context: RenderContext): string {
+function renderDoctor(data: ContractDataForId<"skit.doctor.v8">, context: RenderContext): string {
   const color = createColors(context.color);
   const section = (title: string) => color.cyan(color.bold(title));
   const path = (value: string) => color.cyan(compactHomePath(value));
@@ -241,7 +241,7 @@ function renderDoctor(data: ContractDataForId<"skit.doctor.v7">, context: Render
   let hasCollisions = data.codex.findings.some((finding) => finding.kind !== "layered-name");
   for (const issue of data.issues) {
     findings.push(
-      `  ${color.red("✕")} ${conditionHeadline(issue.code, "Local library issue")}${issue.target ? color.dim(` · ${issue.target === "legacy" ? "former Harness root" : `.${issue.target}`}`) : ""}`,
+      `  ${color.red("✕")} ${conditionHeadline(issue.code, "Local library issue")}${issue.target ? color.dim(` · ${issue.target === "legacy" ? "former skills directory" : `.${issue.target}`}`) : ""}`,
     );
     if (issue.path) findings.push(`      ${path(issue.path)}`);
     else if (issue.skillId) findings.push(`      ${color.dim(issue.skillId)}`);
@@ -253,8 +253,8 @@ function renderDoctor(data: ContractDataForId<"skit.doctor.v7">, context: Render
       `  ${color.yellow("!")} ${color.bold(finding.name)} ${color.dim(`· Codex · ${finding.instances.length} entries`)}`,
       `      ${finding.kind === "layered-name" ? "Same skill name at different scopes (layered)" : finding.kind === "duplicate-name" ? "Same skill name" : "Different skill names share this display name"} · ${finding.documents === "identical" ? "identical SKILL.md" : finding.documents === "different" ? "different SKILL.md" : "content comparison unavailable"}`,
       ...finding.instances.flatMap((instance) => {
-        const locations: readonly import("../projection/harness-shadows.js").SkillAlias[] = instance
-          .aliases?.length
+        const locations: readonly import("../install/duplicates.js").SkillAlias[] = instance.aliases
+          ?.length
           ? instance.aliases
           : [{ path: instance.path, via: "unknown-root" }];
         return locations.map(
@@ -402,11 +402,11 @@ function renderDoctor(data: ContractDataForId<"skit.doctor.v7">, context: Render
   if (hasCollisions)
     lines.push(
       "  Inspect the listed copies and their ownership before disabling or removing one.",
-      `  ${color.cyan("skit inventory")} ${color.dim("· inspect discovered copies and custody")}`,
+      `  ${color.cyan("skit inventory")} ${color.dim("· inspect discovered copies and ownership")}`,
     );
   else if (data.issues.length)
     lines.push(
-      `  ${color.cyan("skit inventory")} ${color.dim("· inspect affected paths and custody")}`,
+      `  ${color.cyan("skit inventory")} ${color.dim("· inspect affected paths and ownership")}`,
     );
   lines.push(
     `  ${color.cyan("skit doctor --json")} ${color.dim("· full lists, paths and native diagnostics")}`,
@@ -549,7 +549,7 @@ const setupGitStateOrder = [
 ] as const;
 const setupExpandedSkillLimit = 5;
 
-function renderSetupCollections(data: ContractDataForId<"skit.setup.v9">): string[] {
+function renderSetupCollections(data: ContractDataForId<"skit.setup.v10">): string[] {
   type Instance = (typeof data.instances)[number];
   type Collection = {
     label: string;
@@ -653,55 +653,63 @@ function renderSetupCollections(data: ContractDataForId<"skit.setup.v9">): strin
   return lines;
 }
 
-function renderSetupProjections(
-  projections: ContractDataForId<"skit.setup.v9">["projections"],
+function renderSetupInstalledSkills(
+  installedSkills: ContractDataForId<"skit.setup.v10">["installedSkills"],
 ): string[] {
-  const collections = new Map<string, (typeof projections)[number][]>();
-  for (const projection of projections) {
-    const group = projection.collectionId ?? projection.skillId;
-    collections.set(group, [...(collections.get(group) ?? []), projection]);
+  const collections = new Map<string, (typeof installedSkills)[number][]>();
+  for (const installedSkill of installedSkills) {
+    const group = installedSkill.collectionId ?? installedSkill.skillId;
+    collections.set(group, [...(collections.get(group) ?? []), installedSkill]);
   }
   return [...collections.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
-    .flatMap(([, projections]) => {
-      const names = [...new Set(projections.map((projection) => projection.name))].sort();
+    .flatMap(([, installedSkills]) => {
+      const names = [
+        ...new Set(installedSkills.map((installedSkill) => installedSkill.name)),
+      ].sort();
       const statuses = ["current", "modified", "missing"] as const;
       const counts = statuses.flatMap((status) => {
-        const count = projections.filter((projection) => projection.status === status).length;
+        const count = installedSkills.filter(
+          (installedSkill) => installedSkill.status === status,
+        ).length;
         return count ? [`${count} ${status}`] : [];
       });
-      const harnesses = [...new Set(projections.flatMap((projection) => projection.harnesses))]
+      const harnesses = [
+        ...new Set(installedSkills.flatMap((installedSkill) => installedSkill.harnesses)),
+      ]
         .sort()
         .map(harnessLabel);
       return [
-        `  ${projections[0]!.collectionDisplayName} · ${names.length} skill${names.length === 1 ? "" : "s"}${projections.length === names.length ? "" : ` · ${projections.length} projections`}`,
+        `  ${installedSkills[0]!.collectionDisplayName} · ${names.length} skill${names.length === 1 ? "" : "s"}${installedSkills.length === names.length ? "" : ` · ${installedSkills.length} installed copies`}`,
         ...(names.length <= setupExpandedSkillLimit ? [`    ${names.join(", ")}`] : []),
         `    ${counts.join(" · ")}${harnesses.length ? ` · ${harnesses.join(", ")}` : ""}`,
       ];
     });
 }
 
-function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v9">): string[] {
+function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v10">): string[] {
   return data.authoredCollections.flatMap((collection) => {
-    const projections = data.projections.filter(
-      (projection) => projection.collectionId === collection.collectionId,
+    const installedSkills = data.installedSkills.filter(
+      (installedSkill) => installedSkill.collectionId === collection.collectionId,
     );
     const statuses = ["current", "modified", "missing"] as const;
-    const projectionSummary = statuses.flatMap((status) => {
-      const count = projections.filter((projection) => projection.status === status).length;
+    const installedSkillSummary = statuses.flatMap((status) => {
+      const count = installedSkills.filter(
+        (installedSkill) => installedSkill.status === status,
+      ).length;
       return count ? [`${count} ${status}`] : [];
     });
     const names = collection.skills.map((skill) => skill.name);
     return [
       `  ${collection.namespace}/${collection.skit} · ${collection.repository}`,
-      `    ${names.length} authored skill${names.length === 1 ? "" : "s"} · library ${collection.collectionId ? "present" : "missing"}${projectionSummary.length ? ` · ${projectionSummary.join(" · ")} projection${projections.length === 1 ? "" : "s"}` : ""}`,
+      `    ${names.length} authored skill${names.length === 1 ? "" : "s"} · library ${collection.collectionId ? "present" : "missing"}${installedSkillSummary.length ? ` · ${installedSkillSummary.join(" · ")} installed cop${installedSkills.length === 1 ? "y" : "ies"}` : ""}`,
       ...(names.length <= setupExpandedSkillLimit ? [`    ${names.join(", ")}`] : []),
       `    ${collection.origin}`,
     ];
   });
 }
 
-function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v9">): string[] {
+function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v10">): string[] {
   const candidates = data.instances.filter(
     (instance) => instance.owner.kind === "unknown" && instance.locks.length === 0,
   );
@@ -710,7 +718,7 @@ function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v9">): st
   );
   const duplicateHashes = new Map<string, typeof candidates>();
   for (const instance of candidates) {
-    const hash = instance.contentIdentity.observedHash;
+    const hash = instance.contentIdentity.currentHash;
     if (hash) duplicateHashes.set(hash, [...(duplicateHashes.get(hash) ?? []), instance]);
   }
   const duplicates = [...duplicateHashes.values()]
@@ -744,12 +752,12 @@ function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v9">): st
 }
 
 /** What `skit setup --apply` would do, and the exact command that does it. */
-function renderSetupRecommendation(data: ContractDataForId<"skit.setup.v9">): string[] {
+function renderSetupRecommendation(data: ContractDataForId<"skit.setup.v10">): string[] {
   const { candidates, recommended } = data.onboarding;
   if (!recommended.sources.length && !recommended.copies.length) return [];
   const duplicates = recommended.copies.filter((copy) =>
     candidates.some(
-      (candidate) => candidate.paths.includes(copy.sourcePath) && candidate.shadows?.length,
+      (candidate) => candidate.paths.includes(copy.sourcePath) && candidate.duplicates?.length,
     ),
   );
   return [
@@ -773,7 +781,7 @@ function renderSetupRecommendation(data: ContractDataForId<"skit.setup.v9">): st
 }
 
 /** What `skit setup --apply` did, then why the rest was left alone. */
-function renderSetupApplied(data: ContractDataForId<"skit.setup.applied.v2">): string {
+function renderSetupApplied(data: ContractDataForId<"skit.setup.applied.v3">): string {
   const lines = [
     ...data.imported.map(({ source, names }) => `Imported ${source}: ${names.join(", ")}`),
     ...(data.added.length
@@ -785,27 +793,23 @@ function renderSetupApplied(data: ContractDataForId<"skit.setup.applied.v2">): s
   ];
   if (!lines.length)
     lines.push(
-      data.reconciliation?.some((outcome) => outcome.status === "updated")
+      data.changes?.some((outcome) => outcome.status === "updated")
         ? "Updated existing managed copies."
-        : data.reconciliation?.some((outcome) => outcome.status === "pending")
+        : data.changes?.some((outcome) => outcome.status === "pending")
           ? "Existing managed copies need a fresh review."
           : "Nothing to apply; the plan recommended no changes.",
     );
-  if (data.projections.length)
+  if (data.installedSkills.length)
     lines.push(
       "",
       "Copies",
-      ...data.projections.map(
-        (projection) =>
-          `  ${projection.name} · ${projection.target} · ${projection.status} · ${projection.path}`,
+      ...data.installedSkills.map(
+        (installedSkill) =>
+          `  ${installedSkill.name} · ${installedSkill.destination} · ${installedSkill.status} · ${installedSkill.path}`,
       ),
     );
-  if (data.reconciliation?.length)
-    lines.push(
-      "",
-      "Existing managed copies",
-      ...data.reconciliation.map(renderSetupReconciliationOutcome),
-    );
+  if (data.changes?.length)
+    lines.push("", "Existing managed copies", ...data.changes.map(renderChangeResult));
   if (data.leftAlone.length)
     lines.push(
       "",
@@ -815,20 +819,20 @@ function renderSetupApplied(data: ContractDataForId<"skit.setup.applied.v2">): s
   if (data.aliasRecoveryDirectories?.length)
     lines.push(
       "",
-      "Preserved copies and their restoration receipts are saved in",
+      "Backed-up copies and their move records are saved in",
       ...data.aliasRecoveryDirectories.map((directory) => `  ${directory}`),
     );
-  const preservationWarnings = data.preservationWarnings ?? data.aliasesKept;
-  if (preservationWarnings?.length)
+  const backupWarnings = data.backupWarnings ?? data.aliasesKept;
+  if (backupWarnings?.length)
     lines.push(
       "",
       "Existing copies left in place",
-      ...preservationWarnings.map((kept) => `  ${kept.name} · ${kept.message}`),
+      ...backupWarnings.map((kept) => `  ${kept.name} · ${kept.message}`),
     );
   return lines.join("\n");
 }
 
-function renderSetup(data: ContractDataForId<"skit.setup.v9">): string {
+function renderSetup(data: ContractDataForId<"skit.setup.v10">): string {
   const lines = [
     `Observed ${data.instances.length} skill instance(s) in ${data.repositories.length} repositories across ${data.machineConfig.repositoryRoots.length} configured root(s)${data.machineConfig.persisted ? " · roots saved for this machine" : ""}`,
     `Scan ${data.scan.complete ? "complete" : "incomplete"} · ${data.scan.directoriesExamined} directories examined · repository depth ${data.scan.repositorySearchDepth}`,
@@ -862,17 +866,22 @@ function renderSetup(data: ContractDataForId<"skit.setup.v9">): string {
       collection.collectionId ? [collection.collectionId] : [],
     ),
   );
-  const externalProjections = data.projections.filter(
-    (projection) =>
-      projection.collectionId === undefined || !authoredCollectionIds.has(projection.collectionId),
+  const externalInstalledSkills = data.installedSkills.filter(
+    (installedSkill) =>
+      installedSkill.collectionId === undefined ||
+      !authoredCollectionIds.has(installedSkill.collectionId),
   );
-  if (externalProjections.length)
-    lines.push("", "Existing SKIT projections", ...renderSetupProjections(externalProjections));
-  if (data.reconciliation?.length)
+  if (externalInstalledSkills.length)
+    lines.push(
+      "",
+      "Existing SKIT installed skills",
+      ...renderSetupInstalledSkills(externalInstalledSkills),
+    );
+  if (data.changes?.length)
     lines.push(
       "",
       "Existing copy reconciliation",
-      ...data.reconciliation.map((fact) => renderSetupReconciliation(fact)),
+      ...data.changes.map((fact) => renderInstalledSkillChange(fact)),
     );
   const contentMatches = renderSetupContentMatches(data);
   if (contentMatches.length) lines.push("", ...contentMatches);
@@ -1004,22 +1013,24 @@ const contractPresenters: ContractPresenters = {
   updatePlan: renderUpdatePlan,
   projectionRetentionPlan: (data) =>
     [
-      `Would retain changed ${data.skill_name} bytes from ${data.selected_projection_id}`,
-      `Observed: ${data.observed_digest}`,
+      `Would retain changed ${data.skill_name} bytes from ${data.selected_installed_skill_id}`,
+      `Observed: ${data.current_hash}`,
       `Snapshot: ${data.snapshot_digest}`,
-      `Destination: ${data.retained_path}`,
-      ...data.projections.map(
-        (projection) => `${projection.target} · ${projection.path} · ${projection.agreement}`,
+      `Destination: ${data.original_path}`,
+      ...data.installed_skills.map(
+        (installedSkill) =>
+          `${installedSkill.destination} · ${installedSkill.path} · ${installedSkill.agreement}`,
       ),
     ].join("\n"),
   projectionRetention: (data) =>
     [
-      data.retained
-        ? `Retained ${data.skill_name} as ${data.retained_skill_version_id}`
-        : `Reconciled ${data.skill_name} using retained Version ${data.retained_skill_version_id}`,
+      data.imported
+        ? `Retained ${data.skill_name} as ${data.imported_skill_version_id}`
+        : `Reconciled ${data.skill_name} using retained Version ${data.imported_skill_version_id}`,
       `Previous Version: ${data.previous_skill_version_id}`,
-      ...data.projections.map(
-        (projection) => `${projection.target} · ${projection.path} · ${projection.status}`,
+      ...data.installed_skills.map(
+        (installedSkill) =>
+          `${installedSkill.destination} · ${installedSkill.path} · ${installedSkill.status}`,
       ),
     ].join("\n"),
   remove: renderRemove,
@@ -1062,7 +1073,7 @@ const contractPresenters: ContractPresenters = {
       ),
       ...(data.legacy
         ? [
-            "Legacy receipt: progress is derived from files, not moved flags; original control-file fingerprints were not recorded.",
+            "Legacy move record: progress is derived from files, not moved flags; original control-file fingerprints were not recorded.",
           ]
         : []),
       ...(data.failure ? [data.failure] : []),
@@ -1074,7 +1085,7 @@ const contractPresenters: ContractPresenters = {
     [
       ...data.copies.map(
         (copy) =>
-          `${copy.name} · ${copy.path}\n${copy.observedHash}\n${copy.markdown}${copy.truncated ? "\n[Preview truncated]" : ""}`,
+          `${copy.name} · ${copy.path}\n${copy.currentHash}\n${copy.markdown}${copy.truncated ? "\n[Preview truncated]" : ""}`,
       ),
       ...data.actions.map(
         (action) => `${action.rel}: ${action.argv.map((arg) => JSON.stringify(arg)).join(" ")}`,
@@ -1093,10 +1104,10 @@ const contractPresenters: ContractPresenters = {
           ]
         : []),
       ...data.summary.versionChoices.map((choice) =>
-        renderSetupVersionChoice(choice, data.summary.reconciliation),
+        renderSetupVersionChoice(choice, data.summary.changes),
       ),
-      ...data.summary.reconciliation.map((fact) =>
-        renderReviewedReconciliation(fact, data.summary.versionChoices),
+      ...data.summary.changes.map((fact) =>
+        renderReviewedChanges(fact, data.summary.versionChoices),
       ),
       ...data.summary.sources.map(
         (source) => `Import ${source.source}: ${source.names.join(", ")}`,

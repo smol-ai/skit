@@ -1,6 +1,6 @@
 import { Schema } from "effect";
-import { Digest, hashParts } from "@smolai/skit-core";
-import type { HarnessShadow } from "../../projection/harness-shadows.js";
+import { Hash, hashParts } from "@smolai/skit-core";
+import type { DuplicateCopy } from "../../install/duplicates.js";
 import type {
   SetupResult,
   SetupSkillInstance,
@@ -18,36 +18,39 @@ export const SetupDuplicateAction = Schema.Literals([
 export type SetupDuplicateAction = typeof SetupDuplicateAction.Type;
 
 /** Evidence authorizing these individual links, independently of later setup stages. */
-export const SetupApprovedAlias = Schema.Struct({
+export const ApprovedSymlink = Schema.Struct({
   path: Schema.String,
   canonicalPath: Schema.String,
   linkTarget: Schema.String,
   dev: Schema.Number,
   ino: Schema.Number,
 });
-export interface SetupApprovedAlias extends Schema.Schema.Type<typeof SetupApprovedAlias> {}
+export interface ApprovedSymlink extends Schema.Schema.Type<typeof ApprovedSymlink> {}
 
 export const SetupApprovedCopy = Schema.Struct({
   path: Schema.String,
-  observedHash: Digest,
+  currentHash: Hash,
   dev: Schema.Number,
   ino: Schema.Number,
 });
 export interface SetupApprovedCopy extends Schema.Schema.Type<typeof SetupApprovedCopy> {}
 
 /** Every relevant alias must be an individual link to the selected canonical source. */
-export function retirableShadowAliases(sourcePath: string, shadows: readonly HarnessShadow[]) {
+export function duplicateSymlinksToBackUp(
+  sourcePath: string,
+  duplicates: readonly DuplicateCopy[],
+) {
   if (
-    !shadows.length ||
-    shadows.some(
-      (shadow) =>
-        shadow.canonicalPath !== sourcePath ||
-        shadow.aliases.some((alias) => alias.via !== "symlink" || alias.linkPath !== alias.path),
+    !duplicates.length ||
+    duplicates.some(
+      (duplicate) =>
+        duplicate.canonicalPath !== sourcePath ||
+        duplicate.aliases.some((alias) => alias.via !== "symlink" || alias.linkPath !== alias.path),
     )
   )
     return [];
   return [
-    ...new Set(shadows.flatMap((shadow) => shadow.aliases.map((alias) => alias.path))),
+    ...new Set(duplicates.flatMap((duplicate) => duplicate.aliases.map((alias) => alias.path))),
   ].sort();
 }
 
@@ -55,7 +58,7 @@ export type SetupCopyConflict =
   | { readonly kind: "none" }
   | {
       readonly kind: "retirable" | "preservable" | "preserve-copies";
-      readonly shadows: readonly HarnessShadow[];
+      readonly duplicates: readonly DuplicateCopy[];
       readonly aliases: readonly string[];
       /**
        * A link sits where SKIT writes this skill's copy. Enabling replaces it, so the copies cannot
@@ -64,51 +67,51 @@ export type SetupCopyConflict =
       readonly replacesLink: boolean;
     };
 
-/** Eligible global copies have harness readers and no repository custody. */
-export const isSetupProjectionTarget = (
+/** Eligible global copies have harness readers and no repository ownership. */
+export const isSetupInstallDestination = (
   instance: SetupSkillInstance | undefined,
 ): instance is SetupSkillInstance & { readonly scope: "global" } =>
   instance?.scope === "global" && !instance.git.repository && instance.harnesses.length > 0;
 
 /** Shared applicability and allowed actions for prompting and both mutation validators. */
 export function copyConflict(
-  observed: Pick<SetupResult, "instances"> & {
+  scan: Pick<SetupResult, "instances"> & {
     readonly onboarding: Pick<SetupResult["onboarding"], "candidates">;
   },
   selection: { readonly name: string; readonly sourcePath: string },
 ): SetupCopyConflict {
-  const candidate = observed.onboarding.candidates.find(
+  const candidate = scan.onboarding.candidates.find(
     (item) => item.name === selection.name && item.paths.includes(selection.sourcePath),
   );
-  const instance = observed.instances.find((item) => item.path === selection.sourcePath);
-  const shadows = candidate?.shadows ?? [];
+  const instance = scan.instances.find((item) => item.path === selection.sourcePath);
+  const duplicates = candidate?.duplicates ?? [];
   if (
-    !shadows.length ||
-    !isSetupProjectionTarget(instance) ||
+    !duplicates.length ||
+    !isSetupInstallDestination(instance) ||
     candidate?.action === "repository-owned"
   )
     return { kind: "none" };
-  const aliases = retirableShadowAliases(selection.sourcePath, shadows);
-  const selectedHash = instance?.contentIdentity.observedHash;
+  const aliases = duplicateSymlinksToBackUp(selection.sourcePath, duplicates);
+  const selectedHash = instance?.contentIdentity.currentHash;
   const preservable =
     selectedHash !== undefined &&
-    shadows.every((shadow) =>
-      shadow.aliases.every((alias) => {
-        const copy = observed.instances.find((item) => item.path === alias.path);
+    duplicates.every((duplicate) =>
+      duplicate.aliases.every((alias) => {
+        const copy = scan.instances.find((item) => item.path === alias.path);
         return (
           alias.via === "directory" &&
-          alias.path === shadow.canonicalPath &&
+          alias.path === duplicate.canonicalPath &&
           copy !== undefined &&
-          isSetupProjectionTarget(copy) &&
+          isSetupInstallDestination(copy) &&
           !copy.git.repository &&
           (copy.owner.kind === "unknown" || copy.owner.kind === "skills-sh") &&
-          copy.contentIdentity.observedHash === selectedHash
+          copy.contentIdentity.currentHash === selectedHash
         );
       }),
     );
   return {
     kind: aliases.length ? "retirable" : preservable ? "preservable" : "preserve-copies",
-    shadows,
+    duplicates,
     aliases,
     replacesLink: (candidate?.destinationLinks?.length ?? 0) > 0,
   };
@@ -150,7 +153,7 @@ export const SetupCopySelection = Schema.Struct({
   name: Schema.String,
   sourcePath: Schema.String,
   duplicateAction: Schema.optionalKey(SetupDuplicateAction),
-  approvedAliases: Schema.optionalKey(Schema.Array(SetupApprovedAlias)),
+  approvedSymlinks: Schema.optionalKey(Schema.Array(ApprovedSymlink)),
   approvedCopies: Schema.optionalKey(Schema.Array(SetupApprovedCopy)),
 });
 export interface SetupCopySelection extends Schema.Schema.Type<typeof SetupCopySelection> {}
@@ -166,42 +169,42 @@ export type SetupCopyDecision = SetupSelectedCopy &
   (
     | {
         readonly duplicateAction?: never;
-        readonly approvedAliases?: never;
+        readonly approvedSymlinks?: never;
         readonly approvedCopies?: never;
       }
     | {
         readonly duplicateAction: "retain-only" | "keep-both";
-        readonly approvedAliases?: never;
+        readonly approvedSymlinks?: never;
         readonly approvedCopies?: never;
       }
     | {
         readonly duplicateAction: "retire-aliases";
-        readonly approvedAliases: readonly SetupApprovedAlias[];
+        readonly approvedSymlinks: readonly ApprovedSymlink[];
         readonly approvedCopies?: never;
       }
     | {
         readonly duplicateAction: "preserve-duplicates";
         readonly approvedCopies: readonly SetupApprovedCopy[];
-        readonly approvedAliases?: never;
+        readonly approvedSymlinks?: never;
       }
   );
 
 /** Front ends submit intent; the application captures and validates filesystem evidence. */
 export type SetupCopyChoice = SetupSelectedCopy & {
   readonly duplicateAction?: SetupDuplicateAction;
-  readonly approvedAliases?: readonly SetupApprovedAlias[];
+  readonly approvedSymlinks?: readonly ApprovedSymlink[];
   readonly approvedCopies?: readonly SetupApprovedCopy[];
 };
 
 export function setupSelectedCopies(
-  observed: SetupResult,
+  scan: SetupResult,
   add: readonly { readonly name: string; readonly sourcePath: string }[],
   bind: readonly { readonly name: string; readonly sourcePath: string }[],
 ): SetupSelectedCopy[] {
   return [
     ...add.map((selection) => ({ ...selection, operation: "add" as const })),
     ...bind.map((selection) => ({ ...selection, operation: "bind" as const })),
-  ].map((copy) => ({ ...copy, conflict: copyConflict(observed, copy) }));
+  ].map((copy) => ({ ...copy, conflict: copyConflict(scan, copy) }));
 }
 
 /** Choices the review can interpret; presentation supplies labels and ordering. */
@@ -211,7 +214,8 @@ export const setupReviewCopies = (
 ) =>
   instances
     .filter(
-      (instance) => instance.owner.kind !== "skit" || instance.owner.membership.kind !== "retained",
+      (instance) =>
+        instance.owner.kind !== "skit" || instance.owner.membership.kind !== "in-library",
     )
     .filter(
       (instance) =>
@@ -288,8 +292,8 @@ export function recommendedSetupSelection(
   for (const { instance, selectable, siblings, groupKey } of reviewable) {
     const differs = siblings.some(
       (sibling) =>
-        instance.contentIdentity.observedHash === undefined ||
-        sibling.contentIdentity.observedHash !== instance.contentIdentity.observedHash,
+        instance.contentIdentity.currentHash === undefined ||
+        sibling.contentIdentity.currentHash !== instance.contentIdentity.currentHash,
     );
     if (
       !selectable ||

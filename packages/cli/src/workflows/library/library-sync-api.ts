@@ -85,7 +85,7 @@ export class LibraryApiInvalidRequest
 }
 
 /** All private Library requests use one generated client in the caller's scope. */
-export const librarySyncApiEffect = Effect.fn("Library.librarySyncApi")(function* (options: {
+export const librarySyncApi = Effect.fn("Library.librarySyncApi")(function* (options: {
   origin: string;
   token?: string;
 }) {
@@ -187,11 +187,11 @@ export const librarySyncApiEffect = Effect.fn("Library.librarySyncApi")(function
   });
   const download = Effect.fn("Library.librarySyncApi.download")(function* (
     libraryId: string,
-    digest: string,
+    hash: string,
   ) {
     return yield* client.librarySnapshots
       .download({
-        params: { library_id: libraryId, digest },
+        params: { library_id: libraryId, digest: hash },
       })
       .pipe(Effect.mapError((error) => mapGeneratedFailure("download private snapshot", error)));
   });

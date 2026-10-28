@@ -704,14 +704,14 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
 
     first(["add", raw]);
     first(["add", gitRemote]);
-    const retained = await state(firstHome);
-    expect(retained.schemaVersion).toBe(9);
-    expect(retained.collections).toHaveLength(2);
-    expect(retained.global_bindings).toEqual([]);
-    const collectionId = retained.collections[0].collection_id;
-    const selected = retained.retained_copies[0];
+    const imported = await state(firstHome);
+    expect(imported.schemaVersion).toBe(10);
+    expect(imported.collections).toHaveLength(2);
+    expect(imported.enabled).toEqual([]);
+    const collectionId = imported.collections[0].collection_id;
+    const selected = imported.collection_versions[0];
     expect(selected).toBeDefined();
-    const selectedHex = selected!.digest.slice("sha256:".length);
+    const selectedHex = selected!.hash.slice("sha256:".length);
     const selectedPath = join(firstHome, "originals", selectedHex.slice(0, 2), selectedHex);
     expect(await readFile(join(selectedPath, "SKILL.md"), "utf8")).toBe(rawText);
     expect(existsSync(join(selectedPath, "README.md"))).toBe(false);
@@ -730,15 +730,15 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
             schema: Schema.String,
             collections: Schema.Array(Schema.Struct({ collection_id: Schema.String })),
             snapshot_digests: Schema.Array(Schema.String),
-            bindings: Schema.Array(Schema.Unknown),
+            enabled: Schema.Array(Schema.Unknown),
           }),
         }),
       }),
     )(await remoteRead.json());
     expect(remote.library.manifest).toMatchObject({
-      schema: "skit.library.v7",
-      snapshot_digests: [selected!.digest],
-      bindings: [],
+      schema: "skit.library.v8",
+      snapshot_digests: [selected!.hash],
+      enabled: [],
     });
     expect(remote.library.manifest.collections).toHaveLength(2);
     expect(
@@ -747,21 +747,21 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
     expect(second(["sync"])).toMatchObject({ data: { status: "pull_ready" } });
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "pulled" } });
     const restored = await state(secondHome);
-    expect(restored.schemaVersion).toBe(9);
+    expect(restored.schemaVersion).toBe(10);
     expect(restored.collections.some((item) => item.collection_id === collectionId)).toBe(true);
-    expect(restored.acquisitions[0].observations).toEqual([]);
-    expect(restored.global_bindings).toEqual([]);
-    const restoredHex = restored.retained_copies[0].digest.slice("sha256:".length);
+    expect(restored.imports[0].lock_file_entries).toEqual([]);
+    expect(restored.enabled).toEqual([]);
+    const restoredHex = restored.collection_versions[0].hash.slice("sha256:".length);
     const restoredPath = join(secondHome, "originals", restoredHex.slice(0, 2), restoredHex);
     expect(await readFile(join(restoredPath, "SKILL.md"), "utf8")).toBe(rawText);
     expect(existsSync(join(restoredPath, "README.md"))).toBe(false);
-    const gitAcquisition = restored.acquisitions.find((item) => item.revision === gitRevision);
-    expect(gitAcquisition).toMatchObject({ kind: "source", revision: gitRevision });
-    const gitCopy = restored.retained_copies.find(
-      (item) => item.retained_copy_id === gitAcquisition?.retained_copy_id,
+    const gitImport = restored.imports.find((item) => item.revision === gitRevision);
+    expect(gitImport).toMatchObject({ kind: "source", revision: gitRevision });
+    const gitCopy = restored.collection_versions.find(
+      (item) => item.collection_version_id === gitImport?.collection_version_id,
     );
     expect(gitCopy).toBeDefined();
-    const gitHex = gitCopy!.digest.slice("sha256:".length);
+    const gitHex = gitCopy!.hash.slice("sha256:".length);
     const gitOriginal = join(secondHome, "originals", gitHex.slice(0, 2), gitHex);
     expect(await readFile(join(gitOriginal, "skills", "git-review", "SKILL.md"), "utf8")).toContain(
       "# Git review",
@@ -776,11 +776,8 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
     expect(second(["sync"])).toMatchObject({ data: { status: "merge_ready" } });
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "merged" } });
     const converged = await state(secondHome);
-    expect(converged.global_bindings).toHaveLength(1);
-    expect(converged.global_bindings[0]?.entries).toEqual(
-      expect.arrayContaining([{ kind: "collection", collection_id: collectionId }]),
-    );
-    expect(converged.global_bindings[0]?.entries).toHaveLength(2);
+    expect(converged.enabled).toEqual(expect.arrayContaining([{ collection: collectionId }]));
+    expect(converged.enabled).toHaveLength(2);
     expect(await readFile(join(secondCodex, "raw-review", "SKILL.md"), "utf8")).toBe(rawText);
     expect(await readFile(join(secondClaude, "raw-review", "SKILL.md"), "utf8")).toBe(rawText);
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "clean" } });
@@ -793,7 +790,7 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
       data: { status: "merge_ready", collections_to_remove: 1 },
     });
     expect(second(["sync", "--apply"])).toMatchObject({
-      data: { status: "merged", retired: 2 },
+      data: { status: "merged", uninstalled: 2 },
     });
     expect(existsSync(join(secondCodex, "raw-review"))).toBe(false);
     expect(existsSync(join(secondClaude, "raw-review"))).toBe(false);
@@ -943,13 +940,13 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
       for (const name of ["racing-left", "racing-right"]) {
         const skill = synced.skills.find((item) => item.name === name)!;
         expect(skill).toBeDefined();
-        const acquisition = synced.acquisitions.find(
+        const sourceImport = synced.imports.find(
           (item) => item.collection_id === skill.collection_id,
         )!;
-        const copy = synced.retained_copies.find(
-          (item) => item.retained_copy_id === acquisition.retained_copy_id,
+        const copy = synced.collection_versions.find(
+          (item) => item.collection_version_id === sourceImport.collection_version_id,
         )!;
-        const digest = copy.digest.slice("sha256:".length);
+        const digest = copy.hash.slice("sha256:".length);
         expect(
           await readFile(join(home, "originals", digest.slice(0, 2), digest, "SKILL.md")),
         ).toEqual(await readFile(join(serverRoot, "test/fixtures/library-sync", name, "SKILL.md")));

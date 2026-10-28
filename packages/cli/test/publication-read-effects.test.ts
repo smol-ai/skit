@@ -10,11 +10,11 @@ import {
   type AuthorRemoteMetadataInvalid,
   type CredentialsUnusable,
 } from "../src/registry/failures.js";
-import { readAuthorRemoteEffect } from "../src/workflows/author/sync.js";
-import { readConfigEffect, resolveAuthForOriginEffect } from "../src/registry/auth.js";
+import { readAuthorRemote } from "../src/workflows/author/sync.js";
+import { readConfig, resolveAuthForOrigin } from "../src/registry/auth.js";
 
-const remote = readAuthorRemoteEffect("/author");
-const config = readConfigEffect("/auth");
+const remote = readAuthorRemote("/author");
+const config = readConfig("/auth");
 
 it.effect.each(["remote", "config"] as const)(
   "%s read preserves defects and interruption",
@@ -106,7 +106,7 @@ it.effect.each(["remote", "config"] as const)(
 
 it.effect("origin parsing fails in the named Registry channel", () =>
   Effect.gen(function* () {
-    const exit = yield* resolveAuthForOriginEffect("not a URL").pipe(
+    const exit = yield* resolveAuthForOrigin("not a URL").pipe(
       Effect.provide(testPlatformLayer),
       Effect.exit,
     );

@@ -6,21 +6,14 @@ import { Effect, FileSystem, Logger, References, Schema } from "effect";
 import { systemError } from "effect/PlatformError";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { skitLayer } from "@smolai/skit-core";
-import {
-  makePnpmSkillObserver,
-  pnpmSkillOwner,
-  leavePnpmSkillEffect,
-} from "../src/projection/pnpm-skills.js";
+import { makePnpmSkillCheck, pnpmSkillOwner, leavePnpmSkill } from "../src/install/pnpm-skills.js";
 import { fileProvenance } from "../src/audit/provenance.js";
 import { runSetup } from "../src/workflows/library/setup.js";
 import { SetupResult } from "../src/workflows/library/setup-contract.js";
 import { setupDiscoveredSkillChoices } from "../src/presentation/setup-skills.js";
 import { setupRemovablePaths } from "../src/workflows/library/setup-removal.js";
-import { applySetupLocalCustody } from "../src/workflows/library/setup-local-custody.js";
-import {
-  retainLibrarySourceEffect,
-  inspectLibrarySourceEffect,
-} from "../src/library-application/source-acquisition.js";
+import { manageSetupCopies } from "../src/workflows/library/setup-manage.js";
+import { importSource, inspectLibrarySource } from "../src/library-application/import-source.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 const fixture = Effect.fn("Test.pnpmFixture")(function* (yaml = false) {
@@ -65,23 +58,23 @@ it.effect("shares document reads within a scan and starts fresh for mutation che
         }),
     });
     yield* Effect.gen(function* () {
-      const observe = yield* makePnpmSkillObserver();
-      expect((yield* observe(f.alias))?.kind).toBe("pnpm");
-      expect((yield* observe(f.skill))?.kind).toBe("pnpm");
-      expect((yield* observe(f.alias))?.kind).toBe("pnpm");
+      const checkPnpm = yield* makePnpmSkillCheck();
+      expect((yield* checkPnpm(f.alias))?.kind).toBe("pnpm");
+      expect((yield* checkPnpm(f.skill))?.kind).toBe("pnpm");
+      expect((yield* checkPnpm(f.alias))?.kind).toBe("pnpm");
       expect(calls.get(f.ledgerPath)).toBe(1);
       expect(calls.get(join(f.pkg, "package.json"))).toBe(1);
       expect([...calls.values()].every((count) => count === 1)).toBe(true);
 
       const ledger = yield* f.fs.readFileString(f.ledgerPath);
       yield* f.fs.writeFileString(f.ledgerPath, "{}");
-      const negativeScan = yield* makePnpmSkillObserver();
+      const negativeScan = yield* makePnpmSkillCheck();
       expect(yield* negativeScan(f.alias)).toBeUndefined();
       yield* f.fs.writeFileString(f.ledgerPath, ledger);
-      const mutation = yield* Effect.result(leavePnpmSkillEffect(f.alias));
+      const mutation = yield* Effect.result(leavePnpmSkill(f.alias));
       expect(mutation._tag).toBe("Failure");
       if (mutation._tag === "Failure") expect(mutation.failure._tag).toBe("PnpmSkillManaged");
-      const refreshed = yield* makePnpmSkillObserver();
+      const refreshed = yield* makePnpmSkillCheck();
       expect((yield* refreshed(f.alias))?.kind).toBe("pnpm");
     }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
   }).pipe(Effect.provide(skitLayer)),
@@ -111,9 +104,9 @@ it.effect("reports unreadable evidence, retries it, and keeps missing-file probe
         }),
     });
     yield* Effect.gen(function* () {
-      const observe = yield* makePnpmSkillObserver();
-      expect(yield* observe(f.alias)).toBeUndefined();
-      expect((yield* observe(f.alias))?.kind).toBe("pnpm");
+      const checkPnpm = yield* makePnpmSkillCheck();
+      expect(yield* checkPnpm(f.alias)).toBeUndefined();
+      expect((yield* checkPnpm(f.alias))?.kind).toBe("pnpm");
     }).pipe(
       Effect.provideService(FileSystem.FileSystem, fs),
       Effect.provideService(References.MinimumLogLevel, "Debug"),
@@ -174,7 +167,7 @@ for (const yaml of [false, true]) {
         source: "pnpm · @acme/demo@1.0.0",
         evidence: f.ledgerPath,
       });
-      expect((yield* Effect.result(leavePnpmSkillEffect(f.alias)))._tag).toBe("Failure");
+      expect((yield* Effect.result(leavePnpmSkill(f.alias)))._tag).toBe("Failure");
     }).pipe(Effect.provide(skitLayer)),
   );
 }
@@ -241,8 +234,8 @@ it.effect("refuses parent-directory acquisition before retaining any pnpm member
         );
       for (const input of [f.pkg, join(f.pkg, "skills")]) {
         const results = yield* Effect.all([
-          Effect.result(home.owned(inspectLibrarySourceEffect(input))),
-          Effect.result(home.owned(writingTo(home.home, retainLibrarySourceEffect(input)))),
+          Effect.result(home.owned(inspectLibrarySource(input))),
+          Effect.result(home.owned(writingTo(home.home, importSource(input)))),
         ]);
         for (const result of results) {
           expect(result._tag).toBe("Failure");
@@ -250,7 +243,7 @@ it.effect("refuses parent-directory acquisition before retaining any pnpm member
         }
       }
       expect((yield* home.durable).skills).toHaveLength(0);
-      expect((yield* home.durable).retained_copies).toHaveLength(0);
+      expect((yield* home.durable).collection_versions).toHaveLength(0);
     }
     expect(yield* f.fs.readLink(f.alias)).toBe(f.skill);
   }).pipe(Effect.provide(skitLayer)),
@@ -299,16 +292,16 @@ it.effect("keeps an authored workspace source distinct from pnpm's recorded alia
       persistRoots: false,
       probePath: "",
     };
-    const observed = yield* home.owned(runSetup(options));
-    const source = observed.instances.find((item) => item.path === skill);
-    const installed = observed.instances.find((item) => item.path === f.alias);
+    const scan = yield* home.owned(runSetup(options));
+    const source = scan.instances.find((item) => item.path === skill);
+    const installed = scan.instances.find((item) => item.path === f.alias);
     expect(source?.owner.kind).toBe("authored");
     expect(source?.aliases).not.toContain(f.alias);
     expect(installed?.owner.kind).toBe("pnpm");
-    expect(observed.onboarding.candidates.some((item) => item.paths.includes(f.alias))).toBe(false);
-    expect((yield* setupRemovablePaths(options, observed)).has(f.alias)).toBe(false);
-    const retained = yield* home.owned(writingTo(home.home, retainLibrarySourceEffect(skill)));
-    expect(retained.skills.map((item) => item.name)).toEqual(["demo-guide"]);
+    expect(scan.onboarding.candidates.some((item) => item.paths.includes(f.alias))).toBe(false);
+    expect((yield* setupRemovablePaths(options, scan)).has(f.alias)).toBe(false);
+    const imported = yield* home.owned(writingTo(home.home, importSource(skill)));
+    expect(imported.skills.map((item) => item.name)).toEqual(["demo-guide"]);
     expect(yield* f.fs.readLink(f.alias)).toBe(skill);
   }).pipe(Effect.provide(skitLayer)),
 );
@@ -334,17 +327,16 @@ it.effect("does not attribute an unrecorded user alias to pnpm", () =>
       persistRoots: false,
       probePath: "",
     };
-    const observed = yield* home.owned(runSetup(options));
-    const instance = observed.instances.find((item) => item.path === alias);
+    const scan = yield* home.owned(runSetup(options));
+    const instance = scan.instances.find((item) => item.path === alias);
     expect(instance?.owner.kind).toBe("unknown");
-    expect(observed.onboarding.candidates.some((item) => item.paths.includes(alias))).toBe(false);
-    const row = setupDiscoveredSkillChoices(
-      observed.instances,
-      observed.onboarding.candidates,
-    ).find((item) => item.instance.path === alias);
+    expect(scan.onboarding.candidates.some((item) => item.paths.includes(alias))).toBe(false);
+    const row = setupDiscoveredSkillChoices(scan.instances, scan.onboarding.candidates).find(
+      (item) => item.instance.path === alias,
+    );
     expect(row?.choice.disabled).toBe(true);
     expect(row?.details).toContain("Left in place · no setup action");
-    expect((yield* setupRemovablePaths(options, observed)).get(alias)).toEqual([alias]);
+    expect((yield* setupRemovablePaths(options, scan)).get(alias)).toEqual([alias]);
   }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -367,27 +359,29 @@ it.effect("reports pnpm copies but excludes acquisition, setup selection and rem
       persistRoots: false,
       probePath: "",
     };
-    const observed = yield* home.owned(runSetup(options));
-    expect(Schema.is(SetupResult)(observed)).toBe(true);
-    const instance = observed.instances.find((item) => item.name === "demo-guide");
+    const scan = yield* home.owned(runSetup(options));
+    expect(Schema.is(SetupResult)(scan)).toBe(true);
+    const instance = scan.instances.find((item) => item.name === "demo-guide");
     expect(instance?.owner.kind).toBe("pnpm");
     expect(instance?.aliases).toContain(f.alias);
-    expect(observed.onboarding.candidates.some((item) => item.name === "demo-guide")).toBe(false);
-    const row = setupDiscoveredSkillChoices(
-      observed.instances,
-      observed.onboarding.candidates,
-    ).find((item) => item.instance.name === "demo-guide");
+    expect(scan.onboarding.candidates.some((item) => item.name === "demo-guide")).toBe(false);
+    const row = setupDiscoveredSkillChoices(scan.instances, scan.onboarding.candidates).find(
+      (item) => item.instance.name === "demo-guide",
+    );
     expect(row?.choice.disabled).toBe(true);
     expect(row?.details).toContain("Managed by pnpm · left in place");
-    expect((yield* setupRemovablePaths(options, observed)).has(f.skill)).toBe(false);
-    const add = yield* Effect.result(home.owned(retainLibrarySourceEffect(f.alias)));
+    expect((yield* setupRemovablePaths(options, scan)).has(f.skill)).toBe(false);
+    const add = yield* Effect.result(home.owned(importSource(f.alias)));
     expect(add._tag).toBe("Failure");
     if (add._tag === "Failure") expect(add.failure._tag).toBe("PnpmSkillManaged");
     const takeover = yield* Effect.result(
       home.owned(
-        applySetupLocalCustody({ bindings: home.bindings }, observed, [
-          { name: "demo-guide", sourcePath: f.skill },
-        ]),
+        manageSetupCopies(
+          { installOptions: home.installOptions },
+          scan,
+          [{ name: "demo-guide", sourcePath: f.skill }],
+          "new",
+        ),
       ),
     );
     expect(takeover._tag).toBe("Failure");

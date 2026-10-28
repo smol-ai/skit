@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Schema } from "effect";
 import { hostname } from "node:os";
 import { join, resolve } from "node:path";
-import { writeJsonAtomicEffect } from "../platform/atomic-write.js";
+import { writeJsonAtomic } from "../platform/atomic-write.js";
 import { canonicalJson } from "../shared/json.js";
 import { LibraryChanged } from "../failures.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
@@ -36,7 +36,7 @@ export class Unusable
 }
 
 /** The caller may retain typed inverse evidence while this owner still holds publication authority. */
-export type BeforePublish<E = never, R = never> = (
+export type BeforeSave<E = never, R = never> = (
   before: Settings,
   after: Settings,
 ) => Effect.Effect<void, E, R>;
@@ -77,7 +77,7 @@ const mutate = Effect.fn("MachineSettings.mutate")(function* <E = never, R = nev
   ) =>
     | Pick<Settings, "discoveryRoots" | "repositories" | "repositoryDecisionsInitialized">
     | undefined,
-  beforePublish?: BeforePublish<E, R>,
+  beforeSave?: BeforeSave<E, R>,
 ) {
   return yield* withLibraryStateReplacement(
     home,
@@ -94,12 +94,12 @@ const mutate = Effect.fn("MachineSettings.mutate")(function* <E = never, R = nev
           repositories: [...changed.repositories],
         }),
       ).pipe(Effect.mapError(() => new Unusable({ path: prior.path })));
-      if (beforePublish)
-        yield* beforePublish(
+      if (beforeSave)
+        yield* beforeSave(
           structuredClone(prior),
           structuredClone(settingsAt(prior.path, document)),
         );
-      yield* writeJsonAtomicEffect(prior.path, document);
+      yield* writeJsonAtomic(prior.path, document);
       return settingsAt(prior.path, document);
     }),
   );
@@ -125,7 +125,7 @@ export const updateDiscovery = Effect.fn("MachineSettings.updateDiscovery")(func
     readonly repositories?: readonly MachineRepositoryDecision[];
     readonly displayName?: string;
   },
-  beforePublish?: BeforePublish<E, R>,
+  beforeSave?: BeforeSave<E, R>,
 ) {
   return yield* mutate(
     home,
@@ -149,7 +149,7 @@ export const updateDiscovery = Effect.fn("MachineSettings.updateDiscovery")(func
           .sort((left, right) => left.path.localeCompare(right.path)),
       };
     },
-    beforePublish,
+    beforeSave,
   );
 });
 
@@ -175,7 +175,7 @@ export const setRepositoryDecision = Effect.fn("MachineSettings.setRepositoryDec
   });
 });
 
-/** Publish only a reviewed inverse of discovery settings, preserving this machine's provenance. */
+/** Save only a reviewed inverse of discovery settings, preserving this machine's provenance. */
 export const restoreDiscovery = Effect.fn("MachineSettings.restoreDiscovery")(function* <
   E = never,
   R = never,
@@ -186,7 +186,7 @@ export const restoreDiscovery = Effect.fn("MachineSettings.restoreDiscovery")(fu
     Settings,
     "discoveryRoots" | "repositories" | "repositoryDecisionsInitialized" | "displayName"
   >,
-  beforePublish?: BeforePublish<E, R>,
+  beforeSave?: BeforeSave<E, R>,
 ) {
   const approved = structuredClone(expected);
   const choice = structuredClone(restored);
@@ -202,7 +202,7 @@ export const restoreDiscovery = Effect.fn("MachineSettings.restoreDiscovery")(fu
       Effect.gen(function* () {
         if (canonicalJson(before) !== canonicalJson(approved))
           return yield* new LibraryChanged({ path: before.path });
-        if (beforePublish) yield* beforePublish(before, after);
+        if (beforeSave) yield* beforeSave(before, after);
       }),
   );
 });

@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import type {
-  SetupReconciliationFact,
+  InstalledSkillChange,
   SetupVersionChoice,
 } from "../workflows/library/setup-contract.js";
 import type { SetupReviewSummary } from "../workflows/library/setup-review.js";
@@ -13,7 +13,7 @@ import {
 } from "../workflows/library/setup-decisions.js";
 import { Prompter, type Choice } from "./prompter.js";
 import { Renderer } from "./renderer.js";
-import { renderSetupVersionChoice, renderReviewedReconciliation } from "./setup-reconciliation.js";
+import { renderSetupVersionChoice, renderReviewedChanges } from "./installed-skill-changes.js";
 
 const skillCount = (count: number) => `${count} skill${count === 1 ? "" : "s"}`;
 
@@ -37,10 +37,10 @@ export const chooseSetupCopyDecisions = Effect.fn("CLI.setup.chooseCopyDecisions
         group.flatMap((copy) =>
           copy.conflict.kind === "none"
             ? []
-            : copy.conflict.shadows.flatMap((shadow) =>
-                shadow.aliases.map(
+            : copy.conflict.duplicates.flatMap((duplicate) =>
+                duplicate.aliases.map(
                   (alias) =>
-                    `${displayPath(alias.path)}${alias.via === "symlink" ? ` → ${displayPath(shadow.canonicalPath)} (symlink${alias.linkPath && alias.linkPath !== alias.path ? ` at ${displayPath(alias.linkPath)}` : ""})` : " (directory)"}`,
+                    `${displayPath(alias.path)}${alias.via === "symlink" ? ` → ${displayPath(duplicate.canonicalPath)} (symlink${alias.linkPath && alias.linkPath !== alias.path ? ` at ${displayPath(alias.linkPath)}` : ""})` : " (directory)"}`,
                 ),
               ),
         ),
@@ -106,10 +106,10 @@ export function setupPlanLines(input: {
         ]
       : []),
     ...summary.versionChoices.map((choice) =>
-      renderSetupVersionChoice(choice, summary.reconciliation, displayPath),
+      renderSetupVersionChoice(choice, summary.changes, displayPath),
     ),
-    ...summary.reconciliation.map((fact) =>
-      renderReviewedReconciliation(fact, summary.versionChoices, displayPath),
+    ...summary.changes.map((fact) =>
+      renderReviewedChanges(fact, summary.versionChoices, displayPath),
     ),
     ...(summary.persistRoots ? [`Save discovery roots: ${input.displayRoots}`] : []),
     ...summary.repositoryDecisions.map(
@@ -147,7 +147,7 @@ export function setupPlanLines(input: {
         ]
       : []),
     ...setupDuplicatePlanLines(summary.duplicates),
-    ...(summary.custodyCount ? [`Take custody: ${summary.custodyCount}`] : []),
+    ...(summary.manageCount ? [`Manage existing: ${summary.manageCount}`] : []),
     ...summary.authoritativeCopies.flatMap((selection) => [
       `Authoritative copy: ${selection.name} · ${selection.sourcePath}`,
       "  Other copies stay in place unless explicitly marked Remove.",
@@ -165,7 +165,7 @@ export function setupPlanLines(input: {
       : []),
     ...(summary.repositoryCopiesRemain
       ? [
-          "Repository copies stay in place. To transfer custody later, remove the repository copy and run `skit enable`.",
+          "Repository copies stay in place. To have SKIT manage it later, remove the repository copy and run `skit enable`.",
         ]
       : []),
   ];
@@ -175,12 +175,12 @@ function setupDuplicatePlanLines(duplicates: SetupReviewSummary["duplicates"]) {
   return duplicates.map(({ action, names, aliasCount }) => {
     const examples = names.length <= 5 ? ` · ${names.join(", ")}` : "";
     if (action === "retain-only")
-      return `Retain only: ${skillCount(names.length)}${examples} · no new Binding or Projection`;
+      return `Retain only: ${skillCount(names.length)}${examples} · no new Binding or installed skill`;
     if (action === "keep-both")
       return `Allow duplicate agent copies: ${skillCount(names.length)}${examples}`;
     if (action === "preserve-duplicates")
       return `Preserve existing copies: ${aliasCount} director${aliasCount === 1 ? "y" : "ies"}${examples} · replacements verified before moving originals to recovery`;
-    return `Retire redundant symlinks: ${skillCount(names.length)} · ${aliasCount} symlink${aliasCount === 1 ? "" : "s"}${examples} · sources stay; recovery receipts saved`;
+    return `Retire redundant symlinks: ${skillCount(names.length)} · ${aliasCount} symlink${aliasCount === 1 ? "" : "s"}${examples} · sources stay; move records saved`;
   });
 }
 
@@ -194,16 +194,16 @@ export const renderSetupAliasRecovery = Effect.fn("CLI.setup.renderAliasRecovery
       yield* renderer.note(warning.message, `${warning.name}: existing copy kept`);
     if (applied.recoveryDirectories.length)
       yield* renderer.note(
-        `Sources stay in place. Symlinks and restoration receipts are saved in:\n${applied.recoveryDirectories.join("\n")}`,
+        `Sources stay in place. Symlinks and their move records are saved in:\n${applied.recoveryDirectories.join("\n")}`,
         `Redundant symlinks retired for ${skillCount(applied.recoveryDirectories.length)}${applied.warnings.length ? ` · ${skillCount(applied.warnings.length)} preserved` : ""}`,
       );
   },
 );
 
-/** The application has already supplied eligible alternatives and custody facts. */
+/** The application has already supplied eligible alternatives and ownership facts. */
 export const chooseSetupVersions = Effect.fn("CLI.setup.chooseVersions")(function* (
   alternatives: readonly SetupVersionChoice[],
-  facts: readonly SetupReconciliationFact[],
+  facts: readonly InstalledSkillChange[],
   displayPath: (path: string) => string,
 ) {
   const prompter = yield* Prompter;

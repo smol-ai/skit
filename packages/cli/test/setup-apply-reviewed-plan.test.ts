@@ -2,9 +2,9 @@ import { join } from "node:path";
 import { Effect, Exit, FileSystem, Option } from "effect";
 import { assert, it } from "@effect/vitest";
 import {
-  inspectOwnershipMarkerEffect,
+  inspectOwnershipMarker,
   MachineSettings,
-  ProjectionRootNotWritable,
+  SkillsDirectoryNotWritable,
   skitLayer,
 } from "@smolai/skit-core";
 import { setupApplyCommand, setupCommand } from "../src/handlers/library/setup.js";
@@ -83,7 +83,7 @@ const fixture = Effect.fn("Test.setupApplyReviewedPlan")(function* (input: {
         home.owned(
           setupApplyCommand({
             options,
-            localCustody: { bindings: home.bindings },
+            manageOptions: { installOptions: home.installOptions },
             ...apply,
           }).pipe(Effect.provide(interaction.layer)),
         ),
@@ -118,7 +118,7 @@ const failure = (exit: Exit.Exit<unknown, unknown>) =>
   Exit.isFailure(exit) ? Option.getOrUndefined(Exit.findErrorOption(exit)) : undefined;
 
 it.effect(
-  "retain-only works without projection write access, while enabling still fails before retention",
+  "retain-only works without write access to skills directories, while enabling still fails before retention",
   () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -132,19 +132,19 @@ it.effect(
       const refused = yield* f
         .run({ planId: reviewed.onboarding.planId, duplicates: "retire-aliases" })
         .pipe(denied);
-      assert.instanceOf(failure(refused), ProjectionRootNotWritable);
+      assert.instanceOf(failure(refused), SkillsDirectoryNotWritable);
       assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
 
-      const retained = yield* f
+      const imported = yield* f
         .run({ planId: reviewed.onboarding.planId, duplicates: "retain-only" })
         .pipe(denied);
-      assert.isTrue(Exit.isSuccess(retained));
+      assert.isTrue(Exit.isSuccess(imported));
       const state = yield* f.home.durable;
       assert.deepStrictEqual(
         state.skills.map((skill) => skill.name),
         ["alpha"],
       );
-      assert.deepStrictEqual(state.projections, []);
+      assert.deepStrictEqual(state.installed_skills, []);
       assert.strictEqual(
         yield* fs.readLink(join(f.root, "config", "devin", "skills", "alpha")),
         join(f.root, "Work", "skills", "alpha"),
@@ -201,7 +201,7 @@ it.effect(
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("applying the reviewed plan ID takes custody of every recommended copy", () =>
+it.effect("applying the reviewed plan ID starts managing every recommended copy", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ alias: false });
     const reviewed = yield* f.review;
@@ -215,15 +215,17 @@ it.effect("applying the reviewed plan ID takes custody of every recommended copy
     assert.isTrue(Exit.isSuccess(exit));
     const state = yield* f.home.durable;
     assert.deepStrictEqual(state.skills.map((skill) => skill.name).sort(), ["alpha", "beta"]);
-    assert.isNotEmpty(state.projections);
-    assert.isTrue(state.projections.every((projection) => projection.status === "installed"));
+    assert.isNotEmpty(state.installed_skills);
+    assert.isTrue(
+      state.installed_skills.every((installedSkill) => installedSkill.status === "installed"),
+    );
     // The result reports what happened, so a caller need not re-observe to find out.
     const report = Exit.isSuccess(exit) ? exit.value : undefined;
     assert.deepStrictEqual(
       report?.added.map((copy) => copy.name),
       ["alpha", "beta"],
     );
-    assert.strictEqual(report?.projections.length, state.projections.length);
+    assert.strictEqual(report?.installedSkills.length, state.installed_skills.length);
     assert.deepStrictEqual(report?.leftAlone, []);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -263,15 +265,17 @@ it.effect(
       assert.strictEqual(yield* fs.readLink(saved!.recoveryPath), originalLink);
       const state = yield* f.home.durable;
       assert.deepStrictEqual(state.skills.map((skill) => skill.name).sort(), ["alpha", "beta"]);
-      assert.isTrue(state.projections.every((projection) => projection.status === "installed"));
+      assert.isTrue(
+        state.installed_skills.every((installedSkill) => installedSkill.status === "installed"),
+      );
       yield* f.home.owned((yield* f.home.owned(prepareSetupUndo(operationId))).apply());
       assert.strictEqual(yield* fs.readLink(alias), originalLink);
-      assert.deepStrictEqual((yield* f.home.durable).global_bindings, []);
+      assert.deepStrictEqual((yield* f.home.durable).enabled, []);
       assert.strictEqual(yield* fs.readFileString(join(source, "SKILL.md")), skillBytes("alpha"));
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("retiring aliases reports where the symlinks and their receipts were saved", () =>
+it.effect("retiring aliases reports where the symlinks and their move records were saved", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const f = yield* fixture({ alias: true });
@@ -291,7 +295,7 @@ it.effect("retiring aliases reports where the symlinks and their receipts were s
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("identical copies at each target are adopted in place, not left to conflict", () =>
+it.effect("identical copies at each target are managed in place, not left to conflict", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ alias: false, identical: true });
     const reviewed = yield* f.review;
@@ -300,16 +304,15 @@ it.effect("identical copies at each target are adopted in place, not left to con
 
     assert.isTrue(Exit.isSuccess(exit));
     const state = yield* f.home.durable;
-    const gamma = state.projections.filter((projection) => projection.path.endsWith("/gamma"));
+    const gamma = state.installed_skills.filter((installedSkill) =>
+      installedSkill.path.endsWith("/gamma"),
+    );
     assert.deepStrictEqual(
-      gamma.map((projection) => projection.status),
+      gamma.map((installedSkill) => installedSkill.status),
       ["installed", "installed"],
     );
     for (const skills of [join(f.root, ".claude", "skills"), join(f.root, ".agents", "skills")])
-      assert.strictEqual(
-        (yield* inspectOwnershipMarkerEffect(join(skills, "gamma"))).kind,
-        "valid",
-      );
+      assert.strictEqual((yield* inspectOwnershipMarker(join(skills, "gamma"))).kind, "valid");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -321,13 +324,13 @@ it.effect(
       const link = (f: { root: string }) => join(f.root, ".claude", "skills", "delta");
       const source = (f: { root: string }) => join(f.root, "dotfiles", "skills", "delta");
 
-      const retained = yield* fixture({ alias: false, linked: true });
-      const retainedPlan = (yield* retained.review).onboarding.planId;
-      const kept = yield* retained.run({ planId: retainedPlan, duplicates: "retain-only" });
+      const imported = yield* fixture({ alias: false, linked: true });
+      const importedPlan = (yield* imported.review).onboarding.planId;
+      const kept = yield* imported.run({ planId: importedPlan, duplicates: "retain-only" });
       assert.isTrue(Exit.isSuccess(kept));
-      assert.strictEqual(yield* fs.readLink(link(retained)), source(retained));
+      assert.strictEqual(yield* fs.readLink(link(imported)), source(imported));
       assert.include(
-        (yield* retained.home.durable).skills.map((skill) => skill.name),
+        (yield* imported.home.durable).skills.map((skill) => skill.name),
         "delta",
       );
 
@@ -335,7 +338,7 @@ it.effect(
       const retiredPlan = (yield* retired.review).onboarding.planId;
       const replaced = yield* retired.run({ planId: retiredPlan });
       assert.isTrue(Exit.isSuccess(replaced));
-      assert.strictEqual((yield* inspectOwnershipMarkerEffect(link(retired))).kind, "valid");
+      assert.strictEqual((yield* inspectOwnershipMarker(link(retired))).kind, "valid");
       const backups = join(retired.root, ".claude", ".skit-backups");
       const saved = (yield* fs.readDirectory(backups)).filter((entry) => entry !== ".gitignore");
       assert.lengthOf(saved, 1);

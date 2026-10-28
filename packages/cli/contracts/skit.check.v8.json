@@ -1,0 +1,165 @@
+{
+  "$id": "skit.check.v8",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "subject_id": {
+        "type": "string"
+      },
+      "subject_kind": {
+        "type": "string",
+        "enum": [
+          "collection",
+          "skill"
+        ]
+      },
+      "label": {
+        "type": "string"
+      },
+      "collection_versions": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "collection_version_id": {
+              "type": "string"
+            },
+            "hash": {
+              "type": "string",
+              "pattern": "^sha256:[a-f0-9]{64}$"
+            },
+            "original_intact": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "collection_version_id",
+            "hash",
+            "original_intact"
+          ],
+          "additionalProperties": true
+        }
+      },
+      "unresolved_skill_selections": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "string",
+            "enum": [
+              "Infinity",
+              "-Infinity",
+              "NaN"
+            ]
+          }
+        ]
+      },
+      "source_status": {
+        "type": "string",
+        "enum": [
+          "current",
+          "changed",
+          "unverified",
+          "not-applicable"
+        ]
+      },
+      "current_snapshot_digest": {
+        "type": "string",
+        "pattern": "^sha256:[a-f0-9]{64}$"
+      },
+      "available_snapshot_digest": {
+        "type": "string",
+        "pattern": "^sha256:[a-f0-9]{64}$"
+      },
+      "has_imports": {
+        "type": "boolean"
+      },
+      "skills_sh": {
+        "type": "object",
+        "properties": {
+          "checked_at": {
+            "type": "string"
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "skill_name": {
+                  "type": "string"
+                },
+                "skill_path": {
+                  "type": "string"
+                },
+                "hash_kind": {
+                  "type": "string",
+                  "enum": [
+                    "computedHash",
+                    "skillFolderHash"
+                  ]
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "current",
+                    "update-available",
+                    "removed-upstream",
+                    "lock-stale",
+                    "differs-from-lock-and-upstream",
+                    "unverifiable",
+                    "not-applicable"
+                  ]
+                },
+                "baseline_commit": {
+                  "type": "string"
+                },
+                "baseline_tree": {
+                  "type": "string"
+                },
+                "baseline_verification": {
+                  "type": "string",
+                  "enum": [
+                    "lock-only",
+                    "lock+original-bytes"
+                  ]
+                },
+                "upstream_commit": {
+                  "type": "string"
+                },
+                "upstream_tree": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "skill_name",
+                "status"
+              ],
+              "additionalProperties": true
+            }
+          }
+        },
+        "required": [
+          "checked_at",
+          "members"
+        ],
+        "additionalProperties": true
+      }
+    },
+    "required": [
+      "subject_id",
+      "subject_kind",
+      "label",
+      "collection_versions",
+      "unresolved_skill_selections",
+      "source_status",
+      "has_imports"
+    ],
+    "additionalProperties": true
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

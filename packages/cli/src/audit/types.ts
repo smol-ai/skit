@@ -1,1 +1,1 @@
-export type { AuditFinding, AuditKind, AuditObservation, AuditReport } from "./schema.js";
+export type { AuditFinding, AuditKind, AuditEntry, AuditReport } from "./schema.js";

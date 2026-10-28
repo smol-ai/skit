@@ -1,21 +1,20 @@
 import {
-  bindingSkillIds,
-  effectiveGlobalBindings,
   currentCollectionSkills,
   currentSkillVersion,
+  enabledSkillIds,
+  globalEnabled,
   LibraryStore,
+  type Enabled,
   type LibraryState,
-  type SkitBindingScope,
-  type DeviceBinding,
-  type RepositoryBinding,
+  type InstallScope,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
 import {
-  bindingPlacements,
-  sameBindingScope,
-  uniqueBindingScopes,
-  type BindingPlacement,
-} from "../workflows/library/binding-selection.js";
+  enabledCollections,
+  sameInstallScope,
+  uniqueInstallScopes,
+  type EnabledCollection,
+} from "../workflows/library/set-enabled-request.js";
 import { librarySubjects } from "../workflows/library/subject-resolution.js";
 import { readDescriptionLoad } from "../workflows/library/collection-load.js";
 import { readLibrarySkillMetadata, sourceIdentityLabel } from "./skill-metadata.js";
@@ -24,13 +23,12 @@ import { makeLibrarySkillInvocationReader } from "../invocation/library-source.j
 /** Internal constructor: derive a read model from the same snapshot used by a prepared action. */
 export const libraryView = (current: LibraryState, originalsPath: string) => {
   const state = structuredClone(current);
-  const placements = structuredClone(bindingPlacements(state));
+  const placements = structuredClone(enabledCollections(state));
   const skills = state.skills.map((skill) => {
     const collection = state.collections.find((item) => item.collection_id === skill.collection_id);
     const source =
       collection?.upstream?.source_identity ??
-      state.acquisitions.find((item) => item.collection_id === skill.collection_id)
-        ?.source_identity;
+      state.imports.find((item) => item.collection_id === skill.collection_id)?.source_identity;
     return {
       id: skill.skill_id,
       name: skill.name,
@@ -38,7 +36,7 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
       versionId: currentSkillVersion(state, skill)?.skill_version_id,
       versions: skill.versions.map((version) => ({
         id: version.skill_version_id,
-        digest: version.artifact_digest,
+        hash: version.artifact_hash,
       })),
       collectionLabel: collection?.label,
       ...(source === undefined
@@ -51,9 +49,9 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
     label: collection.label,
     members: skills.filter((skill) => skill.collectionId === collection.collection_id),
   }));
-  const atScope = (scope: BindingPlacement["scope"] | undefined) =>
+  const atScope = (scope: EnabledCollection["scope"] | undefined) =>
     placements.filter(
-      (placement) => scope === undefined || sameBindingScope(placement.scope, scope),
+      (placement) => scope === undefined || sameInstallScope(placement.scope, scope),
     );
   const readFacts = Effect.fn("LibraryView.readFacts")(function* () {
     const metadata = yield* readLibrarySkillMetadata(state, originalsPath);
@@ -65,7 +63,7 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
         structuredClone({
           ...skill,
           ...provenance,
-          bindings: placements
+          scopes: placements
             .filter((placement) => placement.skillIds.includes(skill.id))
             .map((placement) => ({
               scope: placement.scope,
@@ -78,14 +76,15 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
   return {
     collections: structuredClone(collections),
     placements: structuredClone(placements),
-    placementsAt: (scope: BindingPlacement["scope"] | undefined) => structuredClone(atScope(scope)),
+    placementsAt: (scope: EnabledCollection["scope"] | undefined) =>
+      structuredClone(atScope(scope)),
     scopesFor: (collectionId: string) =>
       structuredClone(
-        uniqueBindingScopes(
+        uniqueInstallScopes(
           placements.filter((item) => item.collectionId === collectionId).map((item) => item.scope),
         ),
       ),
-    membersFor: (collectionId: string, scopes?: readonly BindingPlacement["scope"][]) =>
+    membersFor: (collectionId: string, scopes?: readonly EnabledCollection["scope"][]) =>
       structuredClone(
         skills.filter(
           (skill) =>
@@ -94,7 +93,7 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
               placements.some(
                 (placement) =>
                   placement.skillIds.includes(skill.id) &&
-                  scopes.some((scope) => sameBindingScope(scope, placement.scope)),
+                  scopes.some((scope) => sameInstallScope(scope, placement.scope)),
               )),
         ),
       ),
@@ -107,10 +106,10 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
         ),
         (skill) =>
           Effect.gen(function* () {
-            const retained = state.skills.find((retained) => retained.skill_id === skill.id);
-            if (retained === undefined)
+            const imported = state.skills.find((imported) => imported.skill_id === skill.id);
+            if (imported === undefined)
               return yield* Effect.die(`Missing retained Skill ${skill.id}`);
-            const authorInvocation = yield* readInvocation(retained);
+            const authorInvocation = yield* readInvocation(imported);
             return { ...skill, authorInvocation };
           }),
       );
@@ -126,28 +125,23 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
         ),
       }));
     }),
-    globalBindings: structuredClone(
-      effectiveGlobalBindings(state).map((binding) => ({
-        scope: binding.scope,
-        entries: binding.entries.map((entry) =>
-          entry.kind === "collection"
-            ? {
-                ...entry,
-                label:
-                  state.collections.find(
-                    (collection) => collection.collection_id === entry.collection_id,
-                  )?.label ?? entry.collection_id,
-              }
-            : {
-                ...entry,
-                name:
-                  state.skills.find((skill) => skill.skill_id === entry.skill_id)?.name ??
-                  entry.skill_id,
-              },
-        ),
-        skills: bindingSkillIds(state, binding),
-      })),
-    ),
+    /** What is enabled for every project on this device, labelled, and the Skills it enables. */
+    enabledEverywhere: structuredClone({
+      items: globalEnabled(state).enabled.map((item) =>
+        "collection" in item
+          ? {
+              collection: item.collection,
+              label:
+                state.collections.find((collection) => collection.collection_id === item.collection)
+                  ?.label ?? item.collection,
+            }
+          : {
+              skill: item.skill,
+              name: state.skills.find((skill) => skill.skill_id === item.skill)?.name ?? item.skill,
+            },
+      ),
+      skills: enabledSkillIds(state, globalEnabled(state).enabled),
+    }),
     descriptionLoad: (collectionId: string) => {
       const collection = state.collections.find((item) => item.collection_id === collectionId);
       return readDescriptionLoad(
@@ -157,19 +151,19 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
       );
     },
     listingSizeAfter: (change: {
-      readonly scope: SkitBindingScope;
-      readonly bindings: readonly (DeviceBinding | RepositoryBinding)[];
+      readonly scope: InstallScope;
+      readonly enabled: readonly Enabled[];
     }) =>
-      new Set(
-        [
-          ...change.bindings,
-          ...(change.scope.kind === "repository" ? effectiveGlobalBindings(state) : []),
-        ].flatMap((binding) => bindingSkillIds(state, binding)),
-      ).size,
+      new Set([
+        ...enabledSkillIds(state, change.enabled),
+        ...(change.scope.kind === "repository"
+          ? enabledSkillIds(state, globalEnabled(state).enabled)
+          : []),
+      ]).size,
   };
 };
 
-/** Open once; all queries describe this Library revision without publishing or reconciling. */
+/** Open once; all queries describe this Library revision without saving or reconciling. */
 export const openLibraryView = Effect.fn("LibraryView.open")(function* () {
   const store = yield* LibraryStore;
   return libraryView(yield* store.load, store.originalsPath);

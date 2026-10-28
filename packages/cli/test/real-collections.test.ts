@@ -3,7 +3,7 @@ import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { skitLayer } from "@smolai/skit-core";
-import { previewLibrarySourceEffect } from "../src/library-application/source-acquisition.js";
+import { previewLibrarySource } from "../src/library-application/import-source.js";
 import { assertCollectionImport, gitBlobHash } from "./helpers/collection-import.js";
 import manifest from "./fixtures/collections/manifest.json" with { type: "json" };
 
@@ -23,7 +23,7 @@ for (const collection of manifest) {
             : yield* fs.readFile(path);
         assert.strictEqual(gitBlobHash(bytes), file.gitBlob, file.path);
       }
-      const { preview, retained } = yield* assertCollectionImport(
+      const { preview, imported } = yield* assertCollectionImport(
         source,
         collection.skills.map((skill) => skill.path),
       );
@@ -36,17 +36,17 @@ for (const collection of manifest) {
       for (const file of collection.files) {
         if (!collection.skills.some((skill) => file.path.startsWith(`${skill.path}/`))) continue;
         assert.strictEqual(
-          gitBlobHash(yield* fs.readFile(join(retained, file.path))),
+          gitBlobHash(yield* fs.readFile(join(imported, file.path))),
           file.gitBlob,
           file.path,
         );
       }
       for (const path of collection.excluded) {
         assert.strictEqual(yield* fs.exists(join(source, path, "SKILL.md")), true);
-        assert.strictEqual(yield* fs.exists(join(retained, path)), false);
+        assert.strictEqual(yield* fs.exists(join(imported, path)), false);
       }
       for (const selected of collection.explicit) {
-        const explicit = yield* previewLibrarySourceEffect(join(source, selected.path));
+        const explicit = yield* previewLibrarySource(join(source, selected.path));
         assert.deepStrictEqual(explicit.skills, [{ name: selected.name, verbatim_path: "." }]);
       }
     }).pipe(Effect.provide(skitLayer), Effect.scoped),

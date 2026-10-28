@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { basename, dirname } from "node:path";
 import { Data, Effect, FileSystem, Result, Schema } from "effect";
-import { sourceLocator, SkitSource } from "@smolai/skit-core";
-import type { MachineId, SkillsShProvenanceObservation } from "@smolai/skit-core";
+import { skillsShLockFileEntry, sourceLocator, SkitSource } from "@smolai/skit-core";
+import type { MachineId, SkillsShLockFileEntry } from "@smolai/skit-core";
 import type {
   SetupLockMatch,
   SetupSkillsLock,
@@ -142,7 +142,7 @@ const SkillsLockEntry = Schema.StructWithRest(
     skillPath: Schema.optionalKey(Schema.String),
     computedHash: Schema.optionalKey(Schema.String),
     skillFolderHash: Schema.optionalKey(Schema.String),
-    wellKnownDigest: Schema.optionalKey(Schema.String),
+    wellKnownHash: Schema.optionalKey(Schema.String),
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
 );
@@ -190,7 +190,7 @@ export const readSkillsLock = Effect.fn("Setup.readSkillsLock")(function* (
       ...(entry.skillPath ? { skillPath: entry.skillPath } : {}),
       ...(entry.computedHash ? { computedHash: entry.computedHash } : {}),
       ...(entry.skillFolderHash ? { skillFolderHash: entry.skillFolderHash } : {}),
-      ...(entry.wellKnownDigest ? { wellKnownDigest: entry.wellKnownDigest } : {}),
+      ...(entry.wellKnownHash ? { wellKnownHash: entry.wellKnownHash } : {}),
       originalEntry: originalEntry.success,
     });
   }
@@ -223,9 +223,8 @@ export const lockMatches = Effect.fn("Setup.lockMatches")(function* (
     let content: SetupLockMatch["content"] = "unverifiable";
     const recordedHash = entry.computedHash ?? entry.skillFolderHash;
     if (lock.scope === "project" && recordedHash) {
-      const observedHash = yield* computeSkillsShCompatibleHash(hit.realPath, hit.realPath);
-      if (observedHash !== undefined)
-        content = observedHash === recordedHash ? "agrees" : "mismatch";
+      const currentHash = yield* computeSkillsShCompatibleHash(hit.realPath, hit.realPath);
+      if (currentHash !== undefined) content = currentHash === recordedHash ? "agrees" : "mismatch";
     }
     matches.push({
       scope: lock.scope,
@@ -252,39 +251,39 @@ export class SkillsShImportEvidenceInvalid extends Schema.TaggedError<SkillsShIm
   },
 ) {}
 
-const retainedSkillPath = (lockPath: string | undefined, name: string) => {
+const lockSkillPath = (lockPath: string | undefined, name: string) => {
   if (!lockPath) return name;
   const normalized = lockPath.replaceAll("\\", "/").replace(/^\.\//, "");
   return normalized.endsWith("/SKILL.md") ? normalized.slice(0, -"/SKILL.md".length) : normalized;
 };
 
-const observationFor = (
+const lockFileEntryFor = (
   lock: SetupLockMatch,
   machineId: MachineId,
-  observedAt: string,
+  checkedAt: string,
   skillName: string,
-): SkillsShProvenanceObservation => ({
-  type: "skills.sh-lock",
-  machineId,
-  observedAt,
-  ...(lock.entry.updatedAt ? { sourceUpdatedAt: lock.entry.updatedAt } : {}),
-  lockPath: lock.lockPath,
-  lockVersion: lock.lockVersion,
-  lockScope: lock.scope,
-  lockContentHash: lock.lockContentHash,
-  source: lock.entry.source,
-  sourceType: lock.entry.sourceType,
-  ...(lock.entry.sourceUrl ? { sourceUrl: lock.entry.sourceUrl } : {}),
-  ...(lock.entry.sourceBaseUrl ? { sourceBaseUrl: lock.entry.sourceBaseUrl } : {}),
-  ...(lock.entry.ref ? { ref: lock.entry.ref } : {}),
-  skillName,
-  ...(lock.entry.skillPath ? { skillPath: lock.entry.skillPath } : {}),
-  ...(lock.entry.computedHash ? { computedHash: lock.entry.computedHash } : {}),
-  ...(lock.entry.skillFolderHash ? { skillFolderHash: lock.entry.skillFolderHash } : {}),
-  ...(lock.entry.wellKnownDigest ? { wellKnownDigest: lock.entry.wellKnownDigest } : {}),
-  contentAgreement: lock.content,
-  originalEntry: lock.entry.originalEntry,
-});
+): SkillsShLockFileEntry =>
+  skillsShLockFileEntry({
+    machine_id: machineId,
+    read_at: checkedAt,
+    ...(lock.entry.updatedAt ? { source_updated_at: lock.entry.updatedAt } : {}),
+    lock_path: lock.lockPath,
+    lock_version: lock.lockVersion,
+    lock_scope: lock.scope,
+    lock_content_hash: lock.lockContentHash,
+    source: lock.entry.source,
+    source_type: lock.entry.sourceType,
+    ...(lock.entry.sourceUrl ? { source_url: lock.entry.sourceUrl } : {}),
+    ...(lock.entry.sourceBaseUrl ? { source_base_url: lock.entry.sourceBaseUrl } : {}),
+    ...(lock.entry.ref ? { ref: lock.entry.ref } : {}),
+    skill_name: skillName,
+    ...(lock.entry.skillPath ? { skill_path: lock.entry.skillPath } : {}),
+    ...(lock.entry.computedHash ? { computed_hash: lock.entry.computedHash } : {}),
+    ...(lock.entry.skillFolderHash ? { skill_folder_hash: lock.entry.skillFolderHash } : {}),
+    ...(lock.entry.wellKnownHash ? { well_known_hash: lock.entry.wellKnownHash } : {}),
+    content_agreement: lock.content,
+    original_entry: lock.entry.originalEntry,
+  });
 
 /** Revalidate lock claims and prepare evidence for retention, without fetching upstream bytes. */
 export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImportEvidence")(
@@ -293,7 +292,7 @@ export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImpo
     candidates: readonly { name: string; paths: readonly string[]; skillPath?: string }[],
     instances: readonly Pick<SetupSkillInstance, "name" | "path" | "locks" | "contentIdentity">[],
     machineId: MachineId,
-    observedAt: string,
+    checkedAt: string,
   ) {
     const first = candidates[0];
     if (!first)
@@ -301,7 +300,7 @@ export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImpo
         name: "collection",
         reason: "observation-missing",
       });
-    const observedSkills = [];
+    const foundSkills = [];
     const provenance = [];
     const claimedMembers: Array<{ lock: SetupLockMatch; name: string }> = [];
     const fs = yield* FileSystem.FileSystem;
@@ -335,27 +334,27 @@ export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImpo
       const instance = [...matchingInstances].sort((left, right) =>
         left.path.localeCompare(right.path),
       )[0];
-      const observedHash = instance?.contentIdentity.observedHash;
+      const currentHash = instance?.contentIdentity.currentHash;
       const lock = instance?.locks.find((item) => setupLockGroupKey(item) === groupKey);
-      if (!instance || !observedHash || !lock)
+      if (!instance || !currentHash || !lock)
         return yield* new SkillsShImportEvidenceInvalid({
           name: candidate.name,
           reason: "observation-missing",
         });
       claimedMembers.push({ lock, name: candidate.name });
-      observedSkills.push({
+      foundSkills.push({
         name: candidate.name,
         sourcePath: instance.path,
         relativePath:
           lock.entry.sourceType === "well-known"
             ? candidate.name
-            : retainedSkillPath(candidate.skillPath, candidate.name),
-        observedHash,
+            : lockSkillPath(candidate.skillPath, candidate.name),
+        currentHash,
       });
-      for (const observation of matchingInstances.flatMap((item) =>
+      for (const lockFileEntry of matchingInstances.flatMap((item) =>
         item.locks.filter((candidateLock) => setupLockGroupKey(candidateLock) === groupKey),
       ))
-        provenance.push(observationFor(observation, machineId, observedAt, candidate.name));
+        provenance.push(lockFileEntryFor(lockFileEntry, machineId, checkedAt, candidate.name));
     }
     for (const lock of new Map(claimedMembers.map(({ lock }) => [lock.lockPath, lock])).values()) {
       const text = yield* fs
@@ -378,6 +377,6 @@ export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImpo
         reason: "source-unresolvable",
       });
     const source = resolution.source;
-    return { source, skills: observedSkills, observations: provenance };
+    return { source, skills: foundSkills, lockFileEntries: provenance };
   },
 );

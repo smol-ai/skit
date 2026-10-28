@@ -1,6 +1,6 @@
 # Library sync outcomes
 
-This document is the test oracle for `skit sync`. It lists every path through `syncLibraryEffect` (`packages/cli/src/workflows/library/library-sync.ts`), the durable effects each path makes in order, and the outcomes a crash, a lost response, or a competing writer may legally produce at each boundary. Multi-home tests assert against these tables rather than against an informal notion of "converges".
+This document is the test oracle for `skit sync`. It lists every path through `syncLibrary` (`packages/cli/src/workflows/library/library-sync.ts`), the durable effects each path makes in order, and the outcomes a crash, a lost response, or a competing writer may legally produce at each boundary. Multi-home tests assert against these tables rather than against an informal notion of "converges".
 
 | Coverage | Where |
 | --- | --- |
@@ -41,7 +41,7 @@ The refusal comes from the head read, so it happens before sync plans, uploads, 
 
 Every path is the same three-way merge of L with R from B. A push merges L with an absent R against an empty base, a pull an absent L with R, and a clean sync is a merge whose result is both sides. Absent and empty stay distinct facts: only two existing Libraries can be clean or need adoption, and only an absent R is created by the write, so an empty L still pushes. One alias map, of Collection, Skill and Version handles, is computed once and applied to L, B and the device state at one site. A `--take-remote` key must name a conflict the merge can take remotely; it is checked before projection collisions on every path, so a push or a pull, which has no merge conflicts, refuses any key with `resolution_invalid`. A pull plans no device Projections, because an empty device has none and planning it would only report remote Bindings without a selected Version.
 
-Every applying path commits in one order, stated once in `syncLibraryEffect`:
+Every applying path commits in one order, stated once in `syncLibrary`:
 
 1. Retain every copy the result references in originals (downloading and reacquiring what is missing).
 2. Upload every snapshot the new head references that R lacks.
@@ -87,7 +87,7 @@ The unification is not behaviour-identical. These differences are intended, and 
 | --- | --- | --- | --- |
 | **Remote head** | D1 `libraries.current_revision_id` + `library_revisions` | `api.write` | Compare-and-swap batch on the expected revision |
 | **Remote snapshots** | R2 + D1 `library_snapshots` | `api.upload` | Content-addressed; idempotent |
-| **Originals** | `<home>/originals/<digest>` | `prepareRestoreEffect` | Content-addressed; unreferenced trees are inert |
+| **Originals** | `<home>/originals/<digest>` | `prepareRestore` | Content-addressed; unreferenced trees are inert |
 | **Local state** | `<home>/state.json`, including `sync_ancestry` | `store.publish` | Atomic rename, no fsync |
 | **Projections** | Harness roots | `reconcileLibraryProjections` | Per-projection; derived from local state |
 
@@ -108,7 +108,7 @@ Preflight writes nothing beyond the loader maintenance described under [Remote m
 | B exists and (B.origin ≠ origin, or R is absent, or B.library_id ≠ R.library_id), without `--adopt` | `base_mismatch` |
 | Neither L nor R exists | `clean` (nothing written) |
 
-With `--adopt`, mismatched ancestry is set aside and sync continues as if B were absent, so the merge can only add records. Then exactly one of the paths below runs. Every applying path holds the home's writer lock for its whole duration: `syncLibraryEffect` acquires it when applying, and reuses it reentrantly when its caller already holds it. Each local publish is also checked against the local state the path planned from: if that state has changed, which only a caller without the writer lock can allow, the publish is refused with `SyncLocalChanged` and changes no local state.
+With `--adopt`, mismatched ancestry is set aside and sync continues as if B were absent, so the merge can only add records. Then exactly one of the paths below runs. Every applying path holds the home's writer lock for its whole duration: `syncLibrary` acquires it when applying, and reuses it reentrantly when its caller already holds it. Each local publish is also checked against the local state the path planned from: if that state has changed, which only a caller without the writer lock can allow, the publish is refused with `SyncLocalChanged` and changes no local state.
 
 Every ready/apply path also checks enabled destinations using filesystem identity and previews affected projection custody before committing. A collision reports the Skill IDs and Collection labels. `--keep-enabled <skill-id>` keeps one competing Skill enabled and retains the others without enabling them; invalid or competing choices return `resolution_invalid`. Modified copies and repository Bindings that would lose their selected entities report device conflicts with specific remediation. These checks are read-only.
 
@@ -118,7 +118,7 @@ Independent imports of the same upstream and tracking configuration adopt the pu
 
 | Step | Effect | Commit point |
 | --- | --- | --- |
-| P0 | `prepareRestoreEffect` re-verifies L's retained copies | Originals (already present) |
+| P0 | `prepareRestore` re-verifies L's retained copies | Originals (already present) |
 | P1 | Upload each snapshot | Remote snapshots |
 | P2 | `api.write(null, L)` | **Remote head** |
 | P3 | Retire intact copies the Binding choice removes | Projections, local state (B unchanged) |
@@ -139,7 +139,7 @@ Independent imports of the same upstream and tracking configuration adopt the pu
 | Step | Effect | Commit point |
 | --- | --- | --- |
 | U1 | Download snapshots; reacquire source-restorable copies | — |
-| U2 | `prepareRestoreEffect` retains trees | Originals |
+| U2 | `prepareRestore` retains trees | Originals |
 | U3 | Re-inspect; fail `SyncLocalChanged` if L now exists | — |
 | U4 | Publish restored state with B = R | **Local state** |
 | U5 | Reconcile global projections | Projections |
@@ -179,7 +179,7 @@ Apply:
 | Step | Effect | Commit point |
 | --- | --- | --- |
 | M1 | Download missing snapshots; reacquire source-restorable copies | — |
-| M2 | `prepareRestoreEffect` retains trees | Originals |
+| M2 | `prepareRestore` retains trees | Originals |
 | M3 | Re-inspect; fail `SyncLocalChanged` if L changed | — |
 | M4 | Upload snapshots the merge introduced | Remote snapshots |
 | M5 | `api.write(R.revision, merged)`, skipped when merged = R | **Remote head** |
@@ -208,4 +208,4 @@ These are obligations of sync, not a claim that every existing test asserts all 
 4. **B always describes the state that carries it.** Restoring any whole `state.json` restores its own B. A deletion is inferred only for a record B holds and L does not, which is a removal made on this home since its last reconciliation.
 5. **Ordinary mutations carry B unchanged.** A local removal after sync still syncs as a removal.
 6. **Quiescent convergence.** When no home edits and every home syncs until `clean`, all homes hold the same normalized portable manifest, provided every snapshot or source is available, every schema is supported, and every conflict has been resolved.
-7. **Device state stays local.** Invocation policies, harness roots, and custody records survive every merge (`blendRestoredStateEffect`).
+7. **Device state stays local.** Invocation policies, harness roots, and custody records survive every merge (`blendRestoredState`).

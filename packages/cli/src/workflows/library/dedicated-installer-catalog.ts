@@ -1,4 +1,4 @@
-import { parseSkitSourceEffect, type SkitSource } from "@smolai/skit-core";
+import { parseSkitSource, type SkitSource } from "@smolai/skit-core";
 import { Data, Effect } from "effect";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
@@ -46,11 +46,11 @@ export function dedicatedInstallerForSource(
 }
 
 /** Stop before acquisition when the Source explicitly requires its own installer. */
-export const rejectDedicatedInstallerSourceEffect = Effect.fn(
-  "Library.rejectDedicatedInstallerSource",
-)(function* (input: string) {
-  const source = yield* parseSkitSourceEffect(input);
-  const guidance = dedicatedInstallerForSource(source);
-  if (guidance) return yield* new DedicatedInstallerRequired(guidance);
-  return source;
-});
+export const rejectDedicatedInstallerSource = Effect.fn("Library.rejectDedicatedInstallerSource")(
+  function* (input: string) {
+    const source = yield* parseSkitSource(input);
+    const guidance = dedicatedInstallerForSource(source);
+    if (guidance) return yield* new DedicatedInstallerRequired(guidance);
+    return source;
+  },
+);

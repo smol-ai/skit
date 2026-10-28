@@ -70,15 +70,9 @@ describe("generated command contracts", () => {
         skills: ["review"],
         harnesses: ["codex"],
         scope: { kind: "global" },
-        enabled: true,
+        action: "enable",
         changed: true,
-        bindings: [
-          {
-            harness: "codex",
-            scope: { kind: "global" },
-            entries: [{ kind: "skill", skill_id: skillId }],
-          },
-        ],
+        enabled: [{ skill: skillId }],
       }),
     ).not.toThrow();
     expect(() =>

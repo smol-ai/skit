@@ -3,7 +3,7 @@ import type { PlatformError } from "effect/PlatformError";
 import { createHash } from "node:crypto";
 import { posix, resolve } from "node:path";
 import type {
-  Digest,
+  Hash,
   SkillAssessmentContext,
   SkillAssessmentAcceptance,
   SkillExampleRecord,
@@ -18,24 +18,24 @@ import {
   assessInvocationConformance,
   describeInvocationConformanceIssue,
 } from "../invocation/conformance.js";
-import { walkTreeEffect, type TreeEntry } from "./tree.js";
+import { walkTree, type TreeEntry } from "./tree.js";
 import type { TreeRequirements } from "../platform/tree-requirements.js";
 import type { TreeError } from "../shared/tree-error.js";
 import {
   hashParts,
-  hashProjectedSkillFiles,
+  hashInstalledSkillFiles,
   parseSkillExample,
-  parseSkitConfigEffect,
-  parseSkitReadmeEffect,
+  parseSkitConfig,
+  parseSkitReadme,
 } from "./descriptor.js";
 import {
   type DescriptorFailure,
   type HarnessMetadataInvalid,
-  type ProjectedPathCollision,
+  type InstalledPathCollision,
   type SharedTargetCollision,
 } from "../failures.js";
 
-export function readSkitDescriptorEffect(
+export function readSkitDescriptor(
   root: string,
 ): Effect.Effect<SkitDescriptor, DescriptorFailure | PlatformError, FileSystem.FileSystem> {
   return Effect.gen(function* () {
@@ -48,19 +48,19 @@ export function readSkitDescriptorEffect(
           error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
         ),
       );
-    if (config !== undefined) return yield* parseSkitConfigEffect(config);
+    if (config !== undefined) return yield* parseSkitConfig(config);
     const readme = yield* fs.readFileString(resolve(root, "README.md"));
-    return yield* parseSkitReadmeEffect(readme);
+    return yield* parseSkitReadme(readme);
   });
 }
 
-export function deterministicTreeHashEffect(
+export function deterministicTreeHash(
   root: string,
-): Effect.Effect<Digest, TreeError | PlatformError, TreeRequirements> {
-  return walkTreeEffect(root, "normalized").pipe(Effect.map(hashNormalizedEntries));
+): Effect.Effect<Hash, TreeError | PlatformError, TreeRequirements> {
+  return walkTree(root, "normalized").pipe(Effect.map(hashNormalizedEntries));
 }
 
-export function hashNormalizedEntries(entries: readonly TreeEntry[]): Digest {
+export function hashNormalizedEntries(entries: readonly TreeEntry[]): Hash {
   return hashParts(
     entries.flatMap((entry) =>
       entry.kind === "file" ? [entry.path, String(entry.mode), entry.bytes] : [],
@@ -72,8 +72,8 @@ function releaseIdentityFromEntries(
   descriptor: SkitDescriptor,
   tree: TreeEntry[],
   release: string,
-  releaseContentHash?: Digest,
-): Result.Result<SkitReleaseIdentity, SharedTargetCollision | ProjectedPathCollision> {
+  releaseContentHash?: Hash,
+): Result.Result<SkitReleaseIdentity, SharedTargetCollision | InstalledPathCollision> {
   const files = tree.flatMap((entry) =>
     entry.kind === "file"
       ? [{ path: entry.path, bytes: entry.bytes, executable: entry.mode === 0o755 }]
@@ -82,7 +82,7 @@ function releaseIdentityFromEntries(
   return Result.map(
     Result.all(
       descriptor.skills.map((skill) =>
-        Result.map(hashProjectedSkillFiles(files, skill.path, skill.shared), (contentHash) => ({
+        Result.map(hashInstalledSkillFiles(files, skill.path, skill.shared), (contentHash) => ({
           name: skill.name,
           contentHash,
           enabled: skill.default_enabled,
@@ -111,10 +111,10 @@ const MIME: Record<string, string> = {
   ".jpeg": "image/jpeg",
 };
 
-export function inventorySkitFilesEffect(
+export function inventorySkitFiles(
   root: string,
 ): Effect.Effect<SkitFileRecord[], TreeError | PlatformError, TreeRequirements> {
-  return walkTreeEffect(root, "normalized", { respectGitIgnore: true }).pipe(
+  return walkTree(root, "normalized", { respectGitIgnore: true }).pipe(
     Effect.map(inventoryEntries),
   );
 }
@@ -126,7 +126,7 @@ function inventoryEntries(entries: TreeEntry[]): SkitFileRecord[] {
     return [
       {
         path: entry.path,
-        digest: `sha256:${createHash("sha256").update(entry.bytes).digest("hex")}` as Digest,
+        hash: `sha256:${createHash("sha256").update(entry.bytes).digest("hex")}` as Hash,
         bytes: entry.bytes.byteLength,
         mediaType: MIME[extension] ?? "application/octet-stream",
         executable: entry.mode === 0o755,
@@ -135,7 +135,7 @@ function inventoryEntries(entries: TreeEntry[]): SkitFileRecord[] {
   });
 }
 
-export function validateSkitDirectoryEffect(
+export function validateSkitDirectory(
   root: string,
   release = "draft",
   options:
@@ -151,7 +151,7 @@ export function validateSkitDirectoryEffect(
   ValidatedSkit,
   | DescriptorFailure
   | SharedTargetCollision
-  | ProjectedPathCollision
+  | InstalledPathCollision
   | HarnessMetadataInvalid
   | TreeError
   | PlatformError,
@@ -159,8 +159,8 @@ export function validateSkitDirectoryEffect(
 > {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const descriptor = yield* readSkitDescriptorEffect(root);
-    const tree = yield* walkTreeEffect(root, "normalized", {
+    const descriptor = yield* readSkitDescriptor(root);
+    const tree = yield* walkTree(root, "normalized", {
       respectGitIgnore:
         options.assessmentContext === "author" || options.assessmentContext === "publish",
     });
@@ -207,7 +207,7 @@ export function validateSkitDirectoryEffect(
           declaredCapabilities: skill.capabilities ?? [],
           path: primary,
           fingerprintPath: "SKILL.md",
-          artifactContentDigest: identity.skills.find((item) => item.name === skill.name)!
+          artifactContentHash: identity.skills.find((item) => item.name === skill.name)!
             .contentHash,
         });
         audits[`${descriptor.slug}:${skill.name}`] = audit;
@@ -215,7 +215,7 @@ export function validateSkitDirectoryEffect(
           "acceptances" in options
             ? evaluateSkillAudit(audit, {
                 context: options.assessmentContext,
-                artifactContentDigest: identity.skills.find((item) => item.name === skill.name)!
+                artifactContentHash: identity.skills.find((item) => item.name === skill.name)!
                   .contentHash,
                 acceptances: options.acceptances,
                 evaluatedAt: options.evaluatedAt,

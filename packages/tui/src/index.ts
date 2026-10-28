@@ -24,7 +24,6 @@ import {
   libraryApplicationLayer,
   openLibrarySession,
   readLibrarySkillContent,
-  refreshLibrarySession,
   proposeLibraryEnable,
   proposeLibraryCollectionChange,
   libraryCollectionScopes,
@@ -36,19 +35,19 @@ import {
   destinationLabel,
   invocationChoices,
   invocationBriefing,
-  invocationEligibleBindings,
+  invocationEligibleScopes,
   invocationRowSummary,
   scopeChoices,
   type LibraryActionOutcome,
-  type LibraryBindingRow,
+  type ScopeRow,
   type LibrarySkillRow,
   type Scope,
   type InvocationOption,
 } from "../../cli/src/library-application/index";
 import {
   errorMessage,
-  auditLocalCapabilitiesV1Alpha4Effect,
-  probeHarnessEffect,
+  auditLocalCapabilitiesV1Alpha4,
+  probeHarness,
   type HarnessProbeResult,
 } from "../../cli/src/front-end";
 import {
@@ -57,7 +56,7 @@ import {
   readListingBudgets,
   type ListingBudget,
 } from "@smolai/skit-core";
-import { budgetReceipt } from "./budget/receipt";
+import { budgetDetails } from "./budget/details";
 import { createLibraryHost } from "./library-host";
 import { createRenderer, writeFrame } from "./snapshot";
 import { createInteractionController, type Overlay, type ScrollKey } from "./interaction";
@@ -70,7 +69,7 @@ import {
   listColors,
   panelColors,
   panelTitle,
-  receipt,
+  detailsBlock,
   sep,
   surface,
   tone,
@@ -87,7 +86,7 @@ import {
   type InventoryItem,
   type LibraryCollectionRow,
   type SkillNavigation,
-  type ReceiptField,
+  type DetailField,
 } from "./presentation";
 
 let libraryCollectionId: string | undefined;
@@ -121,7 +120,7 @@ const libraryConfiguration = {
 let libraryOpenError: string | undefined;
 // Every workflow the TUI runs enters the runtime through the host, the audit included.
 const report = await libraryHost.run(
-  auditLocalCapabilitiesV1Alpha4Effect({
+  auditLocalCapabilitiesV1Alpha4({
     home: flag("--home"),
     cwd: flag("--cwd") ?? resolve(import.meta.dir, "../../.."),
     probes: [],
@@ -236,8 +235,8 @@ function statusColor(status: AuditItem["status"]): string {
   }[status];
 }
 
-function receiptFields(fields: readonly ReceiptField[]) {
-  return receipt(
+function detailFields(fields: readonly DetailField[]) {
+  return detailsBlock(
     fields.map((field) =>
       kv(
         field.label,
@@ -547,7 +546,7 @@ function populateDetails(details: ScrollBoxRenderable, item: InventoryItem): voi
   } else {
     details.add(text("detail-name", item.name, { fg: statusColor(item.status) }));
     details.add(
-      new TextRenderable(renderer, { id: "detail-receipt", content: receiptFields(model.fields) }),
+      new TextRenderable(renderer, { id: "detail-fields", content: detailFields(model.fields) }),
     );
   }
   details.add(text("detail-summary", item.summary));
@@ -558,7 +557,7 @@ function populateDetails(details: ScrollBoxRenderable, item: InventoryItem): voi
     details.add(
       new TextRenderable(renderer, {
         id: "harness-listing-budget",
-        content: budgetReceipt(model.budget),
+        content: budgetDetails(model.budget),
       }),
     );
   }
@@ -666,7 +665,7 @@ const paletteCommands = [
     title: "Open Library",
     description: "Enable, disable, and choose when agents may use Library skills",
     shortcut: "1",
-    keywords: "library enable disable invocation binding projection",
+    keywords: "library enable disable invocation binding installed skill",
     run: () => switchVariant(0),
   },
   {
@@ -799,7 +798,7 @@ async function runHarnessProbe(item: AuditItem): Promise<void> {
   probing.add(item.name);
   let result: HarnessProbeResult;
   try {
-    result = await libraryHost.run(probeHarnessEffect(item.name));
+    result = await libraryHost.run(probeHarness(item.name));
   } catch (error) {
     item.status = "error";
     item.summary = `Harness probe failed: ${errorMessage(error)}`;
@@ -822,7 +821,7 @@ function probeSelectedHarness(all: boolean): void {
   })();
 }
 
-const ALL_BINDINGS = "all";
+const ALL_SCOPES = "all";
 
 interface ChooserOption {
   value: string;
@@ -934,11 +933,11 @@ function openConfirm(): void {
     contentOptions: { gap: 1, flexShrink: 0 },
   });
   scroll.add(text("library-confirm-summary", model.summary, { fg: ink.strong }));
-  const confirmReceipt = new TextRenderable(renderer, {
-    id: "library-confirm-receipt",
-    content: receiptFields(model.fields),
+  const confirmDetails = new TextRenderable(renderer, {
+    id: "library-confirm-details",
+    content: detailFields(model.fields),
   });
-  scroll.add(confirmReceipt);
+  scroll.add(confirmDetails);
   overlay.add(scroll);
   const confirmHelp = text("library-confirm-help", model.help, {
     fg: ink.faint,
@@ -953,7 +952,7 @@ function openConfirm(): void {
       scroll: (key) => scrollOverlay(scroll, key),
       update: (showSkills) => {
         const next = confirmationPresentation(pending, showSkills, isCompact());
-        confirmReceipt.content = receiptFields(next.fields);
+        confirmDetails.content = detailFields(next.fields);
         confirmHelp.content = next.help;
       },
     },
@@ -986,11 +985,11 @@ function chooseScopeThen(next: (scope: Scope) => void | Promise<void>): void {
   });
 }
 
-function bindingChooserOptions(bindings: readonly LibraryBindingRow[]): ChooserOption[] {
-  return bindings.map((binding, index) => ({
+function scopeChooserOptions(scopes: readonly ScopeRow[]): ChooserOption[] {
+  return scopes.map((scopeRow, index) => ({
     value: String(index),
-    label: destinationLabel(binding.scope),
-    ...(binding.policy ? { hint: invocationRowSummary(binding.policy) } : {}),
+    label: destinationLabel(scopeRow.scope),
+    ...(scopeRow.policy ? { hint: invocationRowSummary(scopeRow.policy) } : {}),
   }));
 }
 
@@ -1074,13 +1073,13 @@ function disableCollection(collectionId: string): void {
     openChooser({
       title: DESTINATION_QUESTION,
       options: [
-        { value: ALL_BINDINGS, label: "All shown" },
+        { value: ALL_SCOPES, label: "All shown" },
         ...scopes.map((scope, index) => ({
           value: String(index),
           label: destinationLabel(scope),
         })),
       ],
-      choose: (value) => disable(value === ALL_BINDINGS ? scopes : [scopes[Number(value)]!]),
+      choose: (value) => disable(value === ALL_SCOPES ? scopes : [scopes[Number(value)]!]),
     });
 }
 
@@ -1106,29 +1105,26 @@ function startDisable(): void {
               hint: "Disable every skill in this collection",
             },
           ]),
-      ...(row.bindings.length ? [{ value: "skill", label: `Disable ${row.name}` }] : []),
+      ...(row.scopes.length ? [{ value: "skill", label: `Disable ${row.name}` }] : []),
     ],
     choose: (value) => {
       if (value === "collection") {
         disableCollection(row.collectionId);
         return;
       }
-      const disable = async (bindings: readonly LibraryBindingRow[]) =>
+      const disable = async (scopes: readonly ScopeRow[]) =>
         afterProposal(
           await transitionLibrary((state) =>
-            proposeLibraryDisable(state, libraryConfiguration, row, bindings),
+            proposeLibraryDisable(state, libraryConfiguration, row, scopes),
           ),
         );
-      if (row.bindings.length === 1) void disable(row.bindings);
+      if (row.scopes.length === 1) void disable(row.scopes);
       else
         openChooser({
           title: DESTINATION_QUESTION,
-          options: [
-            { value: ALL_BINDINGS, label: "All shown" },
-            ...bindingChooserOptions(row.bindings),
-          ],
+          options: [{ value: ALL_SCOPES, label: "All shown" }, ...scopeChooserOptions(row.scopes)],
           choose: (chosen) =>
-            disable(chosen === ALL_BINDINGS ? row.bindings : [row.bindings[Number(chosen)]!]),
+            disable(chosen === ALL_SCOPES ? row.scopes : [row.scopes[Number(chosen)]!]),
         });
     },
   });
@@ -1138,14 +1134,14 @@ function startInvocation(): void {
   const row = selectedLibraryRow();
   const session = libraryHost.state;
   if (!row || !session) return;
-  const eligible = invocationEligibleBindings(row);
+  const eligible = invocationEligibleScopes(row);
   if (!eligible.length) return;
-  const choosePolicy = (binding: LibraryBindingRow) => {
-    if (!binding.policy) return;
+  const choosePolicy = (scopeRow: ScopeRow) => {
+    if (!scopeRow.policy) return;
     openChooser({
-      title: binding.policy.question,
-      briefing: invocationBriefing(binding.policy),
-      options: invocationChoices(binding).map((choice) => ({
+      title: scopeRow.policy.question,
+      briefing: invocationBriefing(scopeRow.policy),
+      options: invocationChoices(scopeRow).map((choice) => ({
         value: choice.value,
         label: choice.label,
         ...(choice.hint ? { hint: choice.hint } : {}),
@@ -1157,7 +1153,7 @@ function startInvocation(): void {
               state,
               libraryConfiguration,
               row,
-              binding,
+              scopeRow,
               value as InvocationOption,
             ),
           ),
@@ -1168,7 +1164,7 @@ function startInvocation(): void {
   else
     openChooser({
       title: DESTINATION_QUESTION,
-      options: bindingChooserOptions(eligible),
+      options: scopeChooserOptions(eligible),
       choose: (value) => choosePolicy(eligible[Number(value)]!),
     });
 }
@@ -1189,7 +1185,12 @@ async function cancelPending(): Promise<void> {
 
 async function refreshLibrary(): Promise<void> {
   if (!libraryHost.state) return;
-  await transitionLibrary((state) => refreshLibrarySession(state));
+  await transitionLibrary((state) =>
+    Effect.map(openLibrarySession(), (session) => ({
+      ...session,
+      ...(state.outcome === undefined ? {} : { outcome: state.outcome }),
+    })),
+  );
   await refreshListingBudgets();
   render();
 }

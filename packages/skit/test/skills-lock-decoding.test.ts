@@ -5,7 +5,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Exit, FileSystem } from "effect";
 import { join } from "node:path";
-import { initSkitEffect, skitLayer } from "../src/index.js";
+import { initSkit, skitLayer } from "../src/index.js";
 
 const SKILL = "---\nname: probe\ndescription: A probe skill\n---\n\nBody.\n";
 
@@ -14,7 +14,7 @@ const initWith = Effect.fn("initWith")(function* (lock: string) {
   const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-lock-" });
   yield* fs.writeFileString(join(root, "SKILL.md"), SKILL);
   yield* fs.writeFileString(join(root, "skills-lock.json"), lock);
-  const exit = yield* Effect.exit(initSkitEffect(root));
+  const exit = yield* Effect.exit(initSkit(root));
   const after = yield* fs.readFileString(join(root, "skills-lock.json"));
   return { exit, after };
 });
@@ -46,7 +46,7 @@ describe("the adjacent skills-lock file", () => {
       const fs = yield* FileSystem.FileSystem;
       const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-lock-" });
       yield* fs.writeFileString(join(root, "SKILL.md"), SKILL);
-      const result = yield* initSkitEffect(root);
+      const result = yield* initSkit(root);
       assert.deepStrictEqual(result.discovered.skillsLock, { present: false, entries: 0 });
     }).pipe(Effect.provide(skitLayer)),
   );

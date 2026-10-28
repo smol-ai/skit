@@ -7,32 +7,28 @@ import {
   type SkillExampleManifest,
   type SkitDescriptor,
 } from "./schemas.js";
+import { SkillAssessmentAcceptance } from "./library/store/state-schema.js";
 import {
-  SkillsShProvenanceObservation,
-  SkillAssessmentAcceptance,
-} from "./library/store/state-schema.js";
-import {
-  Digest,
+  Hash,
   HarnessName,
   InvocationPolicy,
-  ProjectionTarget,
-  RecordedProjectionTarget,
-  SkitBindingScope,
+  InstallDestination,
+  RecordedInstallDestination,
+  InstallScope,
   SkitValidationDiagnostic,
 } from "./vocabulary.js";
-import { CollectionId, ProjectionId, SkillId, SkillVersionId } from "./library/entity-ids.js";
+import { CollectionId, InstalledSkillId, SkillId, SkillVersionId } from "./library/entity-ids.js";
 export {
-  Digest,
+  Hash,
   HarnessName,
   InvocationPolicy,
-  ProjectionTarget,
-  RecordedProjectionTarget,
-  SkillsShProvenanceObservation,
-  SkitBindingScope,
+  InstallDestination,
+  RecordedInstallDestination,
+  InstallScope,
   SkillAssessmentAcceptance,
   SkitValidationDiagnostic,
 };
-export type { HarnessInstallStatus, CustodyIssue } from "./library/store/state-schema.js";
+export type { HarnessInstallStatus, OwnershipIssue } from "./library/store/state-schema.js";
 export {
   SKILL_EXAMPLE_SCHEMA_VERSION,
   SKIT_DESCRIPTOR_VERSION,
@@ -49,14 +45,14 @@ export type RegistrySkitDescriptor = SkitDescriptor & { readonly id: string };
 
 export interface SkitFileRecord {
   path: string;
-  digest: Digest;
+  hash: Hash;
   bytes: number;
   mediaType: string;
   executable: boolean;
 }
 
 export interface SyncFileVersion {
-  digest: Digest;
+  digest: Hash;
   bytes: Uint8Array;
   mediaType: string;
 }
@@ -90,10 +86,10 @@ export interface ValidatedSkit {
 export interface SkitReleaseIdentity {
   slug: string;
   release: string;
-  releaseContentHash: Digest;
+  releaseContentHash: Hash;
   skills: Array<{
     name: string;
-    contentHash: Digest;
+    contentHash: Hash;
     enabled: boolean;
   }>;
 }
@@ -101,37 +97,60 @@ export interface SkitReleaseIdentity {
 const OwnershipMarkerV2 = Schema.Struct({
   schemaVersion: Schema.Literal(2),
   projectionPolicyVersion: Schema.Literal(1),
-  projection_id: ProjectionId,
+  projection_id: InstalledSkillId,
   collection_id: CollectionId,
   skill_id: SkillId,
   skill_version_id: SkillVersionId,
-  expected_digest: Digest,
+  expected_digest: Hash,
   harness: HarnessName,
 });
 
 const OwnershipMarkerV3 = Schema.Struct({
   schemaVersion: Schema.Literal(3),
   projectionPolicyVersion: Schema.Literal(1),
-  projection_id: ProjectionId,
+  projection_id: InstalledSkillId,
   skill_id: SkillId,
   skill_version_id: SkillVersionId,
-  expected_digest: Digest,
+  expected_digest: Hash,
   harness: HarnessName,
 });
 
-export const OwnershipMarker = Schema.Struct({
+const OwnershipMarkerV4 = Schema.Struct({
   schemaVersion: Schema.Literal(4),
   projectionPolicyVersion: Schema.Literal(1),
-  projection_id: ProjectionId,
+  projection_id: InstalledSkillId,
   skill_id: SkillId,
   skill_version_id: SkillVersionId,
-  expected_digest: Digest,
+  expected_digest: Hash,
+});
+
+export const OwnershipMarker = Schema.Struct({
+  schemaVersion: Schema.Literal(5),
+  installed_skill_id: InstalledSkillId,
+  skill_id: SkillId,
+  skill_version_id: SkillVersionId,
+  expected_hash: Hash,
 });
 export type OwnershipMarker = typeof OwnershipMarker.Type;
 
-// Older markers named the Harness a copy was written for; custody never depended on it.
-const OwnershipMarkerFromV3 = OwnershipMarkerV3.pipe(
+// v4 named the installed skill a projection, called its hash a digest and carried a policy
+// version that was always 1.
+const OwnershipMarkerFromV4 = OwnershipMarkerV4.pipe(
   Schema.decodeTo(OwnershipMarker, {
+    decode: SchemaGetter.transform(
+      ({ projection_id, projectionPolicyVersion: _policy, expected_digest, ...marker }) => ({
+        ...marker,
+        schemaVersion: 5 as const,
+        installed_skill_id: projection_id,
+        expected_hash: expected_digest,
+      }),
+    ),
+    encode: SchemaGetter.forbidden(() => "v4 ownership markers are decode-only"),
+  }),
+);
+// Older markers named the Harness a copy was written for; ownership never depended on it.
+const OwnershipMarkerFromV3 = OwnershipMarkerV3.pipe(
+  Schema.decodeTo(OwnershipMarkerFromV4, {
     decode: SchemaGetter.transform(({ harness: _harness, ...marker }) => ({
       ...marker,
       schemaVersion: 4 as const,
@@ -151,23 +170,24 @@ const OwnershipMarkerFromV2 = OwnershipMarkerV2.pipe(
 
 /**
  * A marker as written by any SKIT since v2, brought to the current one through the linear
- * v2 → v3 → v4 chain. Markers live in Projections, outside versioned Library state, so every
+ * v2 → v3 → v4 → v5 chain. Markers live in installed skills, outside versioned Library state, so every
  * released version stays readable.
  */
 export const StoredOwnershipMarker = Schema.Union([
   OwnershipMarker,
+  OwnershipMarkerFromV4,
   OwnershipMarkerFromV3,
   OwnershipMarkerFromV2,
 ]);
 
 export const SkillAuditFinding = Schema.Struct({
-  fingerprint: Schema.optionalKey(Digest),
+  fingerprint: Schema.optionalKey(Hash),
   analysisProfile: Schema.Struct({
     id: Schema.Literal("skit/finding/v1"),
     scope: Schema.Literals(["skill_artifact", "audited_file"]),
     acceptanceEligible: Schema.Boolean,
   }),
-  artifactContentDigest: Digest,
+  artifactContentHash: Hash,
   ruleId: Schema.String,
   evidence: Schema.Literals([
     "declared",
@@ -206,7 +226,7 @@ export const SkillAudit = Schema.Struct({
 });
 export type SkillAudit = typeof SkillAudit.Type;
 
-export const SkillAssessmentContext = Schema.Literals(["author", "retain", "project", "publish"]);
+export const SkillAssessmentContext = Schema.Literals(["author", "import", "project", "publish"]);
 export type SkillAssessmentContext = typeof SkillAssessmentContext.Type;
 export const SkillAssessmentOutcome = Schema.Literals(["allow", "warn", "block"]);
 export type SkillAssessmentOutcome = typeof SkillAssessmentOutcome.Type;
@@ -225,7 +245,7 @@ export const SkillAcceptanceReviewRecord = Schema.Struct({
 export type SkillAcceptanceReviewRecord = typeof SkillAcceptanceReviewRecord.Type;
 
 export const SkillFindingDecision = Schema.Struct({
-  fingerprint: Digest,
+  fingerprint: Hash,
   ruleId: Schema.String,
   disposition: Schema.Literals(["unresolved", "accepted"]),
   acceptance: Schema.optionalKey(SkillAssessmentAcceptance),
@@ -242,7 +262,7 @@ export type SkillAssessmentDecision = typeof SkillAssessmentDecision.Type;
 
 export const SkillSecurityReview = Schema.Struct({
   skill_version_id: SkillVersionId,
-  artifactContentDigest: Digest,
+  artifactContentHash: Hash,
   audit: SkillAudit,
   assessment: SkillAssessmentDecision,
   acceptances: Schema.mutableKey(Schema.mutable(Schema.Array(SkillAcceptanceReviewRecord))),

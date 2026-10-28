@@ -15,7 +15,7 @@ import {
   pathIsWithin,
   type LibraryState,
 } from "@smolai/skit-core";
-import { selectInventoryRoots, type InventoryRootOptions } from "../../projection/roots.js";
+import { selectInventoryRoots, type InventoryRootOptions } from "../../install/roots.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { handleLibraryCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
@@ -40,7 +40,7 @@ export const refreshLibraryInventoryForCli = Effect.fn("CLI.refreshLibraryInvent
     unmanaged: state.unmanaged.filter((item) =>
       roots.some(({ root }) => pathIsWithin(root, item.path)),
     ),
-    custodyIssues: (state.custodyIssues ?? []).filter((item) =>
+    ownershipIssues: (state.ownershipIssues ?? []).filter((item) =>
       roots.some(({ root }) => pathIsWithin(root, item.path)),
     ),
     ...(state.scanIssues
@@ -75,7 +75,7 @@ export const inventoryCommand = Effect.fn("CLI.inventory")(function* (
 ) {
   const library = yield* refreshLibraryInventoryCommand(options);
   const renderer = yield* Renderer;
-  const observed = yield* renderer.withStatus(
+  const scan = yield* renderer.withStatus(
     "Scanning repository and harness skills",
     runSetup({
       libraryHome: options.libraryHome,
@@ -87,11 +87,11 @@ export const inventoryCommand = Effect.fn("CLI.inventory")(function* (
   return {
     ...library,
     machine: {
-      repositoryRoots: observed.machineConfig.repositoryRoots,
-      repositoryDecisions: observed.machineConfig.repositoryDecisions,
-      scan: observed.scan,
+      repositoryRoots: scan.machineConfig.repositoryRoots,
+      repositoryDecisions: scan.machineConfig.repositoryDecisions,
+      scan: scan.scan,
       instances: yield* Effect.forEach(
-        observed.instances,
+        scan.instances,
         (instance) =>
           skillModificationTime(instance.path).pipe(
             Effect.map((modified) => ({
@@ -101,8 +101,8 @@ export const inventoryCommand = Effect.fn("CLI.inventory")(function* (
           ),
         { concurrency: 8 },
       ),
-      brokenLinks: observed.brokenLinks,
-      suppressed: observed.suppressed,
+      brokenLinks: scan.brokenLinks,
+      suppressed: scan.suppressed,
     },
   };
 });
@@ -150,8 +150,9 @@ export const inventoryCliCommand = Command.make("inventory", localFlags, (input)
           sync_ancestry: _syncAncestry,
           assessmentAcceptances: _,
           collections: __,
-          global_bindings: ___,
-          local_bindings: ____,
+          enabled: ___,
+          invocation_policies: ____,
+          repositories: _____,
           ...inventory
         } = value;
         yield* renderer.result(result("inventory", inventory));
@@ -160,7 +161,7 @@ export const inventoryCliCommand = Command.make("inventory", localFlags, (input)
   }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
   Command.withDescription(
-    "Show every observed Skill instance, its Git state, and refreshed Library projections.",
+    "Show every Skill folder found on this machine, its Git state, and refreshed installed skills.",
   ),
   Command.withExamples([{ command: "skit inventory --json" }]),
   Command.annotate(CommandMetadata, {

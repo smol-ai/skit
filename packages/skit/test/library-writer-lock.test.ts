@@ -45,17 +45,17 @@ it.effect("queues writers within one process instead of failing them", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-writer-lock-queue-" });
-    const acquired = yield* Deferred.make<void>();
+    const imported = yield* Deferred.make<void>();
     const release = yield* Deferred.make<void>();
     const order: string[] = [];
     const first = yield* withLibraryWriterLock(
       home,
-      Deferred.succeed(acquired, undefined).pipe(
+      Deferred.succeed(imported, undefined).pipe(
         Effect.andThen(Deferred.await(release)),
         Effect.andThen(Effect.sync(() => order.push("first"))),
       ),
     ).pipe(Effect.forkScoped);
-    yield* Deferred.await(acquired);
+    yield* Deferred.await(imported);
     const second = yield* withLibraryWriterLock(
       home,
       Effect.sync(() => order.push("second")),

@@ -2,14 +2,13 @@ import { Context, DateTime, Effect, FileSystem, Layer } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { join, resolve } from "node:path";
 import type { InvalidLibraryState, LibraryBusy, LibraryChanged } from "../../failures.js";
-import type { LibraryState } from "../library-state.js";
+import { emptyLibraryState, type LibraryState } from "../library-state.js";
 import {
-  emptyLibraryStateEffect,
-  inspectLocalLibraryStateEffect,
-  publishLibraryStateEffect,
+  inspectLocalLibraryState,
+  saveLibraryState,
   type InspectedLibraryState,
 } from "./state-file.js";
-import { appendLibraryAuditEffect, type LibraryAuditChange } from "../audit/audit-log.js";
+import { appendLibraryAudit, type LibraryAuditChange } from "../audit/audit-log.js";
 import { classifyLibraryAuditEvent, diffLibraryState } from "../audit/state-diff.js";
 import { withLibraryWriterLock } from "./writer-lock.js";
 
@@ -31,9 +30,9 @@ export class LibraryStore extends Context.Service<
     readonly inspect: Effect.Effect<InspectedLibraryState, LibraryStateReadError>;
     /**
      * Replace `base`, a state this caller loaded, with `next`. Fails with `LibraryChanged` and
-     * publishes nothing when the Library is no longer `base`.
+     * saves nothing when the Library is no longer `base`.
      */
-    readonly publish: (
+    readonly save: (
       next: LibraryState,
       base: LibraryState,
     ) => Effect.Effect<void, LibraryStateWriteError>;
@@ -44,12 +43,12 @@ export class LibraryStore extends Context.Service<
   }
 >()("skit/library/LibraryStore") {}
 
-/** What the writer in progress has published so far; it records the changes as one event. */
+/** What the writer in progress has saved so far; it records the changes as one event. */
 const CurrentLibraryAction = Context.Reference<
   | {
       readonly home: string;
       readonly changes: LibraryAuditChange[];
-      published?: LibraryState;
+      saved?: LibraryState;
       live: boolean;
     }
   | undefined
@@ -62,23 +61,23 @@ export function libraryStoreLayer(options: { home: string }) {
       const fs = yield* FileSystem.FileSystem;
       const home = resolve(options.home);
       const path = join(home, "state.json");
-      const inspect = inspectLocalLibraryStateEffect(home).pipe(
+      const inspect = inspectLocalLibraryState(home).pipe(
         Effect.provideService(FileSystem.FileSystem, fs),
       );
-      const load = Effect.flatMap(inspect, (inspected) =>
-        inspected.present ? Effect.succeed(inspected.state) : emptyLibraryStateEffect(path),
+      const load = Effect.map(inspect, (inspected) =>
+        inspected.present ? inspected.state : emptyLibraryState(),
       );
-      const publish = Effect.fn("LibraryStore.publish")(function* (
+      const save = Effect.fn("LibraryStore.save")(function* (
         next: LibraryState,
         base: LibraryState,
       ) {
-        yield* publishLibraryStateEffect(home, next, base).pipe(
+        yield* saveLibraryState(home, next, base).pipe(
           Effect.provideService(FileSystem.FileSystem, fs),
         );
         const changes = diffLibraryState(base, next);
         const action = yield* CurrentLibraryAction;
         if (action?.home === home && action.live) {
-          action.published = next;
+          action.saved = next;
           action.changes.push(...changes);
         } else if (changes.length)
           yield* recordLibraryHistory(home, changes).pipe(
@@ -88,7 +87,7 @@ export function libraryStoreLayer(options: { home: string }) {
       return {
         load,
         inspect,
-        publish,
+        save,
         home,
         statePath: path,
         originalsPath: join(home, "originals"),
@@ -104,7 +103,7 @@ const recordLibraryHistory = Effect.fn("LibraryStore.recordHistory")(function* (
   changes: readonly LibraryAuditChange[],
 ) {
   const workflow = yield* LibraryActor;
-  yield* appendLibraryAuditEffect(home, {
+  yield* appendLibraryAudit(home, {
     schemaVersion: 1,
     occurredAt: DateTime.formatIso(yield* DateTime.now),
     type: classifyLibraryAuditEvent(workflow, changes),
@@ -126,23 +125,23 @@ export const LibraryActor = Context.Reference<string>("skit/library/LibraryActor
   defaultValue: () => "unattributed",
 });
 
-/** The state the writer in progress last published to the current Library, if it has. */
-export const lastPublishedLibraryState = Effect.gen(function* () {
+/** The state the writer in progress last saved to the current Library, if it has. */
+export const lastSavedLibraryState = Effect.gen(function* () {
   const store = yield* LibraryStore;
   const action = yield* CurrentLibraryAction;
-  return action?.home === store.home && action.live ? action.published : undefined;
+  return action?.home === store.home && action.live ? action.saved : undefined;
 });
 
 /**
  * Hold the writer lock of the Library the current `LibraryStore` addresses, and record what the
- * mutation published.
+ * mutation saved.
  *
- * The outermost writer is the transaction: its history is every change published under it, written
+ * The outermost writer is the transaction: its history is every change saved under it, written
  * as one event on success and failure alike, because a workflow that commits in stages can fail
  * after changing the Library. The event is written once the lock has drained every fiber that
  * leased it, so it includes their changes. Nested writers record nothing of their own, so one action
  * is one event however many workflows it composes; a fiber that outlives its action starts its own.
- * Nesting only groups history: every writer still enters through the lock, and each publish is
+ * Nesting only groups history: every writer still enters through the lock, and each save is
  * checked against the state it was planned from.
  */
 export const withLibraryWriter = <A, E, R>(program: Effect.Effect<A, E, R>) =>

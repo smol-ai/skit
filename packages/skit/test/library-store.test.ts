@@ -1,9 +1,9 @@
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem, Result } from "effect";
 import { join } from "node:path";
-import { deterministicTreeHashEffect } from "../src/artifact/skit.js";
+import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
-import { retainObservedCollectionEffect } from "../src/library/observed-import.js";
+import { importCollection } from "../src/library/import-collection.js";
 import {
   LibraryStore,
   libraryStoreLayer,
@@ -25,27 +25,27 @@ const library = Effect.gen(function* () {
     effect.pipe(Effect.provide(libraryStoreLayer({ home })));
   yield* inLibrary(
     Effect.scoped(
-      retainObservedCollectionEffect({
+      importCollection({
         machineId,
         source: { type: "local", path: source },
         input: source,
-        retainedAt: "2026-09-17T00:00:00.000Z",
+        importedAt: "2026-09-17T00:00:00.000Z",
         skills: [
           {
             name: "review",
             sourcePath: source,
             relativePath: ".",
-            observedHash: yield* deterministicTreeHashEffect(source),
+            currentHash: yield* deterministicTreeHash(source),
           },
         ],
-        observations: [],
+        lockFileEntries: [],
       }),
     ),
   );
   return { inLibrary, home, path: join(home, "state.json") };
 });
 
-it.effect("refuses to publish a state its own loader would reject", () =>
+it.effect("refuses to save a state its own loader would reject", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const { inLibrary, path } = yield* library;
@@ -55,7 +55,7 @@ it.effect("refuses to publish a state its own loader would reject", () =>
 
     // Duplicate Collection IDs satisfy the state schema but not the portable manifest.
     const error = yield* store
-      .publish({ ...state, collections: [...state.collections, ...state.collections] }, state)
+      .save({ ...state, collections: [...state.collections, ...state.collections] }, state)
       .pipe(Effect.flip);
 
     assert.strictEqual(error._tag, "InvalidLibraryState");
@@ -64,23 +64,17 @@ it.effect("refuses to publish a state its own loader would reject", () =>
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("accepts exactly one of two publishes planned from the same state", () =>
+it.effect("accepts exactly one of two saves planned from the same state", () =>
   Effect.gen(function* () {
     const { inLibrary } = yield* library;
     const store = yield* inLibrary(Effect.service(LibraryStore));
     const base = yield* store.load;
-    const entries = base.skills.map((skill) => ({
-      kind: "skill" as const,
-      skill_id: skill.skill_id,
-    }));
-    const global = { ...base, global_bindings: [{ scope: { kind: "global" as const }, entries }] };
-    const local = {
-      ...base,
-      local_bindings: [{ scope: { kind: "repository" as const, root: "/workspace" }, entries }],
-    };
+    const enabled = base.skills.map((skill) => ({ skill: skill.skill_id }));
+    const global = { ...base, enabled };
+    const local = { ...base, repositories: [{ root: "/workspace", enabled }] };
 
     const outcomes = yield* Effect.all(
-      [global, local].map((next) => Effect.result(store.publish(next, base))),
+      [global, local].map((next) => Effect.result(store.save(next, base))),
       { concurrency: "unbounded" },
     );
 
@@ -94,26 +88,20 @@ it.effect("accepts exactly one of two publishes planned from the same state", ()
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("accepts exactly one of two concurrent publishes sharing one held writer lock", () =>
+it.effect("accepts exactly one of two concurrent saves sharing one held writer lock", () =>
   Effect.gen(function* () {
     const { inLibrary } = yield* library;
     const store = yield* inLibrary(Effect.service(LibraryStore));
     const base = yield* store.load;
-    const entries = base.skills.map((skill) => ({
-      kind: "skill" as const,
-      skill_id: skill.skill_id,
-    }));
-    const global = { ...base, global_bindings: [{ scope: { kind: "global" as const }, entries }] };
-    const local = {
-      ...base,
-      local_bindings: [{ scope: { kind: "repository" as const, root: "/workspace" }, entries }],
-    };
+    const enabled = base.skills.map((skill) => ({ skill: skill.skill_id }));
+    const global = { ...base, enabled };
+    const local = { ...base, repositories: [{ root: "/workspace", enabled }] };
 
-    // Both forks inherit the outer lock, so only the publish mutex can serialize them.
+    // Both forks inherit the outer lock, so only the save mutex can serialize them.
     const outcomes = yield* withLibraryWriterLock(
       store.home,
       Effect.all(
-        [global, local].map((next) => Effect.result(store.publish(next, base))),
+        [global, local].map((next) => Effect.result(store.save(next, base))),
         { concurrency: "unbounded" },
       ),
     );
@@ -128,7 +116,7 @@ it.effect("accepts exactly one of two concurrent publishes sharing one held writ
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("refuses to publish while another process holds the lock, and leaves its lock", () =>
+it.effect("refuses to save while another process holds the lock, and leaves its lock", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const { inLibrary, path } = yield* library;
@@ -138,7 +126,7 @@ it.effect("refuses to publish while another process holds the lock, and leaves i
     const lock = join(store.home, ".lock");
     yield* fs.writeFileString(lock, "4242@elsewhere token\n");
 
-    const error = yield* store.publish({ ...state, global_bindings: [] }, state).pipe(Effect.flip);
+    const error = yield* store.save({ ...state, enabled: [] }, state).pipe(Effect.flip);
 
     assert.strictEqual(error._tag, "LibraryBusy");
     assert.strictEqual(yield* fs.readFileString(lock), "4242@elsewhere token\n");
@@ -174,7 +162,7 @@ it.effect("makes a writer that outlives its action acquire the lock again", () =
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.live("keeps the lock until a publish already under way in a forked fiber has finished", () =>
+it.live("keeps the lock until a save already under way in a forked fiber has finished", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const { home, path } = yield* library;
@@ -182,7 +170,7 @@ it.live("keeps the lock until a publish already under way in a forked fiber has 
     const entered = yield* Deferred.make<void>();
     const resume = yield* Deferred.make<void>();
     let armed = false;
-    // Pause the publish inside its check-and-write, at its read of the current state.
+    // Pause the save inside its check-and-write, at its read of the current state.
     const gatedFs: FileSystem.FileSystem = {
       ...fs,
       readFileString: (file, encoding) =>
@@ -204,20 +192,20 @@ it.live("keeps the lock until a publish already under way in a forked fiber has 
       Effect.provideService(FileSystem.FileSystem, gatedFs),
     );
     const base = yield* store.load;
-    const next = { ...base, global_bindings: [] };
+    const next = { ...base, enabled: [] };
     let child: Fiber.Fiber<void, unknown> | undefined;
     const owner = yield* withLibraryWriterLock(
       home,
       Effect.gen(function* () {
         armed = true;
-        child = yield* store.publish(next, base).pipe(Effect.forkDetach);
+        child = yield* store.save(next, base).pipe(Effect.forkDetach);
         yield* Deferred.await(entered);
       }),
     ).pipe(Effect.forkChild);
 
     yield* Deferred.await(entered);
     yield* Effect.sleep("50 millis");
-    // The owner's program has returned, but its release waits for the publish it lent the lock to.
+    // The owner's program has returned, but its release waits for the save it lent the lock to.
     assert.isUndefined(owner.pollUnsafe());
     const ownership = yield* fs.readFileString(lock);
     assert.match(ownership, new RegExp(`^${process.pid}@`));

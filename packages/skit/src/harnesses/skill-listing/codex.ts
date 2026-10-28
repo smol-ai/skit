@@ -2,7 +2,7 @@ import { Effect, FileSystem, Option, Schema } from "effect";
 import { dirname, join, resolve } from "node:path";
 import { modelContextWindow } from "../../models/model-context-windows.js";
 import type { LibraryState } from "../../library/library-state.js";
-import type { HarnessRootOverrides } from "../contracts.js";
+import type { SkillsDirectoryOverrides } from "../contracts.js";
 import { invocationMetadataAdapters } from "../invocation-metadata.js";
 import { estimateCodexListing, type CodexListingSkill } from "./codex-allocation.js";
 import type { ListingBudget } from "./contracts.js";
@@ -10,7 +10,7 @@ import { readCodexSkills } from "./codex-discovery.js";
 
 export interface CodexListingOptions {
   readonly cwd: string;
-  readonly overrides?: HarnessRootOverrides;
+  readonly overrides?: SkillsDirectoryOverrides;
 }
 
 const Configuration = Schema.Struct({
@@ -67,14 +67,15 @@ export const readCodexListingBudget = Effect.fn("Library.codexListingBudget")(fu
       positive(configuration.config.model_context_window) ??
       Option.getOrNull(modelContextWindow("openai", model));
     const collectionsByPath = new Map<string, string>();
-    for (const projection of state.projections.filter(
-      (projection) => projection.target === "agents" && projection.suppression_reason === undefined,
+    for (const installedSkill of state.installed_skills.filter(
+      (installedSkill) =>
+        installedSkill.destination === "agents" && installedSkill.suppression_reason === undefined,
     )) {
-      const skill = state.skills.find((skill) => skill.skill_id === projection.skill_id);
+      const skill = state.skills.find((skill) => skill.skill_id === installedSkill.skill_id);
       if (skill === undefined) continue;
       const path = yield* fs
-        .realPath(join(projection.path, "SKILL.md"))
-        .pipe(Effect.orElseSucceed(() => resolve(projection.path, "SKILL.md")));
+        .realPath(join(installedSkill.path, "SKILL.md"))
+        .pipe(Effect.orElseSucceed(() => resolve(installedSkill.path, "SKILL.md")));
       collectionsByPath.set(path, skill.collection_id);
     }
     const seen = new Set<string>();

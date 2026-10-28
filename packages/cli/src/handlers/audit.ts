@@ -1,7 +1,7 @@
 import { skitConfigurationLayer } from "../configuration/skit-configuration.js";
 import { Effect, Option } from "effect";
 import { Command, Flag } from "effect/cli";
-import { auditLocalCapabilitiesV1Alpha4Effect, type AuditOptions } from "../audit/local.js";
+import { auditLocalCapabilitiesV1Alpha4, type AuditOptions } from "../audit/local.js";
 import { handlePlatformCommand } from "../application.js";
 import { CommandMetadata } from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";
@@ -13,7 +13,7 @@ export const auditCommand = Effect.fn("CLI.audit")(function* (options: AuditOpti
   const renderer = yield* Renderer;
   return yield* renderer.withStatus(
     "Auditing local capabilities",
-    auditLocalCapabilitiesV1Alpha4Effect(options),
+    auditLocalCapabilitiesV1Alpha4(options),
   );
 });
 

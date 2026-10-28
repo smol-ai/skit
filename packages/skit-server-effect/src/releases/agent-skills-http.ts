@@ -1,7 +1,7 @@
-import { sha256Digest } from "@smolai/skit-core/universal/consumer";
+import { sha256Hash } from "@smolai/skit-core/universal/consumer";
 import { Effect } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
-import { r2BodyEffect } from "../platform/cloudflare.js";
+import { r2Body } from "../platform/cloudflare.js";
 import { agentSkillsIndex, discoverableSkills, skillArtifact } from "./agent-skills.js";
 import { ReleaseStore } from "./store.js";
 
@@ -16,9 +16,7 @@ const loadSkills = Effect.fn("AgentSkillsHttp.loadSkills")(function* (owner: str
   if (release === null) return yield* Effect.fail("not_found" as const);
   const archive = yield* store.readArchive(release.archive_object_key);
   if (archive === null) return yield* Effect.fail("not_found" as const);
-  const bytes = yield* r2BodyEffect("read Agent Skills release archive", () =>
-    archive.arrayBuffer(),
-  );
+  const bytes = yield* r2Body("read Agent Skills release archive", () => archive.arrayBuffer());
   return yield* discoverableSkills(new Uint8Array(bytes));
 });
 
@@ -34,7 +32,7 @@ export const indexResponse = Effect.gen(function* () {
   // One archive at a time: each is hashed and released before the next is built.
   const indexed = yield* Effect.forEach(skills, (skill) =>
     skillArtifact(skill).pipe(
-      Effect.flatMap(sha256Digest),
+      Effect.flatMap(sha256Hash),
       Effect.map((digest) => ({ ...skill, digest })),
     ),
   );

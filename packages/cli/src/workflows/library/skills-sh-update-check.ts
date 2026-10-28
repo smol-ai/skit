@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path";
 import { Clock, Effect } from "effect";
-import { LibraryStore, retainedTreePath, type LibraryState } from "@smolai/skit-core";
+import { LibraryStore, collectionVersionPath, type LibraryState } from "@smolai/skit-core";
 import { computeSkillsShCompatibleHash } from "./skills-sh-compatible-hash.js";
 import type { LibrarySubject } from "./subject-resolution.js";
 import { inspectSkillsShGitEvidence } from "./skills-sh-git-evidence.js";
@@ -22,7 +22,7 @@ export interface SkillsShUpdateMember {
   readonly status: SkillsShUpdateStatus;
   readonly baseline_commit?: string;
   readonly baseline_tree?: string;
-  readonly baseline_verification?: "lock-only" | "lock+retained-bytes";
+  readonly baseline_verification?: "lock-only" | "lock+original-bytes";
   readonly upstream_commit?: string;
   readonly upstream_tree?: string;
   readonly reason?: string;
@@ -30,86 +30,86 @@ export interface SkillsShUpdateMember {
 
 const sourceUrl = (
   subject: LibrarySubject,
-  observations: readonly LibraryState["acquisitions"][number]["observations"][number][],
+  lockFileEntries: readonly LibraryState["imports"][number]["lock_file_entries"][number][],
 ) => {
   const upstream = subject.kind === "collection" ? subject.collection.upstream : undefined;
   const source = upstream?.source_identity;
   if (source?.kind === "github")
     return `https://github.com/${source.owner}/${source.repository}.git`;
   if (source?.kind === "git") return source.remote.value;
-  return observations.find((observation) => observation.source_url)?.source_url;
+  return lockFileEntries.find((lockFileEntry) => lockFileEntry.source_url)?.source_url;
 };
 
-export const checkSkillsShSubjectEffect = Effect.fn("SkillsSh.checkSubject")(function* (
+export const checkSkillsShSubject = Effect.fn("SkillsSh.checkSubject")(function* (
   subject: LibrarySubject,
-  acquisition: LibraryState["acquisitions"][number] | undefined,
-  retainedCopy: LibraryState["retained_copies"][number] | undefined,
+  sourceImport: LibraryState["imports"][number] | undefined,
+  collectionVersion: LibraryState["collection_versions"][number] | undefined,
 ) {
-  if (!acquisition || !retainedCopy) return undefined;
+  if (!sourceImport || !collectionVersion) return undefined;
   const checkedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
   const store = yield* LibraryStore;
-  const observations = [
+  const lockFileEntries = [
     ...new Map(
-      acquisition.observations.flatMap((observation) =>
-        observation.type === "skills.sh-lock"
+      sourceImport.lock_file_entries.flatMap((lockFileEntry) =>
+        lockFileEntry.type === "skills.sh-lock"
           ? [
               [
-                `${observation.skill_name}\0${observation.skill_path ?? ""}\0${observation.computed_hash ?? ""}\0${observation.skill_folder_hash ?? ""}`,
-                observation,
+                `${lockFileEntry.skill_name}\0${lockFileEntry.skill_path ?? ""}\0${lockFileEntry.computed_hash ?? ""}\0${lockFileEntry.skill_folder_hash ?? ""}`,
+                lockFileEntry,
               ] as const,
             ]
           : [],
       ),
     ).values(),
   ];
-  if (!observations.length) return undefined;
-  const source = sourceUrl(subject, observations);
+  if (!lockFileEntries.length) return undefined;
+  const source = sourceUrl(subject, lockFileEntries);
   if (!source)
     return {
       checked_at: checkedAt,
-      members: observations.map((observation): SkillsShUpdateMember => ({
-        skill_name: observation.skill_name,
-        ...(observation.skill_path ? { skill_path: observation.skill_path } : {}),
-        status: observation.source_type === "well-known" ? "not-applicable" : "unverifiable",
+      members: lockFileEntries.map((lockFileEntry): SkillsShUpdateMember => ({
+        skill_name: lockFileEntry.skill_name,
+        ...(lockFileEntry.skill_path ? { skill_path: lockFileEntry.skill_path } : {}),
+        status: lockFileEntry.source_type === "well-known" ? "not-applicable" : "unverifiable",
         reason:
-          observation.source_type === "well-known"
+          lockFileEntry.source_type === "well-known"
             ? "well-known source"
             : "source is not a Git repository",
       })),
     };
-  const ref = observations.find((observation) => observation.ref)?.ref ?? "HEAD";
+  const ref = lockFileEntries.find((lockFileEntry) => lockFileEntry.ref)?.ref ?? "HEAD";
   const evidence = yield* inspectSkillsShGitEvidence(store.home, source, ref);
   if (evidence._tag === "Unavailable")
     return {
       checked_at: checkedAt,
-      members: observations.map((observation): SkillsShUpdateMember => ({
-        skill_name: observation.skill_name,
-        ...(observation.skill_path ? { skill_path: observation.skill_path } : {}),
+      members: lockFileEntries.map((lockFileEntry): SkillsShUpdateMember => ({
+        skill_name: lockFileEntry.skill_name,
+        ...(lockFileEntry.skill_path ? { skill_path: lockFileEntry.skill_path } : {}),
         status: "unverifiable",
         reason: evidence.reason,
       })),
     };
   const tip = evidence.commit;
-  const root = retainedTreePath(store.originalsPath, retainedCopy.digest);
+  const root = collectionVersionPath(store.originalsPath, collectionVersion.hash);
   const members: SkillsShUpdateMember[] = [];
-  for (const observation of observations) {
-    const claimed = observation.computed_hash ?? observation.skill_folder_hash;
-    const kind = observation.computed_hash
+  for (const lockFileEntry of lockFileEntries) {
+    const claimed = lockFileEntry.computed_hash ?? lockFileEntry.skill_folder_hash;
+    const kind = lockFileEntry.computed_hash
       ? ("computedHash" as const)
-      : observation.skill_folder_hash
+      : lockFileEntry.skill_folder_hash
         ? ("skillFolderHash" as const)
         : undefined;
     const base = {
-      skill_name: observation.skill_name,
-      ...(observation.skill_path ? { skill_path: observation.skill_path } : {}),
+      skill_name: lockFileEntry.skill_name,
+      ...(lockFileEntry.skill_path ? { skill_path: lockFileEntry.skill_path } : {}),
       ...(kind ? { hash_kind: kind } : {}),
       upstream_commit: tip,
     };
-    if (!observation.skill_path || !claimed || !kind) {
+    if (!lockFileEntry.skill_path || !claimed || !kind) {
       members.push({ ...base, status: "unverifiable", reason: "lock has no Skill path or hash" });
       continue;
     }
-    const folder = dirname(observation.skill_path).replaceAll("\\", "/");
+    const folder = dirname(lockFileEntry.skill_path).replaceAll("\\", "/");
     const member = yield* evidence.member(folder, kind, claimed);
     const tipState = member.tip;
     if (!tipState) {
@@ -121,8 +121,8 @@ export const checkSkillsShSubjectEffect = Effect.fn("SkillsSh.checkSubject")(fun
               baseline_commit: baseline.commit,
               baseline_tree: baseline.tree,
               baseline_verification:
-                kind === "computedHash" && observation.content_agreement === "agrees"
-                  ? ("lock+retained-bytes" as const)
+                kind === "computedHash" && lockFileEntry.content_agreement === "agrees"
+                  ? ("lock+original-bytes" as const)
                   : ("lock-only" as const),
             }
           : {}),
@@ -166,7 +166,7 @@ export const checkSkillsShSubjectEffect = Effect.fn("SkillsSh.checkSubject")(fun
         upstream_tree: tipState.tree,
         baseline_commit: tip,
         baseline_tree: tipState.tree,
-        baseline_verification: "lock+retained-bytes",
+        baseline_verification: "lock+original-bytes",
         status: "current",
       });
       continue;
@@ -184,7 +184,7 @@ export const checkSkillsShSubjectEffect = Effect.fn("SkillsSh.checkSubject")(fun
       ...base,
       upstream_tree: tipState.tree,
       ...(baseline ? { baseline_commit: baseline.commit, baseline_tree: baseline.tree } : {}),
-      ...(baseline ? { baseline_verification: "lock+retained-bytes" as const } : {}),
+      ...(baseline ? { baseline_verification: "lock+original-bytes" as const } : {}),
       status: baseline ? "update-available" : "unverifiable",
       ...(baseline ? {} : { reason: "lock hash not found in searched ref history" }),
     });

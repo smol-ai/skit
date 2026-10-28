@@ -1,7 +1,7 @@
 import { OptionCombinationInvalid } from "../../workflows/failures.js";
 import { promptsAllowed } from "../../presentation/interactivity.js";
 import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
-import type { SkitBindingScope as Scope } from "@smolai/skit-core";
+import type { InstallScope as Scope } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { resolve } from "node:path";
@@ -20,12 +20,12 @@ import { promptForScope } from "../../presentation/scope-prompt.js";
 import { failureExitCodes } from "../../failure-classification.js";
 import { result } from "../contracts.js";
 import {
-  applyBindingChanges,
-  BindingChangeIncomplete,
-  openBindingChangeSelection,
-  type BindingChangeIntent,
-  type BindingPlacement,
-} from "../../library-application/binding-changes.js";
+  applySetEnabledPlan,
+  SetEnabledIncomplete,
+  openSetEnabledSession,
+  type SetEnabledIntent,
+  type EnabledCollection,
+} from "../../library-application/set-enabled.js";
 import {
   largeCollectionWarning,
   descriptionLoadMessage,
@@ -43,17 +43,17 @@ const all = Flag.Boolean("all").pipe(
 );
 const invocation = Flag.Literals("invocation", invocationOptions).pipe(
   Flag.withDescription(
-    "Override model invocation policy for every agent; Devin maps explicit to [user], implicit to [user, model], and host-policy preserves authored triggers.",
+    "Override model invocation policy for every harness; Devin maps explicit to [user], implicit to [user, model], and host-policy preserves authored triggers.",
   ),
   Flag.optional,
 );
 const dryRun = Flag.Boolean("dry-run").pipe(
-  Flag.withDescription("Report projection changes without applying them."),
+  Flag.withDescription("Report installed-skill changes without applying them."),
   Flag.withDefault(false),
 );
 const allowDuplicate = Flag.Boolean("allow-duplicate").pipe(
   Flag.withDescription(
-    "Explicitly allow another same-scope copy of a skill already discoverable by an agent.",
+    "Explicitly allow another same-scope copy of a skill a harness can already find.",
   ),
   Flag.withDefault(false),
 );
@@ -112,7 +112,7 @@ const setEnabledCliCommand = (enabled: boolean) => {
       ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
   ).pipe(
     Command.withDescription(
-      `${enabled ? "Enable" : "Disable"} retained Skills for every agent at a scope.`,
+      `${enabled ? "Enable" : "Disable"} Skills from your Library for every harness at a scope.`,
     ),
     Command.withExamples(
       enabled
@@ -144,8 +144,8 @@ export interface SetEnabledCommandInput {
   readonly configuration: Effect.Success<ReturnType<typeof libraryCommandConfiguration>>;
 }
 
-type EnabledTarget = BindingPlacement & { readonly location: string };
-const withLocation = (placement: BindingPlacement): EnabledTarget => ({
+type EnabledTarget = EnabledCollection & { readonly location: string };
+const withLocation = (placement: EnabledCollection): EnabledTarget => ({
   ...placement,
   location: placement.scope.kind === "global" ? "global" : `repository ${placement.scope.root}`,
 });
@@ -160,7 +160,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
       requires: "a skill or collection",
       hint: "`skit list --json` lists them. Add `--global` or `--repo <path>` to choose the scope, and `--all` for a whole collection.",
     });
-  const selection = yield* openBindingChangeSelection();
+  const selection = yield* openSetEnabledSession();
   const view = selection.view;
   const prompter = yield* Prompter;
   const renderer = yield* Renderer;
@@ -342,7 +342,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
     targets = [{ collectionId: query, scope, skillIds: [], invocationBySkill: {}, location: "" }];
   }
 
-  const intent: BindingChangeIntent = {
+  const intent: SetEnabledIntent = {
     subject: query,
     enabled: input.enabled,
     where: targets.map((target) => target.scope),
@@ -359,21 +359,19 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
       ? "Planning Collection Bindings"
       : input.enabled
         ? "Projecting retained Skills"
-        : "Removing retained Projections",
+        : "Removing installed skills",
     Effect.gen(function* () {
-      const plan = yield* selection.preview(intent, input.configuration.inventory);
+      const plan = yield* selection.plan(intent, input.configuration.inventory);
       return input.dryRun
         ? plan.changes.map((value) => ({ kind: "plan" as const, value }))
-        : yield* applyBindingChanges(plan).pipe(
-            Effect.catchTag("Library.BindingChangeIncomplete", (failure) =>
-              Effect.succeed(failure),
-            ),
+        : yield* applySetEnabledPlan(plan).pipe(
+            Effect.catchTag("Library.SetEnabledIncomplete", (failure) => Effect.succeed(failure)),
           );
     }),
   );
-  const incomplete = outcomes instanceof BindingChangeIncomplete ? outcomes : undefined;
+  const incomplete = outcomes instanceof SetEnabledIncomplete ? outcomes : undefined;
   const reported =
-    outcomes instanceof BindingChangeIncomplete
+    outcomes instanceof SetEnabledIncomplete
       ? outcomes.results.map((value) => ({ kind: "applied" as const, value }))
       : outcomes;
   for (const outcome of reported) {

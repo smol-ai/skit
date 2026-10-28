@@ -82,7 +82,7 @@ const accountEnvironment = Effect.gen(function* () {
   };
 });
 const readAccounts = Effect.fn("Auth.readAccounts")(function* (home?: string) {
-  return new RegistryAccounts(yield* readConfigEffect(home), yield* accountEnvironment);
+  return new RegistryAccounts(yield* readConfig(home), yield* accountEnvironment);
 });
 
 export type RegistryConfigurationError =
@@ -125,7 +125,7 @@ function readAuthDocument(home?: string) {
  * store cannot supply is left absent; requests then go unauthenticated and ask the user to log in
  * again, rather than every command failing on a locked keychain.
  */
-export function readConfigEffect(home?: string) {
+export function readConfig(home?: string) {
   return Effect.gen(function* () {
     const path = yield* authPath(home);
     const config = yield* readAuthDocument(home);
@@ -151,10 +151,7 @@ export function readConfigEffect(home?: string) {
  * this 0600 file otherwise. Store items are written before the file names them and removed only
  * after the file stops naming them, so an interruption never leaves the file pointing at nothing.
  */
-const writeConfigEffect = Effect.fn("Auth.writeConfig")(function* (
-  config: AuthConfig,
-  home?: string,
-) {
+const writeConfig = Effect.fn("Auth.writeConfig")(function* (config: AuthConfig, home?: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* authPath(home);
   const previous = yield* Effect.option(readAuthDocument(home));
@@ -222,7 +219,7 @@ const writeConfigEffect = Effect.fn("Auth.writeConfig")(function* (
       yield* removeStoredToken(credential.tokenStorage, path, origin, credential.tokenStorageKey);
 }, Effect.scoped);
 
-export const resolveAuthEffect = Effect.fnUntraced(function* (
+export const resolveAuth = Effect.fnUntraced(function* (
   home?: string,
   registry?: string,
   durableOrigin?: string,
@@ -238,39 +235,37 @@ export const resolveAuthEffect = Effect.fnUntraced(function* (
   );
 });
 
-export const listRegistryRemotesEffect = Effect.fn("Registry.listRemotes")(function* (
-  home?: string,
-) {
+export const listRegistryRemotes = Effect.fn("Registry.listRemotes")(function* (home?: string) {
   return (yield* readAccounts(home)).remotes();
 });
 
-export const addRegistryRemoteEffect = Effect.fn("Registry.addRemote")(
+export const addRegistryRemote = Effect.fn("Registry.addRemote")(
   function* (name: string, originInput: string, home?: string) {
     const result = yield* (yield* readAccounts(home)).addAlias(name, originInput);
-    yield* writeConfigEffect(result.config, home);
+    yield* writeConfig(result.config, home);
     return result.remote;
   },
   (effect, _name, _origin, home) => withConfigurationWriter(home, effect),
 );
-export const defaultRegistryRemoteEffect = Effect.fn("Registry.defaultRemote")(
+export const defaultRegistryRemote = Effect.fn("Registry.defaultRemote")(
   function* (name: string, home?: string) {
     const result = yield* (yield* readAccounts(home)).setDefault(name);
-    yield* writeConfigEffect(result.config, home);
+    yield* writeConfig(result.config, home);
     return result.remote;
   },
   (effect, _name, home) => withConfigurationWriter(home, effect),
 );
-export const removeRegistryRemoteEffect = Effect.fn("Registry.removeRemote")(
+export const removeRegistryRemote = Effect.fn("Registry.removeRemote")(
   function* (name: string, home?: string) {
     const result = yield* (yield* readAccounts(home)).removeAlias(name);
-    yield* writeConfigEffect(result.config, home);
+    yield* writeConfig(result.config, home);
     return result.remote;
   },
   (effect, _name, home) => withConfigurationWriter(home, effect),
 );
 
 /** Select a Registry without letting a device-local name enter durable Source state. */
-export const resolveRegistryLocatorEffect = Effect.fn("Registry.resolveLocator")(function* (
+export const resolveRegistryLocator = Effect.fn("Registry.resolveLocator")(function* (
   input: string,
   options: { readonly registry?: string; readonly home?: string } = {},
 ) {
@@ -289,14 +284,14 @@ export const resolveRegistryLocatorEffect = Effect.fn("Registry.resolveLocator")
 });
 
 /** Resolve a device-local login selector before asking the user for credentials. */
-export const resolveLoginTargetEffect = Effect.fn("Auth.resolveLoginTarget")(function* (
+export const resolveLoginTarget = Effect.fn("Auth.resolveLoginTarget")(function* (
   selectedRegistry?: string,
   home?: string,
 ) {
   return yield* (yield* readAccounts(home)).loginTarget(selectedRegistry);
 });
 
-export function resolveAuthForOriginEffect(
+export function resolveAuthForOrigin(
   originInput: string,
   home?: string,
 ): Effect.Effect<
@@ -313,7 +308,7 @@ export function resolveAuthForOriginEffect(
 }
 
 /** Check the saved bearer before collecting new credentials. No Library data is changed. */
-export const reuseLoginEffect = Effect.fn("Auth.reuseLogin")(function* (input: {
+export const reuseLogin = Effect.fn("Auth.reuseLogin")(function* (input: {
   origin: string;
   scopes: readonly string[];
   alias?: string;
@@ -533,7 +528,7 @@ export const clearPendingLogin = Effect.fn("Auth.clearPendingLogin")(function* (
 });
 
 /** Start a browser login without waiting for it, for a caller that cannot wait for the user. */
-export const startDeviceLoginEffect = Effect.fn("Auth.startDeviceLogin")(function* (input: {
+export const startDeviceLogin = Effect.fn("Auth.startDeviceLogin")(function* (input: {
   origin: string;
   scopes: readonly AuthScope[];
 }) {
@@ -545,7 +540,7 @@ export const startDeviceLoginEffect = Effect.fn("Auth.startDeviceLogin")(functio
  * Poll until the user approves `pending`, returning the approved session's token. Runs outside the
  * configuration writer: waiting on a person must not hold the lock every Library write needs.
  */
-export const awaitDeviceApprovalEffect = Effect.fn("Auth.awaitDeviceApproval")(function* (
+export const awaitDeviceApproval = Effect.fn("Auth.awaitDeviceApproval")(function* (
   pending: PendingDeviceLogin,
   scopes: readonly AuthScope[],
 ) {
@@ -611,7 +606,7 @@ export const loginEffect = Effect.fn("Auth.login")(
     /** Sign in with these. */
     email?: string;
     password?: string;
-    /** Or the session a browser login was approved with (see `awaitDeviceApprovalEffect`). */
+    /** Or the session a browser login was approved with (see `awaitDeviceApproval`). */
     approvedSessionToken?: string;
     scopes: AuthScope[];
     alias?: string;
@@ -746,7 +741,7 @@ export const loginEffect = Effect.fn("Auth.login")(
     if (!created) return yield* new SignInFailed({ message: "Credential creation failed" });
 
     const signedIn = accounts.signedIn(origin, created, input.alias);
-    const stored = yield* Effect.result(writeConfigEffect(signedIn.config, input.home));
+    const stored = yield* Effect.result(writeConfig(signedIn.config, input.home));
     if (Result.isFailure(stored)) {
       const cleanup = yield* revoke(created);
       unsaved = undefined;
@@ -820,7 +815,7 @@ export const logoutEffect = Effect.fn("Auth.logout")(
         message: `Logout failed (${response.status}): ${detail}`,
       });
     }
-    yield* writeConfigEffect(accounts.signedOut(origin), home);
+    yield* writeConfig(accounts.signedOut(origin), home);
     return { origin, revoked: ok };
   },
   (effect, home, _selectedOrigin) => withConfigurationWriter(home, effect),

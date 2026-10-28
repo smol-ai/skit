@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { releaseSchema } from "../distribution/api-contracts.js";
-import { digestSchema as effectDigest, safePathSchema } from "../schemas.js";
+import { hashSchema as effectDigest, safePathSchema } from "../schemas.js";
 import {
   apiBase64Schema as base64,
   apiNonEmptyString as nonEmpty,

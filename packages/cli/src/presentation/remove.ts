@@ -1,24 +1,26 @@
 import type { ContractDataForId } from "../commands/output-contracts.js";
 
-export function renderRemovePlan(data: ContractDataForId<"skit.remove.plan.v4">) {
-  const bindings = data.global_bindings + data.repository_bindings;
+export function renderRemovePlan(data: ContractDataForId<"skit.remove.plan.v5">) {
+  const enabledScopes = data.global_enabled + data.repositories;
   return [
     `Would remove ${data.skills} ${data.skills === 1 ? "skill" : "skills"} from your library.`,
-    ...(bindings
-      ? [`Would also remove ${bindings} ${bindings === 1 ? "binding" : "bindings"}.`]
+    ...(enabledScopes
+      ? [`Would also remove ${enabledScopes} ${enabledScopes === 1 ? "binding" : "bindings"}.`]
       : []),
-    ...(data.owned_projections
+    ...(data.installed_skills
       ? [
-          `Would also retire ${data.owned_projections} ${data.owned_projections === 1 ? "projection" : "projections"}.`,
+          `Would also retire ${data.installed_skills} ${data.installed_skills === 1 ? "installed skill" : "installed skills"}.`,
         ]
       : []),
   ].join("\n");
 }
-export function renderRemove(data: ContractDataForId<"skit.remove.v4">) {
+export function renderRemove(data: ContractDataForId<"skit.remove.v5">) {
   return [
     `Removed ${data.skills} ${data.skills === 1 ? "skill" : "skills"} from your library.`,
-    ...(data.retired
-      ? [`Retired ${data.retired} ${data.retired === 1 ? "projection" : "projections"}.`]
+    ...(data.uninstalled
+      ? [
+          `Retired ${data.uninstalled} ${data.uninstalled === 1 ? "installed skill" : "installed skills"}.`,
+        ]
       : []),
   ].join("\n");
 }

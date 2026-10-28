@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { expect, vi } from "vitest";
 import { ZipFile } from "yazl";
-import { createSkitArchiveEffect, skitLayer } from "../src/index.js";
+import { createSkitArchive, skitLayer } from "../src/index.js";
 import { copySkitFixtureEffect } from "./helpers/skit-fixture.js";
 
 it.effect.each([
@@ -51,7 +51,7 @@ it.effect.each([
     let reads = 0;
     let sinkFinalized = false;
     const operation = Effect.gen(function* () {
-      return yield* createSkitArchiveEffect(root, output).pipe(
+      return yield* createSkitArchive(root, output).pipe(
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
           makeDirectory: (path, options) =>
@@ -117,7 +117,7 @@ it.effect("archives retain deterministic bytes", () =>
     const output = yield* fs.makeTempDirectoryScoped({ prefix: "skit-archive-identity-output-" });
     yield* copySkitFixtureEffect("authored", root);
     const archive = join(output, "release.zip");
-    yield* createSkitArchiveEffect(root, archive);
+    yield* createSkitArchive(root, archive);
     expect(
       createHash("sha256")
         .update(yield* fs.readFile(archive))

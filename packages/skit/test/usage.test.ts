@@ -154,7 +154,7 @@ it.effect(
           loads: 0,
           reads: 0,
           identity: "name-only",
-          lastObservedAt: start,
+          lastSeenAt: start,
         },
       ]);
       expect(report.coverage[0]).toMatchObject({
@@ -174,7 +174,7 @@ it.effect(
     }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
 );
 
-it.effect("path identity joins known projections and keeps same-name documents separate", () =>
+it.effect("path identity joins known installed skills and keeps same-name documents separate", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-usage-identities-" });
@@ -207,7 +207,7 @@ it.effect("path identity joins known projections and keeps same-name documents s
     const report = yield* (yield* SkillUsage).scan({
       roots: [{ root, harness: "codex" }],
       end,
-      projections: [{ path: alias, skillId: "skill-example", name: "Example skill" }],
+      installedSkills: [{ path: alias, skillId: "skill-example", name: "Example skill" }],
     });
     expect(report.rows).toHaveLength(2);
     expect(report.rows).toEqual(
@@ -226,7 +226,7 @@ it.effect("path identity joins known projections and keeps same-name documents s
     const ambiguous = yield* (yield* SkillUsage).scan({
       roots: [{ root, harness: "codex" }],
       end,
-      projections: [
+      installedSkills: [
         { path: alias, skillId: "one", name: "One" },
         { path: document, skillId: "two", name: "Two" },
       ],
@@ -1073,7 +1073,7 @@ it.effect(
       const options = {
         end,
         project: root,
-        projections: [
+        installedSkills: [
           { path: "/synthetic/skills/example", skillId: "example-id", name: "example" },
         ],
       };
