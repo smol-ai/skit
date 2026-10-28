@@ -586,3 +586,40 @@ it.effect("a setup recorded before the v10 upgrade undoes exactly as its v2 reco
     );
   }).pipe(Effect.provide(skitLayer)),
 );
+
+it.effect("undo attempts recorded before the v10 upgrade still read", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    yield* f.home.owned(
+      Effect.gen(function* () {
+        expect((yield* (yield* prepareSetupUndo(f.operationId)).apply()).status).toBe("undone");
+        const saved = yield* inspectSetupOperation(f.home.home, f.operationId);
+        const undo = join(saved.directory, "undo");
+        const attempts = (yield* f.fs.readDirectory(undo)).filter(
+          (name) => !name.endsWith(".done.json"),
+        );
+        expect(attempts).toHaveLength(1);
+        const path = join(undo, attempts[0]!);
+        const { backupId, before, after, schemaVersion, ...fields } = JSON.parse(
+          yield* f.fs.readFileString(path),
+        );
+        expect(schemaVersion).toBe(2);
+        yield* f.fs.writeFileString(
+          path,
+          `${JSON.stringify({
+            ...fields,
+            schemaVersion: 1,
+            preservationId: backupId,
+            before: v1Intent(before),
+            after: v1Intent(after),
+          })}\n`,
+        );
+        // Completed: the v1 attempt and its completion still agree.
+        expect((yield* prepareSetupUndo(f.operationId)).summary.status).toBe("already-undone");
+        // Interrupted: the v1 attempt's backup folder still counts as this undo's own.
+        yield* f.fs.remove(path.replace(/\.json$/, ".done.json"));
+        expect((yield* prepareSetupUndo(f.operationId)).summary.status).not.toBe("already-undone");
+      }),
+    );
+  }).pipe(Effect.provide(skitLayer)),
+);
