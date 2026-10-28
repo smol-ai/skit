@@ -10,12 +10,12 @@ describe("static capability evidence", () => {
     const left = auditSkill('spawn("sh")', {
       path: "/machine-a/skills/review/SKILL.md",
       fingerprintPath: "SKILL.md",
-      artifactContentDigest: digest,
+      artifactContentHash: digest,
     });
     const right = auditSkill('spawn("sh")', {
       path: "/machine-b/skills/review/SKILL.md",
       fingerprintPath: "SKILL.md",
-      artifactContentDigest: digest,
+      artifactContentHash: digest,
     });
     const inventory = auditSkill('spawn("sh")', {
       path: "/machine-a/skills/review/SKILL.md",
@@ -24,7 +24,7 @@ describe("static capability evidence", () => {
     expect(left.findings[0].fingerprint).toBe(right.findings[0].fingerprint);
     expect(left.findings[0]).toEqual(
       expect.objectContaining({
-        artifactContentDigest: digest,
+        artifactContentHash: digest,
         analysisProfile: {
           id: "skit/finding/v1",
           scope: "skill_artifact",
@@ -53,11 +53,11 @@ describe("static capability evidence", () => {
   test("tracks Project acceptance without making it an enablement gate", () => {
     const audit = auditSkill('spawn("sh")', {
       fingerprintPath: "SKILL.md",
-      artifactContentDigest: digest,
+      artifactContentHash: digest,
     });
     const acceptance = {
       fingerprint: audit.findings[0].fingerprint!,
-      artifactContentDigest: digest,
+      artifactContentHash: digest,
       skill_version_id: skillVersionId,
       context: "project" as const,
       principal: "principal:test",
@@ -70,7 +70,7 @@ describe("static capability evidence", () => {
     expect(
       evaluateSkillAudit(audit, {
         context: "project",
-        artifactContentDigest: digest,
+        artifactContentHash: digest,
         acceptances: [acceptance],
         evaluatedAt: "2026-09-01T23:59:59.999Z",
       }),
@@ -83,7 +83,7 @@ describe("static capability evidence", () => {
     expect(
       evaluateSkillAudit(audit, {
         context: "project",
-        artifactContentDigest: digest,
+        artifactContentHash: digest,
         acceptances: [acceptance],
         evaluatedAt: acceptance.expiresAt,
       }),
@@ -96,7 +96,7 @@ describe("static capability evidence", () => {
     expect(
       evaluateSkillAudit(audit, {
         context: "project",
-        artifactContentDigest: `sha256:${"b".repeat(64)}`,
+        artifactContentHash: `sha256:${"b".repeat(64)}`,
         acceptances: [acceptance],
         evaluatedAt: "2026-09-01T12:00:00.000Z",
       }),
@@ -109,7 +109,7 @@ describe("static capability evidence", () => {
     expect(
       evaluateSkillAudit(audit, {
         context: "publish",
-        artifactContentDigest: digest,
+        artifactContentHash: digest,
         acceptances: [acceptance],
         evaluatedAt: "2026-09-01T12:00:00.000Z",
       }).outcome,
@@ -119,11 +119,11 @@ describe("static capability evidence", () => {
   test("tracks acceptance for each distinct Project evidence location", () => {
     const audit = auditSkill('spawn("one")\nspawn("two")', {
       fingerprintPath: "SKILL.md",
-      artifactContentDigest: digest,
+      artifactContentHash: digest,
     });
     const acceptanceFor = (index: number) => ({
       fingerprint: audit.findings[index].fingerprint!,
-      artifactContentDigest: digest,
+      artifactContentHash: digest,
       skill_version_id: skillVersionId,
       context: "project" as const,
       principal: "principal:test",
@@ -133,7 +133,7 @@ describe("static capability evidence", () => {
     const evaluate = (acceptances: ReturnType<typeof acceptanceFor>[]) =>
       evaluateSkillAudit(audit, {
         context: "project",
-        artifactContentDigest: digest,
+        artifactContentHash: digest,
         acceptances,
         evaluatedAt: "2026-09-01T01:00:00.000Z",
       });
@@ -241,7 +241,7 @@ describe("static capability evidence", () => {
   test("bounds repetitive critical findings without losing honest policy attribution", () => {
     const audit = auditSkill(Array.from({ length: 5_000 }, () => "eval(source)").join("\n"), {
       fingerprintPath: "SKILL.md",
-      artifactContentDigest: digest,
+      artifactContentHash: digest,
     });
 
     expect(audit.findings).toHaveLength(100);
@@ -265,7 +265,7 @@ describe("static capability evidence", () => {
     );
     const acceptedVisibleFindings = audit.findings.map((finding) => ({
       fingerprint: finding.fingerprint!,
-      artifactContentDigest: digest,
+      artifactContentHash: digest,
       skill_version_id: skillVersionId,
       context: "project" as const,
       principal: "principal:test",
@@ -275,7 +275,7 @@ describe("static capability evidence", () => {
     expect(
       evaluateSkillAudit(audit, {
         context: "project",
-        artifactContentDigest: digest,
+        artifactContentHash: digest,
         acceptances: acceptedVisibleFindings,
         evaluatedAt: "2026-09-01T01:00:00.000Z",
       }),

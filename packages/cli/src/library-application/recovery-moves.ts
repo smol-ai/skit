@@ -218,7 +218,7 @@ export const prepareOwnedRecoveryMoves = Effect.fn("RecoveryMoves.prepareOwned")
       observed.marker.installed_skill_id !== expected.installed_skill_id ||
       observed.marker.skill_id !== expected.skill_id ||
       observed.marker.skill_version_id !== expected.skill_version_id ||
-      observed.marker.expected_digest !== expected.expected_digest
+      observed.marker.expected_hash !== expected.expected_hash
     )
       return yield* new PlanIsStale();
     const marker = yield* fs.readFileString(join(path, ".skit-ownership.json"));

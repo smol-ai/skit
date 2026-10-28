@@ -27,7 +27,7 @@ export const InventoryScanIssue = Schema.Union([
 export type InventoryScanIssue = typeof InventoryScanIssue.Type;
 export const SkillAssessmentAcceptance = Schema.Struct({
   fingerprint: Digest,
-  artifactContentDigest: Digest,
+  artifactContentHash: Digest,
   skill_version_id: SkillVersionId,
   context: Schema.Literal("project"),
   principal: Schema.String,

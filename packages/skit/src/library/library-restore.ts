@@ -102,7 +102,7 @@ const refetchSourceArchive = Effect.fn("Library.restore.refetchSource")(function
   digest: string,
   options: RestoreOptions,
 ) {
-  const copy = manifest.collection_versions.find((candidate) => candidate.digest === digest);
+  const copy = manifest.collection_versions.find((candidate) => candidate.hash === digest);
   const sourceImport = manifest.imports.find(
     (candidate) =>
       candidate.collection_version_id === copy?.collection_version_id &&
@@ -190,7 +190,7 @@ const invalidPlan = (
   plan: CollectionVersionPlan,
   hasDownload: boolean,
 ): string | undefined => {
-  const required = new Set(manifest.collection_versions.map((copy) => copy.digest));
+  const required = new Set(manifest.collection_versions.map((copy) => copy.hash));
   const copies = new Map(
     manifest.collection_versions.map((copy) => [copy.collection_version_id, copy]),
   );
@@ -211,9 +211,9 @@ const invalidPlan = (
   for (const id of plan.reacquire) {
     const copy = copies.get(id);
     if (copy === undefined) return `unknown retained copy ${id}`;
-    if (snapshots.has(copy.digest))
-      return `snapshot-backed retained copy ${copy.digest} cannot be reacquired from source`;
-    covered.add(copy.digest);
+    if (snapshots.has(copy.hash))
+      return `snapshot-backed retained copy ${copy.hash} cannot be reacquired from source`;
+    covered.add(copy.hash);
   }
   for (const digest of required) {
     if (!covered.has(digest)) return `retained copy ${digest} not downloaded`;
@@ -246,9 +246,7 @@ const completeRestoreArchives = Effect.fn("Library.completeRestoreArchives")(fun
       Effect.gen(function* () {
         for (const [index, digest] of plan.reusable.entries()) {
           const path = collectionVersionPath(options.originalsPath, digest);
-          const copy = manifest.collection_versions.find(
-            (candidate) => candidate.digest === digest,
-          );
+          const copy = manifest.collection_versions.find((candidate) => candidate.hash === digest);
           const subject =
             manifest.imports.find(
               (candidate) => candidate.collection_version_id === copy?.collection_version_id,
@@ -303,23 +301,23 @@ const completeRestoreArchives = Effect.fn("Library.completeRestoreArchives")(fun
     if (copy === undefined)
       return yield* new RestoreInvalid({ detail: `unknown retained copy ${id}` });
     // A stale or mismatched plan must never turn private content into a source fetch.
-    if (manifest.snapshot_digests.includes(copy.digest))
+    if (manifest.snapshot_digests.includes(copy.hash))
       return yield* new RestoreInvalid({
-        detail: `snapshot-backed retained copy ${copy.digest} not downloaded`,
+        detail: `snapshot-backed retained copy ${copy.hash} not downloaded`,
       });
     const subject =
       manifest.imports.find((candidate) => candidate.collection_version_id === id)?.input.value ??
-      copy.digest;
+      copy.hash;
     const archive = yield* progress.around(
       { kind: "fetch-source", subject },
-      refetchSourceArchive(manifest, copy.digest, options),
+      refetchSourceArchive(manifest, copy.hash, options),
     );
     archives.set(archive.digest, archive);
   }
   // Plans describe observations, not authority to omit required content.
   for (const copy of manifest.collection_versions) {
-    if (!archives.has(copy.digest) && !existingPaths.has(copy.digest))
-      return yield* new RestoreInvalid({ detail: `retained copy ${copy.digest} not downloaded` });
+    if (!archives.has(copy.hash) && !existingPaths.has(copy.hash))
+      return yield* new RestoreInvalid({ detail: `retained copy ${copy.hash} not downloaded` });
   }
   return { archives: [...archives.values()], existingPaths };
 });
@@ -349,20 +347,20 @@ export const prepareRestore = Effect.fn("Library.prepareRestore")(function* <E =
           const label =
             manifest.imports.find(
               (candidate) => candidate.collection_version_id === tree.collection_version_id,
-            )?.input.value ?? tree.digest;
+            )?.input.value ?? tree.hash;
           yield* progress.tick({ phase, completed: index, subject: label });
-          const archive = received.get(tree.digest);
-          let path = verifiedPaths.get(tree.digest);
+          const archive = received.get(tree.hash);
+          let path = verifiedPaths.get(tree.hash);
           if (path === undefined) {
-            path = collectionVersionPath(options.originalsPath, tree.digest);
+            path = collectionVersionPath(options.originalsPath, tree.hash);
             if (yield* fs.exists(path)) {
               // Existing immutable objects still need verification, but no unpack/copy cycle.
-              if ((yield* originalTreeHash(path)) !== tree.digest)
+              if ((yield* originalTreeHash(path)) !== tree.hash)
                 return yield* new ContentAddressCollision();
             } else {
               if (archive === undefined)
                 return yield* new RestoreInvalid({
-                  detail: `retained copy ${tree.digest} not downloaded`,
+                  detail: `retained copy ${tree.hash} not downloaded`,
                 });
               const verified = yield* verifySnapshotArchive(archive);
               path = yield* Effect.scoped(
@@ -371,17 +369,17 @@ export const prepareRestore = Effect.fn("Library.prepareRestore")(function* <E =
                   return yield* writeCollectionVersion(
                     temporary,
                     options.originalsPath,
-                    tree.digest,
+                    tree.hash,
                     true,
                   );
                 }),
               );
             }
-            verifiedPaths.set(tree.digest, path);
+            verifiedPaths.set(tree.hash, path);
           }
           for (const member of tree.members) {
             const directory = member.source_path === "." ? path : join(path, member.source_path);
-            if ((yield* originalTreeHash(directory)) !== member.source_digest)
+            if ((yield* originalTreeHash(directory)) !== member.source_hash)
               return yield* new RestoreInvalid({
                 detail: `retained member ${member.source_path} source bytes disagree`,
               });

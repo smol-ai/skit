@@ -60,10 +60,10 @@ export const checkSubjects = Effect.fn("Library.checkSubjects")(function* (
       for (const copy of copies) {
         collection_versions.push({
           collection_version_id: copy.collection_version_id,
-          digest: copy.digest,
+          hash: copy.hash,
           original_intact:
-            (yield* originalTreeHash(collectionVersionPath(store.originalsPath, copy.digest))) ===
-            copy.digest,
+            (yield* originalTreeHash(collectionVersionPath(store.originalsPath, copy.hash))) ===
+            copy.hash,
         });
       }
       const skillsSh = yield* checkSkillsShSubject(subject, sourceImport, currentCopy);
@@ -80,10 +80,10 @@ export const checkSubjects = Effect.fn("Library.checkSubjects")(function* (
             ? ("not-applicable" as const)
             : inspected === undefined || currentCopy === undefined
               ? ("unverified" as const)
-              : inspected.snapshot_digest === currentCopy.digest
+              : inspected.snapshot_digest === currentCopy.hash
                 ? ("current" as const)
                 : ("changed" as const),
-        ...(currentCopy === undefined ? {} : { current_snapshot_digest: currentCopy.digest }),
+        ...(currentCopy === undefined ? {} : { current_snapshot_digest: currentCopy.hash }),
         ...(inspected === undefined
           ? {}
           : { available_snapshot_digest: inspected.snapshot_digest }),

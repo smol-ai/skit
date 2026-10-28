@@ -90,7 +90,7 @@ export const checkSkillsShSubject = Effect.fn("SkillsSh.checkSubject")(function*
       })),
     };
   const tip = evidence.commit;
-  const root = collectionVersionPath(store.originalsPath, collectionVersion.digest);
+  const root = collectionVersionPath(store.originalsPath, collectionVersion.hash);
   const members: SkillsShUpdateMember[] = [];
   for (const lockFileEntry of lockFileEntries) {
     const claimed = lockFileEntry.computed_hash ?? lockFileEntry.skill_folder_hash;

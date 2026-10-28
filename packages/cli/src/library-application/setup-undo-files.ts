@@ -37,7 +37,7 @@ export const installedSkillChoice = (installedSkill: InstalledSkill | undefined)
         path: installedSkill.path,
         root: installedSkill.root,
         target: installedSkill.destination,
-        expected_digest: installedSkill.expected_digest,
+        expected_hash: installedSkill.expected_hash,
         status: installedSkill.status,
         suppressed_at: installedSkill.suppressed_at,
       };
@@ -218,7 +218,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
       marker.marker.installed_skill_id === current.installed_skill_id &&
       marker.marker.skill_id === current.skill_id &&
       marker.marker.skill_version_id === current.skill_version_id &&
-      marker.marker.expected_digest === current.expected_digest;
+      marker.marker.expected_hash === current.expected_hash;
     if (
       file.entry &&
       details.entry &&
@@ -291,7 +291,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
         for (const version of skill.versions) {
           const backing = versionBacking(state, skill, version);
           if (!backing) continue;
-          const root = collectionVersionPath(store.originalsPath, backing.copy.digest);
+          const root = collectionVersionPath(store.originalsPath, backing.copy.hash);
           const path =
             backing.member.source_path === "." ? root : join(root, backing.member.source_path);
           const evidence = yield* Effect.result(readSkillPathDetails(path));

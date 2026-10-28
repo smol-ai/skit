@@ -12,14 +12,15 @@ const current = {
   installed_skill_id: makeInstalledSkillId(),
   skill_id: makeSkillId(),
   skill_version_id: makeSkillVersionId(),
-  expected_digest: `sha256:${"a".repeat(64)}`,
+  expected_hash: `sha256:${"a".repeat(64)}`,
 } as const;
-const { schemaVersion: _version, installed_skill_id, ...fields } = current;
+const { schemaVersion: _version, installed_skill_id, expected_hash, ...fields } = current;
 const v4 = {
   ...fields,
   schemaVersion: 4,
   projectionPolicyVersion: 1,
   projection_id: installed_skill_id,
+  expected_digest: expected_hash,
 };
 
 it("reads v2, v3 and v4 ownership markers as the current marker", () => {

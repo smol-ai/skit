@@ -92,7 +92,7 @@ const SettingsChange = Schema.Struct({
 const SaveConfirmation = Schema.Struct({
   schemaVersion: Schema.Literal(1),
   sequence: Schema.Int,
-  digest: Digest,
+  hash: Digest,
 });
 const Completion = Schema.Struct({
   schemaVersion: Schema.Literal(2),
@@ -256,15 +256,15 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
       const key = String(step.sequence).padStart(8, "0");
       const path = join(changes, `${key}.json`);
       yield* writeJsonExclusive(path, step);
-      return { sequence: step.sequence, digest: hashParts([yield* fs.readFileString(path)]) };
+      return { sequence: step.sequence, hash: hashParts([yield* fs.readFileString(path)]) };
     },
     (effect) => effect.pipe(Effect.provideService(FileSystem.FileSystem, fs)),
   );
   const markSaved = Effect.fn("SetupOperation.markSaved")(
-    function* (changeRecord: { sequence: number; digest: Digest }) {
+    function* (changeRecord: { sequence: number; hash: Digest }) {
       yield* writeJsonExclusive(
         join(changes, `${String(changeRecord.sequence).padStart(8, "0")}.published.json`),
-        { schemaVersion: 1, sequence: changeRecord.sequence, digest: changeRecord.digest },
+        { schemaVersion: 1, sequence: changeRecord.sequence, hash: changeRecord.hash },
       );
     },
     (effect) => effect.pipe(Effect.provideService(FileSystem.FileSystem, fs)),
@@ -272,7 +272,7 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
   let pendingSettings:
     | {
         sequence: number;
-        digest: Digest;
+        hash: Digest;
         after: SetupDiscoverySettings;
         machineId: MachineId | undefined;
       }
@@ -363,7 +363,7 @@ export const inspectSetupOperation = Effect.fn("SetupOperation.inspect")(functio
       const value = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(schema))(raw).pipe(
         Effect.mapError(() => new RecoveryInvalid({ detail: `Invalid setup record ${path}` })),
       );
-      return { value, digest: hashParts([raw]) };
+      return { value, hash: hashParts([raw]) };
     });
   const operation = (yield* read("setup.json", StoredOperation)).value;
   const changes: { change: typeof StoredChange.Type; saved: boolean }[] = [];
@@ -390,7 +390,7 @@ export const inspectSetupOperation = Effect.fn("SetupOperation.inspect")(functio
       let saved = false;
       if (yield* maybeStat(join(directory, ack))) {
         const confirmation = (yield* read(ack, SaveConfirmation)).value;
-        if (confirmation.sequence !== change.sequence || confirmation.digest !== record.digest)
+        if (confirmation.sequence !== change.sequence || confirmation.hash !== record.hash)
           return yield* new RecoveryInvalid({
             detail: "Setup save confirmation differs from its change",
           });

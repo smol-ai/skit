@@ -51,7 +51,7 @@ export const SetupSkillsLockEntry = Schema.Struct({
   skillPath: Schema.optionalKey(Schema.String),
   computedHash: Schema.optionalKey(Schema.String),
   skillFolderHash: Schema.optionalKey(Schema.String),
-  wellKnownDigest: Schema.optionalKey(Schema.String),
+  wellKnownHash: Schema.optionalKey(Schema.String),
   originalEntry: Schema.JsonObject,
 });
 export type SetupSkillsLockEntry = typeof SetupSkillsLockEntry.Type;

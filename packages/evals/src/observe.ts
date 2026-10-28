@@ -147,10 +147,10 @@ async function observeLibrary(home: string, fixture: Fixture): Promise<LibraryOb
           problems.push(`no retained backing for ${skill.name}`);
           continue;
         }
-        const root = collectionVersionPath(join(home, ".skit", "originals"), backing.copy.digest);
+        const root = collectionVersionPath(join(home, ".skit", "originals"), backing.copy.hash);
         const path = join(root, backing.member.source_path);
         const hash = yield* originalTreeHash(path).pipe(Effect.option);
-        if (hash._tag === "None" || hash.value !== version.source_digest)
+        if (hash._tag === "None" || hash.value !== version.source_hash)
           problems.push(`retained content missing or changed: ${skill.name}`);
         const originals = fixture.userFiles.filter((file) =>
           file.path.endsWith(`/${skill.name}/SKILL.md`),

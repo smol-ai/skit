@@ -17,7 +17,7 @@ const safeRelative = (path: string) =>
 /** The fields a reader supplies; the constructor derives and checks the rest. */
 type SkillsShLockFileFields = Omit<
   SkillsShLockFileEntry,
-  "type" | "lock_path" | "skill_path" | "original_entry_digest" | "upstream_baseline"
+  "type" | "lock_path" | "skill_path" | "original_entry_hash" | "upstream_baseline"
 > & { readonly lock_path: string; readonly skill_path?: string };
 
 /**
@@ -37,6 +37,6 @@ export const skillsShLockFileEntry = (fields: SkillsShLockFileFields): SkillsShL
       : { source_base_url: sanitizeSourceClaim(source_base_url) }),
     ...(ref === undefined ? {} : { ref: sanitizeSourceClaim(ref) }),
     ...(skill_path === undefined || !safeRelative(skill_path) ? {} : { skill_path }),
-    original_entry_digest: `sha256:${createHash("sha256").update(canonicalJson(fields.original_entry)).digest("hex")}`,
+    original_entry_hash: `sha256:${createHash("sha256").update(canonicalJson(fields.original_entry)).digest("hex")}`,
   };
 };

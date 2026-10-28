@@ -111,7 +111,7 @@ export const devices = Effect.gen(function* () {
         const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
           Effect.provide(layer),
         );
-        const digest = state.collection_versions[0]!.digest.slice("sha256:".length);
+        const digest = state.collection_versions[0]!.hash.slice("sha256:".length);
         yield* fs.writeFileString(
           join(home, "originals", digest.slice(0, 2), digest, "SKILL.md"),
           "corrupted original\n",

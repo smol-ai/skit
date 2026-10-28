@@ -12,7 +12,6 @@ import {
   CollectionRelativePath,
   HistoricalLocator,
   MaterializationProfile,
-  type Skill,
   SourceIdentity,
   SourceRelativePath,
   SourceTracking,
@@ -26,6 +25,7 @@ import {
   type ImportV7,
   librarySnapshotDigestsV7,
   SkillsShLockFileEntryV7,
+  type SkillV7,
 } from "./manifest-v7.js";
 
 /** Frozen `skit.library.v5` entities, decoded only to migrate them to the current model. */
@@ -173,7 +173,7 @@ export const migrateLibraryEntitiesFromV5 = (input: LibraryEntitiesV5) => {
       observations: acquisition.observations,
     };
   });
-  const skills: Skill[] = input.skills.map((skill) => {
+  const skills: SkillV7[] = input.skills.map((skill) => {
     const selected = skill.versions.find(
       (version) => version.skill_version_id === skill.selected_skill_version_id,
     );

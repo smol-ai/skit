@@ -223,7 +223,7 @@ Tools
         ).every((agent) => agent.effectivePolicy === "explicit"),
       ).toBe(true);
       const state = yield* home.durable;
-      const imported = collectionVersionPath(home.originals, state.collection_versions[0]!.digest);
+      const imported = collectionVersionPath(home.originals, state.collection_versions[0]!.hash);
       yield* fs.writeFileString(join(imported, "agents", "openai.yaml"), "policy: [\n");
       const broken = yield* home.owned(openLibrarySession());
       expect(Result.isFailure(broken.skills[0]!.authorInvocation)).toBe(true);
@@ -284,7 +284,7 @@ for (const problem of ["missing-skill", "malformed-metadata"] as const)
       if (problem === "missing-skill")
         yield* fs.remove(
           join(
-            collectionVersionPath(home.originals, badState.collection_versions[0]!.digest),
+            collectionVersionPath(home.originals, badState.collection_versions[0]!.hash),
             "SKILL.md",
           ),
         );
@@ -403,7 +403,7 @@ Tools
       );
       const state = yield* home.durable;
       const payload = join(
-        collectionVersionPath(home.originals, state.collection_versions[0]!.digest),
+        collectionVersionPath(home.originals, state.collection_versions[0]!.hash),
         "retained-payload.txt",
       );
       let payloadReads = 0;

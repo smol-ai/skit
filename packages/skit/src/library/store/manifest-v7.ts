@@ -1,14 +1,22 @@
 import { Schema, SchemaGetter } from "effect";
-import { CollectionId, CollectionVersionId, ImportId, MachineId, SkillId } from "../entity-ids.js";
+import {
+  CollectionId,
+  CollectionVersionId,
+  ImportId,
+  MachineId,
+  SkillId,
+  SkillVersionId,
+} from "../entity-ids.js";
 import {
   Collection,
+  CollectionRelativePath,
   type CollectionVersion,
-  CollectionVersionSkill,
   CURRENT_PORTABLE_LIBRARY_SCHEMA,
   type Enabled,
   HistoricalLocator,
   type Import,
   LibraryManifest,
+  MaterializationProfile,
   Skill,
   SkillsShLockFileEntry,
   SourceIdentity,
@@ -18,19 +26,46 @@ import { Digest } from "../../vocabulary.js";
 // Frozen `skit.library.v7`. Every older manifest and Library state migrates through these shapes,
 // so they and the helpers below stay as v7 defined them while the current model moves on.
 
+/** A Skill Version as v7 stored it: its hashes were called digests. */
+export const SkillVersionV7 = Schema.Struct({
+  skill_version_id: SkillVersionId,
+  source_digest: Digest,
+  artifact_digest: Digest,
+  validation_identity_digest: Digest,
+  materialization_profile: MaterializationProfile,
+});
+export const SkillV7 = Schema.Struct({
+  ...Skill.fields,
+  versions: Schema.mutable(Schema.Array(SkillVersionV7)),
+});
+export type SkillV7 = typeof SkillV7.Type;
+export const CollectionVersionSkillV7 = Schema.Struct({
+  source_path: CollectionRelativePath,
+  source_digest: Digest,
+  artifact_digest: Digest,
+  materialization_profile: MaterializationProfile,
+});
+
 export const CollectionVersionV7 = Schema.Struct({
   retained_copy_id: CollectionVersionId,
   digest: Digest,
   copy_profile: Schema.Literal("verbatim/v1"),
-  members: Schema.Array(CollectionVersionSkill),
+  members: Schema.Array(CollectionVersionSkillV7),
 });
 export type CollectionVersionV7 = typeof CollectionVersionV7.Type;
 
-/** A skills.sh lock entry as v7 stored it: the time it was read was `observed_at`. */
-const { read_at: _readAt, ...lockEntryFields } = SkillsShLockFileEntry.fields;
+/** A skills.sh lock entry as v7 stored it: `observed_at`, and digests where we now say hashes. */
+const {
+  read_at: _readAt,
+  original_entry_hash: _originalEntryHash,
+  well_known_hash: _wellKnownHash,
+  ...lockEntryFields
+} = SkillsShLockFileEntry.fields;
 export const SkillsShLockFileEntryV7 = Schema.Struct({
   ...lockEntryFields,
   observed_at: Schema.String,
+  original_entry_digest: Digest,
+  well_known_digest: Schema.optionalKey(Schema.String),
 });
 
 export const ImportV7 = Schema.Struct({
@@ -62,7 +97,7 @@ export type BindingV7 = typeof BindingV7.Type;
 export const LibraryManifestV7 = Schema.Struct({
   schema: Schema.Literal("skit.library.v7"),
   collections: Schema.Array(Collection),
-  skills: Schema.Array(Skill),
+  skills: Schema.Array(SkillV7),
   retained_copies: Schema.Array(CollectionVersionV7),
   acquisitions: Schema.Array(ImportV7),
   snapshot_digests: Schema.Array(Digest),
@@ -71,7 +106,7 @@ export const LibraryManifestV7 = Schema.Struct({
 export type LibraryManifestV7 = typeof LibraryManifestV7.Type;
 
 interface LibraryEntitiesV7 {
-  readonly skills: readonly Skill[];
+  readonly skills: readonly SkillV7[];
   readonly retained_copies: readonly CollectionVersionV7[];
   readonly acquisitions: readonly ImportV7[];
 }
@@ -187,12 +222,32 @@ export const enabledFromV7 = (entries: readonly BindingEntryV7[]): Enabled[] =>
     entry.kind === "skill" ? { skill: entry.skill_id } : { collection: entry.collection_id },
   );
 
+export const skillFromV7 = ({ versions, ...skill }: SkillV7) => ({
+  ...skill,
+  versions: versions.map(
+    ({ source_digest, artifact_digest, validation_identity_digest, ...version }) => ({
+      ...version,
+      source_hash: source_digest,
+      artifact_hash: artifact_digest,
+      validation_identity_hash: validation_identity_digest,
+    }),
+  ),
+});
+
 export const collectionVersionFromV7 = ({
   retained_copy_id,
+  digest,
+  members,
   ...copy
 }: CollectionVersionV7): CollectionVersion => ({
   ...copy,
   collection_version_id: retained_copy_id,
+  hash: digest,
+  members: members.map(({ source_digest, artifact_digest, ...member }) => ({
+    ...member,
+    source_hash: source_digest,
+    artifact_hash: artifact_digest,
+  })),
 });
 
 export const importFromV7 = ({
@@ -208,14 +263,19 @@ export const importFromV7 = ({
   kind: kind === "retained-edit" ? "edit" : "source",
   collection_version_id: retained_copy_id,
   imported_at: acquired_at,
-  lock_file_entries: observations.map(({ observed_at, ...entry }) => ({
-    ...entry,
-    read_at: observed_at,
-  })),
+  lock_file_entries: observations.map(
+    ({ observed_at, original_entry_digest, well_known_digest, ...entry }) => ({
+      ...entry,
+      read_at: observed_at,
+      original_entry_hash: original_entry_digest,
+      ...(well_known_digest === undefined ? {} : { well_known_hash: well_known_digest }),
+    }),
+  ),
 });
 
 export const libraryManifestFromV7 = ({
   schema: _schema,
+  skills,
   retained_copies,
   acquisitions,
   bindings,
@@ -223,6 +283,7 @@ export const libraryManifestFromV7 = ({
 }: LibraryManifestV7) => ({
   ...fields,
   schema: CURRENT_PORTABLE_LIBRARY_SCHEMA,
+  skills: skills.map(skillFromV7),
   collection_versions: retained_copies.map(collectionVersionFromV7),
   imports: acquisitions.map(importFromV7),
   enabled: enabledFromV7(bindings.flatMap((binding) => binding.entries)),

@@ -64,7 +64,7 @@ export const syncJourney = (failDownload: boolean) =>
         };
         const manifest = yield* libraryManifestFromLocalState(bound);
         const archives = yield* Effect.forEach(state.collection_versions, (tree) =>
-          readSnapshotArchive(collectionVersionPath(store.originalsPath, tree.digest)),
+          readSnapshotArchive(collectionVersionPath(store.originalsPath, tree.hash)),
         );
         return { manifest, archives };
       }).pipe(withLibraryWriter, Effect.provide(libraryStoreLayer({ home: seedHome })));

@@ -109,7 +109,7 @@
               "additionalProperties": true
             }
           },
-          "documentDigest": {
+          "documentHash": {
             "type": "string"
           }
         },
@@ -118,7 +118,7 @@
           "harness",
           "canonicalPath",
           "aliases",
-          "documentDigest"
+          "documentHash"
         ],
         "additionalProperties": true
       }

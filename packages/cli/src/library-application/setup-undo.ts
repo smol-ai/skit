@@ -212,10 +212,10 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
           (item) =>
             item.collection_version_id ===
             sourceImports(state, restored.collection_id)[0].collection_version_id,
-        )!.digest,
+        )!.hash,
         toSnapshot: state.collection_versions.find(
           (item) => item.collection_version_id === restored.collection_version_id,
-        )!.digest,
+        )!.hash,
       })),
       intentChanged: !done && !equal(setupIntent(state), setupIntent(next)),
       settingsChanged: !done && discovery.changed,

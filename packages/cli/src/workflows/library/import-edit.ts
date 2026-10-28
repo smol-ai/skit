@@ -110,7 +110,7 @@ const planEditImport = Effect.fn("Library.planEditImport")(function* (
   );
   const selected = yield* matchingInstalledSkill(candidates, selector);
   const currentHash = yield* deterministicTreeHash(selected.path);
-  if (currentHash === selected.expected_digest)
+  if (currentHash === selected.expected_hash)
     return yield* new EditImportMissing({
       message: `${selected.path} has not changed from its retained Version`,
     });
@@ -131,7 +131,7 @@ const planEditImport = Effect.fn("Library.planEditImport")(function* (
       installed_skill_id: installedSkill.installed_skill_id,
       destination: installedSkill.destination,
       path: installedSkill.path,
-      current_digest: digest,
+      current_hash: digest,
       agreement:
         installedSkill.installed_skill_id === selected.installed_skill_id
           ? "selected"
@@ -146,10 +146,10 @@ const planEditImport = Effect.fn("Library.planEditImport")(function* (
     skill_name: skill.name,
     previous_skill_version_id: previousVersion.skill_version_id,
     selected_installed_skill_id: selected.installed_skill_id,
-    current_digest: currentHash,
+    current_hash: currentHash,
     snapshot_digest: prepared.digest,
     original_path: collectionVersionPath((yield* LibraryStore).originalsPath, prepared.digest),
-    import_required: previousVersion.artifact_digest !== currentHash,
+    import_required: previousVersion.artifact_hash !== currentHash,
     installed_skills: installedSkills,
   } satisfies EditImportPlan;
 });
@@ -213,7 +213,7 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
               skillId: preview.skill_id,
               installedSkillId: preview.selected_installed_skill_id,
               path: selected.path,
-              currentHash: preview.current_digest,
+              currentHash: preview.current_hash,
               importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
             }),
           )
@@ -241,11 +241,11 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
         { readonly currentHash: Digest; readonly marker: OwnershipMarker }
       >();
       for (const installedSkill of preview.installed_skills) {
-        if (installedSkill.current_digest !== preview.current_digest) continue;
+        if (installedSkill.current_hash !== preview.current_hash) continue;
         const marker = yield* inspectOwnershipMarker(installedSkill.path);
         if (marker.kind === "valid")
           accepted.set(installedSkill.installed_skill_id, {
-            currentHash: installedSkill.current_digest,
+            currentHash: installedSkill.current_hash,
             marker: marker.marker,
           });
       }

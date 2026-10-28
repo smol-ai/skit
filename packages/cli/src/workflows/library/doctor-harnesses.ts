@@ -421,7 +421,7 @@ export function classifyOpenCodeWarnings(
         installedSkill.status === "installed" &&
         resolve(join(installedSkill.path, "SKILL.md")) === selectedPath,
     );
-    if (!agents || agents.current_digest !== agents.expected_digest) continue;
+    if (!agents || agents.current_hash !== agents.expected_hash) continue;
     const claude = state.installed_skills.find(
       (installedSkill) =>
         installedSkill.destination === "claude" &&
@@ -430,7 +430,7 @@ export function classifyOpenCodeWarnings(
         installedSkill.skill_version_id === agents.skill_version_id &&
         // Targets render the same retained Version with different native invocation fields.
         // Each copy must match its own recorded rendering, not the other target's bytes.
-        installedSkill.current_digest === installedSkill.expected_digest &&
+        installedSkill.current_hash === installedSkill.expected_hash &&
         dirname(dirname(installedSkill.root)) === dirname(dirname(agents.root)),
     );
     if (!claude) continue;

@@ -51,9 +51,9 @@ export const prepareSetupSourceUndo = Effect.fn("SetupUndo.prepareSources")(func
       conflicts.push(`Prior retained source evidence is unavailable: ${prior.collectionId}`);
       continue;
     }
-    const path = collectionVersionPath(originalsPath, copy.digest);
+    const path = collectionVersionPath(originalsPath, copy.hash);
     const verified = yield* Effect.result(originalTreeHash(path));
-    if (verified._tag === "Failure" || verified.success !== copy.digest) {
+    if (verified._tag === "Failure" || verified.success !== copy.hash) {
       conflicts.push(`Prior retained source bytes changed: ${prior.collectionId}`);
       continue;
     }

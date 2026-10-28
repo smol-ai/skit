@@ -467,7 +467,7 @@
                             "additionalProperties": true
                           }
                         },
-                        "documentDigest": {
+                        "documentHash": {
                           "type": "string"
                         }
                       },
@@ -476,7 +476,7 @@
                         "harness",
                         "canonicalPath",
                         "aliases",
-                        "documentDigest"
+                        "documentHash"
                       ],
                       "additionalProperties": true
                     }
@@ -824,7 +824,7 @@
                             "additionalProperties": true
                           }
                         },
-                        "documentDigest": {
+                        "documentHash": {
                           "type": "string"
                         }
                       },
@@ -833,7 +833,7 @@
                         "harness",
                         "canonicalPath",
                         "aliases",
-                        "documentDigest"
+                        "documentHash"
                       ],
                       "additionalProperties": true
                     }
@@ -1167,7 +1167,7 @@
                             "additionalProperties": true
                           }
                         },
-                        "documentDigest": {
+                        "documentHash": {
                           "type": "string"
                         }
                       },
@@ -1176,7 +1176,7 @@
                         "harness",
                         "canonicalPath",
                         "aliases",
-                        "documentDigest"
+                        "documentHash"
                       ],
                       "additionalProperties": true
                     }
@@ -1510,7 +1510,7 @@
                             "additionalProperties": true
                           }
                         },
-                        "documentDigest": {
+                        "documentHash": {
                           "type": "string"
                         }
                       },
@@ -1519,7 +1519,7 @@
                         "harness",
                         "canonicalPath",
                         "aliases",
-                        "documentDigest"
+                        "documentHash"
                       ],
                       "additionalProperties": true
                     }
@@ -1849,7 +1849,7 @@
                             "additionalProperties": true
                           }
                         },
-                        "documentDigest": {
+                        "documentHash": {
                           "type": "string"
                         }
                       },
@@ -1858,7 +1858,7 @@
                         "harness",
                         "canonicalPath",
                         "aliases",
-                        "documentDigest"
+                        "documentHash"
                       ],
                       "additionalProperties": true
                     }
@@ -2181,7 +2181,7 @@
                             "additionalProperties": true
                           }
                         },
-                        "documentDigest": {
+                        "documentHash": {
                           "type": "string"
                         }
                       },
@@ -2190,7 +2190,7 @@
                         "harness",
                         "canonicalPath",
                         "aliases",
-                        "documentDigest"
+                        "documentHash"
                       ],
                       "additionalProperties": true
                     }
@@ -2513,7 +2513,7 @@
                             "additionalProperties": true
                           }
                         },
-                        "documentDigest": {
+                        "documentHash": {
                           "type": "string"
                         }
                       },
@@ -2522,7 +2522,7 @@
                         "harness",
                         "canonicalPath",
                         "aliases",
-                        "documentDigest"
+                        "documentHash"
                       ],
                       "additionalProperties": true
                     }
@@ -2857,7 +2857,7 @@
                             "additionalProperties": true
                           }
                         },
-                        "documentDigest": {
+                        "documentHash": {
                           "type": "string"
                         }
                       },
@@ -2866,7 +2866,7 @@
                         "harness",
                         "canonicalPath",
                         "aliases",
-                        "documentDigest"
+                        "documentHash"
                       ],
                       "additionalProperties": true
                     }
@@ -3288,7 +3288,7 @@
                 "skillFolderHash": {
                   "type": "string"
                 },
-                "wellKnownDigest": {
+                "wellKnownHash": {
                   "type": "string"
                 },
                 "originalEntry": {
@@ -3742,7 +3742,7 @@
                     "skillFolderHash": {
                       "type": "string"
                     },
-                    "wellKnownDigest": {
+                    "wellKnownHash": {
                       "type": "string"
                     },
                     "originalEntry": {

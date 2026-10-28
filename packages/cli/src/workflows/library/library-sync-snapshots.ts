@@ -31,7 +31,7 @@ export const prepareSyncTransfer = Effect.fn("Library.sync.prepareTransfer")(fun
     originalsPath: options.originalsPath,
     localArchives: archives,
   });
-  const required = new Set(desired.collection_versions.map((tree) => tree.digest));
+  const required = new Set(desired.collection_versions.map((tree) => tree.hash));
   const snapshotSet = new Set(desired.snapshot_digests);
   const uploads = archives.filter(
     (archive) =>

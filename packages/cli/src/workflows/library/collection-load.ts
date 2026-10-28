@@ -31,7 +31,7 @@ export const readDescriptionLoad = Effect.fn("Library.descriptionLoad")(function
         : yield* fs
             .readFileString(
               join(
-                collectionVersionPath(originalsPath, backing.copy.digest),
+                collectionVersionPath(originalsPath, backing.copy.hash),
                 backing.member.source_path,
                 "SKILL.md",
               ),

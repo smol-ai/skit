@@ -1,6 +1,6 @@
 import { Schema, SchemaGetter } from "effect";
 import { CollectionId, InstalledSkillId, SkillId, SkillVersionId } from "../entity-ids.js";
-import { Collection, Skill } from "../library-contracts.js";
+import { Collection } from "../library-contracts.js";
 import {
   AbsoluteDevicePath,
   CURRENT_LIBRARY_STATE_VERSION,
@@ -22,12 +22,21 @@ import {
   ImportV7,
   libraryManifestFromV7,
   LibraryManifestV7,
+  skillFromV7,
+  SkillV7,
 } from "./manifest-v7.js";
 import {
   HarnessInstallStatus,
   InventoryScanIssue,
   SkillAssessmentAcceptance,
 } from "./state-schema.js";
+
+/** An assessment acceptance as v9 stored it: the content hash was `artifactContentDigest`. */
+const { artifactContentHash: _contentHash, ...acceptanceFields } = SkillAssessmentAcceptance.fields;
+const SkillAssessmentAcceptanceV9 = Schema.Struct({
+  ...acceptanceFields,
+  artifactContentDigest: Digest,
+});
 
 // Frozen v9 state. Every older state migrates through these shapes, so they stay as v9 defined
 // them while the current model moves on.
@@ -86,7 +95,7 @@ export const LibraryDeviceStateFieldsV9 = {
   ),
   custodyIssues: Schema.optional(Schema.Array(OwnershipIssueV9)),
   scanIssues: Schema.optional(Schema.Array(InventoryScanIssue)),
-  assessmentAcceptances: Schema.optional(Schema.Array(SkillAssessmentAcceptance)),
+  assessmentAcceptances: Schema.optional(Schema.Array(SkillAssessmentAcceptanceV9)),
 } as const;
 
 export const LibraryStateV9 = Schema.Struct({
@@ -108,7 +117,7 @@ export const LibraryStateV9 = Schema.Struct({
   ),
   pending_device_selection_origin: Schema.optionalKey(Schema.NonEmptyString),
   collections: Schema.Array(Collection),
-  skills: Schema.Array(Skill),
+  skills: Schema.Array(SkillV7),
   retained_copies: Schema.Array(CollectionVersionV7),
   acquisitions: Schema.Array(ImportV7),
   global_bindings: Schema.Array(DeviceBindingV9),
@@ -128,13 +137,15 @@ export const installedSkillFromV9 = ({
   target,
   projected_at,
   observed_digest,
+  expected_digest,
   ...copy
 }: typeof InstalledSkillV9.Type) => ({
   ...copy,
+  expected_hash: expected_digest,
   installed_skill_id: projection_id,
   destination: target,
   installed_at: projected_at,
-  ...(observed_digest === undefined ? {} : { current_digest: observed_digest }),
+  ...(observed_digest === undefined ? {} : { current_hash: observed_digest }),
 });
 
 export const repositoryFromV9 = (binding: typeof RepositoryBindingV9.Type) => ({
@@ -169,6 +180,8 @@ const libraryStateFromV9 = ({
   projections,
   custodyIssues,
   unmanaged,
+  skills,
+  assessmentAcceptances,
   ...fields
 }: LibraryStateV9) => {
   return {
@@ -189,6 +202,17 @@ const libraryStateFromV9 = ({
     imports: acquisitions.map(importFromV7),
     ...globalFromV9(global_bindings[0]),
     repositories: local_bindings.map(repositoryFromV9),
+    skills: skills.map(skillFromV7),
+    ...(assessmentAcceptances === undefined
+      ? {}
+      : {
+          assessmentAcceptances: assessmentAcceptances.map(
+            ({ artifactContentDigest, ...acceptance }) => ({
+              ...acceptance,
+              artifactContentHash: artifactContentDigest,
+            }),
+          ),
+        }),
     installed_skills: projections.map(installedSkillFromV9),
     unmanaged: unmanaged.map(({ observedHash, lastObservedHash, ...copy }) => ({
       ...copy,

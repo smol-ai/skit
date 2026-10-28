@@ -56,7 +56,7 @@ export const securityReviewFromState = Effect.fn("Library.securityReviewSnapshot
 ) {
   const store = yield* LibraryStore;
   const { version, member, tree } = yield* securitySkill(state, query);
-  const originalPath = collectionVersionPath(store.originalsPath, tree.digest);
+  const originalPath = collectionVersionPath(store.originalsPath, tree.hash);
   const skillPath =
     member.source_path === "." ? originalPath : join(originalPath, member.source_path);
   const text = yield* (yield* FileSystem.FileSystem).readFileString(join(skillPath, "SKILL.md"));
@@ -70,17 +70,17 @@ export const securityReviewFromState = Effect.fn("Library.securityReviewSnapshot
     declaredCapabilities,
     path: "SKILL.md",
     fingerprintPath: "SKILL.md",
-    artifactContentDigest: version.artifact_digest,
+    artifactContentHash: version.artifact_hash,
   });
   const evaluatedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
   const acceptances = state.assessmentAcceptances ?? [];
   return {
     skill_version_id: version.skill_version_id,
-    artifactContentDigest: version.artifact_digest,
+    artifactContentHash: version.artifact_hash,
     audit,
     assessment: evaluateSkillAudit(audit, {
       context: "project",
-      artifactContentDigest: version.artifact_digest,
+      artifactContentHash: version.artifact_hash,
       acceptances,
       evaluatedAt,
     }),
@@ -89,7 +89,7 @@ export const securityReviewFromState = Effect.fn("Library.securityReviewSnapshot
       .map((acceptance) => ({
         ...acceptance,
         status:
-          acceptance.artifactContentDigest !== version.artifact_digest
+          acceptance.artifactContentHash !== version.artifact_hash
             ? ("stale_digest" as const)
             : acceptance.expiresAt && evaluatedAt >= acceptance.expiresAt
               ? ("expired" as const)
@@ -131,7 +131,7 @@ export const acceptSecurityFindingFromState = Effect.fn("Library.acceptSecurityF
       return yield* new SecurityFindingAbsent({ fingerprint: input.fingerprint });
     const acceptance: SkillAssessmentAcceptance = {
       fingerprint: input.fingerprint,
-      artifactContentDigest: review.artifactContentDigest,
+      artifactContentHash: review.artifactContentHash,
       skill_version_id: review.skill_version_id,
       context: "project",
       principal: input.principal.trim(),

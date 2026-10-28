@@ -10,7 +10,14 @@
       "acquisitions": [],
       "snapshot_digests": [],
       "bindings": [],
-      "device_policies": [{ "scope": { "kind": "global" }, "skills": {} }]
+      "device_policies": [
+        {
+          "scope": {
+            "kind": "global"
+          },
+          "skills": {}
+        }
+      ]
     }
   }
 }

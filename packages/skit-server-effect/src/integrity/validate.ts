@@ -81,7 +81,7 @@ export const validateArtifactBundle = Effect.fn("Integrity.validateArtifactBundl
       auditSkill(text.decode(primaryFile.bytes), {
         declaredCapabilities: [...(skill.capabilities ?? [])],
         path: primary,
-        artifactContentDigest: yield* hashInstalledSkillFiles(files, skill.path, skill.shared),
+        artifactContentHash: yield* hashInstalledSkillFiles(files, skill.path, skill.shared),
       }),
       { context: "publish" },
     );

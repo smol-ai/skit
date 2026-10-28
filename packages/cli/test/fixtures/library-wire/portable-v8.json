@@ -31,16 +31,16 @@
           "versions": [
             {
               "skill_version_id": "skv_01m4v718mcfzs9tyvsewnybej2",
-              "source_digest": "sha256:ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb",
-              "artifact_digest": "sha256:3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d",
-              "validation_identity_digest": "sha256:3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d",
+              "source_hash": "sha256:ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb",
+              "artifact_hash": "sha256:3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d",
+              "validation_identity_hash": "sha256:3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d",
               "materialization_profile": "plain-skill/v1"
             },
             {
               "skill_version_id": "skv_01m4v718mcfzs9tyw64zc45mhm",
-              "source_digest": "sha256:18ac3e7343f016890c510e93f935261169d9e3f565436429830faf0934f4f8e4",
-              "artifact_digest": "sha256:3f79bb7b435b05321651daefd374cdc681dc06faa65e374e38337b88ca046dea",
-              "validation_identity_digest": "sha256:3f79bb7b435b05321651daefd374cdc681dc06faa65e374e38337b88ca046dea",
+              "source_hash": "sha256:18ac3e7343f016890c510e93f935261169d9e3f565436429830faf0934f4f8e4",
+              "artifact_hash": "sha256:3f79bb7b435b05321651daefd374cdc681dc06faa65e374e38337b88ca046dea",
+              "validation_identity_hash": "sha256:3f79bb7b435b05321651daefd374cdc681dc06faa65e374e38337b88ca046dea",
               "materialization_profile": "plain-skill/v1"
             }
           ]
@@ -49,26 +49,26 @@
       "collection_versions": [
         {
           "collection_version_id": "ret_01m4v718mcfzs9tyweb4m5dbf1",
-          "digest": "sha256:2e7d2c03a9507ae265ecf5b5356885a53393a2029d241394997265a1a25aefc6",
+          "hash": "sha256:2e7d2c03a9507ae265ecf5b5356885a53393a2029d241394997265a1a25aefc6",
           "copy_profile": "verbatim/v1",
           "members": [
             {
               "source_path": "review",
-              "source_digest": "sha256:ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb",
-              "artifact_digest": "sha256:3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d",
+              "source_hash": "sha256:ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb",
+              "artifact_hash": "sha256:3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d",
               "materialization_profile": "plain-skill/v1"
             }
           ]
         },
         {
           "collection_version_id": "ret_01m4v718mcfzs9tywng4gaf16m",
-          "digest": "sha256:252f10c83610ebca1a059c0bae8255eba2f95be4d1d7bcfa89d7248a82d9f111",
+          "hash": "sha256:252f10c83610ebca1a059c0bae8255eba2f95be4d1d7bcfa89d7248a82d9f111",
           "copy_profile": "verbatim/v1",
           "members": [
             {
               "source_path": ".",
-              "source_digest": "sha256:18ac3e7343f016890c510e93f935261169d9e3f565436429830faf0934f4f8e4",
-              "artifact_digest": "sha256:3f79bb7b435b05321651daefd374cdc681dc06faa65e374e38337b88ca046dea",
+              "source_hash": "sha256:18ac3e7343f016890c510e93f935261169d9e3f565436429830faf0934f4f8e4",
+              "artifact_hash": "sha256:3f79bb7b435b05321651daefd374cdc681dc06faa65e374e38337b88ca046dea",
               "materialization_profile": "plain-skill/v1"
             }
           ]

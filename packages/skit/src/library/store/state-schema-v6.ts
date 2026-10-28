@@ -1,7 +1,8 @@
 import { Schema, SchemaGetter } from "effect";
 import { resolve } from "node:path";
 import { SkillId } from "../entity-ids.js";
-import { Collection, Skill } from "../library-contracts.js";
+import { Collection } from "../library-contracts.js";
+import { SkillV7 } from "./manifest-v7.js";
 import { AbsoluteDevicePath } from "../library-state.js";
 import {
   HarnessName,
@@ -37,7 +38,7 @@ export const LibraryStateV6 = Schema.Struct({
   ...LibraryDeviceStateFieldsV9,
   schemaVersion: Schema.Literal(6),
   collections: Schema.Array(Collection),
-  skills: Schema.Array(Skill),
+  skills: Schema.Array(SkillV7),
   retained_copies: Schema.Array(CollectionVersionV7),
   acquisitions: Schema.Array(ImportV7),
   global_bindings: Schema.Array(DeviceBindingV6),

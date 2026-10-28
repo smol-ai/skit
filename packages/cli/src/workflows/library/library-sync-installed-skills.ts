@@ -235,7 +235,7 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
           installedSkills.push({
             ...installedSkill,
             status: "conflicted",
-            current_digest: ownership.observed,
+            current_hash: ownership.observed,
           });
           continue;
         }
@@ -255,7 +255,7 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
               ? { skill_version_id: selected.skill_version_id }
               : {}),
             status: "conflicted",
-            current_digest: ownership.observed,
+            current_hash: ownership.observed,
           });
           continue;
         }

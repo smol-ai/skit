@@ -193,7 +193,7 @@ test.runIf(realGit)(
       expect(state.schemaVersion).toBe(10);
       expect(state.collections.map((item) => item.collection_id)).toEqual([entry.collection_id]);
       expect(state.collection_versions).toHaveLength(1);
-      expect(state.collection_versions[0].digest).toBe(entry.snapshot_digest);
+      expect(state.collection_versions[0].hash).toBe(entry.snapshot_digest);
       expect(state.installed_skills).toEqual([]);
       // A new add creates no Binding and no installed skill.
       expect(state.enabled).toEqual([]);
@@ -295,7 +295,7 @@ test.runIf(realGit)(
       const firstState = Schema.decodeUnknownSync(LibraryStateDocument)(
         await readFile(join(roots.home, "state.json"), "utf8"),
       );
-      const hex = firstState.collection_versions[0].digest.slice("sha256:".length);
+      const hex = firstState.collection_versions[0].hash.slice("sha256:".length);
       const originalPath = join(roots.home, "originals", hex.slice(0, 2), hex);
       expect(existsSync(join(originalPath, "README.md"))).toBe(false);
       expect(existsSync(join(originalPath, "skit.json"))).toBe(false);

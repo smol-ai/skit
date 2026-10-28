@@ -82,14 +82,14 @@
                       "skill_version_id": {
                         "type": "string"
                       },
-                      "artifact_digest": {
+                      "artifact_hash": {
                         "type": "string",
                         "pattern": "^sha256:[a-f0-9]{64}$"
                       }
                     },
                     "required": [
                       "skill_version_id",
-                      "artifact_digest"
+                      "artifact_hash"
                     ],
                     "additionalProperties": true
                   }

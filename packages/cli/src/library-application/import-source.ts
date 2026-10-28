@@ -154,7 +154,7 @@ export const inspectLibrarySource = Effect.fn("Library.inspectSource")(function*
         /** Per-Skill bytes, so a refresh preview can tell which Skills changed. */
         members: prepared.facts.map((skill) => ({
           source_path: skill.sourcePath,
-          artifact_digest: skill.artifactDigest,
+          artifact_hash: skill.artifactDigest,
         })),
       };
     }),

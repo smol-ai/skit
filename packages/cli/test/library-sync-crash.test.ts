@@ -169,8 +169,8 @@ const furnished = Effect.fn("Test.furnishedHome")(function* ({
     repositories: [{ root: repository, enabled: [{ skill: skill.skill_id }] }],
     assessmentAcceptances: [
       {
-        fingerprint: version.artifact_digest,
-        artifactContentDigest: version.artifact_digest,
+        fingerprint: version.artifact_hash,
+        artifactContentHash: version.artifact_hash,
         skill_version_id: version.skill_version_id,
         context: "project",
         principal: "test",

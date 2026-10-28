@@ -36,7 +36,7 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
       versionId: currentSkillVersion(state, skill)?.skill_version_id,
       versions: skill.versions.map((version) => ({
         id: version.skill_version_id,
-        digest: version.artifact_digest,
+        digest: version.artifact_hash,
       })),
       collectionLabel: collection?.label,
       ...(source === undefined

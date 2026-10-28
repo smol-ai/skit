@@ -47,9 +47,7 @@ it.effect(
       const firstTree = firstState.collection_versions[0];
       assert.ok(firstTree);
       assert.strictEqual(
-        yield* fs.exists(
-          join(collectionVersionPath(home.originals, firstTree.digest), "skit.json"),
-        ),
+        yield* fs.exists(join(collectionVersionPath(home.originals, firstTree.hash), "skit.json")),
         true,
       );
 
@@ -65,7 +63,7 @@ it.effect(
       assert.strictEqual(state.collections.length, 1);
       // The refreshed tree is retained alongside the first.
       assert.deepStrictEqual(
-        state.collection_versions.map((copy) => copy.digest === firstTree.digest),
+        state.collection_versions.map((copy) => copy.hash === firstTree.hash),
         [true, false],
       );
       assert.strictEqual(state.skills.find((skill) => skill.name === "review")?.versions.length, 2);
@@ -207,7 +205,7 @@ it.effect(
       assert.strictEqual(imported.collections.length, 1);
       const copy = imported.collection_versions[0]!;
       assert.isTrue(
-        yield* f.fs.exists(join(collectionVersionPath(f.home.originals, copy.digest), "skit.json")),
+        yield* f.fs.exists(join(collectionVersionPath(f.home.originals, copy.hash), "skit.json")),
       );
       const retried = yield* f.ensure();
       assert.strictEqual(

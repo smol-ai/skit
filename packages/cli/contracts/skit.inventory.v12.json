@@ -339,15 +339,15 @@
                 "skill_version_id": {
                   "type": "string"
                 },
-                "source_digest": {
+                "source_hash": {
                   "type": "string",
                   "pattern": "^sha256:[a-f0-9]{64}$"
                 },
-                "artifact_digest": {
+                "artifact_hash": {
                   "type": "string",
                   "pattern": "^sha256:[a-f0-9]{64}$"
                 },
-                "validation_identity_digest": {
+                "validation_identity_hash": {
                   "type": "string",
                   "pattern": "^sha256:[a-f0-9]{64}$"
                 },
@@ -361,9 +361,9 @@
               },
               "required": [
                 "skill_version_id",
-                "source_digest",
-                "artifact_digest",
-                "validation_identity_digest",
+                "source_hash",
+                "artifact_hash",
+                "validation_identity_hash",
                 "materialization_profile"
               ],
               "additionalProperties": true
@@ -408,11 +408,11 @@
           "path": {
             "type": "string"
           },
-          "expected_digest": {
+          "expected_hash": {
             "type": "string",
             "pattern": "^sha256:[a-f0-9]{64}$"
           },
-          "current_digest": {
+          "current_hash": {
             "anyOf": [
               {
                 "type": "string",
@@ -468,7 +468,7 @@
           "destination",
           "root",
           "path",
-          "expected_digest",
+          "expected_hash",
           "status",
           "installed_at"
         ],
@@ -971,7 +971,7 @@
                         "skillFolderHash": {
                           "type": "string"
                         },
-                        "wellKnownDigest": {
+                        "wellKnownHash": {
                           "type": "string"
                         },
                         "originalEntry": {

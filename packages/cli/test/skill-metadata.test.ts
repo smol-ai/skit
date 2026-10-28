@@ -79,7 +79,7 @@ it.effect(
         skill_name: "review",
         skill_path: "review",
         content_agreement: "agrees",
-        original_entry_digest: `sha256:${"b".repeat(64)}`,
+        original_entry_hash: `sha256:${"b".repeat(64)}`,
         original_entry: { source: "example/skills" },
       });
       const selected = {

@@ -142,7 +142,7 @@ const SkillsLockEntry = Schema.StructWithRest(
     skillPath: Schema.optionalKey(Schema.String),
     computedHash: Schema.optionalKey(Schema.String),
     skillFolderHash: Schema.optionalKey(Schema.String),
-    wellKnownDigest: Schema.optionalKey(Schema.String),
+    wellKnownHash: Schema.optionalKey(Schema.String),
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
 );
@@ -190,7 +190,7 @@ export const readSkillsLock = Effect.fn("Setup.readSkillsLock")(function* (
       ...(entry.skillPath ? { skillPath: entry.skillPath } : {}),
       ...(entry.computedHash ? { computedHash: entry.computedHash } : {}),
       ...(entry.skillFolderHash ? { skillFolderHash: entry.skillFolderHash } : {}),
-      ...(entry.wellKnownDigest ? { wellKnownDigest: entry.wellKnownDigest } : {}),
+      ...(entry.wellKnownHash ? { wellKnownHash: entry.wellKnownHash } : {}),
       originalEntry: originalEntry.success,
     });
   }
@@ -280,7 +280,7 @@ const lockFileEntryFor = (
     ...(lock.entry.skillPath ? { skill_path: lock.entry.skillPath } : {}),
     ...(lock.entry.computedHash ? { computed_hash: lock.entry.computedHash } : {}),
     ...(lock.entry.skillFolderHash ? { skill_folder_hash: lock.entry.skillFolderHash } : {}),
-    ...(lock.entry.wellKnownDigest ? { well_known_digest: lock.entry.wellKnownDigest } : {}),
+    ...(lock.entry.wellKnownHash ? { well_known_hash: lock.entry.wellKnownHash } : {}),
     content_agreement: lock.content,
     original_entry: lock.entry.originalEntry,
   });

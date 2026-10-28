@@ -1002,11 +1002,29 @@ describe("Better Auth adapter", () => {
       const portable = {
         schema: "skit.library.v8",
         collections: portableV7.collections,
-        skills: portableV7.skills,
-        collection_versions: portableV7.retained_copies.map(({ retained_copy_id, ...copy }) => ({
-          ...copy,
-          collection_version_id: retained_copy_id,
+        skills: portableV7.skills.map(({ versions, ...skill }) => ({
+          ...skill,
+          versions: versions.map(
+            ({ source_digest, artifact_digest, validation_identity_digest, ...version }) => ({
+              ...version,
+              source_hash: source_digest,
+              artifact_hash: artifact_digest,
+              validation_identity_hash: validation_identity_digest,
+            }),
+          ),
         })),
+        collection_versions: portableV7.retained_copies.map(
+          ({ retained_copy_id, digest, members, ...copy }) => ({
+            ...copy,
+            collection_version_id: retained_copy_id,
+            hash: digest,
+            members: members.map(({ source_digest, artifact_digest, ...member }) => ({
+              ...member,
+              source_hash: source_digest,
+              artifact_hash: artifact_digest,
+            })),
+          }),
+        ),
         imports: portableV7.acquisitions.map(
           ({ acquisition_id, retained_copy_id, acquired_at, observations, ...item }) => ({
             ...item,

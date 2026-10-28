@@ -43,7 +43,7 @@ const assertIntact = Effect.fn("Test.assertIntact")(function* (
   if (ancestry !== undefined) assert.isTrue(Schema.is(LibraryManifest)(ancestry.base_manifest));
   for (const digest of new Set([
     ...imported,
-    ...state.collection_versions.map((copy) => copy.digest),
+    ...state.collection_versions.map((copy) => copy.hash),
   ]))
     assert.strictEqual(
       (yield* readSnapshotArchive(collectionVersionPath(join(device.home, "originals"), digest)))
@@ -54,11 +54,11 @@ const assertIntact = Effect.fn("Test.assertIntact")(function* (
   if (head === null) return;
   assert.isTrue(Schema.is(LibraryManifest)(head.manifest));
   const stored = new Set(server.stored.snapshots.map(([digest]) => digest));
-  for (const copy of head.manifest.collection_versions) assert.isTrue(stored.has(copy.digest));
+  for (const copy of head.manifest.collection_versions) assert.isTrue(stored.has(copy.hash));
 });
 
 const collectionVersionDigests = (device: Device) =>
-  Effect.map(device.state, (state) => state.collection_versions.map((copy) => copy.digest));
+  Effect.map(device.state, (state) => state.collection_versions.map((copy) => copy.hash));
 
 /** Raw state text, so retired handles are checked without going through the loader. */
 const stateBytes = (fs: FileSystem.FileSystem, device: Device) =>
@@ -178,12 +178,12 @@ it.effect("distinct upstreams with identical bytes keep separate identities", ()
     const secondState = yield* b.state;
     // The case is only meaningful when the retained bytes really are identical.
     assert.strictEqual(
-      firstState.collection_versions[0]!.digest,
-      secondState.collection_versions[0]!.digest,
+      firstState.collection_versions[0]!.hash,
+      secondState.collection_versions[0]!.hash,
     );
     assert.strictEqual(
-      first.skills[0]!.versions[0]!.artifact_digest,
-      second.skills[0]!.versions[0]!.artifact_digest,
+      first.skills[0]!.versions[0]!.artifact_hash,
+      second.skills[0]!.versions[0]!.artifact_hash,
     );
     const imported = yield* collectionVersionDigests(b);
     assert.strictEqual((yield* a.sync()).status, "pushed");
@@ -252,7 +252,7 @@ it.effect(
             ...skill,
             versions: skill.versions.map((item) =>
               item.skill_version_id === localV2
-                ? { ...item, validation_identity_digest: distinct }
+                ? { ...item, validation_identity_hash: distinct }
                 : item,
             ),
           })),

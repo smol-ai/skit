@@ -323,9 +323,7 @@ export function mergeLibraryManifests(
     const versions = [...theirs.versions];
     let incompatible = false;
     for (const version of mine.versions) {
-      const theirsVersion = versions.find(
-        (item) => item.artifact_digest === version.artifact_digest,
-      );
+      const theirsVersion = versions.find((item) => item.artifact_hash === version.artifact_hash);
       if (theirsVersion === undefined) versions.push(version);
       else if (!equal(theirsVersion, version)) incompatible = true;
     }

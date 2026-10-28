@@ -85,15 +85,15 @@ export const readLibrarySkillMetadata = Effect.fn("Library.readSkillMetadata")(f
     // Contradictory observations do not establish a single date.
     if (new Set(dates).size === 1) sourceUpdated = dates[0]!;
     if (backing?.member.materialization_profile === "declared-skit-skill/v1") {
-      if (!descriptors.has(backing.copy.digest))
+      if (!descriptors.has(backing.copy.hash))
         descriptors.set(
-          backing.copy.digest,
-          yield* readSkitDescriptor(collectionVersionPath(originalsPath, backing.copy.digest)).pipe(
+          backing.copy.hash,
+          yield* readSkitDescriptor(collectionVersionPath(originalsPath, backing.copy.hash)).pipe(
             Effect.orElseSucceed(() => undefined),
           ),
         );
       const descriptor = descriptors
-        .get(backing.copy.digest)
+        .get(backing.copy.hash)
         ?.skills.find(
           (member) => member.path === backing.member.source_path && member.name === skill.name,
         );

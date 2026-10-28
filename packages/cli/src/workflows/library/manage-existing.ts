@@ -95,7 +95,7 @@ const ManagePlan = Schema.Struct({
   skill: Schema.optionalKey(
     Schema.Struct({
       name: Schema.String,
-      validationDigest: DigestSchema,
+      validationHash: DigestSchema,
     }),
   ),
   targets: Schema.Array(PlannedManageTarget),
@@ -182,7 +182,7 @@ const planManage = Effect.fn("Library.planManage")(function* (
     ? {
         name: previewSkill.name,
         ...(existingSkill === undefined ? {} : { skillId: existingSkill.skill_id }),
-        validationDigest: sourceContentHash,
+        validationHash: sourceContentHash,
       }
     : undefined;
   if (!skill) blockers.push({ path: sourcePath, reason: "multiple-skills" });
@@ -203,7 +203,7 @@ const planManage = Effect.fn("Library.planManage")(function* (
     const lossless = yield* manageBlockers(path);
     const currentHash = lossless.contentHash;
     let blocked = false;
-    if (currentHash !== skill.validationDigest) {
+    if (currentHash !== skill.validationHash) {
       blockers.push({ path, reason: "content-mismatch" });
       blocked = true;
     }
@@ -212,7 +212,7 @@ const planManage = Effect.fn("Library.planManage")(function* (
       marker.kind === "valid" &&
       skill.skillId !== undefined &&
       marker.marker.skill_id === skill.skillId &&
-      marker.marker.expected_digest === currentHash;
+      marker.marker.expected_hash === currentHash;
     if (!alreadyManaged && lossless.blockers.length > 0) {
       blockers.push(...lossless.blockers);
       blocked = true;
@@ -400,7 +400,7 @@ export const manageCopy = Effect.fn("Manage.copy")(function* (
       return yield* new ManageInvalid({ name: selection.name, reason: "source-not-candidate" });
     subjectId = imported.collection_id;
     manage.path = plan.sourcePath;
-    manage.currentHash = plan.skill.validationDigest;
+    manage.currentHash = plan.skill.validationHash;
   }
   return yield* installCopy(options.installOptions, selection, subjectId, manage, backup);
 }, withLibraryWriter);
@@ -640,8 +640,8 @@ const backUpDuplicates = Effect.fn("Manage.backUpDuplicates")(function* (
     if (
       !installedSkill ||
       ownership?.kind !== "intact" ||
-      ownership.observed !== installedSkill.expected_digest ||
-      ownership.marker.expected_digest !== installedSkill.expected_digest ||
+      ownership.observed !== installedSkill.expected_hash ||
+      ownership.marker.expected_hash !== installedSkill.expected_hash ||
       ownership.marker.skill_version_id !== installedSkill.skill_version_id ||
       (yield* (yield* LinkStat).lstat(path)).type !== "Directory"
     )

@@ -22,13 +22,13 @@ const collectionVersionId = makeCollectionVersionId();
 const machineId = makeMachineId();
 const copy: CollectionVersion = {
   collection_version_id: collectionVersionId,
-  digest,
+  hash: digest,
   copy_profile: "verbatim/v1",
   members: [
     {
       source_path: ".",
-      source_digest: digest,
-      artifact_digest: digest,
+      source_hash: digest,
+      artifact_hash: digest,
       materialization_profile: "plain-skill/v1",
     },
   ],
@@ -110,7 +110,7 @@ const sourceCopyId = makeCollectionVersionId();
 const sourceCopy: CollectionVersion = {
   ...copy,
   collection_version_id: sourceCopyId,
-  digest: sourceDigest,
+  hash: sourceDigest,
 };
 const { revision: _unpinnedRevision, ...unpinnedImport } = sourceImport({});
 const mixedManifest: LibraryManifest = {
@@ -162,9 +162,16 @@ it("decodes a v4 manifest into the current model without selections", () => {
     retained_copies: [
       {
         retained_copy_id: copy.collection_version_id,
-        digest: copy.digest,
+        digest: copy.hash,
         copy_profile: copy.copy_profile,
-        members: [{ ...copy.members[0]!, source_path: "review" }],
+        members: [
+          {
+            source_path: "review",
+            source_digest: digest,
+            artifact_digest: digest,
+            materialization_profile: "plain-skill/v1",
+          },
+        ],
         v3_normalized_tree: {
           digest,
           profile: "legacy/v1",

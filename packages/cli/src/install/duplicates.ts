@@ -37,7 +37,7 @@ export const DuplicateCopy = Schema.Struct({
   harness: Schema.String,
   canonicalPath: Schema.String,
   aliases: Schema.Array(SkillAlias),
-  documentDigest: Schema.String,
+  documentHash: Schema.String,
 });
 export type DuplicateCopy = typeof DuplicateCopy.Type;
 /** Each Harness's readable skills directories for a scope; a global override stands in for its own. */
@@ -140,7 +140,7 @@ export const scanSkillsDirectory = Effect.fn("Install.scanSkillsDirectory")(func
           harness,
           canonicalPath,
           aliases: [...(prior?.aliases ?? []).filter((item) => item.path !== alias.path), alias],
-          documentDigest: "sha256:" + createHash("sha256").update(text).digest("hex"),
+          documentHash: "sha256:" + createHash("sha256").update(text).digest("hex"),
         });
       }).pipe(
         Effect.catchTag("PlatformError", (error: PlatformError) => {

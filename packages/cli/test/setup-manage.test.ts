@@ -96,7 +96,7 @@ it.effect("adds selected skills and takes ownership only of eligible global copi
       expect.objectContaining({ path: managedSkill, status: "installed" }),
     ]);
     const importedDocuments = yield* Effect.forEach(state.collection_versions, (copy) =>
-      fs.readFileString(join(collectionVersionPath(home.originals, copy.digest), "SKILL.md")),
+      fs.readFileString(join(collectionVersionPath(home.originals, copy.hash), "SKILL.md")),
     );
     expect(importedDocuments).toEqual(
       expect.arrayContaining([managedText, skillDocument("repo-only", "Repository skill")]),
@@ -108,7 +108,7 @@ it.effect("adds selected skills and takes ownership only of eligible global copi
       skillDocument("repo-only", "Repository skill"),
     );
     expect((yield* libraryManifestFromLocalState(state)).snapshot_digests).toEqual(
-      state.collection_versions.map((copy) => copy.digest).sort(),
+      state.collection_versions.map((copy) => copy.hash).sort(),
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -166,7 +166,7 @@ it.effect("manages skills with empty directories and Finder metadata", () =>
     expect(state.installed_skills).toHaveLength(2);
     const imported = yield* Effect.forEach(state.collection_versions, (copy) =>
       Effect.gen(function* () {
-        const path = collectionVersionPath(home.originals, copy.digest);
+        const path = collectionVersionPath(home.originals, copy.hash);
         return {
           document: yield* fs.readFileString(join(path, "SKILL.md")),
           entries: yield* fs.readDirectory(path),

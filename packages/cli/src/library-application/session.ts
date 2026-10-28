@@ -139,7 +139,7 @@ export const readLibrarySkillContent = Effect.fn("LibrarySession.readSkillConten
   const fs = yield* FileSystem.FileSystem;
   return yield* fs.readFileString(
     join(
-      collectionVersionPath(store.originalsPath, backing.copy.digest),
+      collectionVersionPath(store.originalsPath, backing.copy.hash),
       backing.member.source_path,
       "SKILL.md",
     ),

@@ -235,7 +235,7 @@ for (const repository of [false, true]) {
           );
           if (edited) {
             const installedSkill = after.installed_skills[0];
-            assert.ok(installedSkill?.current_digest);
+            assert.ok(installedSkill?.current_hash);
             assert.equal(installedSkill.status, "conflicted");
             assert.equal(
               yield* fs.readFileString(
@@ -244,7 +244,7 @@ for (const repository of [false, true]) {
                   "variants",
                   "agents",
                   "review",
-                  installedSkill.current_digest.slice(7),
+                  installedSkill.current_hash.slice(7),
                   "SKILL.md",
                 ),
               ),
@@ -461,15 +461,15 @@ for (const localBytes of ["B\n", "base\n"]) {
         const merged = yield* b.state;
         for (const copy of localCopies) {
           assert.isTrue(
-            yield* fs.exists(collectionVersionPath(join(b.home, "originals"), copy.digest)),
+            yield* fs.exists(collectionVersionPath(join(b.home, "originals"), copy.hash)),
           );
         }
         assert.equal(merged.skills[0]?.versions.length, 2);
         assert.equal(merged.skills[0]?.local_version_id, undefined);
         assert.equal(merged.imports.length, 3);
         assert.equal(
-          currentSkillVersion(merged, merged.skills[0])?.source_digest,
-          remoteUpdate.skills[0]?.versions.at(-1)?.source_digest,
+          currentSkillVersion(merged, merged.skills[0])?.source_hash,
+          remoteUpdate.skills[0]?.versions.at(-1)?.source_hash,
         );
         assert.equal((yield* a.sync()).status, "merged");
         assert.equal((yield* b.sync()).status, "clean");
@@ -480,8 +480,8 @@ for (const localBytes of ["B\n", "base\n"]) {
         const updated = yield* b.state;
         assert.equal(updated.skills[0]?.local_version_id, undefined);
         assert.equal(
-          currentSkillVersion(updated, updated.skills[0])?.source_digest,
-          next.skills[0]?.versions.at(-1)?.source_digest,
+          currentSkillVersion(updated, updated.skills[0])?.source_hash,
+          next.skills[0]?.versions.at(-1)?.source_hash,
         );
       }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
   );

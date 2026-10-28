@@ -26,7 +26,7 @@ export const CodexDoctorInstance = Schema.Struct({
   scope: Schema.String,
   pluginId: Schema.optionalKey(Schema.String),
   skitManaged: Schema.Boolean,
-  documentDigest: Schema.optionalKey(Schema.String),
+  documentHash: Schema.optionalKey(Schema.String),
   aliases: Schema.optionalKey(Schema.Array(SkillAlias)),
 });
 export type CodexDoctorInstance = typeof CodexDoctorInstance.Type;
@@ -91,7 +91,7 @@ export function codexDuplicateFindings(
       if (group.length < 2) continue;
       if (kind === "display-name-collision" && new Set(group.map((item) => item.name)).size < 2)
         continue;
-      const hashes = group.map((item) => item.documentDigest);
+      const hashes = group.map((item) => item.documentHash);
       findings.push({
         kind,
         name: scopedName.slice(scopedName.indexOf("\0") + 1),
@@ -108,7 +108,7 @@ export function codexDuplicateFindings(
   for (const item of unique) layered.set(item.name, [...(layered.get(item.name) ?? []), item]);
   for (const [name, group] of layered) {
     if (new Set(group.map((item) => item.scope)).size < 2) continue;
-    const hashes = group.map((item) => item.documentDigest);
+    const hashes = group.map((item) => item.documentHash);
     findings.push({
       kind: "layered-name",
       name,
@@ -192,7 +192,7 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
           const canonicalPath = yield* fs
             .realPath(skill.path)
             .pipe(Effect.orElseSucceed(() => resolve(skill.path)));
-          const documentDigest = yield* fs.readFile(skill.path).pipe(
+          const documentHash = yield* fs.readFile(skill.path).pipe(
             Effect.map((bytes) => "sha256:" + createHash("sha256").update(bytes).digest("hex")),
             Effect.catchTag("PlatformError", () => {
               errors.push({
@@ -211,7 +211,7 @@ export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
             aliases: codexSkillAliases(canonicalPath, skill.path, aliasIndex),
             ...(skill.pluginId ? { pluginId: skill.pluginId } : {}),
             skitManaged: managed.has(dirname(canonicalPath)),
-            ...(documentDigest ? { documentDigest } : {}),
+            ...(documentHash ? { documentHash } : {}),
           };
         }),
     );

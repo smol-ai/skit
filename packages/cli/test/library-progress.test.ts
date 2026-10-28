@@ -75,8 +75,8 @@ it.effect("a headless update emits domain progress and records one attributed tr
     );
     const after = yield* home.owned(LibraryStore.use((store) => store.load));
     assert.notStrictEqual(
-      after.collection_versions.at(-1)?.digest,
-      before.collection_versions.at(-1)?.digest,
+      after.collection_versions.at(-1)?.hash,
+      before.collection_versions.at(-1)?.hash,
     );
     const recorded = yield* history;
     assert.strictEqual(recorded.length, previousEvents + 1);

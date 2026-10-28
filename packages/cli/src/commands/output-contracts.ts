@@ -118,7 +118,7 @@ export const outputContracts = {
   securityReview: effectOutput("skit.security.review.v4", SkillSecurityReview),
   securityAccept: effectOutput("skit.security.accept.v4", SkillSecurityReview),
   inventory: effectOutput("skit.inventory.v12", MachineInventoryResult),
-  doctor: effectOutput("skit.doctor.v7", DoctorReport),
+  doctor: effectOutput("skit.doctor.v8", DoctorReport),
   check: effectOutput("skit.check.v8", CheckResult),
   update: effectOutput("skit.update.v9", UpdateResult),
   updatePlan: effectOutput("skit.update.plan.v6", UpdatePlan),

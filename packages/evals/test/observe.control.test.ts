@@ -181,7 +181,7 @@ describe("setup verifier rejects broken final states", () => {
       rmSync(join(run.home, ".skit/originals"), { recursive: true });
     if (damage === "changed retention") {
       const state = JSON.parse(readFileSync(join(run.home, ".skit/state.json"), "utf8"));
-      const digest = state.collection_versions[0].digest.slice(7);
+      const digest = state.collection_versions[0].hash.slice(7);
       writeFileSync(
         join(run.home, ".skit/originals", digest.slice(0, 2), digest, "SKILL.md"),
         "broken\n",

@@ -38,6 +38,7 @@ const asV9 = ({
   invocation_policies,
   repositories,
   installed_skills,
+  skills,
   ...fields
 }: LibraryState) => {
   assert.isUndefined(fields.sync_ancestry);
@@ -46,10 +47,29 @@ const asV9 = ({
   return {
     ...fields,
     schemaVersion: 9,
-    retained_copies: collection_versions.map(({ collection_version_id, ...copy }) => ({
-      ...copy,
-      retained_copy_id: collection_version_id,
+    skills: skills.map(({ versions, ...skill }) => ({
+      ...skill,
+      versions: versions.map(
+        ({ source_hash, artifact_hash, validation_identity_hash, ...version }) => ({
+          ...version,
+          source_digest: source_hash,
+          artifact_digest: artifact_hash,
+          validation_identity_digest: validation_identity_hash,
+        }),
+      ),
     })),
+    retained_copies: collection_versions.map(
+      ({ collection_version_id, hash, members, ...copy }) => ({
+        ...copy,
+        retained_copy_id: collection_version_id,
+        digest: hash,
+        members: members.map(({ source_hash, artifact_hash, ...member }) => ({
+          ...member,
+          source_digest: source_hash,
+          artifact_digest: artifact_hash,
+        })),
+      }),
+    ),
     acquisitions: imports.map(
       ({ import_id, kind, collection_version_id, imported_at, lock_file_entries, ...item }) => ({
         ...item,
@@ -57,7 +77,14 @@ const asV9 = ({
         kind: kind === "edit" ? "retained-edit" : kind,
         retained_copy_id: collection_version_id,
         acquired_at: imported_at,
-        observations: lock_file_entries,
+        observations: lock_file_entries.map(
+          ({ read_at, original_entry_hash, well_known_hash, ...entry }) => ({
+            ...entry,
+            observed_at: read_at,
+            original_entry_digest: original_entry_hash,
+            ...(well_known_hash === undefined ? {} : { well_known_digest: well_known_hash }),
+          }),
+        ),
       }),
     ),
     global_bindings:
@@ -78,11 +105,20 @@ const asV9 = ({
         : { invocation_policies: repository.invocation_policies }),
     })),
     projections: installed_skills.map(
-      ({ installed_skill_id, destination, installed_at, ...copy }) => ({
+      ({
+        installed_skill_id,
+        destination,
+        installed_at,
+        expected_hash,
+        current_hash,
+        ...copy
+      }) => ({
         ...copy,
         projection_id: installed_skill_id,
         target: destination,
         projected_at: installed_at,
+        expected_digest: expected_hash,
+        ...(current_hash === undefined ? {} : { observed_digest: current_hash }),
       }),
     ),
   };

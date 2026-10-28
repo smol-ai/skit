@@ -176,7 +176,7 @@ const planChange = Effect.fn("SetEnabled.planChange")(function* (
             installedSkill === undefined ||
             installedSkill.status !== "installed" ||
             !(yield* fs.exists(installedSkill.path)) ||
-            (yield* deterministicTreeHash(installedSkill.path)) !== installedSkill.expected_digest;
+            (yield* deterministicTreeHash(installedSkill.path)) !== installedSkill.expected_hash;
         }
       else if (hasList)
         for (const installedSkill of installedSkills)

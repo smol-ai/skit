@@ -55,16 +55,36 @@ const asV7 = ({
   invocation_policies,
   repositories,
   installed_skills,
+  skills,
   ...fields
 }: LibraryState) => {
   assert.deepStrictEqual([repositories, installed_skills], [[], []]);
   return {
     ...fields,
     schemaVersion: 7,
-    retained_copies: collection_versions.map(({ collection_version_id, ...copy }) => ({
-      ...copy,
-      retained_copy_id: collection_version_id,
+    skills: skills.map(({ versions, ...skill }) => ({
+      ...skill,
+      versions: versions.map(
+        ({ source_hash, artifact_hash, validation_identity_hash, ...version }) => ({
+          ...version,
+          source_digest: source_hash,
+          artifact_digest: artifact_hash,
+          validation_identity_digest: validation_identity_hash,
+        }),
+      ),
     })),
+    retained_copies: collection_versions.map(
+      ({ collection_version_id, hash, members, ...copy }) => ({
+        ...copy,
+        retained_copy_id: collection_version_id,
+        digest: hash,
+        members: members.map(({ source_hash, artifact_hash, ...member }) => ({
+          ...member,
+          source_digest: source_hash,
+          artifact_digest: artifact_hash,
+        })),
+      }),
+    ),
     acquisitions: imports.map(
       ({ import_id, kind, collection_version_id, imported_at, lock_file_entries, ...item }) => ({
         ...item,
@@ -72,7 +92,14 @@ const asV7 = ({
         kind: kind === "edit" ? "retained-edit" : kind,
         retained_copy_id: collection_version_id,
         acquired_at: imported_at,
-        observations: lock_file_entries,
+        observations: lock_file_entries.map(
+          ({ read_at, original_entry_hash, well_known_hash, ...entry }) => ({
+            ...entry,
+            observed_at: read_at,
+            original_entry_digest: original_entry_hash,
+            ...(well_known_hash === undefined ? {} : { well_known_digest: well_known_hash }),
+          }),
+        ),
       }),
     ),
     global_bindings: enabled.length
@@ -163,7 +190,7 @@ const cases: readonly {
         const archive = yield* readSnapshotArchive(
           collectionVersionPath(
             join(b.home, "originals"),
-            competingState.collection_versions[0]!.digest,
+            competingState.collection_versions[0]!.hash,
           ),
         );
         assert.strictEqual(server.respond("POST", "/api/library/snapshots", archive).status, 200);
@@ -580,7 +607,7 @@ const cases: readonly {
           (item) => item.installed_skill_id === installedSkill.installed_skill_id,
         );
         assert.deepStrictEqual(
-          [recorded?.status, recorded?.current_digest],
+          [recorded?.status, recorded?.current_hash],
           ["conflicted", currentHash],
         );
         yield* fs.remove(join(a.root, "second"));

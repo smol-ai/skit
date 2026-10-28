@@ -98,7 +98,7 @@ export interface AuditSkillOptions {
   declaredCapabilities?: string[];
   path?: string;
   fingerprintPath?: string;
-  artifactContentDigest?: Digest;
+  artifactContentHash?: Digest;
 }
 
 export function skillFindingFingerprint(input: {
@@ -163,8 +163,8 @@ function locationAt(text: string, index: number, matchText: string, path?: strin
 }
 
 export function auditSkill(text: string, options: AuditSkillOptions = {}): SkillAudit {
-  const artifactContentDigest =
-    options.artifactContentDigest ??
+  const artifactContentHash =
+    options.artifactContentHash ??
     (`sha256:${createHash("sha256").update(text).digest("hex")}` as Digest);
   const allMatches = RULES.flatMap((rule) => {
     const pattern = new RegExp(rule.pattern.source, `${rule.pattern.flags.replace("g", "")}g`);
@@ -245,7 +245,7 @@ export function auditSkill(text: string, options: AuditSkillOptions = {}): Skill
             : ("audited_file" as const),
         acceptanceEligible: options.fingerprintPath !== undefined,
       },
-      artifactContentDigest,
+      artifactContentHash,
       ruleId: rule.id,
       evidence,
       severity: rule.critical ? ("critical" as const) : ("medium" as const),
@@ -290,7 +290,7 @@ type EvaluateSkillAuditOptions =
   | { context: SkillAssessmentContext }
   | {
       context: SkillAssessmentContext;
-      artifactContentDigest: Digest;
+      artifactContentHash: Digest;
       acceptances: readonly SkillAssessmentAcceptance[];
       evaluatedAt: string;
     };
@@ -329,7 +329,7 @@ export function evaluateSkillAudit(
       ? options.acceptances.filter(
           (acceptance) =>
             acceptance.context === context &&
-            acceptance.artifactContentDigest === options.artifactContentDigest &&
+            acceptance.artifactContentHash === options.artifactContentHash &&
             (!acceptance.expiresAt || options.evaluatedAt < acceptance.expiresAt),
         )
       : [];

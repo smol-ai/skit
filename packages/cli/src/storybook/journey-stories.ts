@@ -58,9 +58,9 @@ const storyState = Schema.decodeUnknownSync(LibraryState)({
       versions: [
         {
           skill_version_id: skillVersionId,
-          source_digest: digest,
-          artifact_digest: digest,
-          validation_identity_digest: digest,
+          source_hash: digest,
+          artifact_hash: digest,
+          validation_identity_hash: digest,
           materialization_profile: "plain-skill/v1",
         },
       ],
@@ -69,13 +69,13 @@ const storyState = Schema.decodeUnknownSync(LibraryState)({
   collection_versions: [
     {
       collection_version_id: collectionVersionId,
-      digest,
+      hash: digest,
       copy_profile: "verbatim/v1",
       members: [
         {
           source_path: ".",
-          source_digest: digest,
-          artifact_digest: digest,
+          source_hash: digest,
+          artifact_hash: digest,
           materialization_profile: "plain-skill/v1",
         },
       ],
@@ -165,8 +165,8 @@ const previewDoctorCleanup = Effect.scoped(
               destination: "agents",
               root: skillsRoot,
               path,
-              expected_digest: digest,
-              current_digest: digest,
+              expected_hash: digest,
+              current_hash: digest,
               status: "installed",
               installed_at: "2026-10-18T00:00:00.000Z",
             },

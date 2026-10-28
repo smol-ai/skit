@@ -40,22 +40,22 @@ const pool = Array.from({ length: 4 }, (_, index) => {
       versions: [
         {
           skill_version_id: makeSkillVersionId(),
-          source_digest: digest,
-          artifact_digest: digest,
-          validation_identity_digest: digest,
+          source_hash: digest,
+          artifact_hash: digest,
+          validation_identity_hash: digest,
           materialization_profile: "plain-skill/v1" as const,
         },
       ],
     },
     collectionVersion: {
       collection_version_id: collectionVersionId,
-      digest,
+      hash: digest,
       copy_profile: "verbatim/v1" as const,
       members: [
         {
           source_path: "." as const,
-          source_digest: digest,
-          artifact_digest: digest,
+          source_hash: digest,
+          artifact_hash: digest,
           materialization_profile: "plain-skill/v1" as const,
         },
       ],

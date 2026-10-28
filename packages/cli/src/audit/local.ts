@@ -104,7 +104,7 @@ const auditOwnershipClaims = Effect.fn("Audit.ownershipClaims")(function* (
     ) {
       const claim = {
         skillId: inspection.marker.skill_id,
-        expectedHash: inspection.marker.expected_digest,
+        expectedHash: inspection.marker.expected_hash,
         transactionId: undefined,
       };
       // A marker claim without a retained ledger entry is ownership evidence, not proof that the

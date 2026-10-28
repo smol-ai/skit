@@ -66,11 +66,11 @@ const subjectSource = Effect.fn("Library.updateSource")(function* (
 const skillChanges = (
   state: LibraryState,
   collectionId: string,
-  previous: ReadonlyArray<{ readonly source_path: string; readonly artifact_digest: string }>,
+  previous: ReadonlyArray<{ readonly source_path: string; readonly artifact_hash: string }>,
   observed: ReadonlyArray<{
     readonly source_path: string;
     readonly name: string;
-    readonly artifact_digest?: string;
+    readonly artifact_hash?: string;
   }>,
 ) => {
   const lists = enabledByScope(state);
@@ -99,8 +99,8 @@ const skillChanges = (
       const before = previous.find((item) => item.source_path === member.source_path);
       const skill = skillAt(member.source_path);
       return before !== undefined &&
-        member.artifact_digest !== undefined &&
-        member.artifact_digest !== before.artifact_digest &&
+        member.artifact_hash !== undefined &&
+        member.artifact_hash !== before.artifact_hash &&
         skill !== undefined &&
         enabled.has(skill.skill_id)
         ? [skill.name]
@@ -152,9 +152,9 @@ export const previewCollectionUpdate = Effect.fn("Library.previewCollectionUpdat
   return {
     subject_id: subject.subjectId,
     subject_kind: subject.kind,
-    current_snapshot_digest: tree.digest,
+    current_snapshot_digest: tree.hash,
     available_snapshot_digest: inspected.snapshot_digest,
-    changed: tree.digest !== inspected.snapshot_digest,
+    changed: tree.hash !== inspected.snapshot_digest,
     label: subject.label,
     ...("diagnostics" in inspected && inspected.diagnostics?.length
       ? { diagnostics: inspected.diagnostics }
@@ -222,11 +222,11 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
         ),
         (value) => ({
           kind: "source-inspected",
-          changed: value.snapshot_digest !== priorTree.digest,
+          changed: value.snapshot_digest !== priorTree.hash,
         }),
       );
       sourceImported = true;
-      const changed = imported.snapshot_digest !== priorTree.digest;
+      const changed = imported.snapshot_digest !== priorTree.hash;
       let installed = 0;
       const collectionId =
         before.kind === "collection" ? before.collection.collection_id : before.skill.collection_id;
@@ -277,7 +277,7 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
           priorTree.members,
           (collectionVersion?.members ?? []).map((member) => ({
             source_path: member.source_path,
-            artifact_digest: member.artifact_digest,
+            artifact_hash: member.artifact_hash,
             name:
               after.skills.find(
                 (skill) =>

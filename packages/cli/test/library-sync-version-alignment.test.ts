@@ -62,8 +62,8 @@ it.effect(
         bBefore.installed_skills[0]?.installed_skill_id,
       );
       assert.strictEqual(
-        bAfter.installed_skills[0]?.expected_digest,
-        bBefore.installed_skills[0]?.expected_digest,
+        bAfter.installed_skills[0]?.expected_hash,
+        bBefore.installed_skills[0]?.expected_hash,
       );
       assert.strictEqual(bAfter.imports.length, 3);
       assert.strictEqual(bAfter.collection_versions.length, 3);

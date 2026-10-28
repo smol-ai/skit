@@ -18,7 +18,7 @@ export const installedSkillSource = Effect.fn("Library.installedSkillSource")(fu
   const backing = versionBacking(state, skill, version);
   if (backing === undefined)
     return { kind: "invalid" as const, detail: `retained Skill ${skill.name} has no backing` };
-  const root = collectionVersionPath(originalsPath, backing.copy.digest);
+  const root = collectionVersionPath(originalsPath, backing.copy.hash);
   const authored = version.materialization_profile === "declared-skit-skill/v1";
   const validated = authored
     ? yield* validateSkitDirectory(root, "retained", {
@@ -36,7 +36,7 @@ export const installedSkillSource = Effect.fn("Library.installedSkillSource")(fu
     return { kind: "invalid" as const, detail: `authored descriptor lacks ${skill.name}` };
   const importedPath =
     backing.member.source_path === "." ? root : join(root, backing.member.source_path);
-  if ((yield* originalTreeHash(importedPath)) !== version.source_digest)
+  if ((yield* originalTreeHash(importedPath)) !== version.source_hash)
     return { kind: "invalid" as const, detail: `retained Skill ${skill.name} changed` };
   return {
     kind: "source" as const,

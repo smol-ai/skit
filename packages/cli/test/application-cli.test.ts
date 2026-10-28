@@ -118,7 +118,7 @@ test.each(["unset", "empty", "explicit"] as const)(
               sourceType: "well-known",
               sourceUrl: "https://skills.example/review/SKILL.md",
               sourceBaseUrl: "https://skills.example",
-              wellKnownDigest: `sha256:${createHash("sha256").update(document).digest("hex")}`,
+              wellKnownHash: `sha256:${createHash("sha256").update(document).digest("hex")}`,
             },
           },
         }),

@@ -38,7 +38,7 @@ export const indexSetupOnboardingEvidence = (
           if (
             !members.some(
               (member) =>
-                member.source_path === path && member.artifact_digest === version.artifact_digest,
+                member.source_path === path && member.artifact_hash === version.artifact_hash,
             )
           )
             continue;
@@ -48,7 +48,7 @@ export const indexSetupOnboardingEvidence = (
               lockFileEntry.lock_content_hash,
               lockFileEntry.skill_name,
               lockFileEntry.skill_path,
-              version.validation_identity_digest,
+              version.validation_identity_hash,
             );
             const subjects = importedByLockEvidence.get(key) ?? new Set<string>();
             subjects.add(skill.collection_id ?? skill.skill_id);

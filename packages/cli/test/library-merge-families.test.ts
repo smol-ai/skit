@@ -69,9 +69,9 @@ const fixture = (paths: readonly string[]) => {
     if (existing !== undefined) return existing;
     const created: SkillVersion = {
       skill_version_id: makeSkillVersionId(),
-      source_digest: digest(`source:${source}`),
-      artifact_digest: digest(`artifact:${bytes}`),
-      validation_identity_digest: digest(`artifact:${bytes}`),
+      source_hash: digest(`source:${source}`),
+      artifact_hash: digest(`artifact:${bytes}`),
+      validation_identity_hash: digest(`artifact:${bytes}`),
       materialization_profile: "plain-skill/v1",
     };
     versions.set(key, created);
@@ -85,12 +85,12 @@ const fixture = (paths: readonly string[]) => {
     const retained_copy_id = makeCollectionVersionId();
     const copy: CollectionVersion = {
       collection_version_id: retained_copy_id,
-      digest: digest(canonicalJson(members)),
+      hash: digest(canonicalJson(members)),
       copy_profile: "verbatim/v1",
       members: Object.entries(members).map(([path, item]) => ({
         source_path: kind === "source" ? path : ".",
-        source_digest: item.source_digest,
-        artifact_digest: item.artifact_digest,
+        source_hash: item.source_hash,
+        artifact_hash: item.artifact_hash,
         materialization_profile: item.materialization_profile,
       })),
     };
@@ -148,7 +148,7 @@ const fixture = (paths: readonly string[]) => {
           const item = observation.versions[path];
           if (
             item !== undefined &&
-            !versions.some((other) => other.artifact_digest === item.artifact_digest)
+            !versions.some((other) => other.artifact_hash === item.artifact_hash)
           )
             versions.push(item);
         }
@@ -429,10 +429,7 @@ const families = {
     const mine = x.observe({ alpha: "same" }, undefined, { alpha: "local source" });
     const theirs = x.observe({ alpha: "same" }, later, { alpha: "remote source" });
     const remote = x.held([theirs]);
-    assert.strictEqual(
-      mine.versions.alpha!.artifact_digest,
-      theirs.versions.alpha!.artifact_digest,
-    );
+    assert.strictEqual(mine.versions.alpha!.artifact_hash, theirs.versions.alpha!.artifact_hash);
     assert.notStrictEqual(
       mine.versions.alpha!.skill_version_id,
       theirs.versions.alpha!.skill_version_id,

@@ -55,14 +55,14 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
     assert.strictEqual(saved.state.imports[0]?.input.value, installed);
     const tree = saved.state.collection_versions[0];
     assert.ok(tree);
-    const firstOriginal = collectionVersionPath(join(firstHome, "originals"), tree.digest);
+    const firstOriginal = collectionVersionPath(join(firstHome, "originals"), tree.hash);
     assert.strictEqual(
       yield* fs.readFileString(join(firstOriginal, "notes.txt")),
       "retained too\n",
     );
 
     const manifest = yield* libraryManifestFromLocalState(saved.state);
-    assert.deepStrictEqual(manifest.snapshot_digests, [tree.digest]);
+    assert.deepStrictEqual(manifest.snapshot_digests, [tree.hash]);
     const archive = yield* readSnapshotArchive(firstOriginal);
     const originalsPath = join(secondHome, "originals");
     const plan = yield* planCollectionVersions(manifest, {
@@ -76,7 +76,7 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
     if (!second.present) return;
     assert.deepStrictEqual(second.state.imports, saved.state.imports);
     assert.deepStrictEqual(second.state.repositories, []);
-    const secondOriginal = collectionVersionPath(join(secondHome, "originals"), tree.digest);
+    const secondOriginal = collectionVersionPath(join(secondHome, "originals"), tree.hash);
     assert.strictEqual(
       yield* fs.readFileString(join(secondOriginal, "SKILL.md")),
       "observed locally\n",

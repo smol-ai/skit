@@ -226,7 +226,7 @@ function renderAuthorList(data: ContractDataForId<"skit.author.list.v1">): strin
   ].join("\n");
 }
 
-function renderDoctor(data: ContractDataForId<"skit.doctor.v7">, context: RenderContext): string {
+function renderDoctor(data: ContractDataForId<"skit.doctor.v8">, context: RenderContext): string {
   const color = createColors(context.color);
   const section = (title: string) => color.cyan(color.bold(title));
   const path = (value: string) => color.cyan(compactHomePath(value));
@@ -1014,7 +1014,7 @@ const contractPresenters: ContractPresenters = {
   projectionRetentionPlan: (data) =>
     [
       `Would retain changed ${data.skill_name} bytes from ${data.selected_installed_skill_id}`,
-      `Observed: ${data.current_digest}`,
+      `Observed: ${data.current_hash}`,
       `Snapshot: ${data.snapshot_digest}`,
       `Destination: ${data.original_path}`,
       ...data.installed_skills.map(

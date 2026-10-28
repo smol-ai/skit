@@ -325,7 +325,7 @@ it.effect(
         (item) => item.collection_version_id === original.collection_version_id,
       )!;
       expect(observation.input.value).toBe(
-        collectionVersionPath(join(f.home.home, "originals"), copy.digest),
+        collectionVersionPath(join(f.home.home, "originals"), copy.hash),
       );
       const afterManifest = yield* libraryManifestFromLocalState(after);
       const restoredManifest = yield* libraryManifestFromLocalState(restored);
@@ -409,7 +409,7 @@ it.effect(
         (item) => item.collection_version_id === original.collection_version_id,
       )!;
       const path = join(
-        collectionVersionPath(join(f.home.home, "originals"), copy.digest),
+        collectionVersionPath(join(f.home.home, "originals"), copy.hash),
         "existing",
         "SKILL.md",
       );

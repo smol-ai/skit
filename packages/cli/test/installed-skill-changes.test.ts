@@ -300,7 +300,7 @@ it.effect(
       const marker = JSON.parse(yield* f.fs.readFileString(markerPath));
       yield* f.fs.writeFileString(
         markerPath,
-        JSON.stringify({ ...marker, expected_digest: yield* deterministicTreeHash(f.copy) }),
+        JSON.stringify({ ...marker, expected_hash: yield* deterministicTreeHash(f.copy) }),
       );
       const newCopy = join(f.agents, "another");
       yield* f.fs.makeDirectory(newCopy);
@@ -397,7 +397,7 @@ it.effect("a changed marker cannot redefine the Library baseline", () =>
     const marker = JSON.parse(yield* f.fs.readFileString(markerPath));
     yield* f.fs.writeFileString(
       markerPath,
-      JSON.stringify({ ...marker, expected_digest: `sha256:${"f".repeat(64)}` }),
+      JSON.stringify({ ...marker, expected_hash: `sha256:${"f".repeat(64)}` }),
     );
     const scan = yield* f.observe;
     expect(scan.changes?.find((item) => item.path === f.copy)?.status).toBe("protected");

@@ -520,7 +520,7 @@ it.effect("keeps every former copy when a later Skill fails relocation", () =>
     assert.ok(backing);
     yield* fs.writeFileString(
       join(
-        collectionVersionPath(join(home, "originals"), backing.copy.digest),
+        collectionVersionPath(join(home, "originals"), backing.copy.hash),
         backing.member.source_path,
         "SKILL.md",
       ),
@@ -914,7 +914,7 @@ for (const original of ["intact", "missing", "corrupt"] as const)
             yield* installedSkillFixture();
           const target = join(targetRoot, "review");
           yield* project();
-          let backed = (yield* load).collection_versions[0]!.digest;
+          let backed = (yield* load).collection_versions[0]!.hash;
           let bytes = "raw Skill bytes\n";
           if (action === "replace") {
             // Install a second retained Version, then select the first again so the copy of the
@@ -1223,10 +1223,7 @@ it.effect("records an earlier verified write when a later item's successor diver
       state.installed_skills.find((installedSkill) => installedSkill.path === path);
     const review = join(targetRoot, "review");
     assert.strictEqual(row(after, review)?.status, "installed");
-    assert.notStrictEqual(
-      row(after, review)?.expected_digest,
-      row(before, review)?.expected_digest,
-    );
+    assert.notStrictEqual(row(after, review)?.expected_hash, row(before, review)?.expected_hash);
     assert.deepStrictEqual(row(after, second), row(before, second));
   }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
 );

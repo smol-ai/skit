@@ -52,23 +52,23 @@ const skill = {
   versions: [
     {
       skill_version_id: versionId,
-      source_digest: digest,
-      artifact_digest: digest,
-      validation_identity_digest: digest,
+      source_hash: digest,
+      artifact_hash: digest,
+      validation_identity_hash: digest,
       materialization_profile: "plain-skill/v1" as const,
     },
     {
       skill_version_id: second,
-      source_digest: digestB,
-      artifact_digest: digestB,
-      validation_identity_digest: digestB,
+      source_hash: digestB,
+      artifact_hash: digestB,
+      validation_identity_hash: digestB,
       materialization_profile: "plain-skill/v1" as const,
     },
     {
       skill_version_id: third,
-      source_digest: digestC,
-      artifact_digest: digestC,
-      validation_identity_digest: digestC,
+      source_hash: digestC,
+      artifact_hash: digestC,
+      validation_identity_hash: digestC,
       materialization_profile: "plain-skill/v1" as const,
     },
   ],
@@ -80,13 +80,13 @@ const manifest = (enabled: unknown[] = []) => ({
   collection_versions: [
     {
       collection_version_id: collectionVersionId,
-      digest,
+      hash: digest,
       copy_profile: "verbatim/v1" as const,
       members: [
         {
           source_path: "." as const,
-          source_digest: digest,
-          artifact_digest: digest,
+          source_hash: digest,
+          artifact_hash: digest,
           materialization_profile: "plain-skill/v1" as const,
         },
       ],
@@ -96,13 +96,13 @@ const manifest = (enabled: unknown[] = []) => ({
       [copyC, digestC],
     ].map(([collection_version_id, value]) => ({
       collection_version_id,
-      digest: value,
+      hash: value,
       copy_profile: "verbatim/v1" as const,
       members: [
         {
           source_path: "." as const,
-          source_digest: value,
-          artifact_digest: value,
+          source_hash: value,
+          artifact_hash: value,
           materialization_profile: "plain-skill/v1" as const,
         },
       ],
@@ -184,7 +184,7 @@ it.effect(
           {
             ...manifest().collection_versions[0],
             collection_version_id: copy,
-            digest: latestDigest,
+            hash: latestDigest,
             members: [
               ...remote.collection_versions[0].members,
               { ...manifest().collection_versions[0].members[0], source_path: "extra" },
@@ -434,14 +434,14 @@ it.effect(
             destination: "agents",
             root: "/tmp/skills",
             path: "/tmp/skills/review",
-            expected_digest: digestB,
+            expected_hash: digestB,
             status: "installed",
             installed_at: "2026-01-01T00:00:00.000Z",
           },
         ],
-        assessmentAcceptances: [digestB, digestC].map((artifactContentDigest) => ({
+        assessmentAcceptances: [digestB, digestC].map((artifactContentHash) => ({
           fingerprint: digest,
-          artifactContentDigest,
+          artifactContentHash,
           skill_version_id: localId,
           context: "project",
           principal: "test",
@@ -460,7 +460,7 @@ it.effect(
         [],
       );
       assert.strictEqual(device.installed_skills[0]?.skill_version_id, second);
-      assert.strictEqual(device.installed_skills[0]?.expected_digest, digestB);
+      assert.strictEqual(device.installed_skills[0]?.expected_hash, digestB);
       assert.strictEqual(device.assessmentAcceptances?.[0]?.skill_version_id, second);
       assert.strictEqual(device.assessmentAcceptances?.[1]?.skill_version_id, localId);
       assert.strictEqual(state.installed_skills[0]?.skill_version_id, localId);
@@ -553,7 +553,7 @@ it.effect("does not alias different validation metadata or another Skill's versi
               ? {
                   ...version,
                   skill_version_id: makeSkillVersionId(),
-                  validation_identity_digest: digestC,
+                  validation_identity_hash: digestC,
                 }
               : version,
           ),
@@ -646,9 +646,9 @@ const pairManifest = (entries: unknown[]) => ({
     versions: [
       {
         skill_version_id: `${skill_id}`.replace("skill_", "skv_"),
-        source_digest: value,
-        artifact_digest: value,
-        validation_identity_digest: value,
+        source_hash: value,
+        artifact_hash: value,
+        validation_identity_hash: value,
         materialization_profile: "plain-skill/v1" as const,
       },
     ],
@@ -656,15 +656,15 @@ const pairManifest = (entries: unknown[]) => ({
   collection_versions: [
     {
       collection_version_id: pairCopy,
-      digest: pairDigest,
+      hash: pairDigest,
       copy_profile: "verbatim/v1" as const,
       members: [
         ["alpha", digestB],
         ["beta", digestC],
       ].map(([source_path, value]) => ({
         source_path,
-        source_digest: value,
-        artifact_digest: value,
+        source_hash: value,
+        artifact_hash: value,
         materialization_profile: "plain-skill/v1" as const,
       })),
     },

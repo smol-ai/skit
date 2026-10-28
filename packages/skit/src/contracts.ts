@@ -129,18 +129,20 @@ export const OwnershipMarker = Schema.Struct({
   installed_skill_id: InstalledSkillId,
   skill_id: SkillId,
   skill_version_id: SkillVersionId,
-  expected_digest: Digest,
+  expected_hash: Digest,
 });
 export type OwnershipMarker = typeof OwnershipMarker.Type;
 
-// v4 named the installed skill a projection and carried a policy version that was always 1.
+// v4 named the installed skill a projection, called its hash a digest and carried a policy
+// version that was always 1.
 const OwnershipMarkerFromV4 = OwnershipMarkerV4.pipe(
   Schema.decodeTo(OwnershipMarker, {
     decode: SchemaGetter.transform(
-      ({ projection_id, projectionPolicyVersion: _policy, ...marker }) => ({
+      ({ projection_id, projectionPolicyVersion: _policy, expected_digest, ...marker }) => ({
         ...marker,
         schemaVersion: 5 as const,
         installed_skill_id: projection_id,
+        expected_hash: expected_digest,
       }),
     ),
     encode: SchemaGetter.forbidden(() => "v4 ownership markers are decode-only"),
@@ -185,7 +187,7 @@ export const SkillAuditFinding = Schema.Struct({
     scope: Schema.Literals(["skill_artifact", "audited_file"]),
     acceptanceEligible: Schema.Boolean,
   }),
-  artifactContentDigest: Digest,
+  artifactContentHash: Digest,
   ruleId: Schema.String,
   evidence: Schema.Literals([
     "declared",
@@ -260,7 +262,7 @@ export type SkillAssessmentDecision = typeof SkillAssessmentDecision.Type;
 
 export const SkillSecurityReview = Schema.Struct({
   skill_version_id: SkillVersionId,
-  artifactContentDigest: Digest,
+  artifactContentHash: Digest,
   audit: SkillAudit,
   assessment: SkillAssessmentDecision,
   acceptances: Schema.mutableKey(Schema.mutable(Schema.Array(SkillAcceptanceReviewRecord))),

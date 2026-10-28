@@ -60,7 +60,7 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
     }
     const currentHash = yield* deterministicTreeHash(installedSkill.path);
     const marker = yield* readOwnershipMarker(installedSkill.path);
-    installedSkill.current_digest = currentHash;
+    installedSkill.current_hash = currentHash;
     const expected = expectedInstalledSkillHashResult(installedSkill, marker);
     installedSkill.status =
       marker && Result.isSuccess(expected) && currentHash === expected.success
@@ -192,7 +192,7 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
       const claim = {
         skillId: marker.marker.skill_id,
         installedSkillId: marker.marker.installed_skill_id,
-        expectedHash: marker.marker.expected_digest,
+        expectedHash: marker.marker.expected_hash,
       };
       state.ownershipIssues.push({
         code: "ORPHANED_OWNERSHIP_MARKER",
@@ -237,7 +237,7 @@ export const refreshLibraryInventory = Effect.fn("Library.refreshLibraryInventor
     if (
       marker?.installed_skill_id === installedSkill.installed_skill_id &&
       marker.skill_id === installedSkill.skill_id &&
-      installedSkill.current_digest === installedSkill.expected_digest
+      installedSkill.current_hash === installedSkill.expected_hash
     )
       for (const backup of yield* pendingInstalledSkillBackups(installedSkill))
         yield* keepInstalledSkillBackup(backup);

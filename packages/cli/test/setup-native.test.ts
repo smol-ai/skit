@@ -1118,9 +1118,9 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
           versions: [
             {
               skill_version_id: skillVersionId,
-              source_digest: contentHash,
-              artifact_digest: contentHash,
-              validation_identity_digest: contentHash,
+              source_hash: contentHash,
+              artifact_hash: contentHash,
+              validation_identity_hash: contentHash,
               materialization_profile: "declared-skit-skill/v1",
             },
           ],
@@ -1129,13 +1129,13 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
       collection_versions: [
         {
           collection_version_id: versionId,
-          digest: contentHash,
+          hash: contentHash,
           copy_profile: "verbatim/v1",
           members: [
             {
               source_path: "skills/council",
-              source_digest: contentHash,
-              artifact_digest: contentHash,
+              source_hash: contentHash,
+              artifact_hash: contentHash,
               materialization_profile: "declared-skit-skill/v1",
             },
           ],
@@ -1170,7 +1170,7 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
           destination: "agents",
           root: f.codex,
           path: installedSkill,
-          expected_digest: contentHash,
+          expected_hash: contentHash,
           status: "installed",
           installed_at: "2026-01-01T00:00:00.000Z",
         },
@@ -1378,9 +1378,9 @@ it.effect(
             versions: [
               {
                 skill_version_id: currentVersionId,
-                source_digest: currentHash,
-                artifact_digest: currentHash,
-                validation_identity_digest: currentHash,
+                source_hash: currentHash,
+                artifact_hash: currentHash,
+                validation_identity_hash: currentHash,
                 materialization_profile: "plain-skill/v1",
               },
             ],
@@ -1393,9 +1393,9 @@ it.effect(
             versions: [
               {
                 skill_version_id: missingVersionId,
-                source_digest: currentHash,
-                artifact_digest: currentHash,
-                validation_identity_digest: currentHash,
+                source_hash: currentHash,
+                artifact_hash: currentHash,
+                validation_identity_hash: currentHash,
                 materialization_profile: "plain-skill/v1",
               },
             ],
@@ -1404,19 +1404,19 @@ it.effect(
         collection_versions: [
           {
             collection_version_id: versionId,
-            digest: currentHash,
+            hash: currentHash,
             copy_profile: "verbatim/v1",
             members: [
               {
                 source_path: "current",
-                source_digest: currentHash,
-                artifact_digest: currentHash,
+                source_hash: currentHash,
+                artifact_hash: currentHash,
                 materialization_profile: "plain-skill/v1",
               },
               {
                 source_path: "missing",
-                source_digest: currentHash,
-                artifact_digest: currentHash,
+                source_hash: currentHash,
+                artifact_hash: currentHash,
                 materialization_profile: "plain-skill/v1",
               },
             ],
@@ -1446,7 +1446,7 @@ it.effect(
             destination: "agents",
             root: f.codex,
             path: current,
-            expected_digest: currentHash,
+            expected_hash: currentHash,
             status: "installed",
             installed_at: "2026-01-01T00:00:00.000Z",
           },
@@ -1458,7 +1458,7 @@ it.effect(
             destination: "agents",
             root: f.codex,
             path: missing,
-            expected_digest: currentHash,
+            expected_hash: currentHash,
             status: "installed",
             installed_at: "2026-01-01T00:00:00.000Z",
           },
@@ -1517,9 +1517,9 @@ for (const kind of ["source", "edit"] as const) {
             versions: [
               {
                 skill_version_id: makeSkillVersionId(),
-                source_digest: hash,
-                artifact_digest: hash,
-                validation_identity_digest: hash,
+                source_hash: hash,
+                artifact_hash: hash,
+                validation_identity_hash: hash,
                 materialization_profile: "plain-skill/v1",
               },
             ],
@@ -1528,13 +1528,13 @@ for (const kind of ["source", "edit"] as const) {
         collection_versions: [
           {
             collection_version_id: copyId,
-            digest: hash,
+            hash: hash,
             copy_profile: "verbatim/v1",
             members: [
               {
                 source_path: kind === "source" ? "skills/review" : ".",
-                source_digest: hash,
-                artifact_digest: hash,
+                source_hash: hash,
+                artifact_hash: hash,
                 materialization_profile: "plain-skill/v1",
               },
             ],
@@ -1569,7 +1569,7 @@ for (const kind of ["source", "edit"] as const) {
                 skill_name: "review",
                 skill_path: lock.entry.skillPath,
                 content_agreement: "agrees",
-                original_entry_digest: hash,
+                original_entry_hash: hash,
                 original_entry: lock.entry.originalEntry,
               },
             ],

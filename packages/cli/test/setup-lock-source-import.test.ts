@@ -206,7 +206,7 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
             sourceType: "well-known",
             sourceUrl: base,
             computedHash: projectHash(installedText),
-            wellKnownDigest: `sha256:${createHash("sha256").update(installedText).digest("hex")}`,
+            wellKnownHash: `sha256:${createHash("sha256").update(installedText).digest("hex")}`,
           },
         },
       }),
@@ -279,7 +279,7 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
     expect(sourceImport.lock_file_entries).toEqual([
       expect.objectContaining({
         source_url: base,
-        well_known_digest: expect.stringMatching(/^sha256:/),
+        well_known_hash: expect.stringMatching(/^sha256:/),
         content_agreement: "agrees",
       }),
     ]);
@@ -288,7 +288,7 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
     );
     expect(sourceImport.collection_id).toBe(skill?.collection_id);
     const tree = persisted.state.collection_versions[0]!;
-    const original = collectionVersionPath(home.originals, tree.digest);
+    const original = collectionVersionPath(home.originals, tree.hash);
     expect(yield* fs.readFileString(join(original, "review", "SKILL.md"))).toBe(installedText);
     expect(yield* fs.exists(join(original, "README.md"))).toBe(false);
     const secondSetup = yield* home.owned(runSetup(setup));
@@ -327,7 +327,7 @@ it.effect("reads a global skills.sh well-known base URL and preserves its digest
             sourceType: "well-known",
             sourceUrl: "https://skills.example/review/SKILL.md",
             sourceBaseUrl: "https://skills.example",
-            wellKnownDigest: `sha256:${"1".repeat(64)}`,
+            wellKnownHash: `sha256:${"1".repeat(64)}`,
           },
         },
       }),
@@ -350,7 +350,7 @@ it.effect("reads a global skills.sh well-known base URL and preserves its digest
         entries: [
           expect.objectContaining({
             sourceBaseUrl: "https://skills.example",
-            wellKnownDigest: `sha256:${"1".repeat(64)}`,
+            wellKnownHash: `sha256:${"1".repeat(64)}`,
           }),
         ],
       }),
@@ -367,7 +367,7 @@ it.effect("reads a global skills.sh well-known base URL and preserves its digest
         sourceType: "well-known",
         sourceUrl: "https://skills.example/review/SKILL.md",
         sourceBaseUrl: "https://skills.example",
-        wellKnownDigest: `sha256:${"1".repeat(64)}`,
+        wellKnownHash: `sha256:${"1".repeat(64)}`,
         originalEntry: { source: "wellknown/skills.example", sourceType: "well-known" },
       },
     });

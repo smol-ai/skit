@@ -125,7 +125,7 @@ export const diffLibraryState = (
         entity: "version",
         id: version.skill_version_id,
         action: "retained",
-        digest: version.source_digest,
+        digest: version.source_hash,
       });
     for (const version of versions.removed)
       changes.push({ entity: "version", id: version.skill_version_id, action: "removed" });
@@ -186,7 +186,7 @@ export const diffLibraryState = (
       action: "projected",
       after: item.status,
       path: item.path,
-      digest: item.expected_digest,
+      digest: item.expected_hash,
     });
   for (const item of installedSkills.removed)
     changes.push({
@@ -209,7 +209,7 @@ export const diffLibraryState = (
       before: previous.status,
       after: current.status,
       path: current.path,
-      ...(current.current_digest === undefined ? {} : { digest: current.current_digest }),
+      ...(current.current_hash === undefined ? {} : { digest: current.current_hash }),
     });
   }
 

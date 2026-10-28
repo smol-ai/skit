@@ -24,12 +24,12 @@ export const planCollectionVersions = Effect.fn("Library.planCollectionVersions"
   const download: Digest[] = [];
   const reacquire: LibraryManifest["collection_versions"][number]["collection_version_id"][] = [];
   for (const copy of manifest.collection_versions) {
-    if (seen.has(copy.digest)) continue;
-    seen.add(copy.digest);
-    if (available.has(copy.digest)) continue;
-    if (yield* fs.exists(collectionVersionPath(options.originalsPath, copy.digest)))
-      reusable.push(copy.digest);
-    else if (snapshots.has(copy.digest)) download.push(copy.digest);
+    if (seen.has(copy.hash)) continue;
+    seen.add(copy.hash);
+    if (available.has(copy.hash)) continue;
+    if (yield* fs.exists(collectionVersionPath(options.originalsPath, copy.hash)))
+      reusable.push(copy.hash);
+    else if (snapshots.has(copy.hash)) download.push(copy.hash);
     else reacquire.push(copy.collection_version_id);
   }
   return {

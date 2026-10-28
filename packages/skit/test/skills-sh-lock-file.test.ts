@@ -43,6 +43,6 @@ it("keeps a safe skill path and drops an unsafe one", () => {
 it("hashes the original entry independently of key order", () => {
   const a = skillsShLockFileEntry({ ...fields, original_entry: { a: 1, b: 2 } });
   const b = skillsShLockFileEntry({ ...fields, original_entry: { b: 2, a: 1 } });
-  expect(a.original_entry_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
-  expect(a.original_entry_digest).toBe(b.original_entry_digest);
+  expect(a.original_entry_hash).toMatch(/^sha256:[0-9a-f]{64}$/);
+  expect(a.original_entry_hash).toBe(b.original_entry_hash);
 });

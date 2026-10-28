@@ -53,8 +53,8 @@ const indexSetupLibrary = (
   for (const skill of library.skills) {
     const selected = currentSkillVersion(library, skill);
     if (selected === undefined) continue;
-    librarySkillsByHash.set(selected.validation_identity_digest, [
-      ...(librarySkillsByHash.get(selected.validation_identity_digest) ?? []),
+    librarySkillsByHash.set(selected.validation_identity_hash, [
+      ...(librarySkillsByHash.get(selected.validation_identity_hash) ?? []),
       {
         subjectId: skill.collection_id ?? skill.skill_id,
         skillId: skill.skill_id,

@@ -30,13 +30,13 @@ const readInvocation = Effect.fn("Library.readSkillInvocation")(function* (
     return yield* new ImportContentInvalid({
       diagnostics: [`Skill ${skill.name} has no selected retained backing`],
     });
-  const root = collectionVersionPath(originalsPath, backing.copy.digest);
-  if ((yield* hashTree(root)) !== backing.copy.digest)
+  const root = collectionVersionPath(originalsPath, backing.copy.hash);
+  if ((yield* hashTree(root)) !== backing.copy.hash)
     return yield* new ImportContentInvalid({
       diagnostics: [`Retained copy for ${skill.name} changed`],
     });
   const importedPath = join(root, backing.member.source_path);
-  if (version === undefined || (yield* hashTree(importedPath)) !== version.source_digest)
+  if (version === undefined || (yield* hashTree(importedPath)) !== version.source_hash)
     return yield* new ImportContentInvalid({
       diagnostics: [`Retained Skill ${skill.name} changed`],
     });

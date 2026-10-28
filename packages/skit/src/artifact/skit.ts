@@ -207,7 +207,7 @@ export function validateSkitDirectory(
           declaredCapabilities: skill.capabilities ?? [],
           path: primary,
           fingerprintPath: "SKILL.md",
-          artifactContentDigest: identity.skills.find((item) => item.name === skill.name)!
+          artifactContentHash: identity.skills.find((item) => item.name === skill.name)!
             .contentHash,
         });
         audits[`${descriptor.slug}:${skill.name}`] = audit;
@@ -215,7 +215,7 @@ export function validateSkitDirectory(
           "acceptances" in options
             ? evaluateSkillAudit(audit, {
                 context: options.assessmentContext,
-                artifactContentDigest: identity.skills.find((item) => item.name === skill.name)!
+                artifactContentHash: identity.skills.find((item) => item.name === skill.name)!
                   .contentHash,
                 acceptances: options.acceptances,
                 evaluatedAt: options.evaluatedAt,

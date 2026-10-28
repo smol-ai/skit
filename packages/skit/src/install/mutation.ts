@@ -222,7 +222,7 @@ export function parseOwnershipMarker(value: unknown): OwnershipMarkerInspection 
   return { kind: "invalid", detail: "Ownership marker has invalid typed fields" };
 }
 
-const markerExpectedHash = (marker: OwnershipMarker): Digest => marker.expected_digest;
+const markerExpectedHash = (marker: OwnershipMarker): Digest => marker.expected_hash;
 
 // Ownership is the installed skill and Skill; a new selected Version is an ordinary rewrite, and the
 // expected-digest check below is what detects local edits.
@@ -237,7 +237,7 @@ const sameMarker = (left: OwnershipMarker, right: OwnershipMarker) =>
   left.installed_skill_id === right.installed_skill_id &&
   left.skill_id === right.skill_id &&
   left.skill_version_id === right.skill_version_id &&
-  left.expected_digest === right.expected_digest;
+  left.expected_hash === right.expected_hash;
 
 const ownershipMarker = (
   request: WriteInstalledSkillRequest,
@@ -248,7 +248,7 @@ const ownershipMarker = (
   installed_skill_id: request.identity.installedSkillId,
   skill_id: request.identity.skillId,
   skill_version_id: request.identity.skillVersionId,
-  expected_digest: expectedHash,
+  expected_hash: expectedHash,
 });
 
 export function inspectOwnershipMarker(
@@ -277,14 +277,14 @@ export function expectedInstalledSkillHashResult(
   installedSkill: InstalledSkill,
   marker: OwnershipMarker | null,
 ): Result.Result<Digest, OwnershipMarkerDisagrees> {
-  if (marker && installedSkill.expected_digest !== markerExpectedHash(marker))
+  if (marker && installedSkill.expected_hash !== markerExpectedHash(marker))
     return Result.fail(
       new OwnershipMarkerDisagrees({
         skillId: installedSkill.skill_id,
         target: installedSkill.destination,
       }),
     );
-  return Result.succeed(installedSkill.expected_digest);
+  return Result.succeed(installedSkill.expected_hash);
 }
 
 /** Moves an owned copy into a pending backup for the mutation that will settle it. */
@@ -333,7 +333,7 @@ const writeInstalledSkill = Effect.fn("Install.write")(function* (
         destination: target,
         root,
         path: destination,
-        expected_digest: desiredHash,
+        expected_hash: desiredHash,
         status: "pending",
         installed_at: request.installedAt,
       };
@@ -377,7 +377,7 @@ const writeInstalledSkill = Effect.fn("Install.write")(function* (
             message: `Post-${verification} hash verification failed for ${skill.skillId} at ${target}`,
           });
         changed = true;
-        return { ...installedSkill, status: "installed" as const, current_digest: currentHash };
+        return { ...installedSkill, status: "installed" as const, current_hash: currentHash };
       });
       const nativeDeletion =
         !request.restoreNativeDeletion &&
@@ -389,7 +389,7 @@ const writeInstalledSkill = Effect.fn("Install.write")(function* (
         installedSkill.status = "suppressed";
         installedSkill.suppression_reason = "native_delete";
         installedSkill.suppressed_at = prior.suppressed_at;
-        installedSkill.current_digest = prior.current_digest;
+        installedSkill.current_hash = prior.current_hash;
         return settled();
       }
       if (yield* exists(destination)) {
@@ -453,7 +453,7 @@ const writeInstalledSkill = Effect.fn("Install.write")(function* (
           )
             return yield* commit("marker", "adoption");
           installedSkill.status = "conflicted";
-          installedSkill.current_digest = currentHash;
+          installedSkill.current_hash = currentHash;
           return settled();
         }
         if (currentHash !== markerExpectedHash(marker)) {
@@ -475,16 +475,16 @@ const writeInstalledSkill = Effect.fn("Install.write")(function* (
           }
           return {
             ...installedSkill,
-            expected_digest: prior?.expected_digest ?? markerExpectedHash(marker),
+            expected_hash: prior?.expected_hash ?? markerExpectedHash(marker),
             status: "conflicted" as const,
-            current_digest: currentHash,
+            current_hash: currentHash,
           };
         }
         if (currentHash === desiredHash) {
           if (marker.skill_version_id !== request.identity.skillVersionId)
             return yield* commit("marker", "marker");
           installedSkill.status = "installed";
-          installedSkill.current_digest = currentHash;
+          installedSkill.current_hash = currentHash;
           return settled();
         }
         return yield* commit("replace", "write");
@@ -564,7 +564,7 @@ export const installedSkillDisplaced = Effect.fn("Install.displaced")(function* 
     const marker = yield* readOwnershipMarker(backup);
     if (
       marker?.installed_skill_id === installedSkill.installed_skill_id &&
-      marker.expected_digest === installedSkill.expected_digest
+      marker.expected_hash === installedSkill.expected_hash
     )
       return true;
   }

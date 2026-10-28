@@ -1,5 +1,6 @@
 import { Schema, SchemaGetter } from "effect";
-import { Collection, Skill } from "../library-contracts.js";
+import { Collection } from "../library-contracts.js";
+import { SkillV7 } from "./manifest-v7.js";
 import { Digest, HarnessName } from "../../vocabulary.js";
 import {
   BindingEntryV7,
@@ -20,7 +21,7 @@ export const BindingV6 = Schema.Struct({
 export const LibraryManifestV6 = Schema.Struct({
   schema: Schema.Literal("skit.library.v6"),
   collections: Schema.Array(Collection),
-  skills: Schema.Array(Skill),
+  skills: Schema.Array(SkillV7),
   retained_copies: Schema.Array(CollectionVersionV7),
   acquisitions: Schema.Array(ImportV7),
   snapshot_digests: Schema.Array(Digest),

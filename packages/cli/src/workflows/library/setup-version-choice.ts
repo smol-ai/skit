@@ -150,7 +150,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
     if (
       !after ||
       after.status !== "installed" ||
-      after.expected_digest !== desired.get(fact.installedSkillId) ||
+      after.expected_hash !== desired.get(fact.installedSkillId) ||
       (yield* deterministicTreeHash(fact.path)) !== desired.get(fact.installedSkillId)
     )
       return yield* new PlanIsStale();

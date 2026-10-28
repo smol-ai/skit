@@ -507,7 +507,7 @@ describe("CLI contracts", () => {
     expect(result.stderr).toBe("");
     expect(JSON.parse(result.stdout)).toEqual(
       expect.objectContaining({
-        schema: "skit.doctor.v7",
+        schema: "skit.doctor.v8",
         data: expect.objectContaining({ ok: false, issues: expect.any(Array) }),
       }),
     );
@@ -752,7 +752,7 @@ describe("CLI contracts", () => {
       ["agents", "different"],
       ["claude", "selected"],
     ]);
-    expect(preview.data.current_digest).not.toBe("");
+    expect(preview.data.current_hash).not.toBe("");
     expect(preview.data.snapshot_digest).not.toBe("");
     expect(existsSync(preview.data.original_path)).toBe(false);
     expect(await readFile(join(home, "state.json"), "utf8")).toBe(stateBeforePreview);
@@ -811,15 +811,15 @@ describe("CLI contracts", () => {
     ]);
 
     const partialState = JSON.parse(await readFile(join(home, "state.json"), "utf8"));
-    const selectedDigest = preview.data.current_digest;
+    const selectedDigest = preview.data.current_hash;
     const marker = JSON.parse(markerBefore.claude);
     await writeFile(join(paths.claude, ".skit-ownership.json"), markerBefore.claude);
     const installedSkill = partialState.installed_skills.find(
       (candidate: { path: string }) => candidate.path === paths.claude,
     );
     installedSkill.skill_version_id = marker.skill_version_id;
-    installedSkill.expected_digest = marker.expected_digest;
-    installedSkill.current_digest = selectedDigest;
+    installedSkill.expected_hash = marker.expected_hash;
+    installedSkill.current_hash = selectedDigest;
     installedSkill.status = "conflicted";
     await writeFile(join(home, "state.json"), `${JSON.stringify(partialState, null, 2)}\n`);
     const beforeRecovery = Schema.decodeUnknownSync(LibraryStateDocument)(

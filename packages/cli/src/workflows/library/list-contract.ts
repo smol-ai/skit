@@ -17,7 +17,7 @@ export const ListResult = Schema.Struct({
           versions: Schema.Array(
             Schema.Struct({
               skill_version_id: SkillVersionId,
-              artifact_digest: Digest,
+              artifact_hash: Digest,
             }),
           ),
         }),

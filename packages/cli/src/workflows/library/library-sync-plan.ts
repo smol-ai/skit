@@ -16,7 +16,7 @@ const collectionSkills = (manifest: LibraryManifest, collectionId: string) =>
   new Map(
     manifest.skills
       .filter((skill) => skill.collection_id === collectionId)
-      .map((skill) => [skill.name, currentSkillVersion(manifest, skill)?.source_digest]),
+      .map((skill) => [skill.name, currentSkillVersion(manifest, skill)?.source_hash]),
   );
 
 const collectionGraph = (manifest: LibraryManifest, collectionId: string) => {

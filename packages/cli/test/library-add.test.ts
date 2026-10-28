@@ -149,7 +149,7 @@ it.effect("reports the retained package when its source disappears after publica
       state.collection_versions[0]?.collection_version_id,
       added.collection_version_id,
     );
-    assert.strictEqual(state.collection_versions[0]?.digest, added.snapshot_digest);
+    assert.strictEqual(state.collection_versions[0]?.hash, added.snapshot_digest);
     assert.strictEqual(
       yield* fs.readFileString(
         join(

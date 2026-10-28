@@ -42,7 +42,7 @@
         }
       ]
     },
-    "digest": {
+    "hash": {
       "type": "string"
     },
     "installed": {

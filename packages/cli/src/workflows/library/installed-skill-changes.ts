@@ -116,7 +116,7 @@ export const findInstalledSkillChanges = Effect.fn("Setup.findInstalledSkillChan
       name: skill.name,
       path: installedSkill.path,
       destination: target,
-      baselineHash: installedSkill.expected_digest,
+      baselineHash: installedSkill.expected_hash,
       ...(version ? { desiredVersionId: version.skill_version_id } : {}),
       metadataChanged: false,
     };
@@ -198,7 +198,7 @@ export const findInstalledSkillChanges = Effect.fn("Setup.findInstalledSkillChan
       marker.marker.installed_skill_id !== installedSkill.installed_skill_id ||
       marker.marker.skill_id !== installedSkill.skill_id ||
       marker.marker.skill_version_id !== installedSkill.skill_version_id ||
-      marker.marker.expected_digest !== installedSkill.expected_digest ||
+      marker.marker.expected_hash !== installedSkill.expected_hash ||
       !version
     ) {
       facts.push(protect("The marker disagrees with the registered last-written baseline"));
@@ -234,9 +234,9 @@ export const findInstalledSkillChanges = Effect.fn("Setup.findInstalledSkillChan
     const status =
       current === desired.success
         ? "unchanged"
-        : current === installedSkill.expected_digest
+        : current === installedSkill.expected_hash
           ? "incoming-update"
-          : desired.success === installedSkill.expected_digest
+          : desired.success === installedSkill.expected_hash
             ? "local-only"
             : "competing";
     facts.push({
@@ -248,7 +248,7 @@ export const findInstalledSkillChanges = Effect.fn("Setup.findInstalledSkillChan
       metadataChanged:
         status === "unchanged" &&
         (installedSkill.skill_version_id !== version.skill_version_id ||
-          installedSkill.expected_digest !== desired.success ||
+          installedSkill.expected_hash !== desired.success ||
           installedSkill.status !== "installed"),
     });
   }
@@ -287,14 +287,14 @@ export const installSelectedVersions = Effect.fn("Setup.installSelectedVersions"
       marker.marker.installed_skill_id !== installedSkill.installed_skill_id ||
       marker.marker.skill_id !== installedSkill.skill_id ||
       marker.marker.skill_version_id !== installedSkill.skill_version_id ||
-      marker.marker.expected_digest !== installedSkill.expected_digest
+      marker.marker.expected_hash !== installedSkill.expected_hash
     )
       return yield* new PlanIsStale();
     // Another approved additive setup stage may already have aligned this exact copy.
     if (
       current === fact.desiredHash &&
       installedSkill.skill_version_id === fact.desiredVersionId &&
-      installedSkill.expected_digest === fact.desiredHash &&
+      installedSkill.expected_hash === fact.desiredHash &&
       installedSkill.status === "installed"
     )
       continue;
@@ -320,7 +320,7 @@ export const installSelectedVersions = Effect.fn("Setup.installSelectedVersions"
     if (
       !after ||
       after.status !== "installed" ||
-      after.expected_digest !== fact.desiredHash ||
+      after.expected_hash !== fact.desiredHash ||
       after.skill_version_id !== fact.desiredVersionId ||
       (yield* deterministicTreeHash(fact.path)) !== fact.desiredHash
     )

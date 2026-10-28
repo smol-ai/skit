@@ -711,7 +711,7 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
     const collectionId = imported.collections[0].collection_id;
     const selected = imported.collection_versions[0];
     expect(selected).toBeDefined();
-    const selectedHex = selected!.digest.slice("sha256:".length);
+    const selectedHex = selected!.hash.slice("sha256:".length);
     const selectedPath = join(firstHome, "originals", selectedHex.slice(0, 2), selectedHex);
     expect(await readFile(join(selectedPath, "SKILL.md"), "utf8")).toBe(rawText);
     expect(existsSync(join(selectedPath, "README.md"))).toBe(false);
@@ -737,7 +737,7 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
     )(await remoteRead.json());
     expect(remote.library.manifest).toMatchObject({
       schema: "skit.library.v7",
-      snapshot_digests: [selected!.digest],
+      snapshot_digests: [selected!.hash],
       bindings: [],
     });
     expect(remote.library.manifest.collections).toHaveLength(2);
@@ -751,7 +751,7 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
     expect(restored.collections.some((item) => item.collection_id === collectionId)).toBe(true);
     expect(restored.imports[0].lock_file_entries).toEqual([]);
     expect(restored.enabled).toEqual([]);
-    const restoredHex = restored.collection_versions[0].digest.slice("sha256:".length);
+    const restoredHex = restored.collection_versions[0].hash.slice("sha256:".length);
     const restoredPath = join(secondHome, "originals", restoredHex.slice(0, 2), restoredHex);
     expect(await readFile(join(restoredPath, "SKILL.md"), "utf8")).toBe(rawText);
     expect(existsSync(join(restoredPath, "README.md"))).toBe(false);
@@ -761,7 +761,7 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
       (item) => item.collection_version_id === gitImport?.collection_version_id,
     );
     expect(gitCopy).toBeDefined();
-    const gitHex = gitCopy!.digest.slice("sha256:".length);
+    const gitHex = gitCopy!.hash.slice("sha256:".length);
     const gitOriginal = join(secondHome, "originals", gitHex.slice(0, 2), gitHex);
     expect(await readFile(join(gitOriginal, "skills", "git-review", "SKILL.md"), "utf8")).toContain(
       "# Git review",
@@ -946,7 +946,7 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
         const copy = synced.collection_versions.find(
           (item) => item.collection_version_id === sourceImport.collection_version_id,
         )!;
-        const digest = copy.digest.slice("sha256:".length);
+        const digest = copy.hash.slice("sha256:".length);
         expect(
           await readFile(join(home, "originals", digest.slice(0, 2), digest, "SKILL.md")),
         ).toEqual(await readFile(join(serverRoot, "test/fixtures/library-sync", name, "SKILL.md")));

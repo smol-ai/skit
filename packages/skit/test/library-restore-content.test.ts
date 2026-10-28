@@ -289,7 +289,7 @@ it.effect("restoring existing copies avoids temporary trees and still rejects da
     const f = yield* fixture;
     yield* f.restore();
     const archives = yield* Effect.forEach(f.manifest.collection_versions, (tree) =>
-      readSnapshotArchive(collectionVersionPath(f.originalsPath, tree.digest)),
+      readSnapshotArchive(collectionVersionPath(f.originalsPath, tree.hash)),
     );
     f.unavailable();
     const ticks: RestoreTick[] = [];
@@ -390,7 +390,7 @@ it.effect(
       );
       assert.deepStrictEqual(
         plan.reusable,
-        f.manifest.collection_versions.map((copy) => copy.digest),
+        f.manifest.collection_versions.map((copy) => copy.hash),
       );
       assert.deepStrictEqual(plan.download, []);
       assert.deepStrictEqual(plan.reacquire, []);
@@ -432,7 +432,7 @@ it.effect("verified whole-tree bytes do not bypass member digest verification", 
         ...copy,
         members: copy.members.map((member) => ({
           ...member,
-          source_digest: f.source.snapshotDigest,
+          source_hash: f.source.snapshotDigest,
         })),
       })),
     };
@@ -481,9 +481,9 @@ it.effect(
         localArchives: [],
       });
       const foreign = yield* readSnapshotArchive(f.sourceRoot);
-      assert.isFalse(f.manifest.collection_versions.some((copy) => copy.digest === foreign.digest));
+      assert.isFalse(f.manifest.collection_versions.some((copy) => copy.hash === foreign.digest));
       const privateCopy = f.manifest.collection_versions.find(
-        (copy) => copy.digest === f.privateCopy.snapshotDigest,
+        (copy) => copy.hash === f.privateCopy.snapshotDigest,
       );
       assert(privateCopy);
       let downloads = 0;

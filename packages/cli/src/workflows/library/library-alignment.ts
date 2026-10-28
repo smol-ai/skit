@@ -26,9 +26,9 @@ export interface LibraryAliases {
 }
 
 const sameContent = (left: SkillVersion, right: SkillVersion) =>
-  left.source_digest === right.source_digest &&
-  left.artifact_digest === right.artifact_digest &&
-  left.validation_identity_digest === right.validation_identity_digest &&
+  left.source_hash === right.source_hash &&
+  left.artifact_hash === right.artifact_hash &&
+  left.validation_identity_hash === right.validation_identity_hash &&
   left.materialization_profile === right.materialization_profile;
 
 const collectionId = (id: CollectionId, aliases: LibraryAliases) =>
@@ -190,7 +190,7 @@ export function aliasDevice(state: LibraryState, aliases: LibraryAliases): Libra
               aliases.versions.find(
                 (alias) =>
                   alias.from.skill_version_id === acceptance.skill_version_id &&
-                  alias.from.artifact_digest === acceptance.artifactContentDigest,
+                  alias.from.artifact_hash === acceptance.artifactContentHash,
               )?.to.skill_version_id ?? acceptance.skill_version_id,
           })),
         }),

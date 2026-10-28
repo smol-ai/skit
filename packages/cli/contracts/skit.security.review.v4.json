@@ -5,7 +5,7 @@
     "skill_version_id": {
       "type": "string"
     },
-    "artifactContentDigest": {
+    "artifactContentHash": {
       "type": "string",
       "pattern": "^sha256:[a-f0-9]{64}$"
     },
@@ -145,7 +145,7 @@
                 ],
                 "additionalProperties": true
               },
-              "artifactContentDigest": {
+              "artifactContentHash": {
                 "type": "string",
                 "pattern": "^sha256:[a-f0-9]{64}$"
               },
@@ -226,7 +226,7 @@
             },
             "required": [
               "analysisProfile",
-              "artifactContentDigest",
+              "artifactContentHash",
               "ruleId",
               "evidence",
               "severity",
@@ -327,7 +327,7 @@
                     "type": "string",
                     "pattern": "^sha256:[a-f0-9]{64}$"
                   },
-                  "artifactContentDigest": {
+                  "artifactContentHash": {
                     "type": "string",
                     "pattern": "^sha256:[a-f0-9]{64}$"
                   },
@@ -355,7 +355,7 @@
                 },
                 "required": [
                   "fingerprint",
-                  "artifactContentDigest",
+                  "artifactContentHash",
                   "skill_version_id",
                   "context",
                   "principal",
@@ -391,7 +391,7 @@
             "type": "string",
             "pattern": "^sha256:[a-f0-9]{64}$"
           },
-          "artifactContentDigest": {
+          "artifactContentHash": {
             "type": "string",
             "pattern": "^sha256:[a-f0-9]{64}$"
           },
@@ -427,7 +427,7 @@
         },
         "required": [
           "fingerprint",
-          "artifactContentDigest",
+          "artifactContentHash",
           "skill_version_id",
           "context",
           "principal",
@@ -441,7 +441,7 @@
   },
   "required": [
     "skill_version_id",
-    "artifactContentDigest",
+    "artifactContentHash",
     "audit",
     "assessment",
     "acceptances"

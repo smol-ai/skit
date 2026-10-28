@@ -144,9 +144,9 @@ export const SkillsShLockFileEntry = Schema.Struct({
   skill_path: Schema.optionalKey(SourceRelativePath),
   computed_hash: Schema.optionalKey(Schema.String),
   skill_folder_hash: Schema.optionalKey(Schema.String),
-  well_known_digest: Schema.optionalKey(Schema.String),
+  well_known_hash: Schema.optionalKey(Schema.String),
   content_agreement: Schema.Literals(["agrees", "mismatch", "unverifiable"]),
-  original_entry_digest: Digest,
+  original_entry_hash: Digest,
   original_entry: BoundedOriginalEntry,
   upstream_baseline: Schema.optionalKey(
     Schema.Struct({
@@ -168,9 +168,9 @@ export type MaterializationProfile = typeof MaterializationProfile.Type;
 
 export const SkillVersion = Schema.Struct({
   skill_version_id: SkillVersionId,
-  source_digest: Digest,
-  artifact_digest: Digest,
-  validation_identity_digest: Digest,
+  source_hash: Digest,
+  artifact_hash: Digest,
+  validation_identity_hash: Digest,
   materialization_profile: MaterializationProfile,
 });
 export interface SkillVersion extends Schema.Schema.Type<typeof SkillVersion> {}
@@ -195,15 +195,15 @@ export interface Collection extends Schema.Schema.Type<typeof Collection> {}
 
 export const CollectionVersionSkill = Schema.Struct({
   source_path: CollectionRelativePath,
-  source_digest: Digest,
-  artifact_digest: Digest,
+  source_hash: Digest,
+  artifact_hash: Digest,
   materialization_profile: MaterializationProfile,
 });
 export type CollectionVersionSkill = typeof CollectionVersionSkill.Type;
 
 export const CollectionVersion = Schema.Struct({
   collection_version_id: CollectionVersionId,
-  digest: Digest,
+  hash: Digest,
   copy_profile: Schema.Literal("verbatim/v1"),
   members: Schema.Array(CollectionVersionSkill),
 });
@@ -259,7 +259,7 @@ export const librarySnapshotDigests = (input: {
                 importCanBeRefetched(sourceImport),
             ),
         )
-        .map((copy) => copy.digest),
+        .map((copy) => copy.hash),
     ),
   ].sort();
 
@@ -353,8 +353,8 @@ export const versionBacking = (library: LibraryEntities, skill: Skill, version: 
     if (
       copy !== undefined &&
       member !== undefined &&
-      member.source_digest === version.source_digest &&
-      member.artifact_digest === version.artifact_digest &&
+      member.source_hash === version.source_hash &&
+      member.artifact_hash === version.artifact_hash &&
       member.materialization_profile === version.materialization_profile
     )
       return { acquisition: sourceImport, copy, member };
@@ -373,7 +373,7 @@ const lastImportedVersion = (library: LibraryEntities, skill: Skill) => {
       .find((copy) => copy.collection_version_id === sourceImport.collection_version_id)
       ?.members.find((candidate) => candidate.source_path === skill.path);
     const version = skill.versions.find(
-      (candidate) => candidate.artifact_digest === member?.artifact_digest,
+      (candidate) => candidate.artifact_hash === member?.artifact_hash,
     );
     if (version !== undefined) return version;
   }
@@ -525,12 +525,12 @@ export const LibraryManifest = Schema.Struct({
         };
       for (const version of skill.versions) {
         if (
-          skill.versions.filter((other) => other.artifact_digest === version.artifact_digest)
-            .length !== 1
+          skill.versions.filter((other) => other.artifact_hash === version.artifact_hash).length !==
+          1
         )
           return {
             path: ["skills"],
-            issue: `Skill ${skill.name} (${skill.skill_id}) contains more than one Version for ${version.artifact_digest}`,
+            issue: `Skill ${skill.name} (${skill.skill_id}) contains more than one Version for ${version.artifact_hash}`,
           };
         // Every retained Version is backed by bytes one of its Collection's imports holds.
         const backed = versionBacking(manifest, skill, version) !== undefined;

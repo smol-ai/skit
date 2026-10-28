@@ -25,7 +25,7 @@
             "collection_version_id": {
               "type": "string"
             },
-            "digest": {
+            "hash": {
               "type": "string",
               "pattern": "^sha256:[a-f0-9]{64}$"
             },
@@ -35,7 +35,7 @@
           },
           "required": [
             "collection_version_id",
-            "digest",
+            "hash",
             "original_intact"
           ],
           "additionalProperties": true

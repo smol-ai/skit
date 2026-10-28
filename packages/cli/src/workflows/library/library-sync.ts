@@ -112,7 +112,7 @@ export const syncLibrary = Effect.fn("Library.sync")(
       progress,
     );
     if (inventory._tag === "Changed")
-      return { status: "local_bytes_changed" as const, digest: inventory.digest };
+      return { status: "local_bytes_changed" as const, hash: inventory.hash };
 
     const remote = yield* progress.around({ kind: "read-remote" }, api.read());
 

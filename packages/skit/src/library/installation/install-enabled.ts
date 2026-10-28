@@ -178,7 +178,7 @@ export const installEnabledSkills = Effect.fn("Library.installEnabledSkills")(fu
               skillId: item.skill.skill_id,
               skillVersionId: item.version.skill_version_id,
               name: item.skill.name,
-              contentHash: item.version.validation_identity_digest,
+              contentHash: item.version.validation_identity_hash,
             },
             target: options.target,
             root: options.root,

@@ -67,7 +67,7 @@ for (const kind of ["observed", "authored"] as const) {
         (candidate) => candidate.collection_version_id === imported.collectionVersionId,
       );
       assert.ok(copy);
-      assert.strictEqual(copy.digest, imported.snapshotDigest);
+      assert.strictEqual(copy.hash, imported.snapshotDigest);
       assert.strictEqual(state.imports[0]?.collection_version_id, imported.collectionVersionId);
       assert.strictEqual(state.skills[0]?.skill_id, imported.skills[0]?.skill_id);
       const retainedRoot = collectionVersionPath(store.originalsPath, imported.snapshotDigest);
@@ -76,7 +76,7 @@ for (const kind of ["observed", "authored"] as const) {
       assert.ok(member);
       assert.strictEqual(member.name, "review");
       assert.strictEqual(member.sourcePath, memberPath);
-      assert.strictEqual(copy.members[0]?.artifact_digest, member.artifactDigest);
+      assert.strictEqual(copy.members[0]?.artifact_hash, member.artifactDigest);
       assert.strictEqual(
         yield* originalTreeHash(join(retainedRoot, member.sourcePath)),
         member.sourceDigest,

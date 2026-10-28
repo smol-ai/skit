@@ -60,7 +60,7 @@ export const SyncResult = Schema.Struct({
   changed: Schema.optionalKey(Schema.Boolean),
   revision_id: Schema.optionalKey(Schema.String),
   snapshots: Schema.optionalKey(Schema.Number),
-  digest: Schema.optionalKey(Schema.String),
+  hash: Schema.optionalKey(Schema.String),
   installed: Schema.optionalKey(Schema.Number),
   uninstalled: Schema.optionalKey(Schema.Number),
   collections_to_remove: Schema.optionalKey(Schema.Number),

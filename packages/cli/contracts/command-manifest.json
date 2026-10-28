@@ -474,7 +474,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.doctor.v7",
+        "skit.doctor.v8",
         "skit.disable.plan.v9",
         "skit.disable.v10"
       ],

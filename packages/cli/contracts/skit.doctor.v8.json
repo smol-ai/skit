@@ -1,5 +1,5 @@
 {
-  "$id": "skit.doctor.v7",
+  "$id": "skit.doctor.v8",
   "type": "object",
   "properties": {
     "ok": {
@@ -121,7 +121,7 @@
               "skitManaged": {
                 "type": "boolean"
               },
-              "documentDigest": {
+              "documentHash": {
                 "type": "string"
               },
               "aliases": {
@@ -216,7 +216,7 @@
                     "skitManaged": {
                       "type": "boolean"
                     },
-                    "documentDigest": {
+                    "documentHash": {
                       "type": "string"
                     },
                     "aliases": {
@@ -929,7 +929,7 @@
                     "additionalProperties": true
                   }
                 },
-                "documentDigest": {
+                "documentHash": {
                   "type": "string"
                 }
               },
@@ -938,7 +938,7 @@
                 "harness",
                 "canonicalPath",
                 "aliases",
-                "documentDigest"
+                "documentHash"
               ],
               "additionalProperties": true
             }

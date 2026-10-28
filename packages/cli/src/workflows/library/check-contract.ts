@@ -30,7 +30,7 @@ export const CheckResult = Schema.Array(
     collection_versions: Schema.Array(
       Schema.Struct({
         collection_version_id: Schema.String,
-        digest: Digest,
+        hash: Digest,
         original_intact: Schema.Boolean,
       }),
     ),
