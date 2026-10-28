@@ -730,15 +730,15 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
             schema: Schema.String,
             collections: Schema.Array(Schema.Struct({ collection_id: Schema.String })),
             snapshot_digests: Schema.Array(Schema.String),
-            bindings: Schema.Array(Schema.Unknown),
+            enabled: Schema.Array(Schema.Unknown),
           }),
         }),
       }),
     )(await remoteRead.json());
     expect(remote.library.manifest).toMatchObject({
-      schema: "skit.library.v7",
+      schema: "skit.library.v8",
       snapshot_digests: [selected!.hash],
-      bindings: [],
+      enabled: [],
     });
     expect(remote.library.manifest.collections).toHaveLength(2);
     expect(
@@ -790,7 +790,7 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
       data: { status: "merge_ready", collections_to_remove: 1 },
     });
     expect(second(["sync", "--apply"])).toMatchObject({
-      data: { status: "merged", retired: 2 },
+      data: { status: "merged", uninstalled: 2 },
     });
     expect(existsSync(join(secondCodex, "raw-review"))).toBe(false);
     expect(existsSync(join(secondClaude, "raw-review"))).toBe(false);

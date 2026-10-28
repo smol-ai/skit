@@ -18,7 +18,7 @@ import {
   globalEnabled,
   type LibraryState,
 } from "../src/library/library-state.js";
-import { inspectLibrary, saveLibrary } from "./helpers/library-store.js";
+import { inspectLibrary } from "./helpers/library-store.js";
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "library-state");
 
