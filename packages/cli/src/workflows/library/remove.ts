@@ -72,7 +72,7 @@ export const executeRemove = Effect.fn("Library.executeRemove")(
     });
     if (plan.subject_kind === "collection")
       yield* markAuthorWorkspaceRemoved(state, plan.subject_id);
-    return { kind: "removed" as const, value: { ...plan, uninstalled: removed.retired } };
+    return { kind: "removed" as const, value: { ...plan, uninstalled: removed.uninstalled } };
   },
   (effect, _state, options) => (options.dryRun ? effect : withLibraryWriter(effect)),
 );

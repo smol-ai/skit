@@ -235,7 +235,7 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
       {
         const current = yield* (yield* LibraryStore).load;
         phase = "install";
-        const reconciled = yield* progress.around(
+        const installedSkillUpdate = yield* progress.around(
           { kind: "install", subject },
           updateInstalledSkills({
             roots: options.roots,
@@ -253,7 +253,7 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
           }),
           (value) => ({ kind: "installed-skills-updated", installed: value.installed }),
         );
-        installed = reconciled.installed;
+        installed = installedSkillUpdate.installed;
       }
       const after = yield* (yield* LibraryStore).load;
       const collectionVersion = after.collection_versions.find(

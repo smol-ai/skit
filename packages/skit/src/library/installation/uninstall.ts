@@ -96,7 +96,7 @@ export const uninstallSkills = Effect.fn("Library.uninstallSkills")(function* (
             installedSkill.observed_digest = outcome.observed;
             continue;
           }
-          if (outcome.kind === "retired") uninstalled++;
+          if (outcome.kind === "uninstalled") uninstalled++;
           const index = mutation.state.installed_skills.findIndex(
             (item) => item.installed_skill_id === installedSkill.installed_skill_id,
           );

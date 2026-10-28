@@ -52,10 +52,10 @@ const same = (a: LibraryManifest, b: LibraryManifest) =>
   canonicalJson(normalizeLibraryManifest(a)) === canonicalJson(normalizeLibraryManifest(b));
 const installedSkillCounts = (result: {
   readonly installed: number;
-  readonly retired: number;
+  readonly uninstalled: number;
 }) => ({
   installed: result.installed,
-  uninstalled: result.retired,
+  uninstalled: result.uninstalled,
 });
 export class SyncLocalChanged
   extends Data.TaggedError("Library.SyncLocalChanged")<{}>
@@ -161,12 +161,12 @@ export const syncLibrary = Effect.fn("Library.sync")(
     // State and the base it was reconciled with are always saved together, never apart.
     const ancestryAt = (
       remote: { library_id: string; revision_id: string },
-      reconciled: LibraryManifest,
+      merged: LibraryManifest,
     ) => ({
       origin: options.origin,
       library_id: remote.library_id,
       revision_id: remote.revision_id,
-      base_manifest: normalizeLibraryManifest(reconciled),
+      base_manifest: normalizeLibraryManifest(merged),
     });
 
     const merge = yield* progress.around(
@@ -244,7 +244,7 @@ export const syncLibrary = Effect.fn("Library.sync")(
             .pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(new SyncLocalChanged())));
       }
       const installedSkills = options.apply
-        ? yield* reconcileSelected()
+        ? yield* updateSelectedSkills()
         : { installed: 0, uninstalled: 0, issues: [] as string[] };
       return {
         status: installedSkills.issues.length
@@ -315,14 +315,14 @@ export const syncLibrary = Effect.fn("Library.sync")(
           );
     // Local state is saved only onto exactly what this plan describes. If it moved, the
     // device keeps its old ancestry and the next sync merges both changes.
-    const retired = yield* progress.around(
+    const uninstalled = yield* progress.around(
       { kind: "save-local" },
       transition
         .saveRestored(restored.state, ancestryAt(saved, desired))
         .pipe(Effect.catchTag("LibraryChanged", () => Effect.fail(new SyncLocalChanged()))),
     );
 
-    const installedSkills = yield* reconcileSelected();
+    const installedSkills = yield* updateSelectedSkills();
     const syncStatus =
       remote === null
         ? ("pushed" as const)
@@ -337,11 +337,11 @@ export const syncLibrary = Effect.fn("Library.sync")(
       revision_id: saved.revision_id,
       snapshots,
       installed: installedSkills.installed,
-      uninstalled: retired + installedSkills.uninstalled,
+      uninstalled: uninstalled + installedSkills.uninstalled,
       plan,
     };
 
-    function reconcileSelected() {
+    function updateSelectedSkills() {
       return Effect.gen(function* () {
         if (!choosing) {
           const result = yield* progress.around(

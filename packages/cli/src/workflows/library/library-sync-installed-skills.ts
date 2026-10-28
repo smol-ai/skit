@@ -145,7 +145,7 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
   deferDeviceConflicts: boolean,
 ) {
   const installedSkills: InstalledSkill[] = [];
-  const retire: InstalledSkillId[] = [];
+  const toUninstall: InstalledSkillId[] = [];
   const remove: InstalledSkillId[] = [];
   const conflicts: SyncConflictDetail[] = [];
   const issues: SyncConflictDetail[] = [];
@@ -272,7 +272,7 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
     }
     if (removing) {
       remove.push(original.installed_skill_id);
-      retire.push(original.installed_skill_id);
+      toUninstall.push(original.installed_skill_id);
       continue;
     }
     if (missingVersion && selected === undefined) {
@@ -286,7 +286,7 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
       installedSkills.push(installedSkill);
       continue;
     }
-    if (reidentifying) retire.push(original.installed_skill_id);
+    if (reidentifying) toUninstall.push(original.installed_skill_id);
     installedSkills.push({
       ...installedSkill,
       ...(reidentifying && installedSkill.suppression_reason !== "native_delete"
@@ -299,7 +299,7 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
   }
   return yield* SyncInstalledSkillPlan.makeEffect({
     projections: installedSkills,
-    retire,
+    retire: toUninstall,
     remove,
     conflicts,
     issues,
@@ -315,7 +315,7 @@ const uninstallForSync = Effect.fn("Library.sync.uninstallForSync")(function* (
   current: LibraryState,
 ) {
   const store = yield* LibraryStore;
-  if (plan.retire.length === 0) return { retired: 0, state: current };
+  if (plan.retire.length === 0) return { uninstalled: 0, state: current };
   const result = yield* withInstalledSkillMutation(
     current,
     {
@@ -326,7 +326,7 @@ const uninstallForSync = Effect.fn("Library.sync.uninstallForSync")(function* (
     },
     (mutation) =>
       Effect.gen(function* () {
-        let retired = 0;
+        let uninstalled = 0;
         for (const id of plan.retire) {
           const installedSkill = mutation.state.installed_skills.find(
             (item) => item.installed_skill_id === id,
@@ -337,7 +337,7 @@ const uninstallForSync = Effect.fn("Library.sync.uninstallForSync")(function* (
             "throw",
             `Refusing to remove modified Skill at ${installedSkill.path}`,
           );
-          if (outcome.kind === "retired") retired++;
+          if (outcome.kind === "uninstalled") uninstalled++;
           if (plan.remove.includes(id))
             mutation.state.installed_skills.splice(
               0,
@@ -347,10 +347,10 @@ const uninstallForSync = Effect.fn("Library.sync.uninstallForSync")(function* (
           else if (installedSkill.suppression_reason !== "native_delete")
             installedSkill.status = "pending";
         }
-        return retired;
+        return uninstalled;
       }),
   );
-  return { retired: result.value, state: result.state };
+  return { uninstalled: result.value, state: result.state };
 });
 
 /** Prepare this device's local transition before remote publication; keep mutation records private. */
@@ -391,9 +391,9 @@ export const prepareSyncDeviceTransition = Effect.fn("Library.sync.prepareDevice
         if (store.home !== home) return yield* new LibraryChanged({ path: store.statePath });
         return yield* withLibraryWriter(
           Effect.gen(function* () {
-            const retirement =
+            const uninstallResult =
               plan === undefined
-                ? { retired: 0, state: baseline }
+                ? { uninstalled: 0, state: baseline }
                 : yield* uninstallForSync(plan, baseline);
             const blended = yield* blendRestoredState(
               { ...aligned, installed_skills: [...(plan?.projections ?? [])] },
@@ -401,8 +401,8 @@ export const prepareSyncDeviceTransition = Effect.fn("Library.sync.prepareDevice
             );
             // Save content and its accepted base together, replacing exactly the state retirement
             // saved (or the original baseline when no retirement was required).
-            yield* store.save({ ...blended, sync_ancestry: ancestry }, retirement.state);
-            return retirement.retired;
+            yield* store.save({ ...blended, sync_ancestry: ancestry }, uninstallResult.state);
+            return uninstallResult.uninstalled;
           }),
         );
       }),

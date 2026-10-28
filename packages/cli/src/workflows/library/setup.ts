@@ -123,7 +123,7 @@ const scanForSetup = Effect.fn("Library.setup")(
       };
     });
     const sortedInstances = instances.sort((left, right) => left.path.localeCompare(right.path));
-    const reconciliation = yield* findInstalledSkillChanges(
+    const installedSkillChanges = yield* findInstalledSkillChanges(
       library,
       options.inventory,
       sortedInstances,
@@ -137,7 +137,7 @@ const scanForSetup = Effect.fn("Library.setup")(
       canonicalJson({
         candidates: onboarding,
         instances: sortedInstances,
-        reconciliation,
+        reconciliation: installedSkillChanges,
         repositoryConfigs,
         discoveryRoots,
         repositoryDecisions: [...existingDecisions].sort(([left], [right]) =>
@@ -207,10 +207,10 @@ const scanForSetup = Effect.fn("Library.setup")(
       onboarding: {
         planId,
         candidates: onboarding,
-        ...(!changesNeedingChoice(reconciliation).length &&
+        ...(!changesNeedingChoice(installedSkillChanges).length &&
         (recommended.sources.length ||
           recommended.copies.length ||
-          hasChangesToApply(reconciliation))
+          hasChangesToApply(installedSkillChanges))
           ? {
               applyCommand: setupApplyCommandLine({
                 planId,
@@ -230,7 +230,7 @@ const scanForSetup = Effect.fn("Library.setup")(
       },
       locks: [...locks].sort((left, right) => left.path.localeCompare(right.path)),
       instances: sortedInstances,
-      changes: reconciliation,
+      changes: installedSkillChanges,
       brokenLinks: yield* collectBrokenLinks(harnessRoots),
       suppressed: walk.suppressed,
     } satisfies SetupResult;

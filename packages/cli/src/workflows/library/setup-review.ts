@@ -337,7 +337,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
         })),
       ]),
       additions: approval.ownership.map(displayCopy),
-      custodyCount: approval.ownership.filter(
+      manageCount: approval.ownership.filter(
         (copy) => !repositoryCopies.includes(copy) && copy.duplicateAction !== "retain-only",
       ).length,
       repositoryCopiesRemain: repositoryCopies.length > 0,

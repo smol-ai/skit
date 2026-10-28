@@ -70,7 +70,7 @@ export const removeCollection = Effect.fn("Library.removeCollection")(function* 
     },
     (mutation) =>
       Effect.gen(function* () {
-        let retired = 0;
+        let uninstalled = 0;
         for (const installedSkill of mutation.state.installed_skills.filter((item) =>
           removedSkillIds.has(item.skill_id),
         )) {
@@ -83,7 +83,7 @@ export const removeCollection = Effect.fn("Library.removeCollection")(function* 
             "throw",
             `Refusing to remove modified ${skill.name} at ${installedSkill.path}`,
           );
-          if (outcome.kind === "retired") retired++;
+          if (outcome.kind === "uninstalled") uninstalled++;
         }
         // Only a batch that retired every copy removes the Collection. A failed one saves just
         // the copies it moved aside.
@@ -116,8 +116,8 @@ export const removeCollection = Effect.fn("Library.removeCollection")(function* 
         if (invocation_policies === undefined)
           delete (candidate as { invocation_policies?: unknown }).invocation_policies;
         else Object.assign(candidate, { invocation_policies });
-        return retired;
+        return uninstalled;
       }),
   );
-  return { collection_id: options.collectionId, retired: result.value };
+  return { collection_id: options.collectionId, uninstalled: result.value };
 });

@@ -147,7 +147,7 @@ export function setupPlanLines(input: {
         ]
       : []),
     ...setupDuplicatePlanLines(summary.duplicates),
-    ...(summary.custodyCount ? [`Manage existing: ${summary.custodyCount}`] : []),
+    ...(summary.manageCount ? [`Manage existing: ${summary.manageCount}`] : []),
     ...summary.authoritativeCopies.flatMap((selection) => [
       `Authoritative copy: ${selection.name} · ${selection.sourcePath}`,
       "  Other copies stay in place unless explicitly marked Remove.",

@@ -318,7 +318,7 @@ it.effect(
         home,
         updateInstalledSkills({ variantsPath: join(home, "variants") }).pipe(Effect.provide(layer)),
       );
-      assert.strictEqual(reconciled.retired, 0);
+      assert.strictEqual(reconciled.uninstalled, 0);
       assert.strictEqual(yield* fs.readFileString(installedPath), "first verbatim Skill\n");
       assert.strictEqual((yield* installedSkill).row.status, "installed");
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),

@@ -118,12 +118,12 @@ export const installEnabledSkills = Effect.fn("Library.installEnabledSkills")(fu
             ),
         )
       : [];
-  const retirementMessage = (installedSkill: InstalledSkill) =>
+  const uninstallMessage = (installedSkill: InstalledSkill) =>
     `Refusing to relocate modified Skill from ${installedSkill.path}`;
   // Refuse an edited former copy before creating another installation or removing any old copy.
   for (const installedSkill of former) {
     if ((yield* inspectInstalledSkill(installedSkill)).kind === "conflicted")
-      return yield* new UninstallConflict({ detail: retirementMessage(installedSkill) });
+      return yield* new UninstallConflict({ detail: uninstallMessage(installedSkill) });
   }
   const result = yield* withInstalledSkillMutation(
     state,
@@ -155,7 +155,7 @@ export const installEnabledSkills = Effect.fn("Library.installEnabledSkills")(fu
           mutation.state.installed_skills.length,
           ...mutation.state.installed_skills.filter((item) => !atTarget(item)),
         );
-        const toRetire: InstalledSkill[] = [];
+        const toUninstall: InstalledSkill[] = [];
         for (const item of selected) {
           const source = yield* installedSkillSource(
             mutation.state,
@@ -212,17 +212,17 @@ export const installEnabledSkills = Effect.fn("Library.installEnabledSkills")(fu
           mutation.state.installed_skills.push(installed);
           // Keep the last working copy when the new destination is blocked or locally modified.
           if (installed.status === "installed")
-            toRetire.push(
+            toUninstall.push(
               ...former.filter((candidate) => candidate.skill_id === item.skill.skill_id),
             );
         }
         // Finish the whole installation batch before removing any former working copy.
-        for (const old of toRetire) {
+        for (const old of toUninstall) {
           if ((yield* inspectInstalledSkill(old)).kind === "conflicted")
-            return yield* new UninstallConflict({ detail: retirementMessage(old) });
+            return yield* new UninstallConflict({ detail: uninstallMessage(old) });
         }
-        for (const old of toRetire) {
-          yield* mutation.uninstall(old, "throw", retirementMessage(old));
+        for (const old of toUninstall) {
+          yield* mutation.uninstall(old, "throw", uninstallMessage(old));
           const index = mutation.state.installed_skills.findIndex(
             (candidate) => candidate.installed_skill_id === old.installed_skill_id,
           );

@@ -360,7 +360,7 @@ const applyChange = Effect.fn("SetEnabled.applyChange")(function* (
   }
   // Only typed failures after intent acceptance become incomplete installation outcomes.
   // Defects and interruption retain their original Effect semantics.
-  const reconciled = yield* Effect.result(
+  const installResult = yield* Effect.result(
     Effect.gen(function* () {
       yield* updateInstalledSkills({
         roots: configuration,
@@ -388,8 +388,8 @@ const applyChange = Effect.fn("SetEnabled.applyChange")(function* (
       return pruned;
     }),
   );
-  const recorded = Result.isSuccess(reconciled)
-    ? reconciled.success
+  const recorded = Result.isSuccess(installResult)
+    ? installResult.success
     : ((yield* lastSavedLibraryState) ?? current);
   const installedSkills = recorded.installed_skills.flatMap(
     ({ destination, root, path, status, skill_id }) =>
@@ -424,9 +424,9 @@ const applyChange = Effect.fn("SetEnabled.applyChange")(function* (
   const unresolvedPaths = [
     ...new Set([...missing, ...unresolved].map((destination) => destination.path)),
   ];
-  const complete = Result.isSuccess(reconciled) && unresolvedPaths.length === 0;
-  const failure = Result.isFailure(reconciled)
-    ? reconciled.failure
+  const complete = Result.isSuccess(installResult) && unresolvedPaths.length === 0;
+  const failure = Result.isFailure(installResult)
+    ? installResult.failure
     : complete
       ? undefined
       : new SetEnabledDestinationsIncomplete({ paths: unresolvedPaths });
@@ -455,7 +455,7 @@ const applyChange = Effect.fn("SetEnabled.applyChange")(function* (
   if (!complete)
     return yield* new SetEnabledIncomplete({
       results: [value],
-      reason: Result.isFailure(reconciled) ? "reconciliation" : "destinations",
+      reason: Result.isFailure(installResult) ? "reconciliation" : "destinations",
       failure,
     });
   return { kind: "applied" as const, value };

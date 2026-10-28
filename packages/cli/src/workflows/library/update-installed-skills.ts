@@ -52,7 +52,7 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
   // Copies at a former or inactive destination are never wanted, whichever settings changed.
   const state = yield* (yield* LibraryStore).load;
   const intent = deviceInstallationIntent(state);
-  const retired = yield* uninstallSkills(
+  const uninstalled = yield* uninstallSkills(
     leftoverSkills(state, {
       activeDestinations: activeTargets,
       enabled: intent.globals[0]?.enabled ?? [],
@@ -91,5 +91,5 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
       outcomes.push({ target, scope });
     }
   }
-  return { installed, retired, outcomes };
+  return { installed, uninstalled, outcomes };
 }, withLibraryWriter);

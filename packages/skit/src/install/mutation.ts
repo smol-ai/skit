@@ -58,7 +58,7 @@ const OwnershipMarkerDocument = Schema.fromJsonString(Schema.Unknown);
 export type UninstallResult =
   | { kind: "absent" }
   | { kind: "conflicted"; observed: Digest }
-  | { kind: "retired"; observed: Digest };
+  | { kind: "uninstalled"; observed: Digest };
 
 export interface MaterializeInstalledSkillRequest {
   /** Installed-skill ownership coordinate and retained root, without a save contract. */
@@ -399,12 +399,12 @@ const materializeInstalledSkill = Effect.fn("Install.materialize")(function* (
         const realDestination = yield* fs
           .realPath(destination)
           .pipe(Effect.orElseSucceed(() => resolve(destination)));
-        const adoptionPaths = request.manage
+        const managePaths = request.manage
           ? [request.manage.path, ...(request.manage.equalPaths ?? [])]
           : [];
-        let adoptionMatchesDestination = false;
-        for (const path of adoptionPaths)
-          adoptionMatchesDestination ||=
+        let manageMatchesDestination = false;
+        for (const path of managePaths)
+          manageMatchesDestination ||=
             (yield* fs.realPath(path).pipe(Effect.orElseSucceed(() => resolve(path)))) ===
             realDestination;
         const replacementMatches =
@@ -416,7 +416,7 @@ const materializeInstalledSkill = Effect.fn("Install.materialize")(function* (
           sameMarker(marker, request.replacement.marker);
         if (replacementMatches) return yield* commit("marker", "replacement");
         if (!marker || !markerMatches(marker, request)) {
-          if (markerInspection.kind === "absent" && request.manage && adoptionMatchesDestination) {
+          if (markerInspection.kind === "absent" && request.manage && manageMatchesDestination) {
             if (observed !== request.manage.observedHash)
               return yield* new ManageTargetChanged({ path: destination });
             if (observed !== desiredHash)
@@ -548,7 +548,7 @@ const uninstallSkill = Effect.fn("Install.uninstall")(function* (
   const { observed } = ownership;
   yield* backUp(installedSkill, "retire");
   return {
-    kind: "retired" as const,
+    kind: "uninstalled" as const,
     observed,
   };
 });
@@ -673,7 +673,7 @@ export interface InstalledSkillMutation<S extends InstalledSkillState = Installe
     onConflict: "throw" | "report",
     conflictMessage: string,
   ) => Effect.Effect<
-    Exclude<UninstallResult, { kind: "retired" }> | { kind: "retired"; observed: Digest },
+    Exclude<UninstallResult, { kind: "uninstalled" }> | { kind: "uninstalled"; observed: Digest },
     InstalledSkillMutationError,
     TreeRequirements | TreeHasher
   >;
@@ -748,8 +748,8 @@ export const withInstalledSkillMutation = Effect.fn("Install.mutate")(function* 
     uninstall: Effect.fn("Install.uninstall")(function* (installedSkill, onConflict, message) {
       touched.set(installedSkill.installed_skill_id, installedSkill);
       const result = yield* uninstallSkill(installedSkill, onConflict, message, backUp);
-      return result.kind === "retired"
-        ? { kind: "retired" as const, observed: result.observed }
+      return result.kind === "uninstalled"
+        ? { kind: "uninstalled" as const, observed: result.observed }
         : result;
     }),
   };

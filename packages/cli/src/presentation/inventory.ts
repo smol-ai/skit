@@ -168,19 +168,19 @@ export function renderMachineSkills(
       "",
       `${color.cyan(color.bold(locationLabel))} · ${locationNames.size} Skill${locationNames.size === 1 ? "" : "s"}${instances.length === locationNames.size ? "" : ` · ${instances.length} instances`}`,
     );
-    const custodyGroups = new Map<string, typeof instances>();
+    const ownershipGroups = new Map<string, typeof instances>();
     for (const instance of instances) {
       const ownership = ownerLabel(instance.owner);
-      custodyGroups.set(ownership, [...(custodyGroups.get(ownership) ?? []), instance]);
+      ownershipGroups.set(ownership, [...(ownershipGroups.get(ownership) ?? []), instance]);
     }
-    for (const [ownership, custodyInstances] of custodyGroups) {
-      const bySkill = new Map<string, { name: string; instances: typeof custodyInstances }>();
-      for (const instance of custodyInstances) {
+    for (const [ownership, ownershipInstances] of ownershipGroups) {
+      const bySkill = new Map<string, { name: string; instances: typeof ownershipInstances }>();
+      for (const instance of ownershipInstances) {
         const key = `${explicitCollectionKey(instance) ?? "standalone"}\0${instance.name}`;
         const skill = bySkill.get(key) ?? { name: instance.name, instances: [] };
         bySkill.set(key, { ...skill, instances: [...skill.instances, instance] });
       }
-      const instanceCount = custodyInstances.length;
+      const instanceCount = ownershipInstances.length;
       const skillCount = bySkill.size;
       lines.push(
         "",
