@@ -35,7 +35,7 @@ const library = Effect.gen(function* () {
             name: "review",
             sourcePath: source,
             relativePath: ".",
-            observedHash: yield* deterministicTreeHash(source),
+            currentHash: yield* deterministicTreeHash(source),
           },
         ],
         observations: [],

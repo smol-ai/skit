@@ -85,7 +85,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
         skillId: copy.skillId,
         installedSkillId: copy.installedSkillId,
         path: copy.path,
-        observedHash: copy.currentHash,
+        currentHash: copy.currentHash,
         importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
       }),
     );

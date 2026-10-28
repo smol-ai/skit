@@ -72,7 +72,7 @@ export const SetupComparisonOutput = Schema.Struct({
     Schema.Struct({
       name: Schema.String,
       path: Schema.String,
-      observedHash: Digest,
+      currentHash: Digest,
       markdown: Schema.String,
       truncated: Schema.Boolean,
     }),

@@ -51,11 +51,11 @@
               }
             ]
           },
-          "observedHash": {
+          "currentHash": {
             "type": "string",
             "pattern": "^sha256:[a-f0-9]{64}$"
           },
-          "lastObservedHash": {
+          "lastHash": {
             "anyOf": [
               {
                 "type": "string",
@@ -70,7 +70,7 @@
         "required": [
           "harness",
           "path",
-          "observedHash"
+          "currentHash"
         ],
         "additionalProperties": true
       }
@@ -107,7 +107,7 @@
                   ]
                 }
               },
-              "observedHash": {
+              "currentHash": {
                 "type": "string",
                 "pattern": "^sha256:[a-f0-9]{64}$"
               },
@@ -178,7 +178,7 @@
               "path",
               "canonicalPath",
               "harnesses",
-              "observedHash"
+              "currentHash"
             ],
             "additionalProperties": true
           }
@@ -412,7 +412,7 @@
             "type": "string",
             "pattern": "^sha256:[a-f0-9]{64}$"
           },
-          "observed_digest": {
+          "current_digest": {
             "anyOf": [
               {
                 "type": "string",
@@ -833,7 +833,7 @@
                       "unhashable"
                     ]
                   },
-                  "observedHash": {
+                  "currentHash": {
                     "type": "string",
                     "pattern": "^sha256:[a-f0-9]{64}$"
                   },

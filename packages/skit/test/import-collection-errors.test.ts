@@ -14,7 +14,7 @@ for (const [name, paths, expected] of [
           name: name === "duplicate names" ? "same" : index === 0 ? "first" : "second",
           relativePath,
           sourcePath: "/unused",
-          observedHash: `sha256:${"a".repeat(64)}`,
+          currentHash: `sha256:${"a".repeat(64)}`,
         })),
       ).pipe(Effect.flip);
       assert.strictEqual(error._tag, "Library.ImportRequestInvalid");

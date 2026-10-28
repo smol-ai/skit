@@ -24,7 +24,7 @@ it("shows all physical copies, groups actual sources, and leaves conflicts and C
     locks: [],
     contentIdentity: {
       status: "none",
-      observedHash: `sha256:${hash.repeat(64)}`,
+      currentHash: `sha256:${hash.repeat(64)}`,
       libraryMatches: [],
     },
   });
@@ -230,7 +230,7 @@ it("separates installed, repository-authored, and loose skills", () => {
           owner: { kind: "unknown" },
           contentIdentity: {
             status: "none",
-            observedHash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            currentHash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             libraryMatches: [],
           },
           git: { status: "ignored", repository: "/work/large-collection" },
@@ -245,7 +245,7 @@ it("separates installed, repository-authored, and loose skills", () => {
           owner: { kind: "unknown" },
           contentIdentity: {
             status: "none",
-            observedHash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            currentHash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             libraryMatches: [],
           },
           git: { status: "committed", repository: "/work/large-collection" },
@@ -260,7 +260,7 @@ it("separates installed, repository-authored, and loose skills", () => {
           owner: { kind: "unknown" },
           contentIdentity: {
             status: "exact",
-            observedHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            currentHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             libraryMatches: [
               {
                 subjectId: makeCollectionId(),
@@ -472,7 +472,7 @@ it("presents authored SKITs without treating their source skills as inferred col
           owner: { kind: "authored", skitLocator, collectionId },
           contentIdentity: {
             status: "exact",
-            observedHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            currentHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             libraryMatches: [
               {
                 subjectId: makeCollectionId(),

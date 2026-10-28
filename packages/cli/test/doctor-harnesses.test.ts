@@ -362,7 +362,7 @@ const collisionFixture = () => {
       root: `/home/.${target}/skills`,
       path: `/home/.${target}/skills/review`,
       expected_digest: digest,
-      observed_digest: digest,
+      current_digest: digest,
       status: "installed" as const,
       installed_at: "2026-10-01T00:00:00.000Z",
     })),
@@ -401,7 +401,7 @@ test.each([
   const { state, check } = collisionFixture();
   const claude = state.installed_skills[1];
   if (!claude) throw new Error("Missing fixture installed skill");
-  if (kind === "different-content") claude.observed_digest = `sha256:${"b".repeat(64)}`;
+  if (kind === "different-content") claude.current_digest = `sha256:${"b".repeat(64)}`;
   if (kind === "different-version")
     state.installed_skills[1] = { ...claude, skill_version_id: makeSkillVersionId() };
   if (kind === "edited") claude.status = "conflicted";
@@ -426,7 +426,7 @@ test("doctor accepts intact target-specific invocation renderings of the same Ve
   state.installed_skills[1] = {
     ...claude,
     expected_digest: claudeDigest,
-    observed_digest: claudeDigest,
+    current_digest: claudeDigest,
   };
   expect(classifyOpenCodeWarnings(check, state).warnings).toEqual([]);
 });

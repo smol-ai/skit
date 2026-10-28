@@ -580,7 +580,7 @@ const cases: readonly {
           (item) => item.installed_skill_id === installedSkill.installed_skill_id,
         );
         assert.deepStrictEqual(
-          [recorded?.status, recorded?.observed_digest],
+          [recorded?.status, recorded?.current_digest],
           ["conflicted", observed],
         );
         yield* fs.remove(join(a.root, "second"));

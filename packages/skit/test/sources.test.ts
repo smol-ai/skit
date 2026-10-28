@@ -119,7 +119,7 @@ describe("source contracts", () => {
               name: "review",
               sourcePath,
               relativePath: selected.path,
-              observedHash: yield* deterministicTreeHash(sourcePath),
+              currentHash: yield* deterministicTreeHash(sourcePath),
             },
           ]);
           expect(yield* readText(join(prepared.staged, selected.path, "SKILL.md"))).toEqual(

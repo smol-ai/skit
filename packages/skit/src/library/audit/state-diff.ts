@@ -209,7 +209,7 @@ export const diffLibraryState = (
       before: previous.status,
       after: current.status,
       path: current.path,
-      ...(current.observed_digest === undefined ? {} : { digest: current.observed_digest }),
+      ...(current.current_digest === undefined ? {} : { digest: current.current_digest }),
     });
   }
 

@@ -93,7 +93,7 @@ export const uninstallSkills = Effect.fn("Library.uninstallSkills")(function* (
           );
           if (outcome.kind === "conflicted") {
             installedSkill.status = "conflicted";
-            installedSkill.observed_digest = outcome.observed;
+            installedSkill.current_digest = outcome.observed;
             continue;
           }
           if (outcome.kind === "uninstalled") uninstalled++;

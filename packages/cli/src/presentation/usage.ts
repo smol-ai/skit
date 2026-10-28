@@ -50,13 +50,13 @@ export function renderUsage(report: UsageReport): string {
       uses: 0,
       explicit: 0,
       implicit: 0,
-      last: row.lastObservedAt,
+      last: row.lastSeenAt,
     };
     group.harnesses.add(row.harness);
     group.uses += row.uses;
     group.explicit += row.explicit;
     group.implicit += row.implicit;
-    if (row.lastObservedAt > group.last) group.last = row.lastObservedAt;
+    if (row.lastSeenAt > group.last) group.last = row.lastSeenAt;
     groups.set(row.name, group);
   }
   const sorted = [...groups.values()].sort(

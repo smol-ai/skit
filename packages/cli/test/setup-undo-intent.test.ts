@@ -46,7 +46,7 @@ const fixture = Effect.fn("Test.undoIntentFixture")(function* () {
             name,
             sourcePath: source,
             relativePath: ".",
-            observedHash: yield* deterministicTreeHash(source),
+            currentHash: yield* deterministicTreeHash(source),
           },
         ],
         observations: [],
@@ -81,7 +81,7 @@ it.effect(
         name: string;
         sourcePath: string;
         relativePath: string;
-        observedHash: Digest;
+        currentHash: Digest;
       }[] = [];
       for (const name of ["existing", "introduced"]) {
         const path = join(root, name);
@@ -94,7 +94,7 @@ it.effect(
           name,
           sourcePath: path,
           relativePath: name,
-          observedHash: yield* deterministicTreeHash(path),
+          currentHash: yield* deterministicTreeHash(path),
         });
       }
       const importSource = (selected: typeof skills, date: string) =>
@@ -201,7 +201,7 @@ it.effect(
               name: "chosen",
               sourcePath: source,
               relativePath: ".",
-              observedHash: yield* deterministicTreeHash(source),
+              currentHash: yield* deterministicTreeHash(source),
             },
           ],
           observations: [],
@@ -234,7 +234,7 @@ it.effect(
               name: "chosen",
               sourcePath: source,
               relativePath: ".",
-              observedHash: yield* deterministicTreeHash(source),
+              currentHash: yield* deterministicTreeHash(source),
             },
           ],
           observations: [],

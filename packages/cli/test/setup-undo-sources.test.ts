@@ -67,7 +67,7 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
             name: item.name,
             sourcePath: item.path,
             relativePath: item.name,
-            observedHash: yield* deterministicTreeHash(item.path),
+            currentHash: yield* deterministicTreeHash(item.path),
           };
         }),
       );

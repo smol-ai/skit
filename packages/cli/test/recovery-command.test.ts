@@ -28,7 +28,7 @@ it.effect("a client follows returned actions through the real grammar to restore
     yield* fs.makeDirectory(source);
     yield* fs.writeFileString(join(source, "SKILL.md"), "preserve me");
     const plan = yield* prepareRecoveryMoves(home, [
-      { name: "review", path: source, observedHash: yield* deterministicTreeHash(source) },
+      { name: "review", path: source, currentHash: yield* deterministicTreeHash(source) },
     ]);
     yield* plan.apply();
     let response = yield* invoke(["skit", "library", "recovery", "list", "--json", "--home", home]);
@@ -74,7 +74,7 @@ it.effect(
       yield* fs.makeDirectory(source);
       yield* fs.writeFileString(join(source, "SKILL.md"), "old bytes");
       const plan = yield* prepareRecoveryMoves(home, [
-        { name: "review", path: source, observedHash: yield* deterministicTreeHash(source) },
+        { name: "review", path: source, currentHash: yield* deterministicTreeHash(source) },
       ]);
       yield* plan.apply();
       const preview = yield* invoke([

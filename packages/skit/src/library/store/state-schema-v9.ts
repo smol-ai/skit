@@ -127,12 +127,14 @@ export const installedSkillFromV9 = ({
   projection_id,
   target,
   projected_at,
+  observed_digest,
   ...copy
 }: typeof InstalledSkillV9.Type) => ({
   ...copy,
   installed_skill_id: projection_id,
   destination: target,
   installed_at: projected_at,
+  ...(observed_digest === undefined ? {} : { current_digest: observed_digest }),
 });
 
 export const repositoryFromV9 = (binding: typeof RepositoryBindingV9.Type) => ({
@@ -166,6 +168,7 @@ const libraryStateFromV9 = ({
   local_bindings,
   projections,
   custodyIssues,
+  unmanaged,
   ...fields
 }: LibraryStateV9) => {
   return {
@@ -187,11 +190,17 @@ const libraryStateFromV9 = ({
     ...globalFromV9(global_bindings[0]),
     repositories: local_bindings.map(repositoryFromV9),
     installed_skills: projections.map(installedSkillFromV9),
+    unmanaged: unmanaged.map(({ observedHash, lastObservedHash, ...copy }) => ({
+      ...copy,
+      currentHash: observedHash,
+      ...(lastObservedHash === undefined ? {} : { lastHash: lastObservedHash }),
+    })),
     ...(custodyIssues === undefined
       ? {}
       : {
-          ownershipIssues: custodyIssues.map(({ code, projectionId, ...issue }) => ({
+          ownershipIssues: custodyIssues.map(({ code, projectionId, observedHash, ...issue }) => ({
             ...issue,
+            currentHash: observedHash,
             code: code === "ORPHANED_PROJECTION_CLAIM" ? "ORPHANED_OWNERSHIP_MARKER" : code,
             ...(projectionId === undefined ? {} : { installedSkillId: projectionId }),
           })),

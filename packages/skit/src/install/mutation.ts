@@ -87,7 +87,7 @@ export interface MaterializeInstalledSkillRequest {
   /** Exact preview evidence authorizing a changed managed installed skill as the selected Version. */
   replacement?: {
     installedSkillId: InstalledSkillIdType;
-    observedHash: Digest;
+    currentHash: Digest;
     marker: OwnershipMarker;
   };
   state: InstalledSkillState;
@@ -377,7 +377,7 @@ const materializeInstalledSkill = Effect.fn("Install.materialize")(function* (
             message: `Post-${verification} hash verification failed for ${skill.skillId} at ${target}`,
           });
         changed = true;
-        return { ...installedSkill, status: "installed" as const, observed_digest: observed };
+        return { ...installedSkill, status: "installed" as const, current_digest: observed };
       });
       const nativeDeletion =
         !request.restoreNativeDeletion &&
@@ -389,7 +389,7 @@ const materializeInstalledSkill = Effect.fn("Install.materialize")(function* (
         installedSkill.status = "suppressed";
         installedSkill.suppression_reason = "native_delete";
         installedSkill.suppressed_at = prior.suppressed_at;
-        installedSkill.observed_digest = prior.observed_digest;
+        installedSkill.current_digest = prior.current_digest;
         return settled();
       }
       if (yield* exists(destination)) {
@@ -410,14 +410,14 @@ const materializeInstalledSkill = Effect.fn("Install.materialize")(function* (
         const replacementMatches =
           request.replacement !== undefined &&
           request.replacement.installedSkillId === installedSkillId &&
-          request.replacement.observedHash === observed &&
+          request.replacement.currentHash === observed &&
           observed === desiredHash &&
           marker !== null &&
           sameMarker(marker, request.replacement.marker);
         if (replacementMatches) return yield* commit("marker", "replacement");
         if (!marker || !markerMatches(marker, request)) {
           if (markerInspection.kind === "absent" && request.manage && manageMatchesDestination) {
-            if (observed !== request.manage.observedHash)
+            if (observed !== request.manage.currentHash)
               return yield* new ManageTargetChanged({ path: destination });
             if (observed !== desiredHash)
               return yield* new ManageContentMismatch({ path: destination });
@@ -453,7 +453,7 @@ const materializeInstalledSkill = Effect.fn("Install.materialize")(function* (
           )
             return yield* commit("marker", "adoption");
           installedSkill.status = "conflicted";
-          installedSkill.observed_digest = observed;
+          installedSkill.current_digest = observed;
           return settled();
         }
         if (observed !== markerExpectedHash(marker)) {
@@ -477,14 +477,14 @@ const materializeInstalledSkill = Effect.fn("Install.materialize")(function* (
             ...installedSkill,
             expected_digest: prior?.expected_digest ?? markerExpectedHash(marker),
             status: "conflicted" as const,
-            observed_digest: observed,
+            current_digest: observed,
           };
         }
         if (observed === desiredHash) {
           if (marker.skill_version_id !== request.identity.skillVersionId)
             return yield* commit("marker", "marker");
           installedSkill.status = "installed";
-          installedSkill.observed_digest = observed;
+          installedSkill.current_digest = observed;
           return settled();
         }
         return yield* commit("replace", "write");
@@ -632,12 +632,12 @@ const reproducible = Effect.fn("Install.reproducible")(function* (
 /**
  * Unmanaged copies the operator approved managing in place: the selected copy, and any
  * copies with identical bytes already at another target's destination. Each is managed only while
- * its content still hashes to `observedHash`, so managing one adds SKIT's marker and nothing else.
+ * its content still hashes to `currentHash`, so managing one adds SKIT's marker and nothing else.
  */
 export interface ManageApproval {
   readonly path: string;
   readonly equalPaths?: readonly string[];
-  readonly observedHash: Digest;
+  readonly currentHash: Digest;
 }
 
 export type InstalledSkillMutationError =

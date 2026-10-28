@@ -6,7 +6,7 @@ import { skillsShLockFileEntry } from "../src/library/skills-sh-lock-file.js";
 
 const fields = {
   machine_id: makeMachineId(),
-  observed_at: "2026-10-28T00:00:00.000Z",
+  read_at: "2026-10-28T00:00:00.000Z",
   lock_path: "/home/story/.agents/.skill-lock.json",
   lock_version: 3,
   lock_scope: "global" as const,

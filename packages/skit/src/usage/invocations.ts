@@ -107,6 +107,6 @@ export function correlateInvocations(observations: readonly Invocation[]): void 
   for (const group of groups.values()) {
     group.row.uses++;
     group.row[group.explicit ? "explicit" : group.implicit ? "implicit" : "unknown"]++;
-    if (group.last > group.row.lastObservedAt) group.row.lastObservedAt = group.last;
+    if (group.last > group.row.lastSeenAt) group.row.lastSeenAt = group.last;
   }
 }

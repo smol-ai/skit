@@ -73,9 +73,9 @@ const classifyLockClaims = (
     );
     let matchingCollections: Set<string> | undefined;
     for (const instance of observedInstances) {
-      const observedHash = instance.contentIdentity.observedHash;
+      const currentHash = instance.contentIdentity.currentHash;
       const matchingLock = instance.locks.find((item) => setupLockGroupKey(item) === groupKey);
-      if (observedHash === undefined || matchingLock === undefined) {
+      if (currentHash === undefined || matchingLock === undefined) {
         matchingCollections = new Set();
         break;
       }
@@ -84,7 +84,7 @@ const classifyLockClaims = (
         matchingLock.lockContentHash,
         instance.name,
         matchingLock.entry.skillPath,
-        observedHash,
+        currentHash,
       );
       const collections = evidence.importedByLockEvidence.get(key) ?? new Set<string>();
       matchingCollections =
@@ -162,7 +162,7 @@ export const classifySetupOnboarding = (
     }
     const hashes = new Set(
       group.flatMap((instance) =>
-        instance.contentIdentity.observedHash ? [instance.contentIdentity.observedHash] : [],
+        instance.contentIdentity.currentHash ? [instance.contentIdentity.currentHash] : [],
       ),
     );
     if (hashes.size > 1) {

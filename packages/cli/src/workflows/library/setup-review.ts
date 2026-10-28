@@ -491,12 +491,12 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
     for (const instance of observed.instances.filter((item) => names.has(item.name))) {
       const markdown = yield* fs.readFileString(join(instance.path, "SKILL.md"));
       const currentHash = yield* deterministicTreeHash(instance.path);
-      if (currentHash !== instance.contentIdentity.observedHash)
+      if (currentHash !== instance.contentIdentity.currentHash)
         return yield* invalid("This copy changed; observe setup again before comparing");
       compared.push({
         name: instance.name,
         path: instance.path,
-        observedHash: currentHash,
+        currentHash: currentHash,
         markdown: markdown.slice(0, 65_536),
         truncated: markdown.length > 65_536,
       });

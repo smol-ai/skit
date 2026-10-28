@@ -752,7 +752,7 @@ describe("CLI contracts", () => {
       ["agents", "different"],
       ["claude", "selected"],
     ]);
-    expect(preview.data.observed_digest).not.toBe("");
+    expect(preview.data.current_digest).not.toBe("");
     expect(preview.data.snapshot_digest).not.toBe("");
     expect(existsSync(preview.data.original_path)).toBe(false);
     expect(await readFile(join(home, "state.json"), "utf8")).toBe(stateBeforePreview);
@@ -811,7 +811,7 @@ describe("CLI contracts", () => {
     ]);
 
     const partialState = JSON.parse(await readFile(join(home, "state.json"), "utf8"));
-    const selectedDigest = preview.data.observed_digest;
+    const selectedDigest = preview.data.current_digest;
     const marker = JSON.parse(markerBefore.claude);
     await writeFile(join(paths.claude, ".skit-ownership.json"), markerBefore.claude);
     const installedSkill = partialState.installed_skills.find(
@@ -819,7 +819,7 @@ describe("CLI contracts", () => {
     );
     installedSkill.skill_version_id = marker.skill_version_id;
     installedSkill.expected_digest = marker.expected_digest;
-    installedSkill.observed_digest = selectedDigest;
+    installedSkill.current_digest = selectedDigest;
     installedSkill.status = "conflicted";
     await writeFile(join(home, "state.json"), `${JSON.stringify(partialState, null, 2)}\n`);
     const beforeRecovery = Schema.decodeUnknownSync(LibraryStateDocument)(

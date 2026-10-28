@@ -33,7 +33,7 @@ test("presents skill activity without internal counters; preserves the public JS
     format: "json",
   });
   expect(JSON.parse(json?.stdout ?? "{}")).toEqual({
-    schema: "skit.usage.v3",
+    schema: "skit.usage.v4",
     data: usageStory,
   });
 });
@@ -119,7 +119,7 @@ it.effect("exposes the read-only command and output schema", () =>
     expect(usage).toMatchObject({
       stability: "experimental",
       effects: { capabilities: ["filesystem.read"] },
-      outputSchemas: expect.arrayContaining(["skit.usage.v3"]),
+      outputSchemas: expect.arrayContaining(["skit.usage.v4"]),
       interactive: false,
     });
   }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-usage-contract"))),
@@ -177,7 +177,7 @@ it.effect("runs the real command against isolated transcripts without creating L
         }),
       ),
     );
-    expect(captured?.schema).toBe("skit.usage.v3");
+    expect(captured?.schema).toBe("skit.usage.v4");
     const report = yield* Schema.decodeUnknownEffect(UsageReport)(captured?.data);
     expect(report.rows).toMatchObject([
       {
@@ -201,8 +201,8 @@ test("orders by invocation counts rather than repeated evidence", () => {
   const report = {
     ...emptyUsageStory,
     rows: [
-      { ...base, name: "older", uses: 1, reads: 100, lastObservedAt: "2026-10-02T12:00:00Z" },
-      { ...base, name: "recent", uses: 2, reads: 1, lastObservedAt: "2026-10-07T12:00:00Z" },
+      { ...base, name: "older", uses: 1, reads: 100, lastSeenAt: "2026-10-02T12:00:00Z" },
+      { ...base, name: "recent", uses: 2, reads: 1, lastSeenAt: "2026-10-07T12:00:00Z" },
     ],
   };
   const body = renderUsage(report);

@@ -413,7 +413,7 @@ it.effect("records a new upstream commit even when its Skill bytes are unchanged
       join(skill, "SKILL.md"),
       "---\nname: review\ndescription: Review\n---\nunchanged\n",
     );
-    const observedHash = yield* deterministicTreeHash(skill);
+    const currentHash = yield* deterministicTreeHash(skill);
     const importAt = (commit: string, importedAt: string) =>
       Effect.scoped(
         writingTo(
@@ -423,7 +423,7 @@ it.effect("records a new upstream commit even when its Skill bytes are unchanged
             input: "https://github.com/acme/skills.git",
             revision: { kind: "commit", commit },
             importedAt,
-            skills: [{ name: "review", sourcePath: skill, relativePath: "review", observedHash }],
+            skills: [{ name: "review", sourcePath: skill, relativePath: "review", currentHash }],
             observations: [],
           }),
         ),

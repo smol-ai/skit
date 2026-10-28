@@ -57,7 +57,7 @@ export interface ImportRequestSkill {
   readonly name: string;
   readonly sourcePath: string;
   readonly relativePath: string;
-  readonly observedHash: Digest;
+  readonly currentHash: Digest;
 }
 export interface ImportRequest {
   readonly machineId?: MachineId;
@@ -136,7 +136,7 @@ export const prepareImport = Effect.fn("Library.prepareImport")(function* (
       ],
       true,
     );
-    if ((yield* deterministicTreeHash(path)) !== skill.observedHash)
+    if ((yield* deterministicTreeHash(path)) !== skill.currentHash)
       return yield* new ImportRequestInvalid({
         reason: `observed Skill ${skill.name} changed`,
       });
@@ -147,7 +147,7 @@ export const prepareImport = Effect.fn("Library.prepareImport")(function* (
       artifactDigest: yield* Effect.scoped(
         materializedSkillDigest({ collectionVersionPath: staged, sourcePath: skill.relativePath }),
       ),
-      validationDigest: skill.observedHash,
+      validationDigest: skill.currentHash,
       materializationProfile: "plain-skill/v1",
     });
   }
@@ -364,7 +364,7 @@ export const importEdit = Effect.fn("Library.importEdit")(function* (request: {
   readonly skillId: LibraryState["skills"][number]["skill_id"];
   readonly installedSkillId: LibraryState["installed_skills"][number]["installed_skill_id"];
   readonly path: string;
-  readonly observedHash: Digest;
+  readonly currentHash: Digest;
   readonly importedAt: string;
 }) {
   const store = yield* LibraryStore;
@@ -392,7 +392,7 @@ export const importEdit = Effect.fn("Library.importEdit")(function* (request: {
       name: "projection-observation",
       sourcePath: request.path,
       relativePath: ".",
-      observedHash: request.observedHash,
+      currentHash: request.currentHash,
     },
   ]).pipe(
     Effect.catchTag("Library.ImportRequestInvalid", () =>

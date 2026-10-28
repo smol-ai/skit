@@ -702,7 +702,7 @@ it.effect("migrates v9 Bindings to enabled lists and renames stored records", ()
         path: projection.path,
         canonicalPath: projection.path,
         harnesses: ["codex"],
-        observedHash: projection.expected_digest,
+        currentHash: projection.expected_digest,
         installedSkillId: projection.projection_id,
       },
     ]);

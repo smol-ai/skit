@@ -120,7 +120,7 @@ const planEditImport = Effect.fn("Library.planEditImport")(function* (
         name: skill.name,
         sourcePath: selected.path,
         relativePath: ".",
-        observedHash: observed,
+        currentHash: observed,
       },
     ]),
   );
@@ -131,7 +131,7 @@ const planEditImport = Effect.fn("Library.planEditImport")(function* (
       installed_skill_id: installedSkill.installed_skill_id,
       destination: installedSkill.destination,
       path: installedSkill.path,
-      observed_digest: digest,
+      current_digest: digest,
       agreement:
         installedSkill.installed_skill_id === selected.installed_skill_id
           ? "selected"
@@ -146,7 +146,7 @@ const planEditImport = Effect.fn("Library.planEditImport")(function* (
     skill_name: skill.name,
     previous_skill_version_id: previousVersion.skill_version_id,
     selected_installed_skill_id: selected.installed_skill_id,
-    observed_digest: observed,
+    current_digest: observed,
     snapshot_digest: prepared.digest,
     original_path: collectionVersionPath((yield* LibraryStore).originalsPath, prepared.digest),
     import_required: previousVersion.artifact_digest !== observed,
@@ -213,7 +213,7 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
               skillId: preview.skill_id,
               installedSkillId: preview.selected_installed_skill_id,
               path: selected.path,
-              observedHash: preview.observed_digest,
+              currentHash: preview.current_digest,
               importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
             }),
           )
@@ -238,14 +238,14 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
           });
       const accepted = new Map<
         InstalledSkillId,
-        { readonly observedHash: Digest; readonly marker: OwnershipMarker }
+        { readonly currentHash: Digest; readonly marker: OwnershipMarker }
       >();
       for (const installedSkill of preview.installed_skills) {
-        if (installedSkill.observed_digest !== preview.observed_digest) continue;
+        if (installedSkill.current_digest !== preview.current_digest) continue;
         const marker = yield* inspectOwnershipMarker(installedSkill.path);
         if (marker.kind === "valid")
           accepted.set(installedSkill.installed_skill_id, {
-            observedHash: installedSkill.observed_digest,
+            currentHash: installedSkill.current_digest,
             marker: marker.marker,
           });
       }

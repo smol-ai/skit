@@ -48,7 +48,7 @@ it.effect("a front end that confirms a Library session change leaves attributed 
               name: "review",
               sourcePath: installed,
               relativePath: ".",
-              observedHash: yield* deterministicTreeHash(installed),
+              currentHash: yield* deterministicTreeHash(installed),
             },
           ],
           observations: [],
@@ -96,7 +96,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
           name,
           sourcePath: path,
           relativePath: name,
-          observedHash: yield* deterministicTreeHash(path),
+          currentHash: yield* deterministicTreeHash(path),
         };
       }),
     );
@@ -230,7 +230,7 @@ const twoScopeProposal = (scopeCount = 2) =>
               name: "review",
               sourcePath: source,
               relativePath: ".",
-              observedHash: yield* deterministicTreeHash(source),
+              currentHash: yield* deterministicTreeHash(source),
             },
           ],
           observations: [],

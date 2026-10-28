@@ -163,7 +163,7 @@ const refetchSourceArchive = Effect.fn("Library.restore.refetchSource")(function
               name: member.source_path,
               sourcePath,
               relativePath: member.source_path,
-              observedHash: yield* deterministicTreeHash(sourcePath),
+              currentHash: yield* deterministicTreeHash(sourcePath),
             };
           }),
         ),

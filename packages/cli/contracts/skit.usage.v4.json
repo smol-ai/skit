@@ -1,5 +1,5 @@
 {
-  "$id": "skit.usage.v3",
+  "$id": "skit.usage.v4",
   "type": "object",
   "properties": {
     "window": {
@@ -143,7 +143,7 @@
               }
             ]
           },
-          "lastObservedAt": {
+          "lastSeenAt": {
             "type": "string"
           }
         },
@@ -160,7 +160,7 @@
           "explicit",
           "implicit",
           "unknown",
-          "lastObservedAt"
+          "lastSeenAt"
         ],
         "additionalProperties": true
       }

@@ -113,7 +113,7 @@ const scanSetupInstances = Effect.fn("Setup.scanInstances")(function* (
                 : libraryMatches.length === 1
                   ? ("exact" as const)
                   : ("ambiguous" as const),
-            observedHash: hashResult.success,
+            currentHash: hashResult.success,
             libraryMatches,
           };
         })();

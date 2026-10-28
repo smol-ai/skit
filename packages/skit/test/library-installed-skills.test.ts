@@ -88,7 +88,7 @@ const boundCollectionWith = (second = false, emptyDirectories: readonly string[]
               name: "review",
               sourcePath: firstSource,
               relativePath: second ? "review" : ".",
-              observedHash: yield* deterministicTreeHash(firstSource),
+              currentHash: yield* deterministicTreeHash(firstSource),
             },
             ...(second
               ? [
@@ -96,7 +96,7 @@ const boundCollectionWith = (second = false, emptyDirectories: readonly string[]
                     name: "second",
                     sourcePath: secondSource,
                     relativePath: "second",
-                    observedHash: yield* deterministicTreeHash(secondSource),
+                    currentHash: yield* deterministicTreeHash(secondSource),
                   },
                 ]
               : []),
@@ -763,7 +763,7 @@ it.effect(
       yield* fs.writeFileString(join(target, "SKILL.md"), "raw Skill bytes\n");
       yield* project({
         root: targetRoot,
-        manage: { path: target, observedHash: yield* deterministicTreeHash(target) },
+        manage: { path: target, currentHash: yield* deterministicTreeHash(target) },
       });
       assert.strictEqual(
         yield* fs.readFileString(join(target, ".git", "HEAD")),
@@ -928,7 +928,7 @@ for (const original of ["intact", "missing", "corrupt"] as const)
                 skillId: first.skill_id,
                 installedSkillId: first.installed_skill_id,
                 path: target,
-                observedHash: yield* deterministicTreeHash(target),
+                currentHash: yield* deterministicTreeHash(target),
                 importedAt: "2026-09-17T00:00:00.000Z",
               }).pipe(Effect.provide(storeLayer)),
             );
@@ -1266,7 +1266,7 @@ for (const path of ["equivalent-version", "accepted-observation"] as const)
               [
                 installed.installed_skill_id,
                 {
-                  observedHash: yield* deterministicTreeHash(target),
+                  currentHash: yield* deterministicTreeHash(target),
                   marker: marker.marker,
                 },
               ],

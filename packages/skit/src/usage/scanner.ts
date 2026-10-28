@@ -435,7 +435,7 @@ export const skillUsageLayer = Layer.effect(
           explicit: 0,
           implicit: 0,
           unknown: 0,
-          lastObservedAt: timestamp,
+          lastSeenAt: timestamp,
         };
         if (event.kind !== "selections") row[event.kind]++;
         invocationObservations.push({
@@ -446,7 +446,7 @@ export const skillUsageLayer = Layer.effect(
           turn: observation.turn,
           timestamp,
         });
-        if (timestamp > row.lastObservedAt) row.lastObservedAt = timestamp;
+        if (timestamp > row.lastSeenAt) row.lastSeenAt = timestamp;
         rows.set(key, row);
       }
       correlateInvocations(invocationObservations);

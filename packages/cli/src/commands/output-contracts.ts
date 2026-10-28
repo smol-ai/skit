@@ -61,12 +61,12 @@ const effectValidation = Schema.Struct({
 
 export const outputContracts = {
   setupUndo: effectOutput("skit.setup.undo.v2", SetupUndoOutput),
-  setupComparison: effectOutput("skit.setup.comparison.v1", SetupComparisonOutput),
+  setupComparison: effectOutput("skit.setup.comparison.v2", SetupComparisonOutput),
   setupReview: effectOutput("skit.setup.review.v2", SetupReviewOutput),
   setupFailed: effectOutput("skit.setup.failed.v1", SetupFailureOutput),
   recoveryList: effectOutput("skit.recovery.list.v1", RecoveryList),
   recovery: effectOutput("skit.recovery.v1", RecoveryOutput),
-  usage: effectOutput("skit.usage.v3", UsageReport),
+  usage: effectOutput("skit.usage.v4", UsageReport),
   versionReport: effectOutput("skit.version.v2", VersionReport),
   version: effectOutput("skit.version.v1", Schema.Struct({ version: Schema.String })),
   init: effectOutput(

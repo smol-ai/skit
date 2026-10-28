@@ -71,7 +71,7 @@ const fixture = Effect.gen(function* () {
         name,
         sourcePath: path,
         relativePath: name,
-        observedHash: yield* deterministicTreeHash(path),
+        currentHash: yield* deterministicTreeHash(path),
       };
     }),
   );
@@ -770,7 +770,7 @@ it.effect(
                 name: "gamma",
                 sourcePath: source,
                 relativePath: ".",
-                observedHash: yield* deterministicTreeHash(source),
+                currentHash: yield* deterministicTreeHash(source),
               },
             ],
           }),

@@ -78,7 +78,7 @@ export type SetupLockMatch = typeof SetupLockMatch.Type;
 
 export const SetupContentIdentity = Schema.Struct({
   status: Schema.Literals(["exact", "ambiguous", "none", "unhashable"]),
-  observedHash: Schema.optionalKey(Digest),
+  currentHash: Schema.optionalKey(Digest),
   libraryMatches: Schema.Array(
     Schema.Struct({
       subjectId: Schema.String,

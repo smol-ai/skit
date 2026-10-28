@@ -42,7 +42,7 @@ const fixture = Effect.gen(function* () {
             name: "alpha",
             sourcePath: existing,
             relativePath: ".",
-            observedHash: yield* deterministicTreeHash(existing),
+            currentHash: yield* deterministicTreeHash(existing),
           },
         ],
         observations: [],

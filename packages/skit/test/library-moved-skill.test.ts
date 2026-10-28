@@ -25,7 +25,7 @@ it.effect("keeps a moved Skill's old row and retained Version beside its new pat
           name: "spec",
           sourcePath: path,
           relativePath,
-          observedHash: yield* deterministicTreeHash(path),
+          currentHash: yield* deterministicTreeHash(path),
         };
       });
     const importSource = (skills: Parameters<typeof importCollection>[0]["skills"]) =>

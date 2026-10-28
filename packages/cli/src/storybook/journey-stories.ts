@@ -166,7 +166,7 @@ const previewDoctorCleanup = Effect.scoped(
               root: skillsRoot,
               path,
               expected_digest: digest,
-              observed_digest: digest,
+              current_digest: digest,
               status: "installed",
               installed_at: "2026-10-18T00:00:00.000Z",
             },

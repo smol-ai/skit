@@ -61,7 +61,7 @@ const setupInstance = (
   owner: { kind: "unknown" },
   contentIdentity: {
     status: "none",
-    observedHash: projectHash(name),
+    currentHash: projectHash(name),
     libraryMatches: [],
   },
   git: { status: "outside-git" },
@@ -667,23 +667,23 @@ it.effect("keeps onboarding classifications conservative across conflicting evid
     const sharedVersion = makeSkillVersionId();
     const candidates = classifySetupOnboarding([
       setupInstance("lock-mismatch", "/global/lock-mismatch-a", {
-        contentIdentity: { status: "none", observedHash: hash, libraryMatches: [] },
+        contentIdentity: { status: "none", currentHash: hash, libraryMatches: [] },
         locks: [setupLock("acme/a", "agrees", "lock-ambiguous")],
       }),
       setupInstance("lock-mismatch", "/global/lock-mismatch-b", {
-        contentIdentity: { status: "none", observedHash: hash, libraryMatches: [] },
+        contentIdentity: { status: "none", currentHash: hash, libraryMatches: [] },
         locks: [setupLock("acme/b", "mismatch", "lock-mismatch")],
       }),
       setupInstance("lock-ambiguous", "/global/lock-ambiguous-a", {
-        contentIdentity: { status: "none", observedHash: hash, libraryMatches: [] },
+        contentIdentity: { status: "none", currentHash: hash, libraryMatches: [] },
         locks: [setupLock("acme/a", "agrees", "lock-ambiguous")],
       }),
       setupInstance("lock-ambiguous", "/global/lock-ambiguous-b", {
-        contentIdentity: { status: "none", observedHash: hash, libraryMatches: [] },
+        contentIdentity: { status: "none", currentHash: hash, libraryMatches: [] },
         locks: [setupLock("acme/b", "agrees", "lock-mismatch")],
       }),
       setupInstance("lock-local-only", "/global/lock-local-only", {
-        contentIdentity: { status: "none", observedHash: hash, libraryMatches: [] },
+        contentIdentity: { status: "none", currentHash: hash, libraryMatches: [] },
         locks: [
           {
             ...setupLock("../local-source", "agrees", "lock-local-only"),
@@ -699,7 +699,7 @@ it.effect("keeps onboarding classifications conservative across conflicting evid
       setupInstance("library-exact", "/global/library-exact", {
         contentIdentity: {
           status: "exact",
-          observedHash: hash,
+          currentHash: hash,
           libraryMatches: [
             {
               subjectId: collectionOne,
@@ -713,7 +713,7 @@ it.effect("keeps onboarding classifications conservative across conflicting evid
       setupInstance("library-renamed", "/global/library-renamed", {
         contentIdentity: {
           status: "exact",
-          observedHash: hash,
+          currentHash: hash,
           libraryMatches: [
             {
               subjectId: collectionOne,
@@ -727,7 +727,7 @@ it.effect("keeps onboarding classifications conservative across conflicting evid
       setupInstance("library-ambiguous", "/global/library-ambiguous", {
         contentIdentity: {
           status: "ambiguous",
-          observedHash: hash,
+          currentHash: hash,
           libraryMatches: [
             {
               subjectId: collectionOne,
@@ -839,7 +839,7 @@ it.effect(
         git: { status: "ignored", repository: "/repo" },
         contentIdentity: {
           status: "exact",
-          observedHash: hash,
+          currentHash: hash,
           libraryMatches: [
             {
               subjectId: upstreamCollectionId,
@@ -859,7 +859,7 @@ it.effect(
         owner: { kind: "repository", repository: "/repo" },
         contentIdentity: {
           status: "exact",
-          observedHash: hash,
+          currentHash: hash,
           libraryMatches: [
             {
               subjectId: localCollectionId,
@@ -929,7 +929,7 @@ it.effect("matches an unresolvable lock to a retained Collection by canonical re
       git: { status: "ignored", repository: "/repo" },
       contentIdentity: {
         status: "exact",
-        observedHash: projectHash("Bad_Name"),
+        currentHash: projectHash("Bad_Name"),
         libraryMatches: [{ subjectId: collectionId, skillId, skillVersionId, name: "Bad_Name" }],
       },
       locks: [
@@ -1211,7 +1211,7 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
         ?.contentIdentity,
     ).toEqual({
       status: "exact",
-      observedHash: contentHash,
+      currentHash: contentHash,
       libraryMatches: [{ subjectId: collectionId, skillId, skillVersionId, name: "council" }],
     });
     expect(
@@ -1504,7 +1504,7 @@ for (const kind of ["source", "edit"] as const) {
       const lock = setupLock("acme/reviews", "agrees", "review");
       const instance = setupInstance("review", "/global/review", {
         locks: [lock],
-        contentIdentity: { status: "none", observedHash: hash, libraryMatches: [] },
+        contentIdentity: { status: "none", currentHash: hash, libraryMatches: [] },
       });
       const library = Schema.decodeUnknownSync(LibraryState)({
         schemaVersion: 10,
@@ -1560,7 +1560,7 @@ for (const kind of ["source", "edit"] as const) {
               {
                 type: "skills.sh-lock",
                 machine_id: machineId,
-                observed_at: "2026-01-01T00:00:00.000Z",
+                read_at: "2026-01-01T00:00:00.000Z",
                 lock_path: { value: lock.lockPath },
                 lock_version: 3,
                 lock_scope: "global",
@@ -1614,7 +1614,7 @@ for (const kind of ["source", "edit"] as const) {
           ...instance,
           contentIdentity: {
             ...instance.contentIdentity,
-            observedHash: `sha256:${"b".repeat(64)}`,
+            currentHash: `sha256:${"b".repeat(64)}`,
           },
         },
       ]);

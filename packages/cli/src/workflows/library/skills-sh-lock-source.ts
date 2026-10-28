@@ -223,9 +223,8 @@ export const lockMatches = Effect.fn("Setup.lockMatches")(function* (
     let content: SetupLockMatch["content"] = "unverifiable";
     const recordedHash = entry.computedHash ?? entry.skillFolderHash;
     if (lock.scope === "project" && recordedHash) {
-      const observedHash = yield* computeSkillsShCompatibleHash(hit.realPath, hit.realPath);
-      if (observedHash !== undefined)
-        content = observedHash === recordedHash ? "agrees" : "mismatch";
+      const currentHash = yield* computeSkillsShCompatibleHash(hit.realPath, hit.realPath);
+      if (currentHash !== undefined) content = currentHash === recordedHash ? "agrees" : "mismatch";
     }
     matches.push({
       scope: lock.scope,
@@ -266,7 +265,7 @@ const lockFileEntryFor = (
 ): SkillsShLockFileEntry =>
   skillsShLockFileEntry({
     machine_id: machineId,
-    observed_at: observedAt,
+    read_at: observedAt,
     ...(lock.entry.updatedAt ? { source_updated_at: lock.entry.updatedAt } : {}),
     lock_path: lock.lockPath,
     lock_version: lock.lockVersion,
@@ -335,9 +334,9 @@ export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImpo
       const instance = [...matchingInstances].sort((left, right) =>
         left.path.localeCompare(right.path),
       )[0];
-      const observedHash = instance?.contentIdentity.observedHash;
+      const currentHash = instance?.contentIdentity.currentHash;
       const lock = instance?.locks.find((item) => setupLockGroupKey(item) === groupKey);
-      if (!instance || !observedHash || !lock)
+      if (!instance || !currentHash || !lock)
         return yield* new SkillsShImportEvidenceInvalid({
           name: candidate.name,
           reason: "observation-missing",
@@ -350,7 +349,7 @@ export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImpo
           lock.entry.sourceType === "well-known"
             ? candidate.name
             : lockSkillPath(candidate.skillPath, candidate.name),
-        observedHash,
+        currentHash,
       });
       for (const observation of matchingInstances.flatMap((item) =>
         item.locks.filter((candidateLock) => setupLockGroupKey(candidateLock) === groupKey),

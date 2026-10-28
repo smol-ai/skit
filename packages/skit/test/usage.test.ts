@@ -154,7 +154,7 @@ it.effect(
           loads: 0,
           reads: 0,
           identity: "name-only",
-          lastObservedAt: start,
+          lastSeenAt: start,
         },
       ]);
       expect(report.coverage[0]).toMatchObject({

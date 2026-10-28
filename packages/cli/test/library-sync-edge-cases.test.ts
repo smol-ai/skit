@@ -235,7 +235,7 @@ for (const repository of [false, true]) {
           );
           if (edited) {
             const installedSkill = after.installed_skills[0];
-            assert.ok(installedSkill?.observed_digest);
+            assert.ok(installedSkill?.current_digest);
             assert.equal(installedSkill.status, "conflicted");
             assert.equal(
               yield* fs.readFileString(
@@ -244,7 +244,7 @@ for (const repository of [false, true]) {
                   "variants",
                   "agents",
                   "review",
-                  installedSkill.observed_digest.slice(7),
+                  installedSkill.current_digest.slice(7),
                   "SKILL.md",
                 ),
               ),

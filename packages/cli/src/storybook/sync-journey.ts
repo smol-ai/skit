@@ -50,7 +50,7 @@ export const syncJourney = (failDownload: boolean) =>
                 name,
                 sourcePath,
                 relativePath: ".",
-                observedHash: yield* deterministicTreeHash(sourcePath),
+                currentHash: yield* deterministicTreeHash(sourcePath),
               },
             ],
             observations: [],

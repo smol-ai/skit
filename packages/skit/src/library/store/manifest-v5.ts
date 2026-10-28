@@ -13,7 +13,6 @@ import {
   HistoricalLocator,
   MaterializationProfile,
   type Skill,
-  SkillsShLockFileEntry,
   SourceIdentity,
   SourceRelativePath,
   SourceTracking,
@@ -26,6 +25,7 @@ import {
   currentCollectionSkillsV7,
   type ImportV7,
   librarySnapshotDigestsV7,
+  SkillsShLockFileEntryV7,
 } from "./manifest-v7.js";
 
 /** Frozen `skit.library.v5` entities, decoded only to migrate them to the current model. */
@@ -85,7 +85,7 @@ export const AcquisitionV5 = Schema.Struct({
   source_revision: Schema.optionalKey(Schema.String),
   acquired_at: Schema.String,
   machine_id: MachineId,
-  observations: Schema.Array(SkillsShLockFileEntry),
+  observations: Schema.Array(SkillsShLockFileEntryV7),
 });
 export type AcquisitionV5 = typeof AcquisitionV5.Type;
 

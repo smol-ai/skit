@@ -2,7 +2,7 @@ import { RecoveryInvalid, recoveryFingerprint as fingerprint } from "./recovery-
 export { RecoveryInvalid } from "./recovery-evidence.js";
 import { createHash, randomUUID } from "node:crypto";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
-import { Effect, FileSystem, Schema } from "effect";
+import { Effect, FileSystem, Schema, SchemaGetter } from "effect";
 import {
   deterministicTreeHash,
   Digest,
@@ -28,7 +28,7 @@ const EntryFields = {
   dev: Schema.Number,
   ino: Schema.Number,
   linkTarget: Schema.optionalKey(Schema.String),
-  observedHash: Schema.optionalKey(Schema.String),
+  currentHash: Schema.optionalKey(Schema.String),
 };
 const RecoveryEntry = Schema.Struct({
   ...EntryFields,
@@ -37,7 +37,21 @@ const RecoveryEntry = Schema.Struct({
   parent: Identity,
 });
 interface RecoveryEntry extends Schema.Schema.Type<typeof RecoveryEntry> {}
-const LegacyEntry = Schema.Struct({ ...EntryFields, moved: Schema.Boolean });
+// 0.3.0 wrote v1 records, where the hash of a moved folder was `observedHash`.
+const { currentHash: _currentHash, ...LegacyFields } = EntryFields;
+const LegacyEntry = Schema.Struct({
+  ...LegacyFields,
+  observedHash: Schema.optionalKey(Schema.String),
+  moved: Schema.Boolean,
+}).pipe(
+  Schema.decodeTo(Schema.Struct({ ...EntryFields, moved: Schema.Boolean }), {
+    decode: SchemaGetter.transform(({ observedHash, ...entry }) => ({
+      ...entry,
+      ...(observedHash === undefined ? {} : { currentHash: observedHash }),
+    })),
+    encode: SchemaGetter.forbidden(() => "v1 move records are decode-only"),
+  }),
+);
 const MoveRecord = Schema.Union([
   Schema.Struct({ schemaVersion: Schema.Literal(1), entries: Schema.Array(LegacyEntry) }),
   Schema.Struct({ schemaVersion: Schema.Literal(2), entries: Schema.Array(RecoveryEntry) }),
@@ -63,7 +77,7 @@ export interface RecoveryMoveRequest {
   readonly name: string;
   readonly path: string;
   /** Required for directories; links are moved without touching their target's bytes. */
-  readonly observedHash?: string;
+  readonly currentHash?: string;
   readonly approvedLink?: {
     readonly dev: number;
     readonly ino: number;
@@ -149,8 +163,8 @@ const prepareMoves = Effect.fn("RecoveryMoves.prepare")(function* (
       contentHash: yield* fingerprint(path),
       ...(owned.get(path) ? { approvedMarker: owned.get(path)?.marker } : {}),
       ...(linkTarget === undefined ? {} : { linkTarget }),
-      ...(info.type === "Directory" && request.observedHash !== undefined
-        ? { observedHash: request.observedHash }
+      ...(info.type === "Directory" && request.currentHash !== undefined
+        ? { currentHash: request.currentHash }
         : {}),
     });
   }
@@ -212,7 +226,7 @@ export const prepareOwnedRecoveryMoves = Effect.fn("RecoveryMoves.prepareOwned")
     moves.push({
       name: request.name,
       path,
-      observedHash: yield* deterministicTreeHash(path),
+      currentHash: yield* deterministicTreeHash(path),
     });
   }
   return yield* prepareMoves(
@@ -266,7 +280,7 @@ const applyRecoveryMoves = Effect.fn("RecoveryMoves.apply")(
         );
       if (
         hash._tag === "Failure" ||
-        hash.success !== entry.observedHash ||
+        hash.success !== entry.currentHash ||
         marker !== entry.approvedMarker
       )
         return yield* new PlanIsStale();
@@ -414,7 +428,7 @@ const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
         entry.recoveryPath !== join(batch, `${index + 1}-${basename(entry.path)}`) ||
         paths.has(entry.path) ||
         (entry.type === "SymbolicLink" && entry.linkTarget === undefined) ||
-        (entry.type === "Directory" && entry.observedHash === undefined)
+        (entry.type === "Directory" && entry.currentHash === undefined)
       )
         return yield* new RecoveryInvalid({
           detail: `Unsafe or incomplete entry in ${moveRecordPath}`,
@@ -452,7 +466,7 @@ const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
           matches = (yield* fs.readLink(path)) === entry.linkTarget;
         else if (matches) {
           const normalized = yield* Effect.result(deterministicTreeHash(path));
-          matches = normalized._tag === "Success" && normalized.success === entry.observedHash;
+          matches = normalized._tag === "Success" && normalized.success === entry.currentHash;
         }
         return { exists: true, matches, stat, hash };
       });

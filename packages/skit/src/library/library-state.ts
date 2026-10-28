@@ -41,7 +41,7 @@ export const InstalledSkill = Schema.Struct({
   root: AbsoluteDevicePath,
   path: AbsoluteDevicePath,
   expected_digest: Digest,
-  observed_digest: Schema.mutableKey(Schema.optional(Digest)),
+  current_digest: Schema.mutableKey(Schema.optional(Digest)),
   status: Schema.mutableKey(HarnessInstallStatus),
   suppression_reason: Schema.mutableKey(Schema.optional(Schema.Literal("native_delete"))),
   suppressed_at: Schema.mutableKey(Schema.optional(Schema.String)),

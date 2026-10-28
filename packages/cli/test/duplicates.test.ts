@@ -450,7 +450,7 @@ it.effect(
               {
                 kind: "existing",
                 subjectId: "review",
-                observedHash: yield* deterministicTreeHash(f.source),
+                currentHash: yield* deterministicTreeHash(f.source),
               },
             );
             expect(outcome.recoveryDirectories).toHaveLength(1);
@@ -825,7 +825,7 @@ it.effect.each(["source", "alias"] as const)(
           );
           const request = {
             kind: "retain" as const,
-            observedHash: yield* deterministicTreeHash(f.source),
+            currentHash: yield* deterministicTreeHash(f.source),
             ownership: {
               harnesses: ["codex" as const],
               machineId: observed.machineConfig.machineId,

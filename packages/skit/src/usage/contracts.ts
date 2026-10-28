@@ -21,7 +21,7 @@ export const UsageRow = Schema.Struct({
   explicit: Count,
   implicit: Count,
   unknown: Count,
-  lastObservedAt: Schema.String,
+  lastSeenAt: Schema.String,
 });
 export interface UsageRow extends Schema.Schema.Type<typeof UsageRow> {}
 export const UsageCoverage = Schema.Struct({

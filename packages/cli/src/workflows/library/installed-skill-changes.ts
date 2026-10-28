@@ -309,7 +309,7 @@ export const installSelectedVersions = Effect.fn("Setup.installSelectedVersions"
       ...(current === fact.desiredHash
         ? {
             acceptedObservations: new Map([
-              [fact.installedSkillId, { observedHash: current, marker: marker.marker }],
+              [fact.installedSkillId, { currentHash: current, marker: marker.marker }],
             ]),
           }
         : {}),

@@ -60,7 +60,7 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
     }
     const observed = yield* deterministicTreeHash(installedSkill.path);
     const marker = yield* readOwnershipMarker(installedSkill.path);
-    installedSkill.observed_digest = observed;
+    installedSkill.current_digest = observed;
     const expected = expectedInstalledSkillHashResult(installedSkill, marker);
     installedSkill.status =
       marker && Result.isSuccess(expected) && observed === expected.success
@@ -177,7 +177,7 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
     }
   for (const observed of observedPaths.values()) {
     const harnesses = [...observed.harnesses].sort();
-    const observedHash = yield* deterministicTreeHash(observed.canonicalPath);
+    const currentHash = yield* deterministicTreeHash(observed.canonicalPath);
     const marker = yield* inspectOwnershipMarker(observed.path);
     if (marker.kind === "invalid") {
       state.ownershipIssues.push({
@@ -185,7 +185,7 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
         path: observed.path,
         canonicalPath: observed.canonicalPath,
         harnesses,
-        observedHash,
+        currentHash,
         detail: marker.detail,
       });
     } else if (marker.kind === "valid") {
@@ -199,9 +199,9 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
         path: observed.path,
         canonicalPath: observed.canonicalPath,
         harnesses,
-        observedHash,
+        currentHash,
         ...claim,
-        matchesExpectedHash: observedHash === claim.expectedHash,
+        matchesExpectedHash: currentHash === claim.expectedHash,
         detail: "Ownership marker is not independently authenticated and cannot authorize removal",
       });
     } else {
@@ -211,8 +211,8 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
         harnesses,
         path: observed.path,
         paths: [...observed.paths],
-        observedHash,
-        ...(prior ? { lastObservedHash: prior.observedHash } : {}),
+        currentHash,
+        ...(prior ? { lastHash: prior.currentHash } : {}),
       });
     }
   }
@@ -237,7 +237,7 @@ export const refreshLibraryInventory = Effect.fn("Library.refreshLibraryInventor
     if (
       marker?.installed_skill_id === installedSkill.installed_skill_id &&
       marker.skill_id === installedSkill.skill_id &&
-      installedSkill.observed_digest === installedSkill.expected_digest
+      installedSkill.current_digest === installedSkill.expected_digest
     )
       for (const backup of yield* pendingInstalledSkillBackups(installedSkill))
         yield* keepInstalledSkillBackup(backup);

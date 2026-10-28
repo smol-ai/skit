@@ -38,7 +38,7 @@ const upstream = Effect.gen(function* () {
           name,
           sourcePath: directory,
           relativePath: name,
-          observedHash: yield* deterministicTreeHash(directory),
+          currentHash: yield* deterministicTreeHash(directory),
         });
       }
       return yield* Effect.scoped(

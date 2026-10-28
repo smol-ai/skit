@@ -73,17 +73,17 @@ const PlannedManageTarget = Schema.Union([
   Schema.Struct({
     ...ManageTarget.fields,
     status: Schema.Literal("adoptable"),
-    observedHash: DigestSchema,
+    currentHash: DigestSchema,
   }),
   Schema.Struct({
     ...ManageTarget.fields,
     status: Schema.Literal("already-managed"),
-    observedHash: DigestSchema,
+    currentHash: DigestSchema,
   }),
   Schema.Struct({
     ...ManageTarget.fields,
     status: Schema.Literal("blocked"),
-    observedHash: Schema.optionalKey(DigestSchema),
+    currentHash: Schema.optionalKey(DigestSchema),
   }),
 ]);
 type PlannedManageTarget = typeof PlannedManageTarget.Type;
@@ -201,9 +201,9 @@ const planManage = Effect.fn("Library.planManage")(function* (
       continue;
     }
     const lossless = yield* manageBlockers(path);
-    const observedHash = lossless.contentHash;
+    const currentHash = lossless.contentHash;
     let blocked = false;
-    if (observedHash !== skill.validationDigest) {
+    if (currentHash !== skill.validationDigest) {
       blockers.push({ path, reason: "content-mismatch" });
       blocked = true;
     }
@@ -212,7 +212,7 @@ const planManage = Effect.fn("Library.planManage")(function* (
       marker.kind === "valid" &&
       skill.skillId !== undefined &&
       marker.marker.skill_id === skill.skillId &&
-      marker.marker.expected_digest === observedHash;
+      marker.marker.expected_digest === currentHash;
     if (!alreadyManaged && lossless.blockers.length > 0) {
       blockers.push(...lossless.blockers);
       blocked = true;
@@ -228,7 +228,7 @@ const planManage = Effect.fn("Library.planManage")(function* (
     observedTargets.push({
       ...target,
       path,
-      observedHash,
+      currentHash,
       status: blocked ? "blocked" : alreadyManaged ? "already-managed" : "adoptable",
     });
   }
@@ -262,10 +262,10 @@ export class ManageInvalid
 
 /** Setup selects eligibility; managing owns retaining or reusing content and taking ownership. */
 export type ManageRequest =
-  | { readonly kind: "existing"; readonly subjectId: string; readonly observedHash: Digest }
+  | { readonly kind: "existing"; readonly subjectId: string; readonly currentHash: Digest }
   | {
       readonly kind: "retain";
-      readonly observedHash: Digest | undefined;
+      readonly currentHash: Digest | undefined;
       readonly ownership?: {
         readonly harnesses: readonly HarnessNameType[];
         readonly machineId: MachineId | undefined;
@@ -351,11 +351,11 @@ export const manageCopy = Effect.fn("Manage.copy")(function* (
     (request.kind === "existing" || request.ownership !== undefined);
   if (request.kind === "existing" && !installing) return empty;
   // Check: the copy, and every equal copy it brings along, still has the scanned bytes.
-  const observedHash = request.observedHash;
+  const currentHash = request.currentHash;
   if (
-    observedHash === undefined ||
+    currentHash === undefined ||
     (request.kind === "retain" &&
-      (yield* deterministicTreeHash(selection.sourcePath)) !== observedHash)
+      (yield* deterministicTreeHash(selection.sourcePath)) !== currentHash)
   )
     return yield* new PlanIsStale();
   const backup = installing
@@ -373,8 +373,8 @@ export const manageCopy = Effect.fn("Manage.copy")(function* (
   }
   const equalPaths = request.kind === "retain" ? (request.equalCopies ?? []) : [];
   for (const path of equalPaths)
-    if ((yield* deterministicTreeHash(path)) !== observedHash) return yield* new PlanIsStale();
-  const manage = { path: selection.sourcePath, equalPaths, observedHash };
+    if ((yield* deterministicTreeHash(path)) !== currentHash) return yield* new PlanIsStale();
+  const manage = { path: selection.sourcePath, equalPaths, currentHash };
   let subjectId: string;
   if (request.kind === "existing") subjectId = request.subjectId;
   else {
@@ -400,7 +400,7 @@ export const manageCopy = Effect.fn("Manage.copy")(function* (
       return yield* new ManageInvalid({ name: selection.name, reason: "source-not-candidate" });
     subjectId = imported.collection_id;
     manage.path = plan.sourcePath;
-    manage.observedHash = plan.skill.validationDigest;
+    manage.currentHash = plan.skill.validationDigest;
   }
   return yield* installCopy(options.installOptions, selection, subjectId, manage, backup);
 }, withLibraryWriter);
@@ -424,7 +424,7 @@ const planDuplicateBackup = Effect.fn("Manage.planDuplicateBackup")(function* (
       copies.map((copy) => ({
         name: selection.name,
         path: copy.path,
-        observedHash: copy.observedHash,
+        currentHash: copy.currentHash,
       })),
       operationDirectory,
     );

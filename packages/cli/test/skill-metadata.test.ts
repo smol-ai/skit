@@ -56,7 +56,7 @@ it.effect(
                   name: "review",
                   sourcePath: source,
                   relativePath: "review",
-                  observedHash: yield* deterministicTreeHash(source),
+                  currentHash: yield* deterministicTreeHash(source),
                 },
               ],
               observations: [],
@@ -68,7 +68,7 @@ it.effect(
       const observation = (index: number): SkillsShLockFileEntry => ({
         type: "skills.sh-lock",
         machine_id: state.imports[index]!.machine_id,
-        observed_at: state.imports[index]!.imported_at,
+        read_at: state.imports[index]!.imported_at,
         source_updated_at: index === 0 ? "2026-04-20T00:00:00.000Z" : "2026-09-25T00:00:00.000Z",
         lock_path: { value: "/fixture/skills-lock.json" },
         lock_version: 3,

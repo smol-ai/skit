@@ -24,7 +24,7 @@ export const usageStory: UsageReport = {
       calls: 0,
       loads: 1,
       reads: 3,
-      lastObservedAt: "2026-10-07T12:00:00.000Z",
+      lastSeenAt: "2026-10-07T12:00:00.000Z",
     },
     {
       name: "example",
@@ -39,7 +39,7 @@ export const usageStory: UsageReport = {
       calls: 2,
       loads: 0,
       reads: 0,
-      lastObservedAt: "2026-10-07T10:00:00.000Z",
+      lastSeenAt: "2026-10-07T10:00:00.000Z",
     },
   ],
   coverage: [

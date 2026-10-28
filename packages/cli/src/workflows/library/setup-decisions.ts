@@ -29,7 +29,7 @@ export interface ApprovedSymlink extends Schema.Schema.Type<typeof ApprovedSymli
 
 export const SetupApprovedCopy = Schema.Struct({
   path: Schema.String,
-  observedHash: Digest,
+  currentHash: Digest,
   dev: Schema.Number,
   ino: Schema.Number,
 });
@@ -92,7 +92,7 @@ export function copyConflict(
   )
     return { kind: "none" };
   const aliases = duplicateSymlinksToBackUp(selection.sourcePath, duplicates);
-  const selectedHash = instance?.contentIdentity.observedHash;
+  const selectedHash = instance?.contentIdentity.currentHash;
   const preservable =
     selectedHash !== undefined &&
     duplicates.every((duplicate) =>
@@ -105,7 +105,7 @@ export function copyConflict(
           isSetupInstallDestination(copy) &&
           !copy.git.repository &&
           (copy.owner.kind === "unknown" || copy.owner.kind === "skills-sh") &&
-          copy.contentIdentity.observedHash === selectedHash
+          copy.contentIdentity.currentHash === selectedHash
         );
       }),
     );
@@ -292,8 +292,8 @@ export function recommendedSetupSelection(
   for (const { instance, selectable, siblings, groupKey } of reviewable) {
     const differs = siblings.some(
       (sibling) =>
-        instance.contentIdentity.observedHash === undefined ||
-        sibling.contentIdentity.observedHash !== instance.contentIdentity.observedHash,
+        instance.contentIdentity.currentHash === undefined ||
+        sibling.contentIdentity.currentHash !== instance.contentIdentity.currentHash,
     );
     if (
       !selectable ||

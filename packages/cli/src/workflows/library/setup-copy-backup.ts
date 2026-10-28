@@ -41,9 +41,9 @@ export const recordSetupCopies = Effect.fn("Setup.captureCopies")(function* (
         return yield* new PlanIsStale();
       for (const name of [".skit-ownership.json", "skit.remote.json", "skit.json", ".skit"])
         if (yield* present(join(path, name))) return yield* new PlanIsStale();
-      const observedHash = yield* deterministicTreeHash(path);
-      if (observedHash !== selectedHash) return yield* new PlanIsStale();
-      return { path, observedHash, dev: info.dev, ino: info.ino };
+      const currentHash = yield* deterministicTreeHash(path);
+      if (currentHash !== selectedHash) return yield* new PlanIsStale();
+      return { path, currentHash, dev: info.dev, ino: info.ino };
     }),
   );
   if (

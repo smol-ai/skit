@@ -65,9 +65,9 @@ const recoveryFixture = Effect.fn("Test.recoveryFixture")(function* () {
   yield* fs.writeFileString(external, "outside");
   yield* fs.symlink(external, join(source, ".skit", "external-link"));
   yield* fs.symlink("review", alias);
-  const observedHash = yield* deterministicTreeHash(source);
+  const currentHash = yield* deterministicTreeHash(source);
   const plan = yield* prepareRecoveryMoves(home, [
-    { name: "review", path: source, observedHash },
+    { name: "review", path: source, currentHash },
     { name: "alias", path: alias },
   ]);
   const operationId = basename(plan.operationDirectory);
@@ -361,7 +361,7 @@ it.effect(
           {
             name: "review",
             path: f.source,
-            observedHash: yield* deterministicTreeHash(f.source),
+            currentHash: yield* deterministicTreeHash(f.source),
           },
         ],
         operation,

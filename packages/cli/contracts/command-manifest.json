@@ -2195,7 +2195,7 @@
         "skit.setup.applied.v3",
         "skit.setup.review.v2",
         "skit.setup.failed.v1",
-        "skit.setup.comparison.v1"
+        "skit.setup.comparison.v2"
       ],
       "exitCodes": [
         0,
@@ -2653,7 +2653,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.usage.v3"
+        "skit.usage.v4"
       ],
       "exitCodes": [
         0,

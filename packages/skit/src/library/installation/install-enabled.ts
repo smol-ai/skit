@@ -42,7 +42,7 @@ export const installEnabledSkills = Effect.fn("Library.installEnabledSkills")(fu
   variantsPath: string;
   acceptedObservations?: ReadonlyMap<
     string,
-    { readonly observedHash: Digest; readonly marker: OwnershipMarker }
+    { readonly currentHash: Digest; readonly marker: OwnershipMarker }
   >;
   /** The existing copies the operator chose to manage, as previewed. */
   manage?: ManageApproval;

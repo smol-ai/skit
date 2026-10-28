@@ -17,7 +17,7 @@
     "selected_installed_skill_id": {
       "type": "string"
     },
-    "observed_digest": {
+    "current_digest": {
       "type": "string",
       "pattern": "^sha256:[a-f0-9]{64}$"
     },
@@ -50,7 +50,7 @@
           "path": {
             "type": "string"
           },
-          "observed_digest": {
+          "current_digest": {
             "type": "string",
             "pattern": "^sha256:[a-f0-9]{64}$"
           },
@@ -67,7 +67,7 @@
           "installed_skill_id",
           "destination",
           "path",
-          "observed_digest",
+          "current_digest",
           "agreement"
         ],
         "additionalProperties": true
@@ -80,7 +80,7 @@
     "skill_name",
     "previous_skill_version_id",
     "selected_installed_skill_id",
-    "observed_digest",
+    "current_digest",
     "snapshot_digest",
     "original_path",
     "import_required",

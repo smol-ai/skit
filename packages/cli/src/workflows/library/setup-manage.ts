@@ -75,14 +75,14 @@ export const manageSetupCopies = Effect.fn("Setup.manageCopies")(
       if (kind === "existing") {
         if (candidate.action !== "bind-existing-entry")
           return yield* invalid(name, "candidate-not-bindable");
-        const observedHash = instance?.contentIdentity.observedHash;
-        if (!observedHash) return yield* invalid(name, "content-identity-missing");
+        const currentHash = instance?.contentIdentity.currentHash;
+        if (!currentHash) return yield* invalid(name, "content-identity-missing");
         if (instance.scope !== "global" || !instance.harnesses.length)
           return yield* invalid(name, "path-not-projection-target");
         managed = yield* manageCopy(options, selection, {
           kind: "existing",
           subjectId: candidate.subjectId,
-          observedHash,
+          currentHash,
         });
       } else {
         if (
@@ -94,20 +94,20 @@ export const manageSetupCopies = Effect.fn("Setup.manageCopies")(
         )
           return yield* invalid(name, "candidate-not-manageable");
         if (!instance) return yield* invalid(name, "source-not-candidate");
-        const observedHash = instance.contentIdentity.observedHash;
+        const currentHash = instance.contentIdentity.currentHash;
         const equalCopies = current.instances
           .filter(
             (other) =>
               other.name === name &&
               other.path !== sourcePath &&
-              observedHash !== undefined &&
-              other.contentIdentity.observedHash === observedHash &&
+              currentHash !== undefined &&
+              other.contentIdentity.currentHash === currentHash &&
               isSetupInstallDestination(other),
           )
           .map((other) => other.path);
         managed = yield* manageCopy(options, selection, {
           kind: "retain",
-          observedHash,
+          currentHash,
           ...(equalCopies.length ? { equalCopies } : {}),
           ...(candidate.action === "repository-owned" || !isSetupInstallDestination(instance)
             ? {}

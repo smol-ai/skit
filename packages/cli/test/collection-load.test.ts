@@ -63,7 +63,7 @@ effectIt.effect(
           name,
           sourcePath: path,
           relativePath: name,
-          observedHash: yield* deterministicTreeHash(path),
+          currentHash: yield* deterministicTreeHash(path),
         });
       }
       const importMembers = (skills: typeof members, importedAt: string) =>

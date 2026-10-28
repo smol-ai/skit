@@ -129,7 +129,7 @@ export type Upstream = typeof Upstream.Type;
 export const SkillsShLockFileEntry = Schema.Struct({
   type: Schema.Literal("skills.sh-lock"),
   machine_id: MachineId,
-  observed_at: Schema.String,
+  read_at: Schema.String,
   source_updated_at: Schema.optionalKey(Schema.String),
   lock_path: HistoricalLocator,
   lock_version: Schema.Number,

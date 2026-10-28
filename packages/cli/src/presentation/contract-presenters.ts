@@ -718,7 +718,7 @@ function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v10">): s
   );
   const duplicateHashes = new Map<string, typeof candidates>();
   for (const instance of candidates) {
-    const hash = instance.contentIdentity.observedHash;
+    const hash = instance.contentIdentity.currentHash;
     if (hash) duplicateHashes.set(hash, [...(duplicateHashes.get(hash) ?? []), instance]);
   }
   const duplicates = [...duplicateHashes.values()]
@@ -1014,7 +1014,7 @@ const contractPresenters: ContractPresenters = {
   projectionRetentionPlan: (data) =>
     [
       `Would retain changed ${data.skill_name} bytes from ${data.selected_installed_skill_id}`,
-      `Observed: ${data.observed_digest}`,
+      `Observed: ${data.current_digest}`,
       `Snapshot: ${data.snapshot_digest}`,
       `Destination: ${data.original_path}`,
       ...data.installed_skills.map(
@@ -1085,7 +1085,7 @@ const contractPresenters: ContractPresenters = {
     [
       ...data.copies.map(
         (copy) =>
-          `${copy.name} · ${copy.path}\n${copy.observedHash}\n${copy.markdown}${copy.truncated ? "\n[Preview truncated]" : ""}`,
+          `${copy.name} · ${copy.path}\n${copy.currentHash}\n${copy.markdown}${copy.truncated ? "\n[Preview truncated]" : ""}`,
       ),
       ...data.actions.map(
         (action) => `${action.rel}: ${action.argv.map((arg) => JSON.stringify(arg)).join(" ")}`,

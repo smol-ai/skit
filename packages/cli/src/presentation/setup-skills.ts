@@ -83,8 +83,8 @@ export const setupReviewSkillChoices = (
     .map(({ instance, candidate, value, selectable, groupKey, siblings, removeValue }) => {
       const identical = siblings.filter(
         (item) =>
-          instance.contentIdentity.observedHash !== undefined &&
-          instance.contentIdentity.observedHash === item.contentIdentity.observedHash,
+          instance.contentIdentity.currentHash !== undefined &&
+          instance.contentIdentity.currentHash === item.contentIdentity.currentHash,
       );
       const differing = siblings.filter((item) => !identical.includes(item));
       const status = candidateStatus(instance, candidate);

@@ -77,7 +77,7 @@ const describeSourceSkills = Effect.fn("Library.describeSourceSkills")(function*
             : basename(sourcePath),
         sourcePath,
         relativePath,
-        observedHash: yield* deterministicTreeHash(sourcePath),
+        currentHash: yield* deterministicTreeHash(sourcePath),
       };
     }),
   );

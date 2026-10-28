@@ -45,13 +45,13 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
               name: "review",
               sourcePath: review,
               relativePath: "review",
-              observedHash: yield* deterministicTreeHash(review),
+              currentHash: yield* deterministicTreeHash(review),
             },
             {
               name: "test",
               sourcePath: test,
               relativePath: "test",
-              observedHash: yield* deterministicTreeHash(test),
+              currentHash: yield* deterministicTreeHash(test),
             },
           ],
           observations: [],
@@ -228,7 +228,7 @@ it.effect("enables a whole Collection and converts it to Skills when one is disa
         name,
         sourcePath: path,
         relativePath: name,
-        observedHash: yield* deterministicTreeHash(path),
+        currentHash: yield* deterministicTreeHash(path),
       });
     }
     const importSource = (members: readonly ImportRequestSkill[], importedAt: string) =>

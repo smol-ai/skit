@@ -68,7 +68,7 @@ export const planSetupRemovals = Effect.fn("Setup.planRemovals")(function* (
         requests.push({
           name: selection.name,
           path,
-          observedHash: instance.contentIdentity.observedHash,
+          currentHash: instance.contentIdentity.currentHash,
         });
     }
   }

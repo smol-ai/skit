@@ -26,6 +26,13 @@ export const CollectionVersionV7 = Schema.Struct({
 });
 export type CollectionVersionV7 = typeof CollectionVersionV7.Type;
 
+/** A skills.sh lock entry as v7 stored it: the time it was read was `observed_at`. */
+const { read_at: _readAt, ...lockEntryFields } = SkillsShLockFileEntry.fields;
+export const SkillsShLockFileEntryV7 = Schema.Struct({
+  ...lockEntryFields,
+  observed_at: Schema.String,
+});
+
 export const ImportV7 = Schema.Struct({
   acquisition_id: ImportId,
   collection_id: CollectionId,
@@ -36,7 +43,7 @@ export const ImportV7 = Schema.Struct({
   revision: Schema.optionalKey(Schema.NonEmptyString),
   acquired_at: Schema.String,
   machine_id: MachineId,
-  observations: Schema.Array(SkillsShLockFileEntry),
+  observations: Schema.Array(SkillsShLockFileEntryV7),
 });
 export type ImportV7 = typeof ImportV7.Type;
 
@@ -201,7 +208,10 @@ export const importFromV7 = ({
   kind: kind === "retained-edit" ? "edit" : "source",
   collection_version_id: retained_copy_id,
   imported_at: acquired_at,
-  lock_file_entries: observations,
+  lock_file_entries: observations.map(({ observed_at, ...entry }) => ({
+    ...entry,
+    read_at: observed_at,
+  })),
 });
 
 export const libraryManifestFromV7 = ({

@@ -1,5 +1,5 @@
 {
-  "$id": "skit.setup.comparison.v1",
+  "$id": "skit.setup.comparison.v2",
   "type": "object",
   "properties": {
     "planId": {
@@ -17,7 +17,7 @@
           "path": {
             "type": "string"
           },
-          "observedHash": {
+          "currentHash": {
             "type": "string",
             "pattern": "^sha256:[a-f0-9]{64}$"
           },
@@ -31,7 +31,7 @@
         "required": [
           "name",
           "path",
-          "observedHash",
+          "currentHash",
           "markdown",
           "truncated"
         ],

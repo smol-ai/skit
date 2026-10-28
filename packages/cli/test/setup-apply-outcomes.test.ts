@@ -600,7 +600,7 @@ const importDelta = (f: Effect.Success<ReturnType<typeof fixture>>) =>
               name: "delta",
               sourcePath: source,
               relativePath: ".",
-              observedHash: yield* deterministicTreeHash(source),
+              currentHash: yield* deterministicTreeHash(source),
             },
           ],
           observations: [],

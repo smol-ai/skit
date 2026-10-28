@@ -124,7 +124,7 @@ export const devices = Effect.gen(function* () {
             skillId: installedSkill.skill_id,
             installedSkillId: installedSkill.installed_skill_id,
             path: installedSkill.path,
-            observedHash: yield* deterministicTreeHash(installedSkill.path),
+            currentHash: yield* deterministicTreeHash(installedSkill.path),
             importedAt: "2026-02-01T00:00:00Z",
           });
         }).pipe(withLibraryWriter, Effect.provide(layer)),
@@ -156,7 +156,7 @@ export const devices = Effect.gen(function* () {
                 name: options.name ?? repository,
                 sourcePath,
                 relativePath: ".",
-                observedHash: yield* deterministicTreeHash(sourcePath),
+                currentHash: yield* deterministicTreeHash(sourcePath),
               },
             ],
             observations: [],
@@ -174,7 +174,7 @@ export const devices = Effect.gen(function* () {
                 name: skillName,
                 sourcePath: path,
                 relativePath: skillName,
-                observedHash: yield* deterministicTreeHash(path),
+                currentHash: yield* deterministicTreeHash(path),
               };
             }),
           );

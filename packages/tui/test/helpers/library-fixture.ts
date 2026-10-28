@@ -56,11 +56,11 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
           input: source,
           importedAt: "2026-10-14T00:00:00.000Z",
           skills: yield* Effect.forEach(skills, (skill) =>
-            Effect.map(deterministicTreeHash(join(source, skill)), (observedHash) => ({
+            Effect.map(deterministicTreeHash(join(source, skill)), (currentHash) => ({
               name: skill,
               sourcePath: join(source, skill),
               relativePath: skill,
-              observedHash,
+              currentHash,
             })),
           ),
           observations: [],
