@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { basename, join } from "node:path";
-import { Effect, FileSystem, Schema, SchemaGetter } from "effect";
+import { Effect, FileSystem, Schema } from "effect";
 import {
   canonicalJson,
   Digest,
@@ -26,8 +26,6 @@ import {
   setupDiscoverySettings,
   setupIntent,
   SetupIntent,
-  setupIntentFromV1,
-  SetupIntentV1,
   SetupDiscoverySettings,
 } from "./setup-undo-intent.js";
 
@@ -44,29 +42,7 @@ const Attempt = Schema.Struct({
   before: SetupIntent,
   after: SetupIntent,
 });
-const StoredAttempt = Schema.Union([
-  Attempt,
-  Schema.Struct({
-    ...AttemptFields,
-    schemaVersion: Schema.Literal(1),
-    preservationId: Schema.String,
-    before: SetupIntentV1,
-    after: SetupIntentV1,
-  }).pipe(
-    Schema.decodeTo(Attempt, {
-      decode: SchemaGetter.transform(
-        ({ schemaVersion: _version, preservationId, before, after, ...fields }) => ({
-          ...fields,
-          schemaVersion: 2 as const,
-          backupId: preservationId,
-          before: setupIntentFromV1(before),
-          after: setupIntentFromV1(after),
-        }),
-      ),
-      encode: SchemaGetter.forbidden(() => "v1 undo records are decode-only"),
-    }),
-  ),
-]);
+const StoredAttempt = Attempt;
 const Done = Schema.Struct({ schemaVersion: Schema.Literal(1), planId: Digest });
 const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
 

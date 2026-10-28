@@ -5,16 +5,10 @@ import {
   CollectionId,
   currentCollectionSkills,
   currentSkillVersion,
-  DeviceBindingV9,
   DeviceSkillSelection,
-  DeviceSkillSelectionV9,
-  deviceSelectionFromV9,
   Enabled,
-  globalFromV9,
   InvocationPolicies,
   Repository,
-  RepositoryBindingV9,
-  repositoryFromV9,
   CollectionVersionId,
   SkillId,
   SkillVersionId,
@@ -63,47 +57,6 @@ export const SetupIntent = Schema.Struct({
   versions: Versions,
 });
 export type SetupIntent = typeof SetupIntent.Type;
-
-/** Frozen v1 intent, as setup records written beside v9 Library state hold it. */
-export const SetupIntentV1 = Schema.Struct({
-  global: Schema.Array(DeviceBindingV9),
-  repositories: Schema.Array(RepositoryBindingV9),
-  device: Schema.NullOr(DeviceSkillSelectionV9),
-  sources: Schema.optionalKey(
-    Schema.Array(
-      Schema.Struct({
-        collectionId: CollectionId,
-        acquisitionId: ImportId,
-        retainedCopyId: CollectionVersionId,
-      }),
-    ),
-  ),
-  memberships: Memberships,
-  versions: Versions,
-});
-
-/** The v2 intent a v1 record means: the same lists in the shapes v10 state holds them. */
-export const setupIntentFromV1 = ({
-  global,
-  repositories,
-  device,
-  sources,
-  ...fields
-}: typeof SetupIntentV1.Type): SetupIntent => ({
-  ...fields,
-  global: globalFromV9(global[0]),
-  repositories: repositories.map(repositoryFromV9),
-  device: device === null ? null : deviceSelectionFromV9(device),
-  ...(sources === undefined
-    ? {}
-    : {
-        sources: sources.map(({ collectionId, acquisitionId, retainedCopyId }) => ({
-          collectionId,
-          importId: acquisitionId,
-          collectionVersionId: retainedCopyId,
-        })),
-      }),
-});
 
 const withPolicies = (invocation_policies: InvocationPolicies | undefined) =>
   invocation_policies === undefined ? {} : { invocation_policies };

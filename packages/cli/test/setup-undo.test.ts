@@ -4,17 +4,12 @@ import { systemError } from "effect/PlatformError";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import {
-  hashParts,
   LibraryStore,
   LinkStat,
   MachineSettings,
   prepareInstalledSkillRebuild,
   skitLayer,
-  type Enabled,
-  type InstalledSkill,
 } from "@smolai/skit-core";
-import { inspectSetupOperation } from "../src/library-application/setup-operation.js";
-import type { SetupIntent } from "../src/library-application/setup-undo-intent.js";
 import { checkSetupGlobalContent } from "../src/library-application/setup-external-ownership.js";
 import { recoveryFingerprint } from "../src/library-application/recovery-evidence.js";
 import { prepareSetupUndo } from "../src/library-application/setup-undo.js";
@@ -455,171 +450,5 @@ it.effect("physical ancestors of a configured root alias retain their ownership 
     expect((yield* Effect.result(checkSetupGlobalContent(destination)))._tag).toBe("Failure");
     expect(yield* fs.exists(destination)).toBe(false);
     expect(yield* fs.readLink(alias)).toBe(physical);
-  }).pipe(Effect.provide(skitLayer)),
-);
-
-const v1Entries = (enabled: readonly Enabled[]) =>
-  enabled.map((item) =>
-    "skill" in item
-      ? { kind: "skill", skill_id: item.skill }
-      : { kind: "collection", collection_id: item.collection },
-  );
-const v1Policies = (list: { readonly invocation_policies?: object }) =>
-  list.invocation_policies === undefined ? {} : { invocation_policies: list.invocation_policies };
-/** The intent as a SKIT writing v9 Library state recorded it. */
-const v1Intent = ({ global, repositories, device, sources, ...fields }: SetupIntent) => ({
-  ...fields,
-  global:
-    global.enabled.length > 0 || global.invocation_policies !== undefined
-      ? [{ scope: { kind: "global" }, entries: v1Entries(global.enabled), ...v1Policies(global) }]
-      : [],
-  repositories: repositories.map((repository) => ({
-    scope: { kind: "repository", root: repository.root },
-    entries: v1Entries(repository.enabled),
-    ...v1Policies(repository),
-  })),
-  device:
-    device?.mode === "choose"
-      ? {
-          mode: "choose",
-          binding: {
-            scope: { kind: "global" },
-            entries: v1Entries(device.enabled),
-            ...v1Policies(device),
-          },
-        }
-      : device,
-  ...(sources === undefined
-    ? {}
-    : {
-        sources: sources.map(({ collectionId, importId, collectionVersionId }) => ({
-          collectionId,
-          acquisitionId: importId,
-          retainedCopyId: collectionVersionId,
-        })),
-      }),
-});
-const v1InstalledSkill = ({
-  installed_skill_id,
-  destination,
-  installed_at,
-  ...copy
-}: InstalledSkill) => ({
-  ...copy,
-  projection_id: installed_skill_id,
-  target: destination,
-  projected_at: installed_at,
-});
-
-it.effect("a setup recorded before the v10 upgrade undoes exactly as its v2 records would", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    yield* f.home.owned(
-      Effect.gen(function* () {
-        const expected = (yield* prepareSetupUndo(f.operationId)).summary;
-        const saved = yield* inspectSetupOperation(f.home.home, f.operationId);
-        const write = (name: string, value: unknown) =>
-          Effect.gen(function* () {
-            const raw = `${JSON.stringify(value, null, 2)}\n`;
-            yield* f.fs.writeFileString(join(saved.directory, name), raw);
-            return hashParts([raw]);
-          });
-        const {
-          installedSkills,
-          installedSkillPaths,
-          before,
-          schemaVersion: _operation,
-          ...operation
-        } = saved.operation;
-        yield* write("setup.json", {
-          ...operation,
-          schemaVersion: 1,
-          before: v1Intent(before),
-          projections: installedSkills.map(v1InstalledSkill),
-          ...(installedSkillPaths === undefined ? {} : { projectionPaths: installedSkillPaths }),
-        });
-        let rewritten = 0;
-        for (const { change, saved: confirmed } of saved.changes) {
-          if (change.kind !== "library") continue;
-          const {
-            installedSkillsBefore,
-            installedSkillsAfter,
-            before,
-            after,
-            schemaVersion: _change,
-            ...fields
-          } = change;
-          const name = String(change.sequence).padStart(8, "0");
-          const digest = yield* write(`changes/${name}.json`, {
-            ...fields,
-            schemaVersion: 1,
-            before: v1Intent(before),
-            after: v1Intent(after),
-            projectionsBefore: installedSkillsBefore.map(v1InstalledSkill),
-            projectionsAfter: installedSkillsAfter.map(v1InstalledSkill),
-          });
-          if (confirmed)
-            yield* write(`changes/${name}.published.json`, {
-              schemaVersion: 1,
-              sequence: change.sequence,
-              digest,
-            });
-          rewritten++;
-        }
-        expect(rewritten).toBeGreaterThan(0);
-        expect(saved.complete).toBeDefined();
-        const { intent, installedSkills: completed, settings } = saved.complete!;
-        yield* write("complete.json", {
-          schemaVersion: 1,
-          intent: v1Intent(intent),
-          settings,
-          projections: completed.map(v1InstalledSkill),
-        });
-        expect(
-          JSON.parse(yield* f.fs.readFileString(join(saved.directory, "setup.json"))),
-        ).toHaveProperty("schemaVersion", 1);
-
-        const undo = yield* prepareSetupUndo(f.operationId);
-        expect(undo.summary).toEqual(expected);
-        expect((yield* undo.apply()).status).toBe("undone");
-      }),
-    );
-  }).pipe(Effect.provide(skitLayer)),
-);
-
-it.effect("undo attempts recorded before the v10 upgrade still read", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    yield* f.home.owned(
-      Effect.gen(function* () {
-        expect((yield* (yield* prepareSetupUndo(f.operationId)).apply()).status).toBe("undone");
-        const saved = yield* inspectSetupOperation(f.home.home, f.operationId);
-        const undo = join(saved.directory, "undo");
-        const attempts = (yield* f.fs.readDirectory(undo)).filter(
-          (name) => !name.endsWith(".done.json"),
-        );
-        expect(attempts).toHaveLength(1);
-        const path = join(undo, attempts[0]!);
-        const { backupId, before, after, schemaVersion, ...fields } = JSON.parse(
-          yield* f.fs.readFileString(path),
-        );
-        expect(schemaVersion).toBe(2);
-        yield* f.fs.writeFileString(
-          path,
-          `${JSON.stringify({
-            ...fields,
-            schemaVersion: 1,
-            preservationId: backupId,
-            before: v1Intent(before),
-            after: v1Intent(after),
-          })}\n`,
-        );
-        // Completed: the v1 attempt and its completion still agree.
-        expect((yield* prepareSetupUndo(f.operationId)).summary.status).toBe("already-undone");
-        // Interrupted: the v1 attempt's backup folder still counts as this undo's own.
-        yield* f.fs.remove(path.replace(/\.json$/, ".done.json"));
-        expect((yield* prepareSetupUndo(f.operationId)).summary.status).not.toBe("already-undone");
-      }),
-    );
   }).pipe(Effect.provide(skitLayer)),
 );

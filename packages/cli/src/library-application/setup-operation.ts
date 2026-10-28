@@ -1,5 +1,5 @@
 import { basename, dirname, join, resolve } from "node:path";
-import { Effect, FileSystem, Schema, SchemaGetter } from "effect";
+import { Effect, FileSystem, Schema } from "effect";
 import {
   AbsoluteDevicePath,
   enabledSkillIds,
@@ -15,8 +15,6 @@ import {
   MachineId,
   MachineSettings,
   InstalledSkill,
-  InstalledSkillV9,
-  installedSkillFromV9,
   InstallDestination,
   writeJsonExclusive,
   type MachineSettingsSnapshot,
@@ -30,8 +28,6 @@ import {
   setupDiscoverySettings,
   SetupIntent,
   setupIntent,
-  setupIntentFromV1,
-  SetupIntentV1,
 } from "./setup-undo-intent.js";
 
 const Identity = Schema.Struct({ dev: Schema.Number, ino: Schema.Number });
@@ -105,76 +101,9 @@ const Completion = Schema.Struct({
   installedSkills: Schema.Array(InstalledSkill),
 });
 
-// v1 records, written beside v9 Library state, read as the v2 records they mean, so a setup made
-// before the upgrade can still be undone. Every record of one operation takes the same path.
-const OperationFromV1 = Schema.Struct({
-  ...OperationFields,
-  schemaVersion: Schema.Literal(1),
-  before: SetupIntentV1,
-  projections: Schema.Array(InstalledSkillV9),
-  projectionPaths: Schema.optionalKey(Schema.Array(DevicePath)),
-}).pipe(
-  Schema.decodeTo(Operation, {
-    decode: SchemaGetter.transform(
-      ({ schemaVersion: _version, before, projections, projectionPaths, ...fields }) => ({
-        ...fields,
-        schemaVersion: 2 as const,
-        before: setupIntentFromV1(before),
-        installedSkills: projections.map(installedSkillFromV9),
-        ...(projectionPaths === undefined ? {} : { installedSkillPaths: projectionPaths }),
-      }),
-    ),
-    encode: SchemaGetter.forbidden(() => "v1 setup records are decode-only"),
-  }),
-);
-const LibraryChangeFromV1 = Schema.Struct({
-  ...LibraryChangeFields,
-  schemaVersion: Schema.Literal(1),
-  before: SetupIntentV1,
-  after: SetupIntentV1,
-  projectionsBefore: Schema.Array(InstalledSkillV9),
-  projectionsAfter: Schema.Array(InstalledSkillV9),
-}).pipe(
-  Schema.decodeTo(LibraryChange, {
-    decode: SchemaGetter.transform(
-      ({
-        schemaVersion: _version,
-        before,
-        after,
-        projectionsBefore,
-        projectionsAfter,
-        ...fields
-      }) => ({
-        ...fields,
-        schemaVersion: 2 as const,
-        before: setupIntentFromV1(before),
-        after: setupIntentFromV1(after),
-        installedSkillsBefore: projectionsBefore.map(installedSkillFromV9),
-        installedSkillsAfter: projectionsAfter.map(installedSkillFromV9),
-      }),
-    ),
-    encode: SchemaGetter.forbidden(() => "v1 setup records are decode-only"),
-  }),
-);
-const CompletionFromV1 = Schema.Struct({
-  schemaVersion: Schema.Literal(1),
-  intent: SetupIntentV1,
-  settings: SetupDiscoverySettings,
-  projections: Schema.Array(InstalledSkillV9),
-}).pipe(
-  Schema.decodeTo(Completion, {
-    decode: SchemaGetter.transform(({ intent, settings, projections }) => ({
-      schemaVersion: 2 as const,
-      intent: setupIntentFromV1(intent),
-      settings,
-      installedSkills: projections.map(installedSkillFromV9),
-    })),
-    encode: SchemaGetter.forbidden(() => "v1 setup records are decode-only"),
-  }),
-);
-const StoredOperation = Schema.Union([Operation, OperationFromV1]);
-const StoredChange = Schema.Union([LibraryChange, LibraryChangeFromV1, SettingsChange]);
-const StoredCompletion = Schema.Union([Completion, CompletionFromV1]);
+const StoredOperation = Operation;
+const StoredChange = Schema.Union([LibraryChange, SettingsChange]);
+const StoredCompletion = Completion;
 
 const maybeStat = Effect.fn("SetupOperation.stat")(function* (path: string) {
   const links = yield* LinkStat;
