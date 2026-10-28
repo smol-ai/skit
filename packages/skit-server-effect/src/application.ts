@@ -11,6 +11,7 @@ import { layer as authorizationLayer } from "./authorization/service.js";
 import { layer as bootstrapServiceLayer } from "./bootstrap/service.js";
 import { ServerConfiguration } from "./configuration.js";
 import { layer as draftsLayer } from "./drafts/service.js";
+import { layer as feedbackServiceLayer } from "./feedback/service.js";
 import { layer as librarySyncLayer } from "./library/library-sync.js";
 import { layer as librarySnapshotsLayer } from "./library/snapshots.js";
 import { databaseLayer, layer as bindingsLayer, type RuntimeEnv } from "./platform/cloudflare.js";
@@ -18,6 +19,7 @@ import { layer as nativeClockLayer } from "./platform/native-clock.js";
 import { layer as nativeCryptoLayer } from "./platform/native-crypto.js";
 import {
   bootstrapLayer as bootstrapRateLimiterLayer,
+  feedbackLayer as feedbackRateLimiterLayer,
   patLayer as patRateLimiterLayer,
 } from "./platform/rate-limiter.js";
 import { layer as publicationServiceLayer } from "./publication/service.js";
@@ -83,7 +85,15 @@ export const applicationLayers = (
     nativeClockLayer,
   );
   const release = releaseStoreLayer.pipe(Layer.provide(platform));
-  if (configured === undefined) return { release, authenticated: undefined, bootstrap: undefined };
+  // Feedback is anonymous, so it does not wait for authentication to be configured.
+  const feedback = env.FEEDBACK_RATE_LIMITER
+    ? Layer.merge(
+        feedbackServiceLayer.pipe(Layer.provide(platform)),
+        feedbackRateLimiterLayer(env.FEEDBACK_RATE_LIMITER),
+      )
+    : undefined;
+  if (configured === undefined)
+    return { release, feedback, authenticated: undefined, bootstrap: undefined };
 
   const passwordHasher = passwordHasherLayer.pipe(Layer.provideMerge(platform));
   const authenticated = Layer.mergeAll(
@@ -120,5 +130,5 @@ export const applicationLayers = (
         Layer.succeed(ServerConfiguration, { publicAppOrigin: configured.publicAppOrigin }),
       ).pipe(Layer.provideMerge(passwordHasher))
     : undefined;
-  return { release, authenticated, bootstrap };
+  return { release, feedback, authenticated, bootstrap };
 };

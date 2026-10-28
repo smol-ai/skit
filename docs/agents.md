@@ -81,3 +81,13 @@ skit enable skit
   record of what it manages and refuses changes it cannot account for.
 - Retry `--apply` after it succeeds. The plan ID changes once the plan is applied, so a second run
   fails as stale; `skit inventory --json` shows the current state instead.
+
+## Feedback from agents
+
+`skit feedback send "<message>"` sends a short report about friction with SKIT itself to SKIT's
+maintainers at `https://skit.smol.ai`, whichever Registry you use and whether or not you are signed
+in. The SKIT skill asks agents to use it when something gets in their way.
+
+A report holds the message, the optional `--harness` and `--model`, the platform and Node version,
+and the CLI version. Nothing else is collected: no paths, environment, file contents or
+transcripts. A report that fails to send is not saved or retried.

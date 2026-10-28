@@ -1,0 +1,97 @@
+import { Config, Data, Effect, Option, Schema } from "effect";
+import { HttpApiClient } from "effect/http-api";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { FeedbackApi, FeedbackInput } from "@smolai/skit-core/universal/api";
+import { officialRegistryOrigin, parseOrigin } from "../registry/accounts.js";
+import { registryApiFailureMessage } from "../registry/api-client.js";
+import { isRegistryTransportError, RegistryHttp } from "../registry/registry-http.js";
+
+export class FeedbackInputInvalid
+  extends Data.TaggedError("FeedbackInputInvalid")<{ readonly message: string }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "INVALID_ARGUMENT" as const;
+  readonly remediation =
+    'Pass one message, either as an argument or with --message: skit feedback send "what slowed you down".';
+}
+
+export class FeedbackNotSent
+  extends Data.TaggedError("FeedbackNotSent")<{ readonly message: string }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation =
+    "Nothing was sent. Retry the same command; feedback is not saved for later.";
+}
+
+/**
+ * Where feedback goes: SKIT's maintainers, whichever Registry this machine uses. Only
+ * `SKIT_FEEDBACK_URL` changes it, for testing against another server.
+ */
+export const feedbackOrigin = Effect.gen(function* () {
+  const configured = yield* Config.option(Config.String("SKIT_FEEDBACK_URL"));
+  return yield* parseOrigin(Option.getOrElse(configured, () => officialRegistryOrigin));
+});
+
+/** One report from the command's arguments, plus the platform and runtime this CLI runs on. */
+export const feedbackInput = Effect.fnUntraced(function* (options: {
+  readonly text: string | undefined;
+  readonly message: string | undefined;
+  readonly harness: string | undefined;
+  readonly model: string | undefined;
+}) {
+  const text = options.text?.trim() || undefined;
+  const message = options.message?.trim() || undefined;
+  if (text !== undefined && message !== undefined)
+    return yield* new FeedbackInputInvalid({
+      message: "Feedback was given both as an argument and with --message.",
+    });
+  const harness = options.harness?.trim() || undefined;
+  const model = options.model?.trim() || undefined;
+  return yield* Schema.decodeUnknownEffect(FeedbackInput)({
+    message: text ?? message ?? "",
+    ...(harness === undefined ? {} : { harness }),
+    ...(model === undefined ? {} : { model }),
+    platform: process.platform,
+    runtime: process.version,
+  }).pipe(
+    Effect.mapError(
+      () =>
+        new FeedbackInputInvalid({
+          message:
+            "Feedback needs a message of 1 to 10,000 characters; --harness and --model take up to 200.",
+        }),
+    ),
+  );
+});
+
+/** Send one report. It is sent once or not at all: nothing retries, and nothing is kept to resend. */
+export const sendFeedback = Effect.fn("Feedback.send")(function* (
+  origin: string,
+  input: FeedbackInput,
+) {
+  const transport = yield* (yield* RegistryHttp).client;
+  const client = yield* HttpApiClient.makeWith(FeedbackApi, {
+    httpClient: transport,
+    baseUrl: origin,
+  });
+  return yield* client.feedback.send({ payload: input }).pipe(
+    Effect.mapError(
+      (error) =>
+        new FeedbackNotSent({
+          message: isRegistryTransportError(error)
+            ? `Could not reach ${origin}: ${error.message}`
+            : registryApiFailureMessage(`Sending feedback to ${origin}`, error),
+        }),
+    ),
+    Effect.timeoutOrElse({
+      duration: "10 seconds",
+      orElse: () =>
+        Effect.fail(
+          new FeedbackNotSent({ message: `${origin} did not answer within 10 seconds.` }),
+        ),
+    }),
+  );
+});

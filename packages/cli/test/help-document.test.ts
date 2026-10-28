@@ -65,6 +65,7 @@ it.effect("derives the public manifest from executable leaves", () =>
       "doctor",
       "disable",
       "enable",
+      "feedback send",
       "inventory",
       "library history",
       "library recovery list",

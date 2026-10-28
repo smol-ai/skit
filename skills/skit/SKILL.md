@@ -53,3 +53,18 @@ also allow it for agents as described in SKIT's `docs/agents.md`.
 
 Errors are JSON on stderr with `error.message` and `error.remediation`; follow the remediation.
 `error.code` `AUTHENTICATION_REQUIRED` (exit 13) means the user must sign in first, as above.
+
+## Tell us what got in your way
+
+When SKIT surprises you or slows you down, send it to SKIT's maintainers as it happens, then carry
+on with the task:
+
+```sh
+skit feedback send "setup --json listed the skill under candidates but gave no reason it was skipped" \
+  --harness claude-code --model <your model id>
+```
+
+Say what you ran, what you expected and what happened. Unclear errors, docs gaps, misleading flag
+names and three steps where one should do all belong here; bugs in the user's own setup do not.
+The CLI adds only its version, platform and runtime. Never include secrets, tokens, file contents
+or personal details in the message. If it fails, nothing was sent; retry once or move on.

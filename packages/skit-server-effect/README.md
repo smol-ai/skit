@@ -54,6 +54,7 @@ boundaries, rather than treating the abbreviated commands above as an operations
 | `AUTH_RATE_LIMITER` | rate-limit binding | Browser authentication requests |
 | `PAT_RATE_LIMITER` | rate-limit binding | Personal Access Token requests |
 | `BOOTSTRAP_RATE_LIMITER` | rate-limit binding | Initial-operator bootstrap requests |
+| `FEEDBACK_RATE_LIMITER` | optional rate-limit binding | Accepts `skit feedback send` reports; only the official deployment sets it |
 | `ASSETS` | Worker assets binding | Browser application assets |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | optional secrets | GitHub sign-in; configure both or neither |
 | `EMAIL`, `EMAIL_FROM` | optional binding and variable | Verification email; configure both or neither |

@@ -7,6 +7,7 @@ import { principalAuthenticationLayer } from "./api/authentication.js";
 import {
   AuthoringAuthenticatedApi,
   ConsumerAuthenticatedApi,
+  FeedbackApi,
   PublicationAuthenticatedApi,
   ReleaseApi,
 } from "@smolai/skit-core/universal/api";
@@ -14,6 +15,7 @@ import { authorInventoryHandlers } from "./api/author-inventory-http.js";
 import { bootstrapHandlers } from "./api/bootstrap-http.js";
 import { BootstrapApi } from "./api/bootstrap.js";
 import { draftHandlers } from "./api/drafts-http.js";
+import { feedbackHandlers } from "./api/feedback-http.js";
 import { librarySnapshotHandlers } from "./api/library-snapshots-http.js";
 import { librarySyncHandlers } from "./api/library-sync-http.js";
 import { readinessHandlers } from "./api/readiness-http.js";
@@ -37,6 +39,7 @@ type ApplicationLayers = ReturnType<typeof applicationLayers>;
 type ReleaseApplication = ApplicationLayers["release"];
 type AuthenticatedApplication = NonNullable<ApplicationLayers["authenticated"]>;
 type BootstrapApplication = NonNullable<ApplicationLayers["bootstrap"]>;
+type FeedbackApplication = NonNullable<ApplicationLayers["feedback"]>;
 
 const allServerCapabilities: ServerCapabilities = {
   authoring: true,
@@ -159,6 +162,12 @@ const configuredBootstrapRoutes = (
     Layer.provide(HttpServer.layerServices),
   );
 
+const feedbackApi = (application: FeedbackApplication) =>
+  HttpApiBuilder.layer(FeedbackApi).pipe(
+    Layer.provide(feedbackHandlers.pipe(Layer.provide(application))),
+    Layer.provide(HttpServer.layerServices),
+  );
+
 const invalidBootstrapRoutes = (detail: string) =>
   HttpRouter.use((router) => {
     const response = configurationFailure(detail);
@@ -255,6 +264,7 @@ const routeLayer = (env: RuntimeEnv, capabilities: ServerCapabilities) => {
     typedSystem,
     uiConfigurationRoutes(env),
     agentSkillsRoutes(application.release),
+    application.feedback ? feedbackApi(application.feedback) : Layer.empty,
     main,
     bootstrap,
   );

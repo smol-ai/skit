@@ -791,6 +791,80 @@
     },
     {
       "path": [
+        "feedback",
+        "send"
+      ],
+      "stability": "experimental",
+      "summary": "Tell SKIT's maintainers about friction with SKIT itself: an unclear error, a gap in the docs, a step that took longer than it should.",
+      "effects": {
+        "capabilities": [
+          "network.write"
+        ]
+      },
+      "outputSchemas": [
+        "skit.feedback.send.v1"
+      ],
+      "exitCodes": [
+        0,
+        1,
+        64
+      ],
+      "interactive": false,
+      "examples": [
+        "skit feedback send \"skit add said the Source was invalid but not which part\"",
+        "skit feedback send --message \"setup --json had no field for skipped skills\" --harness codex --model gpt-5.5"
+      ],
+      "positionals": [
+        {
+          "name": "message",
+          "required": false
+        }
+      ],
+      "flags": {
+        "message": {
+          "type": "string",
+          "valueName": "string",
+          "description": "The same as the argument; easier to build from a script."
+        },
+        "harness": {
+          "type": "string",
+          "valueName": "string",
+          "description": "The agent harness you run in, for example claude-code or codex."
+        },
+        "model": {
+          "type": "string",
+          "valueName": "string",
+          "description": "The model you are, for example claude-opus-5-5."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
         "inventory"
       ],
       "stability": "stable",

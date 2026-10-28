@@ -1145,6 +1145,7 @@ const contractPresenters: ContractPresenters = {
         : "No repository decisions are stored for this machine."
       : `${data.action} · ${data.path}`,
   authLogout: (data) => `Logged out from ${data.origin}`,
+  feedbackSend: (data) => `Sent feedback to ${data.recipient} (${data.id}). Thank you.`,
   authStatus: renderAuthStatus,
   authLogin: renderAuthLogin,
   authLoginPending: (data) =>

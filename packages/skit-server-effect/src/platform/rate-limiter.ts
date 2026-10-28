@@ -14,6 +14,10 @@ export class BootstrapRateLimiter extends Context.Service<
   RateLimiterService
 >()("@skit-server-effect/BootstrapRateLimiter") {}
 
+export class FeedbackRateLimiter extends Context.Service<FeedbackRateLimiter, RateLimiterService>()(
+  "@skit-server-effect/FeedbackRateLimiter",
+) {}
+
 export const patLayer = (binding: RateLimit) =>
   Layer.succeed(PatRateLimiter, {
     limit: (key) => rateLimit(binding, key),
@@ -21,5 +25,10 @@ export const patLayer = (binding: RateLimit) =>
 
 export const bootstrapLayer = (binding: RateLimit) =>
   Layer.succeed(BootstrapRateLimiter, {
+    limit: (key) => rateLimit(binding, key),
+  });
+
+export const feedbackLayer = (binding: RateLimit) =>
+  Layer.succeed(FeedbackRateLimiter, {
     limit: (key) => rateLimit(binding, key),
   });
