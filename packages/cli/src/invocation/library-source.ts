@@ -35,8 +35,8 @@ const readInvocation = Effect.fn("Library.readSkillInvocation")(function* (
     return yield* new ImportContentInvalid({
       diagnostics: [`Retained copy for ${skill.name} changed`],
     });
-  const retainedPath = join(root, backing.member.source_path);
-  if (version === undefined || (yield* hashTree(retainedPath)) !== version.source_digest)
+  const importedPath = join(root, backing.member.source_path);
+  if (version === undefined || (yield* hashTree(importedPath)) !== version.source_digest)
     return yield* new ImportContentInvalid({
       diagnostics: [`Retained Skill ${skill.name} changed`],
     });

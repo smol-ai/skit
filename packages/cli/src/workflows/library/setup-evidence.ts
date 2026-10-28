@@ -17,14 +17,14 @@ export const lockEvidenceKey = (
 /** Join each acquisition's lock observations to retained versions on this machine. */
 export const indexSetupOnboardingEvidence = (
   instances: readonly SetupSkillInstance[],
-  retained?: SetupImportEvidence,
+  imported?: SetupImportEvidence,
 ) => {
-  const library = retained?.library;
-  const retainedByLockEvidence = new Map<string, Set<string>>();
-  if (library && retained?.machineId)
+  const library = imported?.library;
+  const importedByLockEvidence = new Map<string, Set<string>>();
+  if (library && imported?.machineId)
     for (const acquisition of library.imports) {
       const observations = acquisition.lock_file_entries.filter(
-        (observation) => observation.machine_id === retained.machineId,
+        (observation) => observation.machine_id === imported.machineId,
       );
       if (!observations.length) continue;
       const members = library.collection_versions
@@ -50,9 +50,9 @@ export const indexSetupOnboardingEvidence = (
               observation.skill_path,
               version.validation_identity_digest,
             );
-            const subjects = retainedByLockEvidence.get(key) ?? new Set<string>();
+            const subjects = importedByLockEvidence.get(key) ?? new Set<string>();
             subjects.add(skill.collection_id ?? skill.skill_id);
-            retainedByLockEvidence.set(key, subjects);
+            importedByLockEvidence.set(key, subjects);
           }
         }
     }
@@ -71,7 +71,7 @@ export const indexSetupOnboardingEvidence = (
   const lockClaims = new Map(
     [...locksByGroup].map(([key, locks]) => [key, resolveSkillsShSelectedSource(locks)] as const),
   );
-  return { retainedByLockEvidence, lockClaims };
+  return { importedByLockEvidence, lockClaims };
 };
 
 export type SetupOnboardingEvidence = ReturnType<typeof indexSetupOnboardingEvidence>;

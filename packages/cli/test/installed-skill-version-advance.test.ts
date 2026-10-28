@@ -13,7 +13,7 @@ import {
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { updateInstalledSkills } from "../src/workflows/library/update-installed-skills.js";
 import { isolatedRoots } from "./helpers/isolated-library.js";
-import { initializeLibraryMachine, retainObservedIn, writingTo } from "./helpers/library-home.js";
+import { initializeLibraryMachine, importCollectionIn, writingTo } from "./helpers/library-home.js";
 
 const boundRawReview = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -30,10 +30,10 @@ const boundRawReview = Effect.gen(function* () {
       return yield* Effect.scoped(
         writingTo(
           home,
-          retainObservedIn(home)({
+          importCollectionIn(home)({
             source: { type: "local", path: source },
             input: source,
-            retainedAt: "2026-09-16T00:00:00.000Z",
+            importedAt: "2026-09-16T00:00:00.000Z",
             skills: [
               {
                 name: "raw-review",
@@ -210,10 +210,10 @@ for (const followedCollection of [false, true])
         yield* fs.writeFileString(join(otherSource, "SKILL.md"), "other Skill bytes\n");
         const other = yield* writingTo(
           home,
-          retainObservedIn(home)({
+          importCollectionIn(home)({
             source: { type: "local", path: otherSource },
             input: otherSource,
-            retainedAt: "2026-09-16T00:00:00.000Z",
+            importedAt: "2026-09-16T00:00:00.000Z",
             skills: [
               {
                 name: "other",

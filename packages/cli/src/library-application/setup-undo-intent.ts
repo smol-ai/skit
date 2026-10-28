@@ -206,11 +206,11 @@ export const reverseSetupIntent = (
         const index = items.findIndex((item) => itemKey(item) === key);
         if (index >= 0) items.splice(index, 1);
       } else if (!enabled && was) {
-        const retained =
+        const imported =
           "skill" in was
             ? state.skills.some((skill) => skill.skill_id === was.skill)
             : state.collections.some((collection) => collection.collection_id === was.collection);
-        if (retained) items.push(was);
+        if (imported) items.push(was);
         else conflicts.push(`${label} missing retained ${key}`);
       }
     }

@@ -18,7 +18,7 @@ const otherSkillId = makeSkillId();
 const versionId = makeSkillVersionId();
 const otherVersionId = makeSkillVersionId();
 const acquisitionId = makeImportId();
-const retainedCopyId = makeCollectionVersionId();
+const collectionVersionId = makeCollectionVersionId();
 const machineId = makeMachineId();
 const sourceIdentity = {
   kind: "registry" as const,
@@ -26,8 +26,8 @@ const sourceIdentity = {
   namespace: "test",
   slug: "library",
 };
-const retainedCopy = {
-  retained_copy_id: retainedCopyId,
+const collectionVersion = {
+  retained_copy_id: collectionVersionId,
   digest,
   copy_profile: "verbatim/v1",
   members: ["review", "lint"].map((source_path) => ({
@@ -76,11 +76,11 @@ it("migrates a v5 manifest through v6 to the current model", () => {
         },
       ],
     })),
-    retained_copies: [retainedCopy],
+    retained_copies: [collectionVersion],
     acquisitions: [
       {
         acquisition_id: acquisitionId,
-        retained_copy_id: retainedCopyId,
+        retained_copy_id: collectionVersionId,
         source_identity: sourceIdentity,
         tracking: { kind: "default" },
         selection: { kind: "full-tree" },
@@ -139,13 +139,13 @@ it("merges a v6 manifest's per-Harness Bindings into one global Binding", () => 
         versions: [version(versionId)],
       },
     ],
-    retained_copies: [{ ...retainedCopy, members: [retainedCopy.members[0]] }],
+    retained_copies: [{ ...collectionVersion, members: [collectionVersion.members[0]] }],
     acquisitions: [
       {
         acquisition_id: acquisitionId,
         collection_id: collectionId,
         kind: "source",
-        retained_copy_id: retainedCopyId,
+        retained_copy_id: collectionVersionId,
         source_identity: { kind: "local", machine_id: machineId, path: { value: "/tmp/library" } },
         input: { value: "/tmp/library" },
         acquired_at: "2026-09-20T00:00:00.000Z",
@@ -208,13 +208,13 @@ it("migrates a v7 manifest to plain names and a list of enabled items", () => {
         versions: [version(versionId)],
       },
     ],
-    retained_copies: [{ ...retainedCopy, members: [retainedCopy.members[0]] }],
+    retained_copies: [{ ...collectionVersion, members: [collectionVersion.members[0]] }],
     acquisitions: [
       {
         acquisition_id: acquisitionId,
         collection_id: collectionId,
         kind: "source",
-        retained_copy_id: retainedCopyId,
+        retained_copy_id: collectionVersionId,
         source_identity: { kind: "local", machine_id: machineId, path: { value: "/tmp/library" } },
         input: { value: "/tmp/library" },
         acquired_at: "2026-09-20T00:00:00.000Z",
@@ -225,7 +225,7 @@ it("migrates a v7 manifest to plain names and a list of enabled items", () => {
         acquisition_id: editId,
         collection_id: collectionId,
         kind: "retained-edit",
-        retained_copy_id: retainedCopyId,
+        retained_copy_id: collectionVersionId,
         source_identity: { kind: "local", machine_id: machineId, path: { value: "/tmp/library" } },
         input: { value: "/tmp/edit" },
         acquired_at: "2026-09-21T00:00:00.000Z",
@@ -248,7 +248,7 @@ it("migrates a v7 manifest to plain names and a list of enabled items", () => {
   assert.strictEqual(decoded.schema, "skit.library.v8");
   assert.deepStrictEqual(
     decoded.collection_versions.map((item) => item.collection_version_id),
-    [retainedCopyId],
+    [collectionVersionId],
   );
   assert.deepStrictEqual(
     decoded.imports.map((item) => [
@@ -259,8 +259,8 @@ it("migrates a v7 manifest to plain names and a list of enabled items", () => {
       item.lock_file_entries,
     ]),
     [
-      [acquisitionId, "source", retainedCopyId, "2026-09-20T00:00:00.000Z", []],
-      [editId, "edit", retainedCopyId, "2026-09-21T00:00:00.000Z", []],
+      [acquisitionId, "source", collectionVersionId, "2026-09-20T00:00:00.000Z", []],
+      [editId, "edit", collectionVersionId, "2026-09-21T00:00:00.000Z", []],
     ],
   );
   assert.deepStrictEqual(decoded.enabled, [{ collection: collectionId }, { skill: skillId }]);

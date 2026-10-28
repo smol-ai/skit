@@ -13,11 +13,11 @@ it.effect("includes declared shared files in Skill Version artifact identity", (
     yield* fs.writeFileString(join(skill, "SKILL.md"), "review\n");
     yield* fs.writeFileString(join(root, "README.md"), "first\n");
     const plain = yield* Effect.scoped(
-      materializedSkillDigest({ retainedRoot: root, sourcePath: "skills/review" }),
+      materializedSkillDigest({ collectionVersionPath: root, sourcePath: "skills/review" }),
     );
     const first = yield* Effect.scoped(
       materializedSkillDigest({
-        retainedRoot: root,
+        collectionVersionPath: root,
         sourcePath: "skills/review",
         shared: [{ from: "README.md", to: "context/README.md" }],
       }),
@@ -25,7 +25,7 @@ it.effect("includes declared shared files in Skill Version artifact identity", (
     yield* fs.writeFileString(join(root, "README.md"), "second\n");
     const second = yield* Effect.scoped(
       materializedSkillDigest({
-        retainedRoot: root,
+        collectionVersionPath: root,
         sourcePath: "skills/review",
         shared: [{ from: "README.md", to: "context/README.md" }],
       }),

@@ -11,10 +11,10 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { fs, a, b, server } = yield* devices;
-      const initial = yield* a.retain("skills", {
+      const initial = yield* a.importSource("skills", {
         name: "review",
         bytes: "initial bytes\n",
-        retainedAt: "2026-01-01T00:00:00.000Z",
+        importedAt: "2026-01-01T00:00:00.000Z",
       });
       const skillId = initial.skills[0]?.skill_id;
       assert.ok(skillId);
@@ -25,15 +25,15 @@ it.effect(
       yield* a.project();
       assert.strictEqual((yield* a.sync()).status, "pushed");
       assert.strictEqual((yield* b.sync()).status, "pulled");
-      yield* a.retain("skills", {
+      yield* a.importSource("skills", {
         name: "review",
         bytes: "updated identical bytes\n",
-        retainedAt: "2026-01-02T00:00:00.000Z",
+        importedAt: "2026-01-02T00:00:00.000Z",
       });
-      yield* b.retain("skills", {
+      yield* b.importSource("skills", {
         name: "review",
         bytes: "updated identical bytes\n",
-        retainedAt: "2026-01-02T00:00:01.000Z",
+        importedAt: "2026-01-02T00:00:01.000Z",
       });
       yield* a.project();
       yield* b.project();

@@ -44,7 +44,7 @@ export const syncJourney = (failDownload: boolean) =>
             machineId,
             source: { type: "github", owner: "fixture", repository: name },
             input: sourcePath,
-            retainedAt: "2026-01-01T00:00:00.000Z",
+            importedAt: "2026-01-01T00:00:00.000Z",
             skills: [
               {
                 name,

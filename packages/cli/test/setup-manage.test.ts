@@ -95,10 +95,10 @@ it.effect("adds selected skills and takes ownership only of eligible global copi
     expect(state.installed_skills).toEqual([
       expect.objectContaining({ path: managedSkill, status: "installed" }),
     ]);
-    const retainedDocuments = yield* Effect.forEach(state.collection_versions, (copy) =>
+    const importedDocuments = yield* Effect.forEach(state.collection_versions, (copy) =>
       fs.readFileString(join(collectionVersionPath(home.originals, copy.digest), "SKILL.md")),
     );
-    expect(retainedDocuments).toEqual(
+    expect(importedDocuments).toEqual(
       expect.arrayContaining([managedText, skillDocument("repo-only", "Repository skill")]),
     );
     expect(yield* fs.readFileString(join(managedSkill, "SKILL.md"))).toBe(managedText);
@@ -164,7 +164,7 @@ it.effect("manages skills with empty directories and Finder metadata", () =>
       ]),
     );
     expect(state.installed_skills).toHaveLength(2);
-    const retained = yield* Effect.forEach(state.collection_versions, (copy) =>
+    const imported = yield* Effect.forEach(state.collection_versions, (copy) =>
       Effect.gen(function* () {
         const path = collectionVersionPath(home.originals, copy.digest);
         return {
@@ -173,7 +173,7 @@ it.effect("manages skills with empty directories and Finder metadata", () =>
         };
       }),
     );
-    expect(retained).toEqual(
+    expect(imported).toEqual(
       expect.arrayContaining([
         { document: readmeDocument, entries: ["SKILL.md", "references"] },
         { document: reviewDocument, entries: [".DS_Store", "SKILL.md"] },

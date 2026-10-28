@@ -5,7 +5,7 @@ import { skitLayer, deterministicTreeHash } from "@smolai/skit-core";
 import { openSetupReview } from "../src/workflows/library/setup-review.js";
 import { runSetup } from "../src/workflows/library/setup.js";
 import { captureDisk } from "./helpers/disk-snapshot.js";
-import { libraryHome, retainObservedIn, scratch, writingTo } from "./helpers/library-home.js";
+import { libraryHome, importCollectionIn, scratch, writingTo } from "./helpers/library-home.js";
 
 const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -33,10 +33,10 @@ const fixture = Effect.gen(function* () {
   yield* Effect.scoped(
     writingTo(
       home.home,
-      retainObservedIn(home.home)({
+      importCollectionIn(home.home)({
         source: { type: "local", path: existing },
         input: existing,
-        retainedAt: "2026-10-16T00:00:00.000Z",
+        importedAt: "2026-10-16T00:00:00.000Z",
         skills: [
           {
             name: "alpha",

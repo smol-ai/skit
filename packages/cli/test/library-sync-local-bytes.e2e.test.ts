@@ -10,7 +10,7 @@ import { testPlatformLayer } from "./helpers/platform.js";
 it.effect("characterizes local_bytes_changed as a stopped sync with exit 0", () =>
   Effect.gen(function* () {
     const { a } = yield* devices;
-    yield* a.retain("local");
+    yield* a.importSource("local");
     yield* a.corruptOriginal;
     const unchanged = yield* captureDisk(a.disk);
     const result = spawnSync(
@@ -33,7 +33,7 @@ it.effect("characterizes local_bytes_changed as a stopped sync with exit 0", () 
 it.effect("reports an already-synced Library with a blocked device selection as nonzero", () =>
   Effect.gen(function* () {
     const { a, b, fs, remote } = yield* devices;
-    yield* a.retain("first");
+    yield* a.importSource("first");
     yield* a.sync();
     yield* fs.makeDirectory(join(b.root, "first"), { recursive: true });
     yield* fs.writeFileString(join(b.root, "first", "SKILL.md"), "existing copy\n");

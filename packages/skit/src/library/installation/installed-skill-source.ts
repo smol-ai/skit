@@ -34,14 +34,14 @@ export const installedSkillSource = Effect.fn("Library.installedSkillSource")(fu
   );
   if (authored && descriptorSkill === undefined)
     return { kind: "invalid" as const, detail: `authored descriptor lacks ${skill.name}` };
-  const retainedPath =
+  const importedPath =
     backing.member.source_path === "." ? root : join(root, backing.member.source_path);
-  if ((yield* originalTreeHash(retainedPath)) !== version.source_digest)
+  if ((yield* originalTreeHash(importedPath)) !== version.source_digest)
     return { kind: "invalid" as const, detail: `retained Skill ${skill.name} changed` };
   return {
     kind: "source" as const,
     libraryPath: root,
-    sourcePath: descriptorSkill === undefined ? retainedPath : join(root, descriptorSkill.path),
+    sourcePath: descriptorSkill === undefined ? importedPath : join(root, descriptorSkill.path),
     ...(descriptorSkill === undefined
       ? {}
       : { shared: descriptorSkill.shared, declaredInvocation: descriptorSkill.invocation }),

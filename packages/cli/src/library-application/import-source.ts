@@ -203,9 +203,9 @@ export const importSource = Effect.fn("Library.addSource")(function* (
           ...(declaration === undefined ? {} : { declaration }),
           input: historicalInput,
           revision: resolved.revision,
-          retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
+          importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
         };
-        const retained =
+        const imported =
           resolved.descriptorKind === "declared"
             ? yield* importAuthoredCollection({ ...request, root: resolved.root })
             : yield* importCollection({
@@ -214,15 +214,15 @@ export const importSource = Effect.fn("Library.addSource")(function* (
                 observations: [],
               });
         return {
-          action: retained.action,
-          collection_id: retained.collection.collection_id,
-          skill_ids: retained.skills.map((skill) => skill.skill_id),
-          collection_version_id: retained.retainedCopyId,
-          snapshot_digest: retained.snapshotDigest,
+          action: imported.action,
+          collection_id: imported.collection.collection_id,
+          skill_ids: imported.skills.map((skill) => skill.skill_id),
+          collection_version_id: imported.collectionVersionId,
+          snapshot_digest: imported.snapshotDigest,
           ...(resolved.descriptorKind !== "declared" && resolved.diagnostics?.length
             ? { diagnostics: resolved.diagnostics }
             : {}),
-          skills: retained.members.map((member) => ({
+          skills: imported.members.map((member) => ({
             name: member.name,
             verbatim_path: member.sourcePath,
           })),

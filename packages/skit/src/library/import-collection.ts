@@ -66,7 +66,7 @@ export interface ImportRequest {
   readonly declaration?: SourceDeclaration;
   /** Exactly what the bytes came from, where the Source protocol names it. */
   readonly revision?: SourceRevision;
-  readonly retainedAt: string;
+  readonly importedAt: string;
   readonly skills: readonly ImportRequestSkill[];
   readonly observations: readonly SkillsShLockFileEntry[];
 }
@@ -145,7 +145,7 @@ export const prepareImport = Effect.fn("Library.prepareImport")(function* (
       sourcePath: skill.relativePath,
       sourceDigest: yield* originalTreeHash(path),
       artifactDigest: yield* Effect.scoped(
-        materializedSkillDigest({ retainedRoot: staged, sourcePath: skill.relativePath }),
+        materializedSkillDigest({ collectionVersionPath: staged, sourcePath: skill.relativePath }),
       ),
       validationDigest: skill.observedHash,
       materializationProfile: "plain-skill/v1",
@@ -157,7 +157,7 @@ export const prepareImport = Effect.fn("Library.prepareImport")(function* (
 const formatManifestIssue = SchemaIssue.makeFormatterDefault();
 
 interface PersistPreparedRequest extends ImportRequest {
-  readonly retainedDigest: Digest;
+  readonly collectionVersionDigest: Digest;
   readonly facts: readonly ImportedSkillFact[];
   readonly sourceIdentity?: SourceIdentity;
   readonly label?: string;
@@ -212,26 +212,26 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     state.collections.push(collection);
   }
   const collectionId = collection.collection_id;
-  const retainedCopy = state.collection_versions.find(
-    (candidate) => candidate.digest === request.retainedDigest,
+  const collectionVersion = state.collection_versions.find(
+    (candidate) => candidate.digest === request.collectionVersionDigest,
   );
-  const retainedCopyId = retainedCopy?.collection_version_id ?? makeCollectionVersionId();
+  const collectionVersionId = collectionVersion?.collection_version_id ?? makeCollectionVersionId();
   // Return the identity and facts of this retained copy, including on an unchanged import.
   // These contain no scoped paths, so callers can consume them after preparation closes.
   const imported = {
-    retainedCopyId,
-    snapshotDigest: request.retainedDigest,
+    collectionVersionId,
+    snapshotDigest: request.collectionVersionDigest,
     members: request.facts,
   };
   const acquisition: Import = {
     import_id: makeImportId(),
     collection_id: collectionId,
     kind: "source",
-    collection_version_id: retainedCopyId,
+    collection_version_id: collectionVersionId,
     source_identity: source,
     input: { value: request.input },
     ...(revision === undefined ? {} : { revision }),
-    imported_at: request.retainedAt,
+    imported_at: request.importedAt,
     machine_id: machineId,
     // The importing machine records the entries, as it records the import itself.
     lock_file_entries: request.observations.map((entry) => ({ ...entry, machine_id: machineId })),
@@ -287,10 +287,10 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
       versionsChanged = true;
     }
   }
-  if (retainedCopy === undefined)
+  if (collectionVersion === undefined)
     state.collection_versions.push({
-      collection_version_id: retainedCopyId,
-      digest: request.retainedDigest,
+      collection_version_id: collectionVersionId,
+      digest: request.collectionVersionDigest,
       copy_profile: "verbatim/v1",
       members: request.facts.map((fact) => ({
         source_path: fact.sourcePath,
@@ -337,7 +337,7 @@ export const importCollection = Effect.fn("Library.importCollection")(function* 
   yield* writeCollectionVersion(prepared.staged, store.originalsPath, prepared.digest, true);
   return yield* persistPrepared({
     ...request,
-    retainedDigest: prepared.digest,
+    collectionVersionDigest: prepared.digest,
     facts: prepared.facts,
   });
 });
@@ -365,7 +365,7 @@ export const importEdit = Effect.fn("Library.importEdit")(function* (request: {
   readonly installedSkillId: LibraryState["installed_skills"][number]["installed_skill_id"];
   readonly path: string;
   readonly observedHash: Digest;
-  readonly retainedAt: string;
+  readonly importedAt: string;
 }) {
   const store = yield* LibraryStore;
   const current = yield* store.inspect;
@@ -402,10 +402,10 @@ export const importEdit = Effect.fn("Library.importEdit")(function* (request: {
   yield* writeCollectionVersion(prepared.staged, store.originalsPath, prepared.digest, true);
   const fact = prepared.facts[0]!;
   const machineId = yield* MachineSettings.ensureIdentity(store.home);
-  const retainedCopy = state.collection_versions.find(
+  const collectionVersion = state.collection_versions.find(
     (candidate) => candidate.digest === prepared.digest,
   );
-  const retainedCopyId = retainedCopy?.collection_version_id ?? makeCollectionVersionId();
+  const collectionVersionId = collectionVersion?.collection_version_id ?? makeCollectionVersionId();
   const version = skill.versions.find(
     (candidate) => candidate.artifact_digest === fact.artifactDigest,
   ) ?? {
@@ -415,9 +415,9 @@ export const importEdit = Effect.fn("Library.importEdit")(function* (request: {
     validation_identity_digest: fact.validationDigest,
     materialization_profile: fact.materializationProfile,
   };
-  if (retainedCopy === undefined)
+  if (collectionVersion === undefined)
     state.collection_versions.push({
-      collection_version_id: retainedCopyId,
+      collection_version_id: collectionVersionId,
       digest: prepared.digest,
       copy_profile: "verbatim/v1",
       members: [
@@ -433,14 +433,14 @@ export const importEdit = Effect.fn("Library.importEdit")(function* (request: {
     import_id: makeImportId(),
     collection_id: skill.collection_id,
     kind: "edit",
-    collection_version_id: retainedCopyId,
+    collection_version_id: collectionVersionId,
     source_identity: {
       kind: "local",
       machine_id: machineId,
       path: { value: request.path },
     },
     input: { value: request.path },
-    imported_at: request.retainedAt,
+    imported_at: request.importedAt,
     machine_id: machineId,
     lock_file_entries: [],
   });
@@ -458,7 +458,7 @@ export const importEdit = Effect.fn("Library.importEdit")(function* (request: {
   yield* store.save(successor, current.state);
   return {
     skillVersionId: version.skill_version_id,
-    retainedCopyId,
+    collectionVersionId,
     snapshotDigest: prepared.digest,
     artifactDigest: fact.artifactDigest,
   };
@@ -474,7 +474,7 @@ export interface AuthoredImport {
   readonly input: string;
   /** Exactly what the bytes came from, where the Source protocol names it. */
   readonly revision?: SourceRevision;
-  readonly retainedAt: string;
+  readonly importedAt: string;
 }
 export const importAuthoredCollection = Effect.fn("Library.retainAuthoredCollectionUnderLock")(
   function* (request: AuthoredImport) {
@@ -486,11 +486,11 @@ export const importAuthoredCollection = Effect.fn("Library.retainAuthoredCollect
         reason: "authored Descriptor or Skill content is invalid",
       });
     const store = yield* LibraryStore;
-    const retainedDigest = yield* originalTreeHash(request.root);
-    const retainedRoot = yield* writeCollectionVersion(
+    const collectionVersionDigest = yield* originalTreeHash(request.root);
+    const collectionVersionPath = yield* writeCollectionVersion(
       request.root,
       store.originalsPath,
-      retainedDigest,
+      collectionVersionDigest,
       true,
     );
     const validationByName = new Map(validated.identity.skills.map((skill) => [skill.name, skill]));
@@ -504,10 +504,10 @@ export const importAuthoredCollection = Effect.fn("Library.retainAuthoredCollect
       facts.push({
         name: member.name,
         sourcePath: member.path,
-        sourceDigest: yield* originalTreeHash(join(retainedRoot, member.path)),
+        sourceDigest: yield* originalTreeHash(join(collectionVersionPath, member.path)),
         artifactDigest: yield* Effect.scoped(
           materializedSkillDigest({
-            retainedRoot,
+            collectionVersionPath,
             sourcePath: member.path,
             shared: member.shared,
           }),
@@ -520,7 +520,7 @@ export const importAuthoredCollection = Effect.fn("Library.retainAuthoredCollect
       ...request,
       skills: [],
       observations: [],
-      retainedDigest,
+      collectionVersionDigest,
       facts,
     });
   },

@@ -317,7 +317,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
         actions.push({
           path: file.path,
           kind: "restore",
-          source: rebuilt.success.retainedRoot,
+          source: rebuilt.success.collectionVersionPath,
           transfer: "rebuild",
         });
         continue;

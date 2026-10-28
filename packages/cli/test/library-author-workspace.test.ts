@@ -203,16 +203,16 @@ it.effect(
       assert.strictEqual(failure._tag, "PlatformError");
       const pending = yield* f.metadata;
       assert.strictEqual(pending.registration, undefined);
-      const retained = yield* f.home.durable;
-      assert.strictEqual(retained.collections.length, 1);
-      const copy = retained.collection_versions[0]!;
+      const imported = yield* f.home.durable;
+      assert.strictEqual(imported.collections.length, 1);
+      const copy = imported.collection_versions[0]!;
       assert.isTrue(
         yield* f.fs.exists(join(collectionVersionPath(f.home.originals, copy.digest), "skit.json")),
       );
       const retried = yield* f.ensure();
       assert.strictEqual(
         retried.entry?.collection.collection_id,
-        retained.collections[0]?.collection_id,
+        imported.collections[0]?.collection_id,
       );
       assert.strictEqual((yield* f.metadata).workspace_id, pending.workspace_id);
       assert.strictEqual((yield* f.metadata).registration, "registered");

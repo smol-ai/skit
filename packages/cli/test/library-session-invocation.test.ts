@@ -23,7 +23,7 @@ import { invocationBriefing, invocationRowSummary } from "../src/invocation/read
 import {
   initializeLibraryMachine,
   libraryHome,
-  retainObservedIn,
+  importCollectionIn,
   writingTo,
 } from "./helpers/library-home.js";
 
@@ -52,15 +52,15 @@ const fixture = Effect.fn("Test.invocationLibrary")(function* () {
   );
   const home = yield* libraryHome({ home: join(root, "home") });
   yield* initializeLibraryMachine(home.home);
-  const retain = (at: string) =>
+  const importSource = (at: string) =>
     home.owned(
       writingTo(
         home.home,
         Effect.gen(function* () {
-          return yield* retainObservedIn(home.home)({
+          return yield* importCollectionIn(home.home)({
             source: { type: "local", path: source },
             input: source,
-            retainedAt: at,
+            importedAt: at,
             skills: [
               {
                 name: "review",
@@ -74,15 +74,15 @@ const fixture = Effect.fn("Test.invocationLibrary")(function* () {
         }),
       ),
     );
-  return { fs, source, home, retain };
+  return { fs, source, home, importSource };
 });
 
 it.effect(
   "a session reads native per-agent policy from retained bytes and previews the same install behavior",
   () =>
     Effect.gen(function* () {
-      const { fs, source, home, retain } = yield* fixture();
-      yield* retain("2026-10-01T00:00:00.000Z");
+      const { fs, source, home, importSource } = yield* fixture();
+      yield* importSource("2026-10-01T00:00:00.000Z");
       // The working source is not the authority for a Library row.
       yield* fs.writeFileString(join(source, "SKILL.md"), text(false));
       const before = yield* home.durable;
@@ -146,10 +146,10 @@ it.effect(
   "session invocation evidence follows the selected retained version rather than the latest acquisition",
   () =>
     Effect.gen(function* () {
-      const { fs, source, home, retain } = yield* fixture();
-      yield* retain("2026-10-01T00:00:00.000Z");
+      const { fs, source, home, importSource } = yield* fixture();
+      yield* importSource("2026-10-01T00:00:00.000Z");
       yield* fs.writeFileString(join(source, "SKILL.md"), text(false));
-      yield* retain("2026-10-02T00:00:00.000Z");
+      yield* importSource("2026-10-02T00:00:00.000Z");
       const state = yield* home.durable;
       yield* home.owned(
         writingTo(
@@ -207,7 +207,7 @@ Tools
             root: source,
             source: { type: "local", path: source },
             input: source,
-            retainedAt: "2026-10-01T00:00:00.000Z",
+            importedAt: "2026-10-01T00:00:00.000Z",
           }),
         ),
       );
@@ -223,8 +223,8 @@ Tools
         ).every((agent) => agent.effectivePolicy === "explicit"),
       ).toBe(true);
       const state = yield* home.durable;
-      const retained = collectionVersionPath(home.originals, state.collection_versions[0]!.digest);
-      yield* fs.writeFileString(join(retained, "agents", "openai.yaml"), "policy: [\n");
+      const imported = collectionVersionPath(home.originals, state.collection_versions[0]!.digest);
+      yield* fs.writeFileString(join(imported, "agents", "openai.yaml"), "policy: [\n");
       const broken = yield* home.owned(openLibrarySession());
       expect(Result.isFailure(broken.skills[0]!.authorInvocation)).toBe(true);
       expect(broken.skills[0]?.invocationWarning).toContain("Retained copy for review changed");
@@ -261,7 +261,7 @@ Tools
           root: source,
           source: { type: "local", path: source },
           input: source,
-          retainedAt: "2026-10-01T00:00:00.000Z",
+          importedAt: "2026-10-01T00:00:00.000Z",
         }),
       ),
     );
@@ -276,10 +276,10 @@ Tools
 for (const problem of ["missing-skill", "malformed-metadata"] as const)
   it.effect(`an unavailable ${problem} row leaves healthy Skills and disable actions usable`, () =>
     Effect.gen(function* () {
-      const { fs, source, home, retain } = yield* fixture();
+      const { fs, source, home, importSource } = yield* fixture();
       if (problem === "malformed-metadata")
         yield* fs.writeFileString(join(source, "agents", "openai.yaml"), "policy: [\n");
-      yield* retain("2026-10-01T00:00:00.000Z");
+      yield* importSource("2026-10-01T00:00:00.000Z");
       const badState = yield* home.durable;
       if (problem === "missing-skill")
         yield* fs.remove(
@@ -297,10 +297,10 @@ for (const problem of ["missing-skill", "malformed-metadata"] as const)
       yield* home.owned(
         writingTo(
           home.home,
-          retainObservedIn(home.home)({
+          importCollectionIn(home.home)({
             source: { type: "local", path: healthy },
             input: healthy,
-            retainedAt: "2026-10-02T00:00:00.000Z",
+            importedAt: "2026-10-02T00:00:00.000Z",
             skills: [
               {
                 name: "healthy",
@@ -395,7 +395,7 @@ Tools
             root: source,
             source: { type: "local", path: source },
             input: source,
-            retainedAt: "2026-10-01T00:00:00.000Z",
+            importedAt: "2026-10-01T00:00:00.000Z",
           }),
         ),
       );

@@ -32,7 +32,7 @@ import { mergeLibraryManifests } from "../src/workflows/library/library-merge.js
 import {
   deterministicTreeHash,
   libraryHome,
-  retainObservedIn,
+  importCollectionIn,
   scratch,
   writingTo,
 } from "./helpers/library-home.js";
@@ -59,7 +59,7 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
   const origin = { type: "well-known" as const, origin: "https://skills.example" };
   yield* TestClock.setTime(Date.parse("2026-10-01T00:00:00.000Z"));
   yield* fs.writeFileString(join(existing, "SKILL.md"), document("existing", "Before setup"));
-  const retain = (paths: readonly { name: string; path: string }[]) =>
+  const importSource = (paths: readonly { name: string; path: string }[]) =>
     Effect.gen(function* () {
       const skills = yield* Effect.forEach(paths, (item) =>
         Effect.gen(function* () {
@@ -73,10 +73,10 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
       );
       return yield* writingTo(
         home.home,
-        retainObservedIn(home.home)({
+        importCollectionIn(home.home)({
           input: origin.origin,
           source: origin,
-          retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
+          importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
           skills,
           observations: [],
         }),
@@ -87,11 +87,11 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
       join(existing, "SKILL.md"),
       document("existing", "Earlier selected version"),
     );
-    yield* retain([{ name: "existing", path: existing }]);
+    yield* importSource([{ name: "existing", path: existing }]);
     yield* TestClock.adjust("1 second");
     yield* fs.writeFileString(join(existing, "SKILL.md"), document("existing", "Before setup"));
   }
-  yield* retain([{ name: "existing", path: existing }]);
+  yield* importSource([{ name: "existing", path: existing }]);
   const initial = yield* home.durable;
   const collectionId = initial.collections[0].collection_id;
   const enabled = [{ collection: collectionId }];
@@ -207,7 +207,7 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
     introduced,
     before,
     enabled,
-    retain,
+    importSource,
     operationId,
     collectionId,
   };
@@ -344,7 +344,7 @@ it.effect(
         join(f.existing, "SKILL.md"),
         document("existing", "Later source refresh"),
       );
-      yield* f.retain([
+      yield* f.importSource([
         { name: "existing", path: f.existing },
         { name: "introduced", path: f.introduced },
       ]);
@@ -447,7 +447,7 @@ it.effect(
         join(f.introduced, "SKILL.md"),
         document("introduced", "Newer source choice"),
       );
-      yield* f.retain([
+      yield* f.importSource([
         { name: "existing", path: f.existing },
         { name: "introduced", path: f.introduced },
       ]);

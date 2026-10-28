@@ -18,7 +18,7 @@ import { planRemove } from "../src/workflows/library/remove.js";
 import { planUpdates } from "../src/library-application/update.js";
 import { checkSubjects } from "../src/workflows/library/check.js";
 import { matchingLibrarySubjects } from "../src/workflows/library/subject-resolution.js";
-import { initializeLibraryMachine, retainObservedIn, writingTo } from "./helpers/library-home.js";
+import { initializeLibraryMachine, importCollectionIn, writingTo } from "./helpers/library-home.js";
 
 it.effect("partially binds raw Skills and converges after enable and disable", () =>
   Effect.gen(function* () {
@@ -36,10 +36,10 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
     const collection = yield* Effect.scoped(
       writingTo(
         home,
-        retainObservedIn(home)({
+        importCollectionIn(home)({
           source: { type: "local", path: observed },
           input: observed,
-          retainedAt: "2026-09-16T00:00:00.000Z",
+          importedAt: "2026-09-16T00:00:00.000Z",
           skills: [
             {
               name: "review",
@@ -187,10 +187,10 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       "review raw bytes\n",
     );
     assert.strictEqual(yield* fs.exists(join(roots.codexRoot, "test")), false);
-    const retained = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
-    const reviewSkillId = retained?.skills.find((skill) => skill.name === "review")?.skill_id;
+    const imported = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
+    const reviewSkillId = imported?.skills.find((skill) => skill.name === "review")?.skill_id;
     assert.ok(reviewSkillId);
-    assert.deepEqual(retained?.enabled, [{ skill: reviewSkillId }]);
+    assert.deepEqual(imported?.enabled, [{ skill: reviewSkillId }]);
     const repeated = yield* writingTo(home, apply(true));
     assert.strictEqual(repeated.value.changed, false);
     assert.strictEqual(repeated.value.repair, undefined);
@@ -231,23 +231,23 @@ it.effect("enables a whole Collection and converts it to Skills when one is disa
         observedHash: yield* deterministicTreeHash(path),
       });
     }
-    const retain = (members: readonly ImportRequestSkill[], retainedAt: string) =>
+    const importSource = (members: readonly ImportRequestSkill[], importedAt: string) =>
       Effect.scoped(
         writingTo(
           home,
-          retainObservedIn(home)({
+          importCollectionIn(home)({
             source: { type: "local", path: observed },
             input: observed,
-            retainedAt,
+            importedAt,
             skills: members,
             observations: [],
           }),
         ),
       );
-    const retained = yield* retain(skills, "2026-09-16T00:00:00.000Z");
-    const collectionId = retained.collection!.collection_id;
+    const imported = yield* importSource(skills, "2026-09-16T00:00:00.000Z");
+    const collectionId = imported.collection!.collection_id;
     const skillId = (name: string) =>
-      retained.skills.find((skill) => skill.name === name)!.skill_id;
+      imported.skills.find((skill) => skill.name === name)!.skill_id;
     const layer = libraryStoreLayer({ home });
     const set = (query: string, enabled: boolean, all: boolean) =>
       Effect.gen(function* () {
@@ -288,7 +288,7 @@ it.effect("enables a whole Collection and converts it to Skills when one is disa
     assert.deepStrictEqual(yield* set(collectionId, false, true), []);
     // A Skill gone from the Source stays while its own entry enables it, and `--all` ends that too.
     yield* set(skillId("review"), true, false);
-    yield* retain(
+    yield* importSource(
       skills.filter((skill) => skill.name !== "review"),
       "2026-09-16T01:00:00.000Z",
     );

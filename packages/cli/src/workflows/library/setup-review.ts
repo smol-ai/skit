@@ -307,7 +307,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
             ),
         )
         .map(displayCopy),
-      retains: decisions
+      importOnly: decisions
         .filter(
           (copy) =>
             copy.duplicateAction === "retain-only" ||

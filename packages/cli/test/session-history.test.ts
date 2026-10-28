@@ -21,7 +21,7 @@ import {
 import {
   initializeLibraryMachine,
   libraryHome,
-  retainObservedIn,
+  importCollectionIn,
   writingTo,
 } from "./helpers/library-home.js";
 
@@ -39,10 +39,10 @@ it.effect("a front end that confirms a Library session change leaves attributed 
     yield* home.owned(
       writingTo(
         home.home,
-        retainObservedIn(home.home)({
+        importCollectionIn(home.home)({
           source: { type: "local", path: installed },
           input: installed,
-          retainedAt: "2026-09-17T00:00:00.000Z",
+          importedAt: "2026-09-17T00:00:00.000Z",
           skills: [
             {
               name: "review",
@@ -56,7 +56,7 @@ it.effect("a front end that confirms a Library session change leaves attributed 
       ),
     );
     const history = home.owned(Effect.flatMap(LibraryAuditLog, (audit) => audit.list()));
-    const retainedEvents = (yield* history).length;
+    const importedEvents = (yield* history).length;
 
     const session = yield* home.owned(openLibrarySession());
     const proposed = yield* home.owned(
@@ -70,7 +70,7 @@ it.effect("a front end that confirms a Library session change leaves attributed 
     assert.notStrictEqual(confirmed.outcome?.kind, "failed");
 
     const events = yield* history;
-    assert.strictEqual(events.length, retainedEvents + 1);
+    assert.strictEqual(events.length, importedEvents + 1);
     const event = events.at(-1);
     assert.strictEqual(event?.type, "binding.enabled");
     assert.strictEqual(event?.workflow, "tui");
@@ -103,10 +103,10 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     yield* home.owned(
       writingTo(
         home.home,
-        retainObservedIn(home.home)({
+        importCollectionIn(home.home)({
           source: { type: "local", path: source },
           input: source,
-          retainedAt: "2026-10-02T00:00:00.000Z",
+          importedAt: "2026-10-02T00:00:00.000Z",
           skills,
           observations: [],
         }),
@@ -221,10 +221,10 @@ const twoScopeProposal = (scopeCount = 2) =>
     yield* home.owned(
       writingTo(
         home.home,
-        retainObservedIn(home.home)({
+        importCollectionIn(home.home)({
           source: { type: "local", path: source },
           input: source,
-          retainedAt: "2026-10-13T00:00:00.000Z",
+          importedAt: "2026-10-13T00:00:00.000Z",
           skills: [
             {
               name: "review",

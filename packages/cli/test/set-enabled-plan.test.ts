@@ -47,7 +47,7 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import {
   initializeLibraryMachine,
   libraryHome,
-  retainObservedIn,
+  importCollectionIn,
   writingTo,
 } from "./helpers/library-home.js";
 
@@ -78,10 +78,10 @@ const fixture = Effect.gen(function* () {
   yield* home.owned(
     writingTo(
       home.home,
-      retainObservedIn(home.home)({
+      importCollectionIn(home.home)({
         source: { type: "local", path: source },
         input: source,
-        retainedAt: "2026-10-16T00:00:00.000Z",
+        importedAt: "2026-10-16T00:00:00.000Z",
         skills,
         observations: [],
       }),
@@ -757,10 +757,10 @@ it.effect(
       yield* f.home.owned(
         writingTo(
           f.home.home,
-          retainObservedIn(f.home.home)({
+          importCollectionIn(f.home.home)({
             source: { type: "local", path: source },
             input: source,
-            retainedAt: "2026-10-18T00:00:00.000Z",
+            importedAt: "2026-10-18T00:00:00.000Z",
             observations: [],
             skills: [
               {

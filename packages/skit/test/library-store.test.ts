@@ -29,7 +29,7 @@ const library = Effect.gen(function* () {
         machineId,
         source: { type: "local", path: source },
         input: source,
-        retainedAt: "2026-09-17T00:00:00.000Z",
+        importedAt: "2026-09-17T00:00:00.000Z",
         skills: [
           {
             name: "review",

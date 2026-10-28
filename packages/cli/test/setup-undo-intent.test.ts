@@ -19,7 +19,7 @@ import {
 import {
   deterministicTreeHash,
   libraryHome,
-  retainObservedIn,
+  importCollectionIn,
   scratch,
   writingTo,
 } from "./helpers/library-home.js";
@@ -37,10 +37,10 @@ const fixture = Effect.fn("Test.undoIntentFixture")(function* () {
     );
     yield* writingTo(
       home.home,
-      retainObservedIn(home.home)({
+      importCollectionIn(home.home)({
         source: { type: "local", path: source },
         input: source,
-        retainedAt: "2026-10-01T00:00:00.000Z",
+        importedAt: "2026-10-01T00:00:00.000Z",
         skills: [
           {
             name,
@@ -97,28 +97,28 @@ it.effect(
           observedHash: yield* deterministicTreeHash(path),
         });
       }
-      const retain = (selected: typeof skills, date: string) =>
+      const importSource = (selected: typeof skills, date: string) =>
         writingTo(
           home.home,
-          retainObservedIn(home.home)({
+          importCollectionIn(home.home)({
             input: "https://github.com/test/membership",
             source: { type: "github", owner: "test", repository: "membership" },
-            retainedAt: date,
+            importedAt: date,
             skills: selected,
             observations: [],
           }),
         );
-      yield* retain(skills.slice(0, 1), "2026-10-01T00:00:00.000Z");
-      const retained = yield* home.durable;
-      const enabled = [{ collection: retained.collections[0].collection_id }];
-      const before = { ...retained, enabled };
-      yield* retain(skills, "2026-10-02T00:00:00.000Z");
+      yield* importSource(skills.slice(0, 1), "2026-10-01T00:00:00.000Z");
+      const imported = yield* home.durable;
+      const enabled = [{ collection: imported.collections[0].collection_id }];
+      const before = { ...imported, enabled };
+      yield* importSource(skills, "2026-10-02T00:00:00.000Z");
       const after = { ...(yield* home.durable), enabled };
       expect(enabledSkillIds(before, enabled)).toHaveLength(1);
       expect(enabledSkillIds(after, enabled)).toHaveLength(2);
       const inverse = reverseSetupIntent(after, setupIntent(before), setupIntent(after));
       expect(inverse.conflicts).toContain(
-        `Collection source membership ${retained.collections[0].collection_id} requires restoration before undo`,
+        `Collection source membership ${imported.collections[0].collection_id} requires restoration before undo`,
       );
       expect(inverse.state.skills).toEqual(after.skills);
       expect(inverse.state.collection_versions).toEqual(after.collection_versions);
@@ -192,10 +192,10 @@ it.effect(
       );
       yield* writingTo(
         f.home.home,
-        retainObservedIn(f.home.home)({
+        importCollectionIn(f.home.home)({
           source: { type: "local", path: source },
           input: source,
-          retainedAt: "2026-10-02T00:00:00.000Z",
+          importedAt: "2026-10-02T00:00:00.000Z",
           skills: [
             {
               name: "chosen",
@@ -225,10 +225,10 @@ it.effect(
       );
       yield* writingTo(
         f.home.home,
-        retainObservedIn(f.home.home)({
+        importCollectionIn(f.home.home)({
           source: { type: "local", path: source },
           input: source,
-          retainedAt: "2026-10-03T00:00:00.000Z",
+          importedAt: "2026-10-03T00:00:00.000Z",
           skills: [
             {
               name: "chosen",

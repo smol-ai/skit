@@ -16,12 +16,12 @@ it.effect("each sync saves state with the revision it reconciled against", () =>
         assert.strictEqual(ancestry?.revision_id, head?.revision_id);
         assert.strictEqual(ancestry?.library_id, head?.library_id);
       });
-    yield* a.retain("first");
+    yield* a.importSource("first");
     assert.strictEqual((yield* a.sync()).status, "pushed");
     yield* anchoredAt(a.state);
     assert.strictEqual((yield* b.sync()).status, "pulled");
     yield* anchoredAt(b.state);
-    yield* b.retain("second");
+    yield* b.importSource("second");
     assert.strictEqual((yield* b.sync()).status, "merged");
     yield* anchoredAt(b.state);
     assert.strictEqual((yield* a.sync()).status, "merged");
@@ -39,10 +39,10 @@ it.effect("each sync saves state with the revision it reconciled against", () =>
 it.effect("an older state.json does not delete Collections the remote gained since", () =>
   Effect.gen(function* () {
     const { fs, a, b, remoteCollections } = yield* devices;
-    yield* a.retain("first");
+    yield* a.importSource("first");
     yield* a.sync();
     yield* b.sync();
-    yield* b.retain("second");
+    yield* b.importSource("second");
     yield* b.sync();
     const added = yield* remoteCollections;
     assert.strictEqual(added.length, 2);
@@ -60,10 +60,10 @@ it.effect("an older state.json does not delete Collections the remote gained sin
 it.effect("a local removal after sync still removes the Collection everywhere", () =>
   Effect.gen(function* () {
     const { a, b, remoteCollections } = yield* devices;
-    yield* a.retain("first");
+    yield* a.importSource("first");
     const removed = (yield* a.state).collections[0];
     assert.ok(removed);
-    yield* a.retain("second");
+    yield* a.importSource("second");
     yield* a.sync();
     yield* b.sync();
 
@@ -81,10 +81,10 @@ it.effect("a local removal after sync still removes the Collection everywhere", 
 it.effect("a write committed without a response leaves coherent state and converges", () =>
   Effect.gen(function* () {
     const { fs, a, b, inject, remoteCollections } = yield* devices;
-    yield* a.retain("first");
+    yield* a.importSource("first");
     yield* a.sync();
     yield* b.sync();
-    yield* a.retain("second");
+    yield* a.importSource("second");
     const stateBefore = yield* fs.readFileString(join(a.home, "state.json"));
 
     inject({ _tag: "DropAfterCommit" });
@@ -104,10 +104,10 @@ it.effect("a write committed without a response leaves coherent state and conver
 it.effect("state without ancestry adopts explicitly and keeps remote-only Collections", () =>
   Effect.gen(function* () {
     const { a, b, remoteCollections } = yield* devices;
-    yield* a.retain("first");
+    yield* a.importSource("first");
     yield* a.sync();
     // B has never synced, as a home upgraded from the sidecar-based ancestry has not either.
-    yield* b.retain("second");
+    yield* b.importSource("second");
     const remoteOnly = yield* remoteCollections;
 
     assert.strictEqual((yield* b.sync()).status, "adoption_required");
@@ -135,12 +135,12 @@ const enable =
 it.effect("a merge keeps device-local invocation policies", () =>
   Effect.gen(function* () {
     const { a, b } = yield* devices;
-    yield* a.retain("first");
+    yield* a.importSource("first");
     const skillId = (yield* a.state).skills[0]!.skill_id;
     yield* a.edit(enable(skillId));
     yield* a.sync();
     yield* b.sync();
-    yield* b.retain("second");
+    yield* b.importSource("second");
     yield* b.sync();
 
     assert.strictEqual((yield* a.sync()).status, "merged");
@@ -157,7 +157,7 @@ const furnished = Effect.fn("Test.furnishedHome")(function* ({
   fs,
   a,
 }: Effect.Success<typeof devices>) {
-  const first = yield* a.retain("first");
+  const first = yield* a.importSource("first");
   const skill = first.skills[0]!;
   const version = skill.versions[0]!;
   const repository = join(a.home, "..", "a-repository");
@@ -208,7 +208,7 @@ it.effect("every declared device field survives a push, a merge and a clean sync
     assert.strictEqual(pushed.sync_ancestry?.revision_id, (yield* remote)?.revision_id);
 
     yield* b.sync();
-    yield* b.retain("second");
+    yield* b.importSource("second");
     yield* b.sync();
     assert.strictEqual((yield* a.sync()).status, "merged");
     const merged = yield* a.state;
@@ -229,7 +229,7 @@ it.effect("every declared device field survives a push, a merge and a clean sync
 it.effect("sync saves only declared fields, and writes nothing that would drop others", () =>
   Effect.gen(function* () {
     const { a, b } = yield* devices;
-    yield* a.retain("first");
+    yield* a.importSource("first");
     const extended = (state: LibraryState) =>
       ({ ...state, extension: { kept: true } }) as LibraryState;
     yield* a.edit(extended);
@@ -243,7 +243,7 @@ it.effect("sync saves only declared fields, and writes nothing that would drop o
     assert.deepStrictEqual(Object.hasOwn(yield* a.state, "extension"), true);
 
     yield* b.sync();
-    yield* b.retain("second");
+    yield* b.importSource("second");
     yield* b.sync();
     assert.strictEqual((yield* a.sync()).status, "merged");
     assert.deepStrictEqual(Object.hasOwn(yield* a.state, "extension"), false);
@@ -256,7 +256,7 @@ for (const ancestry of ["missing", "stale"] as const)
     () =>
       Effect.gen(function* () {
         const { a, remote } = yield* devices;
-        yield* a.retain("first");
+        yield* a.importSource("first");
         yield* a.sync();
         const head = (yield* remote)!;
         // L and R match; only the ancestry differs from what a clean sync anchors.
@@ -287,7 +287,7 @@ for (const ancestry of ["missing", "stale"] as const)
 it.effect("an install failure after sync saves leaves state and ancestry coherent", () =>
   Effect.gen(function* () {
     const { fs, a, b, remote } = yield* devices;
-    yield* a.retain("first");
+    yield* a.importSource("first");
     yield* a.edit(enable((yield* a.state).skills[0]!.skill_id));
     yield* a.sync();
     // B's skills directory is occupied by a file, so nothing can be installed there.
@@ -309,7 +309,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { a, c, inject, remote } = yield* devices;
-      yield* a.retain("first");
+      yield* a.importSource("first");
       yield* a.sync();
       yield* c.sync();
       const relabel =
@@ -339,8 +339,8 @@ for (const removalSyncsFirst of [true, false])
     () =>
       Effect.gen(function* () {
         const { a, b, remote } = yield* devices;
-        yield* a.retain("first");
-        yield* a.retain("second");
+        yield* a.importSource("first");
+        yield* a.importSource("second");
         yield* a.sync();
         yield* b.sync();
         const removed = (yield* a.state).collections[0]!.collection_id;
@@ -370,10 +370,10 @@ for (const removalSyncsFirst of [true, false])
 it.effect("adoption recovers a home whose Library vanished without deleting anything", () =>
   Effect.gen(function* () {
     const { a, b, resetRemote, remoteCollections } = yield* devices;
-    yield* a.retain("first");
+    yield* a.importSource("first");
     yield* a.sync();
     yield* b.sync();
-    yield* b.retain("second");
+    yield* b.importSource("second");
     yield* resetRemote;
 
     assert.strictEqual((yield* a.sync()).status, "base_mismatch");

@@ -28,18 +28,18 @@ it.effect(
       const f = yield* fixture;
       yield* fs.symlink("file", join(f.source, "link"));
       const hash = yield* originalTreeHash(f.source);
-      const retained = yield* writeCollectionVersion(f.source, f.objects, hash, true);
-      expect(yield* fs.readLink(join(retained, "link"))).toBe("file");
-      expect((yield* fs.stat(join(retained, "file"))).mode & 0o777).toBe(0o751);
-      expect(yield* fs.readDirectory(retained)).toEqual(["file", "link"]);
-      expect(yield* originalTreeHash(retained)).toBe(hash);
-      yield* fs.writeFileString(join(retained, "file"), "corrupted");
+      const imported = yield* writeCollectionVersion(f.source, f.objects, hash, true);
+      expect(yield* fs.readLink(join(imported, "link"))).toBe("file");
+      expect((yield* fs.stat(join(imported, "file"))).mode & 0o777).toBe(0o751);
+      expect(yield* fs.readDirectory(imported)).toEqual(["file", "link"]);
+      expect(yield* originalTreeHash(imported)).toBe(hash);
+      yield* fs.writeFileString(join(imported, "file"), "corrupted");
       expect(
         yield* Effect.exit(writeCollectionVersion(f.source, f.objects, hash, true)),
       ).toMatchObject({
         _tag: "Failure",
       });
-      expect(yield* fs.readFileString(join(retained, "file"))).toBe("corrupted");
+      expect(yield* fs.readFileString(join(imported, "file"))).toBe("corrupted");
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -115,9 +115,9 @@ it.effect("normalized retention materializes only normalized artifact membership
     yield* fs.writeFileString(join(f.source, ".DS_Store"), "excluded residue");
     yield* fs.writeFileString(join(f.source, ".skit-ownership.json"), "excluded custody");
     const hash = yield* deterministicTreeHash(f.source);
-    const retained = yield* writeCollectionVersion(f.source, f.objects, hash, false);
-    expect(yield* fs.readDirectory(retained)).toEqual(["file"]);
-    expect(yield* deterministicTreeHash(retained)).toBe(hash);
+    const imported = yield* writeCollectionVersion(f.source, f.objects, hash, false);
+    expect(yield* fs.readDirectory(imported)).toEqual(["file"]);
+    expect(yield* deterministicTreeHash(imported)).toBe(hash);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 

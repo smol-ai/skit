@@ -18,10 +18,10 @@ import {
 import { StoredLibraryManifest } from "../src/library/store/stored-manifest.js";
 
 const digest = `sha256:${"a".repeat(64)}`;
-const retainedCopyId = makeCollectionVersionId();
+const collectionVersionId = makeCollectionVersionId();
 const machineId = makeMachineId();
 const copy: CollectionVersion = {
-  collection_version_id: retainedCopyId,
+  collection_version_id: collectionVersionId,
   digest,
   copy_profile: "verbatim/v1",
   members: [
@@ -38,7 +38,7 @@ const acquisition = (overrides: Partial<Import>): Import => ({
   import_id: makeImportId(),
   collection_id: collectionId,
   kind: "source",
-  collection_version_id: retainedCopyId,
+  collection_version_id: collectionVersionId,
   source_identity: {
     kind: "github",
     owner: "example-org",
@@ -128,7 +128,7 @@ it("decodes a v4 manifest into the current model without selections", () => {
   const versionId = makeSkillVersionId();
   const legacyAcquisition = {
     acquisition_id: makeImportId(),
-    retained_copy_id: retainedCopyId,
+    retained_copy_id: collectionVersionId,
     source_identity: { kind: "url", url: { value: "https://skills.example#skills=review" } },
     tracking: { kind: "default" },
     selection: { kind: "full-tree" },

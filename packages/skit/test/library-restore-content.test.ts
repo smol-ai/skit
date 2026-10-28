@@ -45,7 +45,7 @@ const fixture = Effect.gen(function* () {
         // Reconstruction must use the identity and recorded release, never this input.
         input: "https://wrong.example/not-the-source",
         revision: { kind: "release", version: "1.2.3" },
-        retainedAt: "2026-10-16T00:00:00.000Z",
+        importedAt: "2026-10-16T00:00:00.000Z",
         skills: [
           {
             name: "review",
@@ -65,7 +65,7 @@ const fixture = Effect.gen(function* () {
         machineId,
         source: { type: "local", path: privatePath },
         input: privatePath,
-        retainedAt: "2026-10-16T00:00:00.000Z",
+        importedAt: "2026-10-16T00:00:00.000Z",
         skills: [
           {
             name: "private",

@@ -109,7 +109,7 @@ it.effect("absent R with ancestry: base_mismatch, never a push of the old Librar
   Effect.gen(function* () {
     const homes = yield* devices;
     const { a, server } = homes;
-    yield* a.retain("first");
+    yield* a.importSource("first");
     yield* a.sync();
     yield* homes.resetRemote;
     const unchanged = yield* unwritten(homes, a);
@@ -164,7 +164,7 @@ it.effect("empty R and empty L without ancestry: clean, anchoring only local anc
 
 /** A home whose state, installed skills and ancestry already match the remote head. */
 const anchored = Effect.fn("Test.anchoredHome")(function* (device: Device) {
-  yield* device.retain("first");
+  yield* device.importSource("first");
   yield* device.edit((state) => ({
     ...state,
     enabled: [{ skill: state.skills[0]!.skill_id }],
@@ -207,7 +207,7 @@ it.effect("empty R is not absent R: a Library without ancestry requires adoption
   Effect.gen(function* () {
     const homes = yield* devices;
     const { a, server } = homes;
-    yield* a.retain("first");
+    yield* a.importSource("first");
     yield* emptyRemote(homes);
     const head = server.remote!;
     const unchanged = yield* unwritten(homes, a);
@@ -233,7 +233,7 @@ it.effect("empty L is not absent L: an empty state without ancestry requires ado
   Effect.gen(function* () {
     const homes = yield* devices;
     const { a, b, server } = homes;
-    yield* a.retain("first");
+    yield* a.importSource("first");
     yield* a.sync();
     const head = server.remote!;
     yield* emptyLocal(b);
@@ -259,7 +259,7 @@ it.effect("absent L with a non-empty R pulls", () =>
   Effect.gen(function* () {
     const homes = yield* devices;
     const { a, b, server } = homes;
-    yield* a.retain("first");
+    yield* a.importSource("first");
     yield* a.sync();
     assert.strictEqual((yield* b.sync()).status, "pulled");
     assert.strictEqual(
@@ -274,7 +274,7 @@ it.effect("empty L with an accepted base removes what the base held, and only th
   Effect.gen(function* () {
     const homes = yield* devices;
     const { a, b, server } = homes;
-    const first = yield* a.retain("first");
+    const first = yield* a.importSource("first");
     yield* a.sync();
     yield* b.sync();
     yield* b.remove(first.collection.collection_id);

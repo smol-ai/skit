@@ -35,7 +35,7 @@ export interface AuditOptions {
 type LedgerInspection =
   | { kind: "absent" }
   | { kind: "unreadable"; path: string }
-  | { kind: "readable"; retained: Set<string> };
+  | { kind: "readable"; imported: Set<string> };
 
 const inspectLibraryLedger = Effect.fn("Audit.ledger")(function* (
   library: ResolvedSkitConfiguration,
@@ -47,7 +47,7 @@ const inspectLibraryLedger = Effect.fn("Audit.ledger")(function* (
         inspected.present
           ? {
               kind: "readable",
-              retained: new Set(inspected.state.skills.map((skill) => skill.skill_id)),
+              imported: new Set(inspected.state.skills.map((skill) => skill.skill_id)),
             }
           : { kind: "absent" },
       ),
@@ -100,7 +100,7 @@ const auditOwnershipClaims = Effect.fn("Audit.ownershipClaims")(function* (
     if (
       inspection.kind === "valid" &&
       ledger.kind !== "unreadable" &&
-      !(ledger.kind === "readable" && ledger.retained.has(inspection.marker.skill_id))
+      !(ledger.kind === "readable" && ledger.imported.has(inspection.marker.skill_id))
     ) {
       const claim = {
         skillId: inspection.marker.skill_id,

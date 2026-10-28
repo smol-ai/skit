@@ -189,11 +189,11 @@ export function auditSkill(text: string, options: AuditSkillOptions = {}): Skill
   ].sort(
     (left, right) => left.index - right.index || compareCodeUnits(left.rule.id, right.rule.id),
   );
-  const retainedMatchKeys = new Set(
+  const importedMatchKeys = new Set(
     matches.map((match) => `${match.rule.id}\0${match.index}\0${match.text}`),
   );
   const omittedMatches = allMatches.filter(
-    (match) => !retainedMatchKeys.has(`${match.rule.id}\0${match.index}\0${match.text}`),
+    (match) => !importedMatchKeys.has(`${match.rule.id}\0${match.index}\0${match.text}`),
   );
   const matchedRules = [
     ...new Map(allMatches.map((match) => [match.rule.id, match.rule])).values(),

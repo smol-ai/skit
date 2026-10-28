@@ -300,8 +300,8 @@ it.effect("keeps an authored workspace source distinct from pnpm's recorded alia
     expect(installed?.owner.kind).toBe("pnpm");
     expect(observed.onboarding.candidates.some((item) => item.paths.includes(f.alias))).toBe(false);
     expect((yield* setupRemovablePaths(options, observed)).has(f.alias)).toBe(false);
-    const retained = yield* home.owned(writingTo(home.home, importSource(skill)));
-    expect(retained.skills.map((item) => item.name)).toEqual(["demo-guide"]);
+    const imported = yield* home.owned(writingTo(home.home, importSource(skill)));
+    expect(imported.skills.map((item) => item.name)).toEqual(["demo-guide"]);
     expect(yield* f.fs.readLink(f.alias)).toBe(skill);
   }).pipe(Effect.provide(skitLayer)),
 );

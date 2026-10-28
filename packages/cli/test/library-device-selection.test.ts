@@ -13,7 +13,7 @@ it.effect("persists an empty device choice before either Library exists", () =>
       "clean",
     );
     assert.strictEqual((yield* b.state).device_skill_selection?.mode, "choose");
-    const first = yield* a.retain("first");
+    const first = yield* a.importSource("first");
     yield* a.edit((state) => ({
       ...state,
       enabled: [{ skill: first.skills[0]!.skill_id }],
@@ -28,12 +28,12 @@ it.effect("persists an empty device choice before either Library exists", () =>
 it.effect("syncs new Library content while preserving an edited deselected installed skill", () =>
   Effect.gen(function* () {
     const { a, b, fs } = yield* devices;
-    yield* a.retain("first");
+    yield* a.importSource("first");
     yield* a.sync();
     yield* b.sync({ deviceSelection: { skills: ["first"], collections: [] } });
     const path = join(b.root, "first", "SKILL.md");
     yield* fs.writeFileString(path, "local edits\n");
-    yield* a.retain("second");
+    yield* a.importSource("second");
     yield* a.sync();
     const result = yield* b.sync({ deviceSelection: { skills: [], collections: [] } });
     assert.strictEqual(result.status, "enablement_incomplete");
@@ -48,7 +48,7 @@ it.effect("syncs new Library content while preserving an edited deselected insta
 it.effect("removing a Collection prunes its device choice without leaving choose mode", () =>
   Effect.gen(function* () {
     const { a, b } = yield* devices;
-    const first = yield* a.retain("first");
+    const first = yield* a.importSource("first");
     yield* a.sync();
     yield* b.sync({ deviceSelection: { skills: ["first"], collections: ["fixture/first"] } });
     yield* b.remove(first.collection.collection_id);
@@ -62,8 +62,8 @@ it.effect("removing a Collection prunes its device choice without leaving choose
 it.effect("remote removal reports a missing device choice without silently pruning it", () =>
   Effect.gen(function* () {
     const { a, b, remote } = yield* devices;
-    const first = yield* a.retain("first");
-    yield* a.retain("second");
+    const first = yield* a.importSource("first");
+    yield* a.importSource("second");
     yield* a.sync();
     yield* b.sync({ deviceSelection: { skills: ["first", "second"], collections: [] } });
     const selected = (yield* b.state).device_skill_selection;
@@ -94,8 +94,8 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { a, b, remote, fs } = yield* devices;
-      const published = yield* a.retain("first");
-      const local = yield* b.retain("first");
+      const published = yield* a.importSource("first");
+      const local = yield* b.importSource("first");
       const publishedSkill = published.skills[0];
       const localSkill = local.skills[0];
       assert.ok(publishedSkill);
@@ -133,8 +133,8 @@ it.effect(
 it.effect("retains the full account Library while persisting an individual device choice", () =>
   Effect.gen(function* () {
     const { a, b, c, fs, remote } = yield* devices;
-    const first = yield* a.retain("first");
-    const second = yield* a.retain("second");
+    const first = yield* a.importSource("first");
+    const second = yield* a.importSource("second");
     yield* a.edit((state) => ({
       ...state,
       enabled: [
@@ -168,7 +168,7 @@ it.effect("a blocked selected destination leaves the Library synced and can be r
   Effect.gen(function* () {
     const homes = yield* devices;
     const { a, b, fs, remote } = homes;
-    const first = yield* a.retain("first");
+    const first = yield* a.importSource("first");
     yield* a.edit((state) => ({
       ...state,
       enabled: [{ skill: first.skills[0]!.skill_id }],
@@ -196,7 +196,7 @@ it.effect("a blocked selected destination leaves the Library synced and can be r
 it.effect("an unmanaged symlinked copy blocks enablement after the Library is retained", () =>
   Effect.gen(function* () {
     const { a, b, fs, remote } = yield* devices;
-    yield* a.retain("first");
+    yield* a.importSource("first");
     yield* a.sync();
     const account = join(b.home, "account");
     const root = join(account, ".agents", "skills");
@@ -231,7 +231,7 @@ it.effect("an unmanaged symlinked copy blocks enablement after the Library is re
 it.effect("a whole-collection choice follows membership while an individual does not", () =>
   Effect.gen(function* () {
     const { a, b, c, fs } = yield* devices;
-    const first = yield* a.retainMany("tools", ["first"], "2026-01-01T00:00:00.000Z");
+    const first = yield* a.importMany("tools", ["first"], "2026-01-01T00:00:00.000Z");
     yield* a.sync();
     yield* b.sync({ deviceSelection: { skills: ["first"], collections: [] } });
     yield* c.sync({ deviceSelection: { skills: [], collections: ["fixture/tools"] } });
@@ -240,7 +240,7 @@ it.effect("a whole-collection choice follows membership while an individual does
     const collection = first.collection.collection_id;
     assert.isTrue("skill" in globalEnabled(individual).enabled[0]!);
     assert.deepStrictEqual(globalEnabled(whole).enabled, [{ collection: collection }]);
-    yield* a.retainMany("tools", ["first", "new-member"], "2026-02-01T00:00:00.000Z");
+    yield* a.importMany("tools", ["first", "new-member"], "2026-02-01T00:00:00.000Z");
     assert.strictEqual((yield* a.sync()).status, "merged");
     assert.strictEqual((yield* b.sync()).status, "merged");
     assert.strictEqual((yield* c.sync()).status, "merged");

@@ -24,7 +24,7 @@ import { makeScriptedInteraction } from "../src/presentation/interaction-recorde
 import {
   libraryHome,
   initializeLibraryMachine,
-  retainObservedIn,
+  importCollectionIn,
   writingTo,
 } from "./helpers/library-home.js";
 
@@ -38,7 +38,7 @@ it.effect(
       yield* initializeLibraryMachine(home.home);
       const source = join(root, "review");
       yield* fs.makeDirectory(source);
-      for (const [index, retainedAt] of [
+      for (const [index, importedAt] of [
         "2026-05-01T00:00:00.000Z",
         "2026-09-29T00:00:00.000Z",
       ].entries()) {
@@ -46,11 +46,11 @@ it.effect(
         yield* home.owned(
           writingTo(
             home.home,
-            retainObservedIn(home.home)({
+            importCollectionIn(home.home)({
               source: { type: "github", owner: "example", repository: "skills" },
               revision: { kind: "commit", commit: String(index + 1).repeat(40) },
               input: "example/skills",
-              retainedAt,
+              importedAt,
               skills: [
                 {
                   name: "review",
@@ -263,7 +263,7 @@ skills:
             root: source,
             source: { type: "local", path: source },
             input: source,
-            retainedAt: "2026-09-29T00:00:00.000Z",
+            importedAt: "2026-09-29T00:00:00.000Z",
           }),
         ),
       );

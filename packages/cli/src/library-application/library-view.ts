@@ -106,10 +106,10 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
         ),
         (skill) =>
           Effect.gen(function* () {
-            const retained = state.skills.find((retained) => retained.skill_id === skill.id);
-            if (retained === undefined)
+            const imported = state.skills.find((imported) => imported.skill_id === skill.id);
+            if (imported === undefined)
               return yield* Effect.die(`Missing retained Skill ${skill.id}`);
-            const authorInvocation = yield* readInvocation(retained);
+            const authorInvocation = yield* readInvocation(imported);
             return { ...skill, authorInvocation };
           }),
       );

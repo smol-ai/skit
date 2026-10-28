@@ -49,7 +49,7 @@ const upstream = Effect.gen(function* () {
             source: { type: "github", owner: "fixture", repository: "skills" },
             input: "https://github.com/fixture/skills",
             revision: { kind: "commit", commit: String(refreshes).repeat(40) },
-            retainedAt: `2026-09-16T0${refreshes}:00:00.000Z`,
+            importedAt: `2026-09-16T0${refreshes}:00:00.000Z`,
             skills,
             observations: [],
           }).pipe(Effect.provide(storeLayer)),

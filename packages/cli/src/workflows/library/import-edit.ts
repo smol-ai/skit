@@ -207,14 +207,14 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
         (installedSkill) =>
           installedSkill.installed_skill_id === preview.selected_installed_skill_id,
       )!;
-      const retained = preview.import_required
+      const imported = preview.import_required
         ? yield* Effect.scoped(
             importEdit({
               skillId: preview.skill_id,
               installedSkillId: preview.selected_installed_skill_id,
               path: selected.path,
               observedHash: preview.observed_digest,
-              retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
+              importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
             }),
           )
         : yield* Effect.gen(function* () {
@@ -232,7 +232,7 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
               });
             return {
               skillVersionId: version.skill_version_id,
-              retainedCopyId: acquisition.collection_version_id,
+              collectionVersionId: acquisition.collection_version_id,
               snapshotDigest: preview.snapshot_digest,
             };
           });
@@ -279,9 +279,9 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
         skill_id: preview.skill_id,
         skill_name: preview.skill_name,
         previous_skill_version_id: preview.previous_skill_version_id,
-        imported_skill_version_id: retained.skillVersionId,
-        collection_version_id: retained.retainedCopyId,
-        snapshot_digest: retained.snapshotDigest,
+        imported_skill_version_id: imported.skillVersionId,
+        collection_version_id: imported.collectionVersionId,
+        snapshot_digest: imported.snapshotDigest,
         imported: preview.import_required,
         installed_skills: preview.installed_skills.map((observation) => {
           const installedSkill = settled.installed_skills.find(

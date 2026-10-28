@@ -342,7 +342,7 @@ export function setupReviewSummary(summary: SetupReviewSummary) {
     createsMachineIdentity: summary.createsMachineIdentity,
     sources: summary.sources.map(({ source, names }) => ({ source, names })),
     enables: summary.enables.map(({ name, sourcePath }) => ({ name, path: sourcePath })),
-    retains: summary.retains.map(({ name, sourcePath }) => ({ name, path: sourcePath })),
+    retains: summary.importOnly.map(({ name, sourcePath }) => ({ name, path: sourcePath })),
     preserves: summary.preserves,
     removals: summary.removals.entries,
   };

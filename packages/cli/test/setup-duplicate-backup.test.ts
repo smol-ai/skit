@@ -65,13 +65,13 @@ it.effect("a protected authored copy has an explicit choice and no automatic pre
       f.home.owned(prepareSetupCommand(input).pipe(Effect.provide(f.interaction.layer))),
     );
     expect(unresolved._tag).toBe("SetupDuplicateDecisionRequired");
-    const retained = yield* f.home.owned(
+    const imported = yield* f.home.owned(
       prepareSetupCommand({ ...input, duplicates: "retain-only" }).pipe(
         Effect.provide(f.interaction.layer),
       ),
     );
-    expect(retained.plan.summary.preserves).toEqual([]);
-    expect(retained.plan.summary.enables).toEqual([]);
+    expect(imported.plan.summary.preserves).toEqual([]);
+    expect(imported.plan.summary.enables).toEqual([]);
     expect(yield* f.fs.exists(f.duplicate)).toBe(true);
   }).pipe(Effect.provide(skitLayer)),
 );

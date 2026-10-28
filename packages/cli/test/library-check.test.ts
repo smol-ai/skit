@@ -20,14 +20,14 @@ it.effect("checks retained files without treating an observed local copy as an u
     yield* fs.makeDirectory(source, { recursive: true });
     yield* initializeLibraryMachine(home);
     yield* fs.writeFileString(join(source, "SKILL.md"), "observed raw Skill\n");
-    const retained = yield* importSource(source).pipe(Effect.provide(libraryStoreLayer({ home })));
+    const imported = yield* importSource(source).pipe(Effect.provide(libraryStoreLayer({ home })));
     const loaded = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
     assert.strictEqual(loaded.present, true);
     if (!loaded.present) return;
     const checkedCollections = yield* Ref.make<ReadonlyArray<string>>([]);
-    const current = yield* checkSubjects(loaded.state, retained.collection_id, (collection) =>
+    const current = yield* checkSubjects(loaded.state, imported.collection_id, (collection) =>
       Ref.update(checkedCollections, (names) => [...names, collection.display_name]),
     ).pipe(
       Effect.provideService(LibraryStore, {
@@ -50,7 +50,7 @@ it.effect("checks retained files without treating an observed local copy as an u
       loaded.state.collection_versions[0]!.digest,
     );
     yield* fs.writeFileString(join(path, "SKILL.md"), "changed retained bytes\n");
-    const changed = yield* checkSubjects(loaded.state, retained.collection_id).pipe(
+    const changed = yield* checkSubjects(loaded.state, imported.collection_id).pipe(
       Effect.provideService(LibraryStore, {
         load: Effect.succeed(loaded.state),
         inspect: Effect.succeed(loaded),
@@ -65,7 +65,7 @@ it.effect("checks retained files without treating an observed local copy as an u
     assert.strictEqual(changed[0]?.source_status, "not-applicable");
     assert.strictEqual(changed[0]?.available_snapshot_digest, undefined);
     yield* fs.remove(source, { recursive: true });
-    const withoutObservedCopy = yield* checkSubjects(loaded.state, retained.collection_id).pipe(
+    const withoutObservedCopy = yield* checkSubjects(loaded.state, imported.collection_id).pipe(
       Effect.provideService(LibraryStore, {
         load: Effect.succeed(loaded.state),
         inspect: Effect.succeed(loaded),

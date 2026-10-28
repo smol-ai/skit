@@ -135,10 +135,10 @@ it.effect(
       assert.instanceOf(failure(refused), SkillsDirectoryNotWritable);
       assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
 
-      const retained = yield* f
+      const imported = yield* f
         .run({ planId: reviewed.onboarding.planId, duplicates: "retain-only" })
         .pipe(denied);
-      assert.isTrue(Exit.isSuccess(retained));
+      assert.isTrue(Exit.isSuccess(imported));
       const state = yield* f.home.durable;
       assert.deepStrictEqual(
         state.skills.map((skill) => skill.name),
@@ -324,13 +324,13 @@ it.effect(
       const link = (f: { root: string }) => join(f.root, ".claude", "skills", "delta");
       const source = (f: { root: string }) => join(f.root, "dotfiles", "skills", "delta");
 
-      const retained = yield* fixture({ alias: false, linked: true });
-      const retainedPlan = (yield* retained.review).onboarding.planId;
-      const kept = yield* retained.run({ planId: retainedPlan, duplicates: "retain-only" });
+      const imported = yield* fixture({ alias: false, linked: true });
+      const importedPlan = (yield* imported.review).onboarding.planId;
+      const kept = yield* imported.run({ planId: importedPlan, duplicates: "retain-only" });
       assert.isTrue(Exit.isSuccess(kept));
-      assert.strictEqual(yield* fs.readLink(link(retained)), source(retained));
+      assert.strictEqual(yield* fs.readLink(link(imported)), source(imported));
       assert.include(
-        (yield* retained.home.durable).skills.map((skill) => skill.name),
+        (yield* imported.home.durable).skills.map((skill) => skill.name),
         "delta",
       );
 

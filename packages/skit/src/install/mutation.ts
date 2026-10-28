@@ -184,7 +184,7 @@ export const prepareInstalledSkillRebuild = Effect.fn("Install.prepareRebuild")(
   const source = yield* installedSkillSource(state, originalsPath, skill, version);
   if (source.kind !== "source") return yield* new InstalledSkillFailure({ message: source.detail });
   return {
-    retainedRoot: source.libraryPath,
+    collectionVersionPath: source.libraryPath,
     build: Effect.fn("Install.rebuildBytes")(function* (destination: string) {
       // Retained bytes may have changed since review; validate them again before reading.
       const current = yield* installedSkillSource(state, originalsPath, skill, version);

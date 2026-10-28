@@ -23,7 +23,7 @@ import {
   archiveBytes,
   boundSkit,
   initializeLibraryMachine,
-  retainObservedIn,
+  importCollectionIn,
   writingTo,
 } from "./helpers/library-home.js";
 import { registryAuthAccessLayer } from "../src/registry/auth-service.js";
@@ -414,15 +414,15 @@ it.effect("records a new upstream commit even when its Skill bytes are unchanged
       "---\nname: review\ndescription: Review\n---\nunchanged\n",
     );
     const observedHash = yield* deterministicTreeHash(skill);
-    const retainAt = (commit: string, retainedAt: string) =>
+    const importAt = (commit: string, importedAt: string) =>
       Effect.scoped(
         writingTo(
           home,
-          retainObservedIn(home)({
+          importCollectionIn(home)({
             source: { type: "github", owner: "acme", repository: "skills" },
             input: "https://github.com/acme/skills.git",
             revision: { kind: "commit", commit },
-            retainedAt,
+            importedAt,
             skills: [{ name: "review", sourcePath: skill, relativePath: "review", observedHash }],
             observations: [],
           }),
@@ -432,10 +432,10 @@ it.effect("records a new upstream commit even when its Skill bytes are unchanged
       Effect.provide(libraryStoreLayer({ home })),
     );
 
-    yield* retainAt("a".repeat(40), "2026-09-16T01:00:00.000Z");
-    yield* retainAt("b".repeat(40), "2026-09-16T02:00:00.000Z");
+    yield* importAt("a".repeat(40), "2026-09-16T01:00:00.000Z");
+    yield* importAt("b".repeat(40), "2026-09-16T02:00:00.000Z");
     const recorded = yield* load;
-    yield* retainAt("b".repeat(40), "2026-09-16T03:00:00.000Z");
+    yield* importAt("b".repeat(40), "2026-09-16T03:00:00.000Z");
     const repeated = yield* load;
 
     // The new commit is recorded as its own import of the same bytes.

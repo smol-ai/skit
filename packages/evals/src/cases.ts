@@ -61,7 +61,7 @@ function libraryFailures(
     skills: readonly string[];
     installedSkills: readonly { target: string; path: string }[];
     /** Skills kept in the Library that no agent may see through a skit copy. */
-    retainedOnly?: readonly string[];
+    importOnly?: readonly string[];
   },
 ): string[] {
   if (!library.exists) return ["no Library: setup was not applied"];
@@ -84,7 +84,7 @@ function libraryFailures(
         (installedSkill) =>
           `${installedSkill.target} copy at ${installedSkill.path} is ${installedSkill.status}`,
       ),
-    ...(expected.retainedOnly ?? []).flatMap((name) =>
+    ...(expected.importOnly ?? []).flatMap((name) =>
       library.installedSkills
         .filter((installedSkill) => installedSkill.path.endsWith(`/${name}`))
         .map(
@@ -141,7 +141,7 @@ export const messyHomeCase: EvalCase = {
         { target: "agents", path: ".agents/skills/release-notes" },
         { target: "claude", path: ".claude/skills/release-notes" },
       ],
-      retainedOnly: ["standup"],
+      importOnly: ["standup"],
     }),
     ...(observation.repositoryRoots.includes("Work") ? [] : ["skit does not scan ~/Work"]),
   ],

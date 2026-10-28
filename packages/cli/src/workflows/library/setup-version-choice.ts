@@ -86,24 +86,24 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
         installedSkillId: copy.installedSkillId,
         path: copy.path,
         observedHash: copy.currentHash,
-        retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
+        importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
       }),
     );
   }
-  const retained = yield* store.load;
+  const imported = yield* store.load;
   // Render all selected destinations before displacing any of them. This also uses their policy.
   const desired = new Map<string, string>();
   for (const fact of live) {
-    const installedSkill = retained.installed_skills.find(
+    const installedSkill = imported.installed_skills.find(
       (item) => item.installed_skill_id === fact.installedSkillId,
     )!;
-    const skill = retained.skills.find((item) => item.skill_id === fact.skillId)!;
-    const version = currentSkillVersion(retained, skill)!;
-    const policy = globalEnabled(retained).invocation_policies?.[fact.skillId];
+    const skill = imported.skills.find((item) => item.skill_id === fact.skillId)!;
+    const version = currentSkillVersion(imported, skill)!;
+    const policy = globalEnabled(imported).invocation_policies?.[fact.skillId];
     const digest = yield* Effect.scoped(
       Effect.gen(function* () {
         const renderer = yield* prepareInstalledSkillRebuild(
-          retained,
+          imported,
           store.originalsPath,
           { ...installedSkill, skill_version_id: version.skill_version_id },
           policy === undefined ? { source: "declared" } : { source: "override", policy },
@@ -119,7 +119,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
   const preservation = yield* prepareOwnedRecoveryMoves(
     live.map((fact) => ({
       name: fact.name,
-      installedSkill: retained.installed_skills.find(
+      installedSkill: imported.installed_skills.find(
         (item) => item.installed_skill_id === fact.installedSkillId,
       )!,
     })),
@@ -131,7 +131,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
       return yield* new PlanIsStale();
   yield* preservation.apply();
   for (const fact of live) {
-    const installedSkill = retained.installed_skills.find(
+    const installedSkill = imported.installed_skills.find(
       (item) => item.installed_skill_id === fact.installedSkillId,
     )!;
     yield* installEnabledSkills({

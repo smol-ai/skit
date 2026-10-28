@@ -20,8 +20,8 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { fs, a, b, remote } = yield* devices;
-      const published = yield* a.retain("same");
-      const imported = yield* b.retain("same");
+      const published = yield* a.importSource("same");
+      const imported = yield* b.importSource("same");
       const local = imported.skills[0];
       assert.ok(local);
       yield* b.edit((state) => ({ ...state, enabled: enable([local.skill_id]) }));
@@ -29,7 +29,7 @@ it.effect(
       const installedSkill = (yield* b.state).installed_skills[0];
       assert.ok(installedSkill);
       yield* fs.writeFileString(join(installedSkill.path, "SKILL.md"), "authored edit\n");
-      yield* b.retainInstalledSkillEdit(installedSkill);
+      yield* b.importInstalledSkillEdit(installedSkill);
       yield* a.sync();
       const before = yield* b.state;
       const head = yield* remote;
@@ -62,9 +62,9 @@ it.effect(
 it.effect("same-name Skills from different Sources stop before writes and resolve explicitly", () =>
   Effect.gen(function* () {
     const { fs, a, b, c, remote } = yield* devices;
-    const first = yield* a.retain("first", { name: "review" });
-    const second = yield* b.retain("second", { name: "review" });
-    const unrelated = yield* b.retain("unrelated", { name: "other" });
+    const first = yield* a.importSource("first", { name: "review" });
+    const second = yield* b.importSource("second", { name: "review" });
+    const unrelated = yield* b.importSource("unrelated", { name: "other" });
     const followed = unrelated.collection;
     const firstSkill = first.skills[0];
     const secondSkill = second.skills[0];
@@ -120,8 +120,8 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { fs, a, b, inject, remote } = yield* devices;
-      const first = yield* a.retain("same");
-      const second = yield* b.retain("same");
+      const first = yield* a.importSource("same");
+      const second = yield* b.importSource("same");
       const publishedSkill = first.skills[0];
       const localSkill = second.skills[0];
       assert.ok(publishedSkill);
@@ -183,7 +183,7 @@ for (const repository of [false, true]) {
       () =>
         Effect.gen(function* () {
           const { fs, a, b } = yield* devices;
-          const initial = yield* a.retain("review");
+          const initial = yield* a.importSource("review");
           const skill = initial.skills[0];
           assert.ok(skill);
           if (!repository)
@@ -198,10 +198,16 @@ for (const repository of [false, true]) {
               ...state,
               repositories: [{ root: repositoryScope.root, enabled: [{ skill: skill.skill_id }] }],
             }));
-          yield* b.retain("review", { bytes: "B edit\n", retainedAt: "2026-01-02T00:00:00Z" });
+          yield* b.importSource("review", {
+            bytes: "B edit\n",
+            importedAt: "2026-01-02T00:00:00Z",
+          });
           yield* b.project(scope, root);
           if (edited) yield* fs.writeFileString(join(root, "review", "SKILL.md"), "native edit\n");
-          yield* a.retain("review", { bytes: "A edit\n", retainedAt: "2026-01-03T00:00:00Z" });
+          yield* a.importSource("review", {
+            bytes: "A edit\n",
+            importedAt: "2026-01-03T00:00:00Z",
+          });
           yield* a.sync();
           const before = yield* b.state;
           assert.equal((yield* b.sync({ apply: false })).status, "conflicted");
@@ -256,8 +262,8 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { fs, a, b } = yield* devices;
-      const retained = yield* a.retain("review");
-      const skill = retained.skills[0];
+      const imported = yield* a.importSource("review");
+      const skill = imported.skills[0];
       assert.ok(skill);
       yield* a.edit((state) => ({ ...state, enabled: enable([skill.skill_id]) }));
       yield* a.sync();
@@ -272,8 +278,8 @@ it.effect(
 it.effect("nested repository reconciliation retains each repository's own route", () =>
   Effect.gen(function* () {
     const { fs, b } = yield* devices;
-    const parent = yield* b.retain("parent");
-    const child = yield* b.retain("child");
+    const parent = yield* b.importSource("parent");
+    const child = yield* b.importSource("child");
     const parentSkill = parent.skills[0];
     const childSkill = child.skills[0];
     assert.ok(parentSkill);
@@ -302,8 +308,8 @@ it.effect("nested repository reconciliation retains each repository's own route"
 it.effect("incoming repository name collisions stop before either head changes", () =>
   Effect.gen(function* () {
     const { fs, a, b, remote } = yield* devices;
-    const first = yield* a.retain("first", { name: "foo" });
-    const second = yield* a.retain("second", { name: "bar" });
+    const first = yield* a.importSource("first", { name: "foo" });
+    const second = yield* a.importSource("second", { name: "bar" });
     yield* a.sync();
     yield* b.sync();
     const scope = { kind: "repository" as const, root: join(b.home, "repo") };
@@ -343,7 +349,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { fs, a, b, remote } = yield* devices;
-      const initial = yield* a.retain("review");
+      const initial = yield* a.importSource("review");
       const skill = initial.skills[0];
       assert.ok(skill);
       yield* a.edit((state) => ({ ...state, enabled: enable([skill.skill_id]) }));
@@ -351,7 +357,7 @@ it.effect(
       yield* b.sync();
       yield* a.remove(initial.collection.collection_id);
       yield* a.sync();
-      yield* b.retain("unrelated");
+      yield* b.importSource("unrelated");
       yield* fs.writeFileString(join(b.root, "review", "SKILL.md"), "native edit\n");
       const before = yield* b.state;
       const head = yield* remote;
@@ -378,8 +384,8 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { fs, a, b, inject, remote } = yield* devices;
-      const first = yield* a.retain("same");
-      const second = yield* b.retain("same");
+      const first = yield* a.importSource("same");
+      const second = yield* b.importSource("same");
       const firstSkill = first.skills[0];
       const secondSkill = second.skills[0];
       assert.ok(firstSkill);
@@ -418,13 +424,13 @@ for (const localBytes of ["B\n", "base\n"]) {
     () =>
       Effect.gen(function* () {
         const { fs, a, b } = yield* devices;
-        yield* a.retain("same", { bytes: "base\n" });
-        yield* b.retain("same", { bytes: "base\n" });
-        const remoteUpdate = yield* a.retain("same", {
+        yield* a.importSource("same", { bytes: "base\n" });
+        yield* b.importSource("same", { bytes: "base\n" });
+        const remoteUpdate = yield* a.importSource("same", {
           bytes: "A\n",
-          retainedAt: "2026-01-02T00:00:00Z",
+          importedAt: "2026-01-02T00:00:00Z",
         });
-        yield* b.retain("same", { bytes: localBytes, retainedAt: "2026-01-03T00:00:00Z" });
+        yield* b.importSource("same", { bytes: localBytes, importedAt: "2026-01-03T00:00:00Z" });
         const localCopies = (yield* b.state).collection_versions;
         yield* a.sync();
         const skill = remoteUpdate.skills[0];
@@ -467,9 +473,9 @@ for (const localBytes of ["B\n", "base\n"]) {
         );
         assert.equal((yield* a.sync()).status, "merged");
         assert.equal((yield* b.sync()).status, "clean");
-        const next = yield* b.retain("same", {
+        const next = yield* b.importSource("same", {
           bytes: "next\n",
-          retainedAt: "2026-01-04T00:00:00Z",
+          importedAt: "2026-01-04T00:00:00Z",
         });
         const updated = yield* b.state;
         assert.equal(updated.skills[0]?.local_version_id, undefined);
@@ -484,8 +490,8 @@ for (const localBytes of ["B\n", "base\n"]) {
 it.effect("identity alignment preserves a native deletion recorded before first adoption", () =>
   Effect.gen(function* () {
     const { fs, a, b } = yield* devices;
-    const first = yield* a.retain("same");
-    const second = yield* b.retain("same");
+    const first = yield* a.importSource("same");
+    const second = yield* b.importSource("same");
     const published = first.skills[0];
     const local = second.skills[0];
     assert.ok(published);
@@ -518,16 +524,22 @@ for (const remoteDeletes of [false, true]) {
     () =>
       Effect.gen(function* () {
         const { a, b } = yield* devices;
-        const initial = yield* a.retain("review");
+        const initial = yield* a.importSource("review");
         yield* a.sync();
         yield* b.sync();
         if (remoteDeletes) {
           yield* a.remove(initial.collection.collection_id);
           yield* a.sync();
-          yield* b.retain("review", { bytes: "changed\n", retainedAt: "2026-01-02T00:00:00Z" });
+          yield* b.importSource("review", {
+            bytes: "changed\n",
+            importedAt: "2026-01-02T00:00:00Z",
+          });
         } else {
           yield* b.remove(initial.collection.collection_id);
-          yield* a.retain("review", { bytes: "changed\n", retainedAt: "2026-01-02T00:00:00Z" });
+          yield* a.importSource("review", {
+            bytes: "changed\n",
+            importedAt: "2026-01-02T00:00:00Z",
+          });
           yield* a.sync();
         }
         const key = `collection:${initial.collection.collection_id}`;
@@ -544,8 +556,8 @@ for (const remoteDeletes of [false, true]) {
 it.effect("destination comparison follows the filesystem's case behavior", () =>
   Effect.gen(function* () {
     const { fs, a, b } = yield* devices;
-    const first = yield* a.retain("first", { name: "Review" });
-    const second = yield* b.retain("second", { name: "review" });
+    const first = yield* a.importSource("first", { name: "Review" });
+    const second = yield* b.importSource("second", { name: "review" });
     const firstSkill = first.skills[0];
     const secondSkill = second.skills[0];
     assert.ok(firstSkill);
@@ -569,8 +581,8 @@ it.effect("destination comparison follows the filesystem's case behavior", () =>
 it.effect("aliased install destinations stop even when only one Skill is enabled", () =>
   Effect.gen(function* () {
     const { a, remote } = yield* devices;
-    const retained = yield* a.retain("review");
-    const skill = retained.skills[0];
+    const imported = yield* a.importSource("review");
+    const skill = imported.skills[0];
     assert.ok(skill);
     yield* a.edit((state) => ({ ...state, enabled: enable([skill.skill_id]) }));
     const before = yield* a.state;
@@ -586,12 +598,12 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { fs, a, b, remote } = yield* devices;
-      const first = yield* a.retain("first", { name: "review" });
+      const first = yield* a.importSource("first", { name: "review" });
       const firstSkill = first.skills[0];
       assert.ok(firstSkill);
       yield* a.sync();
       yield* b.sync();
-      const second = yield* b.retain("second", { name: "review" });
+      const second = yield* b.importSource("second", { name: "review" });
       const secondSkill = second.skills[0];
       assert.ok(secondSkill);
       const scope = { kind: "repository" as const, root: join(b.home, "repo") };
@@ -621,8 +633,8 @@ it.effect(
 it.effect("a copy becoming snapshot-backed during merge uploads its already-retained bytes", () =>
   Effect.gen(function* () {
     const { a, b, remote } = yield* devices;
-    yield* a.retain("same");
-    yield* b.retain("same");
+    yield* a.importSource("same");
+    yield* b.importSource("same");
     const extraId = makeImportId();
     const originalId = (yield* a.state).imports[0]?.import_id;
     assert.ok(originalId);

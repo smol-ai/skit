@@ -24,7 +24,7 @@ const pool = Array.from({ length: 4 }, (_, index) => {
   const digest = `sha256:${String(index).repeat(64)}`;
   const collectionId = makeCollectionId();
   const skillId = makeSkillId();
-  const retainedCopyId = makeCollectionVersionId();
+  const collectionVersionId = makeCollectionVersionId();
   return {
     collectionId,
     skillId,
@@ -47,8 +47,8 @@ const pool = Array.from({ length: 4 }, (_, index) => {
         },
       ],
     },
-    retainedCopy: {
-      collection_version_id: retainedCopyId,
+    collectionVersion: {
+      collection_version_id: collectionVersionId,
       digest,
       copy_profile: "verbatim/v1" as const,
       members: [
@@ -64,7 +64,7 @@ const pool = Array.from({ length: 4 }, (_, index) => {
       import_id: makeImportId(),
       collection_id: collectionId,
       kind: "source" as const,
-      collection_version_id: retainedCopyId,
+      collection_version_id: collectionVersionId,
       source_identity: {
         kind: "local" as const,
         machine_id: machineId,
@@ -102,7 +102,7 @@ const manifestOf = (choices: Side): LibraryManifest => {
         ? [{ collection: entry.collectionId }]
         : [],
   );
-  const retained_copies = present.map(({ entry }) => entry.retainedCopy);
+  const retained_copies = present.map(({ entry }) => entry.collectionVersion);
   const acquisitions = present.map(({ entry }) => entry.acquisition);
   return Schema.decodeUnknownSync(LibraryManifest)(
     currentLibraryManifest({

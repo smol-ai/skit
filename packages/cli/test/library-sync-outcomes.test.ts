@@ -94,7 +94,7 @@ const asV7 = ({
 };
 
 const seed = Effect.fn("Test.seedSyncHomes")(function* ({ a, b }: Homes) {
-  yield* a.retain("first");
+  yield* a.importSource("first");
   yield* a.edit((state) => ({
     ...state,
     enabled: [{ skill: state.skills[0]!.skill_id }],
@@ -143,7 +143,7 @@ const cases: readonly {
     row: "Push: before P2 (failed upload)",
     run: ({ a, inject, server }) =>
       Effect.gen(function* () {
-        yield* a.retain("first");
+        yield* a.importSource("first");
         const unchanged = yield* captureDisk(a.disk);
         inject({ _tag: "FailUpload" });
         assert.ok((yield* Effect.flip(a.sync())) instanceof LibraryApiRejected);
@@ -156,8 +156,8 @@ const cases: readonly {
     row: "Push: P2 loses the CAS on the first push",
     run: ({ a, b, inject, server }) =>
       Effect.gen(function* () {
-        yield* a.retain("from-a");
-        yield* b.retain("from-b");
+        yield* a.importSource("from-a");
+        yield* b.importSource("from-b");
         // The competitor uploads its bytes and commits before A's null-base CAS.
         const competingState = yield* b.state;
         const archive = yield* captureSnapshotArchive(
@@ -187,7 +187,7 @@ const cases: readonly {
     row: "Push: HTTP 500 after commit differs from a lost transport response",
     run: ({ a, inject, server }) =>
       Effect.gen(function* () {
-        yield* a.retain("first");
+        yield* a.importSource("first");
         const unchanged = yield* captureDisk(a.disk);
         inject({ _tag: "ErrorAfterCommit" });
         const error = yield* Effect.flip(a.sync());
@@ -202,7 +202,7 @@ const cases: readonly {
     row: "Push: P2 response lost before P4",
     run: ({ a, inject, server }) =>
       Effect.gen(function* () {
-        yield* a.retain("first");
+        yield* a.importSource("first");
         const unchanged = yield* captureDisk(a.disk);
         inject({ _tag: "DropAfterCommit" });
         assert.ok((yield* Effect.flip(a.sync())) instanceof RegistryUnreachable);
@@ -218,7 +218,7 @@ const cases: readonly {
     row: "Push: after P2 before P4 (failed local publish)",
     run: ({ a, inject, server }) =>
       Effect.gen(function* () {
-        yield* a.retain("first");
+        yield* a.importSource("first");
         const unchanged = yield* captureDisk(a.disk);
         inject({ _tag: "FailSave", anchoredOnly: false });
         assert.instanceOf(yield* Effect.flip(a.sync()), InvalidLibraryState);
@@ -232,13 +232,13 @@ const cases: readonly {
     row: "Push: P2 response lost, then another home writes before retry",
     run: ({ a, b, inject, server }) =>
       Effect.gen(function* () {
-        yield* a.retain("first");
+        yield* a.importSource("first");
         const unchanged = yield* captureDisk(a.disk);
         inject({ _tag: "DropAfterCommit" });
         assert.ok((yield* Effect.flip(a.sync())) instanceof RegistryUnreachable);
         yield* assertDiskUnchanged(unchanged);
         yield* b.sync();
-        yield* b.retain("second");
+        yield* b.importSource("second");
         yield* b.sync();
         const winner = server.remote;
         assert.strictEqual((yield* a.sync()).status, "adoption_required");
@@ -253,7 +253,7 @@ const cases: readonly {
     row: "Pull: before U4 (failed local publish)",
     run: ({ a, b, inject, server }) =>
       Effect.gen(function* () {
-        yield* a.retain("first");
+        yield* a.importSource("first");
         yield* a.sync();
         const unchanged = yield* captureDisk(b.disk);
         const head = server.remote;
@@ -269,9 +269,9 @@ const cases: readonly {
     row: "Pull: U3 finds a concurrent local write (SyncLocalChanged)",
     run: ({ fs, a, b, c, inject, server }) =>
       Effect.gen(function* () {
-        yield* a.retain("remote");
+        yield* a.importSource("remote");
         yield* a.sync();
-        yield* c.retain("concurrent-local");
+        yield* c.importSource("concurrent-local");
         const concurrent = yield* c.state;
         yield* fs.makeDirectory(b.home, { recursive: true });
         yield* fs.copy(join(c.home, "originals"), join(b.home, "originals"));
@@ -293,7 +293,7 @@ const cases: readonly {
       Effect.gen(function* () {
         const { fs, a, b, inject, server } = homes;
         yield* seed(homes);
-        yield* b.retain("remote-addition");
+        yield* b.importSource("remote-addition");
         yield* b.sync();
         const concurrent = {
           ...(yield* a.state),
@@ -326,9 +326,9 @@ const cases: readonly {
       Effect.gen(function* () {
         const { a, b, events, inject, server } = homes;
         yield* seed(homes);
-        yield* b.retain("remote-addition");
+        yield* b.importSource("remote-addition");
         yield* b.sync();
-        yield* a.retain("local-addition");
+        yield* a.importSource("local-addition");
         const concurrent = yield* a.state;
         inject({
           _tag: "ChangeStateWhenHeadRead",
@@ -352,15 +352,15 @@ const cases: readonly {
     row: "Pull: U3 stops before writing a --keep-enabled choice",
     run: ({ fs, a, b, c, events, inject, server }) =>
       Effect.gen(function* () {
-        const first = yield* a.retain("first", { name: "review" });
-        const second = yield* a.retain("second", { name: "review" });
+        const first = yield* a.importSource("first", { name: "review" });
+        const second = yield* a.importSource("second", { name: "review" });
         yield* a.edit((state) => ({
           ...state,
           enabled: [first, second].map((item) => ({ skill: item.skills[0]!.skill_id })),
         }));
         // Without enabled roots nothing collides, so the Library can be pushed as it is.
         yield* a.sync({ rootFor: () => undefined });
-        yield* c.retain("concurrent-local");
+        yield* c.importSource("concurrent-local");
         yield* fs.makeDirectory(b.home, { recursive: true });
         yield* fs.copy(join(c.home, "originals"), join(b.home, "originals"));
         inject({ _tag: "ChangeStateWhenHeadRead", home: b.home, state: yield* c.state });
@@ -380,8 +380,8 @@ const cases: readonly {
       Effect.gen(function* () {
         const { a, b, inject, server } = homes;
         yield* seed(homes);
-        yield* a.retain("from-a");
-        yield* b.retain("from-b");
+        yield* a.importSource("from-a");
+        yield* b.importSource("from-b");
         yield* b.sync();
         inject({
           _tag: "CompetingWrite",
@@ -414,8 +414,8 @@ const cases: readonly {
       Effect.gen(function* () {
         const { a, b, inject, server } = homes;
         yield* seed(homes);
-        yield* a.retain("from-a");
-        yield* b.retain("from-b");
+        yield* a.importSource("from-a");
+        yield* b.importSource("from-b");
         yield* b.sync();
         const unchanged = yield* captureDisk(a.disk);
         inject({ _tag: "FailSave", anchoredOnly: false });
@@ -436,8 +436,8 @@ const cases: readonly {
       Effect.gen(function* () {
         const { a, b, inject, server } = homes;
         yield* seed(homes);
-        yield* a.retain("from-a");
-        yield* b.retain("from-b");
+        yield* a.importSource("from-a");
+        yield* b.importSource("from-b");
         yield* b.sync();
         const unchanged = yield* captureDisk(a.disk);
         const head = server.remote;
@@ -453,9 +453,9 @@ const cases: readonly {
     row: "Adoption gate: adoption_required writes nothing",
     run: ({ a, b, server }) =>
       Effect.gen(function* () {
-        yield* a.retain("remote");
+        yield* a.importSource("remote");
         yield* a.sync();
-        yield* b.retain("local");
+        yield* b.importSource("local");
         const unchanged = yield* captureDisk(b.disk);
         const before = server.stored;
         assert.strictEqual((yield* b.sync()).status, "adoption_required");
@@ -478,7 +478,7 @@ const cases: readonly {
             ...state,
             collections: state.collections.map((item) => ({ ...item, label: "from-b" })),
           }));
-        } else yield* b.retain("remote-addition");
+        } else yield* b.importSource("remote-addition");
         yield* b.sync();
         const unchanged = yield* captureDisk(a.disk);
         const before = server.stored;
@@ -508,7 +508,7 @@ const cases: readonly {
         const { fs, a, b, inject, server } = homes;
         let device = a;
         if (row.startsWith("Push")) {
-          yield* a.retain("first");
+          yield* a.importSource("first");
           yield* a.edit((state) => ({
             ...state,
             enabled: [{ skill: state.skills[0]!.skill_id }],
@@ -517,7 +517,7 @@ const cases: readonly {
           yield* seed(homes);
           if (row.startsWith("Pull")) device = homes.c;
           else if (row.startsWith("Merge")) {
-            yield* b.retain("remote-addition");
+            yield* b.importSource("remote-addition");
             yield* b.sync();
           }
           // A clean sync saves only to anchor ancestry its state lacks.
@@ -554,21 +554,21 @@ const cases: readonly {
     run: (homes: Homes) =>
       Effect.gen(function* () {
         const { fs, a, b, inject } = homes;
-        const first = yield* a.retain("first");
-        const second = yield* a.retain("second");
+        const first = yield* a.importSource("first");
+        const second = yield* a.importSource("second");
         const enable = (ids: readonly SkillId[]) => (state: LibraryState) => ({
           ...state,
           enabled: ids.map((skill) => ({ skill })),
         });
         yield* a.edit(enable([first.skills[0]!.skill_id]));
         yield* a.project();
-        const update = { bytes: "first v2\n", retainedAt: "2026-01-02T00:00:00.000Z" };
+        const update = { bytes: "first v2\n", importedAt: "2026-01-02T00:00:00.000Z" };
         if (path === "Merge") {
           yield* a.sync();
           yield* b.sync();
-          yield* b.retain("first", update);
+          yield* b.importSource("first", update);
           yield* b.sync();
-        } else yield* a.retain("first", update);
+        } else yield* a.importSource("first", update);
         // An edit the selected Version would replace, and a Skill reconciliation must newly install.
         const installedSkill = (yield* a.state).installed_skills[0]!;
         yield* fs.writeFileString(join(installedSkill.path, "SKILL.md"), "unretained edit\n");
@@ -612,7 +612,7 @@ const cases: readonly {
         }));
         yield* b.sync();
         // Force M5 to include a local-only record as well as the resolved remote label.
-        yield* a.retain("local-only");
+        yield* a.importSource("local-only");
         const unchanged = yield* captureDisk(a.disk);
         inject({ _tag: "FailSave", anchoredOnly: false });
         assert.instanceOf(
@@ -654,14 +654,14 @@ it.effect("oracle: every applying path commits remote before local, on the revis
         assert.isTrue(Exit.isSuccess(exit), `${[...events]}`);
         return [...events];
       });
-    yield* a.retain("first");
+    yield* a.importSource("first");
     assert.deepStrictEqual(yield* committed(a.sync()), ["upload", "write on null", "save a"]);
     const pushed = server.remote!.revision_id;
     assert.deepStrictEqual(yield* committed(b.sync()), ["save b"]);
-    yield* b.retain("second");
+    yield* b.importSource("second");
     assert.deepStrictEqual(yield* committed(b.sync()), ["upload", `write on ${pushed}`, "save b"]);
     const merged = server.remote!.revision_id;
-    yield* a.retain("third");
+    yield* a.importSource("third");
     assert.deepStrictEqual(yield* committed(a.sync()), ["upload", `write on ${merged}`, "save a"]);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
@@ -671,8 +671,8 @@ it.effect("oracle: every applying path commits remote before local, on the revis
 it.effect("a --take-remote key is refused before collision checks on a push and a pull", () =>
   Effect.gen(function* () {
     const { fs, a, b, server } = yield* devices;
-    const first = yield* a.retain("first", { name: "review" });
-    const second = yield* a.retain("second", { name: "review" });
+    const first = yield* a.importSource("first", { name: "review" });
+    const second = yield* a.importSource("second", { name: "review" });
     yield* a.edit((state) => ({
       ...state,
       enabled: [first, second].map((item) => ({ skill: item.skills[0]!.skill_id })),
@@ -705,7 +705,7 @@ for (const home of ["current", "legacy", "absent"] as const)
         Effect.gen(function* () {
           const { fs, a, inject, server } = yield* devices;
           if (home !== "absent") {
-            yield* a.retain("first");
+            yield* a.importSource("first");
             yield* a.edit((state) => ({
               ...state,
               enabled: [{ skill: state.skills[0]!.skill_id }],
@@ -757,8 +757,8 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { a, b } = yield* devices;
-      yield* a.retain("first");
-      yield* a.retain("second");
+      yield* a.importSource("first");
+      yield* a.importSource("second");
       yield* a.sync();
       const events: string[] = [];
       const ticks: number[] = [];
@@ -801,8 +801,8 @@ it.effect(
 it.effect("a failed snapshot download retains nothing and leaves the remote unchanged", () =>
   Effect.gen(function* () {
     const { a, b, fs, inject, server } = yield* devices;
-    yield* a.retain("first");
-    yield* a.retain("second");
+    yield* a.importSource("first");
+    yield* a.importSource("second");
     yield* a.sync();
     const before = server.stored;
     inject({ _tag: "FailDownload", digest: server.remote!.manifest.snapshot_digests[1]! });
@@ -831,7 +831,7 @@ it.effect("a failed snapshot download retains nothing and leaves the remote unch
 it.effect("a prepared device transition cannot save into another Library home", () =>
   Effect.gen(function* () {
     const { a, b } = yield* devices;
-    yield* a.retain("first");
+    yield* a.importSource("first");
     const state = yield* a.state;
     const manifest = yield* libraryManifestFromLocalState(state);
     const transition = yield* prepareSyncDeviceTransition({
@@ -861,7 +861,7 @@ it.effect("a prepared device transition cannot save into another Library home", 
 it.effect("sync reuses an orphan retained snapshot without downloading it", () =>
   Effect.gen(function* () {
     const { a, b, c, fs, inject, server } = yield* devices;
-    yield* a.retain("first");
+    yield* a.importSource("first");
     yield* a.sync();
     const digest = server.remote!.manifest.snapshot_digests[0]!;
     const destination = collectionVersionPath(join(b.home, "originals"), digest);
@@ -885,8 +885,8 @@ it.effect("sync reuses an orphan retained snapshot without downloading it", () =
 it.effect("sync exposes bounded completed phases in transfer and save order", () =>
   Effect.gen(function* () {
     const { a, b } = yield* devices;
-    yield* a.retain("first");
-    yield* a.retain("second");
+    yield* a.importSource("first");
+    yield* a.importSource("second");
     const uploaded: number[] = [];
     yield* a.sync({
       progress: {
@@ -903,7 +903,7 @@ it.effect("sync exposes bounded completed phases in transfer and save order", ()
     });
     assert.deepStrictEqual(uploaded, [2]);
     const completed: string[] = [];
-    const retained: number[] = [];
+    const imported: number[] = [];
     const result = yield* b.sync({
       progress: {
         around: (phase, operation) =>
@@ -922,7 +922,7 @@ it.effect("sync exposes bounded completed phases in transfer and save order", ()
             Effect.tap(() =>
               Effect.sync(() => {
                 completed.push(phase.kind);
-                if (phase.kind === "retain") retained.push(phase.total);
+                if (phase.kind === "retain") imported.push(phase.total);
               }),
             ),
           ),
@@ -930,7 +930,7 @@ it.effect("sync exposes bounded completed phases in transfer and save order", ()
       },
     });
     assert.strictEqual(result.status, "pulled");
-    assert.deepStrictEqual(retained, [2]);
+    assert.deepStrictEqual(imported, [2]);
     assert.isBelow(completed.indexOf("download"), completed.indexOf("save-local"));
     assert.strictEqual(completed.at(-1), "enable");
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),

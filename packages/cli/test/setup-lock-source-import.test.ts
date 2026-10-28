@@ -259,7 +259,7 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
         ]),
       ).pipe(Effect.provideService(LibraryActor, "setup")),
     );
-    expect(adopted.retained).toHaveLength(1);
+    expect(adopted.imported).toHaveLength(1);
     const history = yield* home.owned(Effect.flatMap(LibraryAuditLog, (audit) => audit.list()));
     expect(history).toHaveLength(1);
     expect(history[0]).toMatchObject({ type: "collection.retained", workflow: "setup" });
@@ -267,7 +267,7 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
       "collection:added",
       "skill:added",
     ]);
-    const retained = adopted.retained[0]!;
+    const imported = adopted.imported[0]!;
     const persisted = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
       Effect.provide(libraryStoreLayer({ home: home.home })),
     );
@@ -284,7 +284,7 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
       }),
     ]);
     const skill = persisted.state.skills.find(
-      (item) => item.skill_id === retained.skills[0]?.skill_id,
+      (item) => item.skill_id === imported.skills[0]?.skill_id,
     );
     expect(acquisition.collection_id).toBe(skill?.collection_id);
     const tree = persisted.state.collection_versions[0]!;
@@ -479,9 +479,9 @@ it.effect("manages a selected member from a two-Skill GitHub lock collection", (
         ]),
       ),
     );
-    expect(adopted.retained).toHaveLength(1);
-    const retained = adopted.retained[0];
-    if (!retained) return;
+    expect(adopted.imported).toHaveLength(1);
+    const imported = adopted.imported[0];
+    if (!imported) return;
     const saved = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
       Effect.provide(libraryStoreLayer({ home: home.home })),
     );
@@ -489,10 +489,10 @@ it.effect("manages a selected member from a two-Skill GitHub lock collection", (
     if (!saved.present) return;
     expect(
       saved.state.skills
-        .filter((skill) => skill.collection_id === retained.collection?.collection_id)
+        .filter((skill) => skill.collection_id === imported.collection?.collection_id)
         .map((skill) => skill.name),
     ).toEqual(["review"]);
-    expect(saved.state.imports[0]?.collection_id).toBe(retained.collection?.collection_id);
+    expect(saved.state.imports[0]?.collection_id).toBe(imported.collection?.collection_id);
     expect(saved.state.imports[0]?.lock_file_entries).toHaveLength(1);
     expect(saved.state.imports[0]?.lock_file_entries[0]?.source).toBe("acme/skills");
     const secondSetup = yield* home.owned(runSetup(setup));

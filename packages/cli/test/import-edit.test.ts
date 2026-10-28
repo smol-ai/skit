@@ -9,7 +9,7 @@ import {
   skitLayer,
 } from "@smolai/skit-core";
 import { prepareEditImport } from "../src/workflows/library/import-edit.js";
-import { initializeLibraryMachine, retainObservedIn, writingTo } from "./helpers/library-home.js";
+import { initializeLibraryMachine, importCollectionIn, writingTo } from "./helpers/library-home.js";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
 import { isolatedRoots } from "./helpers/isolated-library.js";
 
@@ -26,10 +26,10 @@ const installedSkillFixture = Effect.gen(function* () {
   const collection = yield* Effect.scoped(
     writingTo(
       home,
-      retainObservedIn(home)({
+      importCollectionIn(home)({
         source: { type: "local", path: source },
         input: source,
-        retainedAt: now(),
+        importedAt: now(),
         skills: [
           {
             name: "review",
@@ -114,9 +114,9 @@ it.effect(
         ],
       );
       const after = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(storeLayer));
-      const retained = after.skills.find((candidate) => candidate.skill_id === skill.skill_id)!;
-      assert.strictEqual(retained.versions.length, 2);
-      assert.strictEqual(retained.local_version_id, result.imported_skill_version_id);
+      const imported = after.skills.find((candidate) => candidate.skill_id === skill.skill_id)!;
+      assert.strictEqual(imported.versions.length, 2);
+      assert.strictEqual(imported.local_version_id, result.imported_skill_version_id);
       assert.strictEqual(after.imports.at(-1)?.source_identity.kind, "local");
       assert.strictEqual(
         yield* fs.readFileString(join(roots.codexRoot, "review", "SKILL.md")),
@@ -131,10 +131,10 @@ it.effect(
       yield* Effect.scoped(
         writingTo(
           home,
-          retainObservedIn(home)({
+          importCollectionIn(home)({
             source: { type: "local", path: source },
             input: source,
-            retainedAt: "2026-09-18T00:00:00.000Z",
+            importedAt: "2026-09-18T00:00:00.000Z",
             skills: [
               {
                 name: "review",

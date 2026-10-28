@@ -13,7 +13,7 @@ import { importSource } from "../src/library-application/import-source.js";
 import {
   initializeLibraryMachine,
   libraryHome,
-  retainObservedIn,
+  importCollectionIn,
   writingTo,
 } from "./helpers/library-home.js";
 import { presentSetEnabled } from "../src/handlers/library/set-enabled.js";
@@ -66,22 +66,22 @@ effectIt.effect(
           observedHash: yield* deterministicTreeHash(path),
         });
       }
-      const retain = (skills: typeof members, retainedAt: string) =>
+      const importMembers = (skills: typeof members, importedAt: string) =>
         home.owned(
           writingTo(
             home.home,
-            retainObservedIn(home.home)({
+            importCollectionIn(home.home)({
               source: { type: "local", path: source },
               input: source,
-              retainedAt,
+              importedAt,
               skills,
               observations: [],
             }),
           ),
         );
-      const first = yield* retain(members, "2026-10-12T00:00:00.000Z");
+      const first = yield* importMembers(members, "2026-10-12T00:00:00.000Z");
       yield* fs.remove(join(source, "removed"), { recursive: true });
-      yield* retain(
+      yield* importMembers(
         members.filter((member) => member.name === "keep"),
         "2026-10-13T00:00:00.000Z",
       );
@@ -153,7 +153,7 @@ effectIt.effect(
       const originals = join(home, "originals");
       const measure = readDescriptionLoad(selectedState, originals, [skill]);
       expect(yield* measure).toEqual({ skills: 1, characters: 3, unknown: 0 });
-      const retainedFile = join(
+      const importedFile = join(
         collectionVersionPath(originals, first.snapshot_digest),
         "SKILL.md",
       );
@@ -161,10 +161,10 @@ effectIt.effect(
         "---\nname: review\ndescription: [bad\n---\n",
         "---\nname: review\ndescription: 123\n---\n",
       ]) {
-        yield* fs.writeFileString(retainedFile, text);
+        yield* fs.writeFileString(importedFile, text);
         expect(yield* measure).toEqual({ skills: 1, characters: 0, unknown: 1 });
       }
-      yield* fs.remove(retainedFile);
+      yield* fs.remove(importedFile);
       expect(yield* measure).toEqual({ skills: 1, characters: 0, unknown: 1 });
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

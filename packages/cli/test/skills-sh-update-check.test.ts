@@ -164,7 +164,7 @@ it.effect("checks skills.sh status against real Git history without saving Libra
     );
     const subject = librarySubjects(localState)[0]!;
     const acquisition = localState.imports[0]!;
-    const retainedCopy = localState.collection_versions[0]!;
+    const collectionVersion = localState.collection_versions[0]!;
     type Observation = LibraryState["imports"][number]["lock_file_entries"][number];
     const checkObservation = (change: Partial<Observation> = {}) =>
       checkSkillsShSubject(
@@ -176,7 +176,7 @@ it.effect("checks skills.sh status against real Git history without saving Libra
             ...change,
           })),
         },
-        retainedCopy,
+        collectionVersion,
       ).pipe(Effect.provideService(LibraryStore, store));
     const originalCommit = checked[0]!.skills_sh!.members[0]!.baseline_commit!;
     const originalTree = checked[0]!.skills_sh!.members[0]!.baseline_tree!;

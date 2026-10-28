@@ -79,32 +79,32 @@ export const addCliCommand = Command.make(
           );
           return yield* renderer.result(result("addPreview", value));
         }
-        const retained = yield* renderer.withStatus(
+        const imported = yield* renderer.withStatus(
           "Retaining source",
           withSelectedRegistry(importSource(selectedSource, requestedVersion)),
         );
         yield* renderer.result(
           result("add", {
-            action: retained.action,
-            ...(retained.collection_id === undefined
+            action: imported.action,
+            ...(imported.collection_id === undefined
               ? {}
-              : { collection_id: retained.collection_id }),
-            skill_ids: retained.skill_ids,
-            collection_version_id: retained.collection_version_id,
-            snapshot_digest: retained.snapshot_digest,
-            skills: retained.skills.map((skill) => ({
+              : { collection_id: imported.collection_id }),
+            skill_ids: imported.skill_ids,
+            collection_version_id: imported.collection_version_id,
+            snapshot_digest: imported.snapshot_digest,
+            skills: imported.skills.map((skill) => ({
               name: skill.name,
               verbatim_path: skill.verbatim_path,
             })),
-            ...("diagnostics" in retained && retained.diagnostics?.length
-              ? { diagnostics: retained.diagnostics }
+            ...("diagnostics" in imported && imported.diagnostics?.length
+              ? { diagnostics: imported.diagnostics }
               : {}),
           }),
         );
         const measurement = yield* Effect.gen(function* () {
           const store = yield* LibraryStore;
           const state = yield* store.load;
-          const ids = new Set<string>(retained.skill_ids);
+          const ids = new Set<string>(imported.skill_ids);
           const load = yield* readDescriptionLoad(
             state,
             store.originalsPath,

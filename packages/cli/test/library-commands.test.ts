@@ -18,7 +18,7 @@ import { rendererTestLayer } from "./helpers/renderer.js";
 import {
   initializeLibraryMachine,
   libraryHome,
-  retainObservedIn,
+  importCollectionIn,
   writingTo,
 } from "./helpers/library-home.js";
 import type { CommandResult } from "../src/commands/types.js";
@@ -37,7 +37,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
     const collection = yield* home.owned(
       writingTo(
         home.home,
-        retainObservedIn(home.home)({
+        importCollectionIn(home.home)({
           source: {
             type: "registry",
             namespace: "tim",
@@ -45,7 +45,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
             authority: "https://skit.example.com",
           },
           input: installed,
-          retainedAt: "2026-09-16T00:00:00.000Z",
+          importedAt: "2026-09-16T00:00:00.000Z",
           skills: [
             {
               name: "review",
@@ -143,10 +143,10 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     const collection = yield* home.owned(
       writingTo(
         home.home,
-        retainObservedIn(home.home)({
+        importCollectionIn(home.home)({
           source: { type: "local", path: installed },
           input: installed,
-          retainedAt: "2026-09-17T00:00:00.000Z",
+          importedAt: "2026-09-17T00:00:00.000Z",
           skills: [
             {
               name: "review",
@@ -375,10 +375,10 @@ it.effect("bare disable asks before changing a global Binding spanning Collectio
     yield* home.owned(
       writingTo(
         home.home,
-        retainObservedIn(home.home)({
+        importCollectionIn(home.home)({
           source: { type: "local", path: source },
           input: source,
-          retainedAt: "2026-10-06T00:00:00.000Z",
+          importedAt: "2026-10-06T00:00:00.000Z",
           skills: [
             {
               name: "show-me",
@@ -397,10 +397,10 @@ it.effect("bare disable asks before changing a global Binding spanning Collectio
     yield* home.owned(
       writingTo(
         home.home,
-        retainObservedIn(home.home)({
+        importCollectionIn(home.home)({
           source: { type: "local", path: other },
           input: other,
-          retainedAt: "2026-10-06T00:00:00.000Z",
+          importedAt: "2026-10-06T00:00:00.000Z",
           skills: [
             {
               name: "effect",
@@ -413,12 +413,12 @@ it.effect("bare disable asks before changing a global Binding spanning Collectio
         }),
       ),
     );
-    const retained = yield* home.durable;
+    const imported = yield* home.durable;
     const state = {
-      ...retained,
-      enabled: retained.skills.map((skill) => ({ skill: skill.skill_id })),
+      ...imported,
+      enabled: imported.skills.map((skill) => ({ skill: skill.skill_id })),
     };
-    yield* home.owned(LibraryStore.use((store) => store.save(state, retained)));
+    yield* home.owned(LibraryStore.use((store) => store.save(state, imported)));
     const configuration = yield* libraryCommandConfiguration({
       home: Option.some(home.home),
       codexRoot: Option.none(),
@@ -460,7 +460,7 @@ it.effect("bare disable asks before changing a global Binding spanning Collectio
       }).pipe(Effect.provide(selection.layer)),
     );
     const after = yield* home.durable;
-    const showMe = retained.skills.find((skill) => skill.name === "show-me");
+    const showMe = imported.skills.find((skill) => skill.name === "show-me");
     assert.ok(showMe);
     assert.deepStrictEqual(after.enabled, [{ skill: showMe.skill_id }]);
     const single = yield* makeScriptedInteraction(["cancel"]);
@@ -495,10 +495,10 @@ it.effect("rejects a stale multi-destination disable before changing any Binding
     const collection = yield* home.owned(
       writingTo(
         home.home,
-        retainObservedIn(home.home)({
+        importCollectionIn(home.home)({
           source: { type: "local", path: installed },
           input: installed,
-          retainedAt: "2026-09-17T00:00:00.000Z",
+          importedAt: "2026-09-17T00:00:00.000Z",
           skills: [
             {
               name: "review",

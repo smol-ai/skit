@@ -43,11 +43,11 @@ it.effect(
         state.skills.map((skill) => skill.path),
         manifest.skills.map((skill) => skill.path),
       );
-      const retained = collectionVersionPath(join(home, "originals"), result.snapshot_digest);
+      const imported = collectionVersionPath(join(home, "originals"), result.snapshot_digest);
       for (const file of manifest.files) {
         if (!manifest.skills.some((skill) => file.path.startsWith(`${skill.path}/`))) continue;
         assert.strictEqual(
-          gitBlobHash(yield* fs.readFile(join(retained, file.path))),
+          gitBlobHash(yield* fs.readFile(join(imported, file.path))),
           file.gitBlob,
           file.path,
         );

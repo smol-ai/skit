@@ -778,9 +778,9 @@ describe("CLI contracts", () => {
     const state = Schema.decodeUnknownSync(LibraryStateDocument)(
       await readFile(join(home, "state.json"), "utf8"),
     );
-    const retainedSkill = state.skills.find((skill) => skill.skill_id === preview.data.skill_id);
-    expect(retainedSkill?.versions).toHaveLength(2);
-    expect(retainedSkill?.local_version_id).toBe(applied.data.imported_skill_version_id);
+    const importedSkill = state.skills.find((skill) => skill.skill_id === preview.data.skill_id);
+    expect(importedSkill?.versions).toHaveLength(2);
+    expect(importedSkill?.local_version_id).toBe(applied.data.imported_skill_version_id);
     expect(state.imports.at(-1)).toMatchObject({
       kind: "edit",
       source_identity: {

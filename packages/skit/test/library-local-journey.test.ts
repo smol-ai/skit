@@ -26,14 +26,14 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
     yield* fs.writeFileString(join(installed, "SKILL.md"), "observed locally\n");
     yield* fs.writeFileString(join(installed, "notes.txt"), "retained too\n");
 
-    const retained = yield* Effect.scoped(
+    const imported = yield* Effect.scoped(
       withLibraryWriterLock(
         firstHome,
         importCollection({
           machineId,
           source: { type: "local", path: installed },
           input: installed,
-          retainedAt: "2026-09-16T00:00:00.000Z",
+          importedAt: "2026-09-16T00:00:00.000Z",
           skills: [
             {
               name: "review",
@@ -49,8 +49,8 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
     const saved = yield* inspectLibrary(firstHome);
     assert.strictEqual(saved.present, true);
     if (!saved.present) return;
-    assert.ok(retained.collection?.label.length);
-    assert.strictEqual(retained.collection?.upstream, undefined);
+    assert.ok(imported.collection?.label.length);
+    assert.strictEqual(imported.collection?.upstream, undefined);
     assert.strictEqual(saved.state.imports[0]?.machine_id, machineId);
     assert.strictEqual(saved.state.imports[0]?.input.value, installed);
     const tree = saved.state.collection_versions[0];
@@ -95,7 +95,7 @@ it.effect("reuses an unchanged Skill Version and keeps every import", () =>
     yield* fs.writeFileString(join(review, "SKILL.md"), "first\n");
     yield* fs.writeFileString(join(stable, "SKILL.md"), "stable\n");
 
-    const retain = Effect.fn("Test.retainPair")(function* (retainedAt: string) {
+    const importSource = Effect.fn("Test.retainPair")(function* (importedAt: string) {
       return yield* Effect.scoped(
         withLibraryWriterLock(
           home,
@@ -103,7 +103,7 @@ it.effect("reuses an unchanged Skill Version and keeps every import", () =>
             machineId,
             source: { type: "github", owner: "fixture", repository: "skills" },
             input: "https://github.com/fixture/skills",
-            retainedAt,
+            importedAt,
             skills: [
               {
                 name: "review",
@@ -123,13 +123,13 @@ it.effect("reuses an unchanged Skill Version and keeps every import", () =>
         ),
       );
     });
-    yield* retain("2026-09-16T01:00:00.000Z");
+    yield* importSource("2026-09-16T01:00:00.000Z");
     const first = yield* inspectLibrary(home);
     assert.strictEqual(first.present, true);
     if (!first.present) return;
     const stableVersion = first.state.skills.find((skill) => skill.name === "stable")?.versions[0];
     yield* fs.writeFileString(join(review, "SKILL.md"), "second\n");
-    yield* retain("2026-09-16T02:00:00.000Z");
+    yield* importSource("2026-09-16T02:00:00.000Z");
 
     const saved = yield* inspectLibrary(home);
     assert.strictEqual(saved.present, true);

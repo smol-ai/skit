@@ -19,7 +19,7 @@ export class SkillMaterializationInvalid
 /** Build the self-contained Skill artifact whose digest defines a Skill Version. */
 export const materializedSkillDigest = Effect.fn("Library.materializedSkillDigest")(
   function* (input: {
-    retainedRoot: string;
+    collectionVersionPath: string;
     sourcePath: string;
     shared?: readonly { from: string; to: string }[];
   }) {
@@ -27,7 +27,9 @@ export const materializedSkillDigest = Effect.fn("Library.materializedSkillDiges
     const workspace = yield* fs.makeTempDirectoryScoped({ prefix: "skit-skill-artifact-" });
     const artifact = join(workspace, "artifact");
     const source =
-      input.sourcePath === "." ? input.retainedRoot : join(input.retainedRoot, input.sourcePath);
+      input.sourcePath === "."
+        ? input.collectionVersionPath
+        : join(input.collectionVersionPath, input.sourcePath);
     yield* copyLocalTree(source, artifact, undefined, false);
     for (const mapping of input.shared ?? []) {
       const target = resolve(artifact, mapping.to);
@@ -36,7 +38,12 @@ export const materializedSkillDigest = Effect.fn("Library.materializedSkillDiges
           detail: `Shared mapping target escaped Skill: ${mapping.to}`,
         });
       yield* fs.makeDirectory(dirname(target), { recursive: true, mode: 0o700 });
-      yield* copyLocalTree(join(input.retainedRoot, mapping.from), target, undefined, false);
+      yield* copyLocalTree(
+        join(input.collectionVersionPath, mapping.from),
+        target,
+        undefined,
+        false,
+      );
     }
     return yield* deterministicTreeHash(artifact);
   },

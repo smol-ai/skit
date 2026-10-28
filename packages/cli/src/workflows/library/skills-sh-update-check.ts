@@ -43,9 +43,9 @@ const sourceUrl = (
 export const checkSkillsShSubject = Effect.fn("SkillsSh.checkSubject")(function* (
   subject: LibrarySubject,
   acquisition: LibraryState["imports"][number] | undefined,
-  retainedCopy: LibraryState["collection_versions"][number] | undefined,
+  collectionVersion: LibraryState["collection_versions"][number] | undefined,
 ) {
-  if (!acquisition || !retainedCopy) return undefined;
+  if (!acquisition || !collectionVersion) return undefined;
   const checkedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
   const store = yield* LibraryStore;
   const observations = [
@@ -90,7 +90,7 @@ export const checkSkillsShSubject = Effect.fn("SkillsSh.checkSubject")(function*
       })),
     };
   const tip = evidence.commit;
-  const root = collectionVersionPath(store.originalsPath, retainedCopy.digest);
+  const root = collectionVersionPath(store.originalsPath, collectionVersion.digest);
   const members: SkillsShUpdateMember[] = [];
   for (const observation of observations) {
     const claimed = observation.computed_hash ?? observation.skill_folder_hash;

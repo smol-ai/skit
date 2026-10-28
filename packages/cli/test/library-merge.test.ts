@@ -32,7 +32,7 @@ const skillId = makeSkillId();
 const versionId = makeSkillVersionId();
 const collectionId = makeCollectionId();
 const acquisitionId = makeImportId();
-const retainedCopyId = makeCollectionVersionId();
+const collectionVersionId = makeCollectionVersionId();
 const machineId = makeMachineId();
 const second = makeSkillVersionId();
 const third = makeSkillVersionId();
@@ -79,7 +79,7 @@ const manifest = (enabled: unknown[] = []) => ({
   skills: [skill],
   collection_versions: [
     {
-      collection_version_id: retainedCopyId,
+      collection_version_id: collectionVersionId,
       digest,
       copy_profile: "verbatim/v1" as const,
       members: [
@@ -113,7 +113,7 @@ const manifest = (enabled: unknown[] = []) => ({
       import_id: acquisitionId,
       collection_id: collectionId,
       kind: "source" as const,
-      collection_version_id: retainedCopyId,
+      collection_version_id: collectionVersionId,
       source_identity: {
         kind: "local" as const,
         machine_id: machineId,
@@ -156,7 +156,7 @@ it.effect(
         ...manifest(),
         skills: [{ ...skill, path: "one" }],
         collection_versions: manifest().collection_versions.map((item) =>
-          item.collection_version_id === retainedCopyId
+          item.collection_version_id === collectionVersionId
             ? {
                 ...item,
                 members: item.members.map((member) => ({ ...member, source_path: "one" })),

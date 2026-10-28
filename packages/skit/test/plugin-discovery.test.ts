@@ -320,14 +320,14 @@ it.effect(
       yield* f.fs.makeDirectory(join(f.root, "tools/skills"), { recursive: true });
       yield* f.fs.symlink("../../.claude/skills/review", join(f.root, "tools/skills/review"));
       yield* f.json("tools/.claude-plugin/plugin.json", { name: "tools" });
-      const retained = yield* f.discover(["tools/skills/review"]);
-      assert.deepStrictEqual(retained.observedSkillPaths, ["tools/skills/review"]);
+      const imported = yield* f.discover(["tools/skills/review"]);
+      assert.deepStrictEqual(imported.observedSkillPaths, ["tools/skills/review"]);
       assert.strictEqual(
-        (yield* f.fs.stat(join(retained.originalRoot, "tools/skills/review"))).type,
+        (yield* f.fs.stat(join(imported.originalRoot, "tools/skills/review"))).type,
         "Directory",
       );
       assert.strictEqual(
-        yield* f.fs.readFileString(join(retained.originalRoot, "tools/skills/review/SKILL.md")),
+        yield* f.fs.readFileString(join(imported.originalRoot, "tools/skills/review/SKILL.md")),
         yield* f.fs.readFileString(join(f.root, ".claude/skills/review/SKILL.md")),
       );
     }).pipe(Effect.provide(skitLayer), Effect.scoped),

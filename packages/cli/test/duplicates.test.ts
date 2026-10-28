@@ -68,13 +68,13 @@ it.effect("enable refuses the extra copy before saving intent, and dry-run expla
       writingTo(
         f.home.home,
         Effect.gen(function* () {
-          const retained = yield* importSource(f.source);
+          const imported = yield* importSource(f.source);
           const store = yield* LibraryStore;
           const before = yield* store.load;
-          if (retained.collection_id === undefined)
+          if (imported.collection_id === undefined)
             return yield* Effect.die("Expected a retained collection");
           const options = {
-            query: retained.collection_id,
+            query: imported.collection_id,
             all: false,
             invocation: {
               scope: { kind: "global" as const },

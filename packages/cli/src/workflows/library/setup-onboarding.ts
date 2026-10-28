@@ -86,7 +86,7 @@ const classifyLockClaims = (
         matchingLock.entry.skillPath,
         observedHash,
       );
-      const collections = evidence.retainedByLockEvidence.get(key) ?? new Set<string>();
+      const collections = evidence.importedByLockEvidence.get(key) ?? new Set<string>();
       matchingCollections =
         matchingCollections === undefined
           ? collections
@@ -121,11 +121,11 @@ export const setupInstanceGroupKey = (instance: SetupSkillInstance): string => {
 
 export const classifySetupOnboarding = (
   instances: ReadonlyArray<SetupSkillInstance>,
-  retained?: SetupImportEvidence,
+  imported?: SetupImportEvidence,
 ): SetupOnboardingCandidate[] => {
-  const evidence = indexSetupOnboardingEvidence(instances, retained);
-  const collections = retained?.library?.collections ?? [];
-  const skills = retained?.library?.skills ?? [];
+  const evidence = indexSetupOnboardingEvidence(instances, imported);
+  const collections = imported?.library?.collections ?? [];
+  const skills = imported?.library?.skills ?? [];
   const groups = new Map<string, SetupSkillInstance[]>();
   for (const instance of instances) {
     if (
@@ -231,28 +231,28 @@ export const classifySetupOnboarding = (
         if (
           importableLocks.some(([, lock]) => {
             const source = setupLockCollection(lock)?.source;
-            const retainedSkill = skills.find(
+            const importedSkill = skills.find(
               (skill) =>
                 skill.skill_id === match.subjectId || skill.collection_id === match.subjectId,
             );
-            const retainedSource =
-              retainedSkill === undefined
+            const importedSource =
+              importedSkill === undefined
                 ? undefined
                 : collections.findLast(
-                    (collection) => collection.collection_id === retainedSkill.collection_id,
+                    (collection) => collection.collection_id === importedSkill.collection_id,
                   )?.upstream?.source_identity;
-            if (source === undefined || retainedSource === undefined) return false;
-            const lockSource = sourceIdentityFromSource(source, retained?.machineId);
+            if (source === undefined || importedSource === undefined) return false;
+            const lockSource = sourceIdentityFromSource(source, imported?.machineId);
             if (lockSource === undefined) return false;
             // Pre-v5 state recorded a well-known Source without a member selection as `url`.
             const legacyUrl =
               (lockSource.kind === "well-known" &&
-                retainedSource.kind === "url" &&
-                lockSource.locator.value === retainedSource.url.value) ||
+                importedSource.kind === "url" &&
+                lockSource.locator.value === importedSource.url.value) ||
               (lockSource.kind === "url" &&
-                retainedSource.kind === "well-known" &&
-                lockSource.url.value === retainedSource.locator.value);
-            return legacyUrl || Schema.toEquivalence(SourceIdentity)(lockSource, retainedSource);
+                importedSource.kind === "well-known" &&
+                lockSource.url.value === importedSource.locator.value);
+            return legacyUrl || Schema.toEquivalence(SourceIdentity)(lockSource, importedSource);
           })
         )
           continue;

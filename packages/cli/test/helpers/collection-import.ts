@@ -28,7 +28,7 @@ export const assertCollectionImport = Effect.fn("Test.assertCollectionImport")(f
   assert.strictEqual(state.collections.length, 1);
   assert.strictEqual(state.skills.length, expectedPaths.length);
   assert.strictEqual(new Set(state.skills.map((skill) => skill.name)).size, state.skills.length);
-  const retained = collectionVersionPath(join(home, "originals"), added.snapshot_digest);
-  assert.strictEqual(yield* fs.exists(join(retained, "plugins")), false);
-  return { preview, retained };
+  const imported = collectionVersionPath(join(home, "originals"), added.snapshot_digest);
+  assert.strictEqual(yield* fs.exists(join(imported, "plugins")), false);
+  return { preview, imported };
 });

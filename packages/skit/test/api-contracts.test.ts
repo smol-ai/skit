@@ -35,7 +35,7 @@ it.effect(
         skit: 1,
         id: "team/tools",
         slug: "tools",
-        extension: { retained: true },
+        extension: { imported: true },
         author: { name: "Team", extension: "author" },
         skills: [
           {

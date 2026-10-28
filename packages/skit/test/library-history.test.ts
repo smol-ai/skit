@@ -58,11 +58,11 @@ const library = Effect.gen(function* () {
   yield* fs.writeFileString(join(source, "SKILL.md"), "raw Skill bytes\n");
   const inLibrary = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(Effect.provide(libraryStoreLayer({ home })));
-  const retain = importCollection({
+  const importSource = importCollection({
     machineId,
     source: { type: "local", path: source },
     input: source,
-    retainedAt: "2026-09-17T00:00:00.000Z",
+    importedAt: "2026-09-17T00:00:00.000Z",
     skills: [
       {
         name: "review",
@@ -76,7 +76,7 @@ const library = Effect.gen(function* () {
   const history = Effect.flatMap(LibraryAuditLog, (log) => log.list()).pipe(
     Effect.provide(libraryAuditLogLayer({ home })),
   );
-  return { inLibrary, retain, history, home };
+  return { inLibrary, importSource, history, home };
 });
 
 const globalEnabled = (state: LibraryState) =>
@@ -84,11 +84,11 @@ const globalEnabled = (state: LibraryState) =>
 
 it.effect("records one event for one action, however many writers it nests", () =>
   Effect.gen(function* () {
-    const { inLibrary, retain, history } = yield* library;
+    const { inLibrary, importSource, history } = yield* library;
     yield* inLibrary(
       withLibraryWriter(
         Effect.gen(function* () {
-          yield* Effect.scoped(withLibraryWriter(retain));
+          yield* Effect.scoped(withLibraryWriter(importSource));
           const store = yield* LibraryStore;
           const state = yield* store.load;
           yield* withLibraryWriter(
@@ -125,10 +125,12 @@ it.effect("records nothing when a writer leaves the Library as it found it", () 
 
 it.effect("records what was committed before a mutation failed", () =>
   Effect.gen(function* () {
-    const { inLibrary, retain, history } = yield* library;
+    const { inLibrary, importSource, history } = yield* library;
     const outcome = yield* inLibrary(
       withLibraryWriter(
-        Effect.scoped(retain).pipe(Effect.andThen(Effect.fail("failed after committing" as const))),
+        Effect.scoped(importSource).pipe(
+          Effect.andThen(Effect.fail("failed after committing" as const)),
+        ),
       ),
     ).pipe(Effect.flip);
     assert.strictEqual(outcome, "failed after committing");
@@ -143,19 +145,19 @@ it.effect("records what was committed before a mutation failed", () =>
 it.effect("keeps a committed mutation successful when its history cannot be written", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const { inLibrary, retain, home } = yield* library;
+    const { inLibrary, importSource, home } = yield* library;
     // A directory where the log should be makes every append fail.
     yield* fs.makeDirectory(join(home, "audit.jsonl"), { recursive: true });
-    const retained = yield* inLibrary(withLibraryWriter(Effect.scoped(retain)));
+    const imported = yield* inLibrary(withLibraryWriter(Effect.scoped(importSource)));
     const state = yield* inLibrary(Effect.flatMap(LibraryStore, (store) => store.load));
-    assert.strictEqual(state.collections[0]?.collection_id, retained.collection?.collection_id);
+    assert.strictEqual(state.collections[0]?.collection_id, imported.collection?.collection_id);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.live("records a forked save under way at release in its action's event", () =>
   Effect.gen(function* () {
-    const { inLibrary, retain, history, home } = yield* library;
-    yield* inLibrary(withLibraryWriter(Effect.scoped(retain)));
+    const { inLibrary, importSource, history, home } = yield* library;
+    yield* inLibrary(withLibraryWriter(Effect.scoped(importSource)));
     const before = (yield* history).length;
     const store = yield* inLibrary(Effect.service(LibraryStore));
     const entered = yield* Deferred.make<void>();
@@ -198,8 +200,8 @@ it.live("records a forked save under way at release in its action's event", () =
 
 it.live("records a writer that outlives its action as an action of its own", () =>
   Effect.gen(function* () {
-    const { inLibrary, retain, history } = yield* library;
-    yield* inLibrary(withLibraryWriter(Effect.scoped(retain)));
+    const { inLibrary, importSource, history } = yield* library;
+    yield* inLibrary(withLibraryWriter(Effect.scoped(importSource)));
     const before = (yield* history).length;
     const store = yield* inLibrary(Effect.service(LibraryStore));
     const resume = yield* Deferred.make<void>();

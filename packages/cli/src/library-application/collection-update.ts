@@ -203,13 +203,13 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
   const storeHome = yield* canonicalStoragePath(store.home);
   let phase: UpdateFailure["phase"] = "source";
   let source = before.label;
-  let sourceRetained = false;
+  let sourceImported = false;
   return yield* Effect.scoped(
     Effect.gen(function* () {
       const { priorTree, input } = yield* resolveUpdate(state, before);
       source = sourceLocator(input);
       const subject = { id: before.subjectId, label: before.label };
-      const retained = yield* progress.around(
+      const imported = yield* progress.around(
         { kind: "source", subject },
         importSource(
           input,
@@ -221,8 +221,8 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
           changed: value.snapshot_digest !== priorTree.digest,
         }),
       );
-      sourceRetained = true;
-      const changed = retained.snapshot_digest !== priorTree.digest;
+      sourceImported = true;
+      const changed = imported.snapshot_digest !== priorTree.digest;
       let installed = 0;
       const collectionId =
         before.kind === "collection" ? before.collection.collection_id : before.skill.collection_id;
@@ -252,26 +252,26 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
         installed = reconciled.installed;
       }
       const after = yield* (yield* LibraryStore).load;
-      const retainedTree = after.collection_versions.find(
-        (tree) => tree.collection_version_id === retained.collection_version_id,
+      const collectionVersion = after.collection_versions.find(
+        (tree) => tree.collection_version_id === imported.collection_version_id,
       );
       return {
         subject_id: before.subjectId,
         subject_kind: before.kind,
         previous_collection_version_id: priorTree.collection_version_id,
-        selected_collection_version_id: retained.collection_version_id,
-        snapshot_digest: retained.snapshot_digest,
+        selected_collection_version_id: imported.collection_version_id,
+        snapshot_digest: imported.snapshot_digest,
         changed,
         installed: installed,
         label: before.label,
-        ...("diagnostics" in retained && retained.diagnostics?.length
-          ? { diagnostics: retained.diagnostics }
+        ...("diagnostics" in imported && imported.diagnostics?.length
+          ? { diagnostics: imported.diagnostics }
           : {}),
         ...skillChanges(
           state,
           collectionId,
           priorTree.members,
-          (retainedTree?.members ?? []).map((member) => ({
+          (collectionVersion?.members ?? []).map((member) => ({
             source_path: member.source_path,
             artifact_digest: member.artifact_digest,
             name:
@@ -320,11 +320,11 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
         return yield* Effect.gen(function* () {
           // Source publication can succeed before its temporary checkout fails to close.
           // Inspect persisted evidence rather than claiming that such an update was rolled back.
-          if (!sourceRetained) {
+          if (!sourceImported) {
             const current = yield* store.load;
             const previous = latestSourceImport(state, before);
             const latest = latestSourceImport(current, before);
-            sourceRetained = latest !== undefined && latest.import_id !== previous?.import_id;
+            sourceImported = latest !== undefined && latest.import_id !== previous?.import_id;
           }
           const error = commandFailure(cause);
           return {
@@ -334,8 +334,8 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
             label: before.label,
             source,
             phase,
-            source_imported: sourceRetained,
-            error: sourceRetained
+            source_imported: sourceImported,
+            error: sourceImported
               ? {
                   ...error,
                   remediation: `${error.remediation} Run \`skit update ${before.subjectId}\` to retry this Collection and update its installed skills.`,

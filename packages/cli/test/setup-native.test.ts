@@ -356,7 +356,7 @@ it.effect("reports Git preservation and verifies a project skills.sh lock", () =
             skillPath: ".agents/skills/review/SKILL.md",
             computedHash: projectHash(review),
             skillFolderHash: "legacy-review-hash",
-            extension: { retained: true },
+            extension: { imported: true },
           },
         },
       }),
@@ -389,7 +389,7 @@ it.effect("reports Git preservation and verifies a project skills.sh lock", () =
           source: "acme/tools",
           computedHash: projectHash(review),
           skillFolderHash: "legacy-review-hash",
-          originalEntry: expect.objectContaining({ extension: { retained: true } }),
+          originalEntry: expect.objectContaining({ extension: { imported: true } }),
         }),
       }),
     ]);
@@ -895,7 +895,7 @@ it.effect("matches an unresolvable lock to a retained Collection by canonical re
     const skillVersionId = makeSkillVersionId();
     const machineId = makeMachineId();
     const locator = "https://skills.example.test";
-    const retained = Schema.decodeUnknownSync(LibraryState)({
+    const imported = Schema.decodeUnknownSync(LibraryState)({
       schemaVersion: 10,
       collections: [
         {
@@ -950,8 +950,8 @@ it.effect("matches an unresolvable lock to a retained Collection by canonical re
       ],
     });
 
-    expect(classifySetupOnboarding([instance], { library: retained, machineId })).toEqual([]);
-    expect(classifySetupOnboarding([instance], { library: retained })).toEqual([]);
+    expect(classifySetupOnboarding([instance], { library: imported, machineId })).toEqual([]);
+    expect(classifySetupOnboarding([instance], { library: imported })).toEqual([]);
   }),
 );
 
@@ -1631,9 +1631,9 @@ for (const kind of ["source", "edit"] as const) {
       // Retention outranks another contested claim, but a separate eligible import still wins.
       const contested = setupLock("acme/contested", "agrees", "review");
       const collision = setupInstance("other", "/global/other", { locks: [contested] });
-      const retainedAndContested = { ...instance, locks: [contested, lock] };
+      const importedAndContested = { ...instance, locks: [contested, lock] };
       expect(
-        classifySetupOnboarding([retainedAndContested, collision], { library, machineId }).filter(
+        classifySetupOnboarding([importedAndContested, collision], { library, machineId }).filter(
           (candidate) => candidate.name === "review",
         ),
       ).toEqual([]);

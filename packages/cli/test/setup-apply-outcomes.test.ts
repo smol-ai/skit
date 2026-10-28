@@ -28,7 +28,7 @@ import {
   deterministicTreeHash,
   initializeLibraryMachine,
   libraryHome,
-  retainObservedIn,
+  importCollectionIn,
   scratch,
   testMachineId,
   writingTo,
@@ -582,7 +582,7 @@ it.effect("removal writes one immutable move record before moving files", () =>
 );
 
 /** Another writer retains `delta` into the same Library, through its own Library services. */
-const retainDelta = (f: Effect.Success<ReturnType<typeof fixture>>) =>
+const importDelta = (f: Effect.Success<ReturnType<typeof fixture>>) =>
   Effect.gen(function* () {
     const source = join(f.root, "sources", "delta");
     yield* f.fs.makeDirectory(source, { recursive: true });
@@ -590,11 +590,11 @@ const retainDelta = (f: Effect.Success<ReturnType<typeof fixture>>) =>
     yield* writingTo(
       f.home.home,
       Effect.gen(function* () {
-        yield* retainObservedIn(f.home.home)({
+        yield* importCollectionIn(f.home.home)({
           machineId: testMachineId,
           source: { type: "github", owner: "fixture", repository: "delta" },
           input: source,
-          retainedAt: "2026-01-01T00:00:00.000Z",
+          importedAt: "2026-01-01T00:00:00.000Z",
           skills: [
             {
               name: "delta",
@@ -614,7 +614,7 @@ it.effect("a Library change committed after approval fails stale before any effe
   Effect.gen(function* () {
     const f = yield* fixture({ machine: true });
     const { exit } = yield* f.setup([["alpha", "remove\0gamma"], true], {
-      approved: retainDelta(f),
+      approved: importDelta(f),
     });
     assert.instanceOf(failure(exit), SetupPlanStale);
     assert.deepStrictEqual(
@@ -632,7 +632,7 @@ it.effect("a Library change committed after the first additive stage stops the a
   Effect.gen(function* () {
     const f = yield* fixture({ machine: true });
     const { exit } = yield* f.setup([["alpha", "beta", "remove\0gamma"], true], {
-      published: retainDelta(f),
+      published: importDelta(f),
     });
     assert.propertyVal(failure(exit), "code", "CONFLICT");
     assert.deepStrictEqual((yield* f.home.durable).skills.map((skill) => skill.name).sort(), [

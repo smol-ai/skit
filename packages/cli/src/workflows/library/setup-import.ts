@@ -93,7 +93,7 @@ export const importSetupCollections = Effect.fn("Setup.importCollections")(funct
   const observedAt = new Date(
     yield* Effect.clockWith((clock) => clock.currentTimeMillis),
   ).toISOString();
-  const retained = [];
+  const imported = [];
   for (const [groupKey, candidates] of [...groups].sort(([left], [right]) =>
     left.localeCompare(right),
   )) {
@@ -108,12 +108,12 @@ export const importSetupCollections = Effect.fn("Setup.importCollections")(funct
         Effect.fail(new SetupImportInvalid({ name, reason })),
       ),
     );
-    retained.push(
+    imported.push(
       yield* Effect.scoped(
         importCollection({
           input: sourceLocator(evidence.source),
           source: evidence.source,
-          retainedAt: observedAt,
+          importedAt: observedAt,
           skills: evidence.skills,
           observations: evidence.observations,
         }),
@@ -126,7 +126,7 @@ export const importSetupCollections = Effect.fn("Setup.importCollections")(funct
       name: "Library",
       reason: "retention-missing",
     });
-  for (const result of retained) {
+  for (const result of imported) {
     if (
       result.skills.length === 0 ||
       result.skills.some(
@@ -139,5 +139,5 @@ export const importSetupCollections = Effect.fn("Setup.importCollections")(funct
         reason: "retention-missing",
       });
   }
-  return { planId: current.onboarding.planId, retained };
+  return { planId: current.onboarding.planId, imported };
 });

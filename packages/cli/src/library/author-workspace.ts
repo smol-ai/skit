@@ -102,13 +102,13 @@ const planWorkspace = Effect.fn("Author.planWorkspace")(function* (
         break;
       }
   }
-  const retained = sameRoot.find(
+  const imported = sameRoot.find(
     (collection) => collection.upstream?.source_identity.kind === "authored-workspace",
   );
   const expectedWorkspaceId = workspace
     ? workspace.workspace_id
-    : retained?.upstream?.source_identity.kind === "authored-workspace"
-      ? retained.upstream.source_identity.workspace_id
+    : imported?.upstream?.source_identity.kind === "authored-workspace"
+      ? imported.upstream.source_identity.workspace_id
       : undefined;
   const conflict = sameRoot.find(
     (collection) =>
@@ -122,8 +122,8 @@ const planWorkspace = Effect.fn("Author.planWorkspace")(function* (
   const planned: AuthorWorkspaceMetadata = workspace ?? {
     schema: "skit.author-workspace.v1",
     workspace_id:
-      retained?.upstream?.source_identity.kind === "authored-workspace"
-        ? retained.upstream.source_identity.workspace_id
+      imported?.upstream?.source_identity.kind === "authored-workspace"
+        ? imported.upstream.source_identity.workspace_id
         : (options.workspaceId?.() ?? `workspace_${randomUUID().replaceAll("-", "")}`),
   };
   const existing = state.collections.find(
@@ -178,7 +178,7 @@ const registerOwnedWorkspace = Effect.fn("Author.registerOwnedWorkspace")(functi
     },
     label: validated.identity.slug,
     input: root,
-    retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
+    importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
   });
   if (validated.descriptor.skills.length === 0)
     return yield* new ImportContentInvalid({ diagnostics: ["retained Skills are missing"] });

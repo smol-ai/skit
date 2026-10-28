@@ -881,7 +881,7 @@ describe("Better Auth adapter", () => {
       const collectionId = makeCollectionId();
       const skillId = makeSkillId();
       const skillVersionId = makeSkillVersionId();
-      const retainedCopyId = makeCollectionVersionId();
+      const collectionVersionId = makeCollectionVersionId();
       const acquisitionId = makeImportId();
       const machineId = makeMachineId();
       // A v5 manifest as an older CLI would write it, then the current model of the same Library.
@@ -925,7 +925,7 @@ describe("Better Auth adapter", () => {
         ],
         retained_copies: [
           {
-            retained_copy_id: retainedCopyId,
+            retained_copy_id: collectionVersionId,
             digest: archive.digest,
             copy_profile: "verbatim/v1",
             members: [
@@ -941,7 +941,7 @@ describe("Better Auth adapter", () => {
         acquisitions: [
           {
             acquisition_id: acquisitionId,
-            retained_copy_id: retainedCopyId,
+            retained_copy_id: collectionVersionId,
             input: { value: "private:test/library" },
             source_identity: {
               kind: "registry",
@@ -988,7 +988,7 @@ describe("Better Auth adapter", () => {
             acquisition_id: acquisitionId,
             collection_id: collectionId,
             kind: "source",
-            retained_copy_id: retainedCopyId,
+            retained_copy_id: collectionVersionId,
             input: { value: "private:test/library" },
             source_identity: portableV5.acquisitions[0]!.source_identity,
             acquired_at: "2026-01-01T00:00:00.000Z",

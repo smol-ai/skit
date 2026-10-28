@@ -75,14 +75,14 @@ const boundCollectionWith = (second = false, emptyDirectories: readonly string[]
       yield* fs.makeDirectory(secondSource);
       yield* fs.writeFileString(join(secondSource, "SKILL.md"), "second Skill bytes\n");
     }
-    const retained = yield* Effect.scoped(
+    const imported = yield* Effect.scoped(
       withLibraryWriterLock(
         home,
         importCollection({
           machineId,
           source: { type: "local", path: source },
           input: source,
-          retainedAt: "2026-09-16T00:00:00.000Z",
+          importedAt: "2026-09-16T00:00:00.000Z",
           skills: [
             {
               name: "review",
@@ -109,7 +109,7 @@ const boundCollectionWith = (second = false, emptyDirectories: readonly string[]
     const initial = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
       Effect.provide(storeLayer),
     );
-    const skillId = retained.skills[0]?.skill_id;
+    const skillId = imported.skills[0]?.skill_id;
     assert.ok(skillId);
     yield* withLibraryWriterLock(
       home,
@@ -117,7 +117,7 @@ const boundCollectionWith = (second = false, emptyDirectories: readonly string[]
         store.save(
           {
             ...initial,
-            enabled: retained.skills.map((skill) => ({ skill: skill.skill_id })),
+            enabled: imported.skills.map((skill) => ({ skill: skill.skill_id })),
           },
           initial,
         ),
@@ -929,7 +929,7 @@ for (const original of ["intact", "missing", "corrupt"] as const)
                 installedSkillId: first.installed_skill_id,
                 path: target,
                 observedHash: yield* deterministicTreeHash(target),
-                retainedAt: "2026-09-17T00:00:00.000Z",
+                importedAt: "2026-09-17T00:00:00.000Z",
               }).pipe(Effect.provide(storeLayer)),
             );
             backed = second.snapshotDigest;
@@ -947,10 +947,10 @@ for (const original of ["intact", "missing", "corrupt"] as const)
               })),
             }));
           }
-          const retained = collectionVersionPath(join(home, "originals"), backed);
-          if (original === "missing") yield* fs.remove(retained, { recursive: true });
+          const imported = collectionVersionPath(join(home, "originals"), backed);
+          if (original === "missing") yield* fs.remove(imported, { recursive: true });
           if (original === "corrupt")
-            yield* fs.writeFileString(join(retained, "SKILL.md"), "tampered retained bytes\n");
+            yield* fs.writeFileString(join(imported, "SKILL.md"), "tampered retained bytes\n");
 
           if (action === "replace") yield* project();
           if (action === "retire") {

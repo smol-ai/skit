@@ -704,12 +704,12 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
 
     first(["add", raw]);
     first(["add", gitRemote]);
-    const retained = await state(firstHome);
-    expect(retained.schemaVersion).toBe(10);
-    expect(retained.collections).toHaveLength(2);
-    expect(retained.enabled).toEqual([]);
-    const collectionId = retained.collections[0].collection_id;
-    const selected = retained.collection_versions[0];
+    const imported = await state(firstHome);
+    expect(imported.schemaVersion).toBe(10);
+    expect(imported.collections).toHaveLength(2);
+    expect(imported.enabled).toEqual([]);
+    const collectionId = imported.collections[0].collection_id;
+    const selected = imported.collection_versions[0];
     expect(selected).toBeDefined();
     const selectedHex = selected!.digest.slice("sha256:".length);
     const selectedPath = join(firstHome, "originals", selectedHex.slice(0, 2), selectedHex);

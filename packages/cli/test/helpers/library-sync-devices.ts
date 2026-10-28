@@ -118,14 +118,14 @@ export const devices = Effect.gen(function* () {
         );
       }),
       state: Effect.flatMap(LibraryStore, (store) => store.load).pipe(Effect.provide(layer)),
-      retainInstalledSkillEdit: (installedSkill: InstalledSkill) =>
+      importInstalledSkillEdit: (installedSkill: InstalledSkill) =>
         Effect.gen(function* () {
           return yield* importEdit({
             skillId: installedSkill.skill_id,
             installedSkillId: installedSkill.installed_skill_id,
             path: installedSkill.path,
             observedHash: yield* deterministicTreeHash(installedSkill.path),
-            retainedAt: "2026-02-01T00:00:00Z",
+            importedAt: "2026-02-01T00:00:00Z",
           });
         }).pipe(withLibraryWriter, Effect.provide(layer)),
       /** A local edit made outside sync, as any Library command makes one. */
@@ -135,9 +135,9 @@ export const devices = Effect.gen(function* () {
             Effect.flatMap(store.load, (state) => store.save(change(state), state)),
           ),
         ).pipe(Effect.provide(layer)),
-      retain: (
+      importSource: (
         repository: string,
-        options: { name?: string; bytes?: string; retainedAt?: string } = {},
+        options: { name?: string; bytes?: string; importedAt?: string } = {},
       ) =>
         Effect.gen(function* () {
           const sourcePath = join(workspace, repository);
@@ -150,7 +150,7 @@ export const devices = Effect.gen(function* () {
             machineId,
             source: { type: "github", owner: "fixture", repository },
             input: sourcePath,
-            retainedAt: options.retainedAt ?? "2026-01-01T00:00:00.000Z",
+            importedAt: options.importedAt ?? "2026-01-01T00:00:00.000Z",
             skills: [
               {
                 name: options.name ?? repository,
@@ -162,7 +162,7 @@ export const devices = Effect.gen(function* () {
             observations: [],
           });
         }).pipe(withLibraryWriter, Effect.provide(layer)),
-      retainMany: (repository: string, names: readonly string[], retainedAt: string) =>
+      importMany: (repository: string, names: readonly string[], importedAt: string) =>
         Effect.gen(function* () {
           const sourcePath = join(workspace, repository);
           const skills = yield* Effect.forEach(names, (skillName) =>
@@ -182,7 +182,7 @@ export const devices = Effect.gen(function* () {
             machineId,
             source: { type: "github", owner: "fixture", repository },
             input: sourcePath,
-            retainedAt,
+            importedAt,
             skills,
             observations: [],
           });

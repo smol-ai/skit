@@ -28,19 +28,19 @@ it.effect("keeps a moved Skill's old row and retained Version beside its new pat
           observedHash: yield* deterministicTreeHash(path),
         };
       });
-    const retain = (skills: Parameters<typeof importCollection>[0]["skills"]) =>
+    const importSource = (skills: Parameters<typeof importCollection>[0]["skills"]) =>
       importCollection({
         machineId,
         source: { type: "local", path: source },
         input: source,
-        retainedAt: "2026-09-17T00:00:00.000Z",
+        importedAt: "2026-09-17T00:00:00.000Z",
         skills,
         observations: [],
       }).pipe(Effect.scoped, Effect.provide(libraryStoreLayer({ home })));
 
-    const before = yield* retain([yield* skillAt("in-progress/spec")]);
+    const before = yield* importSource([yield* skillAt("in-progress/spec")]);
     yield* fs.remove(join(source, "in-progress"), { recursive: true });
-    const after = yield* retain([yield* skillAt("engineering/spec")]);
+    const after = yield* importSource([yield* skillAt("engineering/spec")]);
 
     const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
       Effect.provide(libraryStoreLayer({ home })),

@@ -213,7 +213,7 @@ export const archiveBytes = Effect.fn("Test.archiveBytes")(function* (
 export { deterministicTreeHash };
 
 /** Retain observed bytes into the Library at `home`, through the store production consumes. */
-export const retainObservedIn =
+export const importCollectionIn =
   (home: string) => (request: Parameters<typeof importCollection>[0]) =>
     importCollection(request).pipe(Effect.provide(libraryStoreLayer({ home })));
 

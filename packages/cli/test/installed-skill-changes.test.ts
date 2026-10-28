@@ -27,7 +27,7 @@ import { makeScriptedInteraction } from "../src/presentation/interaction-recorde
 import {
   deterministicTreeHash,
   libraryHome,
-  retainObservedIn,
+  importCollectionIn,
   scratch,
   writingTo,
 } from "./helpers/library-home.js";
@@ -73,10 +73,10 @@ const fixture = Effect.fn("Test.setupReconciliation")(function* () {
     yield* fs.writeFileString(join(source, "SKILL.md"), document("Incoming retained update"));
     yield* writingTo(
       home.home,
-      retainObservedIn(home.home)({
+      importCollectionIn(home.home)({
         input: source,
         source: { type: "local", path: source },
-        retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
+        importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
         observations: [],
         skills: [
           {
@@ -114,10 +114,10 @@ it.effect(
       yield* f.fs.writeFileString(join(otherSource, "SKILL.md"), otherBytes);
       yield* writingTo(
         f.home.home,
-        retainObservedIn(f.home.home)({
+        importCollectionIn(f.home.home)({
           input: otherSource,
           source: { type: "local", path: otherSource },
-          retainedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
+          importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
           observations: [],
           skills: [
             {
