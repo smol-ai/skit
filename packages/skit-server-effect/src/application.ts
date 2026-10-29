@@ -86,12 +86,13 @@ export const applicationLayers = (
   );
   const release = releaseStoreLayer.pipe(Layer.provide(platform));
   // Feedback does not wait for authentication to be configured: reports can always be anonymous.
-  const feedback = env.FEEDBACK_RATE_LIMITER
-    ? Layer.merge(
-        feedbackServiceLayer.pipe(Layer.provide(platform)),
-        feedbackRateLimiterLayer(env.FEEDBACK_RATE_LIMITER),
-      )
-    : undefined;
+  const feedback =
+    env.FEEDBACK_MODE === "open"
+      ? Layer.merge(
+          feedbackServiceLayer.pipe(Layer.provide(platform)),
+          feedbackRateLimiterLayer(env.FEEDBACK_RATE_LIMITER),
+        )
+      : undefined;
   if (configured === undefined)
     return { release, feedback, authenticated: undefined, bootstrap: undefined };
 

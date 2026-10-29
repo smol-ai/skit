@@ -136,8 +136,43 @@ export const parseCanonicalOrigin = (value) => {
   return url.origin;
 };
 
+/** The rate limiters the server binds. Every Worker needs each, since `ratelimits` is not inherited. */
+const rateLimiterNames = [
+  "AUTH_RATE_LIMITER",
+  "PAT_RATE_LIMITER",
+  "BOOTSTRAP_RATE_LIMITER",
+  "FEEDBACK_RATE_LIMITER",
+];
+
+/**
+ * Add the rate limiters a Worker lacks, keeping the ones it declares. A new one takes the next
+ * namespace ID after the Worker's highest, so it never shares a counter with another limiter.
+ */
+export const withRateLimiters = (worker) => {
+  const declared = worker.ratelimits ?? [];
+  let next = Math.max(1000, ...declared.map(({ namespace_id }) => Number(namespace_id) || 0));
+  const missing = rateLimiterNames
+    .filter((name) => !declared.some((limiter) => limiter.name === name))
+    .map((name) => ({
+      name,
+      namespace_id: String(++next),
+      simple: { limit: 5, period: 60 },
+    }));
+  return missing.length === 0 ? worker : { ...worker, ratelimits: [...declared, ...missing] };
+};
+
 export const withApplicationHosting = (configuration) => ({
-  ...configuration,
+  ...withRateLimiters(configuration),
+  ...(configuration.env === undefined
+    ? {}
+    : {
+        env: Object.fromEntries(
+          Object.entries(configuration.env).map(([name, environment]) => [
+            name,
+            withRateLimiters(environment),
+          ]),
+        ),
+      }),
   compatibility_flags: Array.from(
     new Set([...(configuration.compatibility_flags ?? []), "nodejs_compat"]),
   ),
@@ -170,25 +205,9 @@ export const initialConfiguration = ({ workerName, accountId, publicOrigin, emai
     workers_dev: true,
     vars: {
       ACCOUNT_REGISTRATION_MODE: "closed",
+      FEEDBACK_MODE: "closed",
       ...(publicOrigin ? { PUBLIC_APP_ORIGIN: publicOrigin } : {}),
     },
-    ratelimits: [
-      {
-        name: "AUTH_RATE_LIMITER",
-        namespace_id: "1001",
-        simple: { limit: 5, period: 60 },
-      },
-      {
-        name: "PAT_RATE_LIMITER",
-        namespace_id: "1002",
-        simple: { limit: 5, period: 60 },
-      },
-      {
-        name: "BOOTSTRAP_RATE_LIMITER",
-        namespace_id: "1003",
-        simple: { limit: 5, period: 60 },
-      },
-    ],
   });
   return emailFrom ? withEmailSending(configuration, emailFrom) : configuration;
 };

@@ -17,7 +17,7 @@ const allowAll: RateLimit = { limit: async () => ({ success: true }) };
 
 const send = (
   body: unknown,
-  runtimeEnv: RuntimeEnv = { ...env, FEEDBACK_RATE_LIMITER: allowAll },
+  runtimeEnv: RuntimeEnv = { ...env, FEEDBACK_MODE: "open", FEEDBACK_RATE_LIMITER: allowAll },
   headers: Record<string, string> = {},
 ) =>
   webPromise(() =>
@@ -286,6 +286,7 @@ describe("feedback", () => {
 
       const response = yield* send(report, {
         ...env,
+        FEEDBACK_MODE: "open",
         FEEDBACK_RATE_LIMITER: { limit: async () => ({ success: false }) },
       });
 
@@ -295,13 +296,14 @@ describe("feedback", () => {
     }),
   );
 
-  it.effect("has no feedback route on a deployment without the feedback binding", () =>
+  it.effect("has no feedback route unless the deployment opens feedback", () =>
     Effect.gen(function* () {
       yield* prepareDatabase;
 
-      const response = yield* send(report, { ...env, FEEDBACK_RATE_LIMITER: undefined });
-
-      expect(response.status).toBe(404);
+      for (const runtimeEnv of [env, { ...env, FEEDBACK_MODE: "closed" as const }]) {
+        const response = yield* send(report, { ...runtimeEnv, FEEDBACK_RATE_LIMITER: allowAll });
+        expect(response.status).toBe(404);
+      }
       expect(yield* storedFeedback).toEqual([]);
     }),
   );

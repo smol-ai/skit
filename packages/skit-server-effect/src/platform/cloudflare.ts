@@ -8,8 +8,13 @@ export interface CloudflareBindings {
 
 export type DatabaseSqlClient = D1Client.D1Client;
 
-export type RuntimeEnv = Omit<Env, "ACCOUNT_REGISTRATION_MODE" | "ASSETS" | "PUBLIC_APP_ORIGIN"> & {
+export type RuntimeEnv = Omit<
+  Env,
+  "ACCOUNT_REGISTRATION_MODE" | "ASSETS" | "FEEDBACK_MODE" | "PUBLIC_APP_ORIGIN"
+> & {
   readonly ACCOUNT_REGISTRATION_MODE?: "closed" | "open";
+  /** `open` accepts `skit feedback send` reports. Only the official deployment opens it. */
+  readonly FEEDBACK_MODE?: "closed" | "open";
   readonly PUBLIC_APP_ORIGIN?: string;
   readonly BETTER_AUTH_SECRET?: string;
   readonly SKIT_BOOTSTRAP_SECRET?: string;
@@ -18,8 +23,6 @@ export type RuntimeEnv = Omit<Env, "ACCOUNT_REGISTRATION_MODE" | "ASSETS" | "PUB
   readonly EMAIL?: SendEmail;
   readonly EMAIL_FROM?: string;
   readonly ASSETS?: Fetcher;
-  /** Only the official deployment binds this; intake for `skit feedback send` exists only there. */
-  readonly FEEDBACK_RATE_LIMITER?: RateLimit;
 };
 
 export class Bindings extends Context.Service<Bindings, CloudflareBindings>()(
