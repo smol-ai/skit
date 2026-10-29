@@ -79,8 +79,8 @@ says 'skill' for both, so I passed the id and got NOT_FOUND with no hint the nam
 Unclear errors, docs gaps, misleading flag names and three steps where one should do all belong
 here. Bugs in the user's own setup, questions you could answer by reading the help, and anything
 you have not actually hit do not. The CLI adds only its version, platform and runtime. Never
-include secrets, tokens, file contents or personal details in the message. If it fails, nothing
-was sent; retry once or move on.
+include secrets, tokens, file contents or personal details in the message. If it fails, follow the
+error's remediation, then carry on.
 
 Reports are anonymous. Only if the user agrees, add `--signed-in` to attribute the report to the
 account this machine is signed in to, or `--email <address>` with an address the user gave you for

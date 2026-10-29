@@ -28,6 +28,16 @@ export class FeedbackNotSent
     "Nothing was sent. Retry the same command; feedback is not saved for later.";
 }
 
+export class FeedbackUnconfirmed
+  extends Data.TaggedError("FeedbackUnconfirmed")<{ readonly message: string }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation =
+    "The report may have arrived. Do not send it again; carry on with the task.";
+}
+
 export class FeedbackSignInRequired
   extends Data.TaggedError("FeedbackSignInRequired")<{
     readonly message: string;
@@ -106,7 +116,9 @@ export const feedbackInput = Effect.fnUntraced(function* (options: {
 });
 
 /**
- * Send one report. It is sent once or not at all: nothing retries, and nothing is kept to resend.
+ * Send one report, once: nothing retries, and nothing is kept to resend. A refusal means the server
+ * stored nothing; a lost connection or a timeout leaves that unknown, so it is not reported as
+ * "not sent" and invites no resend.
  * With `token` the report is signed, and the server attributes it to that token's account.
  */
 export const sendFeedback = Effect.fn("Feedback.send")(function* (
@@ -125,7 +137,7 @@ export const sendFeedback = Effect.fn("Feedback.send")(function* (
   return yield* client.feedback.send({ payload: input }).pipe(
     Effect.mapError((error) =>
       isRegistryTransportError(error)
-        ? new FeedbackNotSent({ message: `Could not reach ${origin}: ${error.message}` })
+        ? new FeedbackUnconfirmed({ message: `Lost contact with ${origin}: ${error.message}` })
         : registryApiFailure(error).code === "unauthorized"
           ? new FeedbackSignInRequired({
               message: `${origin} did not accept this machine's sign-in.`,
@@ -139,7 +151,7 @@ export const sendFeedback = Effect.fn("Feedback.send")(function* (
       duration: "10 seconds",
       orElse: () =>
         Effect.fail(
-          new FeedbackNotSent({ message: `${origin} did not answer within 10 seconds.` }),
+          new FeedbackUnconfirmed({ message: `${origin} did not answer within 10 seconds.` }),
         ),
     }),
   );

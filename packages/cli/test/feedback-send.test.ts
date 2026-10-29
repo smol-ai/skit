@@ -235,19 +235,21 @@ describe("sending feedback", () => {
     }),
   );
 
-  it.effect("reports an unreachable server as not sent", () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(
-        send((request) =>
-          Effect.fail(
-            new HttpClientError.HttpClientError({
-              reason: new HttpClientError.TransportError({ request, description: "offline" }),
-            }),
+  it.effect(
+    "does not invite a resend when the connection fails, since the report may have arrived",
+    () =>
+      Effect.gen(function* () {
+        const error = yield* Effect.flip(
+          send((request) =>
+            Effect.fail(
+              new HttpClientError.HttpClientError({
+                reason: new HttpClientError.TransportError({ request, description: "offline" }),
+              }),
+            ),
           ),
-        ),
-      );
+        );
 
-      expect(error._tag).toBe("FeedbackNotSent");
-    }),
+        expect(error._tag).toBe("FeedbackUnconfirmed");
+      }),
   );
 });
