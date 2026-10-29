@@ -30,7 +30,7 @@ jobs:
           version: 11.23.0
       - uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 24.22.1
           registry-url: https://registry.npmjs.org
           cache: pnpm
       - run: npm install -g npm@11.21.0

@@ -4,7 +4,8 @@ This guide covers repository setup, local CLI usage, isolated testing, generated
 
 ## Prerequisites
 
-- Node.js 22.16.0 or newer
+- Node.js 22.23.4+ on the 22.x line, 24.22.1+ on 24.x, or 26.12.1+
+  ([October 2026 security release](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases))
 - pnpm 11.23.0
 
 Install pnpm with `npx get-pnpm`, `corepack`, or a system package manager such as Homebrew.
