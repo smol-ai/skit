@@ -85,7 +85,7 @@ export const applicationLayers = (
     nativeClockLayer,
   );
   const release = releaseStoreLayer.pipe(Layer.provide(platform));
-  // Feedback is anonymous, so it does not wait for authentication to be configured.
+  // Feedback does not wait for authentication to be configured: reports can always be anonymous.
   const feedback = env.FEEDBACK_RATE_LIMITER
     ? Layer.merge(
         feedbackServiceLayer.pipe(Layer.provide(platform)),

@@ -10,4 +10,5 @@ export const expectedMigrations = [
   "0007_library_snapshots.sql",
   "0008_device_authorization.sql",
   "0009_feedback.sql",
+  "0010_feedback_attribution.sql",
 ] as const;

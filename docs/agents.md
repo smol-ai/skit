@@ -91,3 +91,10 @@ in. The SKIT skill asks agents to use it when something gets in their way.
 A report holds the message, the optional `--harness` and `--model`, the platform and Node version,
 and the CLI version. Nothing else is collected: no paths, environment, file contents or
 transcripts. A report that fails to send is not saved or retried.
+
+Reports are anonymous unless the user opts in, and the skill tells agents to ask first:
+
+- `--signed-in` sends this machine's `skit.smol.ai` credential with the report, and the report is
+  recorded against that account. A credential for any other Registry is never sent. If this
+  machine is not signed in, or the server refuses the credential, nothing is sent.
+- `--email <address>` adds a contact address for a reply. It is stored as given and not verified.

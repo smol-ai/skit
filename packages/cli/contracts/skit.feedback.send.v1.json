@@ -10,12 +10,19 @@
     },
     "recipient": {
       "type": "string"
+    },
+    "signedIn": {
+      "type": "boolean"
+    },
+    "email": {
+      "type": "string"
     }
   },
   "required": [
     "id",
     "createdAt",
-    "recipient"
+    "recipient",
+    "signedIn"
   ],
   "additionalProperties": true,
   "$schema": "http://json-schema.org/draft-07/schema#"

@@ -1145,7 +1145,13 @@ const contractPresenters: ContractPresenters = {
         : "No repository decisions are stored for this machine."
       : `${data.action} · ${data.path}`,
   authLogout: (data) => `Logged out from ${data.origin}`,
-  feedbackSend: (data) => `Sent feedback to ${data.recipient} (${data.id}). Thank you.`,
+  feedbackSend: (data) => {
+    const from = [
+      ...(data.signedIn ? ["signed in"] : []),
+      ...(data.email === undefined ? [] : [`with contact ${data.email}`]),
+    ];
+    return `Sent feedback to ${data.recipient} (${data.id})${from.length === 0 ? ", anonymously" : `, ${from.join(" ")}`}. Thank you.`;
+  },
   authStatus: renderAuthStatus,
   authLogin: renderAuthLogin,
   authLoginPending: (data) =>

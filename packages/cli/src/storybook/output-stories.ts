@@ -1043,6 +1043,18 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       id: "feedback_0123456789abcdef0123456789abcdef",
       createdAt: "2026-10-29T09:00:00.000Z",
       recipient: "https://skit.smol.ai",
+      signedIn: false,
+    }),
+  ),
+  resultStory(
+    "feedback-send",
+    "signed",
+    result("feedbackSend", {
+      id: "feedback_0123456789abcdef0123456789abcdef",
+      createdAt: "2026-10-29T09:00:00.000Z",
+      recipient: "https://skit.smol.ai",
+      signedIn: true,
+      email: "ada@example.com",
     }),
   ),
   resultStory(

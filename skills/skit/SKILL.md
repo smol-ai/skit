@@ -64,7 +64,24 @@ skit feedback send "setup --json listed the skill under candidates but gave no r
   --harness claude-code --model <your model id>
 ```
 
-Say what you ran, what you expected and what happened. Unclear errors, docs gaps, misleading flag
-names and three steps where one should do all belong here; bugs in the user's own setup do not.
-The CLI adds only its version, platform and runtime. Never include secrets, tokens, file contents
-or personal details in the message. If it fails, nothing was sent; retry once or move on.
+Say what you ran, what you expected and what happened. A report that only says something was
+confusing cannot be fixed, because nobody can tell which part was:
+
+```sh
+# Not actionable.
+skit feedback send "enable is confusing"
+
+# Actionable.
+skit feedback send "enable --project took the skill name, but skit list --json shows ids and the help \
+says 'skill' for both, so I passed the id and got NOT_FOUND with no hint the name was wanted"
+```
+
+Unclear errors, docs gaps, misleading flag names and three steps where one should do all belong
+here. Bugs in the user's own setup, questions you could answer by reading the help, and anything
+you have not actually hit do not. The CLI adds only its version, platform and runtime. Never
+include secrets, tokens, file contents or personal details in the message. If it fails, nothing
+was sent; retry once or move on.
+
+Reports are anonymous. Only if the user agrees, add `--signed-in` to attribute the report to the
+account this machine is signed in to, or `--email <address>` with an address the user gave you for
+a reply. Never take an address from git config or anywhere else without asking.

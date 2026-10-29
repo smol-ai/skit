@@ -18,6 +18,7 @@ const allowAll: RateLimit = { limit: async () => ({ success: true }) };
 const send = (
   body: unknown,
   runtimeEnv: RuntimeEnv = { ...env, FEEDBACK_RATE_LIMITER: allowAll },
+  headers: Record<string, string> = {},
 ) =>
   webPromise(() =>
     makeWebHandler(runtimeEnv).handler(
@@ -27,6 +28,7 @@ const send = (
           "content-type": "application/json",
           "skit-client": "skit/1.2.3; kind=release",
           "cf-connecting-ip": "203.0.113.7",
+          ...headers,
         },
         body: JSON.stringify(body),
       }),
@@ -38,6 +40,35 @@ const storedFeedback = webPromise(() =>
     "SELECT id, message, harness, model, platform, runtime, client FROM feedback",
   ).all(),
 ).pipe(Effect.map((rows) => rows.results));
+
+const storedAttribution = webPromise(() =>
+  env.DB.prepare("SELECT principal_id, contact_email FROM feedback").all(),
+).pipe(Effect.map((rows) => rows.results));
+
+const token = "skit_pat_feedback_signer";
+const signedIn = { authorization: `Bearer ${token}` };
+
+const createAccount = webPromise(async () => {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
+  const tokenHash = Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+  const now = "2026-10-29T09:00:00.000Z";
+  await env.DB.batch([
+    env.DB.prepare(
+      "INSERT INTO user (id, name, email, createdAt, updatedAt) VALUES ('user_1', 'Ada', 'ada@example.com', 0, 0)",
+    ),
+    env.DB.prepare(
+      "INSERT INTO principals (principal_id, better_auth_user_id, created_at, updated_at) VALUES ('principal_1', 'user_1', ?, ?)",
+    ).bind(now, now),
+    env.DB.prepare(
+      `INSERT INTO personal_access_tokens
+         (token_id, principal_id, token_hash, token_prefix, name, scopes_json,
+          authorization_generation, created_at)
+       VALUES ('pat_1', 'principal_1', ?, 'skit_pat_feed', 'feedback', '[]', 1, ?)`,
+    ).bind(tokenHash, now),
+  ]);
+});
 
 const report = {
   message: "`skit add` said the Source was invalid but not which part",
@@ -60,6 +91,65 @@ describe("feedback", () => {
       expect(yield* storedFeedback).toEqual([
         { id: body.id, ...report, client: "skit/1.2.3; kind=release" },
       ]);
+    }),
+  );
+
+  it.effect("stores a report as anonymous unless the sender opts in", () =>
+    Effect.gen(function* () {
+      yield* prepareDatabase;
+
+      yield* send(report);
+
+      expect(yield* storedAttribution).toEqual([{ principal_id: null, contact_email: null }]);
+    }),
+  );
+
+  it.effect("stores the contact email a sender chose to give", () =>
+    Effect.gen(function* () {
+      yield* prepareDatabase;
+
+      const response = yield* send({ ...report, email: "ada@example.com" });
+
+      expect(response.status).toBe(201);
+      expect(yield* storedAttribution).toEqual([
+        { principal_id: null, contact_email: "ada@example.com" },
+      ]);
+    }),
+  );
+
+  it.effect("refuses a contact email that is not an address", () =>
+    Effect.gen(function* () {
+      yield* prepareDatabase;
+
+      const response = yield* send({ ...report, email: "ada" });
+
+      expect(response.status).toBe(400);
+      expect(yield* storedFeedback).toEqual([]);
+    }),
+  );
+
+  it.effect("attributes a report signed with a token to that token's account", () =>
+    Effect.gen(function* () {
+      yield* prepareDatabase;
+      yield* createAccount;
+
+      const response = yield* send(report, undefined, signedIn);
+
+      expect(response.status).toBe(201);
+      expect(yield* storedAttribution).toEqual([
+        { principal_id: "principal_1", contact_email: null },
+      ]);
+    }),
+  );
+
+  it.effect("refuses a report signed with a token that does not authenticate", () =>
+    Effect.gen(function* () {
+      yield* prepareDatabase;
+
+      const response = yield* send(report, undefined, signedIn);
+
+      expect(response.status).toBe(401);
+      expect(yield* storedFeedback).toEqual([]);
     }),
   );
 

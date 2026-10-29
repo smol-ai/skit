@@ -8,11 +8,17 @@ import {
 } from "../platform/cloudflare.js";
 import { NativeCrypto } from "../platform/native-crypto.js";
 
+/**
+ * One report as stored. `client` is the sender's `skit-client` header, when it sent one;
+ * `principalId` is the account that signed it, when the sender chose to.
+ */
+export type FeedbackRecord = FeedbackInput & {
+  readonly client: string | undefined;
+  readonly principalId: string | undefined;
+};
+
 export interface FeedbackService {
-  /** Store one report. `client` is the sender's `skit-client` header, when it sent one. */
-  readonly record: (
-    input: FeedbackInput & { readonly client: string | undefined },
-  ) => Effect.Effect<FeedbackResult, DatabaseError>;
+  readonly record: (input: FeedbackRecord) => Effect.Effect<FeedbackResult, DatabaseError>;
 }
 
 export class Feedback extends Context.Service<Feedback, FeedbackService>()(
@@ -26,15 +32,15 @@ export const layer = Layer.effect(
     const crypto = yield* NativeCrypto;
     const clock = yield* Clock.Clock;
 
-    const record = Effect.fn("Feedback.record")(function* (
-      input: FeedbackInput & { readonly client: string | undefined },
-    ) {
+    const record = Effect.fn("Feedback.record")(function* (input: FeedbackRecord) {
       const id = `feedback_${crypto.randomUUID().replaceAll("-", "")}`;
       const createdAt = new Date(yield* clock.currentTimeMillis).toISOString();
       yield* sql`INSERT INTO feedback
-          (id, message, harness, model, platform, runtime, client, created_at)
+          (id, message, harness, model, platform, runtime, client, principal_id, contact_email,
+            created_at)
         VALUES (${id}, ${input.message}, ${input.harness ?? null}, ${input.model ?? null},
-          ${input.platform}, ${input.runtime}, ${input.client ?? null}, ${createdAt})`.pipe(
+          ${input.platform}, ${input.runtime}, ${input.client ?? null},
+          ${input.principalId ?? null}, ${input.email ?? null}, ${createdAt})`.pipe(
         databaseError("record feedback"),
       );
       return { id, createdAt };

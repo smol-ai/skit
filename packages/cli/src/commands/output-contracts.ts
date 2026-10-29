@@ -201,7 +201,13 @@ export const outputContracts = {
   ),
   feedbackSend: effectOutput(
     "skit.feedback.send.v1",
-    Schema.Struct({ id: Schema.String, createdAt: Schema.String, recipient: Schema.String }),
+    Schema.Struct({
+      id: Schema.String,
+      createdAt: Schema.String,
+      recipient: Schema.String,
+      signedIn: Schema.Boolean,
+      email: Schema.optionalKey(Schema.String),
+    }),
   ),
   experimentalHarnessProbe: effectOutput(
     "skit.experimental.harness-probe.v1alpha1",

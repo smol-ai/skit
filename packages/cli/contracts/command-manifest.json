@@ -798,7 +798,13 @@
       "summary": "Tell SKIT's maintainers about friction with SKIT itself: an unclear error, a gap in the docs, a step that took longer than it should.",
       "effects": {
         "capabilities": [
-          "network.write"
+          "network.write",
+          "filesystem.read",
+          "process.execute"
+        ],
+        "subprocesses": [
+          "/usr/bin/security find-generic-password",
+          "secret-tool lookup"
         ]
       },
       "outputSchemas": [
@@ -807,12 +813,14 @@
       "exitCodes": [
         0,
         1,
+        13,
         64
       ],
       "interactive": false,
       "examples": [
         "skit feedback send \"skit add said the Source was invalid but not which part\"",
-        "skit feedback send --message \"setup --json had no field for skipped skills\" --harness codex --model gpt-5.5"
+        "skit feedback send --message \"setup --json had no field for skipped skills\" --harness codex --model gpt-5.5",
+        "skit feedback send \"skit sync --json gave no reason for base_mismatch\" --signed-in --email ada@example.com"
       ],
       "positionals": [
         {
@@ -835,6 +843,21 @@
           "type": "string",
           "valueName": "string",
           "description": "The model you are, for example claude-opus-5-5."
+        },
+        "signed-in": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Attribute the report to the account this machine is signed in to. Only with the user's agreement."
+        },
+        "email": {
+          "type": "string",
+          "valueName": "string",
+          "description": "A contact address for a reply. Only one the user gave you for this report."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
         },
         "json": {
           "type": "boolean",

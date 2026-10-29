@@ -162,9 +162,17 @@ const configuredBootstrapRoutes = (
     Layer.provide(HttpServer.layerServices),
   );
 
-const feedbackApi = (application: FeedbackApplication) =>
+// Accounts are optional: with them a report can be signed, without them it is anonymous only.
+const feedbackApi = (
+  application: FeedbackApplication,
+  authentication: AuthenticatedApplication | undefined,
+) =>
   HttpApiBuilder.layer(FeedbackApi).pipe(
-    Layer.provide(feedbackHandlers.pipe(Layer.provide(application))),
+    Layer.provide(
+      feedbackHandlers.pipe(
+        Layer.provide(authentication ? Layer.merge(application, authentication) : application),
+      ),
+    ),
     Layer.provide(HttpServer.layerServices),
   );
 
@@ -264,7 +272,7 @@ const routeLayer = (env: RuntimeEnv, capabilities: ServerCapabilities) => {
     typedSystem,
     uiConfigurationRoutes(env),
     agentSkillsRoutes(application.release),
-    application.feedback ? feedbackApi(application.feedback) : Layer.empty,
+    application.feedback ? feedbackApi(application.feedback, authentication) : Layer.empty,
     main,
     bootstrap,
   );
