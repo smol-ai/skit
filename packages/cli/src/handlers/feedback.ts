@@ -4,10 +4,7 @@ import { handlePlatformCommand } from "../application.js";
 import { CommandMetadata, credentialStoreReadSubprocesses } from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";
 import { homeFlag, jsonFlag, optionalString } from "../commands/parameters.js";
-import {
-  SkitConfiguration,
-  skitConfigurationLayer,
-} from "../configuration/skit-configuration.js";
+import { SkitConfiguration, skitConfigurationLayer } from "../configuration/skit-configuration.js";
 import {
   feedbackInput,
   feedbackOrigin,

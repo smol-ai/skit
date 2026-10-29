@@ -111,16 +111,16 @@ describe("feedback origin", () => {
 });
 
 describe("signing feedback", () => {
-  const writeCredentials = (home: string, servers: Record<string, unknown>) =>
-    Effect.flatMap(FileSystem.FileSystem, (fs) =>
-      fs.writeFileString(join(home, "auth.json"), JSON.stringify({ schemaVersion: 1, servers })),
-    );
   const credential = (token: string) => ({
     token,
     tokenId: "token-id",
     tokenPrefix: token,
     scopes: [],
   });
+  const writeCredentials = (home: string, servers: Record<string, ReturnType<typeof credential>>) =>
+    Effect.flatMap(FileSystem.FileSystem, (fs) =>
+      fs.writeFileString(join(home, "auth.json"), JSON.stringify({ schemaVersion: 1, servers })),
+    );
 
   it.effect("signs with this machine's credential for the feedback server and no other", () =>
     Effect.gen(function* () {
