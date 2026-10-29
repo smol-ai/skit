@@ -110,6 +110,7 @@ describe("bootstrap status", () => {
         AUTH_RATE_LIMITER: env.AUTH_RATE_LIMITER,
         PAT_RATE_LIMITER: env.PAT_RATE_LIMITER,
         BOOTSTRAP_RATE_LIMITER: env.BOOTSTRAP_RATE_LIMITER,
+        FEEDBACK_RATE_LIMITER: env.FEEDBACK_RATE_LIMITER,
         ACCOUNT_REGISTRATION_MODE: env.ACCOUNT_REGISTRATION_MODE,
       };
       const concealed = makeWebHandler({

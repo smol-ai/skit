@@ -3,5 +3,6 @@ export * from "./authoring.js";
 export * from "./bootstrap.js";
 export * from "./consumer.js";
 export * from "./errors.js";
+export * from "./feedback.js";
 export * from "./releases.js";
 export * from "../../library/library-contracts.js";

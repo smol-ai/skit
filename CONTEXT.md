@@ -37,6 +37,7 @@ Each verb has one meaning. Use these and no others for Library work.
 | sync | Merge this device's Library with the server's. |
 | plan / apply | Preview a change, then make it. |
 | inspect | Show something in detail without changing it. |
+| send | Send feedback to SKIT's maintainers. |
 
 _Avoid_: acquire, retain, retire, preserve, reconcile, adopt, observe, bind, project, materialize, capture, reload, and publish for anything but Releases.
 

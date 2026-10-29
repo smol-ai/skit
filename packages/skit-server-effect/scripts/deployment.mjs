@@ -45,6 +45,24 @@ const valueAfter = (args, name) => {
   return value;
 };
 
+/** The Wrangler environment named by `--env`, if any. Its name must already be in wrangler.jsonc. */
+export const parseEnvironment = (args) => {
+  const environment = valueAfter(args, "--env");
+  if (environment !== undefined && !workerNamePattern.test(environment))
+    throw new DeploymentInputError("--env must use lowercase letters, numbers, and dashes");
+  return environment;
+};
+
+/** The `env.<name>` block of a deployment configuration. */
+export const environmentConfiguration = (configuration, environment) => {
+  const declared = configuration.env?.[environment];
+  if (!declared)
+    throw new DeploymentInputError(
+      `wrangler.jsonc has no env.${environment}; declare its routes, vars, ratelimits, d1_databases and r2_buckets first`,
+    );
+  return declared;
+};
+
 export const parseSetupOptions = (args) => {
   const workerName = valueAfter(args, "--name") ?? "skit-server";
   const databaseName = valueAfter(args, "--database-name") ?? `${workerName}-db`;
@@ -118,8 +136,50 @@ export const parseCanonicalOrigin = (value) => {
   return url.origin;
 };
 
+/** The rate limiters the server binds. Every Worker needs each, since `ratelimits` is not inherited. */
+const rateLimiterNames = [
+  "AUTH_RATE_LIMITER",
+  "PAT_RATE_LIMITER",
+  "BOOTSTRAP_RATE_LIMITER",
+  "FEEDBACK_RATE_LIMITER",
+];
+
+/**
+ * Add the rate limiters each Worker lacks, the top level and every env.<name>, keeping the ones
+ * they declare. Workers in one account that share a namespace share its counters, so a new
+ * limiter takes the next namespace ID after the highest anywhere in the configuration.
+ */
+const withRateLimiters = (configuration) => {
+  const workers = [configuration, ...Object.values(configuration.env ?? {})];
+  let next = Math.max(
+    1000,
+    ...workers.flatMap(({ ratelimits = [] }) =>
+      ratelimits.map(({ namespace_id }) => Number(namespace_id) || 0),
+    ),
+  );
+  const complete = (worker) => {
+    const declared = worker.ratelimits ?? [];
+    const missing = rateLimiterNames
+      .filter((name) => !declared.some((limiter) => limiter.name === name))
+      .map((name) => ({
+        name,
+        namespace_id: String(++next),
+        simple: { limit: 5, period: 60 },
+      }));
+    return missing.length === 0 ? worker : { ...worker, ratelimits: [...declared, ...missing] };
+  };
+  const top = complete(configuration);
+  if (configuration.env === undefined) return top;
+  return {
+    ...top,
+    env: Object.fromEntries(
+      Object.entries(configuration.env).map(([name, environment]) => [name, complete(environment)]),
+    ),
+  };
+};
+
 export const withApplicationHosting = (configuration) => ({
-  ...configuration,
+  ...withRateLimiters(configuration),
   compatibility_flags: Array.from(
     new Set([...(configuration.compatibility_flags ?? []), "nodejs_compat"]),
   ),
@@ -152,25 +212,9 @@ export const initialConfiguration = ({ workerName, accountId, publicOrigin, emai
     workers_dev: true,
     vars: {
       ACCOUNT_REGISTRATION_MODE: "closed",
+      FEEDBACK_MODE: "closed",
       ...(publicOrigin ? { PUBLIC_APP_ORIGIN: publicOrigin } : {}),
     },
-    ratelimits: [
-      {
-        name: "AUTH_RATE_LIMITER",
-        namespace_id: "1001",
-        simple: { limit: 5, period: 60 },
-      },
-      {
-        name: "PAT_RATE_LIMITER",
-        namespace_id: "1002",
-        simple: { limit: 5, period: 60 },
-      },
-      {
-        name: "BOOTSTRAP_RATE_LIMITER",
-        namespace_id: "1003",
-        simple: { limit: 5, period: 60 },
-      },
-    ],
   });
   return emailFrom ? withEmailSending(configuration, emailFrom) : configuration;
 };
@@ -236,7 +280,7 @@ export const deployTargets = (output) => {
   throw new Error("Wrangler did not write a deployment result");
 };
 
-export const bootstrapCommand = (publicOrigin, paths = {}) => [
+export const bootstrapCommand = (publicOrigin, paths = {}, environment) => [
   "pnpm",
   "skit",
   "server",
@@ -245,6 +289,7 @@ export const bootstrapCommand = (publicOrigin, paths = {}) => [
   publicOrigin,
   "--config",
   paths.configPath ?? configPath,
+  ...(environment ? ["--env", environment] : []),
   "--wrangler",
   paths.wranglerPath ?? wranglerPath,
 ];
@@ -317,14 +362,19 @@ const runWrangler = (args, options = {}) => {
     throw new Error(`wrangler ${args.join(" ")} failed with exit code ${result.status}`);
 };
 
-const buildDeployment = async (configuration) => {
-  const environment = buildEnvironment(process.env);
+const buildDeployment = async (configuration, environment) => {
+  const buildEnv = buildEnvironment(process.env);
   const metadata = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8"));
-  const build = { ...buildInfo(metadata, environment), buildId: environment.FOLDKIT_BUILD_ID };
+  const build = { ...buildInfo(metadata, buildEnv), buildId: buildEnv.FOLDKIT_BUILD_ID };
   const result = spawnSync("pnpm", ["build"], {
     cwd: packageRoot,
     stdio: "inherit",
-    env: { ...environment, CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH: configPath },
+    // The Vite plugin flattens env.<name> into the built wrangler.json, so deploy needs no --env.
+    env: {
+      ...buildEnv,
+      CLOUDFLARE_VITE_WRANGLER_CONFIG_PATH: configPath,
+      ...(environment ? { CLOUDFLARE_ENV: environment } : {}),
+    },
   });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`pnpm build failed with exit code ${result.status}`);
@@ -445,7 +495,7 @@ const findBucket = (name) => {
 };
 
 export const deploy = async (
-  { installSecret = false, expectedOrigin } = {},
+  { installSecret = false, expectedOrigin, environment } = {},
   {
     read = readConfiguration,
     write = writeConfiguration,
@@ -455,15 +505,19 @@ export const deploy = async (
   } = {},
 ) => {
   const currentConfiguration = await read();
+  if (environment) environmentConfiguration(currentConfiguration, environment);
   const configuration = withApplicationHosting(currentConfiguration);
   if (JSON.stringify(configuration) !== JSON.stringify(currentConfiguration))
     await write(configuration);
-  const deployment = await build(configuration);
+  const deployment = await build(configuration, environment);
   const deploymentConfigPath = deployment.configPath;
   // `wrangler d1 migrations` ignores the configured account_id when the login can reach several
   // accounts, so name it in the environment for every command.
   const env = configuration.account_id ? { CLOUDFLARE_ACCOUNT_ID: configuration.account_id } : {};
-  run(["d1", "migrations", "apply", "DB", "--remote"], { env });
+  run(
+    ["d1", "migrations", "apply", "DB", "--remote", ...(environment ? ["--env", environment] : [])],
+    { env },
+  );
   if (!installSecret) {
     run(["deploy"], { configPath: deploymentConfigPath, env });
     log(`Deployed SKIT server ${describeBuild(deployment.build)}`);
@@ -491,7 +545,63 @@ export const deploy = async (
   }
 };
 
+/** Point env.<name>'s D1 binding at its database, keeping everything else it declares. */
+export const withEnvironmentDatabaseId = (configuration, environment, databaseId) => {
+  const declared = environmentConfiguration(configuration, environment);
+  return {
+    ...configuration,
+    env: {
+      ...configuration.env,
+      [environment]: {
+        ...declared,
+        d1_databases: declared.d1_databases.map((database) =>
+          database.binding === "DB" ? { ...database, database_id: databaseId } : database,
+        ),
+      },
+    },
+  };
+};
+
+/**
+ * Provision and first-deploy a Wrangler environment already declared in wrangler.jsonc. Its
+ * routes, vars and bindings are the operator's; setup only creates the D1 database and R2 bucket
+ * it names, records the database ID, and deploys with a fresh auth secret.
+ */
+const setupEnvironment = async (environment, { dryRun }) => {
+  let configuration = await readConfiguration();
+  const declared = environmentConfiguration(configuration, environment);
+  const database = declared.d1_databases?.find(({ binding }) => binding === "DB");
+  const bucket = declared.r2_buckets?.find(({ binding }) => binding === "SKIT_BLOBS");
+  const publicOrigin = declared.vars?.PUBLIC_APP_ORIGIN;
+  if (!database?.database_name || !bucket?.bucket_name || !publicOrigin)
+    throw new DeploymentInputError(
+      `env.${environment} needs a DB d1_databases binding, a SKIT_BLOBS r2_buckets binding and vars.PUBLIC_APP_ORIGIN`,
+    );
+  if (dryRun) {
+    console.log(JSON.stringify({ environment, configuration: declared }, null, 2));
+    return;
+  }
+
+  if (!database.database_id) {
+    if (!findDatabase(database.database_name))
+      // setup records the ID itself, in env.<name>; Wrangler would otherwise offer the top level.
+      runWrangler(["d1", "create", database.database_name, "--no-update-config"]);
+    const created = findDatabase(database.database_name);
+    if (!created) throw new Error(`D1 database '${database.database_name}' was not created`);
+    configuration = withEnvironmentDatabaseId(configuration, environment, created.uuid);
+    await writeConfiguration(configuration);
+  }
+  if (!findBucket(bucket.bucket_name))
+    runWrangler(["r2", "bucket", "create", bucket.bucket_name, "--no-update-config"]);
+
+  await deploy({ installSecret: true, environment });
+  console.log(`\nSKIT server env.${environment} deployed to ${publicOrigin}`);
+  console.log(`Next: run ${shellCommand(bootstrapCommand(publicOrigin, {}, environment))}`);
+};
+
 const setup = async (args) => {
+  const environment = parseEnvironment(args);
+  if (environment) return setupEnvironment(environment, { dryRun: args.includes("--dry-run") });
   const options = parseSetupOptions(args);
   const plan = setupPlan(options);
   if (options.dryRun) {
@@ -563,6 +673,10 @@ const setup = async (args) => {
 };
 
 const setDomain = async (args) => {
+  if (args.includes("--env"))
+    throw new DeploymentInputError(
+      "deploy:domain changes only the top-level Worker; set env.<name>.routes and vars in wrangler.jsonc instead",
+    );
   const emailFrom = valueAfter(args, "--email-from");
   const positional = args.filter(
     (argument, index) =>
@@ -585,7 +699,7 @@ const setDomain = async (args) => {
 export const main = async (argv) => {
   const [command, ...args] = argv;
   if (command === "setup") return setup(args);
-  if (command === "deploy") return deploy();
+  if (command === "deploy") return deploy({ environment: parseEnvironment(args) });
   if (command === "domain") return setDomain(args);
   throw new DeploymentInputError("expected one of: setup, deploy, domain");
 };

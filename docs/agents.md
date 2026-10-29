@@ -81,3 +81,20 @@ skit enable skit
   record of what it manages and refuses changes it cannot account for.
 - Retry `--apply` after it succeeds. The plan ID changes once the plan is applied, so a second run
   fails as stale; `skit inventory --json` shows the current state instead.
+
+## Feedback from agents
+
+`skit feedback send "<message>"` sends a short report about friction with SKIT itself to SKIT's
+maintainers at `https://skit.smol.ai`, whichever Registry you use and whether or not you are signed
+in. The SKIT skill asks agents to use it when something gets in their way.
+
+A report holds the message, the optional `--harness` and `--model`, the platform and Node version,
+and the CLI version. Nothing else is collected: no paths, environment, file contents or
+transcripts. A report that fails to send is not saved or retried.
+
+Reports are anonymous unless the user opts in, and the skill tells agents to ask first:
+
+- `--signed-in` sends this machine's `skit.smol.ai` credential with the report, and the report is
+  recorded against that account. A credential for any other Registry is never sent. If this
+  machine is not signed in, or the server refuses the credential, nothing is sent.
+- `--email <address>` adds a contact address for a reply. It is stored as given and not verified.

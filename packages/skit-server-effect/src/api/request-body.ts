@@ -15,6 +15,7 @@ export const schemaBodyJsonLimited = Effect.fn("Http.schemaBodyJsonLimited")(fun
   request: HttpServerRequest.HttpServerRequest,
   schema: Schema.ConstraintDecoder<A, RD>,
   limit: number,
+  options: { readonly onExcessProperty: "error" | "ignore" } = { onExcessProperty: "error" },
 ) {
   const contentLength = Number(request.headers["content-length"] ?? "0");
   if (Number.isFinite(contentLength) && contentLength > limit)
@@ -40,6 +41,6 @@ export const schemaBodyJsonLimited = Effect.fn("Http.schemaBodyJsonLimited")(fun
   }
   return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(schema))(
     new TextDecoder().decode(bytes),
-    { onExcessProperty: "error" },
+    options,
   );
 });

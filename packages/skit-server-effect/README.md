@@ -47,6 +47,7 @@ boundaries, rather than treating the abbreviated commands above as an operations
 | --- | --- | --- |
 | `PUBLIC_APP_ORIGIN` | variable | Exact HTTPS Registry origin; identity and browser security depend on it |
 | `ACCOUNT_REGISTRATION_MODE` | variable | `closed` for self-hosting; `open` deliberately permits registration |
+| `FEEDBACK_MODE` | variable | `closed` for self-hosting; `open` accepts `skit feedback send` reports, which only the official deployment does |
 | `BETTER_AUTH_SECRET` | secret | Better Auth signing secret, at least 32 characters |
 | `SKIT_BOOTSTRAP_SECRET` | temporary secret | Enables the one-time setup surface; removed after bootstrap |
 | `DB` | D1 binding | Identity, authorization, Library, and Release metadata |
@@ -54,6 +55,7 @@ boundaries, rather than treating the abbreviated commands above as an operations
 | `AUTH_RATE_LIMITER` | rate-limit binding | Browser authentication requests |
 | `PAT_RATE_LIMITER` | rate-limit binding | Personal Access Token requests |
 | `BOOTSTRAP_RATE_LIMITER` | rate-limit binding | Initial-operator bootstrap requests |
+| `FEEDBACK_RATE_LIMITER` | rate-limit binding | `skit feedback send` reports, when `FEEDBACK_MODE` is `open` |
 | `ASSETS` | Worker assets binding | Browser application assets |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | optional secrets | GitHub sign-in; configure both or neither |
 | `EMAIL`, `EMAIL_FROM` | optional binding and variable | Verification email; configure both or neither |

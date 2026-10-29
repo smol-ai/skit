@@ -11,11 +11,13 @@ import {
   deploy,
   deployTargets,
   DeploymentInputError,
+  environmentConfiguration,
   exampleConfiguration,
   findDatabaseCollision,
   initialConfiguration,
   parseCanonicalOrigin,
   parseDeploymentConfiguration,
+  parseEnvironment,
   parseSetupOptions,
   promoteToCustomDomain,
   selectAccount,
@@ -24,6 +26,7 @@ import {
   withBucketBinding,
   withDatabaseBinding,
   withEmailSending,
+  withEnvironmentDatabaseId,
   withApplicationHosting,
   workersDevOrigin,
 } from "./deployment.mjs";
@@ -176,6 +179,42 @@ describe("server deployment configuration", () => {
     assert.deepEqual(configuration.assets.run_worker_first.slice(0, 3), ["/", "/setup", "/device"]);
   });
 
+  it("adds the rate limiters each Worker lacks without changing the ones it declares", () => {
+    const configuration = withApplicationHosting({
+      name: "skit-server",
+      ratelimits: [
+        { name: "AUTH_RATE_LIMITER", namespace_id: "1001", simple: { limit: 10, period: 60 } },
+        { name: "PAT_RATE_LIMITER", namespace_id: "1002", simple: { limit: 5, period: 60 } },
+        { name: "BOOTSTRAP_RATE_LIMITER", namespace_id: "1003", simple: { limit: 5, period: 60 } },
+      ],
+      env: {
+        test: {},
+        staging: { ratelimits: [{ name: "AUTH_RATE_LIMITER", namespace_id: "2001" }] },
+      },
+    });
+    const namespaces = (worker) =>
+      worker.ratelimits.map(({ name, namespace_id }) => [name, namespace_id]);
+    assert.deepEqual(configuration.ratelimits[0], {
+      name: "AUTH_RATE_LIMITER",
+      namespace_id: "1001",
+      simple: { limit: 10, period: 60 },
+    });
+    // New limiters number after the highest ID anywhere, so no two Workers share a counter.
+    assert.deepEqual(namespaces(configuration).at(-1), ["FEEDBACK_RATE_LIMITER", "2002"]);
+    assert.deepEqual(namespaces(configuration.env.test), [
+      ["AUTH_RATE_LIMITER", "2003"],
+      ["PAT_RATE_LIMITER", "2004"],
+      ["BOOTSTRAP_RATE_LIMITER", "2005"],
+      ["FEEDBACK_RATE_LIMITER", "2006"],
+    ]);
+    assert.deepEqual(namespaces(configuration.env.staging), [
+      ["AUTH_RATE_LIMITER", "2001"],
+      ["PAT_RATE_LIMITER", "2007"],
+      ["BOOTSTRAP_RATE_LIMITER", "2008"],
+      ["FEEDBACK_RATE_LIMITER", "2009"],
+    ]);
+  });
+
   it("reads targets from Wrangler's versioned structured deployment output", () => {
     const output = [
       JSON.stringify({ type: "wrangler-session", version: 1 }),
@@ -207,6 +246,73 @@ describe("server deployment configuration", () => {
         "/repo/server/node_modules/.bin/wrangler",
       ],
     );
+  });
+
+  it("hands bootstrap the Wrangler environment it must target", () => {
+    assert.deepEqual(
+      bootstrapCommand(
+        "https://skit-test.example.com",
+        { configPath: "/repo/server/wrangler.jsonc", wranglerPath: "/repo/wrangler" },
+        "test",
+      ),
+      [
+        "pnpm",
+        "skit",
+        "server",
+        "bootstrap",
+        "--url",
+        "https://skit-test.example.com",
+        "--config",
+        "/repo/server/wrangler.jsonc",
+        "--env",
+        "test",
+        "--wrangler",
+        "/repo/wrangler",
+      ],
+    );
+  });
+
+  it("reads one declared Wrangler environment and rejects undeclared or malformed names", () => {
+    const configuration = { name: "skit-server", env: { test: { vars: { A: "1" } } } };
+    assert.equal(parseEnvironment(["--env", "test"]), "test");
+    assert.equal(parseEnvironment([]), undefined);
+    assert.throws(() => parseEnvironment(["--env", "Test_1"]), DeploymentInputError);
+    assert.throws(() => parseEnvironment(["--env"]), DeploymentInputError);
+    assert.deepEqual(environmentConfiguration(configuration, "test"), { vars: { A: "1" } });
+    assert.throws(() => environmentConfiguration(configuration, "staging"), /no env\.staging/);
+  });
+
+  it("records an environment's D1 ID without touching the top level or other bindings", () => {
+    const configuration = {
+      name: "skit-server",
+      d1_databases: [{ binding: "DB", database_name: "prod", database_id: "prod-id" }],
+      env: {
+        test: {
+          vars: { PUBLIC_APP_ORIGIN: "https://skit-test.example.com" },
+          d1_databases: [
+            { binding: "DB", database_name: "skit-server-test", migrations_dir: "migrations" },
+            { binding: "OTHER", database_name: "other" },
+          ],
+        },
+      },
+    };
+    assert.deepEqual(withEnvironmentDatabaseId(configuration, "test", "test-id"), {
+      ...configuration,
+      env: {
+        test: {
+          ...configuration.env.test,
+          d1_databases: [
+            {
+              binding: "DB",
+              database_name: "skit-server-test",
+              migrations_dir: "migrations",
+              database_id: "test-id",
+            },
+            { binding: "OTHER", database_name: "other" },
+          ],
+        },
+      },
+    });
   });
 
   it("prints a directly copyable bootstrap command", () => {
@@ -334,6 +440,50 @@ describe("server deployment execution", () => {
     });
     assert.match(calls[3], /0.2.0.*release.*abc123.*build-1/);
   });
+  it("builds and migrates a Wrangler environment, then deploys the artifact built for it", async () => {
+    const calls = [];
+    await deploy(
+      { environment: "test" },
+      {
+        read: async () => withApplicationHosting({ ...configuration, env: { test: { vars: {} } } }),
+        write: rejectWrite,
+        build: async (_configuration, environment) => {
+          calls.push({ build: environment });
+          return { configPath: "built-wrangler.json", build };
+        },
+        run: (args, options) => calls.push({ args, options }),
+        log: () => {},
+      },
+    );
+    assert.deepEqual(calls, [
+      { build: "test" },
+      {
+        args: ["d1", "migrations", "apply", "DB", "--remote", "--env", "test"],
+        options: { env: {} },
+      },
+      // The built config is already flattened to env.test, so deploy takes no --env.
+      { args: ["deploy"], options: { configPath: "built-wrangler.json", env: {} } },
+    ]);
+  });
+
+  it("refuses an undeclared environment before building anything", async () => {
+    const calls = [];
+    await assert.rejects(
+      deploy(
+        { environment: "staging" },
+        {
+          read: async () => configuration,
+          write: rejectWrite,
+          build: async () => calls.push("build"),
+          run: (args) => calls.push(args),
+          log: () => {},
+        },
+      ),
+      /no env\.staging/,
+    );
+    assert.deepEqual(calls, []);
+  });
+
   it("does not deploy or announce success after migration failure", async () => {
     const calls = [];
     await assert.rejects(

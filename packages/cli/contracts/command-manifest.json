@@ -791,6 +791,103 @@
     },
     {
       "path": [
+        "feedback",
+        "send"
+      ],
+      "stability": "experimental",
+      "summary": "Tell SKIT's maintainers about friction with SKIT itself: an unclear error, a gap in the docs, a step that took longer than it should.",
+      "effects": {
+        "capabilities": [
+          "network.write",
+          "filesystem.read",
+          "process.execute"
+        ],
+        "subprocesses": [
+          "/usr/bin/security find-generic-password",
+          "secret-tool lookup"
+        ]
+      },
+      "outputSchemas": [
+        "skit.feedback.send.v1"
+      ],
+      "exitCodes": [
+        0,
+        1,
+        13,
+        64
+      ],
+      "interactive": false,
+      "examples": [
+        "skit feedback send \"skit add said the Source was invalid but not which part\"",
+        "skit feedback send --message \"setup --json had no field for skipped skills\" --harness codex --model gpt-5.5",
+        "skit feedback send \"skit sync --json gave no reason for base_mismatch\" --signed-in --email ada@example.com"
+      ],
+      "positionals": [
+        {
+          "name": "message",
+          "required": false
+        }
+      ],
+      "flags": {
+        "message": {
+          "type": "string",
+          "valueName": "string",
+          "description": "The same as the argument; easier to build from a script."
+        },
+        "harness": {
+          "type": "string",
+          "valueName": "string",
+          "description": "The agent harness you run in, for example claude-code or codex."
+        },
+        "model": {
+          "type": "string",
+          "valueName": "string",
+          "description": "The model you are, for example claude-opus-5-5."
+        },
+        "signed-in": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Attribute the report to the account this machine is signed in to. Only with the user's agreement."
+        },
+        "email": {
+          "type": "string",
+          "valueName": "string",
+          "description": "A contact address for a reply. Only one the user gave you for this report."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
+        },
+        "json": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Emit structured JSON."
+        },
+        "help": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
+        },
+        "completions": {
+          "type": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "valueName": "<bash|zsh|fish|powershell|sh|pwsh>",
+          "description": "Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)"
+        },
+        "log-level": {
+          "type": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "valueName": "<all|trace|debug|info|warn|warning|error|fatal|none>",
+          "description": "Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)"
+        }
+      }
+    },
+    {
+      "path": [
         "inventory"
       ],
       "stability": "stable",
@@ -2116,7 +2213,8 @@
       "interactive": true,
       "examples": [
         "skit server bootstrap",
-        "skit server bootstrap --config wrangler.jsonc"
+        "skit server bootstrap --config wrangler.jsonc",
+        "skit server bootstrap --config wrangler.jsonc --env test"
       ],
       "positionals": [],
       "flags": {
@@ -2124,6 +2222,11 @@
           "type": "string",
           "valueName": "string",
           "description": "Use this Wrangler configuration file."
+        },
+        "env": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Bootstrap this environment of the Wrangler configuration, reading its PUBLIC_APP_ORIGIN."
         },
         "url": {
           "type": "string",

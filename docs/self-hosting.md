@@ -93,6 +93,43 @@ This updates `PUBLIC_APP_ORIGIN`, adds the hostname as a Cloudflare Custom Domai
 
 Changing the canonical origin invalidates the practical use of existing host-bound browser sessions and stored CLI credentials. Sign in again at the custom domain and run `skit auth login https://registry.example.com` on each CLI installation. Do not promote the origin while synchronization or other Registry operations are in flight.
 
+## A second server for testing
+
+A [Wrangler environment](https://developers.cloudflare.com/workers/wrangler/environments/) in the same `wrangler.jsonc` runs a separate Worker, `<name>-<env>`, with its own D1 database, R2 bucket and origin. Declare it by hand: `vars`, `d1_databases` and `r2_buckets` are not inherited, but `routes` is, so set all of them. `ratelimits` is not inherited either; `deploy` adds any rate limiter an environment lacks, numbering it after the highest `namespace_id` anywhere in `wrangler.jsonc`.
+
+```jsonc
+"env": {
+  "test": {
+    "routes": [{ "pattern": "skit-test.example.com", "custom_domain": true }],
+    "vars": {
+      "ACCOUNT_REGISTRATION_MODE": "closed",
+      "PUBLIC_APP_ORIGIN": "https://skit-test.example.com"
+    },
+    "ratelimits": [
+      { "name": "AUTH_RATE_LIMITER", "namespace_id": "2001", "simple": { "limit": 5, "period": 60 } },
+      { "name": "PAT_RATE_LIMITER", "namespace_id": "2002", "simple": { "limit": 5, "period": 60 } },
+      { "name": "BOOTSTRAP_RATE_LIMITER", "namespace_id": "2003", "simple": { "limit": 5, "period": 60 } }
+    ],
+    "d1_databases": [{ "binding": "DB", "database_name": "skit-server-test", "migrations_dir": "migrations" }],
+    "r2_buckets": [{ "binding": "SKIT_BLOBS", "bucket_name": "skit-server-test-blobs" }]
+  }
+}
+```
+
+Give its rate limiters their own `namespace_id`s: Workers in one account that share a namespace share its counters. If a broader route on the zone, such as `*example.com/*`, already matches the hostname, also add a route `skit-test.example.com/*` for the same Worker. A matching route takes precedence over a Custom Domain, and the most specific route wins.
+
+Then create its database and bucket, deploy it with a fresh auth secret, and bootstrap it:
+
+```sh
+pnpm --filter @smolai/skit-server-effect deploy:setup -- --env test
+pnpm skit server bootstrap \
+  --config packages/skit-server-effect/wrangler.jsonc --env test \
+  --wrangler packages/skit-server-effect/node_modules/.bin/wrangler
+pnpm --filter @smolai/skit-server-effect run deploy -- --env test   # later deploys
+```
+
+`deploy:domain` changes only the top-level Worker. Once `wrangler.jsonc` has environments, `skit server bootstrap` needs `--env`, or `--url` for the top-level Worker, so the bootstrap secret cannot land on the wrong one.
+
 ## Initial operator bootstrap
 
 Normal email/password registration remains closed throughout deployment. After applying migrations and deploying the Worker, run the guided bootstrap:

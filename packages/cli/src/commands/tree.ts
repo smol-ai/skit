@@ -25,6 +25,7 @@ import { libraryRecoveryCliCommand } from "../handlers/library/recovery.js";
 import { librarySetupUndoCliCommand } from "../handlers/library/setup-undo.js";
 import { libraryHistoryCliCommand } from "../handlers/library/history.js";
 import { versionCliCommand } from "../handlers/version.js";
+import { feedbackSendCliCommand } from "../handlers/feedback.js";
 import {
   registryAddCliCommand,
   registryDefaultCliCommand,
@@ -36,6 +37,11 @@ import { JsonOutputFlag } from "./parameters.js";
 const authCommand = Command.make("auth").pipe(
   Command.withDescription("Manage Registry authentication."),
   Command.withSubcommands([authLoginCliCommand, authLogoutCliCommand, authStatusCliCommand]),
+);
+
+const feedbackCommand = Command.make("feedback").pipe(
+  Command.withDescription("Tell SKIT's maintainers what got in your way."),
+  Command.withSubcommands([feedbackSendCliCommand]),
 );
 
 const securityCommand = Command.make("security").pipe(
@@ -88,6 +94,7 @@ export const skitCommand = Command.make("skit").pipe(
     doctorCliCommand,
     disableCliCommand,
     enableCliCommand,
+    feedbackCommand,
     inventoryCliCommand,
     libraryCommand,
     listCliCommand,

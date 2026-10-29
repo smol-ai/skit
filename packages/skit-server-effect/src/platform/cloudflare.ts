@@ -8,8 +8,13 @@ export interface CloudflareBindings {
 
 export type DatabaseSqlClient = D1Client.D1Client;
 
-export type RuntimeEnv = Omit<Env, "ACCOUNT_REGISTRATION_MODE" | "ASSETS" | "PUBLIC_APP_ORIGIN"> & {
+export type RuntimeEnv = Omit<
+  Env,
+  "ACCOUNT_REGISTRATION_MODE" | "ASSETS" | "FEEDBACK_MODE" | "PUBLIC_APP_ORIGIN"
+> & {
   readonly ACCOUNT_REGISTRATION_MODE?: "closed" | "open";
+  /** `open` accepts `skit feedback send` reports. Only the official deployment opens it. */
+  readonly FEEDBACK_MODE?: "closed" | "open";
   readonly PUBLIC_APP_ORIGIN?: string;
   readonly BETTER_AUTH_SECRET?: string;
   readonly SKIT_BOOTSTRAP_SECRET?: string;
