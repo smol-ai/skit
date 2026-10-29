@@ -62,6 +62,45 @@ no path overrides are needed.
 
 ## Repeat and recover
 
+### Swyx's source skills
+
+Create a fresh trial with real source skills and Codex symlinks:
+
+```sh
+pnpm vm new skit-swyx --fixture swyx
+pnpm vm shell skit-swyx
+# In the guest:
+cd ~/Work/skills
+skit setup
+```
+
+The fixture clones `swyxio/skills` at
+`7a57f05a9137c00cd75b81b1991c16dc800ef5fe` (September 30, 2026) into
+`~/Work/skills`, with 98 absolute directory symlinks under `~/.codex/skills`.
+The repository remains a real Git checkout. Shell and Codex sessions open in
+`~/Work/skills`, as recorded by the fixture marker's `cwd`. It does not run upstream scripts,
+apply SKIT setup, or copy credentials. For interactive Codex, run
+`pnpm vm auth-copy skit-swyx` followed by `pnpm vm codex skit-swyx`.
+
+This reconstructs the reported pre-SKIT source-and-symlink layout, rather
+than restoring all the old dump's Library state, other agent folders, or third
+party skills. The 98 names match the source skills in the old `skit.setup.v4`
+dump; 96 of their normalized tree hashes match. `video-talk-to-essay` and
+`youtube-api` differ; their original bytes cannot be recovered from the dump.
+The Codex link layout comes from the reported layout: the dump does not preserve
+the original link targets. Guest paths use the guest's home, not `/Users/swyx`.
+The fixture revision is also recorded in `~/.skit-vm-fixture.json`.
+Checked with guest Codex 0.165.0 using its local `skills/list` app-server method:
+all 98 source skills load with user scope and no errors. Codex resolves the
+legacy `~/.codex/skills` symlinks to their source paths and leaves the links in
+place. This check required neither credentials nor a model call.
+The trial also contains the development checkout at `~/skit` and an npm-linked
+SKIT build from it; these are test tooling rather than a reconstruction of the
+original machine. They remain accessible but are outside the session's working
+directory.
+
+### Manage trials
+
 ```sh
 pnpm vm new                  # creates and prints a unique trial name
 pnpm vm list

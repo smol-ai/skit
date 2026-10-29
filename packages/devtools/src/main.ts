@@ -37,11 +37,19 @@ const program = Effect.gen(function* () {
       Command.make("reset", {}, () =>
         hostReady.pipe(Effect.andThen(vm.ready), Effect.andThen(vm.reset)),
       ),
-      Command.make("new", { name: name.pipe(Argument.optional) }, (input) =>
-        hostReady.pipe(
-          Effect.andThen(vm.ready),
-          Effect.andThen(vm.newTrial(Option.getOrUndefined(input.name))),
-        ),
+      Command.make(
+        "new",
+        {
+          name: name.pipe(Argument.optional),
+          fixture: Flag.Literals("fixture", ["swyx"]).pipe(Flag.optional),
+        },
+        (input) =>
+          hostReady.pipe(
+            Effect.andThen(vm.ready),
+            Effect.andThen(
+              vm.newTrial(Option.getOrUndefined(input.name), Option.getOrUndefined(input.fixture)),
+            ),
+          ),
       ),
       Command.make("build", { name }, (input) =>
         hostReady.pipe(Effect.andThen(vm.ready), Effect.andThen(vm.build(input.name))),

@@ -249,7 +249,10 @@ export const makeVm = Effect.gen(function* () {
     );
     yield* Console.log(`Copied auth privately into ${name}; Codex reports authenticated.`);
   });
-  const newTrial = Effect.fn("Vm.newTrial")(function* (name = `skit-${randomUUID().slice(0, 8)}`) {
+  const newTrial = Effect.fn("Vm.newTrial")(function* (
+    name = `skit-${randomUUID().slice(0, 8)}`,
+    fixture?: "swyx",
+  ) {
     yield* requireTrial(name);
     let created = false;
     let checkoutPublished = false;
@@ -274,6 +277,12 @@ export const makeVm = Effect.gen(function* () {
         yield* load(name);
         checkoutPublished = true;
         yield* buildCheckout(name);
+        if (fixture === "swyx") {
+          const script = yield* fs.readFileString(
+            join(config.repo, "packages/devtools/src/fixtures/swyx.sh"),
+          );
+          yield* tart.job(name, script, {}, 180);
+        }
       }),
     ).pipe(
       Effect.onInterrupt(() =>
@@ -286,9 +295,11 @@ export const makeVm = Effect.gen(function* () {
       Effect.tapError(() =>
         created
           ? Console.error(
-              checkoutPublished
-                ? `Trial ${name} was preserved. Retry with pnpm vm build ${name}, or discard with pnpm vm rm ${name}.`
-                : `Trial ${name} was preserved with an incomplete transfer. Discard it with pnpm vm rm ${name} and create another trial.`,
+              checkoutPublished && fixture
+                ? `Trial ${name} was preserved after a build or fixture failure. Inspect with pnpm vm shell ${name}, or discard with pnpm vm rm ${name} and recreate with --fixture ${fixture}.`
+                : checkoutPublished
+                  ? `Trial ${name} was preserved. Retry with pnpm vm build ${name}, or discard with pnpm vm rm ${name}.`
+                  : `Trial ${name} was preserved with an incomplete transfer. Discard it with pnpm vm rm ${name} and create another trial.`,
             )
           : Effect.void,
       ),
@@ -302,14 +313,29 @@ export const makeVm = Effect.gen(function* () {
     yield* requireTrial(name);
     yield* withLock(name, tart.start(name));
     // The interactive process outlives startup's lock; another shell/new/stop can proceed.
-    const command =
-      kind === "shell"
-        ? ["/bin/bash", "-il"]
-        : [
-            "/bin/bash",
-            "-lc",
-            `export PATH="$HOME/.local/bin:$PATH"; ${kind === "login" ? "exec codex login --device-auth" : 'cd "$HOME/skit" && exec codex'}`,
-          ];
+    const workingDirectory = `
+      const fs = require("node:fs"), path = require("node:path");
+      const home = process.env.HOME;
+      const marker = path.join(home, ".skit-vm-fixture.json");
+      let cwd = ${JSON.stringify(kind === "codex" ? "skit" : ".")};
+      if (fs.existsSync(marker)) {
+        cwd = JSON.parse(fs.readFileSync(marker, "utf8")).cwd;
+        if (typeof cwd !== "string" || path.isAbsolute(cwd))
+          throw new Error("Fixture marker needs a home-relative cwd");
+      }
+      const target = path.resolve(home, cwd);
+      if ((target !== home && !target.startsWith(home + path.sep)) || !fs.statSync(target).isDirectory())
+        throw new Error("Session directory must be a directory inside the guest home");
+      process.stdout.write(target);
+    `;
+    const command = [
+      "/bin/bash",
+      "-lc",
+      `export PATH="$HOME/.local/bin:$PATH"
+      cwd=$(node -e ${quote(workingDirectory)}) || exit 1
+      cd "$cwd" || exit 1
+      ${kind === "shell" ? "exec /bin/bash -il" : kind === "login" ? "exec codex login --device-auth" : "exec codex"}`,
+    ];
     return (yield* tart.run(["exec", "-i", "-t", name, ...command], {
       interactive: true,
       allowNonzero: true,
