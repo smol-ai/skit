@@ -466,7 +466,12 @@ it.effect("records the Registry Release a Collection is added from, so sync can 
         ),
       ),
     );
-    yield* importSource({ type: "registry", namespace: "alice", slug: "tools", version: "1.2.3" }).pipe(
+    yield* importSource({
+      type: "registry",
+      namespace: "alice",
+      slug: "tools",
+      version: "1.2.3",
+    }).pipe(
       Effect.provide(libraryStoreLayer({ home })),
       Effect.provide(
         registryAuthAccessLayer({
