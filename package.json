@@ -16,6 +16,7 @@
     "format:check": "oxfmt --check .",
     "lint": "oxlint .",
     "skit": "node packages/cli/bin/skit.js",
+    "vm": "pnpm --filter @smolai/skit-devtools vm",
     "tui": "pnpm --filter @smolai/skit-tui dev",
     "cli:stories": "pnpm --filter @smolai/skit-storybook start",
     "cli:stories:print": "pnpm --filter @smolai/skit stories",

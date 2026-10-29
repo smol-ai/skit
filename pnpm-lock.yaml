@@ -79,6 +79,28 @@ importers:
         specifier: 2.8.3
         version: 2.8.3
 
+  packages/devtools:
+    dependencies:
+      '@effect/platform-node':
+        specifier: 4.0.3
+        version: 4.0.3(effect@4.0.3)(redis@6.2.1)
+      effect:
+        specifier: 4.0.3
+        version: 4.0.3
+    devDependencies:
+      '@effect/vitest':
+        specifier: 4.0.3
+        version: 4.0.3(effect@4.0.3)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))
+      '@types/node':
+        specifier: 24.10.1
+        version: 24.10.1
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      vitest:
+        specifier: 5.0.3
+        version: 5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3))
+
   packages/evals:
     devDependencies:
       '@smolai/skit-core':

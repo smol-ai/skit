@@ -50,6 +50,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec vitest run --config vitest.lint.config.ts
       - run: pnpm --filter @smolai/skit-core test
+      - run: pnpm --filter @smolai/skit-devtools test
       - run: pnpm --filter @smolai/skit-tui test
       - run: pnpm --filter @smolai/skit-storybook test
 
