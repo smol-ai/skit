@@ -95,7 +95,7 @@ Changing the canonical origin invalidates the practical use of existing host-bou
 
 ## A second server for testing
 
-A [Wrangler environment](https://developers.cloudflare.com/workers/wrangler/environments/) in the same `wrangler.jsonc` runs a separate Worker, `<name>-<env>`, with its own D1 database, R2 bucket and origin. Declare it by hand: `vars`, `d1_databases` and `r2_buckets` are not inherited, but `routes` is, so set all of them. `ratelimits` is not inherited either; `deploy` adds any rate limiter an environment lacks, numbering it after the environment's highest `namespace_id`.
+A [Wrangler environment](https://developers.cloudflare.com/workers/wrangler/environments/) in the same `wrangler.jsonc` runs a separate Worker, `<name>-<env>`, with its own D1 database, R2 bucket and origin. Declare it by hand: `vars`, `d1_databases` and `r2_buckets` are not inherited, but `routes` is, so set all of them. `ratelimits` is not inherited either; `deploy` adds any rate limiter an environment lacks, numbering it after the highest `namespace_id` anywhere in `wrangler.jsonc`.
 
 ```jsonc
 "env": {

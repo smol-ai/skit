@@ -28,7 +28,6 @@ import {
   withEmailSending,
   withEnvironmentDatabaseId,
   withApplicationHosting,
-  withRateLimiters,
   workersDevOrigin,
 } from "./deployment.mjs";
 
@@ -180,7 +179,7 @@ describe("server deployment configuration", () => {
     assert.deepEqual(configuration.assets.run_worker_first.slice(0, 3), ["/", "/setup", "/device"]);
   });
 
-  it("adds the rate limiters a Worker lacks without changing the ones it declares", () => {
+  it("adds the rate limiters each Worker lacks without changing the ones it declares", () => {
     const configuration = withApplicationHosting({
       name: "skit-server",
       ratelimits: [
@@ -188,25 +187,32 @@ describe("server deployment configuration", () => {
         { name: "PAT_RATE_LIMITER", namespace_id: "1002", simple: { limit: 5, period: 60 } },
         { name: "BOOTSTRAP_RATE_LIMITER", namespace_id: "1003", simple: { limit: 5, period: 60 } },
       ],
-      env: { test: { ratelimits: [{ name: "AUTH_RATE_LIMITER", namespace_id: "2001" }] } },
+      env: {
+        test: {},
+        staging: { ratelimits: [{ name: "AUTH_RATE_LIMITER", namespace_id: "2001" }] },
+      },
     });
-    assert.deepEqual(configuration.ratelimits.slice(0, 1), [
-      { name: "AUTH_RATE_LIMITER", namespace_id: "1001", simple: { limit: 10, period: 60 } },
+    const namespaces = (worker) =>
+      worker.ratelimits.map(({ name, namespace_id }) => [name, namespace_id]);
+    assert.deepEqual(configuration.ratelimits[0], {
+      name: "AUTH_RATE_LIMITER",
+      namespace_id: "1001",
+      simple: { limit: 10, period: 60 },
+    });
+    // New limiters number after the highest ID anywhere, so no two Workers share a counter.
+    assert.deepEqual(namespaces(configuration).at(-1), ["FEEDBACK_RATE_LIMITER", "2002"]);
+    assert.deepEqual(namespaces(configuration.env.test), [
+      ["AUTH_RATE_LIMITER", "2003"],
+      ["PAT_RATE_LIMITER", "2004"],
+      ["BOOTSTRAP_RATE_LIMITER", "2005"],
+      ["FEEDBACK_RATE_LIMITER", "2006"],
     ]);
-    assert.deepEqual(configuration.ratelimits.at(-1), {
-      name: "FEEDBACK_RATE_LIMITER",
-      namespace_id: "1004",
-      simple: { limit: 5, period: 60 },
-    });
-    assert.deepEqual(
-      configuration.env.test.ratelimits.map(({ name, namespace_id }) => [name, namespace_id]),
-      [
-        ["AUTH_RATE_LIMITER", "2001"],
-        ["PAT_RATE_LIMITER", "2002"],
-        ["BOOTSTRAP_RATE_LIMITER", "2003"],
-        ["FEEDBACK_RATE_LIMITER", "2004"],
-      ],
-    );
+    assert.deepEqual(namespaces(configuration.env.staging), [
+      ["AUTH_RATE_LIMITER", "2001"],
+      ["PAT_RATE_LIMITER", "2007"],
+      ["BOOTSTRAP_RATE_LIMITER", "2008"],
+      ["FEEDBACK_RATE_LIMITER", "2009"],
+    ]);
   });
 
   it("reads targets from Wrangler's versioned structured deployment output", () => {
@@ -439,7 +445,7 @@ describe("server deployment execution", () => {
     await deploy(
       { environment: "test" },
       {
-        read: async () => ({ ...configuration, env: { test: withRateLimiters({ vars: {} }) } }),
+        read: async () => withApplicationHosting({ ...configuration, env: { test: { vars: {} } } }),
         write: rejectWrite,
         build: async (_configuration, environment) => {
           calls.push({ build: environment });

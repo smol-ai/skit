@@ -145,34 +145,41 @@ const rateLimiterNames = [
 ];
 
 /**
- * Add the rate limiters a Worker lacks, keeping the ones it declares. A new one takes the next
- * namespace ID after the Worker's highest, so it never shares a counter with another limiter.
+ * Add the rate limiters each Worker lacks, the top level and every env.<name>, keeping the ones
+ * they declare. Workers in one account that share a namespace share its counters, so a new
+ * limiter takes the next namespace ID after the highest anywhere in the configuration.
  */
-export const withRateLimiters = (worker) => {
-  const declared = worker.ratelimits ?? [];
-  let next = Math.max(1000, ...declared.map(({ namespace_id }) => Number(namespace_id) || 0));
-  const missing = rateLimiterNames
-    .filter((name) => !declared.some((limiter) => limiter.name === name))
-    .map((name) => ({
-      name,
-      namespace_id: String(++next),
-      simple: { limit: 5, period: 60 },
-    }));
-  return missing.length === 0 ? worker : { ...worker, ratelimits: [...declared, ...missing] };
+const withRateLimiters = (configuration) => {
+  const workers = [configuration, ...Object.values(configuration.env ?? {})];
+  let next = Math.max(
+    1000,
+    ...workers.flatMap(({ ratelimits = [] }) =>
+      ratelimits.map(({ namespace_id }) => Number(namespace_id) || 0),
+    ),
+  );
+  const complete = (worker) => {
+    const declared = worker.ratelimits ?? [];
+    const missing = rateLimiterNames
+      .filter((name) => !declared.some((limiter) => limiter.name === name))
+      .map((name) => ({
+        name,
+        namespace_id: String(++next),
+        simple: { limit: 5, period: 60 },
+      }));
+    return missing.length === 0 ? worker : { ...worker, ratelimits: [...declared, ...missing] };
+  };
+  const top = complete(configuration);
+  if (configuration.env === undefined) return top;
+  return {
+    ...top,
+    env: Object.fromEntries(
+      Object.entries(configuration.env).map(([name, environment]) => [name, complete(environment)]),
+    ),
+  };
 };
 
 export const withApplicationHosting = (configuration) => ({
   ...withRateLimiters(configuration),
-  ...(configuration.env === undefined
-    ? {}
-    : {
-        env: Object.fromEntries(
-          Object.entries(configuration.env).map(([name, environment]) => [
-            name,
-            withRateLimiters(environment),
-          ]),
-        ),
-      }),
   compatibility_flags: Array.from(
     new Set([...(configuration.compatibility_flags ?? []), "nodejs_compat"]),
   ),
