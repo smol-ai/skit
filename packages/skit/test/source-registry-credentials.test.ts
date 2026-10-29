@@ -81,10 +81,9 @@ describe("the Registry credential", () => {
         close,
       );
       const registryPort = yield* listen(registry);
-      yield* resolveSkitSource("skit:alice/tools", {
+      yield* resolveSkitSource("skit:alice/tools@1.0.0", {
         registryBaseUrl: `http://127.0.0.1:${registryPort}`,
         registryToken: "secret-token",
-        version: "1.0.0",
       });
       assert.deepEqual(seen, [
         ["registry", "Bearer secret-token"],
@@ -108,9 +107,8 @@ describe("the Registry credential", () => {
         close,
       );
       const port = yield* listen(registry);
-      yield* resolveSkitSource("skit:alice/tools", {
+      yield* resolveSkitSource("skit:alice/tools@1.0.0", {
         registryBaseUrl: `http://127.0.0.1:${port}`,
-        version: "1.0.0",
       });
       assert.deepEqual(seen, [null]);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),

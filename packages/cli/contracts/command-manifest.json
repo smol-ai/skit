@@ -291,11 +291,6 @@
         }
       ],
       "flags": {
-        "version": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Show version information"
-        },
         "registry": {
           "type": "string",
           "valueName": "string",
@@ -340,6 +335,11 @@
           "type": "boolean",
           "valueName": "boolean",
           "description": "Show help information"
+        },
+        "version": {
+          "type": "boolean",
+          "valueName": "boolean",
+          "description": "Show version information"
         },
         "completions": {
           "type": "<bash|zsh|fish|powershell|sh|pwsh>",

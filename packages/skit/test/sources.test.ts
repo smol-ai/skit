@@ -12,7 +12,6 @@ import {
   parseSkitSource,
   sourceLocator,
   sourceLocatorProfiles,
-  sourceInputWithVersion,
   resolveSkitSource,
 } from "../src/sources/resolve.js";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
@@ -305,9 +304,6 @@ describe("source contracts", () => {
         owner: "humanlayer",
         repository: "skills",
       });
-      expect(yield* sourceInputWithVersion("humanlayer/skills", "1.2.0")).toBe(
-        "skit:humanlayer/skills",
-      );
       expect(yield* parseSkitSource("gh:humanlayer/skills")).toEqual({
         type: "github",
         owner: "humanlayer",
@@ -344,9 +340,6 @@ describe("source contracts", () => {
       const root = yield* scratch("skit-local-shorthand-");
       const fs = yield* FileSystem.FileSystem;
       yield* fs.makeDirectory(join(root, "humanlayer", "skills"), { recursive: true });
-      expect(yield* sourceInputWithVersion("humanlayer/skills", "1.2.0", root)).toBe(
-        "humanlayer/skills",
-      );
       expect(yield* parseSkitSource("humanlayer/skills", root)).toEqual({
         type: "local",
         path: join(root, "humanlayer", "skills"),

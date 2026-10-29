@@ -1,6 +1,6 @@
 import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
 import { Effect, Option, Result } from "effect";
-import { LibraryStore, sourceInputWithVersion } from "@smolai/skit-core";
+import { LibraryStore } from "@smolai/skit-core";
 import {
   readDescriptionLoad,
   descriptionLoadMessage,
@@ -22,7 +22,6 @@ import { importSource, previewLibrarySource } from "../../library-application/im
 import { rejectDedicatedInstallerSource } from "../../workflows/library/dedicated-installer-catalog.js";
 
 const source = Argument.String("source");
-const version = optionalString("version", "Select a source version.");
 const registry = optionalString("registry", "Resolve a Registry source through a name or URL.");
 const preview = Flag.Boolean("list").pipe(
   Flag.withDescription("Preview discovered contents without adding them."),
@@ -31,18 +30,14 @@ const preview = Flag.Boolean("list").pipe(
 
 export const addCliCommand = Command.make(
   "add",
-  { source, version, registry, preview, ...localFlags },
+  { source, registry, preview, ...localFlags },
   (input) =>
     handleSourceCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const registryAuth = yield* RegistryAuth;
-        const requestedVersion = Option.getOrUndefined(input.version);
-        const source = input.source
-          ? yield* sourceInputWithVersion(input.source, requestedVersion)
-          : undefined;
-        const locator = source
-          ? yield* registryAuth.resolveLocator(source, Option.getOrUndefined(input.registry))
+        const locator = input.source
+          ? yield* registryAuth.resolveLocator(input.source, Option.getOrUndefined(input.registry))
           : undefined;
         // An explicit Registry selection replaces an ambient configuration failure because it
         // supplies the concrete origin (and any credential stored for that origin) directly.
@@ -64,7 +59,7 @@ export const addCliCommand = Command.make(
                 ...registryAuth,
                 resolve: () => Effect.succeed(selectedAccess),
               });
-        const selectedSource = locator?.input ?? source;
+        const selectedSource = locator?.input ?? input.source;
         if (!selectedSource)
           return yield* new MissingRequirement({
             command: "add",
@@ -75,13 +70,13 @@ export const addCliCommand = Command.make(
         if (input.preview) {
           const value = yield* renderer.withStatus(
             `Inspecting ${selectedSource}`,
-            withSelectedRegistry(previewLibrarySource(selectedSource, requestedVersion)),
+            withSelectedRegistry(previewLibrarySource(selectedSource)),
           );
           return yield* renderer.result(result("addPreview", value));
         }
         const imported = yield* renderer.withStatus(
           "Retaining source",
-          withSelectedRegistry(importSource(selectedSource, requestedVersion)),
+          withSelectedRegistry(importSource(selectedSource)),
         );
         yield* renderer.result(
           result("add", {

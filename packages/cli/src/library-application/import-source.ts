@@ -85,7 +85,6 @@ const describeSourceSkills = Effect.fn("Library.describeSourceSkills")(function*
 /** Resolve once inside the lifetime of the operation consuming the staged source. */
 const withResolvedSource = Effect.fn("SourceAcquisition.withResolvedSource")(function* <A, E, R>(
   input: string | SkitSource,
-  version: string | undefined,
   previousSkillPaths: readonly string[] | undefined,
   use: (prepared: {
     parsed: SkitSource;
@@ -108,7 +107,6 @@ const withResolvedSource = Effect.fn("SourceAcquisition.withResolvedSource")(fun
   const resolved = yield* resolveSkitSource(input, {
     registryBaseUrl: registry.origin,
     registryToken: registry.token,
-    ...(version === undefined ? {} : { version }),
     ...(previousSkillPaths === undefined ? {} : { previousSkillPaths }),
   });
   yield* leaveResolvedPnpmSkills(parsed, resolved);
@@ -122,10 +120,9 @@ const withResolvedSource = Effect.fn("SourceAcquisition.withResolvedSource")(fun
 
 export const inspectLibrarySource = Effect.fn("Library.inspectSource")(function* (
   input: string | SkitSource,
-  version?: string,
   previousSkillPaths?: readonly string[],
 ) {
-  return yield* withResolvedSource(input, version, previousSkillPaths, ({ parsed, resolved }) =>
+  return yield* withResolvedSource(input, previousSkillPaths, ({ parsed, resolved }) =>
     Effect.gen(function* () {
       if (resolved.descriptorKind === "declared") {
         const validated = yield* validateSkitDirectory(resolved.root, "retained", {
@@ -163,9 +160,8 @@ export const inspectLibrarySource = Effect.fn("Library.inspectSource")(function*
 
 export const previewLibrarySource = Effect.fn("Library.previewSource")(function* (
   input: string | SkitSource,
-  version?: string,
 ) {
-  const inspected = yield* inspectLibrarySource(input, version);
+  const inspected = yield* inspectLibrarySource(input);
   return {
     kind: inspected.kind,
     skills: inspected.skills,
@@ -176,12 +172,10 @@ export const previewLibrarySource = Effect.fn("Library.previewSource")(function*
 /** Own the retention transaction, including partial commits and temporary-source cleanup. */
 export const importSource = Effect.fn("Library.addSource")(function* (
   input: string | SkitSource,
-  version?: string,
   previousSkillPaths?: readonly string[],
 ) {
   return yield* withResolvedSource(
     input,
-    version,
     previousSkillPaths,
     ({ resolved, historicalInput, registryOrigin }) =>
       Effect.gen(function* () {
