@@ -145,7 +145,6 @@ export const previewCollectionUpdate = Effect.fn("Library.previewCollectionUpdat
   } = yield* resolveUpdate(state, subject);
   const inspected = yield* inspectLibrarySource(
     input,
-    undefined,
     tree.members.map((member) => member.source_path),
   );
   const members = ("members" in inspected ? inspected.members : undefined) ?? [];
@@ -217,7 +216,6 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
         { kind: "source", subject },
         importSource(
           input,
-          undefined,
           priorTree.members.map((member) => member.source_path),
         ),
         (value) => ({

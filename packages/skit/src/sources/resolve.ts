@@ -65,18 +65,6 @@ function wellKnownSource(value: string): SkitSource | undefined {
   return { type: "well-known", origin: value.replace(/\/$/, "") };
 }
 
-/** A version flag promotes ambiguous shorthand only after an existing local path gets priority. */
-export const sourceInputWithVersion = Effect.fn("Source.inputWithVersion")(function* (
-  input: string,
-  version?: string,
-  cwd = process.cwd(),
-) {
-  if (!version || !ownerRepository.test(input)) return input;
-  const probe = yield* LinkStat;
-  const observed = yield* Effect.option(probe.identity.stat(resolve(cwd, input)));
-  return observed._tag === "Some" ? input : `skit:${input}`;
-});
-
 function canonicalizeDirectGithubUrl(value: string): string {
   const blob = value.match(/^https:\/\/github\.com\/([^/]+)\/([^/]+)\/blob\/([^/]+)\/(.+)$/);
   if (blob) {
@@ -992,7 +980,6 @@ export function resolveSkitSource(
     cwd?: string;
     registryBaseUrl?: string;
     registryToken?: string;
-    version?: string;
     /** Exact commit to acquire when restoring; `tracking_ref` must match the Source's `ref`. */
     git?: { commit: string; tracking_ref: string | null };
     requireGitRevision?: boolean;
@@ -1192,22 +1179,7 @@ export function resolveSkitSource(
         source.type === "registry"
           ? { ...source, authority: registryBaseUrl!.replace(/\/$/, "") }
           : source;
-      const locatorVersion = source.type === "registry" ? source.version : undefined;
-      if (
-        source.type === "registry" &&
-        locatorVersion &&
-        locatorVersion !== "latest" &&
-        options.version &&
-        options.version !== "latest" &&
-        locatorVersion !== options.version
-      )
-        return yield* sourceVersionDisagreement(
-          "Registry locator and requested Release version disagree.",
-        );
-      const selectedVersion =
-        locatorVersion && locatorVersion !== "latest"
-          ? locatorVersion
-          : (options.version ?? "latest");
+      const selectedVersion = (source.type === "registry" ? source.version : undefined) ?? "latest";
       const registryReference =
         source.type === "registry"
           ? `${registryBaseUrl!.replace(/\/$/, "")}/api/skits/${source.namespace}/${source.slug}/releases/${selectedVersion}/download`

@@ -24,9 +24,10 @@ The syntax catalog and acquisition behavior live in
 [`packages/skit/src/sources/resolve.ts`](../packages/skit/src/sources/resolve.ts). The
 current comparison is in
 [`packages/cli/src/handlers/library/check.ts`](../packages/cli/src/handlers/library/check.ts).
-Bare `owner/repo` is normally GitHub shorthand; when a version is requested and no local path of
-that name exists, SKIT promotes it to Registry shorthand. Use `gh:` or `skit:` to make the intended
-Source explicit.
+Bare `owner/repo` is GitHub shorthand unless a local path of that name exists; bare
+`owner/name@1.2.0` is Registry shorthand. Select a Registry Release with an `@version` suffix on the
+Source (`skit:owner/name@1.2.0`); select a Git ref with `#ref`. Use `gh:` or `skit:` to make the
+intended Source explicit.
 
 ### Agent Skills `.well-known` discovery
 
