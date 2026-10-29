@@ -70,6 +70,36 @@ const createAccount = webPromise(async () => {
   ]);
 });
 
+const signIn = webPromise(async () => {
+  const web = makeWebHandler(env);
+  const post = (path: string, body: unknown) =>
+    web.handler(
+      new Request(`https://registry.test${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "https://registry.test" },
+        body: JSON.stringify(body),
+      }),
+    );
+  const credentials = {
+    email: "operator@example.test",
+    password: "correct horse battery staple",
+  };
+  const bootstrap = await post("/api/bootstrap", {
+    ...credentials,
+    username: "operator",
+    token: "skit-bootstrap-test-secret-that-is-at-least-thirty-two-characters",
+  });
+  expect(bootstrap.status).toBe(201);
+  const response = await post("/api/auth/sign-in/email", credentials);
+  expect(response.status).toBe(200);
+  const { token } = await response.json<{ token: string }>();
+  const cookie = response.headers
+    .getSetCookie()
+    .map((value) => value.split(";", 1)[0])
+    .join("; ");
+  return { token, cookie };
+});
+
 const report = {
   message: "`skit add` said the Source was invalid but not which part",
   harness: "claude-code",
@@ -153,6 +183,70 @@ describe("feedback", () => {
     }),
   );
 
+  it.effect("never attributes feedback through a browser cookie, even with an invalid Bearer", () =>
+    Effect.gen(function* () {
+      yield* prepareDatabase;
+      const { cookie } = yield* signIn;
+
+      const anonymous = yield* send(report, undefined, { cookie });
+      const invalid = yield* send(report, undefined, {
+        cookie,
+        authorization: "Bearer invalid.invalid",
+      });
+
+      expect(anonymous.status).toBe(201);
+      expect(invalid.status).toBe(401);
+      expect(yield* storedAttribution).toEqual([{ principal_id: null, contact_email: null }]);
+    }),
+  );
+
+  it.effect("attributes a report using a session Bearer token without a browser cookie", () =>
+    Effect.gen(function* () {
+      yield* prepareDatabase;
+      const { token } = yield* signIn;
+
+      const response = yield* send(report, undefined, { authorization: `Bearer ${token}` });
+
+      expect(response.status).toBe(201);
+      expect(yield* storedAttribution).toEqual([
+        { principal_id: expect.any(String), contact_email: null },
+      ]);
+    }),
+  );
+
+  it.effect("accepts maximum-length Unicode and JSON-escaped messages", () =>
+    Effect.gen(function* () {
+      yield* prepareDatabase;
+
+      for (const message of ["界".repeat(1_000), "\u0000".repeat(1_000)]) {
+        const response = yield* send({
+          message,
+          harness: "\u0000".repeat(200),
+          model: "\u0000".repeat(200),
+          platform: "\u0000".repeat(200),
+          runtime: "\u0000".repeat(200),
+          email: `${"a".repeat(242)}@example.com`,
+        });
+
+        expect(response.status).toBe(201);
+      }
+      expect((yield* storedFeedback).map(({ message }) => message).sort()).toEqual(
+        ["界".repeat(1_000), "\u0000".repeat(1_000)].sort(),
+      );
+    }),
+  );
+
+  it.effect("still bounds the request body when extra fields are ignored", () =>
+    Effect.gen(function* () {
+      yield* prepareDatabase;
+
+      const response = yield* send({ ...report, extra: "x".repeat(17 * 1024) });
+
+      expect(response.status).toBe(400);
+      expect(yield* storedFeedback).toEqual([]);
+    }),
+  );
+
   it.effect("accepts fields a newer client sends that this server does not know", () =>
     Effect.gen(function* () {
       yield* prepareDatabase;
@@ -179,7 +273,7 @@ describe("feedback", () => {
     Effect.gen(function* () {
       yield* prepareDatabase;
 
-      const response = yield* send({ ...report, message: "x".repeat(20_000) });
+      const response = yield* send({ ...report, message: "x".repeat(1_001) });
 
       expect(response.status).toBe(400);
       expect(yield* storedFeedback).toEqual([]);

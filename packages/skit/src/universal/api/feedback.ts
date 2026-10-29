@@ -19,7 +19,7 @@ const shortText = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(
  * records the account that token belongs to.
  */
 export const FeedbackInput = Schema.Struct({
-  message: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(10_000)),
+  message: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(1_000)),
   harness: Schema.optionalKey(shortText),
   model: Schema.optionalKey(shortText),
   email: Schema.optionalKey(

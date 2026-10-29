@@ -1,9 +1,9 @@
 import { Effect, Option } from "effect";
-import { HttpEffect, HttpServerResponse } from "effect/http";
+import { HttpEffect, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 import { FeedbackApi, FeedbackInput } from "@smolai/skit-core/universal/api";
 import { Authentication } from "../auth/authentication.js";
-import { authenticateRequest } from "../auth/request-context.js";
+import { RequestConversionError } from "../auth/request-context.js";
 import { Feedback } from "../feedback/service.js";
 import { FeedbackRateLimiter } from "../platform/rate-limiter.js";
 import {
@@ -15,6 +15,8 @@ import {
 import { schemaBodyJsonLimited } from "./request-body.js";
 import { noStore } from "./response.js";
 
+// Bounded fields total 2,054 UTF-16 code units. JSON can escape each as six bytes;
+// 16 KiB also leaves room for field names and punctuation.
 const MAX_FEEDBACK_REQUEST_BYTES = 16 * 1024;
 const MAX_CLIENT_LENGTH = 200;
 const retryAfter = HttpEffect.appendPreResponseHandler((_request, response) =>
@@ -36,8 +38,16 @@ export const feedbackHandlers = HttpApiBuilder.group(FeedbackApi, "feedback", (h
       if (authorization === undefined) return undefined;
       if (!authorization.startsWith("Bearer ") || Option.isNone(authentication))
         return yield* Effect.fail(unauthorizedResponse);
-      const { principal } = yield* authenticateRequest().pipe(
-        Effect.provideService(Authentication, authentication.value),
+      const principal = yield* HttpServerRequest.HttpServerRequest.pipe(
+        Effect.flatMap(HttpServerRequest.toWeb),
+        Effect.mapError((cause) => new RequestConversionError({ cause })),
+        // Authentication accepts device-login session tokens too. Give it only the Bearer
+        // header so an invalid token cannot fall back to a browser's session cookie.
+        Effect.flatMap((request) =>
+          authentication.value.authenticate(
+            new Request(request.url, { headers: { authorization } }),
+          ),
+        ),
         Effect.tapError((error) => Effect.logError("feedback authentication failed", error)),
         Effect.mapError(() => storageFailureResponse),
       );

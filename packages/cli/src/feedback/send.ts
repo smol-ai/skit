@@ -99,7 +99,7 @@ export const feedbackInput = Effect.fnUntraced(function* (options: {
       () =>
         new FeedbackInputInvalid({
           message:
-            "Feedback needs a message of 1 to 10,000 characters; --harness and --model take up to 200, and --email one address.",
+            "Feedback needs a message of 1 to 1,000 characters; --harness and --model take up to 200, and --email one address.",
         }),
     ),
   );

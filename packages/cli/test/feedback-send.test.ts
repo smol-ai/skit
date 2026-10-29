@@ -85,7 +85,7 @@ describe("feedback input", () => {
 
       expect(yield* refused(none)).toBe("FeedbackInputInvalid");
       expect(yield* refused({ ...none, text: "a", message: "b" })).toBe("FeedbackInputInvalid");
-      expect(yield* refused({ ...none, text: "x".repeat(10_001) })).toBe("FeedbackInputInvalid");
+      expect(yield* refused({ ...none, text: "x".repeat(1_001) })).toBe("FeedbackInputInvalid");
       expect(yield* refused({ ...none, text: "ok", harness: "h".repeat(201) })).toBe(
         "FeedbackInputInvalid",
       );
