@@ -26,8 +26,9 @@ current comparison is in
 [`packages/cli/src/handlers/library/check.ts`](../packages/cli/src/handlers/library/check.ts).
 Bare `owner/repo` is GitHub shorthand unless a local path of that name exists; bare
 `owner/name@1.2.0` is Registry shorthand. Select a Registry Release with an `@version` suffix on the
-Source (`skit:owner/name@1.2.0`); select a Git ref with `#ref`. Use `gh:` or `skit:` to make the
-intended Source explicit.
+Source (`skit:owner/name@1.2.0`). Select a GitHub ref with a tree URL
+(`https://github.com/owner/repo/tree/<ref>`); a `#` fragment on a Git or GitHub Source is rejected.
+Use `gh:` or `skit:` to make the intended Source explicit.
 
 ### Agent Skills `.well-known` discovery
 
