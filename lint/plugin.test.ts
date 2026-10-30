@@ -2,9 +2,12 @@ import { spawnSync } from "node:child_process";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 
 const pluginPath = join(import.meta.dirname, "oxlint-plugin-skit.mjs");
+// Invoke the installed CLI directly so fixtures do not pay npx's cold-start cost.
+const oxlintPath = fileURLToPath(new URL("bin/oxlint", import.meta.resolve("oxlint/package.json")));
 
 interface Diagnostic {
   code: string;
@@ -40,8 +43,8 @@ async function lint(source: string): Promise<Diagnostic[]> {
     }),
   );
   const result = spawnSync(
-    "npx",
-    ["oxlint", "--config", join(directory, ".oxlintrc.json"), "--format=json", file],
+    process.execPath,
+    [oxlintPath, "--config", join(directory, ".oxlintrc.json"), "--format=json", file],
     { encoding: "utf8", cwd: join(import.meta.dirname, "..") },
   );
   const report = JSON.parse(result.stdout) as {
