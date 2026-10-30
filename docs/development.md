@@ -91,6 +91,8 @@ pnpm unlink --global
 
 ## Safe local testing
 
+For a disposable Linux home with interactive Codex, use [Linux VM testing](./linux-vm-testing.md).
+
 SKIT can write Projections into Harness directories. Use isolated storage and explicit temporary Harness roots during development so tests cannot modify real Harness configuration:
 
 ```sh
