@@ -255,6 +255,7 @@ export const makeVm = Effect.gen(function* () {
   ) {
     yield* requireTrial(name);
     let created = false;
+    let transferStarted = false;
     let checkoutPublished = false;
     yield* withLock(
       name,
@@ -274,6 +275,7 @@ export const makeVm = Effect.gen(function* () {
           name,
           `test "$(cat "$HOME/.skit-baseline")" = ${quote(config.fingerprint)}; test ! -e "$HOME/.skit"; test ! -e "$HOME/.codex/auth.json"`,
         );
+        transferStarted = true;
         yield* load(name);
         checkoutPublished = true;
         yield* buildCheckout(name);
@@ -299,7 +301,9 @@ export const makeVm = Effect.gen(function* () {
                 ? `Trial ${name} was preserved after a build or fixture failure. Inspect with pnpm vm shell ${name}, or discard with pnpm vm rm ${name} and recreate with --fixture ${fixture}.`
                 : checkoutPublished
                   ? `Trial ${name} was preserved. Retry with pnpm vm build ${name}, or discard with pnpm vm rm ${name}.`
-                  : `Trial ${name} was preserved with an incomplete transfer. Discard it with pnpm vm rm ${name} and create another trial.`,
+                  : transferStarted
+                    ? `Trial ${name} was preserved with an incomplete transfer. Discard it with pnpm vm rm ${name} and create another trial.`
+                    : `Trial ${name} was preserved after it failed to start or verify. Inspect with pnpm vm shell ${name}, or discard with pnpm vm rm ${name}.`,
             )
           : Effect.void,
       ),

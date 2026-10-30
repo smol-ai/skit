@@ -169,6 +169,8 @@ export const tartLayer = Layer.effect(
         umask 077
         for previous in "${jobs}/"*; do
           test -d "$previous" || continue
+          # A child never runs user code once its directory is gone, so finished or
+          # pre-launch-cancelled jobs can be removed.
           if test -s "$previous/pid"; then
             previous_pid=$(cat "$previous/pid")
             if kill -0 -- "-$previous_pid" 2>/dev/null; then
@@ -177,6 +179,7 @@ export const tartLayer = Layer.effect(
           elif test ! -e "$previous/cancelled"; then
             echo 'A prior guest job has uncertain ownership. Stop the VM before retrying.' >&2; exit 75
           fi
+          rm -rf "$previous"
         done
         mkdir -p "${directory}"`,
         { output: "capture" },
@@ -221,7 +224,7 @@ export const tartLayer = Layer.effect(
       pid=$!
       printf '%s\\n' "$pid" > "$directory/pid.partial"
       mv "$directory/pid.partial" "$directory/pid"
-      for attempt in {1..200}; do
+      for attempt in {1..3000}; do
         test -s "$directory/group" && break
         kill -0 "$pid" 2>/dev/null || break
         sleep 0.01

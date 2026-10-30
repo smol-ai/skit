@@ -1,13 +1,11 @@
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { release } from "node:os";
-import { Console, Effect, Layer, Option, Runtime } from "effect";
+import { Console, Effect, FileSystem, Layer, Option, Runtime } from "effect";
 import { Argument, CliConfig, Command, Flag, GlobalFlag } from "effect/cli";
-import { configurationLayer, VmError } from "./configuration.ts";
+import { Configuration, configurationLayer, VmError } from "./configuration.ts";
 import { processesLayer } from "./processes.ts";
 import { tartLayer } from "./tart.ts";
 import { makeVm } from "./vm.ts";
-import { Configuration } from "./configuration.ts";
-import { FileSystem } from "effect";
 
 const program = Effect.gen(function* () {
   const vm = yield* makeVm;
