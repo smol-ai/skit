@@ -107,13 +107,8 @@
         },
         "directoriesExamined": {
           "type": "integer",
-          "minimum": -9007199254740991,
-          "maximum": 9007199254740991,
-          "allOf": [
-            {
-              "minimum": 0
-            }
-          ]
+          "minimum": 0,
+          "maximum": 9007199254740991
         },
         "repositorySearchDepth": {
           "type": "number",

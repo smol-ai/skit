@@ -62,10 +62,6 @@ export const tokenHandlers = HttpApiBuilder.group(ConsumerAuthenticatedApi, "tok
                 "Authentication.SessionRequired": () => Effect.fail(sessionRequiredResponse),
                 "Authentication.UnauthorizedPrincipal": () =>
                   Effect.fail(unauthorizedPrincipalResponse),
-                "Authentication.CryptoError": (error) =>
-                  Effect.logError("token creation crypto failed", error).pipe(
-                    Effect.andThen(Effect.fail(storageFailureResponse)),
-                  ),
                 "Cloudflare.DatabaseError": (error) =>
                   Effect.logError("token creation storage failed", error).pipe(
                     Effect.andThen(Effect.fail(storageFailureResponse)),

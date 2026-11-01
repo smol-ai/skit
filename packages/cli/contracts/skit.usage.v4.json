@@ -75,73 +75,38 @@
           },
           "calls": {
             "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "loads": {
             "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "reads": {
             "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "uses": {
             "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "explicit": {
             "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "implicit": {
             "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "unknown": {
             "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "lastSeenAt": {
             "type": "string"
@@ -190,183 +155,93 @@
           },
           "files": {
             "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "bytes": {
             "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "bytesRead": {
             "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "records": {
             "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "windowRecords": {
             "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "malformed": {
             "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "undated": {
             "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "undatedCandidates": {
             "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "unsupported": {
             "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "duplicates": {
             "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "missingIds": {
             "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "summaries": {
             "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "mentions": {
             "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "slashCommands": {
             "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "skippedFiles": {
             "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "unreadableFiles": {
             "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "changedFiles": {
             "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           },
           "unknownProjectRecords": {
             "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991,
-            "allOf": [
-              {
-                "minimum": 0
-              }
-            ]
+            "minimum": 0,
+            "maximum": 9007199254740991
           }
         },
         "required": [

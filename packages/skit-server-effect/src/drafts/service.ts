@@ -9,7 +9,8 @@ import {
   skitValidationDiagnosticSchema,
 } from "@smolai/skit-core/universal/authoring";
 import { sha256Hash } from "@smolai/skit-core/universal/consumer";
-import { Clock, Context, Crypto, Effect, Layer, Schema } from "effect";
+import { Clock, Context, Effect, Layer, Schema } from "effect";
+import { Digest, SecureRandom } from "effect/crypto";
 import type { CloudflareBindings } from "../platform/cloudflare.js";
 import {
   Bindings,
@@ -97,7 +98,8 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const bindings: CloudflareBindings = yield* Bindings;
     const sql: DatabaseSqlClient = yield* D1Client.D1Client;
-    const crypto = yield* Crypto.Crypto;
+    const digests = yield* Digest.Digest;
+    const random = yield* SecureRandom.SecureRandom;
     const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
       effect.pipe(databaseError(operation));
     const blobs = <A>(operation: string, run: (bucket: R2Bucket) => Promise<A>) =>
@@ -127,7 +129,7 @@ export const layer = Layer.effect(
             catch: (cause) => new DraftEncodingError({ path: file.path, cause }),
           });
           const blobDigest = yield* sha256Hash(bytes).pipe(
-            Effect.provideService(Crypto.Crypto, crypto),
+            Effect.provideService(Digest.Digest, digests),
           );
           return {
             path: file.path,
@@ -144,7 +146,7 @@ export const layer = Layer.effect(
         input.slug,
         input.descriptor,
         prepared,
-      ).pipe(Effect.provideService(Crypto.Crypto, crypto));
+      ).pipe(Effect.provideService(Digest.Digest, digests));
       const manifest = prepared
         .map(
           (file) =>
@@ -153,9 +155,9 @@ export const layer = Layer.effect(
         .sort()
         .join("\n");
       const bundleDigest = yield* sha256Hash(new TextEncoder().encode(manifest)).pipe(
-        Effect.provideService(Crypto.Crypto, crypto),
+        Effect.provideService(Digest.Digest, digests),
       );
-      const revisionId = `draft_${(yield* crypto.randomUUIDv4()).replaceAll("-", "")}`;
+      const revisionId = `draft_${(yield* random.uuidV4()).replaceAll("-", "")}`;
       const now = new Date(yield* Clock.currentTimeMillis).toISOString();
 
       for (const file of prepared) {
@@ -207,7 +209,7 @@ export const layer = Layer.effect(
         skit_id: `${input.owner}/${input.slug}`,
         revision_id: revisionId,
         manifest_digest: yield* sha256Hash(new TextEncoder().encode(manifest)).pipe(
-          Effect.provideService(Crypto.Crypto, crypto),
+          Effect.provideService(Digest.Digest, digests),
         ),
         bundle_digest: bundleDigest,
         files: prepared.map((file) => ({

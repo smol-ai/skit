@@ -51,6 +51,11 @@ const scriptedTerminal = (keys: readonly Key[]): Terminal.Terminal =>
   Terminal.make({
     columns: Effect.succeed(80),
     rows: Effect.succeed(24),
+    size: Effect.gen(function* () {
+      const queue = yield* Queue.make<Terminal.Size, Cause.Done>();
+      yield* Queue.offer(queue, { columns: 80, rows: 24 });
+      return Queue.asDequeue(queue);
+    }),
     readInput: Effect.gen(function* () {
       const queue = yield* Queue.make<Terminal.UserInput, Cause.Done>();
       for (const key of keys) yield* Queue.offer(queue, press(key));

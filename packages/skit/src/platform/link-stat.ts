@@ -2,7 +2,7 @@
 // NFS.stat and follows links — but rejecting symlinks is a security property of tree walking and
 // path identity, so the service is extended with the one operation the platform omits.
 
-import { ByteSize, Context, Effect, FileSystem, Layer, Option } from "effect";
+import { ByteSize, Context, Effect, FileSystem, Layer, Option, Schema, SchemaGetter } from "effect";
 import { PlatformError, systemError, type SystemErrorTag } from "effect/PlatformError";
 import {
   accessSync,
@@ -12,7 +12,7 @@ import {
   realpathSync,
   statSync,
 } from "node:fs";
-import type { Stats } from "node:fs";
+import type { BigIntStats } from "node:fs";
 
 export interface LinkStatShape {
   /** Metadata for `path` itself, never the target it points at. */
@@ -44,13 +44,27 @@ export interface LinkStatShape {
   readonly realPathNative: (path: string) => Effect.Effect<string, PlatformError>;
 }
 
-/** Device and inode are always present from a Node stat, so identity keys need no Option. */
+/**
+ * Device and inode are always present from a Node stat, so identity keys need no Option. They are
+ * exact: 64-bit values do not fit a JS number.
+ */
 export interface PathStats {
-  readonly dev: number;
-  readonly ino: number;
+  readonly dev: bigint;
+  readonly ino: bigint;
   readonly size: number;
   readonly type: FileSystem.File.Info["type"];
 }
+
+/** A device or inode number saved as decimal text: a JSON number cannot hold it exactly. */
+export const FileIdentityNumber = Schema.BigIntFromString;
+
+/** Device and inode numbers saved as JSON numbers, before they were exact. Read-only. */
+export const LegacyFileIdentityNumber = Schema.Int.pipe(
+  Schema.decodeTo(Schema.BigInt, {
+    decode: SchemaGetter.transform((value: number) => BigInt(value)),
+    encode: SchemaGetter.forbidden(() => "device and inode numbers are saved as text"),
+  }),
+);
 
 export class LinkStat extends Context.Service<LinkStat, LinkStatShape>()("skit/LinkStat") {}
 
@@ -63,11 +77,11 @@ const errorTags: Record<string, SystemErrorTag> = {
   EAGAIN: "WouldBlock",
 };
 
-function pathStats(stats: Stats): PathStats {
-  return { dev: stats.dev, ino: stats.ino, size: stats.size, type: fileInfo(stats).type };
+function pathStats(stats: BigIntStats): PathStats {
+  return { dev: stats.dev, ino: stats.ino, size: Number(stats.size), type: fileInfo(stats).type };
 }
 
-function fileInfo(stats: Stats): FileSystem.File.Info {
+function fileInfo(stats: BigIntStats): FileSystem.File.Info {
   return {
     type: stats.isFile()
       ? "File"
@@ -90,10 +104,10 @@ function fileInfo(stats: Stats): FileSystem.File.Info {
     dev: stats.dev,
     rdev: Option.fromNullishOr(stats.rdev),
     ino: Option.fromNullishOr(stats.ino),
-    mode: stats.mode,
     nlink: Option.fromNullishOr(stats.nlink),
-    uid: Option.fromNullishOr(stats.uid),
-    gid: Option.fromNullishOr(stats.gid),
+    mode: Number(stats.mode),
+    uid: Option.some(Number(stats.uid)),
+    gid: Option.some(Number(stats.gid)),
     size: ByteSize.bytes(stats.size),
     blksize: Option.some(ByteSize.bytes(stats.blksize)),
     blocks: Option.fromNullishOr(stats.blocks),
@@ -114,12 +128,12 @@ export const linkStatLayer: Layer.Layer<LinkStat> = Layer.succeed(LinkStat)({
   identity: {
     stat: (path) =>
       Effect.try({
-        try: () => pathStats(statSync(path)),
+        try: () => pathStats(statSync(path, { bigint: true })),
         catch: platformFailure("stat", path),
       }),
     lstat: (path) =>
       Effect.try({
-        try: () => pathStats(lstatSync(path)),
+        try: () => pathStats(lstatSync(path, { bigint: true })),
         catch: platformFailure("lstat", path),
       }),
     executable: (path) =>
@@ -140,7 +154,7 @@ export const linkStatLayer: Layer.Layer<LinkStat> = Layer.succeed(LinkStat)({
     }),
   lstat: (path) =>
     Effect.callback<FileSystem.File.Info, PlatformError>((resume) => {
-      nodeLstat(path, (cause, stats) =>
+      nodeLstat(path, { bigint: true }, (cause, stats) =>
         resume(
           cause
             ? Effect.fail(platformFailure("lstat", path)(cause))

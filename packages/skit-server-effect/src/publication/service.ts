@@ -1,4 +1,5 @@
-import { Clock, Context, Crypto, Effect, Layer, Schema } from "effect";
+import { Clock, Context, Effect, Layer, Schema } from "effect";
+import { Digest, SecureRandom } from "effect/crypto";
 import { D1Client } from "@effect/sql-d1";
 import { verifyReleaseArchive } from "./archive.js";
 import { type Hash, sha256Hash } from "@smolai/skit-core/universal/consumer";
@@ -74,7 +75,8 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const bindings: CloudflareBindings = yield* Bindings;
     const sql: DatabaseSqlClient = yield* D1Client.D1Client;
-    const crypto = yield* Crypto.Crypto;
+    const digests = yield* Digest.Digest;
+    const random = yield* SecureRandom.SecureRandom;
     const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
       effect.pipe(databaseError(operation));
     const blobs = <A>(operation: string, run: (bucket: R2Bucket) => Promise<A>) =>
@@ -119,7 +121,7 @@ export const layer = Layer.effect(
       ).pipe(
         Effect.provideService(Bindings, bindings),
         Effect.provideService(D1Client.D1Client, sql),
-        Effect.provideService(Crypto.Crypto, crypto),
+        Effect.provideService(Digest.Digest, digests),
       );
       if (diagnostics.some((diagnostic) => diagnostic.severity === "error"))
         return yield* new PublishBlocked({ diagnostics });
@@ -128,9 +130,9 @@ export const layer = Layer.effect(
         return yield* new ReleaseConflict();
 
       const archiveDigest = yield* sha256Hash(input.archive).pipe(
-        Effect.provideService(Crypto.Crypto, crypto),
+        Effect.provideService(Digest.Digest, digests),
       );
-      const releaseId = `rel_${yield* crypto.randomUUIDv4()}`;
+      const releaseId = `rel_${yield* random.uuidV4()}`;
       const objectKey = `releases/${input.owner}/${input.slug}/${input.version}/${releaseId}.zip`;
       yield* blobs("write release archive", (bucket) =>
         bucket.put(objectKey, input.archive, {

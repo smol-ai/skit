@@ -1,4 +1,5 @@
-import { Clock, Context, Crypto, Effect, Layer, PlatformError, Schema } from "effect";
+import { Clock, Context, Effect, Layer, PlatformError, Schema } from "effect";
+import { Digest } from "effect/crypto";
 import { D1Client } from "@effect/sql-d1";
 import {
   SnapshotArchive,
@@ -67,7 +68,7 @@ export const layer = Layer.effect(
     const bindings = yield* Bindings;
     const sql = yield* D1Client.D1Client;
     const authorization = yield* Authorization;
-    const crypto = yield* Crypto.Crypto;
+    const digests = yield* Digest.Digest;
     const clock = yield* Clock.Clock;
     const nativeCrypto = yield* NativeCrypto;
     const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
@@ -98,7 +99,7 @@ export const layer = Layer.effect(
       const value = yield* Schema.decodeUnknownEffect(JsonUnknown)(json).pipe(
         Effect.mapError(() => new SnapshotStoreInvalid()),
       );
-      return yield* verifySnapshotArchive(value).pipe(Effect.provideService(Crypto.Crypto, crypto));
+      return yield* verifySnapshotArchive(value).pipe(Effect.provideService(Digest.Digest, digests));
     });
     const ownDefault = (principal: Principal) =>
       findOwnedLibrary({
@@ -117,7 +118,7 @@ export const layer = Layer.effect(
       archive: SnapshotArchive,
     ) {
       const verified = yield* verifySnapshotArchive(archive).pipe(
-        Effect.provideService(Crypto.Crypto, crypto),
+        Effect.provideService(Digest.Digest, digests),
       );
       const library = yield* ownDefault(principal);
       const digest = verified.archive.digest;

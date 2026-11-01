@@ -33,8 +33,11 @@ const builtins = new Set(
 const externalImports = Object.values(result.metafile.outputs).flatMap((output) =>
   output.imports.filter(({ external }) => external).map(({ path }) => path),
 );
+// ws (reached through Effect's Node HTTP client) loads these native speed-ups inside try/catch
+// and falls back without them, so leaving them unresolved is safe.
+const optionalAddons = new Set(["bufferutil", "utf-8-validate"]);
 const packageImports = externalImports.filter(
-  (path) => !path.startsWith("node:") && !builtins.has(path),
+  (path) => !path.startsWith("node:") && !builtins.has(path) && !optionalAddons.has(path),
 );
 if (packageImports.length > 0) {
   throw new Error(

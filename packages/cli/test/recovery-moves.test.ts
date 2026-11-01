@@ -294,8 +294,9 @@ it.effect(
             path: f.source,
             recoveryPath,
             type: "Directory",
-            dev: info.dev,
-            ino: info.ino,
+            // v1 saved device and inode numbers as JSON numbers.
+            dev: Number(info.dev),
+            ino: Number(info.ino),
             observedHash: yield* deterministicTreeHash(f.source),
             moved: false,
           },
@@ -309,6 +310,50 @@ it.effect(
       expect((yield* preview.apply()).entries[0].status).toBe("at-original");
       expect(yield* f.fs.readFileString(join(directory, "receipt.json"))).toBe(moveRecord);
     }).pipe(Effect.provide(skitLayer)),
+);
+
+it.effect("move records save exact device and inode numbers as text", () =>
+  Effect.gen(function* () {
+    const f = yield* recoveryFixture();
+    const links = yield* LinkStat;
+    const info = yield* links.identity.lstat(f.source);
+    yield* f.plan.apply();
+    const record = JSON.parse(
+      yield* f.fs.readFileString(join(f.plan.recoveryDirectory, "receipt.json")),
+    );
+    expect(record.schemaVersion).toBe(3);
+    expect(record.entries[0]).toMatchObject({ dev: String(info.dev), ino: String(info.ino) });
+  }).pipe(Effect.provide(skitLayer)),
+);
+
+it.effect("v2 move records with numeric device and inode numbers still restore", () =>
+  Effect.gen(function* () {
+    const f = yield* recoveryFixture();
+    yield* f.plan.apply();
+    const path = join(f.plan.recoveryDirectory, "receipt.json");
+    const current = JSON.parse(yield* f.fs.readFileString(path));
+    const numeric = (identity: { dev: string; ino: string }) => ({
+      dev: Number(identity.dev),
+      ino: Number(identity.ino),
+    });
+    const v2 = JSON.stringify({
+      schemaVersion: 2,
+      entries: current.entries.map(
+        (entry: { dev: string; ino: string; parent: { dev: string; ino: string } }) => ({
+          ...entry,
+          ...numeric(entry),
+          parent: { ...entry.parent, ...numeric(entry.parent) },
+        }),
+      ),
+    });
+    yield* f.fs.writeFileString(path, v2);
+    const preview = yield* prepareRecoveryRestore(f.home, f.operationId);
+    expect(preview.summary.entries.map((entry) => entry.status)).toEqual(["saved", "saved"]);
+    const restored = yield* preview.apply();
+    expect(restored.entries.map((entry) => entry.status)).toEqual(["at-original", "at-original"]);
+    expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe("original skill");
+    expect(yield* f.fs.readFileString(path)).toBe(v2);
+  }).pipe(Effect.provide(skitLayer)),
 );
 
 it.effect.each(["move-record", "archive-directory", "missing"] as const)(
