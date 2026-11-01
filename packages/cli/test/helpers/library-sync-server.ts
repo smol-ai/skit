@@ -64,7 +64,11 @@ export const faultQueue = () => {
 /** Encode a body with its contract schema and answer with the status that schema declares. */
 const reply = <A, I>(schema: Schema.Codec<A, I>, value: A) =>
   Response.json(Schema.encodeSync(schema)(value), {
-    status: SchemaAST.resolveAt<number>("httpApiStatus")(schema.ast) ?? 200,
+    // HttpApiSchema.status stores the code as a key annotation; Effect's resolver is internal.
+    status:
+      SchemaAST.resolveAt<number>("httpApiStatus")(schema.ast) ??
+      (schema.ast.context?.annotations?.httpApiStatus as number | undefined) ??
+      200,
   });
 
 /**

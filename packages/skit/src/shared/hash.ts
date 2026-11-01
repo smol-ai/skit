@@ -1,4 +1,5 @@
-import { Crypto, Effect } from "effect";
+import { Effect } from "effect";
+import { Digest } from "effect/crypto";
 import type { Hash } from "../vocabulary.js";
 
 /**
@@ -21,8 +22,8 @@ export function encodeHashParts(parts: readonly (string | Uint8Array)[]): Uint8A
   return result;
 }
 
-/** SHA-256 through Effect's Crypto service, so it runs unchanged on Node and the Worker. */
+/** SHA-256 through Effect's Digest service, so it runs unchanged on Node and the Worker. */
 export const sha256Hash = Effect.fn("Hash.sha256")(function* (bytes: Uint8Array) {
-  const hash = yield* (yield* Crypto.Crypto).digest("SHA-256", bytes);
-  return `sha256:${Array.from(hash, (byte) => byte.toString(16).padStart(2, "0")).join("")}` as const satisfies Hash;
+  const hex = yield* (yield* Digest.Digest).digestHex(Digest.sha256, bytes);
+  return `sha256:${hex}` as const satisfies Hash;
 });

@@ -20,7 +20,7 @@ import { isPlatformError } from "effect/PlatformError";
 import { commandFailure } from "../failure-classification.js";
 import { sourceLocator } from "@smolai/skit-core";
 import { sourceFromUpstream } from "../workflows/library/upstream-source.js";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { FailureTypeId, isSkitFailure, type SkitFailure } from "@smolai/skit-core";
 
 export class CollectionNotUpdatable
   extends Data.TaggedError("Library.CollectionNotUpdatable")<{
@@ -315,7 +315,9 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
                 Cause.isFailReason(reason) || error.reason.method === "makeTempDirectoryScoped"
               );
             }
-            return Cause.isFailReason(reason);
+            // When a finalizer dies, Effect converts every typed error in the cause to a defect.
+            // A named SKIT failure is still a Collection failure; programming defects never are.
+            return Cause.isFailReason(reason) || isSkitFailure(error);
           }),
         );
         if (!recovery.every(Boolean)) return yield* Effect.failCause(cause);

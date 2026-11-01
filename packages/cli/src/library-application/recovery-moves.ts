@@ -9,6 +9,8 @@ import {
   LinkStat,
   LibraryStore,
   canonicalJson,
+  FileIdentityNumber,
+  LegacyFileIdentityNumber,
   inspectOwnershipMarker,
   type InstalledSkill,
   type LibraryStateReadError,
@@ -19,32 +21,41 @@ import {
 import { PlanIsStale } from "../library/failures.js";
 import { leavePnpmSkill } from "../install/pnpm-skills.js";
 
-const Identity = Schema.Struct({ path: Schema.String, dev: Schema.Number, ino: Schema.Number });
-const EntryFields = {
-  name: Schema.String,
-  path: Schema.String,
-  recoveryPath: Schema.String,
-  type: Schema.Literals(["Directory", "SymbolicLink"]),
-  dev: Schema.Number,
-  ino: Schema.Number,
-  linkTarget: Schema.optionalKey(Schema.String),
-  currentHash: Schema.optionalKey(Schema.String),
+/** Entry shapes for one saved format of device and inode numbers. */
+const recordSchemas = <Number extends Schema.Codec<bigint, unknown>>(number: Number) => {
+  const Identity = Schema.Struct({ path: Schema.String, dev: number, ino: number });
+  const EntryFields = {
+    name: Schema.String,
+    path: Schema.String,
+    recoveryPath: Schema.String,
+    type: Schema.Literals(["Directory", "SymbolicLink"]),
+    dev: number,
+    ino: number,
+    linkTarget: Schema.optionalKey(Schema.String),
+    currentHash: Schema.optionalKey(Schema.String),
+  };
+  const Entry = Schema.Struct({
+    ...EntryFields,
+    contentHash: Hash,
+    approvedMarker: Schema.optionalKey(Schema.String),
+    parent: Identity,
+  });
+  return { EntryFields, Entry };
 };
-const RecoveryEntry = Schema.Struct({
-  ...EntryFields,
-  contentHash: Hash,
-  approvedMarker: Schema.optionalKey(Schema.String),
-  parent: Identity,
-});
+// v3 saves device and inode numbers as text so they stay exact; v1 and v2 saved JSON numbers.
+const current = recordSchemas(FileIdentityNumber);
+const numeric = recordSchemas(LegacyFileIdentityNumber);
+const decoded = recordSchemas(Schema.BigInt);
+const RecoveryEntry = current.Entry;
 interface RecoveryEntry extends Schema.Schema.Type<typeof RecoveryEntry> {}
 // 0.3.0 wrote v1 records, where the hash of a moved folder was `observedHash`.
-const { currentHash: _currentHash, ...LegacyFields } = EntryFields;
+const { currentHash: _currentHash, ...LegacyFields } = numeric.EntryFields;
 const LegacyEntry = Schema.Struct({
   ...LegacyFields,
   observedHash: Schema.optionalKey(Schema.String),
   moved: Schema.Boolean,
 }).pipe(
-  Schema.decodeTo(Schema.Struct({ ...EntryFields, moved: Schema.Boolean }), {
+  Schema.decodeTo(Schema.Struct({ ...decoded.EntryFields, moved: Schema.Boolean }), {
     decode: SchemaGetter.transform(({ observedHash, ...entry }) => ({
       ...entry,
       ...(observedHash === undefined ? {} : { currentHash: observedHash }),
@@ -52,9 +63,14 @@ const LegacyEntry = Schema.Struct({
     encode: SchemaGetter.forbidden(() => "v1 move records are decode-only"),
   }),
 );
+const CurrentMoveRecord = Schema.Struct({
+  schemaVersion: Schema.Literal(3),
+  entries: Schema.Array(RecoveryEntry),
+});
 const MoveRecord = Schema.Union([
   Schema.Struct({ schemaVersion: Schema.Literal(1), entries: Schema.Array(LegacyEntry) }),
-  Schema.Struct({ schemaVersion: Schema.Literal(2), entries: Schema.Array(RecoveryEntry) }),
+  Schema.Struct({ schemaVersion: Schema.Literal(2), entries: Schema.Array(numeric.Entry) }),
+  CurrentMoveRecord,
 ]);
 
 export const RecoveryFact = Schema.Struct({
@@ -79,8 +95,8 @@ export interface RecoveryMoveRequest {
   /** Required for directories; links are moved without touching their target's bytes. */
   readonly currentHash?: string;
   readonly approvedLink?: {
-    readonly dev: number;
-    readonly ino: number;
+    readonly dev: bigint;
+    readonly ino: bigint;
     readonly linkTarget: string;
   };
 }
@@ -290,10 +306,10 @@ const applyRecoveryMoves = Effect.fn("RecoveryMoves.apply")(
     yield* ensureRecoveryOperation(home, dirname(recoveryDirectory));
     yield* fs.makeDirectory(recoveryDirectory, { mode: 0o700 });
     // Write once, exclusively, before any move. Filesystem evidence supplies progress.
-    yield* writeJsonExclusive(join(recoveryDirectory, "receipt.json"), {
-      schemaVersion: 2,
-      entries,
-    });
+    yield* writeJsonExclusive(
+      join(recoveryDirectory, "receipt.json"),
+      Schema.encodeSync(CurrentMoveRecord)({ schemaVersion: 3, entries }),
+    );
     for (const entry of entries) {
       yield* checkApproved(entry);
       yield* fs.rename(entry.path, entry.recoveryPath);
@@ -501,7 +517,8 @@ const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
         status,
         reason,
       });
-      witnesses.push(JSON.stringify({ parent, physicalParent, original, saved }));
+      // canonicalJson renders exact device and inode numbers; JSON.stringify cannot.
+      witnesses.push(canonicalJson({ parent, physicalParent, original, saved }));
       content.push({
         original: "hash" in original ? original.hash : undefined,
         saved: "hash" in saved ? saved.hash : undefined,
@@ -510,7 +527,7 @@ const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
   }
   const planId = Hash.make(
     `sha256:${createHash("sha256")
-      .update(JSON.stringify([operationId, evidence, facts]))
+      .update(canonicalJson([operationId, evidence, facts]))
       .digest("hex")}`,
   );
   return {

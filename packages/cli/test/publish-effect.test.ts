@@ -238,7 +238,10 @@ it.effect.each([
           expect(Cause.hasDies(exit.cause)).toBe(
             outcome === "defect" || outcome.startsWith("cleanup"),
           );
-          expect(Cause.hasFails(exit.cause)).toBe(outcome !== "defect" && outcome !== "cleanup");
+          // A dying finalizer converts typed errors to defects, keeping them first in order.
+          expect(Cause.hasFails(exit.cause)).toBe(
+            outcome !== "defect" && !outcome.startsWith("cleanup"),
+          );
           if (outcome === "transport")
             expect(Cause.squash(exit.cause)).toMatchObject({
               _tag: "RegistryTransportError",
@@ -251,7 +254,7 @@ it.effect.each([
             });
           if (outcome === "parser")
             expect(Cause.squash(exit.cause)).toMatchObject({ name: "SkitContractError" });
-          if (outcome === "rejection")
+          if (outcome === "rejection" || outcome === "cleanup-rejection")
             expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "RegistryRejectedWrite" });
         }
         expect(requests).toBe(outcome === "defect" ? 0 : 2);

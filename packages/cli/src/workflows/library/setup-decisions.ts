@@ -22,16 +22,16 @@ export const ApprovedSymlink = Schema.Struct({
   path: Schema.String,
   canonicalPath: Schema.String,
   linkTarget: Schema.String,
-  dev: Schema.Number,
-  ino: Schema.Number,
+  dev: Schema.BigInt,
+  ino: Schema.BigInt,
 });
 export interface ApprovedSymlink extends Schema.Schema.Type<typeof ApprovedSymlink> {}
 
 export const SetupApprovedCopy = Schema.Struct({
   path: Schema.String,
   currentHash: Hash,
-  dev: Schema.Number,
-  ino: Schema.Number,
+  dev: Schema.BigInt,
+  ino: Schema.BigInt,
 });
 export interface SetupApprovedCopy extends Schema.Schema.Type<typeof SetupApprovedCopy> {}
 

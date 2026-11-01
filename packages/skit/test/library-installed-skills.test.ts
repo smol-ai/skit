@@ -1376,7 +1376,7 @@ it.effect(
   "works beside a root on its parent's device, and inside a root mounted from another",
   () =>
     Effect.gen(function* () {
-      const devices = (root: number, parent: number) =>
+      const devices = (root: bigint, parent: bigint) =>
         FileSystem.layerNoop({
           realPath: (path) => Effect.succeed(path),
           stat: (path) =>
@@ -1386,13 +1386,13 @@ it.effect(
         });
       assert.strictEqual(
         yield* installedSkillWorkDirectory("/home/me/.claude/skills").pipe(
-          Effect.provide(devices(1, 1)),
+          Effect.provide(devices(1n, 1n)),
         ),
         "/home/me/.claude",
       );
       assert.strictEqual(
         yield* installedSkillWorkDirectory("/home/me/.claude/skills").pipe(
-          Effect.provide(devices(2, 1)),
+          Effect.provide(devices(2n, 1n)),
         ),
         "/home/me/.claude/skills",
       );

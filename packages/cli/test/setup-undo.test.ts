@@ -35,7 +35,10 @@ const fixture = Effect.fn("Test.setupUndoFixture")(function* (removeOnly = false
   const home = yield* libraryHome({
     home: join(root, "library"),
     inventoryHome: root,
-    roots: { codex: [join(root, "agents")], "claude-code": [join(root, "claude")] },
+    roots: {
+      codex: [join(root, "agents")],
+      "claude-code": [join(root, "claude")],
+    },
   });
   const options = {
     libraryHome: home.home,
@@ -64,7 +67,16 @@ const fixture = Effect.fn("Test.setupUndoFixture")(function* (removeOnly = false
     }).pipe(Effect.provide(interaction.layer)),
   );
   if (!applied.operationId) return yield* Effect.die(new Error("Setup omitted operation ID"));
-  return { fs, root, source, successor, markdown, home, applied, operationId: applied.operationId };
+  return {
+    fs,
+    root,
+    source,
+    successor,
+    markdown,
+    home,
+    applied,
+    operationId: applied.operationId,
+  };
 });
 
 it.effect(
@@ -112,6 +124,46 @@ it.effect("undo of an explicit removal restores the original inode and move reco
         expect(
           (yield* inspectRecoveryOperation(f.home.home, f.operationId)).entries[0].status,
         ).toBe("at-original");
+        expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe(f.markdown);
+      }),
+    );
+  }).pipe(Effect.provide(skitLayer)),
+);
+
+it.effect("setup records save exact identities, and v2 numeric records still undo", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture(true);
+    const path = join(f.home.home, "removed", f.operationId, "setup.json");
+    const record = JSON.parse(yield* f.fs.readFileString(path));
+    expect(record.schemaVersion).toBe(3);
+    expect(typeof record.files[0].anchor.ino).toBe("string");
+    const numeric = <A extends { dev: string; ino: string }>(identity: A) => ({
+      ...identity,
+      dev: Number(identity.dev),
+      ino: Number(identity.ino),
+    });
+    yield* f.fs.writeFileString(
+      path,
+      JSON.stringify({
+        ...record,
+        schemaVersion: 2,
+        files: record.files.map(
+          (file: {
+            anchor: { dev: string; ino: string };
+            entry: { dev: string; ino: string } | null;
+          }) => ({
+            ...file,
+            anchor: numeric(file.anchor),
+            entry: file.entry === null ? null : numeric(file.entry),
+          }),
+        ),
+      }),
+    );
+    yield* f.home.owned(
+      Effect.gen(function* () {
+        const preview = yield* prepareSetupUndo(f.operationId);
+        expect(preview.summary.conflicts).toEqual([]);
+        expect((yield* preview.apply()).status).toBe("undone");
         expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe(f.markdown);
       }),
     );

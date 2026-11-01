@@ -17,6 +17,64 @@ describe("contract compatibility", () => {
     expect(result.errors).toEqual(["skit.list.v2 changed shape without changing its contract ID"]);
   });
 
+  describe("compares what a schema accepts, not how it is written", () => {
+    const schema = (id: string, count: object, fitted: object) =>
+      `${JSON.stringify({ $id: id, type: "object", properties: { count, fitted } })}\n`;
+    const nested = {
+      anyOf: [{ anyOf: [{ type: "number" }, { type: "string", enum: ["NaN"] }] }, { type: "null" }],
+    };
+    const flat = {
+      anyOf: [{ type: "number" }, { type: "string", enum: ["NaN"] }, { type: "null" }],
+    };
+    const check = (before: string, after: string) =>
+      checkContractCompatibility({
+        baseArtifacts: { "skit.list.v2.json": before },
+        headArtifacts: { "skit.list.v2.json": after },
+        baseManifest: manifest("stable", ["skit.list.v2"]),
+      });
+
+    test("accepts bounds folded out of allOf and unions flattened", () => {
+      const before = schema(
+        "skit.list.v2",
+        {
+          type: "integer",
+          minimum: -9007199254740991,
+          maximum: 9007199254740991,
+          allOf: [{ minimum: 0 }],
+        },
+        nested,
+      );
+      const after = schema(
+        "skit.list.v2",
+        { type: "integer", minimum: 0, maximum: 9007199254740991 },
+        flat,
+      );
+      expect(check(before, after)).toEqual({ errors: [], warnings: [] });
+    });
+
+    test("still rejects a bound that accepts different values", () => {
+      const before = schema("skit.list.v2", { type: "integer", allOf: [{ minimum: 0 }] }, flat);
+      const after = schema("skit.list.v2", { type: "integer", minimum: 1 }, flat);
+      expect(check(before, after).errors).toEqual([
+        "skit.list.v2 changed shape without changing its contract ID",
+      ]);
+    });
+
+    test("still rejects a union that gains a member", () => {
+      const before = schema("skit.list.v2", { type: "integer" }, nested);
+      const after = schema(
+        "skit.list.v2",
+        { type: "integer" },
+        {
+          anyOf: [...flat.anyOf, { type: "boolean" }],
+        },
+      );
+      expect(check(before, after).errors).toEqual([
+        "skit.list.v2 changed shape without changing its contract ID",
+      ]);
+    });
+  });
+
   test("allows one stable version increment", () => {
     const result = checkContractCompatibility({
       baseArtifacts: { "skit.list.v2.json": artifact("skit.list.v2", "before") },

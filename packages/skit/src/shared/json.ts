@@ -20,6 +20,9 @@ export interface YamlMapping {
 
 export function canonicalJson(value: unknown): string {
   if (value === undefined) return "undefined";
+  // Plain digits, exactly as these values rendered when they were numbers, so hashes of
+  // device and inode numbers did not change when they became exact bigints.
+  if (typeof value === "bigint") return value.toString();
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (value && typeof value === "object")
     return `{${Object.entries(value)

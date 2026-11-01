@@ -409,6 +409,24 @@ const stderrTerminal = (
   Terminal.make({
     columns: Effect.sync(() => process.stderr.columns ?? 0),
     rows: Effect.sync(() => process.stderr.rows ?? 0),
+    // Mirrors the Node terminal's resize subscription, but for stderr.
+    size: Effect.gen(function* () {
+      const queue = yield* Queue.sliding<Terminal.Size, Cause.Done>(1);
+      const onResize = () =>
+        Queue.offerUnsafe(queue, {
+          columns: process.stderr.columns ?? 0,
+          rows: process.stderr.rows ?? 0,
+        });
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          process.stderr.off("resize", onResize);
+          Queue.endUnsafe(queue);
+        }),
+      );
+      process.stderr.on("resize", onResize);
+      onResize();
+      return Queue.asDequeue(queue);
+    }),
     readInput: Effect.gen(function* () {
       const source = yield* terminal.readInput;
       const target = yield* Queue.make<Terminal.UserInput, Cause.Done>();

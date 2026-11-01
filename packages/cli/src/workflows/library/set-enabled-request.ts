@@ -30,8 +30,8 @@ export interface SetEnabledRequest {
   readonly allowedDuplicateSymlinks?: readonly {
     readonly path: string;
     readonly canonicalPath: string;
-    readonly dev: number;
-    readonly ino: number;
+    readonly dev: bigint;
+    readonly ino: bigint;
     readonly linkTarget?: string;
   }[];
   readonly manage?: ManageApproval;

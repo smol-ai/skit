@@ -1,5 +1,6 @@
 import { D1Client } from "@effect/sql-d1";
-import { Clock, Context, Crypto, Effect, Layer, Schema } from "effect";
+import { Clock, Context, Effect, Layer, Schema } from "effect";
+import { Digest, SecureRandom } from "effect/crypto";
 import { DatabaseError, databaseError, type DatabaseSqlClient } from "../platform/cloudflare.js";
 import { BetterAuth, type BetterAuthError, type BetterAuthService } from "./better-auth.js";
 import { CreatePatInput, CreatedPat, ListedPat, Scope } from "./contracts.js";
@@ -58,32 +59,17 @@ export class UnauthorizedPrincipal extends Schema.TaggedError<UnauthorizedPrinci
   {},
 ) {}
 
-export class AuthenticationCryptoError extends Schema.TaggedError<AuthenticationCryptoError>()(
-  "Authentication.CryptoError",
-  { cause: Schema.Defect() },
-) {}
-
 export interface AuthenticationService {
   readonly authenticate: (
     request: Request,
-  ) => Effect.Effect<
-    Principal | undefined,
-    DatabaseError | AuthenticationCryptoError | BetterAuthError
-  >;
-  readonly authenticatePat: (
-    token: string,
-  ) => Effect.Effect<Principal | undefined, DatabaseError | AuthenticationCryptoError>;
+  ) => Effect.Effect<Principal | undefined, DatabaseError | BetterAuthError>;
+  readonly authenticatePat: (token: string) => Effect.Effect<Principal | undefined, DatabaseError>;
   readonly createPat: (
     principal: Principal,
     input: CreatePatInput,
   ) => Effect.Effect<
     CreatedPat,
-    | SessionRequired
-    | InvalidScope
-    | InvalidExpiry
-    | UnauthorizedPrincipal
-    | AuthenticationCryptoError
-    | DatabaseError
+    SessionRequired | InvalidScope | InvalidExpiry | UnauthorizedPrincipal | DatabaseError
   >;
   readonly listPats: (
     principal: Principal,
@@ -98,20 +84,16 @@ export class Authentication extends Context.Service<Authentication, Authenticati
   "@skit-server-effect/Authentication",
 ) {}
 
-const sha256 = (crypto: Crypto.Crypto, value: string) =>
-  crypto.digest("SHA-256", new TextEncoder().encode(value)).pipe(
-    Effect.mapError((cause) => new AuthenticationCryptoError({ cause })),
-    Effect.map((digest) =>
-      Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join(""),
-    ),
-  );
+const sha256 = (digests: typeof Digest.Digest.Service, value: string) =>
+  digests.digestHex(Digest.sha256, new TextEncoder().encode(value));
 
 export const layer = (supportedScopes: ReadonlySet<Scope>) =>
   Layer.effect(
     Authentication,
     Effect.gen(function* () {
       const sql: DatabaseSqlClient = yield* D1Client.D1Client;
-      const crypto = yield* Crypto.Crypto;
+      const digests = yield* Digest.Digest;
+      const random = yield* SecureRandom.SecureRandom;
       const clock = yield* Clock.Clock;
       const betterAuth: Pick<BetterAuthService, "getSession"> = yield* BetterAuth;
       const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
@@ -121,7 +103,7 @@ export const layer = (supportedScopes: ReadonlySet<Scope>) =>
         token: string,
       ) {
         if (!token.startsWith("skit_pat_")) return undefined;
-        const tokenHash = yield* sha256(crypto, token);
+        const tokenHash = yield* sha256(digests, token);
         const rows = yield* db(
           "find personal access token",
           sql`SELECT p.principal_id, p.state, p.authorization_generation,
@@ -222,20 +204,16 @@ export const layer = (supportedScopes: ReadonlySet<Scope>) =>
           ),
         );
 
-        const bytes = yield* crypto
-          .randomBytes(32)
-          .pipe(Effect.mapError((cause) => new AuthenticationCryptoError({ cause })));
+        const bytes = yield* random.randomBytes(32);
         const secret = btoa(String.fromCharCode(...bytes))
           .replaceAll("+", "-")
           .replaceAll("/", "_")
           .replaceAll("=", "");
         const token = `skit_pat_${secret}`;
-        const uuid = yield* crypto
-          .randomUUIDv4()
-          .pipe(Effect.mapError((cause) => new AuthenticationCryptoError({ cause })));
+        const uuid = yield* random.uuidV4();
         const tokenId = `pat_${uuid.replaceAll("-", "")}`;
         const tokenPrefix = token.slice(0, 18);
-        const tokenHash = yield* sha256(crypto, token);
+        const tokenHash = yield* sha256(digests, token);
         const now = new Date(yield* clock.currentTimeMillis).toISOString();
         yield* db(
           "create personal access token",

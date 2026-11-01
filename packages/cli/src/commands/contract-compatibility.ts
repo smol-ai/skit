@@ -42,6 +42,70 @@ const versionedFamily = (
   return { family: match[1], version: Number(match[2]) };
 };
 
+type Json = null | boolean | number | string | readonly Json[] | { readonly [key: string]: Json };
+
+const isObject = (value: Json): value is { readonly [key: string]: Json } =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+/** Lower bounds keep the larger value and upper bounds the smaller, so merging only tightens. */
+const lowerBounds = new Set(["minimum", "exclusiveMinimum", "minLength", "minItems"]);
+const upperBounds = new Set(["maximum", "exclusiveMaximum", "maxLength", "maxItems"]);
+
+/**
+ * The same schema however a generator nests it. Effect upgrades can write a bound as
+ * `{ minimum: -MAX, allOf: [{ minimum: 0 }] }` or as `{ minimum: 0 }`, and a union of unions
+ * either nested or flat; neither changes which documents validate. Only rewrites that keep the
+ * accepted documents identical belong here: anything else is a real shape change.
+ */
+const normalizeSchema = (value: Json): Json => {
+  if (Array.isArray(value)) return value.map(normalizeSchema);
+  if (!isObject(value)) return value;
+  const schema: Record<string, Json> = {};
+  for (const key of Object.keys(value).sort()) schema[key] = normalizeSchema(value[key]!);
+  if (Array.isArray(schema.allOf)) {
+    const remaining: Json[] = [];
+    for (const member of schema.allOf) {
+      const bounds =
+        isObject(member) &&
+        Object.entries(member).every(
+          ([key, bound]) =>
+            (lowerBounds.has(key) || upperBounds.has(key)) && typeof bound === "number",
+        );
+      if (!bounds || !isObject(member)) {
+        remaining.push(member);
+        continue;
+      }
+      for (const [key, bound] of Object.entries(member) as [string, number][]) {
+        const current = schema[key];
+        schema[key] =
+          typeof current !== "number"
+            ? bound
+            : lowerBounds.has(key)
+              ? Math.max(current, bound)
+              : Math.min(current, bound);
+      }
+    }
+    if (remaining.length === 0) delete schema.allOf;
+    else schema.allOf = remaining;
+  }
+  if (Array.isArray(schema.anyOf))
+    schema.anyOf = schema.anyOf.flatMap((member) =>
+      isObject(member) && Object.keys(member).length === 1 && Array.isArray(member.anyOf)
+        ? member.anyOf
+        : [member],
+    );
+  return Object.fromEntries(
+    Object.keys(schema)
+      .sort()
+      .map((key) => [key, schema[key]!]),
+  );
+};
+
+const sameShape = (left: string, right: string) =>
+  left === right ||
+  JSON.stringify(normalizeSchema(JSON.parse(left))) ===
+    JSON.stringify(normalizeSchema(JSON.parse(right)));
+
 const artifactsById = (artifacts: Readonly<Record<string, string>>) =>
   new Map(
     Object.values(artifacts).flatMap((contents) => {
@@ -83,7 +147,7 @@ export function checkContractCompatibility(
     const stable = stableIds.has(id);
     const experimental = experimentalIds.has(id) && !stable;
     if (headContents !== undefined) {
-      if (headContents !== baseContents) {
+      if (!sameShape(baseContents, headContents)) {
         const message = `${id} changed shape without changing its contract ID`;
         if (stable) errors.push(message);
         else if (experimental) warnings.push(message);

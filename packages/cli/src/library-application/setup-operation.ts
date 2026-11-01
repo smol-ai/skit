@@ -3,6 +3,8 @@ import { Effect, FileSystem, Schema } from "effect";
 import {
   AbsoluteDevicePath,
   enabledSkillIds,
+  FileIdentityNumber,
+  LegacyFileIdentityNumber,
   canonicalJson,
   deviceInstallationIntent,
   Hash,
@@ -30,42 +32,55 @@ import {
   setupIntent,
 } from "./setup-undo-intent.js";
 
-const Identity = Schema.Struct({ dev: Schema.Number, ino: Schema.Number });
 const DevicePath = AbsoluteDevicePath.check(
   Schema.makeFilter((path) => resolve(path) === path, {
     message: "Expected a normalized absolute device path",
   }),
 );
-const FileEvidence = Schema.Struct({
-  path: DevicePath,
-  anchor: Schema.Struct({ path: DevicePath, physicalPath: DevicePath, ...Identity.fields }),
-  entry: Schema.NullOr(
-    Schema.Struct({
-      ...Identity.fields,
-      type: Schema.String,
-      hash: Hash,
-      unstampedHash: Hash,
-      marker: Schema.NullOr(Schema.String),
-      markerType: Schema.optionalKey(Schema.NullOr(Schema.String)),
-      markerMode: Schema.optionalKey(Schema.NullOr(Schema.Number)),
-      linkTarget: Schema.NullOr(Schema.String),
+/** File evidence for one saved format of device and inode numbers. */
+const fileEvidence = <Number extends Schema.Codec<bigint, unknown>>(number: Number) => {
+  const Identity = { dev: number, ino: number };
+  return Schema.Struct({
+    path: DevicePath,
+    anchor: Schema.Struct({
+      path: DevicePath,
+      physicalPath: DevicePath,
+      ...Identity,
     }),
-  ),
-});
+    entry: Schema.NullOr(
+      Schema.Struct({
+        ...Identity,
+        type: Schema.String,
+        hash: Hash,
+        unstampedHash: Hash,
+        marker: Schema.NullOr(Schema.String),
+        markerType: Schema.optionalKey(Schema.NullOr(Schema.String)),
+        markerMode: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+        linkTarget: Schema.NullOr(Schema.String),
+      }),
+    ),
+  });
+};
+// v3 saves device and inode numbers as text so they stay exact; v2 saved JSON numbers.
+const FileEvidence = fileEvidence(FileIdentityNumber);
+const NumericFileEvidence = fileEvidence(LegacyFileIdentityNumber);
 const OperationFields = {
   kind: Schema.Literal("setup"),
   planId: Hash,
   settings: SetupDiscoverySettings,
   machineId: Schema.NullOr(MachineId),
   targets: Schema.Array(Schema.Struct({ target: InstallDestination, root: DevicePath })),
-  files: Schema.Array(FileEvidence),
 };
-const Operation = Schema.Struct({
-  ...OperationFields,
-  schemaVersion: Schema.Literal(2),
+const OperationVersionFields = {
   before: SetupIntent,
   installedSkills: Schema.Array(InstalledSkill),
   installedSkillPaths: Schema.optionalKey(Schema.Array(DevicePath)),
+};
+const Operation = Schema.Struct({
+  ...OperationFields,
+  ...OperationVersionFields,
+  schemaVersion: Schema.Literal(3),
+  files: Schema.Array(FileEvidence),
 });
 const LibraryChangeFields = {
   sequence: Schema.Int,
@@ -101,7 +116,15 @@ const Completion = Schema.Struct({
   installedSkills: Schema.Array(InstalledSkill),
 });
 
-const StoredOperation = Operation;
+const StoredOperation = Schema.Union([
+  Schema.Struct({
+    ...OperationFields,
+    ...OperationVersionFields,
+    schemaVersion: Schema.Literal(2),
+    files: Schema.Array(NumericFileEvidence),
+  }),
+  Operation,
+]);
 const StoredChange = Schema.Union([LibraryChange, SettingsChange]);
 const StoredCompletion = Completion;
 
@@ -222,21 +245,24 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
   let expectedSettings = setupDiscoverySettings(settings);
   let expectedMachineId = settings.machineId;
   yield* ensureRecoveryOperation(store.home, directory);
-  yield* writeJsonExclusive(join(directory, "setup.json"), {
-    schemaVersion: 2,
-    kind: "setup",
-    planId: approval.planId,
-    before: expectedIntent,
-    installedSkills: expectedInstalledSkills,
-    settings: expectedSettings,
-    machineId: settings.machineId ?? null,
-    targets: targets.map((target) => ({
-      target,
-      root: skillsDirectoryFor(target, { kind: "global" }, approval.setup.inventory),
-    })),
-    installedSkillPaths: [...installedSkillPaths].sort(),
-    files,
-  } satisfies typeof Operation.Type);
+  yield* writeJsonExclusive(
+    join(directory, "setup.json"),
+    Schema.encodeSync(Operation)({
+      schemaVersion: 3,
+      kind: "setup",
+      planId: approval.planId,
+      before: expectedIntent,
+      installedSkills: expectedInstalledSkills,
+      settings: expectedSettings,
+      machineId: settings.machineId ?? null,
+      targets: targets.map((target) => ({
+        target,
+        root: skillsDirectoryFor(target, { kind: "global" }, approval.setup.inventory),
+      })),
+      installedSkillPaths: [...installedSkillPaths].sort(),
+      files,
+    }),
+  );
   const changes = join(directory, "changes");
   yield* fs.makeDirectory(changes, { mode: 0o700 });
   if ((yield* links.identity.lstat(changes)).type !== "Directory")
@@ -256,7 +282,10 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
       const key = String(step.sequence).padStart(8, "0");
       const path = join(changes, `${key}.json`);
       yield* writeJsonExclusive(path, step);
-      return { sequence: step.sequence, hash: hashParts([yield* fs.readFileString(path)]) };
+      return {
+        sequence: step.sequence,
+        hash: hashParts([yield* fs.readFileString(path)]),
+      };
     },
     (effect) => effect.pipe(Effect.provideService(FileSystem.FileSystem, fs)),
   );
@@ -264,7 +293,11 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
     function* (changeRecord: { sequence: number; hash: Hash }) {
       yield* writeJsonExclusive(
         join(changes, `${String(changeRecord.sequence).padStart(8, "0")}.published.json`),
-        { schemaVersion: 1, sequence: changeRecord.sequence, hash: changeRecord.hash },
+        {
+          schemaVersion: 1,
+          sequence: changeRecord.sequence,
+          hash: changeRecord.hash,
+        },
       );
     },
     (effect) => effect.pipe(Effect.provideService(FileSystem.FileSystem, fs)),
@@ -296,7 +329,11 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
         after: changed,
         machineId: after.machineId ?? null,
       });
-      pendingSettings = { ...changeRecord, after: changed, machineId: after.machineId };
+      pendingSettings = {
+        ...changeRecord,
+        after: changed,
+        machineId: after.machineId,
+      };
     }),
     settingsSaved: Effect.fn("SetupOperation.settingsSaved")(function* () {
       if (pendingSettings) {
@@ -358,7 +395,9 @@ export const inspectSetupOperation = Effect.fn("SetupOperation.inspect")(functio
     Effect.gen(function* () {
       const path = join(directory, name);
       if ((yield* links.identity.lstat(path)).type !== "File")
-        return yield* new RecoveryInvalid({ detail: `Redirected setup record ${path}` });
+        return yield* new RecoveryInvalid({
+          detail: `Redirected setup record ${path}`,
+        });
       const raw = yield* fs.readFileString(path);
       const value = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(schema))(raw).pipe(
         Effect.mapError(() => new RecoveryInvalid({ detail: `Invalid setup record ${path}` })),
@@ -370,7 +409,9 @@ export const inspectSetupOperation = Effect.fn("SetupOperation.inspect")(functio
   const changesPath = join(directory, "changes");
   if (yield* maybeStat(changesPath)) {
     if ((yield* links.identity.lstat(changesPath)).type !== "Directory")
-      return yield* new RecoveryInvalid({ detail: "Redirected setup changes directory" });
+      return yield* new RecoveryInvalid({
+        detail: "Redirected setup changes directory",
+      });
     const names = (yield* fs.readDirectory(changesPath)).sort();
     for (const ack of names.filter((name) => /^\d{8}\.published\.json$/.test(name))) {
       if (!names.includes(ack.replace(".published.json", ".json")))
@@ -385,7 +426,9 @@ export const inspectSetupOperation = Effect.fn("SetupOperation.inspect")(functio
         name !== `${String(change.sequence).padStart(8, "0")}.json` ||
         change.sequence !== changes.length + 1
       )
-        return yield* new RecoveryInvalid({ detail: "Out-of-order setup changes" });
+        return yield* new RecoveryInvalid({
+          detail: "Out-of-order setup changes",
+        });
       const ack = join("changes", name.replace(/\.json$/, ".published.json"));
       let saved = false;
       if (yield* maybeStat(join(directory, ack))) {

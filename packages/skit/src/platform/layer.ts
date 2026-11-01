@@ -2,7 +2,8 @@
 // entrypoint provides this layer and enters the runtime (docs/adr/0018-own-cli-workflows-with-effect.md).
 
 import { Layer } from "effect";
-import { NodeServices } from "@effect/platform-node";
+import { NodeCrypto, NodeServices } from "@effect/platform-node";
+import type { Digest } from "effect/crypto";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import { TreeHasher, treeHasherLayer } from "../artifact/tree-hasher.js";
 import { linkStatLayer, LinkStat } from "./link-stat.js";
@@ -10,6 +11,7 @@ import { sourceProcessLayer, SourceProcess } from "./source-process.js";
 
 export type SkitServices =
   | NodeServices.NodeServices
+  | Digest.Digest
   | LinkStat
   | HttpClient.HttpClient
   | TreeHasher
@@ -17,6 +19,7 @@ export type SkitServices =
 
 export const skitLayer: Layer.Layer<SkitServices> = Layer.mergeAll(
   NodeServices.layer,
+  NodeCrypto.layerDigest,
   linkStatLayer,
   FetchHttpClient.layer,
   treeHasherLayer,
