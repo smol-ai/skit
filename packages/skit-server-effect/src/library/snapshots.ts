@@ -99,7 +99,9 @@ export const layer = Layer.effect(
       const value = yield* Schema.decodeUnknownEffect(JsonUnknown)(json).pipe(
         Effect.mapError(() => new SnapshotStoreInvalid()),
       );
-      return yield* verifySnapshotArchive(value).pipe(Effect.provideService(Digest.Digest, digests));
+      return yield* verifySnapshotArchive(value).pipe(
+        Effect.provideService(Digest.Digest, digests),
+      );
     });
     const ownDefault = (principal: Principal) =>
       findOwnedLibrary({

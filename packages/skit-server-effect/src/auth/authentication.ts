@@ -62,23 +62,14 @@ export class UnauthorizedPrincipal extends Schema.TaggedError<UnauthorizedPrinci
 export interface AuthenticationService {
   readonly authenticate: (
     request: Request,
-  ) => Effect.Effect<
-    Principal | undefined,
-    DatabaseError | BetterAuthError
-  >;
-  readonly authenticatePat: (
-    token: string,
-  ) => Effect.Effect<Principal | undefined, DatabaseError>;
+  ) => Effect.Effect<Principal | undefined, DatabaseError | BetterAuthError>;
+  readonly authenticatePat: (token: string) => Effect.Effect<Principal | undefined, DatabaseError>;
   readonly createPat: (
     principal: Principal,
     input: CreatePatInput,
   ) => Effect.Effect<
     CreatedPat,
-    | SessionRequired
-    | InvalidScope
-    | InvalidExpiry
-    | UnauthorizedPrincipal
-    | DatabaseError
+    SessionRequired | InvalidScope | InvalidExpiry | UnauthorizedPrincipal | DatabaseError
   >;
   readonly listPats: (
     principal: Principal,
