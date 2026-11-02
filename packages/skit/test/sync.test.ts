@@ -6,7 +6,7 @@ import { describe as group, expect as check, test } from "vitest";
 import {
   FailureTypeId,
   History,
-  historyTree,
+  mergeAuthorTree,
   makeMachineId,
   Sync,
   type SkitFailure,
@@ -32,7 +32,7 @@ describe("plan", () => {
     name: string,
     tree: History.Tree,
     parents: ReadonlyArray<string> = [],
-  ): Sync.Held => ({
+  ): Sync.LoadedRevision => ({
     id: revisionId(name),
     revision: { tree: treeHash(name), parents: parents.map(revisionId), author },
     tree,
@@ -40,9 +40,9 @@ describe("plan", () => {
   const local = (name: string, tree: History.Tree = []) => ({ hash: treeHash(name), tree });
   const idle = (
     localTree: ReturnType<typeof local>,
-    base: Sync.Held | null,
-    current: Sync.Held | null,
-  ): Sync.View => ({ _tag: "Idle", local: localTree, base, current });
+    base: Sync.LoadedRevision | null,
+    current: Sync.LoadedRevision | null,
+  ): Sync.PlanInput => ({ _tag: "Idle", local: localTree, base, current });
   const localOurs = (...parents: ReadonlyArray<string>) => ({
     _tag: "Local" as const,
     parents: parents.map(revisionId),
@@ -154,9 +154,9 @@ describe("plan", () => {
     const sent = held("s", files("1", "2"), ["b"]);
     const view = (
       localTree: string,
-      current: Sync.Held | null,
+      current: Sync.LoadedRevision | null,
       from = base,
-    ): Extract<Sync.View, { readonly _tag: "Sending" }> => ({
+    ): Extract<Sync.PlanInput, { readonly _tag: "Sending" }> => ({
       _tag: "Sending",
       local: local(localTree, files("1", "2")),
       base: from,
@@ -319,7 +319,7 @@ const makeDevice = Effect.fn("Test.makeDevice")(function* (
           state: self.state,
           local,
           author: { device, at: options.at },
-          merger: historyTree,
+          merger: mergeAuthorTree,
           // The later edit wins; this device breaks a tie.
           decide: (editedAt) => () =>
             DateTime.isGreaterThan(editedAt.theirs, editedAt.ours) ? "theirs" : "ours",
@@ -395,7 +395,7 @@ describe("run", () => {
           state: b.state,
           local: yield* b.store.putTree(b.files),
           author: { device: makeMachineId(), at: 1 },
-          merger: historyTree,
+          merger: mergeAuthorTree,
           decide: () => () => "ours",
           save: (state) =>
             (boundary === "before-write" ? state._tag === "Writing" : state._tag === "Idle")

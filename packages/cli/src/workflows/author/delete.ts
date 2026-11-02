@@ -148,7 +148,7 @@ export const authorDeleteCommand = Effect.fn("CLI.authorDelete")(function* <E>(
 
 const skit = Argument.String("skit");
 const dryRun = Flag.Boolean("dry-run").pipe(
-  Flag.withDescription("Preview the private Draft and Releases that would be deleted."),
+  Flag.withDescription("Preview the private SKIT and Releases that would be deleted."),
   Flag.withDefault(false),
 );
 

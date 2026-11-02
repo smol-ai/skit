@@ -29,7 +29,8 @@ const input = { origin: "https://registry.test", token: "test-token" };
 const item = {
   skit_id: "tim/tools",
   visibility: "private",
-  draft_revision_id: `sha256:${"1".repeat(64)}`,
+  current_revision_id: `sha256:${"1".repeat(64)}`,
+  current_revision_published: false,
   most_recent_release_version: null,
 };
 const page = (cursor: string | null = null, skits = [item]) =>

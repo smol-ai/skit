@@ -138,7 +138,7 @@ const RevisionRow = Schema.Struct({ tree_hash: Schema.String, descriptor_json: S
 const JsonDocument = Schema.fromJsonString(Schema.Unknown);
 
 /**
- * Check an uploaded archive against one revision of a Draft and validate it for publication. A
+ * Check an uploaded archive against one revision of a SKIT and validate it for publication. A
  * tree with entries a Release cannot hold is refused with their diagnostics; otherwise the archive
  * must hold exactly the tree's files, each with the same length and hash.
  */
@@ -150,19 +150,18 @@ export const verifyReleaseArchive = Effect.fn("Integrity.verifyReleaseArchive")(
 ) {
   const { names, files } = yield* readArchive(archive);
   const sql = yield* D1Client.D1Client;
-  const revisionRows = yield* sql`SELECT tree_hash, descriptor_json FROM draft_revisions
+  const revisionRows = yield* sql`SELECT tree_hash, descriptor_json FROM revisions
     WHERE owner_slug = ${owner} AND skit_slug = ${slug} AND revision_id = ${revisionId}`.pipe(
     databaseError("read release archive revision"),
   );
-  if (revisionRows[0] === undefined)
-    return yield* new IntegrityError({ code: "DRAFT_REVISION_MISSING" });
+  if (revisionRows[0] === undefined) return yield* new IntegrityError({ code: "REVISION_MISSING" });
   const revision = yield* Schema.decodeUnknownEffect(RevisionRow)(revisionRows[0]).pipe(
     Effect.mapError(
-      (error) => new IntegrityError({ code: "DRAFT_REVISION_MISSING", detail: error.message }),
+      (error) => new IntegrityError({ code: "REVISION_MISSING", detail: error.message }),
     ),
   );
   const unknownRows = yield* sql`SELECT path, kind, mode, blob_hash, byte_length
-    FROM draft_tree_entries WHERE tree_hash = ${revision.tree_hash}`.pipe(
+    FROM revision_tree_entries WHERE tree_hash = ${revision.tree_hash}`.pipe(
     databaseError("read release archive manifest"),
   );
   const entries = yield* Schema.decodeUnknownEffect(Schema.Array(TreeEntryRow))(unknownRows).pipe(

@@ -285,7 +285,7 @@ export const normalizeAuthorTreeEntries = Effect.fn("Tree.normalizeAuthorEntries
   return entries;
 });
 
-/** One Git/control inventory for local Author history and Draft/retain transport. */
+/** One Git/control inventory for local Author history and revision transport. */
 export const walkAuthorTree = Effect.fn("Tree.walkAuthor")(function* (
   root: string,
   policy: TreePolicy,

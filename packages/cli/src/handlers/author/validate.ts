@@ -14,7 +14,7 @@ export const validateCommand = Effect.fn("CLI.validate")(function* (
   input: string,
   assessmentContext: "author" | "publish",
 ) {
-  const value = yield* validateSkitDirectory(resolve(input), "draft", {
+  const value = yield* validateSkitDirectory(resolve(input), "unpublished", {
     assessmentContext,
   });
   const structurallyValid = !value.diagnostics.some(

@@ -120,7 +120,7 @@ export * as MachineSettings from "./library/machine-settings.js";
 export * as Merge from "./merge/merge.js";
 export * as History from "./history/history.js";
 export * as Sync from "./sync/sync.js";
-export { fileTree, historyTree, conflictKind, type Files } from "./merge/files.js";
+export { mergeAuthorTree, conflictKind } from "./merge/files.js";
 export {
   Unusable as MachineSettingsUnusable,
   type Settings as MachineSettingsSnapshot,

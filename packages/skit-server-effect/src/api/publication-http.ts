@@ -13,13 +13,14 @@ import { CurrentPrincipal, CurrentRequest } from "./authentication.js";
 import { PublicationAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import {
   archiveTooLargeResponse,
-  draftNotFoundResponse,
+  skitNotFoundResponse,
   forbiddenOriginResponse,
   forbiddenResponse,
   insufficientScopeResponse,
   invalidRequestResponse,
   releaseConflictResponse,
-  staleDraftRevisionResponse,
+  staleRevisionResponse,
+  currentRevisionMissingResponse,
   storageFailureResponse,
 } from "./errors.js";
 import { schemaBodyJsonLimited } from "./request-body.js";
@@ -91,10 +92,12 @@ export const publicationHandlers = HttpApiBuilder.group(
               Effect.catch((error) =>
                 Effect.gen(function* () {
                   switch (error._tag) {
-                    case "Publication.DraftNotFound":
-                      return yield* Effect.fail(draftNotFoundResponse);
-                    case "Publication.StaleDraftRevision":
-                      return yield* Effect.fail(staleDraftRevisionResponse);
+                    case "Publication.SkitNotFound":
+                      return yield* Effect.fail(skitNotFoundResponse);
+                    case "Publication.CurrentRevisionMissing":
+                      return yield* Effect.fail(currentRevisionMissingResponse);
+                    case "Publication.StaleRevision":
+                      return yield* Effect.fail(staleRevisionResponse);
                     case "Publication.PublishBlocked":
                       return yield* Effect.fail({
                         error: "publish_blocked" as const,

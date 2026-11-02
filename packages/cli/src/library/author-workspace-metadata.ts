@@ -17,16 +17,16 @@ export type AuthorWorkspaceMetadata = typeof AuthorWorkspaceDocument.Type;
 export const authorWorkspaceMetadataPath = (root: string) =>
   join(root, COLLECTION_CONTROL_DIRECTORY, AUTHOR_WORKSPACE_METADATA_FILE);
 
-export const readAuthorWorkspace = Effect.fn("Library.readAuthorWorkspace")(function* (
-  root: string,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = authorWorkspaceMetadataPath(root);
-  const text = yield* fs
-    .readFileString(path)
-    .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
-  if (text === undefined) return undefined;
-  return yield* Schema.decodeUnknownEffect(AuthorWorkspaceDocument, {
-    onExcessProperty: "error",
-  })(text).pipe(Effect.mapError(() => new AuthorWorkspaceMetadataInvalid({ path })));
-});
+export const loadAuthorWorkspaceMetadata = Effect.fn("Library.loadAuthorWorkspaceMetadata")(
+  function* (root: string) {
+    const fs = yield* FileSystem.FileSystem;
+    const path = authorWorkspaceMetadataPath(root);
+    const text = yield* fs
+      .readFileString(path)
+      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
+    if (text === undefined) return undefined;
+    return yield* Schema.decodeUnknownEffect(AuthorWorkspaceDocument, {
+      onExcessProperty: "error",
+    })(text).pipe(Effect.mapError(() => new AuthorWorkspaceMetadataInvalid({ path })));
+  },
+);

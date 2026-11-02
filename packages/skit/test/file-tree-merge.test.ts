@@ -1,44 +1,53 @@
-import { Option } from "effect";
+import { Option, Schema } from "effect";
 import { describe, expect, test } from "vitest";
-import { conflictKind, fileTree, historyTree, Merge, type SyncFileVersion } from "../src/index.js";
+import { conflictKind, mergeAuthorTree, type History, Merge, TreeFile } from "../src/index.js";
 
 // An edit beats a deletion, then our version wins.
 const oursWins = Merge.prefer(Merge.present, Merge.always("ours"));
 
-function file(content: string | Uint8Array): SyncFileVersion {
+function file(path: string, content: string | Uint8Array): TreeFile {
   const bytes = typeof content === "string" ? new TextEncoder().encode(content) : content;
-  return { bytes, mode: 0o644 };
+  return { path, kind: "file", bytes, mode: 0o644 };
 }
 
-type Files = Record<string, SyncFileVersion>;
+type Files = Record<string, TreeFile>;
 const merge = (base: Files, ours: Files, theirs: Files, choose?: Merge.Chooser) =>
   Merge.run(
-    fileTree,
-    { base: Option.some(base), ours: Option.some(ours), theirs: Option.some(theirs) },
+    mergeAuthorTree,
+    {
+      base: Option.some(Object.values(base)),
+      ours: Option.some(Object.values(ours)),
+      theirs: Option.some(Object.values(theirs)),
+    },
     choose,
   );
 /** The merged files; throws when the merge left conflicts. */
-const merged = (result: Merge.Result<Readonly<Files>>) => {
+const merged = (result: Merge.Result<History.Tree>) => {
   if (result._tag !== "Clean") throw new Error("expected a clean merge");
-  return Option.getOrThrow(result.value);
+  return Object.fromEntries(
+    Option.getOrThrow(result.value).map((entry) => [
+      entry.path,
+      Schema.decodeUnknownSync(TreeFile)(entry),
+    ]),
+  );
 };
-const conflicts = (result: Merge.Result<Readonly<Files>>) =>
+const conflicts = (result: Merge.Result<History.Tree>) =>
   result._tag === "Conflicts"
     ? result.conflicts.map((found) => ({ path: String(found.at[0]), kind: conflictKind(found) }))
     : [];
-const choices = (result: Merge.Result<Readonly<Files>>) =>
+const choices = (result: Merge.Result<History.Tree>) =>
   result.choices.map(({ conflict, kept }) => ({
     path: String(conflict.at[0]),
     kind: conflictKind(conflict),
     kept,
   }));
-const text = (version: SyncFileVersion | undefined) => new TextDecoder().decode(version!.bytes);
+const text = (version: TreeFile | undefined) => new TextDecoder().decode(version!.bytes);
 
 describe("file tree merge", () => {
   test("combines independent changes deterministically", () => {
-    const base = { "a.txt": file("base"), "b.txt": file("base") };
-    const local = { "a.txt": file("local"), "b.txt": base["b.txt"] };
-    const remote = { "a.txt": base["a.txt"], "b.txt": file("remote") };
+    const base = { "a.txt": file("a.txt", "base"), "b.txt": file("b.txt", "base") };
+    const local = { "a.txt": file("a.txt", "local"), "b.txt": base["b.txt"] };
+    const remote = { "a.txt": base["a.txt"], "b.txt": file("b.txt", "remote") };
     const files = merged(merge(base, local, remote));
     expect(text(files["a.txt"])).toBe("local");
     expect(text(files["b.txt"])).toBe("remote");
@@ -86,9 +95,9 @@ describe("file tree merge", () => {
       [remote, local],
     ]) {
       const result = merge(
-        { "SKILL.md": file(base) },
-        { "SKILL.md": file(left) },
-        { "SKILL.md": file(right) },
+        { "SKILL.md": file("SKILL.md", base) },
+        { "SKILL.md": file("SKILL.md", left) },
+        { "SKILL.md": file("SKILL.md", right) },
       );
       expect(conflicts(result)).toEqual([]);
       expect(new TextDecoder().decode(merged(result)["SKILL.md"].bytes)).toBe(expected);
@@ -97,9 +106,9 @@ describe("file tree merge", () => {
 
   test("identical insertions are retained once", () => {
     const result = merge(
-      { "a.txt": file("a\nb\n") },
-      { "a.txt": file("a\nshared\nb\n") },
-      { "a.txt": file("a\nshared\nb\n") },
+      { "a.txt": file("a.txt", "a\nb\n") },
+      { "a.txt": file("a.txt", "a\nshared\nb\n") },
+      { "a.txt": file("a.txt", "a\nshared\nb\n") },
     );
     expect(conflicts(result)).toEqual([]);
     expect(new TextDecoder().decode(merged(result)["a.txt"].bytes)).toBe("a\nshared\nb\n");
@@ -107,9 +116,9 @@ describe("file tree merge", () => {
 
   test("overlapping insertions remain a conflict without marker text", () => {
     const result = merge(
-      { "a.txt": file("a\nb\n") },
-      { "a.txt": file("a\nlocal\nb\n") },
-      { "a.txt": file("a\nremote\nb\n") },
+      { "a.txt": file("a.txt", "a\nb\n") },
+      { "a.txt": file("a.txt", "a\nlocal\nb\n") },
+      { "a.txt": file("a.txt", "a\nremote\nb\n") },
     );
     expect(conflicts(result)).toEqual([{ path: "a.txt", kind: "both_modified" }]);
   });
@@ -118,9 +127,9 @@ describe("file tree merge", () => {
     "does not decode malformed UTF-8 or NUL-bearing text into a merged file",
     (bytes) => {
       const result = merge(
-        { "a.txt": file("base\na") },
-        { "a.txt": file(bytes) },
-        { "a.txt": file("remote\na") },
+        { "a.txt": file("a.txt", "base\na") },
+        { "a.txt": file("a.txt", bytes) },
+        { "a.txt": file("a.txt", "remote\na") },
       );
       expect(conflicts(result)).toEqual([{ path: "a.txt", kind: "binary" }]);
     },
@@ -128,9 +137,9 @@ describe("file tree merge", () => {
 
   test("preserves a UTF-8 BOM during a text merge", () => {
     const result = merge(
-      { "a.txt": file("\ufeffa\nb\nc\n") },
-      { "a.txt": file("\ufeffa\nlocal\nb\nc\n") },
-      { "a.txt": file("\ufeffa\nb\nc\nremote\n") },
+      { "a.txt": file("a.txt", "\ufeffa\nb\nc\n") },
+      { "a.txt": file("a.txt", "\ufeffa\nlocal\nb\nc\n") },
+      { "a.txt": file("a.txt", "\ufeffa\nb\nc\nremote\n") },
     );
     expect(conflicts(result)).toEqual([]);
     expect(merged(result)["a.txt"].bytes).toEqual(
@@ -156,16 +165,16 @@ describe("file tree merge", () => {
     "rejects a syntactically invalid synthesis of two valid $path inputs",
     ({ path, base, local, remote }) => {
       const result = merge(
-        { [path]: file(base) },
-        { [path]: file(local) },
-        { [path]: file(remote) },
+        { [path]: file(path, base) },
+        { [path]: file(path, local) },
+        { [path]: file(path, remote) },
       );
       expect(conflicts(result)).toEqual([{ path, kind: "both_modified" }]);
       // Exactly the same line edits are non-overlapping plain text. Syntax is the reason.
       const plain = merge(
-        { "notes.txt": file(base) },
-        { "notes.txt": file(local) },
-        { "notes.txt": file(remote) },
+        { "notes.txt": file("notes.txt", base) },
+        { "notes.txt": file("notes.txt", local) },
+        { "notes.txt": file("notes.txt", remote) },
       );
       expect(conflicts(plain)).toEqual([]);
     },
@@ -176,7 +185,11 @@ describe("file tree merge", () => {
     const base = "first: [\nmiddle: 2\nlast: 3\n";
     const local = "first: [\nextra: left\nmiddle: 2\nlast: 3\n";
     const remote = "first: [\nmiddle: 2\nlast: 3\nextra: right\n";
-    const result = merge({ [path]: file(base) }, { [path]: file(local) }, { [path]: file(remote) });
+    const result = merge(
+      { [path]: file(path, base) },
+      { [path]: file(path, local) },
+      { [path]: file(path, remote) },
+    );
     expect(conflicts(result)).toEqual([]);
     expect(new TextDecoder().decode(merged(result)[path].bytes)).toBe(
       "first: [\nextra: left\nmiddle: 2\nlast: 3\nextra: right\n",
@@ -188,9 +201,9 @@ describe("file tree merge", () => {
     const local = base.replace('"first": 1', '"first": 10');
     const remote = base.replace('"last": 3', '"last": 30');
     const result = merge(
-      { "settings.json": file(base) },
-      { "settings.json": file(local) },
-      { "settings.json": file(remote) },
+      { "settings.json": file("settings.json", base) },
+      { "settings.json": file("settings.json", local) },
+      { "settings.json": file("settings.json", remote) },
     );
     expect(conflicts(result)).toEqual([]);
     expect(new TextDecoder().decode(merged(result)["settings.json"].bytes)).toBe(
@@ -203,9 +216,9 @@ describe("file tree merge", () => {
     const local = base.replace("first", "local first");
     const remote = base.replace("first", "remote first").replace("last", "remote last");
     const result = merge(
-      { "a.txt": file(base) },
-      { "a.txt": file(local) },
-      { "a.txt": file(remote) },
+      { "a.txt": file("a.txt", base) },
+      { "a.txt": file("a.txt", local) },
+      { "a.txt": file("a.txt", remote) },
       oursWins,
     );
     expect(conflicts(result)).toEqual([]);
@@ -218,9 +231,9 @@ describe("file tree merge", () => {
   test.each([false, true])(
     "automatic edit/delete resolution keeps edited content (local edit: %s)",
     (localEdit) => {
-      const edited = { "a.txt": file("edited") };
+      const edited = { "a.txt": file("a.txt", "edited") };
       const result = merge(
-        { "a.txt": file("base") },
+        { "a.txt": file("a.txt", "base") },
         localEdit ? edited : {},
         localEdit ? {} : edited,
         oursWins,
@@ -242,25 +255,25 @@ describe("file tree merge", () => {
     const local = "first: 1\nextra: left\nmiddle: 2\nlast: 3\n";
     const remote = "first: 1\nmiddle: 2\nlast: 3\nextra: right\n";
     const result = merge(
-      { "a.yaml": file(base) },
-      { "a.yaml": file(local) },
-      { "a.yaml": file(remote) },
+      { "a.yaml": file("a.yaml", base) },
+      { "a.yaml": file("a.yaml", local) },
+      { "a.yaml": file("a.yaml", remote) },
       oursWins,
     );
     expect(conflicts(result)).toEqual([]);
-    expect(merged(result)["a.yaml"].bytes).toEqual(file(local).bytes);
+    expect(merged(result)["a.yaml"].bytes).toEqual(file("a.yaml", local).bytes);
     expect(choices(result)).toEqual([{ path: "a.yaml", kind: "both_modified", kept: "ours" }]);
   });
 
   test("automatic binary overlap keeps the local bytes exactly", () => {
-    const local = file(new Uint8Array([0, 255, 1]));
+    const local = file("asset.bin", new Uint8Array([0, 255, 1]));
     const result = merge(
       {
-        "asset.bin": file(new Uint8Array([0, 1, 2])),
+        "asset.bin": file("asset.bin", new Uint8Array([0, 1, 2])),
       },
       { "asset.bin": local },
       {
-        "asset.bin": file(new Uint8Array([0, 254, 2])),
+        "asset.bin": file("asset.bin", new Uint8Array([0, 254, 2])),
       },
       oursWins,
     );
@@ -271,20 +284,20 @@ describe("file tree merge", () => {
 
   test("reports descriptor, binary, and delete-modify conflicts without choosing a side", () => {
     const base = {
-      "README.md": file("base"),
-      "asset.bin": file(Uint8Array.of(0, 1)),
-      "removed.txt": file("base"),
+      "README.md": file("README.md", "base"),
+      "asset.bin": file("asset.bin", Uint8Array.of(0, 1)),
+      "removed.txt": file("removed.txt", "base"),
     };
     const result = merge(
       base,
       {
-        "README.md": file("local"),
-        "asset.bin": file(Uint8Array.of(0, 2)),
+        "README.md": file("README.md", "local"),
+        "asset.bin": file("asset.bin", Uint8Array.of(0, 2)),
       },
       {
-        "README.md": file("remote"),
-        "asset.bin": file(Uint8Array.of(0, 3)),
-        "removed.txt": file("remote"),
+        "README.md": file("README.md", "remote"),
+        "asset.bin": file("asset.bin", Uint8Array.of(0, 3)),
+        "removed.txt": file("removed.txt", "remote"),
       },
     );
     expect(conflicts(result)).toEqual([
@@ -305,7 +318,7 @@ describe("modes and trees", () => {
 
   test("a mode follows the side that changed it, even when the other side changed the bytes", () => {
     const result = Merge.runDecided(
-      historyTree,
+      mergeAuthorTree,
       {
         base: Option.some([entry("run.md", "echo 1\n")]),
         ours: Option.some([entry("run.md", "echo 2\n")]),
@@ -319,7 +332,7 @@ describe("modes and trees", () => {
 
   test("edits to different lines of a script combine, whatever its extension", () => {
     const base = "#!/bin/sh\necho one\necho two\necho three\n";
-    const result = Merge.run(historyTree, {
+    const result = Merge.run(mergeAuthorTree, {
       base: Option.some([entry("run.sh", base, 0o755)]),
       ours: Option.some([entry("run.sh", base.replace("echo one", "echo first"), 0o755)]),
       theirs: Option.some([entry("run.sh", base.replace("echo three", "echo third"), 0o755)]),
@@ -333,7 +346,7 @@ describe("modes and trees", () => {
   test("a tree holding a symlink merges as one whole value", () => {
     const link = { path: "link", kind: "symlink" as const, target: "a.md" };
     const result = Merge.runDecided(
-      historyTree,
+      mergeAuthorTree,
       {
         base: Option.some([entry("a.md", "0")]),
         ours: Option.some([entry("a.md", "1")]),

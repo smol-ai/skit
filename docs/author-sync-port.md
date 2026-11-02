@@ -1,5 +1,9 @@
 # Author sync after PR 118
 
+Terminology and ownership are updated by [ADR 0028](adr/0028-author-skills-through-revisions-not-drafts.md):
+SKIT identities own revisions and Releases; Draft is no longer a separate entity.
+The earlier implementation details below are retained as dated port/refactor evidence.
+
 This port starts from `6bc3bdeb7b` (PR 118 on dev). Its author implementation
 comes from `924fbefc55`, with interrupted-workspace-write recovery from
 `aa54cfde9`. The old combined `refactor/library-owner` branch is a recovery

@@ -5,9 +5,8 @@
  * the renamed skill.
  */
 import { Array, Equal, Option, Order, TextDiff } from "effect";
-import type { SyncFileVersion } from "../contracts.js";
+import type { TreeFile } from "../artifact/tree-entry.js";
 import { decodeUtf8 } from "../shared/text.js";
-import type { Files } from "./files.js";
 
 /** A skill folder and the folder one side moved it to. */
 interface SkillMove {
@@ -29,7 +28,7 @@ const byScore = Order.combine(
 const SKILL = "SKILL.md";
 
 /** Folders holding a SKILL.md, excluding the workspace root. */
-const skillFolders = (files: Files) =>
+const skillFolders = (files: Readonly<Record<string, TreeFile>>) =>
   new Set(
     Object.keys(files)
       .filter((path) => path.endsWith(`/${SKILL}`))
@@ -37,7 +36,7 @@ const skillFolders = (files: Files) =>
   );
 
 /** The files under `folder`, keyed by their path inside it. */
-const within = (files: Files, folder: string) =>
+const within = (files: Readonly<Record<string, TreeFile>>, folder: string) =>
   new Map(
     Object.entries(files)
       .filter(([path]) => path.startsWith(`${folder}/`))
@@ -59,8 +58,8 @@ const lineSimilarity = (left: string, right: string) => {
  * SKILL.md files must share at least half their lines, as git's rename detection requires, and
  * at least half the other files must be identical at the same place.
  */
-const similarity = (before: Map<string, SyncFileVersion>, after: Map<string, SyncFileVersion>) => {
-  const text = (files: Map<string, SyncFileVersion>) =>
+const similarity = (before: Map<string, TreeFile>, after: Map<string, TreeFile>) => {
+  const text = (files: Map<string, TreeFile>) =>
     Option.flatMap(Option.fromUndefinedOr(files.get(SKILL)), (file) => decodeUtf8(file.bytes));
   const skill = Option.getOrElse(
     Option.zipWith(text(before), text(after), lineSimilarity),
@@ -84,7 +83,10 @@ const similarity = (before: Map<string, SyncFileVersion>, after: Map<string, Syn
 };
 
 /** Skill folders that `side` removed and re-created elsewhere since `base`. */
-const skillMoves = (base: Files, side: Files): ReadonlyArray<SkillMove> => {
+const skillMoves = (
+  base: Readonly<Record<string, TreeFile>>,
+  side: Readonly<Record<string, TreeFile>>,
+): ReadonlyArray<SkillMove> => {
   const [baseFolders, sideFolders] = [skillFolders(base), skillFolders(side)];
   const removed = [...baseFolders].filter((folder) => within(side, folder).size === 0);
   const added = [...sideFolders].filter((folder) => within(base, folder).size === 0);
@@ -106,13 +108,17 @@ const skillMoves = (base: Files, side: Files): ReadonlyArray<SkillMove> => {
   );
 };
 
-/** Files under each move's old folder, moved under its new one. A tree with files already there is left alone. */
-const relocate = (files: Files, moves: ReadonlyArray<SkillMove>): Files => {
+/** Readonly<Record<string, TreeFile>> under each move's old folder, moved under its new one. A tree with files already there is left alone. */
+const relocate = (
+  files: Readonly<Record<string, TreeFile>>,
+  moves: ReadonlyArray<SkillMove>,
+): Readonly<Record<string, TreeFile>> => {
   const applicable = moves.filter((move) => within(files, move.to).size === 0);
   return Object.fromEntries(
     Object.entries(files).map(([path, file]) => {
       const move = applicable.find((candidate) => path.startsWith(`${candidate.from}/`));
-      return [move === undefined ? path : `${move.to}${path.slice(move.from.length)}`, file];
+      const destination = move === undefined ? path : `${move.to}${path.slice(move.from.length)}`;
+      return [destination, destination === path ? file : { ...file, path: destination }];
     }),
   );
 };
@@ -122,7 +128,11 @@ const relocate = (files: Files, moves: ReadonlyArray<SkillMove>): Files => {
  * by old path. When both sides moved the same folder to different places, our move wins: the
  * device merging now breaks the tie.
  */
-export const followSkillMoves = (trees: { base: Files; ours: Files; theirs: Files }) => {
+export const followSkillMoves = (trees: {
+  base: Readonly<Record<string, TreeFile>>;
+  ours: Readonly<Record<string, TreeFile>>;
+  theirs: Readonly<Record<string, TreeFile>>;
+}) => {
   const ours = skillMoves(trees.base, trees.ours);
   const theirsMoves = skillMoves(trees.base, trees.theirs);
   const theirs = theirsMoves.filter((move) => !ours.some((other) => other.from === move.from));

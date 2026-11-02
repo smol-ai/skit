@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import {
   loadAuthorHistory,
   loadStoredTrees,
-  saveAuthorWorkspace,
+  refreshAuthorHistory,
 } from "../src/workflows/author/history.js";
 import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
 import { testPlatformLayer } from "./helpers/platform.js";
@@ -17,9 +17,9 @@ it.effect("ignored edits neither enter raw history nor append chronological obse
     yield* Effect.sync(() => execFileSync("git", ["init", "--quiet", world.a.workspace]));
     yield* fs.writeFileString(join(world.a.workspace, ".gitignore"), "*.local\n");
     yield* fs.writeFileString(join(world.a.workspace, "private.local"), "first ignored value\n");
-    const before = yield* saveAuthorWorkspace(world.a.workspace, world.a.home);
+    const before = yield* refreshAuthorHistory(world.a.workspace, world.a.home);
     yield* fs.writeFileString(join(world.a.workspace, "private.local"), "second ignored value\n");
-    const after = yield* saveAuthorWorkspace(world.a.workspace, world.a.home);
+    const after = yield* refreshAuthorHistory(world.a.workspace, world.a.home);
     expect(after.treeHash).toBe(before.treeHash);
     expect(after.tree.some((entry) => entry.path === "private.local")).toBe(false);
     const versions = yield* loadStoredTrees(world.a.home);
@@ -62,8 +62,8 @@ it.effect(
       yield* world.a.edit("notes/a.txt", "one stable tree\n", "local-history");
       const versions = yield* Effect.all(
         [
-          saveAuthorWorkspace(world.a.workspace, world.a.home),
-          saveAuthorWorkspace(world.a.workspace, world.a.home),
+          refreshAuthorHistory(world.a.workspace, world.a.home),
+          refreshAuthorHistory(world.a.workspace, world.a.home),
         ],
         { concurrency: "unbounded" },
       );
@@ -86,7 +86,7 @@ it.effect("retries a tree that changes between reads instead of recording a mixe
     yield* world.a.edit("notes/a.txt", "before\n");
     const path = yield* fs.realPath(join(world.a.workspace, "notes/a.txt"));
     let reads = 0;
-    const version = yield* saveAuthorWorkspace(world.a.workspace, world.a.home).pipe(
+    const version = yield* refreshAuthorHistory(world.a.workspace, world.a.home).pipe(
       Effect.provideService(FileSystem.FileSystem, {
         ...fs,
         readFile: Effect.fn("Test.changeDuringHistoryRead")(function* (input) {
@@ -117,7 +117,7 @@ it.effect(
       yield* fs.chmod(join(world.a.workspace, "notes/run.sh"), 0o755);
       yield* fs.symlink("run.sh", join(world.a.workspace, "notes/link"));
       yield* fs.writeFile(join(world.a.workspace, "notes/binary"), new Uint8Array([0, 128, 255]));
-      const version = yield* saveAuthorWorkspace(world.a.workspace, world.a.home);
+      const version = yield* refreshAuthorHistory(world.a.workspace, world.a.home);
       expect(version.tree.find((entry) => entry.path === "notes/run.sh")).toMatchObject({
         kind: "file",
         mode: 0o755,
@@ -139,14 +139,14 @@ it.effect(
     Effect.gen(function* () {
       const world = yield* makeAuthorSyncWorld();
       const fs = yield* FileSystem.FileSystem;
-      const version = yield* saveAuthorWorkspace(world.a.workspace, world.a.home);
+      const version = yield* refreshAuthorHistory(world.a.workspace, world.a.home);
       const path = join(world.a.home, "history", "trees", `${version.treeHash.slice(7)}.json`);
       yield* fs.writeFileString(path, "corrupted");
       expect(yield* Effect.flip(loadStoredTrees(world.a.home))).toMatchObject({
         _tag: "AuthorHistoryInvalid",
       });
       expect(
-        yield* Effect.flip(saveAuthorWorkspace(world.a.workspace, world.a.home)),
+        yield* Effect.flip(refreshAuthorHistory(world.a.workspace, world.a.home)),
       ).toMatchObject({
         _tag: "AuthorHistoryInvalid",
       });
@@ -170,7 +170,7 @@ it.effect("rejects a history home inside its workspace before creating it", () =
     const world = yield* makeAuthorSyncWorld();
     const fs = yield* FileSystem.FileSystem;
     const home = join(world.a.workspace, "nested-history");
-    expect(yield* Effect.flip(saveAuthorWorkspace(world.a.workspace, home))).toMatchObject({
+    expect(yield* Effect.flip(refreshAuthorHistory(world.a.workspace, home))).toMatchObject({
       _tag: "AuthorHistoryInvalid",
     });
     expect(yield* fs.exists(home)).toBe(false);
@@ -183,9 +183,11 @@ it.effect("rejects a history directory symlink into its workspace", () =>
     const fs = yield* FileSystem.FileSystem;
     const before = (yield* fs.readDirectory(world.a.workspace)).sort();
     yield* fs.symlink(world.a.workspace, join(world.a.home, "history"));
-    expect(yield* Effect.flip(saveAuthorWorkspace(world.a.workspace, world.a.home))).toMatchObject({
-      _tag: "AuthorHistoryInvalid",
-    });
+    expect(yield* Effect.flip(refreshAuthorHistory(world.a.workspace, world.a.home))).toMatchObject(
+      {
+        _tag: "AuthorHistoryInvalid",
+      },
+    );
     expect((yield* fs.readDirectory(world.a.workspace)).sort()).toEqual(before);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
@@ -200,7 +202,7 @@ it.effect(
       const target = join(a.workspace, "journal.sqlite");
       yield* fs.makeDirectory(directory);
       yield* fs.symlink(target, join(directory, "journal.sqlite"));
-      expect(yield* Effect.flip(saveAuthorWorkspace(a.workspace, a.home))).toMatchObject({
+      expect(yield* Effect.flip(refreshAuthorHistory(a.workspace, a.home))).toMatchObject({
         _tag: "AuthorHistoryInvalid",
       });
       expect(yield* fs.exists(target)).toBe(false);
@@ -220,11 +222,11 @@ it.effect(
         metadata,
         JSON.stringify({ schema: "skit.author-workspace.v1", workspace_id: workspaceId }),
       );
-      expect((yield* saveAuthorWorkspace(world.a.workspace, world.a.home)).workspace_id).toBe(
+      expect((yield* refreshAuthorHistory(world.a.workspace, world.a.home)).workspace_id).toBe(
         workspaceId,
       );
       yield* fs.writeFileString(metadata, "unfinished metadata");
-      const version = yield* saveAuthorWorkspace(world.a.workspace, world.a.home);
+      const version = yield* refreshAuthorHistory(world.a.workspace, world.a.home);
       expect(version.workspace_id).toBeUndefined();
       expect(version.tree.some((entry) => entry.path.startsWith(".skit/"))).toBe(false);
       expect(yield* fs.readFileString(metadata)).toBe("unfinished metadata");

@@ -7,7 +7,7 @@ import {
   writeAuthorWorkspace,
   type AuthorWorkspaceOptions,
 } from "../../library/author-workspace.js";
-import { saveAuthorWorkspace } from "./history.js";
+import { refreshAuthorHistory } from "./history.js";
 
 /**
  * Establish only identity and initial raw recovery history. Live per-skill import
@@ -28,7 +28,7 @@ export const ensureAuthorWorkspaceIdentity = Effect.fn("Author.ensureWorkspaceId
       yield* prepareAuthorWorkspaceMetadata(root, plan);
       // The existing journal owns ID/root aliases and rejects a live copied ID,
       // including before this workspace has any valid Library Collection.
-      const saved = yield* saveAuthorWorkspace(root, store.home);
+      const saved = yield* refreshAuthorHistory(root, store.home);
       yield* writeAuthorWorkspace(root, { ...plan.workspace, registration: "registered" });
       return {
         status: "ready" as const,

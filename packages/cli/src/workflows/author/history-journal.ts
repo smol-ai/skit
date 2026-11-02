@@ -8,7 +8,7 @@ import {
   AuthorHistoryInvalid,
   AuthorHistoryBusy,
 } from "./history-contracts.js";
-import { readAuthorWorkspace } from "../../library/author-workspace-metadata.js";
+import { loadAuthorWorkspaceMetadata } from "../../library/author-workspace-metadata.js";
 import { AuthorWorkspaceAlreadyRegistered } from "../../library/failures.js";
 import { Hash, sha256Hash, type History } from "@smolai/skit-core";
 
@@ -45,7 +45,7 @@ const resolveWorkspace = Effect.fn("Author.resolveHistoryWorkspace")(function* (
     if (rows.length > 0) {
       const workspace = yield* Schema.decodeUnknownEffect(Workspace)(rows[0]);
       if (workspace.root !== root) {
-        const previous = yield* readAuthorWorkspace(workspace.root).pipe(
+        const previous = yield* loadAuthorWorkspaceMetadata(workspace.root).pipe(
           Effect.catchTag("AuthorWorkspaceMetadataInvalid", () => Effect.succeed(undefined)),
         );
         if (previous?.workspace_id === workspaceId)
@@ -211,7 +211,7 @@ export const writeAuthorHistoryEvent = Effect.fn("Author.writeHistoryEvent")(fun
 });
 
 /** Metadata-only, per-workspace read; it neither creates a database nor decodes tree contents. */
-export const readAuthorHistoryEvents = Effect.fn("Author.readHistoryEvents")(function* (
+export const loadAuthorHistoryEvents = Effect.fn("Author.loadHistoryEvents")(function* (
   directory: string,
   root: string,
   workspaceId?: string,

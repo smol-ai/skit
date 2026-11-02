@@ -1202,7 +1202,7 @@ describe("Better Auth adapter", () => {
         D1Client.D1Client,
         (
           sql,
-        ) => sql`INSERT INTO drafts (owner_slug, skit_slug, visibility, current_revision_id, created_at, updated_at)
+        ) => sql`INSERT INTO skits (owner_slug, skit_slug, visibility, current_revision_id, created_at, updated_at)
           VALUES ('operator', 'tools', 'private', ${"sha256:7777777777777777777777777777777777777777777777777777777777777777"}, '2026-01-01', '2026-01-01')`,
       );
       const authorInventory = yield* request("/api/author/skits", {
@@ -1214,8 +1214,9 @@ describe("Better Auth adapter", () => {
           {
             skit_id: "operator/tools",
             visibility: "private",
-            draft_revision_id:
+            current_revision_id:
               "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+            current_revision_published: false,
             most_recent_release_version: null,
           },
         ],

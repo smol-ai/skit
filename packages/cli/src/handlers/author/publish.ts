@@ -8,7 +8,7 @@ import { MissingRequirement } from "../../workflows/failures.js";
 import { publish } from "../../workflows/author/publish.js";
 import { AuthenticationRequired } from "../../registry/failures.js";
 import { Renderer } from "../../presentation/renderer.js";
-import { readAuthorRemote } from "../../workflows/author/sync.js";
+import { loadAuthorRemote } from "../../workflows/author/sync.js";
 import { NotBoundToRegistry } from "../../registry/failures.js";
 import { handleRegistryCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
@@ -20,7 +20,7 @@ const requireRegistryBinding = Effect.fn("Publish.requireRegistryBinding")(funct
   path: string,
 ) {
   yield* readSkitDescriptor(resolve(path));
-  const remote = yield* readAuthorRemote(resolve(path));
+  const remote = yield* loadAuthorRemote(resolve(path));
   if (!remote) return yield* new NotBoundToRegistry();
   return remote;
 });
@@ -58,7 +58,7 @@ const version = Flag.String("version").pipe(
   Flag.withMetavar("semver"),
   Flag.withDescription("Release version (required)."),
 );
-const revision = optionalString("revision", "Require an exact current draft revision.");
+const revision = optionalString("revision", "Require an exact current skit revision.");
 
 export const publishCliCommand = Command.make(
   "publish",
@@ -79,7 +79,10 @@ export const publishCliCommand = Command.make(
   Command.withDescription("Package and publish an immutable SKIT release."),
   Command.withExamples([
     { command: "skit author publish . --version 1.0.0" },
-    { command: "skit author publish . --version 1.0.0 --revision draft_abc123" },
+    {
+      command:
+        "skit author publish . --version 1.0.0 --revision sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    },
   ]),
   Command.annotate(CommandMetadata, {
     outputSchemas: [outputContracts.publish],

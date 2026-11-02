@@ -10,10 +10,10 @@ import {
   type AuthorRemoteMetadataInvalid,
   type CredentialsUnusable,
 } from "../src/registry/failures.js";
-import { readAuthorRemote } from "../src/workflows/author/sync.js";
+import { loadAuthorRemote } from "../src/workflows/author/sync.js";
 import { readConfig, resolveAuthForOrigin } from "../src/registry/auth.js";
 
-const remote = readAuthorRemote("/author");
+const remote = loadAuthorRemote("/author");
 const config = readConfig("/auth");
 
 it.effect.each(["remote", "config"] as const)(

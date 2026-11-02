@@ -14,7 +14,7 @@ import {
 import { authorInventoryHandlers } from "./api/author-inventory-http.js";
 import { bootstrapHandlers } from "./api/bootstrap-http.js";
 import { BootstrapApi } from "./api/bootstrap.js";
-import { draftHandlers } from "./api/drafts-http.js";
+import { skitAuthoringHandlers } from "./api/skit-authoring-http.js";
 import { feedbackHandlers } from "./api/feedback-http.js";
 import { librarySnapshotHandlers } from "./api/library-snapshots-http.js";
 import { librarySyncHandlers } from "./api/library-sync-http.js";
@@ -210,9 +210,11 @@ const consumerAuthenticatedApi = (application: AuthenticatedApplication) => {
 };
 
 const authoringAuthenticatedApi = (application: AuthenticatedApplication) => {
-  const handlers = Layer.mergeAll(authorInventoryHandlers, draftHandlers, skitDeleteHandlers).pipe(
-    Layer.provide(application),
-  );
+  const handlers = Layer.mergeAll(
+    authorInventoryHandlers,
+    skitAuthoringHandlers,
+    skitDeleteHandlers,
+  ).pipe(Layer.provide(application));
   return HttpApiBuilder.layer(AuthoringAuthenticatedApi).pipe(
     Layer.provide(handlers),
     Layer.provide(principalAuthenticationLayer.pipe(Layer.provide(application))),

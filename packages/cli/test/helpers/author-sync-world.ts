@@ -1,7 +1,7 @@
 import { dirname, join } from "node:path";
 import { Effect, Exit, Fiber, FileSystem, Ref, Scope } from "effect";
 import type { PlatformError } from "effect/PlatformError";
-import { syncDraft } from "../../src/workflows/author/sync.js";
+import { syncAuthorWorkspace } from "../../src/workflows/author/sync.js";
 import { loadStoredTrees } from "../../src/workflows/author/history.js";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
 import { testHttpClientLayer } from "./http-test-client.js";
@@ -78,7 +78,7 @@ export const makeAuthorSyncWorld = Effect.fn("Test.makeAuthorSyncWorld")(functio
     ) {
       return yield* Effect.forkIn(
         Effect.scoped(
-          syncDraft(workspace, {
+          syncAuthorWorkspace(workspace, {
             apply,
             allowLargeDeletion,
             home,

@@ -13,15 +13,112 @@ import {
 import { TestClock } from "effect/testing";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import type { History } from "@smolai/skit-core";
+import { type History, Sync } from "@smolai/skit-core";
 import {
   loadAuthorHistory,
   loadStoredTrees,
-  saveAuthorWorkspace,
+  refreshAuthorHistory,
 } from "../src/workflows/author/history.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
 import { makeAuthorSyncServer } from "./helpers/author-sync-server.js";
+
+it.effect.each([
+  "{unfinished",
+  JSON.stringify({
+    schema: "skit.sync-bindings.v3",
+    skits: { "skit://registry.example/swyx/tools": { _tag: "Unknown" } },
+  }),
+])(
+  "invalid saved sync state is recoverable without changing files or remote history (%s)",
+  (invalid) =>
+    Effect.gen(function* () {
+      const world = yield* makeAuthorSyncWorld();
+      const fs = yield* FileSystem.FileSystem;
+      yield* world.connect();
+      const path = join(world.a.home, "sync-bindings.json");
+      const saved = yield* fs.readFileString(path);
+      const files = yield* world.a.files();
+      const revisions = yield* world.server.revisions();
+      yield* fs.writeFileString(path, invalid);
+      const failure = yield* Effect.flip(world.a.sync());
+      expect(failure).toMatchObject({
+        _tag: "AuthorSyncStateInvalid",
+        path,
+        code: "OPERATION_FAILED",
+      });
+      expect(yield* fs.readFileString(path)).toBe(invalid);
+      expect(yield* world.a.files()).toEqual(files);
+      expect(yield* world.server.revisions()).toEqual(revisions);
+      yield* fs.writeFileString(path, saved);
+      expect((yield* world.a.sync()).status).toBe("up_to_date");
+    }).pipe(Effect.provide(testPlatformLayer)),
+);
+
+it.effect.each(["Idle", "Sending", "Writing"] as const)(
+  "v2 recovery checkpoints keep their history and upgrade on the next save (%s)",
+  (kind) =>
+    Effect.gen(function* () {
+      const world = yield* makeAuthorSyncWorld();
+      const fs = yield* FileSystem.FileSystem;
+      yield* world.connect();
+      const path = join(world.a.home, "sync-bindings.json");
+      const current = yield* Schema.decodeUnknownEffect(
+        Schema.fromJsonString(
+          Schema.Struct({
+            skits: Schema.Record(Schema.String, Sync.SyncState),
+          }),
+        ),
+      )(yield* fs.readFileString(path));
+      const locator = "skit://registry.example/swyx/tools";
+      const initial = current.skits[locator];
+      if (initial?._tag !== "Idle" || initial.base === null)
+        return yield* Effect.die("Expected connected Idle checkpoint");
+      const revisions = yield* world.server.revisions();
+      const revision = revisions.find((entry) => entry.id === initial.base);
+      if (revision === undefined) return yield* Effect.die("Expected current revision");
+      const state: Sync.SyncState =
+        kind === "Idle"
+          ? initial
+          : kind === "Sending"
+            ? { _tag: "Sending", base: initial.base, revision: initial.base }
+            : {
+                _tag: "Writing",
+                base: initial.base,
+                from: revision.revision.tree,
+                to: revision.revision.tree,
+                next: { _tag: "Idle", base: initial.base },
+              };
+      const legacy = JSON.stringify({
+        schema: "skit.sync-bindings.v2",
+        drafts: { [locator]: state },
+      });
+      yield* fs.writeFileString(path, legacy);
+      yield* world.a.preview();
+      expect(yield* fs.readFileString(path)).toBe(legacy);
+      yield* world.a.edit("notes/migration.txt", "Edit after v2 checkpoint");
+      yield* world.a.sync();
+      yield* world.b.sync();
+      expect(yield* world.b.read("notes/migration.txt")).toBe("Edit after v2 checkpoint");
+      const currentId = yield* world.server.current();
+      const synced = (yield* world.server.revisions()).find((entry) => entry.id === currentId);
+      // Losing the v2 base would create a new root and a spurious merge here.
+      expect(synced?.revision.parents).toEqual([initial.base]);
+      const saved = yield* Schema.decodeUnknownEffect(
+        Schema.fromJsonString(
+          Schema.Struct({
+            schema: Schema.String,
+            skits: Schema.Record(Schema.String, Sync.SyncState),
+          }),
+        ),
+      )(yield* fs.readFileString(path));
+      expect(saved.schema).toBe("skit.sync-bindings.v3");
+      expect(saved.skits[locator]?._tag).toBe("Idle");
+      expect((yield* world.server.revisions()).some((entry) => entry.id === initial.base)).toBe(
+        true,
+      );
+    }).pipe(Effect.provide(testPlatformLayer)),
+);
 
 type World = Effect.Success<ReturnType<typeof makeAuthorSyncWorld>>;
 
@@ -294,7 +391,7 @@ it.effect.each(["directory-symlink", "file", "dangling-symlink"] as const)(
 );
 
 it.effect.each(["repository", "plain"] as const)(
-  "ignored credentials never enter local history, Draft revisions or merge inputs (%s)",
+  "ignored credentials never enter local history, SKIT revisions or merge inputs (%s)",
   (format) =>
     Effect.gen(function* () {
       const world = yield* makeAuthorSyncWorld();
@@ -307,7 +404,7 @@ it.effect.each(["repository", "plain"] as const)(
         yield* fs.writeFileString(join(device.workspace, ".env"), `${sentinel}:${device.name}`);
         yield* fs.writeFileString(join(device.workspace, ".DS_Store"), sentinel);
       }
-      yield* world.connect(); // Includes the initial Draft create, not only updates.
+      yield* world.connect(); // Includes the initial SKIT create, not only updates.
       yield* world.a.edit("notes/a.txt", "remote authored change\n");
       yield* world.a.sync();
       yield* world.b.edit("notes/b.txt", "local authored change\n");
@@ -385,7 +482,7 @@ it.effect("every stored revision names its credential, device and first-observed
     yield* world.b.edit("notes/b.txt", "B's edit\n", "remote");
     // Observe each edit now; sync must report this first observation, not its own later one.
     const observed = (device: World["a"]) =>
-      saveAuthorWorkspace(device.workspace, device.home).pipe(
+      refreshAuthorHistory(device.workspace, device.home).pipe(
         Effect.andThen(loadAuthorHistory(device.workspace, device.home)),
         Effect.map((events) => events.at(-1)!),
       );
@@ -428,10 +525,10 @@ it.effect.each([
       yield* world.b.sync();
       // Each edit is observed at its own time; sync order is A, B, A regardless.
       yield* world[first].edit(path, skill(`${first} edited first`), "remote");
-      yield* saveAuthorWorkspace(world[first].workspace, world[first].home);
+      yield* refreshAuthorHistory(world[first].workspace, world[first].home);
       yield* TestClock.adjust("1 minute");
       yield* world[second].edit(path, skill(`${second} edited later`), "remote");
-      yield* saveAuthorWorkspace(world[second].workspace, world[second].home);
+      yield* refreshAuthorHistory(world[second].workspace, world[second].home);
       yield* world.a.sync();
       expect(yield* world.b.sync()).toMatchObject({
         status: "merged",
@@ -453,7 +550,7 @@ it.effect("a skill renamed on one device keeps the other device's concurrent edi
     const world = yield* makeAuthorSyncWorld();
     const fs = yield* FileSystem.FileSystem;
     const skill = (name: string, extra = "") =>
-      `---\nname: ${name}\ndescription: Draft release notes.\n---\n# Notes\nKeep them short.\n${extra}`;
+      `---\nname: ${name}\ndescription: SKIT release notes.\n---\n# Notes\nKeep them short.\n${extra}`;
     yield* world.connect();
     yield* world.a.edit("extra/release-notes/SKILL.md", skill("release-notes"), "remote");
     yield* world.a.edit("extra/release-notes/TEMPLATE.md", "## Changes\n", "remote");
@@ -739,11 +836,11 @@ it.effect("recovers a move whose response disappeared without posting it again a
     // The binding still says Sending; a preview reports the landed move and changes nothing.
     const bindingPath = join(world.a.home, "sync-bindings.json");
     const before = yield* fs.readFileString(bindingPath);
-    expect(JSON.parse(before).drafts["skit://registry.example/swyx/tools"]._tag).toBe("Sending");
+    expect(JSON.parse(before).skits["skit://registry.example/swyx/tools"]._tag).toBe("Sending");
     expect((yield* world.a.preview()).status).toBe("up_to_date");
     expect(yield* fs.readFileString(bindingPath)).toBe(before);
     expect((yield* world.a.sync()).status).toBe("up_to_date");
-    expect(JSON.parse(yield* fs.readFileString(bindingPath)).drafts).toEqual({
+    expect(JSON.parse(yield* fs.readFileString(bindingPath)).skits).toEqual({
       "skit://registry.example/swyx/tools": { _tag: "Idle", base: committed.at(-1)?.id },
     });
     expect(yield* world.server.revisions()).toEqual(committed);
@@ -924,7 +1021,7 @@ it.effect("a late device with different files merges with no base and keeps both
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect("a late device with no files pulls the Draft", () =>
+it.effect("a late device with no files pulls the SKIT", () =>
   Effect.gen(function* () {
     const world = yield* makeAuthorSyncWorld();
     const fs = yield* FileSystem.FileSystem;
@@ -1036,7 +1133,7 @@ it.effect.each(["pull", "merge"] as const)(
       expect(Exit.hasInterrupts(yield* Fiber.await(pending))).toBe(true);
       const bindingPath = join(world.a.home, "sync-bindings.json");
       const beforePreview = yield* fs.readFileString(bindingPath);
-      expect(JSON.parse(beforePreview).drafts["skit://registry.example/swyx/tools"]).toMatchObject({
+      expect(JSON.parse(beforePreview).skits["skit://registry.example/swyx/tools"]).toMatchObject({
         _tag: "Writing",
         next: { _tag: operation === "pull" ? "Idle" : "Sending" },
       });

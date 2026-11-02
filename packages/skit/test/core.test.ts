@@ -28,7 +28,7 @@ const validSkit = Effect.gen(function* () {
 /** Git is exercised through its CLI; the call is synchronous and stays out of the platform seam. */
 const git = (...args: string[]) => Effect.sync(() => void execFileSync("git", args));
 const author = (root: string) =>
-  validateSkitDirectory(root, "draft", { assessmentContext: "author" });
+  validateSkitDirectory(root, "unpublished", { assessmentContext: "author" });
 const authorFailure = (root: string) => Effect.flip(author(root));
 
 test("pins depth-first code-unit ordering for Skill Artifact digests", () => {
@@ -609,7 +609,7 @@ it.effect.each([
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-parser-" });
     yield* fs.writeFileString(join(root, file), body);
     const failure = yield* Effect.flip(
-      validateSkitDirectory(root, "draft", { assessmentContext: "author" }),
+      validateSkitDirectory(root, "unpublished", { assessmentContext: "author" }),
     );
     expect(failure).toMatchObject(expected);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -646,7 +646,7 @@ it.effect.each(["author", "publish"] as const)(
               };
             }),
         };
-        return yield* validateSkitDirectory(root, "draft", { assessmentContext }).pipe(
+        return yield* validateSkitDirectory(root, "unpublished", { assessmentContext }).pipe(
           Effect.provide(
             Layer.fresh(
               sourceProcessLayer.pipe(
@@ -679,7 +679,9 @@ it.effect("malformed invocation metadata is a named validation failure", () =>
     );
     yield* fs.writeFileString(join(root, "skills/review/SKILL.md"), "---\nname: [\n---\n");
     expect(
-      yield* Effect.flip(validateSkitDirectory(root, "draft", { assessmentContext: "author" })),
+      yield* Effect.flip(
+        validateSkitDirectory(root, "unpublished", { assessmentContext: "author" }),
+      ),
     ).toMatchObject({ _tag: "HarnessMetadataInvalid" });
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -702,7 +704,9 @@ it.effect("projected content collisions enter the validation error channel", () 
       }),
     );
     expect(
-      yield* Effect.flip(validateSkitDirectory(root, "draft", { assessmentContext: "author" })),
+      yield* Effect.flip(
+        validateSkitDirectory(root, "unpublished", { assessmentContext: "author" }),
+      ),
     ).toMatchObject({ _tag: "SharedTargetCollision" });
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

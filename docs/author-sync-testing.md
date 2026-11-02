@@ -1,5 +1,9 @@
 # Testing automatic author sync
 
+Terminology and ownership are updated by [ADR 0028](adr/0028-author-skills-through-revisions-not-drafts.md):
+SKIT identities own revisions and Releases; Draft is no longer a separate entity.
+The earlier implementation details below are retained as dated port/refactor evidence.
+
 This is the first test-harness increment for automatic multi-device author sync.
 It exercises the existing, unexposed author-sync workflow and fixes its stale
 merge base after an accepted write's response disappears. It does not enable a

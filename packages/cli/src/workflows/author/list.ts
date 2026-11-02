@@ -154,7 +154,8 @@ export const listAuthorSkits = Effect.fn("listAuthorSkits")(function* (input: {
           skit: skit.skit_id.slice(separator + 1),
         }),
         visibility: skit.visibility,
-        draft_revision_id: skit.draft_revision_id,
+        current_revision_id: skit.current_revision_id,
+        current_revision_published: skit.current_revision_published,
         most_recent_release_version: skit.most_recent_release_version,
       };
     }),

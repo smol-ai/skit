@@ -1,7 +1,7 @@
 import { NodeRuntime } from "@effect/platform-node";
 import { Console, Effect, FileSystem, Schema, Stream } from "effect";
 import { dirname, join } from "node:path";
-import { saveAuthorWorkspace } from "../../src/workflows/author/history.js";
+import { refreshAuthorHistory } from "../../src/workflows/author/history.js";
 import { testPlatformLayer } from "../helpers/platform.js";
 
 const Arguments = Schema.Struct({
@@ -19,7 +19,7 @@ NodeRuntime.runMain(
       });
       const fs = yield* FileSystem.FileSystem;
       const directory = join(home, "history");
-      const recording = saveAuthorWorkspace(root, home);
+      const recording = refreshAuthorHistory(root, home);
       let attempts = 0;
       const controlled = recording.pipe(
         Effect.provideService(FileSystem.FileSystem, {

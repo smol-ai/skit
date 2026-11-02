@@ -57,7 +57,7 @@ export const skitDeleteHandlers = HttpApiBuilder.group(
                           status: "absent" as const,
                           skit_id: `${params.owner}/${params.slug}`,
                           changed: false,
-                          draft_revisions: 0,
+                          revisions: 0,
                           releases: 0,
                           release_versions: [],
                         }

@@ -33,7 +33,7 @@ const failure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   );
 
 const fs = FileSystem.FileSystem;
-/** The Draft revision a publication names: a revision id, as the Registry issues them. */
+/** The SKIT revision a publication names: a revision id, as the Registry issues them. */
 const revision = `sha256:${"1".repeat(64)}`;
 const writeText = (path: string, text: string) =>
   Effect.flatMap(fs, (fs) => fs.writeFileString(path, text));
@@ -196,7 +196,7 @@ it.effect("publish uses skit.remote.json without including it in the Release", (
   }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect("publish lets the Registry select its current Draft when --revision is omitted", () =>
+it.effect("publish lets the Registry select its current SKIT when --revision is omitted", () =>
   Effect.gen(function* () {
     const root = yield* scratch("skit-current-publish-test-");
     yield* writeRemote(root);
@@ -380,7 +380,7 @@ it.effect("publish reports the diagnostics that block publication", () =>
   }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect("publish tells the author to sync when local files do not match the Draft", () =>
+it.effect("publish tells the author to sync when local files do not match the SKIT", () =>
   Effect.gen(function* () {
     const root = yield* scratch("skit-unsynced-publish-test-");
     yield* writeRemote(root);

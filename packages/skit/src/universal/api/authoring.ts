@@ -6,9 +6,9 @@ import {
   AuthorSkitListResponse,
   CurrentMoveRequest,
   CurrentMoveResponse,
-  DraftCreateRequest,
-  DraftCreateResponse,
-  DraftCurrentResponse,
+  SkitCreateRequest,
+  SkitCreateResponse,
+  SkitCurrentResponse,
   RevisionPage,
   RevisionPostRequest,
   RevisionPostResponse,
@@ -27,43 +27,43 @@ import {
   apiErrorStatuses,
   ArchiveTooLargeResponse,
   DeleteRequiresPrivateResponse,
-  DraftExistsResponse,
-  DraftNotFoundResponse,
+  SkitExistsResponse,
+  SkitNotFoundResponse,
   ForbiddenOriginResponse,
   ForbiddenResponse,
   InsufficientScopeResponse,
   InvalidCursorResponse,
   InvalidRequestResponse,
   ReleaseConflictResponse,
-  SkitNotFoundResponse,
-  StaleDraftRevisionResponse,
+  StaleRevisionResponse,
+  CurrentRevisionMissingResponse,
   StorageFailureResponse,
 } from "./errors.js";
 
-export const DraftTooLargeResponse = Schema.Struct({
-  error: Schema.Literal("DRAFT_TOO_LARGE"),
-}).pipe(HttpApiSchema.status(apiErrorStatuses.DRAFT_TOO_LARGE));
+export const ArtifactTooLargeResponse = Schema.Struct({
+  error: Schema.Literal("ARTIFACT_TOO_LARGE"),
+}).pipe(HttpApiSchema.status(apiErrorStatuses.ARTIFACT_TOO_LARGE));
 /** Another device moved `current` first; this is where it points now. */
 export const CurrentMovedResponse = Schema.Struct({
   error: Schema.Literal("REVISION_CONFLICT"),
   current: Schema.NullOr(History.RevisionId),
 }).pipe(HttpApiSchema.status(apiErrorStatuses.REVISION_CONFLICT));
-const dedicatedDraftErrorCodes = new Set([
+const dedicatedRevisionErrorCodes = new Set([
   "unauthorized",
   "invalid_request",
   "insufficient_scope",
   "forbidden_origin",
   "forbidden",
-  "DRAFT_TOO_LARGE",
+  "ARTIFACT_TOO_LARGE",
   "storage_failure",
   "REVISION_CONFLICT",
-  "draft_exists",
-  "draft_not_found",
+  "skit_exists",
+  "skit_not_found",
 ]);
-export const InvalidDraftResponse = Schema.Struct({
+export const InvalidRevisionResponse = Schema.Struct({
   error: Schema.String.check(
-    Schema.makeFilter((value) => !dedicatedDraftErrorCodes.has(value), {
-      message: "Invalid Draft errors must not overlap dedicated HTTP responses",
+    Schema.makeFilter((value) => !dedicatedRevisionErrorCodes.has(value), {
+      message: "Invalid SKIT errors must not overlap dedicated HTTP responses",
     }),
   ),
 }).pipe(HttpApiSchema.status(400));
@@ -81,71 +81,71 @@ export class AuthorInventoryApi extends HttpApiGroup.make("authorInventory")
   )
   .middleware(PrincipalAuthentication) {}
 
-const commonDraftErrors = [
+const commonAuthoringErrors = [
   InvalidRequestResponse,
   InsufficientScopeResponse,
   ForbiddenOriginResponse,
   ForbiddenResponse,
-  DraftTooLargeResponse,
+  ArtifactTooLargeResponse,
   StorageFailureResponse,
 ] as const;
 
-const draftParams = { owner: Schema.String, slug: Schema.String };
-const draftReadErrors = [
+const skitParams = { owner: Schema.String, slug: Schema.String };
+const revisionReadErrors = [
   InvalidRequestResponse,
   InsufficientScopeResponse,
-  DraftNotFoundResponse,
-  DraftTooLargeResponse,
+  SkitNotFoundResponse,
+  ArtifactTooLargeResponse,
   StorageFailureResponse,
 ] as const;
 
 /**
- * A Draft's revisions and its one `current` pointer. Posting a revision never changes what is
+ * A SKIT's revisions and its one `current` pointer. Posting a revision never changes what is
  * current; only `move` does, and only if `current` still points where the caller expects.
  */
-export class DraftApi extends HttpApiGroup.make("drafts")
+export class SkitAuthoringApi extends HttpApiGroup.make("skits")
   .add(
     HttpApiEndpoint.post("create", "/api/skits", {
-      payload: DraftCreateRequest,
-      success: DraftCreateResponse.pipe(HttpApiSchema.status(201)),
-      error: [...commonDraftErrors, InvalidDraftResponse, DraftExistsResponse],
+      payload: SkitCreateRequest,
+      success: SkitCreateResponse.pipe(HttpApiSchema.status(201)),
+      error: [...commonAuthoringErrors, InvalidRevisionResponse, SkitExistsResponse],
     }),
     HttpApiEndpoint.get("current", "/api/skits/:owner/:slug/current", {
-      params: draftParams,
-      success: DraftCurrentResponse,
-      error: draftReadErrors,
+      params: skitParams,
+      success: SkitCurrentResponse,
+      error: revisionReadErrors,
     }),
     HttpApiEndpoint.put("move", "/api/skits/:owner/:slug/current", {
-      params: draftParams,
+      params: skitParams,
       payload: CurrentMoveRequest,
       success: CurrentMoveResponse,
       error: [
-        ...commonDraftErrors,
-        InvalidDraftResponse,
-        DraftNotFoundResponse,
+        ...commonAuthoringErrors,
+        InvalidRevisionResponse,
+        SkitNotFoundResponse,
         CurrentMovedResponse,
       ],
     }),
     HttpApiEndpoint.post("post", "/api/skits/:owner/:slug/revisions", {
-      params: draftParams,
+      params: skitParams,
       payload: RevisionPostRequest,
       success: RevisionPostResponse,
-      error: [...commonDraftErrors, InvalidDraftResponse, DraftNotFoundResponse],
+      error: [...commonAuthoringErrors, InvalidRevisionResponse, SkitNotFoundResponse],
     }),
     HttpApiEndpoint.get("revision", "/api/skits/:owner/:slug/revisions/:id", {
-      params: { ...draftParams, id: History.RevisionId },
+      params: { ...skitParams, id: History.RevisionId },
       success: RevisionReadResponse,
-      error: draftReadErrors,
+      error: revisionReadErrors,
     }),
     HttpApiEndpoint.get("ancestors", "/api/skits/:owner/:slug/revisions", {
-      params: draftParams,
+      params: skitParams,
       query: {
         ancestors: History.RevisionId,
         limit: Schema.optionalKey(Schema.String),
         cursor: Schema.optionalKey(Schema.String),
       },
       success: RevisionPage,
-      error: [...draftReadErrors, InvalidCursorResponse],
+      error: [...revisionReadErrors, InvalidCursorResponse],
     }),
   )
   .middleware(RequestDecoding)
@@ -181,14 +181,14 @@ export const IntegrityErrorCode = Schema.Literals([
   "CONFLICTING_INVOCATION_DECLARATIONS",
   "DESCRIPTOR_CONTENT_MISMATCH",
   "DESCRIPTOR_MISSING",
-  "DRAFT_FILE_TOO_LARGE",
-  "DRAFT_REVISION_MISSING",
-  "DRAFT_TOO_LARGE",
+  "ARTIFACT_FILE_TOO_LARGE",
+  "REVISION_MISSING",
+  "ARTIFACT_TOO_LARGE",
   "DUPLICATE_FILE_PATH",
   "INVALID_ARCHIVE",
   "INVALID_DESCRIPTOR",
   "INVALID_DESCRIPTOR_ID",
-  "INVALID_DRAFT",
+  "INVALID_ARTIFACT",
   "INVALID_INVOCATION_METADATA",
   "PROJECTED_PATH_COLLISION",
   "PROJECTED_RELEASE_TOO_LARGE",
@@ -213,8 +213,9 @@ export class PublicationApi extends HttpApiGroup.make("publication")
         ForbiddenOriginResponse,
         ForbiddenResponse,
         ArchiveTooLargeResponse,
-        DraftNotFoundResponse,
-        StaleDraftRevisionResponse,
+        SkitNotFoundResponse,
+        StaleRevisionResponse,
+        CurrentRevisionMissingResponse,
         PublishBlockedResponse,
         ReleaseConflictResponse,
         IntegrityFailureResponse,
@@ -227,7 +228,7 @@ export class PublicationApi extends HttpApiGroup.make("publication")
 
 export class AuthoringAuthenticatedApi extends HttpApi.make("skit-authoring-authenticated-api").add(
   AuthorInventoryApi,
-  DraftApi,
+  SkitAuthoringApi,
   SkitDeleteApi,
 ) {}
 export class PublicationAuthenticatedApi extends HttpApi.make(

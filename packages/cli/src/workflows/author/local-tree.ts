@@ -21,7 +21,7 @@ import {
  * The workspace's files as author sync sees them: normalized paths, files only, with their
  * modes. Owns the pairing of those bytes with the native entries authorized for this pass.
  */
-export const readAuthorSyncTree = Effect.fn("Sync.readLocalTree")(function* (root: string) {
+export const scanAuthorSyncTree = Effect.fn("Sync.scanLocalTree")(function* (root: string) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const links = yield* LinkStat;

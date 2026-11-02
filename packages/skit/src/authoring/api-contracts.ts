@@ -13,22 +13,22 @@ import {
 } from "../protocol/api-contracts.js";
 
 /**
- * Optional Authoring, Draft, and Publication wire contracts.
+ * Optional Authoring, SKIT, and Publication wire contracts.
  *
- * A Draft is a graph of immutable revisions and one `current` pointer. Revisions and trees travel
+ * A SKIT is a graph of immutable revisions and one `current` pointer. Revisions and trees travel
  * in the History schemas' JSON form (file bytes as base64), so the Registry recomputes the same
  * {@link History.treeHash} and {@link History.revisionId} the device did.
  */
 export { skitDescriptorRequestSchema, skitValidationDiagnosticsSchema };
 
-/** Create an empty Draft. Its `current` stays null until a device moves it. */
-export const DraftCreateRequest = Schema.Struct({
+/** Create an empty SKIT. Its `current` stays null until a device moves it. */
+export const SkitCreateRequest = Schema.Struct({
   owner: slug,
   slug,
   visibility: skitVisibilitySchema,
 });
-export type DraftCreateRequest = typeof DraftCreateRequest.Type;
-export const DraftCreateResponse = Schema.Struct({ skit_id: nonEmpty });
+export type SkitCreateRequest = typeof SkitCreateRequest.Type;
+export const SkitCreateResponse = Schema.Struct({ skit_id: nonEmpty });
 
 /** Record a revision. The Registry checks `id` against its own hash and never moves `current`. */
 export const RevisionPostRequest = Schema.Struct({
@@ -50,12 +50,12 @@ export const CurrentMoveRequest = Schema.Struct({
 });
 export const CurrentMoveResponse = Schema.Struct({ id: History.RevisionId });
 
-export const DraftCurrentResponse = Schema.Struct({
+export const SkitCurrentResponse = Schema.Struct({
   skit_id: nonEmpty,
   current: Schema.NullOr(History.RevisionId),
   visibility: skitVisibilitySchema,
 });
-export type DraftCurrentResponse = typeof DraftCurrentResponse.Type;
+export type SkitCurrentResponse = typeof SkitCurrentResponse.Type;
 
 /** One revision with its tree, and what validating that tree found. */
 export const RevisionReadResponse = Schema.Struct({
@@ -82,7 +82,8 @@ export type RevisionPage = typeof RevisionPage.Type;
 export const AuthorSkitSummary = Schema.Struct({
   skit_id: Schema.NonEmptyString,
   visibility: Schema.Literals(["public", "unlisted", "private"]),
-  draft_revision_id: History.RevisionId,
+  current_revision_id: History.RevisionId,
+  current_revision_published: Schema.Boolean,
   most_recent_release_version: Schema.NullOr(
     Schema.String.check(Schema.isPattern(apiSemverPattern)),
   ),
@@ -97,13 +98,13 @@ export const AuthorSkitDeleteResponse = Schema.Struct({
   status: Schema.Literals(["delete_ready", "deleted", "absent"]),
   skit_id: Schema.NonEmptyString,
   changed: Schema.Boolean,
-  draft_revisions: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  revisions: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   releases: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   release_versions: Schema.Array(Schema.String.check(Schema.isPattern(apiSemverPattern))),
   archive_cleanup: Schema.optionalKey(Schema.Literals(["complete", "deferred"])),
 });
 export type AuthorSkitDeleteResponse = typeof AuthorSkitDeleteResponse.Type;
-/** The most files, and uncompressed bytes in total, one Draft revision or Release may carry. */
+/** The most files, and uncompressed bytes in total, one SKIT revision or Release may carry. */
 export const MAX_ARTIFACT_FILES = 5_000;
 export const MAX_ARTIFACT_CONTENT_BYTES = 25 * 1024 * 1024;
 export const MAX_RELEASE_ARCHIVE_BYTES = 25 * 1024 * 1024;
@@ -120,7 +121,7 @@ export const MAX_PROJECTED_RELEASE_ENTRIES = 10_000;
 export const MAX_RELEASE_ARCHIVE_BASE64_LENGTH = Math.ceil(MAX_RELEASE_ARCHIVE_BYTES / 3) * 4;
 export const releasePublishRequestSchema = Schema.Struct({
   version: semver,
-  /** Publish only if the Draft's `current` is still this revision. */
+  /** Publish only if the SKIT's `current` is still this revision. */
   revision_id: Schema.optional(History.RevisionId),
   archive_base64: base64.check(Schema.isMaxLength(MAX_RELEASE_ARCHIVE_BASE64_LENGTH)),
 });

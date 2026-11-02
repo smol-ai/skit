@@ -16,9 +16,9 @@ export const apiErrorStatuses = {
   skit_not_found: 404,
   delete_requires_private: 409,
   archive_too_large: 413,
-  draft_not_found: 404,
-  draft_exists: 409,
-  stale_draft_revision: 409,
+  skit_exists: 409,
+  stale_revision: 409,
+  current_revision_missing: 409,
   release_conflict: 409,
   publish_blocked: 422,
   rate_limited: 429,
@@ -35,7 +35,7 @@ export const apiErrorStatuses = {
   membership_not_found: 404,
   library_not_found: 404,
   REVISION_CONFLICT: 409,
-  DRAFT_TOO_LARGE: 413,
+  ARTIFACT_TOO_LARGE: 413,
   storage_failure: 500,
 } as const;
 
@@ -55,9 +55,9 @@ export const ForbiddenOriginResponse = errorResponse("forbidden_origin");
 export const SkitNotFoundResponse = errorResponse("skit_not_found");
 export const DeleteRequiresPrivateResponse = errorResponse("delete_requires_private");
 export const ArchiveTooLargeResponse = errorResponse("archive_too_large");
-export const DraftNotFoundResponse = errorResponse("draft_not_found");
-export const DraftExistsResponse = errorResponse("draft_exists");
-export const StaleDraftRevisionResponse = errorResponse("stale_draft_revision");
+export const SkitExistsResponse = errorResponse("skit_exists");
+export const CurrentRevisionMissingResponse = errorResponse("current_revision_missing");
+export const StaleRevisionResponse = errorResponse("stale_revision");
 export const ReleaseConflictResponse = errorResponse("release_conflict");
 export const RateLimitedResponse = errorResponse("rate_limited");
 export const InvalidScopeResponse = errorResponse("INVALID_SCOPE");
@@ -85,9 +85,9 @@ export const forbiddenOriginResponse = { error: "forbidden_origin" as const };
 export const skitNotFoundResponse = { error: "skit_not_found" as const };
 export const deleteRequiresPrivateResponse = { error: "delete_requires_private" as const };
 export const archiveTooLargeResponse = { error: "archive_too_large" as const };
-export const draftNotFoundResponse = { error: "draft_not_found" as const };
-export const draftExistsResponse = { error: "draft_exists" as const };
-export const staleDraftRevisionResponse = { error: "stale_draft_revision" as const };
+export const skitExistsResponse = { error: "skit_exists" as const };
+export const currentRevisionMissingResponse = { error: "current_revision_missing" as const };
+export const staleRevisionResponse = { error: "stale_revision" as const };
 export const releaseConflictResponse = { error: "release_conflict" as const };
 export const rateLimitedResponse = { error: "rate_limited" as const };
 export const invalidScopeResponse = { error: "INVALID_SCOPE" as const };

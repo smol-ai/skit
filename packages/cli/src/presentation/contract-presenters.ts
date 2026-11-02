@@ -99,12 +99,12 @@ function renderAuthorInvocation(data: ContractDataForId<"skit.author.invocation.
   ].join("\n");
 }
 
-function renderAuthorDelete(data: ContractDataForId<"skit.author.delete.v1">): string {
+function renderAuthorDelete(data: ContractDataForId<"skit.author.delete.v2">): string {
   const releases = data.release_versions.join(", ") || "none";
   if (data.status === "delete_ready")
-    return `Would delete ${data.skit_id}: ${data.draft_revisions} Draft Revision(s), Releases: ${releases}`;
+    return `Would delete ${data.skit_id}: ${data.revisions} revision(s), Releases: ${releases}`;
   if (data.status === "absent") return `${data.skit_id} is already absent`;
-  return `Deleted ${data.skit_id}: ${data.draft_revisions} Draft Revision(s), Releases: ${releases}${data.archive_cleanup === "deferred" ? "; archive cleanup deferred" : ""}`;
+  return `Deleted ${data.skit_id}: ${data.revisions} revision(s), Releases: ${releases}${data.archive_cleanup === "deferred" ? "; archive cleanup deferred" : ""}`;
 }
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
@@ -201,15 +201,16 @@ function authoredSkitLabel(identity: string): string {
   }
 }
 
-function renderAuthorList(data: ContractDataForId<"skit.author.list.v1">): string {
+function renderAuthorList(data: ContractDataForId<"skit.author.list.v2">): string {
   const registry = registryLabel(data.registry);
   if (!data.skits.length) return `No authored SKITs · ${registry}`;
   const rows = data.skits.map((skit) => [
     authoredSkitLabel(skit.identity),
     skit.visibility,
+    skit.current_revision_published ? "published" : "unpublished",
     skit.most_recent_release_version ?? "—",
   ]);
-  const headings = ["SKIT", "ACCESS", "LATEST"];
+  const headings = ["SKIT", "ACCESS", "CURRENT", "LATEST"];
   const widths = headings.map((heading, column) =>
     Math.max(heading.length, ...rows.map((row) => row[column].length)),
   );
@@ -521,25 +522,25 @@ function renderHarnessProbe(
     .join("\n\n");
 }
 
-function renderAuthorSync(data: ContractDataForId<"skit.author.sync.v4">): string {
+function renderAuthorSync(data: ContractDataForId<"skit.author.sync.v5">): string {
   switch (data.status) {
     case "first_sync_ready":
-      return `First Draft sync ready for ${data.identity.locator} (${data.visibility}); no Release will be published; rerun with --apply`;
+      return `Sync ready for ${data.identity.locator} (${data.visibility}); no Release will be published; rerun with --apply`;
     case "ready":
-      return `Draft ready to ${data.action}; rerun with --apply`;
+      return `Ready to ${data.action}; rerun with --apply`;
     case "blocked":
-      return `Draft sync paused: ${data.deleting} of ${data.of} files removed. Remote files are unchanged. To send these deletions, rerun with --apply --allow-large-deletion.`;
+      return `Sync paused: ${data.deleting} of ${data.of} files removed. Remote files are unchanged. To send these deletions, rerun with --apply --allow-large-deletion.`;
     case "created":
-      return `Created the remote Draft (${data.revision_id})`;
+      return `Connected ${data.identity.locator}; saved revision ${data.revision_id}`;
     case "up_to_date":
-      return `Draft is already synchronized (${data.revision_id})`;
+      return `Workspace is already synchronized (${data.revision_id})`;
     case "pulled":
-      return `Updated ${data.paths.length} file(s) from the remote Draft (${data.revision_id})`;
+      return `Updated ${data.paths.length} file(s) from the Registry (${data.revision_id})`;
     case "pushed":
-      return `Sent local changes to the remote Draft (${data.revision_id})`;
+      return `Synced local changes to the Registry (${data.revision_id})`;
     case "merged":
       return [
-        `Merged local and remote Draft changes (${data.revision_id})`,
+        `Merged local and remote changes (${data.revision_id})`,
         ...data.choices.map(
           (choice) => `  ${choice.path}: kept the ${choice.kept} version (${choice.kind})`,
         ),

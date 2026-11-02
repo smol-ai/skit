@@ -4,7 +4,7 @@ import { HttpClientError, type HttpClientRequest } from "effect/http";
 import { History } from "@smolai/skit-core";
 import {
   CurrentMoveRequest,
-  DraftCreateRequest,
+  SkitCreateRequest,
   RevisionPage,
   RevisionPostRequest,
   RevisionReadResponse,
@@ -35,25 +35,25 @@ export interface StoredRevision {
 
 const decode = <S extends Schema.Top>(schema: S, request: HttpClientRequest.HttpClientRequest) =>
   request.body._tag !== "Uint8Array"
-    ? Effect.die(new Error("Expected an encoded Draft request"))
+    ? Effect.die(new Error("Expected an encoded SKIT request"))
     : Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.toCodecJson(schema)))(
         new TextDecoder().decode(request.body.body),
       ).pipe(Effect.orDie);
 
-interface DraftState {
+interface SkitState {
   readonly created: boolean;
   readonly current: History.RevisionId | null;
   readonly revisions: ReadonlyArray<StoredRevision>;
 }
 
 /**
- * A wire-level Draft server for `swyx/tools`: revisions by identity and one `current` pointer.
+ * A wire-level SKIT server for `swyx/tools`: revisions by identity and one `current` pointer.
  * It checks identities and parents like the Registry, but not validation, authorization, D1/R2
  * or crash durability; those need real server tests. It keeps every revision, so an independent
  * oracle can inspect what is recoverable.
  */
 export const makeAuthorSyncServer = Effect.fn("Test.makeAuthorSyncServer")(function* () {
-  const draft = yield* Ref.make<DraftState>({ created: false, current: null, revisions: [] });
+  const skit = yield* Ref.make<SkitState>({ created: false, current: null, revisions: [] });
   const offline = yield* Ref.make<ReadonlySet<AuthorDevice>>(new Set());
   const faults = yield* Ref.make<ReadonlyArray<Fault>>([]);
   const events = yield* Ref.make<ReadonlyArray<string>>([]);
@@ -99,27 +99,27 @@ export const makeAuthorSyncServer = Effect.fn("Test.makeAuthorSyncServer")(funct
     }
   });
 
-  const notFound = () => Response.json({ error: "draft_not_found" }, { status: 404 });
+  const notFound = () => Response.json({ error: "skit_not_found" }, { status: 404 });
   const prefix = "/api/skits/swyx/tools";
 
   const transport = (device: AuthorDevice): TestHttpHandler =>
     Effect.fn("Test.authorSyncTransport")(function* (request, url) {
       if ((yield* Ref.get(offline)).has(device)) return yield* Effect.fail(transportError(request));
-      const state = yield* Ref.get(draft);
+      const state = yield* Ref.get(skit);
       if (request.method === "POST" && url.pathname === "/api/skits") {
-        yield* decode(DraftCreateRequest, request);
-        const created = yield* Ref.modify(draft, (current) => [
+        yield* decode(SkitCreateRequest, request);
+        const created = yield* Ref.modify(skit, (current) => [
           !current.created,
           { ...current, created: true },
         ]);
         return created
           ? Response.json({ skit_id: "swyx/tools" }, { status: 201 })
-          : Response.json({ error: "draft_exists" }, { status: 409 });
+          : Response.json({ error: "skit_exists" }, { status: 409 });
       }
       if (!state.created) return notFound();
       if (request.method === "GET" && url.pathname === `${prefix}/current`) {
         yield* checkpoint(device, "before-current", request);
-        const { current } = yield* Ref.get(draft);
+        const { current } = yield* Ref.get(skit);
         return Response.json({ skit_id: "swyx/tools", current, visibility: "private" });
       }
       if (request.method === "POST" && url.pathname === `${prefix}/revisions`) {
@@ -131,7 +131,7 @@ export const makeAuthorSyncServer = Effect.fn("Test.makeAuthorSyncServer")(funct
         ]).pipe(Effect.provide(NodeCrypto.layerDigest));
         if (tree !== input.revision.tree || id !== input.id)
           return Response.json({ error: "REVISION_ID_MISMATCH" }, { status: 400 });
-        const response = yield* Ref.modify(draft, (current): [Response, DraftState] => {
+        const response = yield* Ref.modify(skit, (current): [Response, SkitState] => {
           const known = new Set(current.revisions.map((entry) => entry.id));
           if (input.revision.parents.some((parent) => !known.has(parent)))
             return [Response.json({ error: "PARENT_MISSING" }, { status: 400 }), current];
@@ -156,7 +156,7 @@ export const makeAuthorSyncServer = Effect.fn("Test.makeAuthorSyncServer")(funct
         const input = yield* decode(CurrentMoveRequest, request);
         yield* checkpoint(device, "before-move", request);
         // One synchronous Ref.modify is the server's compare-and-swap boundary.
-        const response = yield* Ref.modify(draft, (current): [Response, DraftState] => {
+        const response = yield* Ref.modify(skit, (current): [Response, SkitState] => {
           if (!current.revisions.some((entry) => entry.id === input.id))
             return [Response.json({ error: "REVISION_MISSING" }, { status: 400 }), current];
           if (current.current !== input.expected)
@@ -215,14 +215,14 @@ export const makeAuthorSyncServer = Effect.fn("Test.makeAuthorSyncServer")(funct
           }),
         );
       }
-      return yield* Effect.die(new Error(`Unexpected Draft request: ${request.method} ${url}`));
+      return yield* Effect.die(new Error(`Unexpected SKIT request: ${request.method} ${url}`));
     });
 
   return {
     transport,
     /** Every revision the server recorded, in the order it first accepted them. */
-    revisions: () => Ref.get(draft).pipe(Effect.map((state) => state.revisions)),
-    current: () => Ref.get(draft).pipe(Effect.map((state) => state.current)),
+    revisions: () => Ref.get(skit).pipe(Effect.map((state) => state.revisions)),
+    current: () => Ref.get(skit).pipe(Effect.map((state) => state.current)),
     events: () => Ref.get(events),
     setOnline: (device: AuthorDevice, online: boolean) =>
       Ref.update(offline, (devices) => {

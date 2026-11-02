@@ -10,11 +10,12 @@ const ACCESS_BATCH_SIZE = 40;
 const SUBREQUEST_CONCURRENCY = 4;
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 100;
-const DraftRow = Schema.Struct({
+const SkitRow = Schema.Struct({
   owner_slug: Schema.String,
   skit_slug: Schema.String,
   visibility: Schema.Literals(["public", "unlisted", "private"]),
   current_revision_id: History.RevisionId,
+  current_revision_published: Schema.Literals([0, 1]),
   most_recent_release_version: Schema.NullOr(Schema.String),
 });
 
@@ -88,7 +89,7 @@ export const layer = Layer.effect(
     const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
       effect.pipe(databaseError(operation));
 
-    const accessedDrafts = (batch: AccessBatch, after: Position | null, limit: number) => {
+    const accessedSkits = (batch: AccessBatch, after: Position | null, limit: number) => {
       const access = [
         batch.namespaces.length > 0
           ? `d.owner_slug IN (${batch.namespaces.map(() => "?").join(", ")})`
@@ -98,13 +99,16 @@ export const layer = Layer.effect(
           : undefined,
       ].filter((value): value is string => value !== undefined);
       return db(
-        "read accessed drafts",
+        "read accessed skits",
         sql.unsafe(
           `SELECT d.owner_slug, d.skit_slug, d.visibility, d.current_revision_id,
+              EXISTS (SELECT 1 FROM releases published
+                WHERE published.owner_slug = d.owner_slug AND published.skit_slug = d.skit_slug
+                  AND published.source_revision = d.current_revision_id) current_revision_published,
               (SELECT r.version FROM releases r
                WHERE r.owner_slug = d.owner_slug AND r.skit_slug = d.skit_slug
                ORDER BY r.published_at DESC, r.rowid DESC LIMIT 1) most_recent_release_version
-           FROM drafts d
+           FROM skits d
            WHERE d.current_revision_id IS NOT NULL
              AND (${access.join(" OR ")})
              AND (? IS NULL OR d.owner_slug > ? OR (d.owner_slug = ? AND d.skit_slug > ?))
@@ -133,19 +137,19 @@ export const layer = Layer.effect(
       if (scope.namespaces.length === 0 && scope.skits.length === 0)
         return { outcome: "page" as const, skits: [], next_cursor: null };
       const rowBatches = yield* Effect.all(
-        accessBatches(scope).map((batch) => accessedDrafts(batch, after, limit)),
+        accessBatches(scope).map((batch) => accessedSkits(batch, after, limit)),
         { concurrency: SUBREQUEST_CONCURRENCY },
       );
       const decoded = yield* Effect.forEach(rowBatches, (rows) =>
-        Schema.decodeUnknownEffect(Schema.Array(DraftRow))(rows).pipe(
+        Schema.decodeUnknownEffect(Schema.Array(SkitRow))(rows).pipe(
           Effect.mapError(
             (cause) => new DatabaseError({ operation: "decode author inventory", cause }),
           ),
         ),
       );
-      const drafts = [
+      const skits = [
         ...new Map(
-          decoded.flat().map((draft) => [`${draft.owner_slug}/${draft.skit_slug}`, draft] as const),
+          decoded.flat().map((skit) => [`${skit.owner_slug}/${skit.skit_slug}`, skit] as const),
         ).values(),
       ].sort((left, right) =>
         comparePosition(
@@ -153,18 +157,19 @@ export const layer = Layer.effect(
           { owner: right.owner_slug, skit: right.skit_slug },
         ),
       );
-      const page = drafts.slice(0, limit);
+      const page = skits.slice(0, limit);
       const last = page.at(-1);
       return {
         outcome: "page" as const,
-        skits: page.map((draft) => ({
-          skit_id: `${draft.owner_slug}/${draft.skit_slug}`,
-          visibility: draft.visibility,
-          draft_revision_id: draft.current_revision_id,
-          most_recent_release_version: draft.most_recent_release_version,
+        skits: page.map((skit) => ({
+          skit_id: `${skit.owner_slug}/${skit.skit_slug}`,
+          visibility: skit.visibility,
+          current_revision_id: skit.current_revision_id,
+          current_revision_published: skit.current_revision_published === 1,
+          most_recent_release_version: skit.most_recent_release_version,
         })),
         next_cursor:
-          drafts.length > limit && last
+          skits.length > limit && last
             ? formatCursor({ owner: last.owner_slug, skit: last.skit_slug })
             : null,
       };

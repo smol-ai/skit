@@ -5,24 +5,23 @@
 import { Equal, Option, Record, Schema } from "effect";
 import { parseDocument } from "yaml";
 import { parseSkillFrontmatter } from "../harnesses/frontmatter.js";
-import { SyncFileVersion, type SyncConflict } from "../contracts.js";
+import type { SyncConflict } from "../contracts.js";
+import { TreeFile } from "../artifact/tree-entry.js";
 import type { YamlMapping } from "../shared/json.js";
 import { decodeUtf8 } from "../shared/text.js";
 import * as History from "../history/history.js";
 import * as Merge from "./merge.js";
 import { followSkillMoves } from "./skill-moves.js";
 
-export type Files = Readonly<Record<string, SyncFileVersion>>;
-
 /** Files are the same when their bytes and modes are. */
-const sameFile = Schema.toEquivalence(SyncFileVersion);
+const sameFile = Schema.toEquivalence(TreeFile);
 const wholeFile = Merge.whole(sameFile);
 
 /**
  * The file as text, or none for binary content: bytes holding NUL, as git decides, or bytes
  * that are not valid UTF-8.
  */
-const textOf = (file: SyncFileVersion) =>
+const textOf = (file: TreeFile) =>
   file.bytes.includes(0) ? Option.none() : decodeUtf8(file.bytes);
 
 const isSkillFile = (path: string) => path.split("/").at(-1) === "SKILL.md";
@@ -118,80 +117,71 @@ const skillText = Merge.via<string, SkillFile, SplitSkill>(
  * binary files are whole values. A text merge that would break the syntax of two valid inputs
  * is a whole-file conflict instead.
  */
-const file: Merge.Merger<SyncFileVersion> = Merge.make(
-  sameFile,
-  (base, ours, theirs, at, choose) => {
-    const whole = () =>
-      wholeFile({ base, ours: Option.some(ours), theirs: Option.some(theirs) }, at, choose);
-    const path = String(at.at(-1));
-    const texts = Option.all({
-      base: Option.flatMap(base, textOf),
-      ours: textOf(ours),
-      theirs: textOf(theirs),
-    });
-    if (path === "README.md" || Option.isNone(texts)) return whole();
-    const merged = (isSkillFile(path) ? skillText : Merge.lines)(
-      {
-        base: Option.some(texts.value.base),
-        ours: Option.some(texts.value.ours),
-        theirs: Option.some(texts.value.theirs),
-      },
-      at,
-      choose,
-    );
-    const text = Option.getOrElse(merged.value, () => texts.value.ours);
-    if (!parses(path, text) && parses(path, texts.value.ours) && parses(path, texts.value.theirs))
-      return whole();
-    // A mode follows the side that changed it.
-    const mode = Option.exists(base, (file) => file.mode === ours.mode) ? theirs.mode : ours.mode;
-    return { ...merged, value: Option.some({ bytes: new TextEncoder().encode(text), mode }) };
-  },
-);
-
-/** A tree of files by path. Files follow a skill folder one side renamed. */
-export const fileTree: Merge.Merger<Files> = (versions, at, choose) => {
-  const aligned = followSkillMoves({
-    base: Option.getOrElse(versions.base, Record.empty),
-    ours: Option.getOrElse(versions.ours, Record.empty),
-    theirs: Option.getOrElse(versions.theirs, Record.empty),
+const file: Merge.Merger<TreeFile> = Merge.make(sameFile, (base, ours, theirs, at, choose) => {
+  const whole = () =>
+    wholeFile({ base, ours: Option.some(ours), theirs: Option.some(theirs) }, at, choose);
+  const path = String(at.at(-1));
+  const texts = Option.all({
+    base: Option.flatMap(base, textOf),
+    ours: textOf(ours),
+    theirs: textOf(theirs),
   });
-  return Merge.record(file)(
+  if (path === "README.md" || Option.isNone(texts)) return whole();
+  const merged = (isSkillFile(path) ? skillText : Merge.lines)(
     {
-      base: Option.some(aligned.base),
-      ours: Option.some(aligned.ours),
-      theirs: Option.some(aligned.theirs),
+      base: Option.some(texts.value.base),
+      ours: Option.some(texts.value.ours),
+      theirs: Option.some(texts.value.theirs),
     },
     at,
     choose,
   );
-};
+  const text = Option.getOrElse(merged.value, () => texts.value.ours);
+  if (!parses(path, text) && parses(path, texts.value.ours) && parses(path, texts.value.theirs))
+    return whole();
+  // A mode follows the side that changed it.
+  const mode = Option.exists(base, (file) => file.mode === ours.mode) ? theirs.mode : ours.mode;
+  return {
+    ...merged,
+    value: Option.some({ ...ours, bytes: new TextEncoder().encode(text), mode }),
+  };
+});
 
 /**
- * A {@link History.Tree}, merged file by file as {@link fileTree}. A tree that holds a directory
- * or symlink is one whole value instead, so nothing in it is merged away.
+ * Merge the canonical author tree. A path index holds the same file entries; rename alignment
+ * changes their paths, never their representation. Directories or symlinks retain the existing
+ * whole-tree policy.
  */
-export const historyTree: Merge.Merger<History.Tree> = Merge.via<History.Tree, Files>(
+export const mergeAuthorTree: Merge.Merger<History.Tree> = Merge.via<
+  History.Tree,
+  Readonly<Record<string, TreeFile>>
+>(
   {
     decode: (tree) =>
       Option.map(
         Option.all(
-          tree.map((entry) =>
-            entry.kind === "file"
-              ? Option.some([entry.path, { bytes: entry.bytes, mode: entry.mode }] as const)
-              : Option.none(),
-          ),
+          tree.map((entry) => (entry.kind === "file" ? Option.some(entry) : Option.none())),
         ),
-        Record.fromEntries,
+        (files) => Record.fromEntries(files.map((file) => [file.path, file])),
       ),
-    encode: (files) =>
-      Object.entries(files).map(([path, file]) => ({
-        path,
-        kind: "file" as const,
-        mode: file.mode,
-        bytes: file.bytes,
-      })),
+    encode: Object.values,
   },
-  fileTree,
+  (versions, at, choose) => {
+    const aligned = followSkillMoves({
+      base: Option.getOrElse(versions.base, Record.empty),
+      ours: Option.getOrElse(versions.ours, Record.empty),
+      theirs: Option.getOrElse(versions.theirs, Record.empty),
+    });
+    return Merge.record(file)(
+      {
+        base: Option.some(aligned.base),
+        ours: Option.some(aligned.ours),
+        theirs: Option.some(aligned.theirs),
+      },
+      at,
+      choose,
+    );
+  },
   Merge.whole(Schema.toEquivalence(History.Tree)),
 );
 
@@ -204,6 +194,6 @@ export const conflictKind = (found: Merge.Conflict): SyncConflict["kind"] => {
   if (found.at.length === 0) return "both_modified";
   if (found.at[0] === "README.md") return "descriptor";
   const text = (side: Option.Option<unknown>) =>
-    Option.isSome(Option.flatMap(Option.filter(side, Schema.is(SyncFileVersion)), textOf));
+    Option.isSome(Option.flatMap(Option.filter(side, Schema.is(TreeFile)), textOf));
   return text(found.ours) && text(found.theirs) ? "both_modified" : "binary";
 };

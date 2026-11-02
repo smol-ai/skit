@@ -10,7 +10,7 @@ import {
 } from "../platform/cloudflare.js";
 import { AuthorSkitDeleteResponse } from "@smolai/skit-core/universal/api";
 
-const DraftVisibility = Schema.Struct({
+const SkitVisibility = Schema.Struct({
   visibility: Schema.Literals(["public", "unlisted", "private"]),
 });
 const RevisionRow = Schema.Struct({ revision_id: Schema.String });
@@ -28,7 +28,7 @@ const DeletedReleaseRow = Schema.Struct({
 
 export interface SkitDeletePlan {
   readonly skit_id: string;
-  readonly draft_revisions: number;
+  readonly revisions: number;
   readonly releases: number;
   readonly release_versions: ReadonlyArray<string>;
 }
@@ -63,20 +63,18 @@ export const layer = Layer.effect(
       blobStorageEffectFrom(bindings.blobs, operation, run);
 
     const plan = Effect.fn("SkitDeletion.plan")(function* (owner: string, slug: string) {
-      const draftRows = yield* db(
-        "find draft for deletion",
-        sql`SELECT visibility FROM drafts WHERE owner_slug = ${owner} AND skit_slug = ${slug}`,
+      const skitRows = yield* db(
+        "find skit for deletion",
+        sql`SELECT visibility FROM skits WHERE owner_slug = ${owner} AND skit_slug = ${slug}`,
       );
-      if (draftRows[0] === undefined) return undefined;
-      const draft = yield* Schema.decodeUnknownEffect(DraftVisibility)(draftRows[0]).pipe(
-        Effect.mapError(
-          (cause) => new DatabaseError({ operation: "decode deletion draft", cause }),
-        ),
+      if (skitRows[0] === undefined) return undefined;
+      const skit = yield* Schema.decodeUnknownEffect(SkitVisibility)(skitRows[0]).pipe(
+        Effect.mapError((cause) => new DatabaseError({ operation: "decode deletion skit", cause })),
       );
       const [revisionRows, releaseRows] = yield* Effect.all([
         db(
-          "list draft revisions for deletion",
-          sql`SELECT revision_id FROM draft_revisions
+          "list skit revisions for deletion",
+          sql`SELECT revision_id FROM revisions
               WHERE owner_slug = ${owner} AND skit_slug = ${slug}`,
         ),
         db(
@@ -93,13 +91,13 @@ export const layer = Layer.effect(
         Effect.mapError((cause) => new DatabaseError({ operation: "decode deletion plan", cause })),
       );
       if (
-        draft.visibility !== "private" ||
+        skit.visibility !== "private" ||
         releases.some(({ visibility }) => visibility !== "private")
       )
         return yield* new DeleteRequiresPrivate();
       return {
         skit_id: `${owner}/${slug}`,
-        draft_revisions: revisions.length,
+        revisions: revisions.length,
         releases: releases.length,
         release_versions: releases.map(({ version }) => version),
       };
@@ -107,7 +105,7 @@ export const layer = Layer.effect(
 
     const deleteSkit = Effect.fn("SkitDeletion.delete")(function* (owner: string, slug: string) {
       const guard = `EXISTS (
-      SELECT 1 FROM drafts
+      SELECT 1 FROM skits
       WHERE owner_slug = ? AND skit_slug = ? AND visibility = 'private'
     ) AND NOT EXISTS (
       SELECT 1 FROM releases
@@ -129,45 +127,45 @@ export const layer = Layer.effect(
             [`${owner}/${slug}`, ...guardBindings],
           ),
           sql.unsafe(
-            `DELETE FROM draft_revision_parents WHERE owner_slug = ? AND skit_slug = ?
+            `DELETE FROM revision_parents WHERE owner_slug = ? AND skit_slug = ?
              AND ${guard}`,
             [owner, slug, ...guardBindings],
           ),
           sql.unsafe(
-            `DELETE FROM draft_revisions WHERE owner_slug = ? AND skit_slug = ?
+            `DELETE FROM revisions WHERE owner_slug = ? AND skit_slug = ?
              AND ${guard} RETURNING revision_id`,
             [owner, slug, ...guardBindings],
           ),
           // Trees are shared by hash, so only those no revision references any more go. Blobs
           // stay in R2.
-          sql`DELETE FROM draft_tree_entries WHERE tree_hash IN (
-                SELECT tree_hash FROM draft_trees t WHERE NOT EXISTS (
-                  SELECT 1 FROM draft_revisions r WHERE r.tree_hash = t.tree_hash))`,
-          sql`DELETE FROM draft_trees WHERE NOT EXISTS (
-                SELECT 1 FROM draft_revisions r WHERE r.tree_hash = draft_trees.tree_hash)`,
+          sql`DELETE FROM revision_tree_entries WHERE tree_hash IN (
+                SELECT tree_hash FROM revision_trees t WHERE NOT EXISTS (
+                  SELECT 1 FROM revisions r WHERE r.tree_hash = t.tree_hash))`,
+          sql`DELETE FROM revision_trees WHERE NOT EXISTS (
+                SELECT 1 FROM revisions r WHERE r.tree_hash = revision_trees.tree_hash)`,
           sql.unsafe(
             `DELETE FROM releases WHERE owner_slug = ? AND skit_slug = ?
              AND ${guard} RETURNING release_id, version, archive_object_key, published_at`,
             [owner, slug, ...guardBindings],
           ),
-          sql`DELETE FROM drafts WHERE owner_slug = ${owner} AND skit_slug = ${slug} AND visibility = 'private'
+          sql`DELETE FROM skits WHERE owner_slug = ${owner} AND skit_slug = ${slug} AND visibility = 'private'
              AND NOT EXISTS (
                SELECT 1 FROM releases WHERE owner_slug = ${owner} AND skit_slug = ${slug}
              ) RETURNING owner_slug`,
         ]),
       );
-      const deletedDraft = results[7];
-      if (deletedDraft?.length !== 1) {
+      const deletedSkit = results[7];
+      if (deletedSkit?.length !== 1) {
         const remains = yield* db(
           "check failed skit deletion",
-          sql`SELECT 1 found FROM drafts WHERE owner_slug = ${owner} AND skit_slug = ${slug}`,
+          sql`SELECT 1 found FROM skits WHERE owner_slug = ${owner} AND skit_slug = ${slug}`,
         );
         if (remains.length !== 0) return yield* new DeleteRequiresPrivate();
         return {
           status: "absent" as const,
           skit_id: `${owner}/${slug}`,
           changed: false,
-          draft_revisions: 0,
+          revisions: 0,
           releases: 0,
           release_versions: [],
         };
@@ -214,7 +212,7 @@ export const layer = Layer.effect(
         changed: true,
         archive_cleanup: archiveCleanup,
         skit_id: `${owner}/${slug}`,
-        draft_revisions: revisions.length,
+        revisions: revisions.length,
         releases: sortedReleases.length,
         release_versions: sortedReleases.map(({ version }) => version),
       };

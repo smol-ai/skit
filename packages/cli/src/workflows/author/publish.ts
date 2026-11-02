@@ -38,10 +38,10 @@ import {
   registryApiFailure,
   registryApiFailureMessage,
 } from "../../registry/api-client.js";
-import { readAuthorRemote } from "./sync.js";
+import { loadAuthorRemote } from "./sync.js";
 import {
   AuthorRemoteMetadataInvalid,
-  DraftOutOfSync,
+  AuthorSyncRequired,
   NoRemoteHome,
   RegistryMismatch,
   RegistryRejectedWrite,
@@ -76,7 +76,7 @@ export type PublicationFailure =
   | AuthenticationRequired
   | CredentialLacksScope
   | PrincipalNotAuthorized
-  | DraftOutOfSync
+  | AuthorSyncRequired
   | RegistryRejectedWrite
   | RegistryTransportError
   | PublicationResponseError
@@ -109,7 +109,7 @@ export const publish = Effect.fn("publish")(function* (
   const absolute = resolve(root);
   const commandPath = /^[A-Za-z0-9_./-]+$/.test(root) ? root : `'${root.replaceAll("'", `'\\''`)}'`;
   yield* readSkitDescriptor(absolute);
-  const remote = yield* readAuthorRemote(absolute);
+  const remote = yield* loadAuthorRemote(absolute);
   if (!remote) return yield* Effect.fail(new NoRemoteHome());
   const owner = remote.namespace;
   const slug = remote.skit;
@@ -233,7 +233,7 @@ export const publish = Effect.fn("publish")(function* (
         });
       }
       if (Schema.is(IntegrityFailureResponse)(error) && error.error === "ARCHIVE_MANIFEST_MISMATCH")
-        return new DraftOutOfSync({ commandPath });
+        return new AuthorSyncRequired({ commandPath });
       if (isRegistryTransportError(error)) return error;
       if (isSuccessfulResponseDecodeFailure(error, [201]))
         return new SkitContractError({

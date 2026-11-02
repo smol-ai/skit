@@ -10,7 +10,7 @@ import { layer as authorInventoryLayer } from "./author-inventory/service.js";
 import { layer as authorizationLayer } from "./authorization/service.js";
 import { layer as bootstrapServiceLayer } from "./bootstrap/service.js";
 import { ServerConfiguration } from "./configuration.js";
-import { layer as draftsLayer } from "./drafts/service.js";
+import { layer as skitsLayer } from "./skits/service.js";
 import { layer as feedbackServiceLayer } from "./feedback/service.js";
 import { layer as librarySyncLayer } from "./library/library-sync.js";
 import { layer as librarySnapshotsLayer } from "./library/snapshots.js";
@@ -106,8 +106,8 @@ export const applicationLayers = (
     releaseStoreLayer,
     authorInventoryLayer,
     skitDeletionLayer,
-    draftsLayer,
-    publicationServiceLayer,
+    skitsLayer,
+    publicationServiceLayer.pipe(Layer.provide(skitsLayer)),
     patRateLimiterLayer(env.PAT_RATE_LIMITER),
     Layer.succeed(ServerConfiguration, { publicAppOrigin: configured.publicAppOrigin }),
   ).pipe(

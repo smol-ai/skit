@@ -12,23 +12,23 @@ const testLayer = skitDeletionLayer.pipe(Layer.provideMerge(bindingsLayer));
 const prepareDatabase = Effect.flatMap(D1Client.D1Client, (sql) =>
   sql.batch([
     sql.unsafe("DROP TABLE IF EXISTS resource_grants"),
-    sql.unsafe("DROP TABLE IF EXISTS draft_tree_entries"),
-    sql.unsafe("DROP TABLE IF EXISTS draft_revision_parents"),
-    sql.unsafe("DROP TABLE IF EXISTS draft_revisions"),
-    sql.unsafe("DROP TABLE IF EXISTS draft_trees"),
+    sql.unsafe("DROP TABLE IF EXISTS revision_tree_entries"),
+    sql.unsafe("DROP TABLE IF EXISTS revision_parents"),
+    sql.unsafe("DROP TABLE IF EXISTS revisions"),
+    sql.unsafe("DROP TABLE IF EXISTS revision_trees"),
     sql.unsafe("DROP TABLE IF EXISTS releases"),
-    sql.unsafe("DROP TABLE IF EXISTS drafts"),
-    sql.unsafe(`CREATE TABLE drafts (
+    sql.unsafe("DROP TABLE IF EXISTS skits"),
+    sql.unsafe(`CREATE TABLE skits (
       owner_slug TEXT NOT NULL, skit_slug TEXT NOT NULL, visibility TEXT NOT NULL,
       PRIMARY KEY (owner_slug, skit_slug)
     )`),
-    sql.unsafe("CREATE TABLE draft_trees (tree_hash TEXT PRIMARY KEY)"),
-    sql.unsafe("CREATE TABLE draft_tree_entries (tree_hash TEXT NOT NULL, path TEXT NOT NULL)"),
-    sql.unsafe(`CREATE TABLE draft_revisions (
+    sql.unsafe("CREATE TABLE revision_trees (tree_hash TEXT PRIMARY KEY)"),
+    sql.unsafe("CREATE TABLE revision_tree_entries (tree_hash TEXT NOT NULL, path TEXT NOT NULL)"),
+    sql.unsafe(`CREATE TABLE revisions (
       owner_slug TEXT NOT NULL, skit_slug TEXT NOT NULL, revision_id TEXT NOT NULL,
       tree_hash TEXT NOT NULL
     )`),
-    sql.unsafe(`CREATE TABLE draft_revision_parents (
+    sql.unsafe(`CREATE TABLE revision_parents (
       owner_slug TEXT NOT NULL, skit_slug TEXT NOT NULL, revision_id TEXT NOT NULL,
       parent_id TEXT NOT NULL
     )`),
@@ -51,21 +51,19 @@ describe("private SKIT deletion", () => {
       const deletion = yield* SkitDeletion;
       yield* Effect.flatMap(D1Client.D1Client, (sql) =>
         sql.batch([
-          sql.unsafe("INSERT INTO drafts VALUES ('tim', 'tools', 'private')"),
-          sql.unsafe("INSERT INTO drafts VALUES ('ann', 'kept', 'private')"),
-          // `tree_shared` is also recorded by another Draft, so it outlives this deletion.
-          sql.unsafe("INSERT INTO draft_trees VALUES ('tree_own'), ('tree_shared')"),
+          sql.unsafe("INSERT INTO skits VALUES ('tim', 'tools', 'private')"),
+          sql.unsafe("INSERT INTO skits VALUES ('ann', 'kept', 'private')"),
+          // `tree_shared` is also recorded by another SKIT, so it outlives this deletion.
+          sql.unsafe("INSERT INTO revision_trees VALUES ('tree_own'), ('tree_shared')"),
           sql.unsafe(
-            "INSERT INTO draft_tree_entries VALUES ('tree_own', 'SKILL.md'), ('tree_shared', 'SKILL.md')",
+            "INSERT INTO revision_tree_entries VALUES ('tree_own', 'SKILL.md'), ('tree_shared', 'SKILL.md')",
           ),
           sql.unsafe(
-            `INSERT INTO draft_revisions VALUES
+            `INSERT INTO revisions VALUES
              ('tim', 'tools', 'rev_one', 'tree_own'), ('tim', 'tools', 'rev_two', 'tree_shared'),
              ('ann', 'kept', 'rev_kept', 'tree_shared')`,
           ),
-          sql.unsafe(
-            "INSERT INTO draft_revision_parents VALUES ('tim', 'tools', 'rev_two', 'rev_one')",
-          ),
+          sql.unsafe("INSERT INTO revision_parents VALUES ('tim', 'tools', 'rev_two', 'rev_one')"),
           sql.unsafe(
             `INSERT INTO releases VALUES
              ('tim', 'tools', '1.0.0', 'rel_one', 'releases/one.zip',
@@ -81,7 +79,7 @@ describe("private SKIT deletion", () => {
 
       expect(yield* deletion.plan("tim", "tools")).toEqual({
         skit_id: "tim/tools",
-        draft_revisions: 2,
+        revisions: 2,
         releases: 1,
         release_versions: ["1.0.0"],
       });
@@ -90,25 +88,25 @@ describe("private SKIT deletion", () => {
         changed: true,
         archive_cleanup: "complete",
         skit_id: "tim/tools",
-        draft_revisions: 2,
+        revisions: 2,
         releases: 1,
         release_versions: ["1.0.0"],
       });
       const remaining = (query: string) =>
         Effect.flatMap(D1Client.D1Client, (sql) => sql.unsafe(query));
-      expect(yield* remaining("SELECT owner_slug, skit_slug FROM drafts")).toEqual([
+      expect(yield* remaining("SELECT owner_slug, skit_slug FROM skits")).toEqual([
         { owner_slug: "ann", skit_slug: "kept" },
       ]);
-      expect(yield* remaining("SELECT revision_id FROM draft_revisions")).toEqual([
+      expect(yield* remaining("SELECT revision_id FROM revisions")).toEqual([
         { revision_id: "rev_kept" },
       ]);
-      expect(yield* remaining("SELECT tree_hash FROM draft_trees")).toEqual([
+      expect(yield* remaining("SELECT tree_hash FROM revision_trees")).toEqual([
         { tree_hash: "tree_shared" },
       ]);
-      expect(yield* remaining("SELECT tree_hash FROM draft_tree_entries")).toEqual([
+      expect(yield* remaining("SELECT tree_hash FROM revision_tree_entries")).toEqual([
         { tree_hash: "tree_shared" },
       ]);
-      for (const table of ["draft_revision_parents", "releases", "resource_grants"]) {
+      for (const table of ["revision_parents", "releases", "resource_grants"]) {
         const rows = yield* remaining(`SELECT COUNT(*) count FROM ${table}`);
         expect(rows[0]).toEqual({ count: 0 });
       }
@@ -122,13 +120,13 @@ describe("private SKIT deletion", () => {
     }).pipe(Effect.provide(testLayer)),
   );
 
-  it.effect("refuses deletion if either the draft or a release is visible", () =>
+  it.effect("refuses deletion if either the skit or a release is visible", () =>
     Effect.gen(function* () {
       yield* prepareDatabase;
       const deletion = yield* SkitDeletion;
       yield* Effect.flatMap(D1Client.D1Client, (sql) =>
         sql.batch([
-          sql.unsafe("INSERT INTO drafts VALUES ('tim', 'tools', 'private')"),
+          sql.unsafe("INSERT INTO skits VALUES ('tim', 'tools', 'private')"),
           sql.unsafe(
             `INSERT INTO releases VALUES
              ('tim', 'tools', '1.0.0', 'rel_one', 'releases/one.zip',
@@ -145,7 +143,7 @@ describe("private SKIT deletion", () => {
       });
       const rows = yield* Effect.flatMap(
         D1Client.D1Client,
-        (sql) => sql`SELECT COUNT(*) count FROM drafts`,
+        (sql) => sql`SELECT COUNT(*) count FROM skits`,
       );
       expect(rows[0]).toEqual({ count: 1 });
     }).pipe(Effect.provide(testLayer)),

@@ -9,7 +9,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Cause, Effect, Exit, FileSystem } from "effect";
 import { join } from "node:path";
 import { resolveAuth } from "../src/registry/auth.js";
-import { readAuthorRemote } from "../src/workflows/author/sync.js";
+import { loadAuthorRemote } from "../src/workflows/author/sync.js";
 
 const ORIGIN = "https://registry.example";
 const credential = { token: "t", tokenId: "i", tokenPrefix: "p", scopes: ["library:sync"] };
@@ -25,7 +25,7 @@ const withRemote = Effect.fn("withRemote")(function* (document: string) {
   const fs = yield* FileSystem.FileSystem;
   const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-remote-" });
   yield* fs.writeFileString(join(root, "skit.remote.json"), document);
-  return yield* Effect.exit(readAuthorRemote(root));
+  return yield* Effect.exit(loadAuthorRemote(root));
 });
 
 /** The tag of the single reason in a failed exit, or how it failed instead. */

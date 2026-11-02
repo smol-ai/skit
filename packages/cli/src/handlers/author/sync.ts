@@ -10,8 +10,8 @@ import { AuthenticationRequired } from "../../registry/failures.js";
 import { Renderer } from "../../presentation/renderer.js";
 import {
   parseAuthorDestination,
-  readAuthorRemote,
-  syncDraft,
+  loadAuthorRemote,
+  syncAuthorWorkspace,
   type AuthorVisibility,
 } from "../../workflows/author/sync.js";
 import { handleRegistryCommand } from "../../application.js";
@@ -30,7 +30,7 @@ export const authorSyncCommand = Effect.fn("CLI.authorSync")(function* <AuthErro
   readonly visibility?: AuthorVisibility;
   readonly authState: Result.Result<ResolvedAuth, AuthError>;
 }) {
-  const storedRemote = yield* readAuthorRemote(options.root ?? ".");
+  const storedRemote = yield* loadAuthorRemote(options.root ?? ".");
   let credentials = storedRemote
     ? yield* resolveAuthForOrigin(storedRemote.origin, options.home)
     : undefined;
@@ -53,9 +53,9 @@ export const authorSyncCommand = Effect.fn("CLI.authorSync")(function* <AuthErro
 
   const renderer = yield* Renderer;
   return yield* renderer.withStatus(
-    "Synchronizing draft",
+    "Synchronizing skit",
     Effect.scoped(
-      syncDraft(options.root ?? ".", {
+      syncAuthorWorkspace(options.root ?? ".", {
         apply: options.apply,
         allowLargeDeletion: options.allowLargeDeletion,
         home: options.home,
@@ -112,7 +112,7 @@ export const authorSyncCliCommand = Command.make(
       );
     }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
 ).pipe(
-  Command.withDescription("Synchronize a local SKIT with its remote draft."),
+  Command.withDescription("Synchronize an author workspace with its Registry revisions."),
   Command.withExamples([
     { command: "skit author sync . --to tim/tools --visibility private" },
     { command: "skit author sync . --to tim/tools --visibility private --apply" },

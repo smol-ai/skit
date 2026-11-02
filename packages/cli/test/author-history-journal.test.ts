@@ -7,7 +7,7 @@ import {
   loadAuthorHistory,
   loadAuthorTree,
   loadStoredTrees,
-  saveAuthorWorkspace,
+  refreshAuthorHistory,
 } from "../src/workflows/author/history.js";
 import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
 import { testPlatformLayer } from "./helpers/platform.js";
@@ -18,13 +18,13 @@ it.effect("A → B → A records three ordered revisions referencing two stored 
     const { a } = yield* makeAuthorSyncWorld();
     yield* TestClock.setTime(1000);
     yield* a.edit("notes/a.txt", "A");
-    const first = yield* saveAuthorWorkspace(a.workspace, a.home);
+    const first = yield* refreshAuthorHistory(a.workspace, a.home);
     yield* a.edit("notes/a.txt", "B");
-    const second = yield* saveAuthorWorkspace(a.workspace, a.home);
+    const second = yield* refreshAuthorHistory(a.workspace, a.home);
     // Equal times above and a backwards wall clock below cannot reorder revisions.
     yield* TestClock.setTime(500);
     yield* a.edit("notes/a.txt", "A");
-    const third = yield* saveAuthorWorkspace(a.workspace, a.home);
+    const third = yield* refreshAuthorHistory(a.workspace, a.home);
     const events = yield* loadAuthorHistory(a.workspace, a.home);
     expect(events.map((event) => event.sequence)).toEqual([1, 2, 3]);
     expect(events.map((event) => event.revision.author.at)).toEqual([1000, 1000, 500]);
@@ -53,9 +53,9 @@ it.effect("unchanged concurrent observations add no duplicate events", () =>
   Effect.gen(function* () {
     const { a } = yield* makeAuthorSyncWorld();
     yield* a.edit("notes/a.txt", "unchanged");
-    yield* saveAuthorWorkspace(a.workspace, a.home);
+    yield* refreshAuthorHistory(a.workspace, a.home);
     yield* Effect.all(
-      Array.from({ length: 4 }, () => saveAuthorWorkspace(a.workspace, a.home)),
+      Array.from({ length: 4 }, () => refreshAuthorHistory(a.workspace, a.home)),
       { concurrency: "unbounded" },
     );
     expect(yield* loadAuthorHistory(a.workspace, a.home)).toHaveLength(1);
@@ -98,12 +98,12 @@ it.effect("a pending B observation cannot be overtaken by an unchanged A scan", 
     const { a } = yield* makeAuthorSyncWorld();
     const fs = yield* FileSystem.FileSystem;
     yield* a.edit("notes/a.txt", "A");
-    const first = yield* saveAuthorWorkspace(a.workspace, a.home);
+    const first = yield* refreshAuthorHistory(a.workspace, a.home);
     const directory = join(a.home, "history", "trees");
     const entered = yield* Deferred.make<void>();
     const released = yield* Deferred.make<void>();
     yield* a.edit("notes/a.txt", "B");
-    const pendingB = yield* saveAuthorWorkspace(a.workspace, a.home).pipe(
+    const pendingB = yield* refreshAuthorHistory(a.workspace, a.home).pipe(
       Effect.provideService(FileSystem.FileSystem, {
         ...fs,
         readFileString: Effect.fn("Test.pauseBeforeObservationCommit")(function* (path) {
@@ -123,7 +123,7 @@ it.effect("a pending B observation cannot be overtaken by an unchanged A scan", 
     );
     yield* Deferred.await(entered);
     yield* a.edit("notes/a.txt", "A");
-    const pendingA = yield* saveAuthorWorkspace(a.workspace, a.home).pipe(Effect.forkScoped);
+    const pendingA = yield* refreshAuthorHistory(a.workspace, a.home).pipe(Effect.forkScoped);
     expect(yield* loadAuthorHistory(a.workspace, a.home)).toHaveLength(1);
     yield* Deferred.succeed(released, undefined);
     const second = yield* Fiber.join(pendingB);
@@ -143,7 +143,7 @@ it.effect(
       yield* a.edit("notes/a.txt", "record me");
       const entered = yield* Deferred.make<void>();
       const directory = join(a.home, "history", "trees");
-      const pending = yield* saveAuthorWorkspace(a.workspace, a.home).pipe(
+      const pending = yield* refreshAuthorHistory(a.workspace, a.home).pipe(
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
           readFileString: Effect.fn("Test.pauseRecordedTreeBeforeCommit")(function* (path) {
@@ -164,7 +164,7 @@ it.effect(
       if (Exit.isFailure(exit)) expect(Cause.hasInterrupts(exit.cause)).toBe(true);
       expect(yield* loadAuthorHistory(a.workspace, a.home)).toEqual([]);
       expect(yield* loadStoredTrees(a.home)).toHaveLength(1);
-      yield* saveAuthorWorkspace(a.workspace, a.home);
+      yield* refreshAuthorHistory(a.workspace, a.home);
       expect(
         (yield* loadAuthorHistory(a.workspace, a.home)).map((event) => event.sequence),
       ).toEqual([1]);
@@ -188,7 +188,7 @@ it.effect(
       );
       let interrupted = false;
       const failed = yield* Effect.result(
-        saveAuthorWorkspace(a.workspace, a.home).pipe(
+        refreshAuthorHistory(a.workspace, a.home).pipe(
           Effect.provideService(FileSystem.FileSystem, {
             ...fs,
             open: Effect.fn("Test.failObservationAcknowledgement")(function* (path, options) {
@@ -204,7 +204,7 @@ it.effect(
       expect(failed._tag).toBe("Failure");
       expect(interrupted).toBe(true);
       expect(yield* loadAuthorHistory(a.workspace, a.home)).toHaveLength(1);
-      yield* saveAuthorWorkspace(a.workspace, a.home);
+      yield* refreshAuthorHistory(a.workspace, a.home);
       expect(yield* loadAuthorHistory(a.workspace, a.home)).toHaveLength(1);
     }).pipe(Effect.provide(testPlatformLayer)),
 );
@@ -214,11 +214,11 @@ it.effect("history listings are per workspace and do not decode retained tree co
     const { a, b } = yield* makeAuthorSyncWorld();
     const fs = yield* FileSystem.FileSystem;
     yield* a.edit("notes/a.txt", "A");
-    yield* saveAuthorWorkspace(a.workspace, a.home);
+    yield* refreshAuthorHistory(a.workspace, a.home);
     yield* b.edit("notes/b.txt", "B");
-    yield* saveAuthorWorkspace(b.workspace, a.home);
+    yield* refreshAuthorHistory(b.workspace, a.home);
     yield* a.edit("notes/a.txt", "A2");
-    yield* saveAuthorWorkspace(a.workspace, a.home);
+    yield* refreshAuthorHistory(a.workspace, a.home);
     const events = yield* loadAuthorHistory(a.workspace, a.home).pipe(
       Effect.provideService(FileSystem.FileSystem, {
         ...fs,
@@ -242,7 +242,7 @@ it.effect(
       const { a } = yield* makeAuthorSyncWorld();
       const fs = yield* FileSystem.FileSystem;
       yield* a.edit("notes/a.txt", "before registration");
-      yield* saveAuthorWorkspace(a.workspace, a.home);
+      yield* refreshAuthorHistory(a.workspace, a.home);
       yield* fs.makeDirectory(join(a.workspace, ".skit"));
       yield* fs.writeFileString(
         join(a.workspace, ".skit", "workspace.json"),
@@ -253,11 +253,11 @@ it.effect(
       );
       // Workspace metadata is not part of the tree; each step edits a file so it saves a revision.
       yield* a.edit("notes/a.txt", "after registration");
-      yield* saveAuthorWorkspace(a.workspace, a.home);
+      yield* refreshAuthorHistory(a.workspace, a.home);
       const moved = join(dirname(a.workspace), "moved");
       yield* fs.rename(a.workspace, moved);
       yield* fs.writeFileString(join(moved, "notes/a.txt"), "after move");
-      yield* saveAuthorWorkspace(moved, a.home);
+      yield* refreshAuthorHistory(moved, a.home);
       const events = yield* loadAuthorHistory(moved, a.home);
       expect(events.map((event) => event.sequence)).toEqual([1, 2, 3]);
       expect(events.map((event) => event.revision.parents)).toEqual([
@@ -268,7 +268,7 @@ it.effect(
       // The old path can now belong to a different, anonymous workspace.
       yield* fs.makeDirectory(a.workspace);
       yield* fs.writeFileString(join(a.workspace, "fresh.txt"), "independent");
-      yield* saveAuthorWorkspace(a.workspace, a.home);
+      yield* refreshAuthorHistory(a.workspace, a.home);
       const fresh = yield* loadAuthorHistory(a.workspace, a.home);
       expect(fresh.map((event) => event.sequence)).toEqual([1]);
       expect(fresh[0]?.revision.parents).toEqual([]);
@@ -288,9 +288,9 @@ it.effect("copied live workspace identity cannot merge two folders' histories", 
       yield* fs.makeDirectory(join(root, ".skit"));
       yield* fs.writeFileString(join(root, ".skit", "workspace.json"), metadata);
     }
-    yield* saveAuthorWorkspace(a.workspace, a.home);
+    yield* refreshAuthorHistory(a.workspace, a.home);
     const original = yield* loadAuthorHistory(a.workspace, a.home);
-    expect(yield* Effect.flip(saveAuthorWorkspace(b.workspace, a.home))).toMatchObject({
+    expect(yield* Effect.flip(refreshAuthorHistory(b.workspace, a.home))).toMatchObject({
       _tag: "AuthorWorkspaceAlreadyRegistered",
       at: yield* fs.realPath(a.workspace),
     });
@@ -303,7 +303,7 @@ it.effect("existing stored trees stay available without inventing a pre-journal 
     const { a } = yield* makeAuthorSyncWorld();
     const fs = yield* FileSystem.FileSystem;
     yield* a.edit("notes/a.txt", "existing tree");
-    const saved = yield* saveAuthorWorkspace(a.workspace, a.home);
+    const saved = yield* refreshAuthorHistory(a.workspace, a.home);
     yield* fs.remove(join(a.home, "history", "journal.sqlite"));
     expect(yield* loadAuthorHistory(a.workspace, a.home)).toEqual([]);
     const file = (yield* loadAuthorTree(saved.treeHash, a.home)).find(
@@ -312,7 +312,7 @@ it.effect("existing stored trees stay available without inventing a pre-journal 
     expect(file?.kind === "file" ? Buffer.from(file.bytes).toString() : undefined).toBe(
       "existing tree",
     );
-    yield* saveAuthorWorkspace(a.workspace, a.home);
+    yield* refreshAuthorHistory(a.workspace, a.home);
     expect(
       (yield* loadAuthorHistory(a.workspace, a.home)).map((event) => event.revision.tree),
     ).toEqual([saved.treeHash]);

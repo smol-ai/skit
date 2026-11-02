@@ -90,7 +90,8 @@ effectIt.effect.each([
       expect(yield* read(join(root, "skills", "review", "SKILL.md"))).toContain(claude);
       expect(yield* read(join(root, CODEX))).toContain(codex);
       expect(
-        (yield* validateSkitDirectory(root, "draft", { assessmentContext: "publish" })).diagnostics,
+        (yield* validateSkitDirectory(root, "unpublished", { assessmentContext: "publish" }))
+          .diagnostics,
       ).toEqual([]);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -111,7 +112,8 @@ effectIt.effect("generation removes both fields for host policy", () =>
     );
     expect(yield* exists(join(root, CODEX))).toBe(false);
     expect(
-      (yield* validateSkitDirectory(root, "draft", { assessmentContext: "publish" })).diagnostics,
+      (yield* validateSkitDirectory(root, "unpublished", { assessmentContext: "publish" }))
+        .diagnostics,
     ).toEqual([]);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -128,7 +130,8 @@ effectIt.effect(
 
       expect(yield* generateInvocationMetadata(root)).toEqual([]);
       expect(
-        (yield* validateSkitDirectory(root, "draft", { assessmentContext: "publish" })).diagnostics,
+        (yield* validateSkitDirectory(root, "unpublished", { assessmentContext: "publish" }))
+          .diagnostics,
       ).toEqual([]);
       const archive = join(yield* makeTemporaryDirectory, "release.zip");
       yield* createSkitArchive(root, archive);
@@ -172,10 +175,10 @@ effectIt.effect("validation reports drift as an author warning and a publication
   Effect.gen(function* () {
     const root = yield* workspace("explicit");
 
-    const authoring = yield* validateSkitDirectory(root, "draft", {
+    const authoring = yield* validateSkitDirectory(root, "unpublished", {
       assessmentContext: "author",
     });
-    const publication = yield* validateSkitDirectory(root, "draft", {
+    const publication = yield* validateSkitDirectory(root, "unpublished", {
       assessmentContext: "publish",
     });
 
@@ -208,7 +211,8 @@ effectIt.effect("acquired sources are never assessed for conformance", () =>
 
     for (const context of ["import", "project"] as const)
       expect(
-        (yield* validateSkitDirectory(root, "draft", { assessmentContext: context })).diagnostics,
+        (yield* validateSkitDirectory(root, "unpublished", { assessmentContext: context }))
+          .diagnostics,
       ).toEqual([]);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

@@ -7,7 +7,7 @@ const text = (value: string) => new TextEncoder().encode(value);
 export const device = Schema.decodeUnknownSync(MachineId)("mach_01h455vb4pex5vsknk084sn02q");
 
 /** A complete, publishable SKIT whose slug is `tools`. */
-export const draftTree: History.Tree = [
+export const skillTree: History.Tree = [
   {
     path: "skit.json",
     kind: "file",
@@ -28,8 +28,8 @@ export const draftTree: History.Tree = [
 ];
 
 /** The body a device posts to record `tree` on top of `parents` at time `at`. */
-export const draftRevision = Effect.fn("Fixture.draftRevision")(function* (
-  tree: History.Tree = draftTree,
+export const revisionRequest = Effect.fn("Fixture.revisionRequest")(function* (
+  tree: History.Tree = skillTree,
   parents: ReadonlyArray<History.RevisionId> = [],
   at = 1,
 ) {

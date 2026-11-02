@@ -20,7 +20,7 @@ const principal = {
 const prepareDatabase = Effect.flatMap(D1Client.D1Client, (sql) =>
   sql.batch([
     sql`DROP TABLE IF EXISTS releases`,
-    sql`DROP TABLE IF EXISTS drafts`,
+    sql`DROP TABLE IF EXISTS skits`,
     sql`DROP TABLE IF EXISTS resource_grants`,
     sql`DROP TABLE IF EXISTS namespaces`,
     sql`DROP TABLE IF EXISTS team_memberships`,
@@ -30,19 +30,19 @@ const prepareDatabase = Effect.flatMap(D1Client.D1Client, (sql) =>
       grant_id TEXT PRIMARY KEY, subject_kind TEXT, subject_id TEXT,
       resource_kind TEXT, resource_id TEXT, permission TEXT
     )`,
-    sql`CREATE TABLE drafts (
+    sql`CREATE TABLE skits (
       owner_slug TEXT NOT NULL, skit_slug TEXT NOT NULL, visibility TEXT NOT NULL,
       current_revision_id TEXT, PRIMARY KEY (owner_slug, skit_slug)
     )`,
     sql`CREATE TABLE releases (
       owner_slug TEXT NOT NULL, skit_slug TEXT NOT NULL, version TEXT NOT NULL,
-      published_at TEXT NOT NULL
+      published_at TEXT NOT NULL, source_revision TEXT
     )`,
   ]),
 );
 
 describe("author inventory", () => {
-  it.effect("merges owned and granted drafts into a stable cursor page", () =>
+  it.effect("merges owned and granted skits into a stable cursor page", () =>
     Effect.gen(function* () {
       yield* prepareDatabase;
       const inventory = yield* AuthorInventory;
@@ -50,12 +50,12 @@ describe("author inventory", () => {
         sql.batch([
           sql`INSERT INTO namespaces VALUES ('tim', 'principal', 'principal_test')`,
           sql`INSERT INTO resource_grants VALUES ('grant_external', 'principal', 'principal_test', 'skit', 'zed/shared', 'read')`,
-          sql`INSERT INTO drafts VALUES ('tim', 'alpha', 'private', 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')`,
-          sql`INSERT INTO drafts VALUES ('tim', 'tools', 'unlisted', 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')`,
-          sql`INSERT INTO drafts VALUES ('zed', 'shared', 'public', 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc')`,
-          sql`INSERT INTO drafts VALUES ('other', 'hidden', 'private', 'sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd')`,
-          sql`INSERT INTO releases VALUES ('tim', 'alpha', '1.0.0', '2026-01-01T00:00:00Z')`,
-          sql`INSERT INTO releases VALUES ('tim', 'alpha', '1.1.0', '2026-02-01T00:00:00Z')`,
+          sql`INSERT INTO skits VALUES ('tim', 'alpha', 'private', 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')`,
+          sql`INSERT INTO skits VALUES ('tim', 'tools', 'unlisted', 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')`,
+          sql`INSERT INTO skits VALUES ('zed', 'shared', 'public', 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc')`,
+          sql`INSERT INTO skits VALUES ('other', 'hidden', 'private', 'sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd')`,
+          sql`INSERT INTO releases (owner_slug, skit_slug, version, published_at) VALUES ('tim', 'alpha', '1.0.0', '2026-01-01T00:00:00Z')`,
+          sql`INSERT INTO releases (owner_slug, skit_slug, version, published_at) VALUES ('tim', 'alpha', '1.1.0', '2026-02-01T00:00:00Z')`,
         ]),
       );
 
@@ -68,15 +68,17 @@ describe("author inventory", () => {
           {
             skit_id: "tim/alpha",
             visibility: "private",
-            draft_revision_id:
+            current_revision_id:
               "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            current_revision_published: false,
             most_recent_release_version: "1.1.0",
           },
           {
             skit_id: "tim/tools",
             visibility: "unlisted",
-            draft_revision_id:
+            current_revision_id:
               "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            current_revision_published: false,
             most_recent_release_version: null,
           },
         ],
@@ -88,8 +90,9 @@ describe("author inventory", () => {
           {
             skit_id: "zed/shared",
             visibility: "public",
-            draft_revision_id:
+            current_revision_id:
               "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            current_revision_published: false,
             most_recent_release_version: null,
           },
         ],

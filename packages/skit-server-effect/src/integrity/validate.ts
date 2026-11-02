@@ -35,13 +35,13 @@ const fail = (code: IntegrityErrorCode, detail?: string) =>
 export const validateArtifactFiles = Effect.fn("Integrity.validateArtifactFiles")(function* (
   files: ReadonlyArray<ArtifactFile>,
 ) {
-  if (files.length > MAX_ARTIFACT_FILES) return yield* fail("INVALID_DRAFT");
+  if (files.length > MAX_ARTIFACT_FILES) return yield* fail("INVALID_ARTIFACT");
   if (new Set(files.map(({ path }) => path)).size !== files.length)
     return yield* fail("DUPLICATE_FILE_PATH");
   if (files.some(({ bytes }) => bytes.byteLength > MAX_ARTIFACT_CONTENT_BYTES))
-    return yield* fail("DRAFT_FILE_TOO_LARGE");
+    return yield* fail("ARTIFACT_FILE_TOO_LARGE");
   if (files.reduce((total, { bytes }) => total + bytes.byteLength, 0) > MAX_ARTIFACT_CONTENT_BYTES)
-    return yield* fail("DRAFT_TOO_LARGE");
+    return yield* fail("ARTIFACT_TOO_LARGE");
 });
 
 export const readArtifactDescriptor = Effect.fn("Integrity.readArtifactDescriptor")(function* (
@@ -70,7 +70,7 @@ export const validateArtifactBundle = Effect.fn("Integrity.validateArtifactBundl
   descriptorInput: unknown,
   files: ReadonlyArray<ArtifactFile>,
 ) {
-  if (files.length < 1) return yield* fail("INVALID_DRAFT");
+  if (files.length < 1) return yield* fail("INVALID_ARTIFACT");
   yield* validateArtifactFiles(files);
   const descriptor = yield* readArtifactDescriptor(owner, slug, files);
   const normalizedLocal = yield* normalizeDescriptorDeclarations(descriptor);
@@ -139,7 +139,7 @@ export const validateArtifactBundle = Effect.fn("Integrity.validateArtifactBundl
 
 /**
  * The tree entries a Release cannot hold: every symlink, and every directory with no file beneath
- * it. Publication refuses them; a Draft records these diagnostics so the author learns early.
+ * it. Publication refuses them; a SKIT records these diagnostics so the author learns early.
  */
 export const unpublishableEntries = (
   entries: ReadonlyArray<{

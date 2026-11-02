@@ -1,8 +1,8 @@
 /**
- * Synchronizing a device's tree with a Draft on the Registry: a pure {@link plan} and one
+ * Synchronizing a device's tree with a SKIT on the Registry: a pure {@link plan} and one
  * interpreter, {@link run}, that performs every write.
  *
- * The device keeps one {@link SyncState} per Draft. `Idle { base }` means the device's files
+ * The device keeps one {@link SyncState} per SKIT. `Idle { base }` means the device's files
  * descend from `base`, a revision that was current on the Registry. `Sending { base, revision }`
  * means the device recorded `revision` on top of `base`, holds its files, and was moving the
  * Registry's `current` from `base` to it when it last stopped; it may not know whether the move
@@ -79,19 +79,19 @@ export class Unsettled
   readonly code = "CONFLICT" as const;
   readonly retryable = true;
   get message() {
-    return `Sync did not settle after ${this.steps} steps while other devices kept changing the Draft`;
+    return `Sync did not settle after ${this.steps} steps while other devices kept changing the SKIT`;
   }
   readonly remediation = "Sync again; nothing was lost.";
 }
 
 /** A revision with its tree. */
-export interface Held {
+export interface LoadedRevision {
   readonly id: History.RevisionId;
   readonly revision: History.Revision;
   readonly tree: History.Tree;
 }
 
-/** The Registry's side of a Draft. Failures other than {@link Moved} are the caller's own. */
+/** The Registry's side of a SKIT. Failures other than {@link Moved} are the caller's own. */
 export class Remote extends Context.Service<
   Remote,
   {
@@ -125,9 +125,9 @@ export class Remote extends Context.Service<
 
 /**
  * What {@link plan} decides from: the device's tree, the revisions its state names, and the
- * Registry's `current`. A `Sending` view always holds the revision being sent.
+ * Registry's `current`. A `Sending` input always holds the revision being sent.
  */
-export type View =
+export type PlanInput =
   | {
       readonly _tag: "Writing";
       readonly state: typeof Writing.Type;
@@ -138,39 +138,43 @@ export type View =
   | {
       readonly _tag: "Idle";
       readonly local: { readonly hash: History.TreeHash; readonly tree: History.Tree };
-      readonly base: Held | null;
-      readonly current: Held | null;
+      readonly base: LoadedRevision | null;
+      readonly current: LoadedRevision | null;
     }
   | {
       readonly _tag: "Sending";
       readonly local: { readonly hash: History.TreeHash; readonly tree: History.Tree };
-      readonly base: Held | null;
-      readonly sent: Held;
-      readonly current: Held | null;
+      readonly base: LoadedRevision | null;
+      readonly sent: LoadedRevision;
+      readonly current: LoadedRevision | null;
     };
 
 /**
  * The revision this device sends: its local tree recorded on top of `parents`, or a revision it
  * already recorded and posted.
  */
-export type Ours =
+export type LocalRevision =
   | { readonly _tag: "Local"; readonly parents: ReadonlyArray<History.RevisionId> }
-  | { readonly _tag: "Sent"; readonly sent: Held };
+  | { readonly _tag: "Sent"; readonly sent: LoadedRevision };
 
 export type Plan =
-  | { readonly _tag: "Write"; readonly view: Extract<View, { readonly _tag: "Writing" }> }
+  | { readonly _tag: "Write"; readonly input: Extract<PlanInput, { readonly _tag: "Writing" }> }
   /** The device's files are `base`'s tree. */
   | { readonly _tag: "UpToDate"; readonly base: History.RevisionId }
   /** Only the Registry changed: write `current`'s tree. */
-  | { readonly _tag: "Pull"; readonly current: Held }
+  | { readonly _tag: "Pull"; readonly current: LoadedRevision }
   /** Only the device changed: move `current` from `expected` to ours. */
-  | { readonly _tag: "Push"; readonly ours: Ours; readonly expected: History.RevisionId | null }
+  | {
+      readonly _tag: "Push";
+      readonly ours: LocalRevision;
+      readonly expected: History.RevisionId | null;
+    }
   /** Both changed since `base`: merge ours with theirs, the Registry's `current`. */
   | {
       readonly _tag: "Merge";
-      readonly base: Held | null;
-      readonly ours: Ours;
-      readonly theirs: Held;
+      readonly base: LoadedRevision | null;
+      readonly ours: LocalRevision;
+      readonly theirs: LoadedRevision;
     }
   | { readonly _tag: "Blocked"; readonly removal: Removal };
 
@@ -179,32 +183,32 @@ const knownPaths = (tree: History.Tree) =>
   tree.filter((entry) => entry.kind !== "directory").map((entry) => entry.path);
 
 /**
- * Decide the next step. Pure: everything it needs is in `view`. A push or merge that deletes too
+ * Decide the next step. Pure: everything it needs is in `input`. A push or merge that deletes too
  * many of the base's files, as ADR-0026 defines bulk removal (every known file, or more than five
  * and more than half), is `Blocked` unless `approved` is that exact removal.
  */
-export const plan = (view: View, approved?: Removal): Plan => {
-  if (view._tag === "Writing") return { _tag: "Write", view };
-  const current = view.current;
-  if (view._tag === "Sending") {
-    const sent = view.sent;
+export const plan = (input: PlanInput, approved?: Removal): Plan => {
+  if (input._tag === "Writing") return { _tag: "Write", input };
+  const current = input.current;
+  if (input._tag === "Sending") {
+    const sent = input.sent;
     // The move landed: the device holds `sent`, so plan from there.
     if (current?.id === sent.id)
-      return plan({ _tag: "Idle", local: view.local, base: sent, current }, approved);
+      return plan({ _tag: "Idle", local: input.local, base: sent, current }, approved);
     // The move never landed. Removal safety was decided when the revision was first planned.
-    if (current === null || current.id === view.base?.id)
+    if (current === null || current.id === input.base?.id)
       return { _tag: "Push", ours: { _tag: "Sent", sent }, expected: current?.id ?? null };
     // Someone else moved first. Merge what the device holds now, which descends from `sent`.
-    const ours: Ours =
-      view.local.hash === sent.revision.tree
+    const ours: LocalRevision =
+      input.local.hash === sent.revision.tree
         ? { _tag: "Sent", sent }
         : { _tag: "Local", parents: [sent.id] };
-    return { _tag: "Merge", base: view.base, ours, theirs: current };
+    return { _tag: "Merge", base: input.base, ours, theirs: current };
   }
-  const base = view.base;
+  const base = input.base;
   const guarded = (next: Plan): Plan => {
     if (base === null) return next;
-    const kept = new Set(knownPaths(view.local.tree));
+    const kept = new Set(knownPaths(input.local.tree));
     const known = knownPaths(base.tree);
     const paths = known.filter((path) => !kept.has(path)).sort();
     const removal = { deleting: paths.length, of: known.length, paths };
@@ -218,11 +222,11 @@ export const plan = (view: View, approved?: Removal): Plan => {
   };
   if (current === null)
     return guarded({ _tag: "Push", ours: { _tag: "Local", parents: [] }, expected: null });
-  if (current.revision.tree === view.local.hash) return { _tag: "UpToDate", base: current.id };
-  // Never synced. An empty device takes the Draft; otherwise nothing is known to be deleted, so
+  if (current.revision.tree === input.local.hash) return { _tag: "UpToDate", base: current.id };
+  // Never synced. An empty device takes the SKIT; otherwise nothing is known to be deleted, so
   // merging keeps both sides' files.
   if (base === null)
-    return view.local.tree.length === 0
+    return input.local.tree.length === 0
       ? { _tag: "Pull", current }
       : { _tag: "Merge", base: null, ours: { _tag: "Local", parents: [] }, theirs: current };
   if (current.id === base.id)
@@ -231,7 +235,7 @@ export const plan = (view: View, approved?: Removal): Plan => {
       ours: { _tag: "Local", parents: [base.id] },
       expected: base.id,
     });
-  if (view.local.hash === base.revision.tree) return { _tag: "Pull", current };
+  if (input.local.hash === base.revision.tree) return { _tag: "Pull", current };
   return guarded({
     _tag: "Merge",
     base,
@@ -241,10 +245,10 @@ export const plan = (view: View, approved?: Removal): Plan => {
 };
 
 /** A revision from the device's store, with its tree. */
-const held = Effect.fn("Sync.held")(function* (id: History.RevisionId) {
+const loadRevision = Effect.fn("Sync.loadRevision")(function* (id: History.RevisionId) {
   const store = yield* History.Store;
   const revision = yield* store.revision(id);
-  return { id, revision, tree: yield* store.tree(revision.tree) } satisfies Held;
+  return { id, revision, tree: yield* store.tree(revision.tree) } satisfies LoadedRevision;
 });
 
 /**
@@ -252,10 +256,10 @@ const held = Effect.fn("Sync.held")(function* (id: History.RevisionId) {
  * `current` from the Registry. A `current` the device does not hold yet is fetched, checked
  * against its identity, and stored shallowly.
  */
-export const view = Effect.fn("Sync.view")(function* (
+export const loadPlanInput = Effect.fn("Sync.loadPlanInput")(function* (
   state: SyncState,
   local: History.TreeHash,
-): Effect.fn.Return<View, History.StoreError | SkitFailure, History.Store | Remote> {
+): Effect.fn.Return<PlanInput, History.StoreError | SkitFailure, History.Store | Remote> {
   const store = yield* History.Store;
   if (state._tag === "Writing")
     return {
@@ -270,7 +274,7 @@ export const view = Effect.fn("Sync.view")(function* (
   const current =
     currentId === null
       ? null
-      : yield* held(currentId).pipe(
+      : yield* loadRevision(currentId).pipe(
           Effect.catchTag("History.StoreMissing", () =>
             Effect.gen(function* () {
               const fetched = yield* remote.revision(currentId);
@@ -284,17 +288,17 @@ export const view = Effect.fn("Sync.view")(function* (
                   id: currentId,
                   reason: "its identity does not match",
                 });
-              return yield* held(currentId);
+              return yield* loadRevision(currentId);
             }),
           ),
         );
   const common = {
     local: { hash: local, tree: yield* store.tree(local) },
-    base: state.base === null ? null : yield* held(state.base),
+    base: state.base === null ? null : yield* loadRevision(state.base),
     current,
   };
   if (state._tag === "Idle") return { _tag: "Idle", ...common };
-  const sent = yield* held(state.revision);
+  const sent = yield* loadRevision(state.revision);
   // Another device may have built on the send after it landed. Then the device holds an ancestor
   // of `current`, and must plan from what it sent rather than merge it again.
   const landed =
@@ -328,7 +332,7 @@ const lastEdit = (
   );
 
 /** {@link lastEdit} for a revision, reading a merge's ancestry from the Registry as needed. */
-const editedAt = Effect.fn("Sync.editedAt")(function* (start: Held) {
+const editedAt = Effect.fn("Sync.editedAt")(function* (start: LoadedRevision) {
   if (start.revision.parents.length < 2) return DateTime.makeUnsafe(start.revision.author.at);
   const known = yield* (yield* Remote).ancestors(start.id).pipe(
     Stream.scan(
@@ -365,7 +369,7 @@ export type Outcome =
     }
   | { readonly status: "blocked"; readonly removal: Removal };
 
-export interface RunOptions<E, R> {
+export interface RunOptions<SaveError, WriteError, R> {
   readonly state: SyncState;
   /** The device's tree, already in its store. */
   readonly local: History.TreeHash;
@@ -381,9 +385,9 @@ export interface RunOptions<E, R> {
   /** A removal the user approved; it applies only if the removal is exactly this one. */
   readonly approved?: Removal;
   /** Save the state durably before returning. */
-  readonly save: (state: SyncState) => Effect.Effect<void, E, R>;
+  readonly save: (state: SyncState) => Effect.Effect<void, SaveError, R>;
   /** Make the device's files `to`, if they are still `from`. */
-  readonly write: (from: History.Tree, to: History.Tree) => Effect.Effect<void, E, R>;
+  readonly write: (from: History.Tree, to: History.Tree) => Effect.Effect<void, WriteError, R>;
 }
 
 export interface RunResult {
@@ -408,10 +412,10 @@ const strength = ["up_to_date", "pulled", "pushed", "merged"] as const;
  * already written; anything else is an edit made since. Recover the authored input without
  * partly downloaded entries, so it keeps its original ancestry before merging the pending write.
  */
-const authoredTree = (view: Extract<View, { readonly _tag: "Writing" }>) => {
-  const from = new Map(view.from.map((entry) => [entry.path, entry]));
-  const to = new Map(view.to.map((entry) => [entry.path, entry]));
-  const local = new Map(view.local.tree.map((entry) => [entry.path, entry]));
+const authoredTree = (input: Extract<PlanInput, { readonly _tag: "Writing" }>) => {
+  const from = new Map(input.from.map((entry) => [entry.path, entry]));
+  const to = new Map(input.to.map((entry) => [entry.path, entry]));
+  const local = new Map(input.local.tree.map((entry) => [entry.path, entry]));
   const same = Option.makeEquivalence(Schema.toEquivalence(TreeEntry));
   const authored: TreeEntry[] = [];
   for (const path of new Set([...from.keys(), ...to.keys(), ...local.keys()])) {
@@ -430,24 +434,28 @@ const authoredTree = (view: Extract<View, { readonly _tag: "Writing" }>) => {
  * re-reads `current` and plans again. Returns the state it last saved and what happened, with the
  * strongest status of any step: merged, then pushed, then pulled.
  */
-export const run = <E, R>(
-  options: RunOptions<E, R>,
-): Effect.Effect<RunResult, E | History.StoreError | SkitFailure, R | History.Store | Remote> =>
-  Effect.gen(function* () {
+export const run = <SaveError, WriteError, R>(
+  options: RunOptions<SaveError, WriteError, R>,
+): Effect.Effect<
+  RunResult,
+  SaveError | WriteError | History.StoreError | SkitFailure,
+  R | History.Store | Remote
+> =>
+  Effect.fn("Sync.run")(function* () {
     const store = yield* History.Store;
     const remote = yield* Remote;
     const start = { hash: options.local, tree: yield* store.tree(options.local) };
     // A send whose outcome is unknown is posted again first, so every later step may rely on it.
     if (options.state._tag === "Sending") {
-      const sent = yield* held(options.state.revision);
+      const sent = yield* loadRevision(options.state.revision);
       yield* remote.post(sent.id, sent.revision, sent.tree);
     }
 
-    const send = Effect.fn("Sync.send")(function* (ours: Ours, local: History.Tree) {
+    const send = Effect.fn("Sync.send")(function* (ours: LocalRevision, local: History.Tree) {
       if (ours._tag === "Sent") return ours.sent;
       const recorded = yield* History.record(local, ours.parents, options.author);
       yield* remote.post(recorded.id, recorded.revision, local);
-      return { ...recorded, tree: local } satisfies Held;
+      return { ...recorded, tree: local } satisfies LoadedRevision;
     });
     const moved = (expected: History.RevisionId | null, id: History.RevisionId) =>
       remote.move(expected, id).pipe(
@@ -461,14 +469,21 @@ export const run = <E, R>(
     const step = (
       progress: Progress,
       steps: number,
-    ): Effect.Effect<RunResult, E | History.StoreError | SkitFailure, R | History.Store | Remote> =>
+    ): Effect.Effect<
+      RunResult,
+      SaveError | WriteError | History.StoreError | SkitFailure,
+      R | History.Store | Remote
+    > =>
       Effect.gen(function* () {
         if (steps === MAX_STEPS) return yield* new Unsettled({ steps });
-        const next = plan(yield* view(progress.state, progress.local.hash), options.approved);
+        const next = plan(
+          yield* loadPlanInput(progress.state, progress.local.hash),
+          options.approved,
+        );
         switch (next._tag) {
           case "Write": {
-            const { state } = next.view;
-            const authored = authoredTree(next.view);
+            const { state } = next.input;
+            const authored = authoredTree(next.input);
             // A real edit made during an unfinished write keeps its original ancestry, without
             // claiming the already downloaded files as new authored content.
             const edited = (yield* store.putTree(authored)) !== state.from;
@@ -482,15 +497,15 @@ export const run = <E, R>(
             }
             // Apply the pending changes through the same merger as an ordinary sync. A real
             // edit and an independent downloaded edit in one file must both survive.
-            const target = yield* held(
+            const target = yield* loadRevision(
               state.next._tag === "Sending" ? state.next.revision : state.next.base,
             );
             const merged = Merge.runDecided(
               options.merger,
               {
-                base: Option.some(next.view.from),
+                base: Option.some(next.input.from),
                 ours: Option.some(progress.local.tree),
-                theirs: Option.some(next.view.to),
+                theirs: Option.some(next.input.to),
               },
               options.decide({
                 ours: DateTime.makeUnsafe(options.author.at),
@@ -578,7 +593,7 @@ export const run = <E, R>(
             );
           }
           case "Merge": {
-            // Ours is posted first, so the side a merge does not keep stays on the Registry.
+            // LocalRevision is posted first, so the side a merge does not keep stays on the Registry.
             const ours = yield* send(next.ours, progress.local.tree);
             const theirs = next.theirs;
             const merged = Merge.runDecided(
@@ -627,4 +642,4 @@ export const run = <E, R>(
       { state: options.state, local: start, status: "up_to_date", choices: [] },
       0,
     );
-  });
+  })();

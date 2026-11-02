@@ -114,7 +114,7 @@ it.effect("author sync never sends an environment token to another Registry's re
           testHttpClientLayer((request) =>
             Effect.sync(() => {
               authorizations.push(request.headers.authorization);
-              return Response.json({ error: "draft_not_found" }, { status: 404 });
+              return Response.json({ error: "skit_not_found" }, { status: 404 });
             }),
           ),
         ),

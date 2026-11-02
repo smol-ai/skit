@@ -1,10 +1,10 @@
 import { Clock, Effect, FileSystem, Path, Result, Schema } from "effect";
 import { History, LinkStat, MachineSettings, syncPaths, walkAuthorTree } from "@smolai/skit-core";
 import { configurationForHome } from "../../configuration/skit-configuration.js";
-import { readAuthorWorkspace } from "../../library/author-workspace-metadata.js";
+import { loadAuthorWorkspaceMetadata } from "../../library/author-workspace-metadata.js";
 import { LocalFilesChangedDuringSync } from "../../registry/failures.js";
 import { AuthorHistoryInvalid } from "./history-contracts.js";
-import { readAuthorHistoryEvents, writeAuthorHistoryEvent } from "./history-journal.js";
+import { loadAuthorHistoryEvents, writeAuthorHistoryEvent } from "./history-journal.js";
 import { withDeviceStore } from "./device-store.js";
 export { AuthorHistoryInvalid, AuthorHistoryEvent } from "./history-contracts.js";
 
@@ -31,11 +31,11 @@ export const loadAuthorHistory = Effect.fn("Author.loadHistory")(function* (
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const root = yield* fs.realPath(path.resolve(input));
-  const workspace = yield* readAuthorWorkspace(root).pipe(
+  const workspace = yield* loadAuthorWorkspaceMetadata(root).pipe(
     Effect.catchTag("AuthorWorkspaceMetadataInvalid", () => Effect.succeed(undefined)),
   );
   const directory = yield* historyDirectory(home);
-  const events = yield* readAuthorHistoryEvents(directory, root, workspace?.workspace_id);
+  const events = yield* loadAuthorHistoryEvents(directory, root, workspace?.workspace_id);
   return yield* Effect.gen(function* () {
     const store = yield* History.Store;
     return yield* Effect.forEach(events, (event) =>
@@ -69,7 +69,7 @@ export const loadStoredTrees = Effect.fn("Author.loadStoredTrees")(function* (ho
  * .gitignore remain in effect. An unchanged scan records nothing and returns the latest
  * revision; returning to older content records a new revision that shares the older tree.
  */
-export const saveAuthorWorkspace = Effect.fn("Author.saveWorkspace")(function* (
+export const refreshAuthorHistory = Effect.fn("Author.refreshHistory")(function* (
   input: string,
   home?: string,
 ) {
@@ -114,7 +114,7 @@ export const saveAuthorWorkspace = Effect.fn("Author.saveWorkspace")(function* (
     });
   // Broken device-local metadata must not prevent backing up the authored files. This is
   // path-provenance fallback only; it neither creates nor repairs a workspace identity.
-  const workspace = yield* readAuthorWorkspace(root).pipe(
+  const workspace = yield* loadAuthorWorkspaceMetadata(root).pipe(
     Effect.catchTag("AuthorWorkspaceMetadataInvalid", () => Effect.succeed(undefined)),
   );
   // Machine identity may need the Library writer. Never acquire that writer while holding the

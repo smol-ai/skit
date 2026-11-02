@@ -2,8 +2,8 @@ import { configurationForHome } from "../../configuration/skit-configuration.js"
 import {
   AuthoringAuthenticatedApi,
   CurrentMovedResponse,
-  DraftExistsResponse,
-  DraftNotFoundResponse,
+  SkitExistsResponse,
+  SkitNotFoundResponse,
   ForbiddenOriginResponse,
   ForbiddenResponse,
   InsufficientScopeResponse,
@@ -26,14 +26,14 @@ import {
   AuthorRemoteMetadataInvalid,
   InsecureOrigin,
   LocalFilesChangedDuringSync,
-  RemoteDraftUnavailable,
+  RemoteSkitUnavailable,
   VisibilityNotAccepted,
 } from "../../registry/failures.js";
 import type { AuthorSyncResult, AuthorVisibility } from "./sync-contract.js";
-import { historyDirectory, saveAuthorWorkspace } from "./history.js";
+import { historyDirectory, refreshAuthorHistory } from "./history.js";
 import { withDeviceStore } from "./device-store.js";
 import { authorDecider, authorTree } from "./device-view.js";
-import { readAuthorSyncTree } from "./local-tree.js";
+import { scanAuthorSyncTree } from "./local-tree.js";
 
 export type { AuthorVisibility } from "./sync-contract.js";
 import {
@@ -60,7 +60,7 @@ import {
 } from "../../registry/failures.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
-/** A Draft request the Registry answered, with its own words for why it refused. */
+/** A SKIT request the Registry answered, with its own words for why it refused. */
 export class SyncRejected
   extends Data.TaggedError("SyncRejected")<{ message: string }>
   implements SkitFailure
@@ -70,18 +70,41 @@ export class SyncRejected
   readonly remediation = "Check the Registry's reason, then sync again.";
 }
 
-/** One sync state per Draft, by the Draft's `skit://` locator. */
-const SyncBindings = Schema.Struct({
+/** Saved recovery state must be readable before sync may change files or the Registry. */
+export class AuthorSyncStateInvalid
+  extends Schema.TaggedError<AuthorSyncStateInvalid>()("AuthorSyncStateInvalid", {
+    path: Schema.String,
+    reason: Schema.String,
+  })
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  get message() {
+    return `Author sync state at ${this.path} is invalid: ${this.reason}`;
+  }
+  readonly remediation = "Keep the sync state file and repair or restore it before syncing again.";
+}
+
+/** One sync state per SKIT, by the SKIT's `skit://` locator. */
+const SavedSyncStates = Schema.Struct({
+  schema: Schema.Literal("skit.sync-bindings.v3"),
+  skits: Schema.Record(Schema.String, Sync.SyncState),
+});
+/** Read-only compatibility for checkpoints written before SKITs owned their revisions. */
+const LegacySyncStates = Schema.Struct({
   schema: Schema.Literal("skit.sync-bindings.v2"),
   drafts: Schema.Record(Schema.String, Sync.SyncState),
 });
-type SyncBindings = typeof SyncBindings.Type;
-/** The pre-release format, a base copy of every file per Draft, recognized only to drop it. */
+type SavedSyncStates = typeof SavedSyncStates.Type;
+/** The pre-release format, a base copy of every file per SKIT, recognized only to drop it. */
 const PreReleaseBindings = Schema.Record(
   Schema.String,
   Schema.Struct({ skitId: Schema.String, revisionId: Schema.String }),
 );
-const BindingsDocument = Schema.fromJsonString(Schema.Union([SyncBindings, PreReleaseBindings]));
+const SyncStatesDocument = Schema.fromJsonString(
+  Schema.Union([SavedSyncStates, LegacySyncStates, PreReleaseBindings]),
+);
 
 export type AuthorRemoteHome = {
   schema: "skit.remote.v1";
@@ -177,7 +200,7 @@ export function skitLocator(remote: AuthorRemoteHome): string {
   return `skit://${authority}/${remote.namespace}/${remote.skit}`;
 }
 
-export function readAuthorRemote(
+export function loadAuthorRemote(
   root: string,
 ): Effect.Effect<AuthorRemoteHome | undefined, AuthorRemoteMetadataInvalid, FileSystem.FileSystem> {
   return Effect.gen(function* () {
@@ -226,35 +249,41 @@ const writeRemote = Effect.fn("Sync.writeRemote")(function* (
 });
 
 /**
- * Load the sync state of every Draft. Pre-release bindings name Draft revisions the Registry no
- * longer has, so they are dropped and each Draft syncs again from no base.
+ * Load the sync state of every SKIT. Pre-release bindings name SKIT revisions the Registry no
+ * longer has, so they are dropped and each SKIT syncs again from no base.
  */
-const loadBindings = Effect.fn("Sync.loadBindings")(function* (home?: string) {
+const loadSyncStates = Effect.fn("Sync.loadSyncStates")(function* (home?: string) {
   const fs = yield* FileSystem.FileSystem;
+  const path = (yield* configurationForHome(home)).syncBindingsPath;
   const text = yield* fs
-    .readFileString((yield* configurationForHome(home)).syncBindingsPath)
+    .readFileString(path)
     .pipe(
       Effect.catchTag("PlatformError", (error) =>
         isErrno(error, "ENOENT") ? Effect.succeed(undefined) : Effect.fail(error),
       ),
     );
   if (text === undefined) return {};
-  // A malformed file is a defect, as it always was.
-  const document = yield* Schema.decodeUnknownEffect(BindingsDocument)(text).pipe(Effect.orDie);
-  return Schema.is(SyncBindings)(document) ? document.drafts : {};
+  const document = yield* Schema.decodeUnknownEffect(SyncStatesDocument)(text).pipe(
+    Effect.mapError((error) => new AuthorSyncStateInvalid({ path, reason: String(error) })),
+  );
+  return Schema.is(SavedSyncStates)(document)
+    ? document.skits
+    : Schema.is(LegacySyncStates)(document)
+      ? document.drafts
+      : {};
 });
 
-/** Save one Draft's sync state durably: flushed, then renamed over the old file. */
-const saveBinding = Effect.fn("Sync.saveBinding")(function* (
+/** Save one SKIT's sync state durably: flushed, then renamed over the old file. */
+const saveSyncState = Effect.fn("Sync.saveSyncState")(function* (
   home: string | undefined,
   locator: string,
   state: Sync.SyncState,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = (yield* configurationForHome(home)).syncBindingsPath;
-  const bindings: SyncBindings = {
-    schema: "skit.sync-bindings.v2",
-    drafts: { ...(yield* loadBindings(home)), [locator]: state },
+  const states: SavedSyncStates = {
+    schema: "skit.sync-bindings.v3",
+    skits: { ...(yield* loadSyncStates(home)), [locator]: state },
   };
   yield* fs.makeDirectory(dirname(path), { recursive: true, mode: 0o700 });
   yield* Effect.scoped(
@@ -266,7 +295,7 @@ const saveBinding = Effect.fn("Sync.saveBinding")(function* (
       const temporary = join(staging, "state.json");
       const file = yield* fs.open(temporary, { flag: "wx", mode: 0o600 });
       // The bindings are built from decoded states, so failing to encode them is a defect.
-      const text = yield* Schema.encodeEffect(Schema.fromJsonString(SyncBindings))(bindings).pipe(
+      const text = yield* Schema.encodeEffect(Schema.fromJsonString(SavedSyncStates))(states).pipe(
         Effect.orDie,
       );
       yield* file.writeAll(new TextEncoder().encode(text));
@@ -285,7 +314,7 @@ const saveBinding = Effect.fn("Sync.saveBinding")(function* (
 /**
  * Make the workspace's files `to`, if they are still `from`. Any edit made since sync read them is
  * saved to history first and stops the write. Only files are written: a directory or symlink in
- * a Draft is refused rather than dropped.
+ * a SKIT is refused rather than dropped.
  */
 const writeAuthorTree = Effect.fn("Sync.writeTree")(function* (
   root: string,
@@ -294,8 +323,8 @@ const writeAuthorTree = Effect.fn("Sync.writeTree")(function* (
   to: History.Tree,
 ) {
   const fs = yield* FileSystem.FileSystem;
-  yield* saveAuthorWorkspace(root, home);
-  const local = yield* readAuthorSyncTree(root);
+  yield* refreshAuthorHistory(root, home);
+  const local = yield* scanAuthorSyncTree(root);
   if ((yield* History.treeHash(local.tree)) !== (yield* History.treeHash(from)))
     return yield* new LocalFilesChangedDuringSync();
   const before = new Map(
@@ -309,7 +338,7 @@ const writeAuthorTree = Effect.fn("Sync.writeTree")(function* (
       issues: [
         {
           path: unsupported.path,
-          message: `Author sync writes files only; the Draft holds a ${unsupported.kind} here`,
+          message: `Author sync writes files only; the SKIT holds a ${unsupported.kind} here`,
         },
       ],
     });
@@ -357,7 +386,14 @@ const writeAuthorTree = Effect.fn("Sync.writeTree")(function* (
   for (const folder of folders) yield* links.removeEmptyDirectory(join(root, ...folder.split("/")));
 });
 
-export const syncDraft = Effect.fn("Sync.draft")(function* (
+/** Whether this invocation connects a new SKIT or syncs a saved remote home. */
+type SyncDestination = Data.TaggedEnum<{
+  NewRemote: { readonly remote: AuthorRemoteHome; readonly visibility: AuthorVisibility };
+  ConnectedRemote: { readonly remote: AuthorRemoteHome };
+}>;
+const SyncDestination = Data.taggedEnum<SyncDestination>();
+
+export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
   rootInput: string,
   options: {
     apply: boolean;
@@ -371,7 +407,7 @@ export const syncDraft = Effect.fn("Sync.draft")(function* (
 ) {
   const root = resolve(rootInput);
   const configuredBase = options.baseUrl;
-  const storedRemote = yield* readAuthorRemote(root);
+  const storedRemote = yield* loadAuthorRemote(root);
   if (storedRemote && options.to)
     return yield* new AuthorRemoteAlreadyExists({
       locator: skitLocator(storedRemote),
@@ -379,8 +415,8 @@ export const syncDraft = Effect.fn("Sync.draft")(function* (
   if (storedRemote && options.visibility)
     return yield* new VisibilityNotAccepted({ reason: "already-synced" });
   // A first sync names its destination and visibility; a synced workspace has its remote home.
-  const { remote, firstSync } = storedRemote
-    ? { remote: storedRemote, firstSync: undefined }
+  const destination = storedRemote
+    ? SyncDestination.ConnectedRemote({ remote: storedRemote })
     : options.to === undefined
       ? yield* new MissingRequirement({
           command: "First author sync",
@@ -388,10 +424,11 @@ export const syncDraft = Effect.fn("Sync.draft")(function* (
         })
       : options.visibility === undefined
         ? yield* new VisibilityNotAccepted({ reason: "required" })
-        : {
+        : SyncDestination.NewRemote({
             remote: yield* parseAuthorDestination(options.to, configuredBase),
-            firstSync: { visibility: options.visibility },
-          };
+            visibility: options.visibility,
+          });
+  const { remote } = destination;
   const base = remote.origin;
   const owner = remote.namespace;
   const slug = remote.skit;
@@ -405,8 +442,8 @@ export const syncDraft = Effect.fn("Sync.draft")(function* (
   const identity = { authority: remote.origin, namespace: owner, skit: slug, locator };
 
   // Every observed tree is saved on this device before sync talks to the Registry.
-  const observed = yield* saveAuthorWorkspace(root, options.home);
-  const local = yield* readAuthorSyncTree(root);
+  const saved = yield* refreshAuthorHistory(root, options.home);
+  const local = yield* scanAuthorSyncTree(root);
   const directory = yield* historyDirectory(options.home);
   const localHash = yield* Effect.flatMap(History.Store, (history) =>
     history.putTree(local.tree),
@@ -429,8 +466,8 @@ export const syncDraft = Effect.fn("Sync.draft")(function* (
       });
     if (Schema.is(ForbiddenResponse)(error) || Schema.is(ForbiddenOriginResponse)(error))
       return new PrincipalNotAuthorized({ action: "author this Namespace or SKIT" });
-    if (Schema.is(DraftNotFoundResponse)(error))
-      return new RemoteDraftUnavailable({ identity: locator });
+    if (Schema.is(SkitNotFoundResponse)(error))
+      return new RemoteSkitUnavailable({ identity: locator });
     if (isSuccessfulResponseDecodeFailure(error, [successStatus]))
       return new SkitContractError({
         contract: `${context} response`,
@@ -442,18 +479,18 @@ export const syncDraft = Effect.fn("Sync.draft")(function* (
   };
   const params = { owner, slug };
   const registry = Sync.Remote.of({
-    current: client.drafts.current({ params }).pipe(
-      Effect.map((draft) => draft.current),
-      Effect.mapError(failure("draft current", 200)),
+    current: client.skits.current({ params }).pipe(
+      Effect.map((skit) => skit.current),
+      Effect.mapError(failure("skit current", 200)),
     ),
     revision: (id) =>
-      client.drafts.revision({ params: { ...params, id } }).pipe(
+      client.skits.revision({ params: { ...params, id } }).pipe(
         Effect.map(({ revision, tree }) => ({ revision, tree })),
-        Effect.mapError(failure("draft revision", 200)),
+        Effect.mapError(failure("skit revision", 200)),
       ),
     ancestors: (id) =>
       Stream.paginate(Option.none<string>(), (cursor) =>
-        client.drafts
+        client.skits
           .ancestors({
             params,
             query: Option.match(cursor, {
@@ -469,54 +506,55 @@ export const syncDraft = Effect.fn("Sync.draft")(function* (
                   Option.map(Option.fromNullishOr(page.next_cursor), Option.some),
                 ] as const,
             ),
-            Effect.mapError(failure("draft history", 200)),
+            Effect.mapError(failure("skit history", 200)),
           ),
       ),
     post: (id, revision, tree) =>
-      client.drafts
+      client.skits
         .post({ params, payload: { id, revision, tree } })
-        .pipe(Effect.asVoid, Effect.mapError(failure("draft revision", 200))),
+        .pipe(Effect.asVoid, Effect.mapError(failure("skit revision", 200))),
     move: (expected, id) =>
-      client.drafts.move({ params, payload: { expected, id } }).pipe(
+      client.skits.move({ params, payload: { expected, id } }).pipe(
         Effect.asVoid,
         Effect.mapError((error) =>
           Schema.is(CurrentMovedResponse)(error)
             ? new Sync.Moved({ current: error.current })
-            : failure("draft move", 200)(error),
+            : failure("skit move", 200)(error),
         ),
       ),
   });
-  if (firstSync !== undefined) {
-    const existing = yield* client.drafts.current({ params }).pipe(Effect.result);
+  if (destination._tag === "NewRemote") {
+    const existing = yield* client.skits.current({ params }).pipe(Effect.result);
     if (Result.isSuccess(existing))
       return yield* new DestinationExistsWithoutHistory({ identity: locator });
-    if (!Schema.is(DraftNotFoundResponse)(existing.failure))
-      return yield* Effect.fail(failure("draft current", 200)(existing.failure));
+    if (!Schema.is(SkitNotFoundResponse)(existing.failure))
+      return yield* Effect.fail(failure("skit current", 200)(existing.failure));
     if (!options.apply)
       return {
         status: "first_sync_ready",
         changed: false,
         identity,
-        visibility: firstSync.visibility,
+        visibility: destination.visibility,
         file_count: local.tree.length,
-        effects: ["create_skit", "create_draft", "record_remote_home"],
+        effects: ["create_skit", "save_revision", "record_remote_home"],
       } satisfies AuthorSyncResult;
-    yield* client.drafts
-      .create({ payload: { owner, slug, visibility: firstSync.visibility } })
+    yield* client.skits
+      .create({ payload: { owner, slug, visibility: destination.visibility } })
       .pipe(
         Effect.mapError((error) =>
-          Schema.is(DraftExistsResponse)(error)
+          Schema.is(SkitExistsResponse)(error)
             ? new DestinationExistsWithoutHistory({ identity: locator })
-            : failure("draft create", 201)(error),
+            : failure("skit create", 201)(error),
         ),
       );
   }
 
-  // A Draft this sync just created starts from no base, whatever an earlier binding said.
+  // A SKIT this sync just created starts from no base, whatever an earlier binding said.
   const state =
-    (firstSync === undefined ? (yield* loadBindings(options.home))[locator] : undefined) ??
-    Sync.Idle.make({ base: null });
-  const planned = yield* Sync.view(state, localHash).pipe(
+    (destination._tag === "ConnectedRemote"
+      ? (yield* loadSyncStates(options.home))[locator]
+      : undefined) ?? Sync.Idle.make({ base: null });
+  const planned = yield* Sync.loadPlanInput(state, localHash).pipe(
     Effect.map((view) => Sync.plan(view)),
     Effect.provideService(Sync.Remote, registry),
     withDeviceStore(directory),
@@ -537,7 +575,7 @@ export const syncDraft = Effect.fn("Sync.draft")(function* (
         return {
           status: "ready",
           changed: false,
-          action: planned.view.state.next._tag === "Idle" ? "pull" : "merge",
+          action: planned.input.state.next._tag === "Idle" ? "pull" : "merge",
         } satisfies AuthorSyncResult;
       case "Push":
         return { status: "ready", changed: false, action: "push" } satisfies AuthorSyncResult;
@@ -547,7 +585,7 @@ export const syncDraft = Effect.fn("Sync.draft")(function* (
   const { outcome } = yield* Sync.run({
     state,
     local: localHash,
-    author: observed.revision.author,
+    author: saved.revision.author,
     // This device applies every path it syncs.
     merger: authorTree({ excluded: new Set(), previouslyExcluded: new Set() }),
     decide: authorDecider,
@@ -555,20 +593,20 @@ export const syncDraft = Effect.fn("Sync.draft")(function* (
     ...(options.allowLargeDeletion && planned._tag === "Blocked"
       ? { approved: planned.removal }
       : {}),
-    save: (next) => saveBinding(options.home, locator, next),
+    save: (next) => saveSyncState(options.home, locator, next),
     write: (from, to) => writeAuthorTree(root, options.home, from, to),
   }).pipe(Effect.provideService(Sync.Remote, registry), withDeviceStore(directory));
   if (outcome.status === "blocked")
     return { status: "blocked", changed: false, ...outcome.removal } satisfies AuthorSyncResult;
-  if (firstSync !== undefined) yield* writeRemote(root, remote);
+  if (destination._tag === "NewRemote") yield* writeRemote(root, remote);
   // Record what sync wrote as this workspace's latest observation.
-  yield* saveAuthorWorkspace(root, options.home);
-  if (firstSync !== undefined)
+  yield* refreshAuthorHistory(root, options.home);
+  if (destination._tag === "NewRemote")
     return {
       status: "created",
       changed: true,
       identity,
-      visibility: firstSync.visibility,
+      visibility: destination.visibility,
       revision_id: outcome.revision,
       paths: local.tree.map((entry) => entry.path).sort(),
       // This field means first sync persisted the repository's remote home.

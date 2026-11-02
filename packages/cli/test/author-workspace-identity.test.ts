@@ -4,11 +4,11 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
 import { withLibraryWriter } from "@smolai/skit-core";
 import { ensureAuthorWorkspaceIdentity } from "../src/workflows/author/workspace-identity.js";
-import { readAuthorWorkspace } from "../src/library/author-workspace-metadata.js";
+import { loadAuthorWorkspaceMetadata } from "../src/library/author-workspace-metadata.js";
 import {
   loadAuthorHistory,
   loadStoredTrees,
-  saveAuthorWorkspace,
+  refreshAuthorHistory,
 } from "../src/workflows/author/history.js";
 import { libraryHome } from "./helpers/library-home.js";
 import { testPlatformLayer } from "./helpers/platform.js";
@@ -35,7 +35,7 @@ it.effect("plain invalid skills connect with recovery history, no config or Libr
     expect(yield* f.fs.exists(join(f.source, "skit.json"))).toBe(false);
     expect(yield* f.fs.readFileString(join(f.source, "review/SKILL.md"))).toBe("---\ninvalid: [\n");
     expect(yield* f.fs.readFileString(join(f.source, ".skit/.gitignore"))).toBe("*\n");
-    expect(yield* readAuthorWorkspace(f.source)).toMatchObject({
+    expect(yield* loadAuthorWorkspaceMetadata(f.source)).toMatchObject({
       workspace_id: first.workspace_id,
       registration: "registered",
     });
@@ -138,7 +138,7 @@ it.effect(
         ),
       );
       expect(result._tag).toBe("Failure");
-      const pending = yield* readAuthorWorkspace(f.source);
+      const pending = yield* loadAuthorWorkspaceMetadata(f.source);
       expect(pending?.registration).toBeUndefined();
       expect((yield* f.ensure()).workspace_id).toBe(pending?.workspace_id);
       expect(yield* f.home.owned(loadAuthorHistory(f.source, f.home.home))).toHaveLength(1);
@@ -177,7 +177,7 @@ it.effect(
       const other = yield* Effect.forkChild(
         Deferred.await(start).pipe(
           Effect.andThen(
-            f.home.owned(saveAuthorWorkspace(f.source, f.home.home)).pipe(
+            f.home.owned(refreshAuthorHistory(f.source, f.home.home)).pipe(
               Effect.provideService(FileSystem.FileSystem, {
                 ...f.fs,
                 readFileString: (path, options) =>
@@ -202,7 +202,7 @@ it.effect(
             yield* Deferred.succeed(start, undefined);
             yield* Deferred.await(readIdentity);
             yield* Deferred.succeed(proceed, undefined);
-            yield* saveAuthorWorkspace(f.source, f.home.home);
+            yield* refreshAuthorHistory(f.source, f.home.home);
           }),
         ),
       );
@@ -218,7 +218,7 @@ it.effect(
       const f = yield* fixture;
       yield* f.fs.writeFileString(join(f.home.home, "machine.json"), "{broken machine settings");
       expect(yield* Effect.flip(f.ensure())).toMatchObject({ _tag: "MachineSettingsUnusable" });
-      expect((yield* readAuthorWorkspace(f.source))?.registration).toBeUndefined();
+      expect((yield* loadAuthorWorkspaceMetadata(f.source))?.registration).toBeUndefined();
       const trees = yield* f.home.owned(loadStoredTrees(f.home.home));
       expect(trees).toHaveLength(1);
       const saved = trees[0]?.tree.find((entry) => entry.path === "review/SKILL.md");

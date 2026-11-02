@@ -29,7 +29,7 @@ export const AuthorSyncResult = Schema.Union([
     identity: AuthorIdentity,
     visibility: AuthorVisibility,
     file_count: count,
-    effects: Schema.Array(Schema.Literals(["create_skit", "create_draft", "record_remote_home"])),
+    effects: Schema.Array(Schema.Literals(["create_skit", "save_revision", "record_remote_home"])),
   }),
   syncResult("created", {
     identity: AuthorIdentity,

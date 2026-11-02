@@ -134,7 +134,7 @@ function inventoryEntries(entries: TreeEntry[]): SkitFileRecord[] {
 
 export function validateSkitDirectory(
   root: string,
-  release = "draft",
+  release = "unpublished",
   options:
     | {
         assessmentContext: SkillAssessmentContext;

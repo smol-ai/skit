@@ -12,11 +12,11 @@ import {
 } from "@smolai/skit-core/universal/api";
 import { History } from "@smolai/skit-core/universal/authoring";
 import { sha256Hash } from "@smolai/skit-core/universal/consumer";
-import { draftRevision, draftTree } from "./fixtures/draft-request.js";
+import { revisionRequest, skillTree } from "./fixtures/revision-request.js";
 
 // Real worker HTTP, authentication, D1 and R2. No mocked service or transport.
 const origin = "https://registry.test";
-const owner = "draft-author";
+const owner = "skit-author";
 const params = { owner, slug: "tools" };
 let clientAddress = 0;
 
@@ -67,7 +67,8 @@ const signIn = Effect.gen(function* () {
     baseUrl: origin,
   });
   return {
-    drafts: authoring.drafts,
+    skits: authoring.skits,
+    authorInventory: authoring.authorInventory,
     skitDelete: authoring.skitDelete,
     publication: publishing.publication,
   };
@@ -99,140 +100,141 @@ const archiveOf = (tree: History.Tree) =>
     ),
   );
 
-it.effect("creates an empty Draft whose current is null, once", () =>
-  withRegistry(({ drafts }) =>
+it.effect("creates an empty SKIT whose current is null, once", () =>
+  withRegistry(({ skits }) =>
     Effect.gen(function* () {
-      expect(yield* drafts.create({ payload: { ...params, visibility: "private" } })).toEqual({
-        skit_id: "draft-author/tools",
+      expect(yield* skits.create({ payload: { ...params, visibility: "private" } })).toEqual({
+        skit_id: "skit-author/tools",
       });
-      expect(yield* drafts.current({ params })).toEqual({
-        skit_id: "draft-author/tools",
+      expect(yield* skits.current({ params })).toEqual({
+        skit_id: "skit-author/tools",
         current: null,
         visibility: "private",
       });
       expect(
-        yield* Effect.flip(drafts.create({ payload: { ...params, visibility: "private" } })),
-      ).toEqual({ error: "draft_exists" });
-      expect(yield* Effect.flip(drafts.current({ params: { owner, slug: "missing" } }))).toEqual({
-        error: "draft_not_found",
+        yield* Effect.flip(skits.create({ payload: { ...params, visibility: "private" } })),
+      ).toEqual({ error: "skit_exists" });
+      expect(yield* Effect.flip(skits.current({ params: { owner, slug: "missing" } }))).toEqual({
+        error: "skit_not_found",
       });
     }),
   ),
 );
 
 it.effect("records a revision once, reads it back, and never moves current", () =>
-  withRegistry(({ drafts }) =>
+  withRegistry(({ skits }) =>
     Effect.gen(function* () {
-      yield* drafts.create({ payload: { ...params, visibility: "private" } });
-      const posted = yield* draftRevision();
-      expect(yield* drafts.post({ params, payload: posted })).toEqual({
+      yield* skits.create({ payload: { ...params, visibility: "private" } });
+      const posted = yield* revisionRequest();
+      expect(yield* skits.post({ params, payload: posted })).toEqual({
         id: posted.id,
         diagnostics: [],
       });
-      expect(yield* drafts.post({ params, payload: posted })).toEqual({
+      expect(yield* skits.post({ params, payload: posted })).toEqual({
         id: posted.id,
         diagnostics: [],
       });
-      expect(yield* countRows("draft_revisions")).toBe(1);
-      expect((yield* drafts.current({ params })).current).toBeNull();
-      expect(yield* drafts.revision({ params: { ...params, id: posted.id } })).toEqual({
+      expect(yield* countRows("revisions")).toBe(1);
+      expect((yield* skits.current({ params })).current).toBeNull();
+      expect(yield* skits.revision({ params: { ...params, id: posted.id } })).toEqual({
         revision: posted.revision,
         tree: History.sortTree(posted.tree),
         diagnostics: [],
         descriptor: {
           skit: 1,
-          id: "draft-author/tools",
+          id: "skit-author/tools",
           slug: "tools",
           skills: [{ name: "review", path: "skills/review", default_enabled: true }],
         },
       });
       expect(
-        yield* Effect.flip(drafts.revision({ params: { owner, slug: "other", id: posted.id } })),
-      ).toEqual({ error: "draft_not_found" });
+        yield* Effect.flip(skits.revision({ params: { owner, slug: "other", id: posted.id } })),
+      ).toEqual({ error: "skit_not_found" });
     }),
   ),
 );
 
 it.effect("rejects a tree or revision whose identity does not match", () =>
-  withRegistry(({ drafts }) =>
+  withRegistry(({ skits }) =>
     Effect.gen(function* () {
-      yield* drafts.create({ payload: { ...params, visibility: "private" } });
-      const posted = yield* draftRevision();
-      const later = yield* draftRevision(draftTree, [], 2);
+      yield* skits.create({ payload: { ...params, visibility: "private" } });
+      const posted = yield* revisionRequest();
+      const later = yield* revisionRequest(skillTree, [], 2);
       expect(
         yield* Effect.flip(
-          drafts.post({
+          skits.post({
             params,
             payload: { ...posted, tree: [...posted.tree, { path: "notes", kind: "directory" }] },
           }),
         ),
       ).toEqual({ error: "TREE_HASH_MISMATCH" });
       expect(
-        yield* Effect.flip(drafts.post({ params, payload: { ...posted, id: later.id } })),
+        yield* Effect.flip(skits.post({ params, payload: { ...posted, id: later.id } })),
       ).toEqual({ error: "REVISION_ID_MISMATCH" });
       expect(
         yield* Effect.flip(
-          drafts.post({
+          skits.post({
             params,
-            payload: yield* draftRevision([...draftTree, { path: "../escape", kind: "directory" }]),
+            payload: yield* revisionRequest([
+              ...skillTree,
+              { path: "../escape", kind: "directory" },
+            ]),
           }),
         ),
       ).toEqual({ error: "UNSAFE_PATH" });
       expect(
         yield* Effect.flip(
-          drafts.post({ params, payload: yield* draftRevision(draftTree, [later.id]) }),
+          skits.post({ params, payload: yield* revisionRequest(skillTree, [later.id]) }),
         ),
       ).toEqual({ error: "PARENT_MISSING" });
-      expect(yield* countRows("draft_revisions")).toBe(0);
+      expect(yield* countRows("revisions")).toBe(0);
     }),
   ),
 );
 
 it.effect("moves current only from the revision the caller expects", () =>
-  withRegistry(({ drafts }) =>
+  withRegistry(({ skits }) =>
     Effect.gen(function* () {
-      yield* drafts.create({ payload: { ...params, visibility: "private" } });
-      const first = yield* draftRevision();
-      const second = yield* draftRevision(draftTree, [first.id], 2);
-      yield* drafts.post({ params, payload: first });
-      yield* drafts.post({ params, payload: second });
-      expect(yield* drafts.move({ params, payload: { expected: null, id: first.id } })).toEqual({
+      yield* skits.create({ payload: { ...params, visibility: "private" } });
+      const first = yield* revisionRequest();
+      const second = yield* revisionRequest(skillTree, [first.id], 2);
+      yield* skits.post({ params, payload: first });
+      yield* skits.post({ params, payload: second });
+      expect(yield* skits.move({ params, payload: { expected: null, id: first.id } })).toEqual({
         id: first.id,
       });
       expect(
-        yield* Effect.flip(drafts.move({ params, payload: { expected: null, id: second.id } })),
+        yield* Effect.flip(skits.move({ params, payload: { expected: null, id: second.id } })),
       ).toEqual({ error: "REVISION_CONFLICT", current: first.id });
-      expect(yield* drafts.move({ params, payload: { expected: first.id, id: first.id } })).toEqual(
-        { id: first.id },
-      );
-      const unknown = yield* draftRevision(draftTree, [], 3);
+      expect(yield* skits.move({ params, payload: { expected: first.id, id: first.id } })).toEqual({
+        id: first.id,
+      });
+      const unknown = yield* revisionRequest(skillTree, [], 3);
       expect(
-        yield* Effect.flip(
-          drafts.move({ params, payload: { expected: first.id, id: unknown.id } }),
-        ),
+        yield* Effect.flip(skits.move({ params, payload: { expected: first.id, id: unknown.id } })),
       ).toEqual({ error: "REVISION_MISSING" });
-      yield* drafts.move({ params, payload: { expected: first.id, id: second.id } });
-      expect((yield* drafts.current({ params })).current).toBe(second.id);
+      yield* skits.move({ params, payload: { expected: first.id, id: second.id } });
+      expect((yield* skits.current({ params })).current).toBe(second.id);
     }),
   ),
 );
 
 it.effect("pages the ancestors of a merge, listing each revision once", () =>
-  withRegistry(({ drafts }) =>
+  withRegistry(({ skits }) =>
     Effect.gen(function* () {
-      yield* drafts.create({ payload: { ...params, visibility: "private" } });
-      const root = yield* draftRevision(draftTree, [], 1);
-      const ours = yield* draftRevision(draftTree, [root.id], 2);
-      const theirs = yield* draftRevision(draftTree, [root.id], 3);
-      const merge = yield* draftRevision(draftTree, [ours.id, theirs.id], 4);
+      yield* skits.create({ payload: { ...params, visibility: "private" } });
+      const root = yield* revisionRequest(skillTree, [], 1);
+      const ours = yield* revisionRequest(skillTree, [root.id], 2);
+      const theirs = yield* revisionRequest(skillTree, [root.id], 3);
+      const merge = yield* revisionRequest(skillTree, [ours.id, theirs.id], 4);
       for (const posted of [root, ours, theirs, merge])
-        yield* drafts.post({ params, payload: posted });
+        yield* skits.post({ params, payload: posted });
 
-      const first = yield* drafts.ancestors({ params, query: { ancestors: merge.id, limit: "3" } });
+      const first = yield* skits.ancestors({ params, query: { ancestors: merge.id, limit: "3" } });
       expect(first.revisions.map(({ id }) => id)).toEqual([merge.id, theirs.id, ours.id]);
       expect(first.revisions[0]?.revision.parents).toEqual([ours.id, theirs.id]);
       expect(first.next_cursor).not.toBeNull();
-      const rest = yield* drafts.ancestors({
+      const rest = yield* skits.ancestors({
         params,
         query: { ancestors: merge.id, limit: "3", cursor: first.next_cursor ?? "" },
       });
@@ -241,18 +243,18 @@ it.effect("pages the ancestors of a merge, listing each revision once", () =>
         next_cursor: null,
       });
       expect(
-        (yield* drafts.ancestors({ params, query: { ancestors: ours.id } })).revisions.map(
+        (yield* skits.ancestors({ params, query: { ancestors: ours.id } })).revisions.map(
           ({ id }) => id,
         ),
       ).toEqual([ours.id, root.id]);
       expect(
         yield* Effect.flip(
-          drafts.ancestors({ params, query: { ancestors: merge.id, cursor: "next" } }),
+          skits.ancestors({ params, query: { ancestors: merge.id, cursor: "next" } }),
         ),
       ).toEqual({ error: "invalid_cursor" });
       expect(
         yield* Effect.flip(
-          drafts.ancestors({ params, query: { ancestors: merge.id, limit: "1000" } }),
+          skits.ancestors({ params, query: { ancestors: merge.id, limit: "1000" } }),
         ),
       ).toEqual({ error: "invalid_request" });
     }),
@@ -260,30 +262,30 @@ it.effect("pages the ancestors of a merge, listing each revision once", () =>
 );
 
 it.effect("accepts invalid content and unpublishable entries with diagnostics", () =>
-  withRegistry(({ drafts }) =>
+  withRegistry(({ skits }) =>
     Effect.gen(function* () {
-      yield* drafts.create({ payload: { ...params, visibility: "private" } });
-      const undescribed = yield* draftRevision([draftTree[1]]);
-      expect(yield* drafts.post({ params, payload: undescribed })).toEqual({
+      yield* skits.create({ payload: { ...params, visibility: "private" } });
+      const undescribed = yield* revisionRequest([skillTree[1]]);
+      expect(yield* skits.post({ params, payload: undescribed })).toEqual({
         id: undescribed.id,
         diagnostics: [expect.objectContaining({ code: "DESCRIPTOR_MISSING", severity: "error" })],
       });
       expect(
-        (yield* drafts.revision({ params: { ...params, id: undescribed.id } })).descriptor,
+        (yield* skits.revision({ params: { ...params, id: undescribed.id } })).descriptor,
       ).toBeNull();
 
-      const linked = yield* draftRevision([
-        ...draftTree,
+      const linked = yield* revisionRequest([
+        ...skillTree,
         { path: "skills/review/link", kind: "symlink", target: "SKILL.md" },
         { path: "skills", kind: "directory" },
         { path: "empty", kind: "directory" },
       ]);
-      const recorded = yield* drafts.post({ params, payload: linked });
+      const recorded = yield* skits.post({ params, payload: linked });
       expect(recorded.diagnostics.map(({ code, path }) => ({ code, path }))).toEqual([
         { code: "UNPUBLISHABLE_TREE_ENTRY", path: "skills/review/link" },
         { code: "UNPUBLISHABLE_TREE_ENTRY", path: "empty" },
       ]);
-      expect((yield* drafts.revision({ params: { ...params, id: linked.id } })).tree).toEqual(
+      expect((yield* skits.revision({ params: { ...params, id: linked.id } })).tree).toEqual(
         History.sortTree(linked.tree),
       );
     }),
@@ -291,12 +293,12 @@ it.effect("accepts invalid content and unpublishable entries with diagnostics", 
 );
 
 it.effect("reads back verified blob bytes rather than trusting stored lengths", () =>
-  withRegistry(({ drafts }) =>
+  withRegistry(({ skits }) =>
     Effect.gen(function* () {
-      yield* drafts.create({ payload: { ...params, visibility: "private" } });
-      const posted = yield* draftRevision();
-      yield* drafts.post({ params, payload: posted });
-      const skill = draftTree[1];
+      yield* skits.create({ payload: { ...params, visibility: "private" } });
+      const posted = yield* revisionRequest();
+      yield* skits.post({ params, payload: posted });
+      const skill = skillTree[1];
       if (skill?.kind !== "file") return yield* Effect.die("fixture SKILL.md is a file");
       const hash = yield* sha256Hash(skill.bytes);
       // Same size, wrong content.
@@ -306,45 +308,58 @@ it.effect("reads back verified blob bytes rather than trusting stored lengths", 
           "x".repeat(skill.bytes.byteLength),
         ),
       );
-      expect(yield* Effect.flip(drafts.revision({ params: { ...params, id: posted.id } }))).toEqual(
-        { error: "storage_failure" },
-      );
+      expect(yield* Effect.flip(skits.revision({ params: { ...params, id: posted.id } }))).toEqual({
+        error: "storage_failure",
+      });
     }),
   ),
 );
 
 it.effect("publishes current, and refuses a stale revision or an unpublishable tree", () =>
-  withRegistry(({ drafts, publication }) =>
+  withRegistry(({ skits, publication, authorInventory }) =>
     Effect.gen(function* () {
-      yield* drafts.create({ payload: { ...params, visibility: "private" } });
-      const published = yield* draftRevision();
-      yield* drafts.post({ params, payload: published });
+      yield* skits.create({ payload: { ...params, visibility: "private" } });
+      const published = yield* revisionRequest();
+      yield* skits.post({ params, payload: published });
       expect(
         yield* Effect.flip(
           publication.publish({
             params,
-            payload: { version: "1.0.0", archive_base64: archiveOf(draftTree) },
+            payload: { version: "1.0.0", archive_base64: archiveOf(skillTree) },
           }),
         ),
-      ).toEqual({ error: "draft_not_found" });
-      yield* drafts.move({ params, payload: { expected: null, id: published.id } });
+      ).toEqual({ error: "current_revision_missing" });
+      yield* skits.move({ params, payload: { expected: null, id: published.id } });
+      expect((yield* authorInventory.read({ query: {} })).skits[0]).toMatchObject({
+        current_revision_id: published.id,
+        current_revision_published: false,
+      });
       const release = yield* publication.publish({
         params,
         payload: {
           version: "1.0.0",
           revision_id: published.id,
-          archive_base64: archiveOf(draftTree),
+          archive_base64: archiveOf(skillTree),
         },
       });
       expect(release.release.revision_id).toBe(published.id);
+      expect((yield* authorInventory.read({ query: {} })).skits[0]).toMatchObject({
+        current_revision_id: published.id,
+        current_revision_published: true,
+      });
 
-      const linked = yield* draftRevision(
-        [...draftTree, { path: "skills/review/link", kind: "symlink", target: "SKILL.md" }],
+      const linked = yield* revisionRequest(
+        [...skillTree, { path: "skills/review/link", kind: "symlink", target: "SKILL.md" }],
         [published.id],
         2,
       );
-      yield* drafts.post({ params, payload: linked });
-      yield* drafts.move({ params, payload: { expected: published.id, id: linked.id } });
+      yield* skits.post({ params, payload: linked });
+      yield* skits.move({ params, payload: { expected: published.id, id: linked.id } });
+      expect((yield* authorInventory.read({ query: {} })).skits[0]).toMatchObject({
+        current_revision_id: linked.id,
+        current_revision_published: false,
+        most_recent_release_version: "1.0.0",
+      });
       expect(
         yield* Effect.flip(
           publication.publish({
@@ -352,16 +367,16 @@ it.effect("publishes current, and refuses a stale revision or an unpublishable t
             payload: {
               version: "1.0.1",
               revision_id: published.id,
-              archive_base64: archiveOf(draftTree),
+              archive_base64: archiveOf(skillTree),
             },
           }),
         ),
-      ).toEqual({ error: "stale_draft_revision" });
+      ).toEqual({ error: "stale_revision" });
       expect(
         yield* Effect.flip(
           publication.publish({
             params,
-            payload: { version: "1.0.1", archive_base64: archiveOf(draftTree) },
+            payload: { version: "1.0.1", archive_base64: archiveOf(skillTree) },
           }),
         ),
       ).toEqual({
@@ -373,36 +388,40 @@ it.effect("publishes current, and refuses a stale revision or an unpublishable t
           }),
         ],
       });
+      yield* skits.move({ params, payload: { expected: linked.id, id: published.id } });
+      expect(
+        (yield* authorInventory.read({ query: {} })).skits[0]?.current_revision_published,
+      ).toBe(true);
     }),
   ),
 );
 
-it.effect("deleting a Draft removes its revisions and the trees no other Draft records", () =>
-  withRegistry(({ drafts, skitDelete }) =>
+it.effect("deleting a SKIT removes its revisions and the trees no other SKIT records", () =>
+  withRegistry(({ skits, skitDelete }) =>
     Effect.gen(function* () {
       const other = { owner, slug: "other" };
       for (const target of [params, other])
-        yield* drafts.create({ payload: { ...target, visibility: "private" } });
-      const shared = yield* draftRevision();
-      const own = yield* draftRevision(
-        [...draftTree, { path: "notes", kind: "directory" }],
+        yield* skits.create({ payload: { ...target, visibility: "private" } });
+      const shared = yield* revisionRequest();
+      const own = yield* revisionRequest(
+        [...skillTree, { path: "notes", kind: "directory" }],
         [shared.id],
         2,
       );
-      for (const posted of [shared, own]) yield* drafts.post({ params, payload: posted });
-      yield* drafts.post({ params: other, payload: shared });
-      yield* drafts.move({ params, payload: { expected: null, id: own.id } });
+      for (const posted of [shared, own]) yield* skits.post({ params, payload: posted });
+      yield* skits.post({ params: other, payload: shared });
+      yield* skits.move({ params, payload: { expected: null, id: own.id } });
 
       expect(yield* skitDelete.deletePrivate({ params, query: {} })).toMatchObject({
         status: "deleted",
-        draft_revisions: 2,
+        revisions: 2,
       });
-      expect(yield* countRows("draft_revisions")).toBe(1);
-      expect(yield* countRows("draft_revision_parents")).toBe(0);
-      expect(yield* countRows("draft_trees")).toBe(1);
-      expect(yield* countRows("draft_tree_entries")).toBe(draftTree.length);
-      expect(yield* drafts.revision({ params: { ...other, id: shared.id } })).toMatchObject({
-        tree: History.sortTree(draftTree),
+      expect(yield* countRows("revisions")).toBe(1);
+      expect(yield* countRows("revision_parents")).toBe(0);
+      expect(yield* countRows("revision_trees")).toBe(1);
+      expect(yield* countRows("revision_tree_entries")).toBe(skillTree.length);
+      expect(yield* skits.revision({ params: { ...other, id: shared.id } })).toMatchObject({
+        tree: History.sortTree(skillTree),
       });
     }),
   ),

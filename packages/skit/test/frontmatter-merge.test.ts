@@ -1,10 +1,10 @@
-import { DateTime, Option } from "effect";
+import { DateTime, Option, Schema } from "effect";
 import { describe, expect, test } from "vitest";
-import { conflictKind, fileTree, Merge, type SyncFileVersion } from "../src/index.js";
+import { conflictKind, mergeAuthorTree, Merge, TreeFile } from "../src/index.js";
 
-const file = (text: string): SyncFileVersion => {
+const file = (text: string): TreeFile => {
   const bytes = new TextEncoder().encode(text);
-  return { bytes, mode: 0o644 };
+  return { path, kind: "file", bytes, mode: 0o644 };
 };
 const path = "skills/review/SKILL.md";
 type EditTimes = { ours?: string; theirs?: string };
@@ -17,11 +17,11 @@ const authorRule = (times: EditTimes) =>
   );
 const merge = (base: string, ours: string, theirs: string, times: EditTimes = {}) => {
   const result = Merge.run(
-    fileTree,
+    mergeAuthorTree,
     {
-      base: Option.some({ [path]: file(base) }),
-      ours: Option.some({ [path]: file(ours) }),
-      theirs: Option.some({ [path]: file(theirs) }),
+      base: Option.some([file(base)]),
+      ours: Option.some([file(ours)]),
+      theirs: Option.some([file(theirs)]),
     },
     authorRule(times),
   );
@@ -33,7 +33,9 @@ const merge = (base: string, ours: string, theirs: string, times: EditTimes = {}
   }));
   return {
     choices,
-    text: new TextDecoder().decode(Option.getOrThrow(result.value)[path]!.bytes),
+    text: new TextDecoder().decode(
+      Schema.decodeUnknownSync(TreeFile)(Option.getOrThrow(result.value)[0]).bytes,
+    ),
   };
 };
 

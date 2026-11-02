@@ -128,7 +128,7 @@ describe("Publication release archives", () => {
     }),
   );
 
-  it.effect("verifies the archive against its persisted draft revision and rejects drift", () =>
+  it.effect("verifies the archive against its persisted skit revision and rejects drift", () =>
     Effect.gen(function* () {
       const descriptor = {
         skit: 1,
@@ -150,15 +150,15 @@ describe("Publication release archives", () => {
       ]);
       yield* Effect.flatMap(D1Client.D1Client, (sql) =>
         sql.batch([
-          sql`DROP TABLE IF EXISTS draft_tree_entries`,
-          sql`DROP TABLE IF EXISTS draft_revisions`,
-          sql`CREATE TABLE draft_revisions (
+          sql`DROP TABLE IF EXISTS revision_tree_entries`,
+          sql`DROP TABLE IF EXISTS revisions`,
+          sql`CREATE TABLE revisions (
             owner_slug TEXT, skit_slug TEXT, revision_id TEXT, tree_hash TEXT, descriptor_json TEXT
           )`,
-          sql`CREATE TABLE draft_tree_entries (
+          sql`CREATE TABLE revision_tree_entries (
             tree_hash TEXT, path TEXT, kind TEXT, mode INTEGER, blob_hash TEXT, byte_length INTEGER
           )`,
-          sql`INSERT INTO draft_revisions
+          sql`INSERT INTO revisions
               VALUES ('alice', 'tools', 'draft_test', 'tree_test', ${JSON.stringify(descriptor)})`,
         ]),
       );
@@ -167,7 +167,7 @@ describe("Publication release archives", () => {
         yield* Effect.flatMap(
           D1Client.D1Client,
           (sql) =>
-            sql`INSERT INTO draft_tree_entries
+            sql`INSERT INTO revision_tree_entries
                 VALUES ('tree_test', ${path}, 'file', 420, ${digest}, ${content.byteLength})`,
         );
       }
@@ -176,7 +176,7 @@ describe("Publication release archives", () => {
       expect(yield* verifyReleaseArchive("alice", "tools", "draft_test", archive)).toEqual([]);
       expect(
         yield* Effect.flip(verifyReleaseArchive("bob", "tools", "draft_test", archive)),
-      ).toMatchObject({ code: "DRAFT_REVISION_MISSING" });
+      ).toMatchObject({ code: "REVISION_MISSING" });
       const drifted = yield* Effect.result(
         verifyReleaseArchive(
           "alice",

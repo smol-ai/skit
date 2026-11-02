@@ -2,7 +2,7 @@ import { join, relative } from "node:path";
 import { describe, expect, test } from "vitest";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { it } from "@effect/vitest";
-import { fileTree, Merge, skitLayer, type SyncFileVersion } from "../src/index.js";
+import { mergeAuthorTree, Merge, skitLayer, TreeFile } from "../src/index.js";
 
 // Every pure skill rename in github.com/mattpocock/skills (MIT): one folder per rename, holding
 // the skill before and after. Regenerate with fixtures/skill-renames/extract.mjs.
@@ -19,40 +19,61 @@ const Rename = Schema.Struct({
   title: Schema.String,
 });
 
-const file = (bytes: Uint8Array): SyncFileVersion => ({ bytes, mode: 0o644 });
+const file = (path: string, bytes: Uint8Array): TreeFile => ({
+  path,
+  kind: "file",
+  bytes,
+  mode: 0o644,
+});
 const tree = Effect.fn("Test.renameTree")(function* (directory: string) {
   const fs = yield* FileSystem.FileSystem;
-  const files: Record<string, SyncFileVersion> = {};
+  const files: Record<string, TreeFile> = {};
   const walk = Effect.fn("Test.walkRename")(function* (
     current: string,
   ): Effect.fn.Return<void, import("effect/PlatformError").PlatformError> {
     for (const name of yield* fs.readDirectory(current)) {
       const path = join(current, name);
       if ((yield* fs.stat(path)).type === "Directory") yield* walk(path);
-      else files[relative(directory, path)] = file(yield* fs.readFile(path));
+      else
+        files[relative(directory, path)] = file(
+          relative(directory, path),
+          yield* fs.readFile(path),
+        );
     }
   });
   yield* walk(directory);
   return files;
 });
-const text = (version: SyncFileVersion | undefined) =>
+const text = (version: TreeFile | undefined) =>
   version === undefined ? undefined : new TextDecoder().decode(version.bytes);
 
 const edit = "\nAlso check the changelog.\n";
-const withEdit = (files: Record<string, SyncFileVersion>, path: string) => ({
+const withEdit = (files: Record<string, TreeFile>, path: string) => ({
   ...files,
-  [path]: file(new TextEncoder().encode(`${text(files[path])}${edit}`)),
+  [path]: file(path, new TextEncoder().encode(`${text(files[path])}${edit}`)),
 });
-type Files = Record<string, SyncFileVersion>;
+type Files = Record<string, TreeFile>;
 /** Merge with author sync's tie-breaks: an edit beats a deletion, then ours wins. */
 const merge = (base: Files, ours: Files, theirs: Files) => {
   const result = Merge.run(
-    fileTree,
-    { base: Option.some(base), ours: Option.some(ours), theirs: Option.some(theirs) },
+    mergeAuthorTree,
+    {
+      base: Option.some(Object.values(base)),
+      ours: Option.some(Object.values(ours)),
+      theirs: Option.some(Object.values(theirs)),
+    },
     Merge.prefer(Merge.present, Merge.always("ours")),
   );
   if (result._tag !== "Clean") throw new Error("expected a clean merge");
-  return { files: Option.getOrThrow(result.value), choices: result.choices };
+  return {
+    files: Object.fromEntries(
+      Option.getOrThrow(result.value).map((entry) => [
+        entry.path,
+        Schema.decodeUnknownSync(TreeFile)(entry),
+      ]),
+    ),
+    choices: result.choices,
+  };
 };
 const fixture = Effect.fn("Test.renameFixture")(function* (name: string) {
   const fs = yield* FileSystem.FileSystem;
@@ -69,7 +90,7 @@ const fixture = Effect.fn("Test.renameFixture")(function* (name: string) {
 const expectRenamedWithEdit = (
   entry: typeof Rename.Type,
   plan: ReturnType<typeof merge>,
-  renamed: Record<string, SyncFileVersion>,
+  renamed: Record<string, TreeFile>,
 ) => {
   expect(Object.keys(plan.files).sort()).toEqual(Object.keys(renamed).sort());
   const skill = text(plan.files[`${entry.to}/SKILL.md`]);
@@ -109,7 +130,7 @@ describe.each(cases)("%s", (name) => {
       const elsewhere = Object.fromEntries(
         Object.entries(renamed).map(([path, version]) => [
           path.replace(`${entry.to}/`, `${entry.to}-elsewhere/`),
-          version,
+          { ...version, path: path.replace(`${entry.to}/`, `${entry.to}-elsewhere/`) },
         ]),
       );
       const plan = merge(base, renamed, elsewhere);
@@ -120,7 +141,10 @@ describe.each(cases)("%s", (name) => {
 
 test("an unrelated skill removed while another is added is not a rename", () => {
   const skill = (name: string, body: string) =>
-    file(new TextEncoder().encode(`---\nname: ${name}\ndescription: ${name}\n---\n${body}\n`));
+    file(
+      `${name}/SKILL.md`,
+      new TextEncoder().encode(`---\nname: ${name}\ndescription: ${name}\n---\n${body}\n`),
+    );
   const base = {
     "old/SKILL.md": skill("old", "Write release notes.\nKeep them short."),
   };

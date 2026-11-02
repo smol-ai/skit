@@ -47,7 +47,8 @@ const inventory = Layer.succeed(
                 {
                   skit_id: "tim/tools",
                   visibility: "private" as const,
-                  draft_revision_id: revisionId,
+                  current_revision_id: revisionId,
+                  current_revision_published: false,
                   most_recent_release_version: "1.2.3",
                 },
               ],
@@ -74,7 +75,8 @@ layer(handlers(principal(new Set(["authoring:write"]))))("AuthorInventoryApi", (
           {
             skit_id: "tim/tools",
             visibility: "private",
-            draft_revision_id: revisionId,
+            current_revision_id: revisionId,
+            current_revision_published: false,
             most_recent_release_version: "1.2.3",
           },
         ],

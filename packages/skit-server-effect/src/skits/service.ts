@@ -1,6 +1,6 @@
 import { D1Client } from "@effect/sql-d1";
 import {
-  type DraftCurrentResponse,
+  type SkitCurrentResponse,
   History,
   MAX_ARTIFACT_CONTENT_BYTES,
   MAX_ARTIFACT_FILES,
@@ -32,41 +32,44 @@ import {
   r2Body,
 } from "../platform/cloudflare.js";
 
-export class DraftExists extends Schema.TaggedError<DraftExists>()("Draft.Exists", {}) {}
+export class SkitExists extends Schema.TaggedError<SkitExists>()("SKIT.Exists", {}) {}
 
-export class DraftNotFound extends Schema.TaggedError<DraftNotFound>()("Draft.NotFound", {}) {}
+export class SkitNotFound extends Schema.TaggedError<SkitNotFound>()("SKIT.NotFound", {}) {}
 
-/** A revision the Draft refuses to record or point at. `code` is the wire error. */
-export class InvalidRevision extends Schema.TaggedError<InvalidRevision>()(
-  "Draft.InvalidRevision",
-  {
-    code: Schema.Literals([
-      "UNSAFE_PATH",
-      "TREE_HASH_MISMATCH",
-      "REVISION_ID_MISMATCH",
-      "PARENT_MISSING",
-      "REVISION_MISSING",
-    ]),
-  },
-) {}
+/** A revision the SKIT refuses to record or point at. `code` is the wire error. */
+export class InvalidRevision extends Schema.TaggedError<InvalidRevision>()("SKIT.InvalidRevision", {
+  code: Schema.Literals([
+    "UNSAFE_PATH",
+    "TREE_HASH_MISMATCH",
+    "REVISION_ID_MISMATCH",
+    "PARENT_MISSING",
+    "REVISION_MISSING",
+  ]),
+}) {}
 
 /** Another device moved `current` first; this is where it points now. */
-export class CurrentMoved extends Schema.TaggedError<CurrentMoved>()("Draft.CurrentMoved", {
+export class CurrentMoved extends Schema.TaggedError<CurrentMoved>()("SKIT.CurrentMoved", {
   current: Schema.NullOr(History.RevisionId),
 }) {}
 
-export class DraftBlobMissing extends Schema.TaggedError<DraftBlobMissing>()("Draft.BlobMissing", {
-  path: Schema.String,
-}) {}
+export class RevisionBlobMissing extends Schema.TaggedError<RevisionBlobMissing>()(
+  "SKIT.BlobMissing",
+  {
+    path: Schema.String,
+  },
+) {}
 
-export class DraftBlobCorrupt extends Schema.TaggedError<DraftBlobCorrupt>()("Draft.BlobCorrupt", {
-  path: Schema.String,
-}) {}
+export class RevisionBlobCorrupt extends Schema.TaggedError<RevisionBlobCorrupt>()(
+  "SKIT.BlobCorrupt",
+  {
+    path: Schema.String,
+  },
+) {}
 
-export class DraftTooLarge extends Schema.TaggedError<DraftTooLarge>()("Draft.TooLarge", {}) {}
+export class RevisionTooLarge extends Schema.TaggedError<RevisionTooLarge>()("SKIT.TooLarge", {}) {}
 
 export type PostError =
-  | DraftNotFound
+  | SkitNotFound
   | InvalidRevision
   | IntegrityError
   | DatabaseError
@@ -75,23 +78,23 @@ export type PostError =
 export type ReadError =
   | DatabaseError
   | BlobStorageError
-  | DraftBlobMissing
-  | DraftBlobCorrupt
-  | DraftTooLarge;
+  | RevisionBlobMissing
+  | RevisionBlobCorrupt
+  | RevisionTooLarge;
 
-export interface DraftService {
-  /** Create an empty Draft; its `current` stays null until a device moves it. */
+export interface SkitService {
+  /** Create an empty SKIT; its `current` stays null until a device moves it. */
   readonly create: (
     owner: string,
     slug: string,
-    visibility: DraftCurrentResponse["visibility"],
-  ) => Effect.Effect<void, DraftExists | DatabaseError>;
+    visibility: SkitCurrentResponse["visibility"],
+  ) => Effect.Effect<void, SkitExists | DatabaseError>;
   readonly current: (
     owner: string,
     slug: string,
-  ) => Effect.Effect<DraftCurrentResponse | undefined, DatabaseError>;
+  ) => Effect.Effect<SkitCurrentResponse | undefined, DatabaseError>;
   /**
-   * Record a revision after checking its identity. Recording one the Draft already holds returns
+   * Record a revision after checking its identity. Recording one the SKIT already holds returns
    * it unchanged. Invalid content is accepted with diagnostics. It never moves `current`.
    */
   readonly post: (
@@ -106,7 +109,7 @@ export interface DraftService {
     slug: string,
     expected: History.RevisionId | null,
     id: History.RevisionId,
-  ) => Effect.Effect<void, DraftNotFound | InvalidRevision | CurrentMoved | DatabaseError>;
+  ) => Effect.Effect<void, SkitNotFound | InvalidRevision | CurrentMoved | DatabaseError>;
   readonly revision: (
     owner: string,
     slug: string,
@@ -125,9 +128,9 @@ export interface DraftService {
   ) => Effect.Effect<RevisionPage | undefined, DatabaseError>;
 }
 
-export class Drafts extends Context.Service<Drafts, DraftService>()("@skit-server-effect/Drafts") {}
+export class Skits extends Context.Service<Skits, SkitService>()("@skit-server-effect/Skits") {}
 
-const StoredDraft = Schema.Struct({
+const StoredSkit = Schema.Struct({
   current_revision_id: Schema.NullOr(History.RevisionId),
   visibility: Schema.Literals(["public", "unlisted", "private"]),
 });
@@ -153,10 +156,11 @@ const StoredEntry = Schema.Union([
   Schema.Struct({ path: Schema.String, kind: Schema.Literal("symlink"), target: Schema.String }),
 ]);
 
+// Keep the existing R2 namespace so the SQL migration does not orphan file bytes.
 const blobKey = (hash: string) => `draft-blobs/${hash.slice(7, 9)}/${hash.slice(7)}`;
 
 export const layer = Layer.effect(
-  Drafts,
+  Skits,
   Effect.gen(function* () {
     const bindings: CloudflareBindings = yield* Bindings;
     const sql: DatabaseSqlClient = yield* D1Client.D1Client;
@@ -166,33 +170,33 @@ export const layer = Layer.effect(
     const blobs = <A>(operation: string, run: (bucket: R2Bucket) => Promise<A>) =>
       blobStorageEffectFrom(bindings.blobs, operation, run);
 
-    const findDraft = Effect.fn("Draft.findDraft")(function* (owner: string, slug: string) {
+    const findSkit = Effect.fn("SKIT.findSkit")(function* (owner: string, slug: string) {
       const rows = yield* db(
-        "read draft",
-        sql`SELECT current_revision_id, visibility FROM drafts
+        "read skit",
+        sql`SELECT current_revision_id, visibility FROM skits
             WHERE owner_slug = ${owner} AND skit_slug = ${slug}`,
       );
       if (rows[0] === undefined) return undefined;
-      return yield* Schema.decodeUnknownEffect(StoredDraft)(rows[0]).pipe(
-        databaseError("decode draft"),
+      return yield* Schema.decodeUnknownEffect(StoredSkit)(rows[0]).pipe(
+        databaseError("decode skit"),
       );
     });
 
-    const hasRevision = Effect.fn("Draft.hasRevision")(function* (
+    const hasRevision = Effect.fn("SKIT.hasRevision")(function* (
       owner: string,
       slug: string,
       id: History.RevisionId,
     ) {
       const rows = yield* db(
         "find revision",
-        sql`SELECT 1 found FROM draft_revisions
+        sql`SELECT 1 found FROM revisions
             WHERE owner_slug = ${owner} AND skit_slug = ${slug} AND revision_id = ${id}`,
       );
       return rows.length > 0;
     });
 
     /** Each revision rebuilt from its row and its parents in order. */
-    const revisionsOf = Effect.fn("Draft.revisionsOf")(function* (
+    const revisionsOf = Effect.fn("SKIT.revisionsOf")(function* (
       owner: string,
       slug: string,
       rows: ReadonlyArray<unknown>,
@@ -202,7 +206,7 @@ export const layer = Layer.effect(
       );
       const parentRows = yield* db(
         "read revision parents",
-        sql`SELECT revision_id, parent_id FROM draft_revision_parents
+        sql`SELECT revision_id, parent_id FROM revision_parents
             WHERE owner_slug = ${owner} AND skit_slug = ${slug}
               AND revision_id IN (SELECT value FROM json_each(${JSON.stringify(
                 stored.map(({ revision_id }) => revision_id),
@@ -230,41 +234,41 @@ export const layer = Layer.effect(
       );
     });
 
-    const create = Effect.fn("Draft.create")(function* (
+    const create = Effect.fn("SKIT.create")(function* (
       owner: string,
       slug: string,
-      visibility: DraftCurrentResponse["visibility"],
+      visibility: SkitCurrentResponse["visibility"],
     ) {
       const now = new Date(yield* Clock.currentTimeMillis).toISOString();
       const created = yield* db(
-        "create draft",
-        sql`INSERT INTO drafts (owner_slug, skit_slug, visibility, current_revision_id, created_at, updated_at)
+        "create skit",
+        sql`INSERT INTO skits (owner_slug, skit_slug, visibility, current_revision_id, created_at, updated_at)
             VALUES (${owner}, ${slug}, ${visibility}, NULL, ${now}, ${now})
             ON CONFLICT (owner_slug, skit_slug) DO NOTHING RETURNING owner_slug`,
       );
-      if (created.length === 0) return yield* new DraftExists();
+      if (created.length === 0) return yield* new SkitExists();
     });
 
-    const current = Effect.fn("Draft.current")(function* (owner: string, slug: string) {
-      const draft = yield* findDraft(owner, slug);
-      if (draft === undefined) return undefined;
+    const current = Effect.fn("SKIT.current")(function* (owner: string, slug: string) {
+      const skit = yield* findSkit(owner, slug);
+      if (skit === undefined) return undefined;
       return {
         skit_id: `${owner}/${slug}`,
-        current: draft.current_revision_id,
-        visibility: draft.visibility,
+        current: skit.current_revision_id,
+        visibility: skit.visibility,
       };
     });
 
-    const post = Effect.fn("Draft.post")(
+    const post = Effect.fn("SKIT.post")(
       function* (
         owner: string,
         slug: string,
         { id, revision, tree }: RevisionPostRequest,
         credentialId: string | undefined,
       ) {
-        if ((yield* findDraft(owner, slug)) === undefined) return yield* new DraftNotFound();
+        if ((yield* findSkit(owner, slug)) === undefined) return yield* new SkitNotFound();
         if (tree.length > MAX_ARTIFACT_FILES)
-          return yield* new IntegrityError({ code: "INVALID_DRAFT" });
+          return yield* new IntegrityError({ code: "INVALID_ARTIFACT" });
         if (new Set(tree.map(({ path }) => path)).size !== tree.length)
           return yield* new IntegrityError({ code: "DUPLICATE_FILE_PATH" });
         if (!tree.every(({ path }) => Schema.is(safePathSchema)(path)))
@@ -289,7 +293,7 @@ export const layer = Layer.effect(
 
         const recorded = yield* db(
           "find recorded revision",
-          sql`SELECT diagnostics_json FROM draft_revisions
+          sql`SELECT diagnostics_json FROM revisions
               WHERE owner_slug = ${owner} AND skit_slug = ${slug} AND revision_id = ${id}`,
         );
         if (recorded[0] !== undefined) {
@@ -302,7 +306,7 @@ export const layer = Layer.effect(
         const parents = [...new Set(revision.parents)];
         const foundParents = yield* db(
           "find revision parents",
-          sql`SELECT revision_id FROM draft_revisions
+          sql`SELECT revision_id FROM revisions
               WHERE owner_slug = ${owner} AND skit_slug = ${slug}
                 AND revision_id IN (SELECT value FROM json_each(${JSON.stringify(parents)}))`,
         );
@@ -313,15 +317,13 @@ export const layer = Layer.effect(
         const treeStored =
           (yield* db(
             "find tree",
-            sql`SELECT 1 found FROM draft_trees WHERE tree_hash = ${revision.tree}`,
+            sql`SELECT 1 found FROM revision_trees WHERE tree_hash = ${revision.tree}`,
           )).length > 0;
         if (!treeStored)
           for (const [hash, bytes] of new Map(files.map((file) => [file.digest, file.bytes]))) {
-            const existing = yield* blobs("find draft blob", (bucket) =>
-              bucket.head(blobKey(hash)),
-            );
+            const existing = yield* blobs("find skit blob", (bucket) => bucket.head(blobKey(hash)));
             if (existing === null)
-              yield* blobs("write draft blob", (bucket) => bucket.put(blobKey(hash), bytes));
+              yield* blobs("write skit blob", (bucket) => bucket.put(blobKey(hash), bytes));
           }
 
         const descriptorResult = yield* readArtifactDescriptor(owner, slug, files).pipe(
@@ -355,11 +357,11 @@ export const layer = Layer.effect(
             ...(treeStored
               ? []
               : [
-                  sql`INSERT INTO draft_trees (tree_hash) VALUES (${revision.tree})
+                  sql`INSERT INTO revision_trees (tree_hash) VALUES (${revision.tree})
                       ON CONFLICT DO NOTHING`,
                   ...tree.map(
                     (entry) =>
-                      sql`INSERT INTO draft_tree_entries
+                      sql`INSERT INTO revision_tree_entries
                           (tree_hash, path, kind, mode, blob_hash, byte_length, target)
                           VALUES (${revision.tree}, ${entry.path}, ${entry.kind},
                             ${entry.kind === "file" ? entry.mode : null},
@@ -369,7 +371,7 @@ export const layer = Layer.effect(
                           ON CONFLICT DO NOTHING`,
                   ),
                 ]),
-            sql`INSERT INTO draft_revisions
+            sql`INSERT INTO revisions
                 (owner_slug, skit_slug, revision_id, tree_hash, author_device, author_at,
                  descriptor_json, diagnostics_json, credential_id, created_at)
                 VALUES (${owner}, ${slug}, ${id}, ${revision.tree}, ${revision.author.device},
@@ -378,7 +380,7 @@ export const layer = Layer.effect(
                 ON CONFLICT DO NOTHING`,
             ...revision.parents.map(
               (parent, position) =>
-                sql`INSERT INTO draft_revision_parents
+                sql`INSERT INTO revision_parents
                     (owner_slug, skit_slug, revision_id, position, parent_id)
                     VALUES (${owner}, ${slug}, ${id}, ${position}, ${parent})
                     ON CONFLICT DO NOTHING`,
@@ -390,37 +392,37 @@ export const layer = Layer.effect(
       Effect.provideService(Digest.Digest, digests),
     );
 
-    const move = Effect.fn("Draft.move")(function* (
+    const move = Effect.fn("SKIT.move")(function* (
       owner: string,
       slug: string,
       expected: History.RevisionId | null,
       id: History.RevisionId,
     ) {
       if (!(yield* hasRevision(owner, slug, id)))
-        return yield* (yield* findDraft(owner, slug)) === undefined
-          ? new DraftNotFound()
+        return yield* (yield* findSkit(owner, slug)) === undefined
+          ? new SkitNotFound()
           : new InvalidRevision({ code: "REVISION_MISSING" });
       const now = new Date(yield* Clock.currentTimeMillis).toISOString();
       const moved = yield* db(
         "move current revision",
-        sql`UPDATE drafts SET current_revision_id = ${id}, updated_at = ${now}
+        sql`UPDATE skits SET current_revision_id = ${id}, updated_at = ${now}
             WHERE owner_slug = ${owner} AND skit_slug = ${slug}
               AND current_revision_id IS ${expected}
             RETURNING owner_slug`,
       );
       if (moved.length === 1) return;
-      const draft = yield* findDraft(owner, slug);
-      if (draft === undefined) return yield* new DraftNotFound();
-      return yield* new CurrentMoved({ current: draft.current_revision_id });
+      const skit = yield* findSkit(owner, slug);
+      if (skit === undefined) return yield* new SkitNotFound();
+      return yield* new CurrentMoved({ current: skit.current_revision_id });
     });
 
-    const revision = Effect.fn("Draft.revision")(
+    const revision = Effect.fn("SKIT.revision")(
       function* (owner: string, slug: string, id: History.RevisionId) {
         const rows = yield* db(
           "read revision",
           sql`SELECT revision_id, tree_hash, author_device, author_at, diagnostics_json,
                 descriptor_json
-              FROM draft_revisions
+              FROM revisions
               WHERE owner_slug = ${owner} AND skit_slug = ${slug} AND revision_id = ${id}`,
         );
         if (rows[0] === undefined) return undefined;
@@ -435,7 +437,7 @@ export const layer = Layer.effect(
           yield* db(
             "read tree entries",
             sql`SELECT path, kind, mode, blob_hash, byte_length, target
-                FROM draft_tree_entries WHERE tree_hash = ${read.revision.tree}`,
+                FROM revision_tree_entries WHERE tree_hash = ${read.revision.tree}`,
           ),
         ).pipe(databaseError("decode tree entries"));
         if (
@@ -444,24 +446,24 @@ export const layer = Layer.effect(
             0,
           ) > MAX_ARTIFACT_CONTENT_BYTES
         )
-          return yield* new DraftTooLarge();
+          return yield* new RevisionTooLarge();
         const tree = yield* Effect.forEach(entries, (entry) =>
           Effect.gen(function* () {
             if (entry.kind !== "file") return entry;
-            const object = yield* blobs("read draft blob", (bucket) =>
+            const object = yield* blobs("read skit blob", (bucket) =>
               bucket.get(blobKey(entry.blob_hash)),
             );
-            if (object === null) return yield* new DraftBlobMissing({ path: entry.path });
+            if (object === null) return yield* new RevisionBlobMissing({ path: entry.path });
             if (object.size !== entry.byte_length)
-              return yield* new DraftBlobCorrupt({ path: entry.path });
+              return yield* new RevisionBlobCorrupt({ path: entry.path });
             const bytes = new Uint8Array(
-              yield* r2Body("read draft blob body", () => object.arrayBuffer()),
+              yield* r2Body("read skit blob body", () => object.arrayBuffer()),
             );
             if (
               bytes.byteLength !== entry.byte_length ||
               (yield* sha256Hash(bytes)) !== entry.blob_hash
             )
-              return yield* new DraftBlobCorrupt({ path: entry.path });
+              return yield* new RevisionBlobCorrupt({ path: entry.path });
             return { path: entry.path, kind: entry.kind, mode: entry.mode, bytes };
           }),
         );
@@ -475,7 +477,7 @@ export const layer = Layer.effect(
       Effect.provideService(Digest.Digest, digests),
     );
 
-    const ancestors = Effect.fn("Draft.ancestors")(function* (
+    const ancestors = Effect.fn("SKIT.ancestors")(function* (
       owner: string,
       slug: string,
       id: History.RevisionId,
@@ -489,12 +491,12 @@ export const layer = Layer.effect(
         sql`WITH RECURSIVE reachable(revision_id) AS (
               SELECT ${id}
               UNION
-              SELECT p.parent_id FROM draft_revision_parents p
+              SELECT p.parent_id FROM revision_parents p
                 JOIN reachable r ON p.revision_id = r.revision_id
                 WHERE p.owner_slug = ${owner} AND p.skit_slug = ${slug}
             )
             SELECT d.revision_id, d.tree_hash, d.author_device, d.author_at, d.diagnostics_json
-            FROM draft_revisions d JOIN reachable USING (revision_id)
+            FROM revisions d JOIN reachable USING (revision_id)
             WHERE d.owner_slug = ${owner} AND d.skit_slug = ${slug}
             ORDER BY d.author_at DESC, d.revision_id DESC
             LIMIT ${limit + 1} OFFSET ${offset}`,
@@ -506,6 +508,6 @@ export const layer = Layer.effect(
       };
     });
 
-    return Drafts.of({ create, current, post, move, revision, ancestors });
+    return Skits.of({ create, current, post, move, revision, ancestors });
   }),
 );

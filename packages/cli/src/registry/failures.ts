@@ -1,5 +1,5 @@
 // Named failures for talking to a Registry: credentials, Registry selection, author
-// destinations, and Draft sync.
+// destinations, and SKIT sync.
 //
 // These were seventeen SkitError sites across four codes. The conditions are genuinely distinct —
 // an expired race against the server is not a malformed destination — and callers that want to
@@ -279,7 +279,7 @@ export class NoAuthorRemote extends Data.TaggedError("NoAuthorRemote")<{}> imple
   }
 }
 
-// -- Draft synchronization ----------------------------------------------------------------------
+// -- SKIT synchronization ----------------------------------------------------------------------
 
 export class VisibilityNotAccepted
   extends Data.TaggedError("VisibilityNotAccepted")<{
@@ -317,8 +317,8 @@ export class SyncBlockedByValidation
   }
 }
 
-export class RemoteDraftUnavailable
-  extends Data.TaggedError("RemoteDraftUnavailable")<{
+export class RemoteSkitUnavailable
+  extends Data.TaggedError("RemoteSkitUnavailable")<{
     identity: string;
   }>
   implements SkitFailure
@@ -326,21 +326,21 @@ export class RemoteDraftUnavailable
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "NOT_FOUND" as const;
   readonly remediation =
-    "Check that the Draft still exists and that the active credential can read it, then retry.";
+    "Check that the SKIT still exists and that the active credential can read it, then retry.";
   get message(): string {
-    return `Remote Draft ${this.identity} is unavailable`;
+    return `Remote SKIT ${this.identity} is unavailable`;
   }
 }
 
-export class RemoteDraftIdentityMismatch
-  extends Data.TaggedError("RemoteDraftIdentityMismatch")<{}>
+export class RemoteSkitIdentityMismatch
+  extends Data.TaggedError("RemoteSkitIdentityMismatch")<{}>
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
   readonly remediation = "Check the author remote's Registry and destination, then retry.";
   get message(): string {
-    return "Remote Draft identity does not match its Registry route";
+    return "Remote SKIT identity does not match its Registry route";
   }
 }
 
@@ -611,16 +611,16 @@ export class PublicationBlocked
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "VALIDATION_FAILED" as const;
-  readonly remediation = "Resolve the reported findings, sync the Draft, then publish again.";
+  readonly remediation = "Resolve the reported findings, sync the SKIT, then publish again.";
   get message(): string {
     return this.reason === "content"
       ? `This SKIT cannot be published as it stands:\n${this.detail}`
-      : `Publication is blocked by the current Draft assessment${this.detail}`;
+      : `Publication is blocked by the current SKIT assessment${this.detail}`;
   }
 }
 
-export class DraftOutOfSync
-  extends Data.TaggedError("DraftOutOfSync")<{ commandPath: string }>
+export class AuthorSyncRequired
+  extends Data.TaggedError("AuthorSyncRequired")<{ commandPath: string }>
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -629,7 +629,7 @@ export class DraftOutOfSync
     return `Run \`skit author sync ${this.commandPath} --apply\`, then publish again.`;
   }
   get message(): string {
-    return `Local files do not match the current Draft; run \`skit author sync ${this.commandPath} --apply\` before publishing`;
+    return `Local files do not match the current Registry revision; run \`skit author sync ${this.commandPath} --apply\` before publishing`;
   }
 }
 
@@ -661,7 +661,7 @@ export class DeleteRequiresPrivate
   }
 }
 
-// -- Draft destinations ------------------------------------------------------------------------------
+// -- SKIT destinations ------------------------------------------------------------------------------
 
 export class DestinationFormInvalid
   extends Data.TaggedError("DestinationFormInvalid")<{
@@ -683,8 +683,8 @@ export class DestinationFormInvalid
   }
 }
 
-export class DraftSlugMismatch
-  extends Data.TaggedError("DraftSlugMismatch")<{
+export class SkitSlugMismatch
+  extends Data.TaggedError("SkitSlugMismatch")<{
     context: string;
     remote: string;
     local: string;

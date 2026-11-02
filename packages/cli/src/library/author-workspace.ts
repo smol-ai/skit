@@ -19,7 +19,7 @@ import { AuthorWorkspaceAlreadyRegistered, DirectoryAlreadyInLibrary } from "./f
 
 import {
   authorWorkspaceMetadataPath,
-  readAuthorWorkspace,
+  loadAuthorWorkspaceMetadata,
   type AuthorWorkspaceMetadata,
 } from "./author-workspace-metadata.js";
 
@@ -49,7 +49,7 @@ export const planAuthorWorkspace = Effect.fn("Author.planAuthorWorkspace")(funct
   options: AuthorWorkspaceOptions,
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const workspace = yield* readAuthorWorkspace(root);
+  const workspace = yield* loadAuthorWorkspaceMetadata(root);
   const physical = (yield* fs.exists(root)) ? yield* fs.realPath(root) : root;
   const importsFor = (collection: Collection) =>
     state.imports.filter((sourceImport) => sourceImport.collection_id === collection.collection_id);
@@ -178,7 +178,7 @@ export const markAuthorWorkspaceRemoved = Effect.fn("Author.markWorkspaceRemoved
       sourceImport.source_identity.kind === "authored-workspace",
   )?.input.value;
   if (path === undefined) return;
-  const workspace = yield* readAuthorWorkspace(path);
+  const workspace = yield* loadAuthorWorkspaceMetadata(path);
   if (workspace?.workspace_id === collection.upstream.source_identity.workspace_id)
     yield* writeAuthorWorkspace(path, { ...workspace, registration: "removed" });
 }, withLibraryWriter);

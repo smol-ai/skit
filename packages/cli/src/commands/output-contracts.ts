@@ -98,20 +98,21 @@ export const outputContracts = {
     }),
   ),
   authorList: effectOutput(
-    "skit.author.list.v1",
+    "skit.author.list.v2",
     Schema.Struct({
       registry: Schema.String,
       skits: Schema.Array(
         Schema.Struct({
           identity: Schema.String,
           visibility: AuthorSkitSummary.fields.visibility,
-          draft_revision_id: AuthorSkitSummary.fields.draft_revision_id,
+          current_revision_id: AuthorSkitSummary.fields.current_revision_id,
+          current_revision_published: AuthorSkitSummary.fields.current_revision_published,
           most_recent_release_version: AuthorSkitSummary.fields.most_recent_release_version,
         }),
       ),
     }),
   ),
-  authorDelete: effectOutput("skit.author.delete.v1", AuthorSkitDeleteResponse),
+  authorDelete: effectOutput("skit.author.delete.v2", AuthorSkitDeleteResponse),
   add: effectOutput("skit.add.v7", AddResult),
   addPreview: effectOutput("skit.add.preview.v4", AddPreview),
   list: effectOutput("skit.list.v7", ListResult),
@@ -131,7 +132,7 @@ export const outputContracts = {
   disable: effectOutput("skit.disable.v10", SetEnabledResult),
   disablePlan: effectOutput("skit.disable.plan.v9", SetEnabledChange),
   publish: effectOutput("skit.publish.v1", releasePublishResponseSchema),
-  sync: effectOutput("skit.author.sync.v4", AuthorSyncResult),
+  sync: effectOutput("skit.author.sync.v5", AuthorSyncResult),
   librarySync: effectOutput("skit.library.sync.v11", SyncResult),
   libraryHistory: effectOutput(
     "skit.library.history.v1",

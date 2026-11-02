@@ -1,6 +1,7 @@
 import { Clock, Context, Effect, Layer, Schema } from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
 import { D1Client } from "@effect/sql-d1";
+import { Skits } from "../skits/service.js";
 import { verifyReleaseArchive } from "./archive.js";
 import { type Hash, sha256Hash } from "@smolai/skit-core/universal/consumer";
 import { IntegrityError, ValidationDiagnostic } from "../integrity/contracts.js";
@@ -14,18 +15,18 @@ import {
   type DatabaseSqlClient,
 } from "../platform/cloudflare.js";
 
-const DraftRow = Schema.Struct({
-  current_revision_id: Schema.NullOr(Schema.String),
-  visibility: Schema.Literals(["public", "unlisted", "private"]),
-});
 const ReleaseRow = Schema.Struct({ release_id: Schema.String });
 
-export class DraftNotFound extends Schema.TaggedError<DraftNotFound>()(
-  "Publication.DraftNotFound",
+export class SkitNotFound extends Schema.TaggedError<SkitNotFound>()(
+  "Publication.SkitNotFound",
   {},
 ) {}
-export class StaleDraftRevision extends Schema.TaggedError<StaleDraftRevision>()(
-  "Publication.StaleDraftRevision",
+export class CurrentRevisionMissing extends Schema.TaggedError<CurrentRevisionMissing>()(
+  "Publication.CurrentRevisionMissing",
+  {},
+) {}
+export class StaleRevision extends Schema.TaggedError<StaleRevision>()(
+  "Publication.StaleRevision",
   {},
 ) {}
 export class PublishBlocked extends Schema.TaggedError<PublishBlocked>()(
@@ -53,8 +54,9 @@ export interface PublicationResult {
 }
 
 export type PublicationError =
-  | DraftNotFound
-  | StaleDraftRevision
+  | SkitNotFound
+  | CurrentRevisionMissing
+  | StaleRevision
   | PublishBlocked
   | ReleaseConflict
   | IntegrityError
@@ -77,17 +79,11 @@ export const layer = Layer.effect(
     const sql: DatabaseSqlClient = yield* D1Client.D1Client;
     const digests = yield* Digest.Digest;
     const random = yield* SecureRandom.SecureRandom;
+    const skits = yield* Skits;
     const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
       effect.pipe(databaseError(operation));
     const blobs = <A>(operation: string, run: (bucket: R2Bucket) => Promise<A>) =>
       blobStorageEffectFrom(bindings.blobs, operation, run);
-    const decodeDraft = (value: unknown) =>
-      Schema.decodeUnknownEffect(DraftRow)(value).pipe(
-        Effect.mapError(
-          (cause) => new DatabaseError({ operation: "decode publication draft", cause }),
-        ),
-      );
-
     const findRelease = Effect.fn("Publication.findRelease")(function* (
       owner: string,
       slug: string,
@@ -105,18 +101,12 @@ export const layer = Layer.effect(
     });
 
     const publish = Effect.fn("Publication.publish")(function* (input: PublicationInput) {
-      const draftRows = yield* db(
-        "find publication draft",
-        sql`SELECT current_revision_id, visibility FROM drafts
-            WHERE owner_slug = ${input.owner} AND skit_slug = ${input.slug}`,
-      );
-      if (draftRows[0] === undefined) return yield* new DraftNotFound();
-      const draft = yield* decodeDraft(draftRows[0]);
-      // A Draft that no device has pointed at yet has nothing to publish.
-      const current = draft.current_revision_id;
-      if (current === null) return yield* new DraftNotFound();
+      const skit = yield* skits.current(input.owner, input.slug);
+      if (skit === undefined) return yield* new SkitNotFound();
+      const current = skit.current;
+      if (current === null) return yield* new CurrentRevisionMissing();
       if (input.revisionId !== undefined && input.revisionId !== current)
-        return yield* new StaleDraftRevision();
+        return yield* new StaleRevision();
 
       const diagnostics = yield* verifyReleaseArchive(
         input.owner,
@@ -152,7 +142,7 @@ export const layer = Layer.effect(
             archive_bytes, archive_object_key, published_at, visibility)
            VALUES (${input.owner}, ${input.slug}, ${input.version}, ${releaseId},
                    ${current}, ${archiveDigest}, ${input.archive.byteLength},
-                   ${objectKey}, ${publishedAt}, ${draft.visibility})`,
+                   ${objectKey}, ${publishedAt}, ${skit.visibility})`,
       );
       yield* insert.pipe(
         Effect.catchTag("Cloudflare.DatabaseError", (insertError) =>

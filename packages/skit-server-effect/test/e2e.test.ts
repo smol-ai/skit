@@ -13,7 +13,7 @@ import { createTestHarness } from "wrangler";
 import { expect, test } from "vitest";
 import type { RuntimeEnv } from "../src/platform/cloudflare.js";
 import {
-  DraftCurrentResponse,
+  SkitCurrentResponse,
   History,
   RevisionPostRequest,
   RevisionReadResponse,
@@ -44,7 +44,7 @@ const commandsWithHarnessRoots = new Set([
 test.skip("runs the pre-release authoring product loop through the built CLI", async () => {
   // The v1 CLI deliberately has no `author` command. Retain this scenario as executable design
   // evidence until it is replaced by a supported authoring client or removed with the pre-release
-  // Draft and Publication surface; it is not part of the v1 E2E gate.
+  // SKIT and Publication surface; it is not part of the v1 E2E gate.
   let cliToken: string;
   const workspace = await mkdtemp(join(tmpdir(), "skit-e2e-"));
   const authorSource = join(workspace, "author-lifecycle");
@@ -269,7 +269,7 @@ test.skip("runs the pre-release authoring product loop through the built CLI", a
       schema: "skit.validate.v3",
       data: { valid: true, diagnostics: [] },
     });
-    const createdDraft = JSON.parse(
+    const createdSkit = JSON.parse(
       skit([
         "author",
         "sync",
@@ -284,7 +284,7 @@ test.skip("runs the pre-release authoring product loop through the built CLI", a
         "--json",
       ]).stdout,
     );
-    expect(createdDraft).toMatchObject({
+    expect(createdSkit).toMatchObject({
       schema: "skit.author.sync.v4",
       data: { status: "created", changed: true, revision_id: expect.any(String) },
     });
@@ -325,7 +325,7 @@ test.skip("runs the pre-release authoring product loop through the built CLI", a
     expect(currentResponse.status).toBe(200);
     // The first sync moved `current`, so it is a revision.
     const { current } = Schema.decodeUnknownSync(
-      Schema.Struct({ ...DraftCurrentResponse.fields, current: History.RevisionId }),
+      Schema.Struct({ ...SkitCurrentResponse.fields, current: History.RevisionId }),
     )(await currentResponse.json());
     const remoteResponse = await fetch(new URL(`${draftPath}/revisions/${current}`, registryUrl), {
       headers: authorization,
@@ -406,7 +406,7 @@ test.skip("runs the pre-release authoring product loop through the built CLI", a
         status: "delete_ready",
         changed: false,
         // The first push, the remote edit, and the merge: the device's own revision and the merge.
-        draft_revisions: 4,
+        revisions: 4,
         release_versions: ["1.0.0"],
       },
     });

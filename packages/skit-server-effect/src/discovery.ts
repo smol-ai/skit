@@ -28,8 +28,9 @@ export const makeServerDiscovery = (capabilities: ServerCapabilities) =>
       ? {
           authorSkits: "/api/author/skits",
           skit: "/api/skits/{owner}/{slug}",
-          createDraft: "/api/skits",
-          draft: "/api/skits/{owner}/{slug}/draft",
+          createSkit: "/api/skits",
+          currentRevision: "/api/skits/{owner}/{slug}/current",
+          revisions: "/api/skits/{owner}/{slug}/revisions",
         }
       : {}),
     ...(capabilities.publication ? { publish: "/api/skits/{owner}/{slug}/releases" } : {}),

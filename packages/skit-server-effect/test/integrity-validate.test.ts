@@ -113,8 +113,8 @@ const emptyDirectoryBundle = Effect.fn("Test.emptyDirectoryBundle")(function* (
   };
 });
 
-describe("Integrity draft validation", () => {
-  it.effect("accepts a complete conforming draft", () =>
+describe("Integrity skit validation", () => {
+  it.effect("accepts a complete conforming skit", () =>
     Effect.gen(function* () {
       const bundle = yield* validBundle;
       const validated = yield* validateArtifactBundle(
@@ -217,7 +217,7 @@ describe("Integrity draft validation", () => {
     ["one Skill projects more than 8 MiB", 1, 9, "PROJECTED_SKILL_TOO_LARGE"],
     ["its Skills together project more than 32 MiB", 5, 7, "PROJECTED_RELEASE_TOO_LARGE"],
   ] as const)
-    it.effect(`rejects a draft when ${label}`, () =>
+    it.effect(`rejects a skit when ${label}`, () =>
       Effect.gen(function* () {
         const bundle = yield* sharedBundle(skills, mappings);
         const outcome = yield* Effect.result(
@@ -252,7 +252,7 @@ describe("Integrity draft validation", () => {
       "PROJECTED_RELEASE_TOO_LARGE",
     ],
   ] as const)
-    it.effect(`${code ? "rejects" : "accepts"} a draft when ${label}`, () =>
+    it.effect(`${code ? "rejects" : "accepts"} a skit when ${label}`, () =>
       Effect.gen(function* () {
         const bundle = yield* emptyDirectoryBundle(skills, mappings);
         const outcome = yield* Effect.result(
