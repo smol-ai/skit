@@ -203,6 +203,8 @@ export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
       .filter(
         (fact) =>
           fact.status === "incoming-update" ||
+          fact.status === "uninstall" ||
+          fact.status === "install" ||
           fact.metadataChanged ||
           (fact.status !== "native-delete" &&
             approval.versionChoices?.some((choice) => choice.skillId === fact.skillId)),

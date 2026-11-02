@@ -15,7 +15,7 @@ const IGNORE_EVERYTHING = "*\n";
  * sees them; but a root mounted from another device shares that device only with its own entries,
  * and a rename is the only lossless move, so there they live hidden inside the root instead.
  */
-export const installedSkillWorkDirectory = Effect.fn("Install.workDirectory")(function* (
+export const installedSkillStagingDirectory = Effect.fn("Install.stagingDirectory")(function* (
   root: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
@@ -31,11 +31,14 @@ export const installedSkillWorkDirectory = Effect.fn("Install.workDirectory")(fu
  */
 export const backUpInstalledSkill = Effect.fn("Install.backUp")(function* (
   installedSkill: Pick<InstalledSkill, "root" | "path" | "installed_skill_id">,
-  action: "replace" | "retire",
+  action: "replace" | "uninstall",
 ) {
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
-  const backups = join(yield* installedSkillWorkDirectory(installedSkill.root), BACKUPS_DIRECTORY);
+  const backups = join(
+    yield* installedSkillStagingDirectory(installedSkill.root),
+    BACKUPS_DIRECTORY,
+  );
   yield* fs.makeDirectory(backups, { recursive: true, mode: 0o700 });
   // A repository can commit its own `.skit-backups`, so never follow a link planted there.
   if ((yield* links.lstat(backups)).type !== "Directory")
@@ -102,7 +105,7 @@ const installedSkillBackups = Effect.fn("Install.backups")(function* (
   return pending;
 });
 
-/** Unsettled backups retain their existing narrow protocol. */
+/** Unsettled backups keep their existing narrow protocol. */
 export const pendingInstalledSkillBackups = (
   installedSkill: Pick<InstalledSkill, "root" | "installed_skill_id">,
 ) => installedSkillBackups(installedSkill, false);

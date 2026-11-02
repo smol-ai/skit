@@ -1,5 +1,5 @@
 {
-  "$id": "skit.doctor.v8",
+  "$id": "skit.doctor.v9",
   "type": "object",
   "properties": {
     "ok": {
@@ -39,8 +39,7 @@
                 "type": "string",
                 "enum": [
                   "agents",
-                  "claude",
-                  "legacy"
+                  "claude"
                 ]
               },
               {

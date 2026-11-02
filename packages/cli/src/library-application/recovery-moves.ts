@@ -19,7 +19,7 @@ import {
   writeJsonExclusive,
 } from "@smolai/skit-core";
 import { PlanIsStale } from "../library/failures.js";
-import { leavePnpmSkill } from "../install/pnpm-skills.js";
+import { leavePnpmSkill } from "@smolai/skit-core";
 
 /** Entry shapes for one saved format of device and inode numbers. */
 const recordSchemas = <Number extends Schema.Codec<bigint, unknown>>(number: Number) => {

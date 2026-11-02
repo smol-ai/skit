@@ -1,17 +1,9 @@
 import { Schema, SchemaGetter } from "effect";
 import { CollectionId, InstalledSkillId, SkillId, SkillVersionId } from "../entity-ids.js";
 import { Collection } from "../library-contracts.js";
-import {
-  AbsoluteDevicePath,
-  CURRENT_LIBRARY_STATE_VERSION,
-  LibraryStateDocument,
-} from "../library-state.js";
-import {
-  Hash,
-  HarnessName,
-  InvocationPolicy,
-  RecordedInstallDestination,
-} from "../../vocabulary.js";
+import { AbsoluteDevicePath } from "../library-state.js";
+import { LibraryStateFromV10 } from "./state-schema-v10.js";
+import { Hash, HarnessName, InvocationPolicy } from "../../vocabulary.js";
 import {
   BindingEntryV7,
   BindingV7,
@@ -29,6 +21,7 @@ import {
   HarnessInstallStatus,
   InventoryScanIssue,
   SkillAssessmentAcceptance,
+  RecordedInstallDestination,
 } from "./state-schema.js";
 
 /** An assessment acceptance as v9 stored it: the content hash was `artifactContentDigest`. */
@@ -186,7 +179,7 @@ const libraryStateFromV9 = ({
 }: LibraryStateV9) => {
   return {
     ...fields,
-    schemaVersion: CURRENT_LIBRARY_STATE_VERSION,
+    schemaVersion: 10 as const,
     ...(sync_ancestry === undefined
       ? {}
       : {
@@ -234,7 +227,7 @@ const libraryStateFromV9 = ({
 
 export const LibraryStateFromV9 = Schema.Unknown.pipe(
   Schema.refine(Schema.is(LibraryStateV9)),
-  Schema.decodeTo(LibraryStateDocument, {
+  Schema.decodeTo(LibraryStateFromV10, {
     decode: SchemaGetter.transform(libraryStateFromV9),
     encode: SchemaGetter.forbidden(() => "v9 Library state is decode-only"),
   }),

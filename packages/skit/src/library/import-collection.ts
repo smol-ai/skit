@@ -10,11 +10,17 @@ import {
   makeSkillId,
   makeSkillVersionId,
   MachineId,
+  type CollectionVersionId,
+  type InstalledSkillId,
+  type SkillId,
+  type SkillVersionId,
 } from "./entity-ids.js";
 import * as MachineSettings from "./machine-settings.js";
 import {
   Import,
+  type Collection,
   type MaterializationProfile,
+  type Skill,
   type SkillsShLockFileEntry,
   type SkitSource,
   sourceImports,
@@ -22,11 +28,7 @@ import {
   SourceIdentity,
   SourceTracking,
 } from "./library-contracts.js";
-import {
-  LibraryState,
-  decodeLibraryState,
-  libraryManifestFromLocalState,
-} from "./library-state.js";
+import { decodeLibraryState, libraryManifestFromLocalState } from "./library-state.js";
 import { LibraryStore } from "./store/library-store.js";
 import { originalTreeHash, writeCollectionVersion } from "./collection-version.js";
 import { installedSkillHash } from "./installed-skill-hash.js";
@@ -69,6 +71,33 @@ export interface ImportRequest {
   readonly importedAt: string;
   readonly skills: readonly ImportRequestSkill[];
   readonly lockFileEntries: readonly SkillsShLockFileEntry[];
+}
+
+/** What an import saved: the Collection, its Skills, and the Collection Version it stored. */
+export interface ImportedCollection {
+  readonly action: "added" | "updated" | "unchanged";
+  readonly collection: Collection;
+  readonly skills: readonly Skill[];
+  readonly collectionVersionId: CollectionVersionId;
+  readonly snapshotDigest: Hash;
+  readonly members: readonly ImportedSkillFact[];
+}
+
+/** An edited installed copy, to import as a new Version of its Skill. */
+export interface EditImport {
+  readonly skillId: SkillId;
+  readonly installedSkillId: InstalledSkillId;
+  readonly path: string;
+  readonly currentHash: Hash;
+  readonly importedAt: string;
+}
+
+/** The Version an imported edit became, and the Collection Version that holds it. */
+export interface ImportedEdit {
+  readonly skillVersionId: SkillVersionId;
+  readonly collectionVersionId: CollectionVersionId;
+  readonly snapshotDigest: Hash;
+  readonly artifactHash: Hash;
 }
 
 const safeRelative = (path: string) =>
@@ -253,7 +282,12 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     }) &&
     unchangedSkills.every((skill) => skill !== undefined)
   )
-    return { action: "unchanged" as const, collection, skills: unchangedSkills, ...imported };
+    return {
+      action: "unchanged",
+      collection,
+      skills: unchangedSkills,
+      ...imported,
+    } satisfies ImportedCollection;
   const previousCopy = state.collection_versions.find(
     (copy) => copy.collection_version_id === previous?.collection_version_id,
   );
@@ -328,7 +362,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
       ? ("updated" as const)
       : ("unchanged" as const);
   yield* store.save(successor, base);
-  return { action, collection, skills, ...imported };
+  return { action, collection, skills, ...imported } satisfies ImportedCollection;
 });
 
 /** Import scanned bytes and return what was imported while the caller holds Library write authority. */
@@ -363,13 +397,7 @@ export class InstalledSkillChanged
  * The import records only the local path and machine that were actually observed. It does
  * not alter the Collection's upstream or attribute the changed bytes to that upstream.
  */
-export const importEdit = Effect.fn("Library.importEdit")(function* (request: {
-  readonly skillId: LibraryState["skills"][number]["skill_id"];
-  readonly installedSkillId: LibraryState["installed_skills"][number]["installed_skill_id"];
-  readonly path: string;
-  readonly currentHash: Hash;
-  readonly importedAt: string;
-}) {
+export const importEdit = Effect.fn("Library.importEdit")(function* (request: EditImport) {
   const store = yield* LibraryStore;
   const current = yield* store.inspect;
   if (!current.present)
@@ -464,7 +492,7 @@ export const importEdit = Effect.fn("Library.importEdit")(function* (request: {
     collectionVersionId,
     snapshotDigest: prepared.hash,
     artifactHash: fact.artifactHash,
-  };
+  } satisfies ImportedEdit;
 });
 
 export interface AuthoredImport {
@@ -528,3 +556,9 @@ export const importAuthoredCollection = Effect.fn("Library.retainAuthoredCollect
     });
   },
 );
+
+export type ImportCollectionError = Effect.Error<ReturnType<typeof importCollection>>;
+export type ImportAuthoredCollectionError = Effect.Error<
+  ReturnType<typeof importAuthoredCollection>
+>;
+export type ImportEditError = Effect.Error<ReturnType<typeof importEdit>>;

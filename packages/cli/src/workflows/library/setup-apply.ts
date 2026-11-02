@@ -26,12 +26,13 @@ import { importSetupCollections } from "./setup-import.js";
 import { beginSetupOperation } from "../../library-application/setup-operation.js";
 import type { PreparedRecoveryMoves } from "../../library-application/recovery-moves.js";
 import {
-  installSelectedVersions,
+  applyInstalledSkillChanges,
+  changeResults,
   hasChangesToApply,
   ChangeChoiceRequired,
   changesNeedingChoice,
-} from "./installed-skill-changes.js";
-import { applyChosenSetupVersions, setupVersionAlternatives } from "./setup-version-choice.js";
+  setupVersionAlternatives,
+} from "./setup-installed-skills.js";
 import { PlanIsStale } from "../../library/failures.js";
 
 /** What the user reviewed and approved: the plan ID they saw and the selections they made. */
@@ -73,24 +74,20 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
       revalidateSetupPlan(approval.setup, approval.planId),
     );
     const installedSkillChanges = approval.changes ?? revalidated.scan.changes ?? [];
-    const reviewedIds = new Set<string>();
+    const reviewedPaths = new Set<string>();
     for (const fact of installedSkillChanges) {
       if (
-        reviewedIds.has(fact.installedSkillId) ||
+        reviewedPaths.has(fact.path) ||
         canonicalJson(fact) !==
-          canonicalJson(
-            revalidated.scan.changes?.find(
-              (item) => item.installedSkillId === fact.installedSkillId,
-            ) ?? null,
-          )
+          canonicalJson(revalidated.scan.changes?.find((item) => item.path === fact.path) ?? null)
       )
         return yield* new PlanIsStale();
-      reviewedIds.add(fact.installedSkillId);
+      reviewedPaths.add(fact.path);
     }
     const reviewedSkills = new Set(installedSkillChanges.map((fact) => fact.skillId));
     if (
       (revalidated.scan.changes ?? []).some(
-        (fact) => reviewedSkills.has(fact.skillId) && !reviewedIds.has(fact.installedSkillId),
+        (fact) => reviewedSkills.has(fact.skillId) && !reviewedPaths.has(fact.path),
       )
     )
       return yield* new PlanIsStale();
@@ -121,15 +118,20 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
         ),
     );
     const enablingCopies = installedCopies.length > 0;
-    const projects = enablingCopies || hasChangesToApply(installedSkillChanges, versionChoices);
+    // Updating existing copies updates every one the approved plan showed, not only those selected.
+    const scanChanges = revalidated.scan.changes ?? [];
+    const updating = hasChangesToApply(installedSkillChanges, versionChoices);
+    const projects = enablingCopies || updating;
     if (projects)
       for (const target of yield* activeInstallDestinations(approval.setup.inventory))
         if (
           enablingCopies ||
-          installedSkillChanges.some(
+          (updating ? scanChanges : installedSkillChanges).some(
             (fact) =>
               fact.destination === target &&
               (fact.status === "incoming-update" ||
+                fact.status === "uninstall" ||
+                fact.status === "install" ||
                 fact.metadataChanged ||
                 (fact.status !== "native-delete" &&
                   versionChoices.some((choice) => choice.skillId === fact.skillId))),
@@ -142,7 +144,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
     const store = yield* LibraryStore;
     let revision = libraryStateRevision(revalidated.library);
     const operation = yield* beginSetupOperation(
-      { ...approval, changes: installedSkillChanges },
+      { ...approval, changes: updating ? scanChanges : installedSkillChanges },
       revalidated.library,
       projects,
       installedCopies.map((copy) => copy.name),
@@ -225,42 +227,31 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(
             deferredSkills.add(fact.skillId);
         }
       }
-      for (const fact of revalidated.scan.changes ?? []) {
-        if (!deferredSkills.has(fact.skillId)) continue;
-        changeOutcomes.push({
-          installedSkillId: fact.installedSkillId,
-          name: fact.name,
-          path: fact.path,
-          status: fact.status === "native-delete" ? "native-delete" : "pending",
-          reason:
-            "The source import changed the desired Version. Observe setup and review these copies again; this apply leaves them untouched.",
-        });
-      }
-      const currentChoices = versionChoices.filter((choice) => !deferredSkills.has(choice.skillId));
-      const chosenSkills = new Set(currentChoices.map((choice) => choice.skillId));
-      if (currentChoices.length) {
-        const chosen = yield* options.withStatus(
-          "Applying the selected active versions",
-          applyChosenSetupVersions(
-            installedSkillChanges,
-            currentChoices,
-            approval.removals.operationDirectory,
-          ),
+      // One update installs every copy, so a Version the import changed holds all of them back.
+      if (deferredSkills.size)
+        changeOutcomes.push(
+          ...installedSkillChanges.map((fact) => ({
+            ...(fact.installedSkillId === undefined
+              ? {}
+              : { installedSkillId: fact.installedSkillId }),
+            name: fact.name,
+            path: fact.path,
+            status:
+              fact.status === "native-delete" ? ("native-delete" as const) : ("pending" as const),
+            reason:
+              "The source import changed the desired Version. Observe setup and review these copies again; this apply leaves them untouched.",
+          })),
         );
-        changeOutcomes.push(...chosen.outcomes);
-        recoveryDirectories.push(chosen.recoveryDirectory);
-      }
-      if (installedSkillChanges.length)
+      else if (updating)
         changeOutcomes.push(
           ...(yield* options.withStatus(
-            "Reconciling reviewed existing copies",
-            installSelectedVersions(
-              installedSkillChanges.filter(
-                (fact) => !chosenSkills.has(fact.skillId) && !deferredSkills.has(fact.skillId),
-              ),
-            ),
+            versionChoices.length
+              ? "Applying the selected active versions"
+              : "Updating reviewed existing copies",
+            applyInstalledSkillChanges(approval.setup.inventory, scanChanges, versionChoices),
           )),
         );
+      else changeOutcomes.push(...changeResults(installedSkillChanges, true));
     }).pipe(
       Effect.provideService(LibraryStore, {
         ...store,

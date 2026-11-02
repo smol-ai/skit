@@ -21,6 +21,7 @@ import { LibraryStateFromV6 } from "./state-schema-v6.js";
 import { LibraryStateFromV7 } from "./state-schema-v7.js";
 import { LibraryStateFromV8 } from "./state-schema-v8.js";
 import { LibraryStateFromV9 } from "./state-schema-v9.js";
+import { LibraryStateFromV10 } from "./state-schema-v10.js";
 import { withLibraryStateReplacement } from "./writer-lock.js";
 
 export type InspectedLibraryState =
@@ -65,10 +66,11 @@ const decodeCurrentState = Effect.fn("Library.decodeCurrentState")(function* (
 
 /**
  * v4 is what the first public SKIT wrote. Each legacy version steps through the linear
- * v4 → v5 → v6 → v7 → v9 → v10 chain, with v8 joining at v9.
+ * v4 → v5 → v6 → v7 → v9 → v10 → v11 chain, with v8 joining at v9.
  */
 const OLDEST_LIBRARY_STATE_VERSION = 4;
 const LegacyLibraryState = Schema.Union([
+  LibraryStateFromV10,
   LibraryStateFromV9,
   LibraryStateFromV8,
   LibraryStateFromV7,

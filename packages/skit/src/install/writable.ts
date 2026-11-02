@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Predicate } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { SkillsDirectoryNotWritable } from "../failures.js";
-import { installedSkillWorkDirectory } from "./backups.js";
+import { installedSkillStagingDirectory } from "./backups.js";
 
 /**
  * Whether the operating system refused access. Node's EACCES arrives as `PermissionDenied`, but a
@@ -15,17 +15,17 @@ const isPermissionDenied = (error: PlatformError): boolean =>
     (error.reason.cause.code === "EPERM" || error.reason.cause.code === "EROFS"));
 
 /**
- * Prove that SKIT can place copies under a root: create the root and a scratch directory in each
- * place materializing writes, the root itself and the work directory where copies are staged and
- * backed up. A refusal becomes `SkillsDirectoryNotWritable` naming the root. Callers run this before
- * saving Library state, so a sandboxed or read-only root fails without leaving a half-applied
- * Library behind; materializing runs it again, so every copy write fails the same way.
+ * Prove that SKIT can place Installed Skills under a root: create the root and a scratch directory
+ * in each place installing writes, the root itself and the staging directory where folders are
+ * staged and backed up. A refusal becomes `SkillsDirectoryNotWritable` naming the root. Callers run
+ * this before saving Library state, so a sandboxed or read-only root fails without leaving a
+ * half-applied Library behind; installing runs it again, so every write fails the same way.
  */
 export const ensureSkillsDirectoryWritable = Effect.fn("Install.ensureSkillsDirectoryWritable")(
   function* (root: string) {
     const fs = yield* FileSystem.FileSystem;
     yield* fs.makeDirectory(root, { recursive: true, mode: 0o700 });
-    for (const directory of new Set([root, yield* installedSkillWorkDirectory(root)])) {
+    for (const directory of new Set([root, yield* installedSkillStagingDirectory(root)])) {
       const probe = yield* fs.makeTempDirectory({ directory, prefix: ".skit-write-check-" });
       yield* fs.remove(probe, { recursive: true });
     }

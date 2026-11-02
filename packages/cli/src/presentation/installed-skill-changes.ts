@@ -18,6 +18,8 @@ export function renderInstalledSkillChange(
     competing: "Local and Library both changed; choose the active version",
     protected: `Resolve ownership: ${fact.reason ?? "ownership is uncertain"}`,
     "native-delete": "Keep native deletion",
+    uninstall: "Uninstall: nothing enables it here",
+    install: "Install from Library",
   }[fact.status];
   return `${terminalData(fact.name)} · ${terminalData(label)} · ${terminalData(displayPath(fact.path))}`;
 }
@@ -53,6 +55,8 @@ export function renderChangeResult(outcome: InstalledSkillChangeResult) {
     "local-kept": "Local edits kept active",
     "native-delete": "Native deletion kept",
     pending: "Fresh review needed",
+    uninstalled: "Uninstalled",
+    installed: "Installed",
   }[outcome.status];
   return `${terminalData(outcome.name)} · ${label} · ${terminalData(outcome.path)}${outcome.reason ? ` · ${terminalData(outcome.reason)}` : ""}`;
 }

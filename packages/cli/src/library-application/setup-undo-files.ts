@@ -39,7 +39,8 @@ export const installedSkillChoice = (installedSkill: InstalledSkill | undefined)
         target: installedSkill.destination,
         expected_hash: installedSkill.expected_hash,
         status: installedSkill.status,
-        suppressed_at: installedSkill.suppressed_at,
+        suppressed_at:
+          installedSkill.status === "suppressed" ? installedSkill.suppressed_at : undefined,
       };
 const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
 
@@ -244,6 +245,9 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
       conflicts.push(`Occupied original path: ${file.path}`);
       continue;
     }
+    // Only a copy the operation installed is setup's to move or remove; a folder that appeared
+    // where it recorded a deletion is the user's own.
+    if (file.entry === null && after?.status !== "installed") continue;
     if (details.entry && owned) moves.push({ name: basename(file.path), installedSkill: current });
     if (file.entry === null) {
       if (details.entry) actions.push({ path: file.path, kind: "remove-created" });

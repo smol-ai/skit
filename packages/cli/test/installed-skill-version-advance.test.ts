@@ -1,17 +1,17 @@
+import { installEnabledSkills, updateInstalledSkills } from "./helpers/installed-skills.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import {
+  InstalledSkillStatus,
   currentSkillVersion,
   deterministicTreeHash,
   LibraryStore,
   libraryStoreLayer,
-  installEnabledSkills,
   refreshLibraryInventory,
 } from "@smolai/skit-core";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
-import { updateInstalledSkills } from "../src/workflows/library/update-installed-skills.js";
 import { isolatedRoots } from "./helpers/isolated-library.js";
 import { initializeLibraryMachine, importCollectionIn, writingTo } from "./helpers/library-home.js";
 
@@ -143,11 +143,13 @@ it.effect("heals an untouched installed skill already recorded as conflicted", (
         store.save(
           {
             ...state,
-            installed_skills: state.installed_skills.map((row) => ({
-              ...row,
-              skill_version_id: selected,
-              status: "conflicted" as const,
-            })),
+            // Untouched on disk, so the folder still holds the hash SKIT wrote.
+            installed_skills: state.installed_skills.map((row) =>
+              InstalledSkillStatus.conflicted(
+                { ...row, skill_version_id: selected },
+                row.expected_hash,
+              ),
+            ),
           },
           state,
         ),
@@ -261,7 +263,6 @@ for (const followedCollection of [false, true])
           (row) => row.skill_id === skillId && row.destination === "agents",
         );
         assert.strictEqual(suppressedRow?.status, "suppressed");
-        assert.strictEqual(suppressedRow?.suppression_reason, "native_delete");
         yield* project;
         assert.strictEqual(yield* fs.exists(installedPath), false);
         const before = yield* load;
@@ -298,13 +299,11 @@ for (const followedCollection of [false, true])
           (row) => row.skill_id === skillId && row.destination === "agents",
         );
         assert.strictEqual(restored?.status, "installed");
-        assert.strictEqual(restored?.suppression_reason, undefined);
-        assert.strictEqual(restored?.suppressed_at, undefined);
         assert.deepStrictEqual(after.enabled, before.enabled);
         assert.strictEqual(yield* fs.exists(join(roots.codexRoot, "other")), false);
         assert.strictEqual(
-          after.installed_skills.find((row) => row.skill_id === otherId)?.suppression_reason,
-          "native_delete",
+          after.installed_skills.find((row) => row.skill_id === otherId)?.status,
+          "suppressed",
         );
       }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
   );

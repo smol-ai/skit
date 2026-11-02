@@ -1,5 +1,6 @@
+import { localLibrary } from "../../library-application/library-owner.js";
 import { Data, Effect, Schema } from "effect";
-import { importCollection, LibraryStore, sourceLocator } from "@smolai/skit-core";
+import { LibraryStore, sourceLocator } from "@smolai/skit-core";
 import { type SetupOptions } from "./setup.js";
 import { SetupKnownSourceSelection, type SetupResult } from "./setup-contract.js";
 import { prepareSkillsShImportEvidence } from "./skills-sh-lock-source.js";
@@ -109,15 +110,13 @@ export const importSetupCollections = Effect.fn("Setup.importCollections")(funct
       ),
     );
     imported.push(
-      yield* Effect.scoped(
-        importCollection({
-          input: sourceLocator(evidence.source),
-          source: evidence.source,
-          importedAt: checkedAt,
-          skills: evidence.skills,
-          lockFileEntries: evidence.lockFileEntries,
-        }),
-      ),
+      yield* (yield* localLibrary).import.collection({
+        input: sourceLocator(evidence.source),
+        source: evidence.source,
+        importedAt: checkedAt,
+        skills: evidence.skills,
+        lockFileEntries: evidence.lockFileEntries,
+      }),
     );
   }
   const persisted = yield* (yield* LibraryStore).inspect;

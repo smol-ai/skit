@@ -1,7 +1,7 @@
 import type { PlatformError } from "effect/PlatformError";
 import { createHash } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path";
-import { Data, Effect, FileSystem, Schema } from "effect";
+import { Effect, FileSystem, Schema } from "effect";
 import {
   HarnessName,
   LinkStat,
@@ -15,7 +15,6 @@ import {
   skillsDirectoryFor,
   type InventoryRootOptions,
 } from "./roots.js";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
 export const SkillAlias = Schema.Struct({
   path: Schema.String,
@@ -156,17 +155,8 @@ export const scanSkillsDirectory = Effect.fn("Install.scanSkillsDirectory")(func
   );
 });
 
-export class DuplicateScanIncomplete
-  extends Data.TaggedError("DuplicateScanIncomplete")<{
-    path: string;
-    message: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly remediation = "Inspect the skills directory before enabling another copy.";
-}
+export { DuplicateScanIncomplete } from "@smolai/skit-core";
+import { DuplicateScanIncomplete } from "@smolai/skit-core";
 
 /** Exclude the destinations we will reconcile together; other same-scope copies are duplicates. */
 export const findDuplicates = Effect.fn("Install.findDuplicates")(function* (
@@ -230,31 +220,4 @@ export const findDuplicates = Effect.fn("Install.findDuplicates")(function* (
     );
 });
 
-/** Enabling would replace the user's own link where SKIT writes the copy; keeping both is impossible. */
-export class InstalledSkillWouldReplaceLink
-  extends Data.TaggedError("InstalledSkillWouldReplaceLink")<{ links: readonly string[] }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly remediation =
-    "Remove the link and enable again, or run `skit setup` and choose `--duplicates retire-aliases` to back it up with a move record.";
-  get message() {
-    return `Enabling would replace the link at ${this.links.join(", ")} with SKIT's copy, so both cannot be kept`;
-  }
-}
-
-export class InstalledSkillWouldDuplicate
-  extends Data.TaggedError("InstalledSkillWouldDuplicate")<{
-    duplicates: readonly DuplicateCopy[];
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly remediation =
-    "Remove the redundant agent location, retain without enabling, or explicitly use --allow-duplicate.";
-  get message() {
-    return `Enabling would create duplicate skills: ${this.duplicates.flatMap((item) => item.aliases.map((alias) => `${item.name} (${item.harness}): ${alias.path}${alias.via === "symlink" ? ` -> ${item.canonicalPath} (symlink${alias.linkPath !== alias.path ? ` at ${alias.linkPath} -> ${alias.linkTarget}` : ""})` : ""}`)).join("; ")}`;
-  }
-}
+export { InstalledSkillWouldReplaceLink, InstalledSkillWouldDuplicate } from "@smolai/skit-core";

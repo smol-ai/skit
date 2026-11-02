@@ -1,3 +1,4 @@
+import { installEnabledSkills } from "./helpers/installed-skills.js";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { Clock, Effect, FileSystem } from "effect";
@@ -12,7 +13,6 @@ import {
   currentSkillVersion,
   libraryManifestFromLocalState,
   LibraryStore,
-  installEnabledSkills,
   MachineSettings,
   collectionVersionPath,
   sourceImports,

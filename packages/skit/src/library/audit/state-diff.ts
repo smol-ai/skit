@@ -209,7 +209,7 @@ export const diffLibraryState = (
       before: previous.status,
       after: current.status,
       path: current.path,
-      ...(current.current_hash === undefined ? {} : { digest: current.current_hash }),
+      ...(current.status === "conflicted" ? { digest: current.current_hash } : {}),
     });
   }
 

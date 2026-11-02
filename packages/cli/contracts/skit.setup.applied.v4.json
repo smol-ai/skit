@@ -1,5 +1,5 @@
 {
-  "$id": "skit.setup.applied.v3",
+  "$id": "skit.setup.applied.v4",
   "type": "object",
   "properties": {
     "changes": {
@@ -22,16 +22,17 @@
           "status": {
             "type": "string",
             "enum": [
+              "installed",
               "updated",
               "unchanged",
               "local-kept",
               "native-delete",
-              "pending"
+              "pending",
+              "uninstalled"
             ]
           }
         },
         "required": [
-          "installedSkillId",
           "name",
           "path",
           "status"

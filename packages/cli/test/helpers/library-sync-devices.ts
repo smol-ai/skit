@@ -1,3 +1,4 @@
+import { installEnabledSkills } from "./installed-skills.js";
 import { assert } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Schema } from "effect";
 import { join } from "node:path";
@@ -9,8 +10,8 @@ import {
   deterministicTreeHash,
   libraryStoreLayer,
   makeMachineId,
-  installEnabledSkills,
-  removeCollection,
+  Library,
+  InstalledSkills,
   importCollection,
   withLibraryWriter,
   LibraryState,
@@ -18,6 +19,7 @@ import {
 } from "@smolai/skit-core";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
 import { syncLibrary } from "../../src/workflows/library/library-sync.js";
+import { syncInstalledSkills } from "../../src/workflows/library/library-sync-installed-skills.js";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 import { faultQueue, librarySyncServer } from "./library-sync-server.js";
 
@@ -190,7 +192,24 @@ export const devices = Effect.gen(function* () {
       remove: (collectionId: string) =>
         Effect.flatMap(LibraryStore, (store) => store.load).pipe(
           Effect.flatMap((state) =>
-            removeCollection(state, { collectionId, variantsPath: join(home, "variants") }),
+            Effect.gen(function* () {
+              const id = state.collections.find(
+                (item) => item.collection_id === collectionId,
+              )?.collection_id;
+              assert.ok(id);
+              // Routed as this device's sync installs.
+              const library = yield* Library.make.pipe(
+                Effect.provideService(
+                  InstalledSkills.Service,
+                  yield* syncInstalledSkills(state, (target) =>
+                    target === "agents" ? root : undefined,
+                  ),
+                ),
+              );
+              return yield* library.apply(
+                yield* library.plan({ _tag: "Remove", collectionId: id }, { base: state }),
+              );
+            }),
           ),
           withLibraryWriter,
           Effect.provide(layer),

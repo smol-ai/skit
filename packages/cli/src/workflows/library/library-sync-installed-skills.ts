@@ -1,6 +1,8 @@
+import { localLibrary } from "../../library-application/library-owner.js";
 import { Effect, Schema } from "effect";
 import { join } from "node:path";
 import {
+  InstalledSkillStatus,
   LibraryManifest,
   LibraryState,
   InstalledSkill,
@@ -17,7 +19,9 @@ import {
   installedSkillName,
   installDestinationPathIdentity,
   repositorySelectsInstalledSkill,
-  withInstalledSkillMutation,
+  Library,
+  InstalledSkills,
+  InstalledSkillInvalid,
   type InstallDestination,
   type Enabled,
 } from "@smolai/skit-core";
@@ -232,11 +236,9 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
               resolution: "local",
             }),
           );
-          installedSkills.push({
-            ...installedSkill,
-            status: "conflicted",
-            current_hash: ownership.observed,
-          });
+          installedSkills.push(
+            InstalledSkillStatus.conflicted(installedSkill, ownership.currentHash),
+          );
           continue;
         }
         // Normal updates preserve edited bytes as variants. Inactive routes are reported by
@@ -249,14 +251,14 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
           (!removing || !missingVersion) &&
           (!missingVersion || selected !== undefined)
         ) {
-          installedSkills.push({
-            ...installedSkill,
-            ...(missingVersion && selected !== undefined
-              ? { skill_version_id: selected.skill_version_id }
-              : {}),
-            status: "conflicted",
-            current_hash: ownership.observed,
-          });
+          installedSkills.push(
+            InstalledSkillStatus.conflicted(
+              missingVersion && selected !== undefined
+                ? { ...installedSkill, skill_version_id: selected.skill_version_id }
+                : installedSkill,
+              ownership.currentHash,
+            ),
+          );
           continue;
         }
         conflicts.push(
@@ -287,15 +289,15 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
       continue;
     }
     if (reidentifying) toUninstall.push(original.installed_skill_id);
-    installedSkills.push({
-      ...installedSkill,
-      ...(reidentifying && installedSkill.suppression_reason !== "native_delete"
-        ? { status: "pending" as const }
-        : {}),
-      ...(missingVersion && selected !== undefined
-        ? { skill_version_id: selected.skill_version_id }
-        : {}),
-    });
+    const versioned =
+      missingVersion && selected !== undefined
+        ? { ...installedSkill, skill_version_id: selected.skill_version_id }
+        : installedSkill;
+    installedSkills.push(
+      reidentifying && versioned.status !== "suppressed"
+        ? InstalledSkillStatus.pending(versioned)
+        : versioned,
+    );
   }
   return yield* SyncInstalledSkillPlan.makeEffect({
     projections: installedSkills,
@@ -304,6 +306,53 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
     conflicts,
     issues,
   });
+});
+
+/**
+ * This device's skill folders as sync routes them: global copies at `rootFor`'s roots, repository
+ * copies at the routes they already use. Without `rootFor`, every destination counts as active.
+ */
+export const syncInstalledSkills = Effect.fn("Library.sync.installedSkills")(function* (
+  state: LibraryState,
+  rootFor: ((target: InstallDestination) => string | undefined) | undefined,
+) {
+  const active =
+    rootFor === undefined
+      ? [...targets]
+      : targets.filter((target) => rootFor(target) !== undefined);
+  return yield* InstalledSkills.make({
+    active: Effect.succeed(active),
+    destinations: (scope) =>
+      Effect.succeed(
+        active.flatMap((destination) => {
+          const root =
+            scope.kind === "global"
+              ? rootFor?.(destination)
+              : existingRepositorySkillsDirectory(state, scope.root, destination);
+          return root === undefined ? [] : [{ destination, root }];
+        }),
+      ),
+    duplicates: {
+      scan: () =>
+        Effect.fail(new InstalledSkillInvalid({ detail: "Sync does not scan for duplicates" })),
+    },
+  });
+});
+
+/** Every copy SKIT installed, brought in line with what is enabled, as sync routes them. */
+export const updateSyncInstalledSkills = Effect.fn("Library.sync.updateInstalledSkills")(function* (
+  rootFor: ((target: InstallDestination) => string | undefined) | undefined,
+) {
+  const current = yield* (yield* LibraryStore).load;
+  const library = yield* Library.make.pipe(
+    Effect.provideService(InstalledSkills.Service, yield* syncInstalledSkills(current, rootFor)),
+  );
+  const outcome = yield* library.apply(yield* library.plan({ _tag: "Update" }, { base: current }));
+  const copies = outcome._tag === "Applied" ? outcome.copies : [];
+  return {
+    installed: copies.filter((copy) => copy._tag === "Installed").length,
+    uninstalled: copies.filter((copy) => copy._tag === "Uninstalled").length,
+  };
 });
 
 /**
@@ -316,41 +365,22 @@ const uninstallForSync = Effect.fn("Library.sync.uninstallForSync")(function* (
 ) {
   const store = yield* LibraryStore;
   if (plan.retire.length === 0) return { uninstalled: 0, state: current };
-  const result = yield* withInstalledSkillMutation(
-    current,
-    {
-      rootFor: () => undefined,
-      variantsPath: store.variantsPath,
-      originalsPath: store.originalsPath,
-      save: store.save,
-    },
-    (mutation) =>
-      Effect.gen(function* () {
-        let uninstalled = 0;
-        for (const id of plan.retire) {
-          const installedSkill = mutation.state.installed_skills.find(
-            (item) => item.installed_skill_id === id,
-          );
-          if (installedSkill === undefined) continue;
-          const outcome = yield* mutation.uninstall(
-            installedSkill,
-            "throw",
-            `Refusing to remove modified Skill at ${installedSkill.path}`,
-          );
-          if (outcome.kind === "uninstalled") uninstalled++;
-          if (plan.remove.includes(id))
-            mutation.state.installed_skills.splice(
-              0,
-              mutation.state.installed_skills.length,
-              ...mutation.state.installed_skills.filter((item) => item.installed_skill_id !== id),
-            );
-          else if (installedSkill.suppression_reason !== "native_delete")
-            installedSkill.status = "pending";
-        }
-        return uninstalled;
-      }),
+  const library = yield* localLibrary;
+  const outcome = yield* library.apply(
+    yield* library.plan(
+      { _tag: "Uninstall", copies: plan.retire, drop: plan.remove },
+      {
+        base: current,
+      },
+    ),
   );
-  return { uninstalled: result.value, state: result.state };
+  return {
+    uninstalled:
+      outcome._tag === "Applied"
+        ? outcome.copies.filter((copy) => copy._tag === "Uninstalled").length
+        : 0,
+    state: yield* store.load,
+  };
 });
 
 /** Prepare this device's local transition before remote publication; keep mutation records private. */

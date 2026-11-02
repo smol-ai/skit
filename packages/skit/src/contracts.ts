@@ -13,7 +13,6 @@ import {
   HarnessName,
   InvocationPolicy,
   InstallDestination,
-  RecordedInstallDestination,
   InstallScope,
   SkitValidationDiagnostic,
 } from "./vocabulary.js";
@@ -23,7 +22,6 @@ export {
   HarnessName,
   InvocationPolicy,
   InstallDestination,
-  RecordedInstallDestination,
   InstallScope,
   SkillAssessmentAcceptance,
   SkitValidationDiagnostic,

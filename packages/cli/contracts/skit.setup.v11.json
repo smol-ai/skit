@@ -1,5 +1,5 @@
 {
-  "$id": "skit.setup.v10",
+  "$id": "skit.setup.v11",
   "type": "object",
   "properties": {
     "operationId": {
@@ -380,7 +380,9 @@
               "local-only",
               "competing",
               "protected",
-              "native-delete"
+              "native-delete",
+              "uninstall",
+              "install"
             ]
           },
           "metadataChanged": {
@@ -391,12 +393,10 @@
           }
         },
         "required": [
-          "installedSkillId",
           "skillId",
           "name",
           "path",
           "destination",
-          "baselineHash",
           "evidence",
           "status",
           "metadataChanged"

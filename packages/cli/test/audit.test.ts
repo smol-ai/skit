@@ -5,6 +5,7 @@ import { it } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem, Schema } from "effect";
 import * as TestClock from "effect/testing/TestClock";
 import {
+  CURRENT_LIBRARY_STATE_VERSION,
   makeCollectionId,
   makeInstalledSkillId,
   makeSkillId,
@@ -316,7 +317,7 @@ describe("experimental capability audit", () => {
         false,
       );
       const migrated = JSON.parse(yield* fs.readFileString(join(library, "state.json")));
-      expect(migrated.schemaVersion).toBe(10);
+      expect(migrated.schemaVersion).toBe(CURRENT_LIBRARY_STATE_VERSION);
       const backups = (yield* fs.readDirectory(library)).filter((name) =>
         name.startsWith("state.json.v4.backup-"),
       );

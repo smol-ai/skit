@@ -1,6 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import {
+  CURRENT_LIBRARY_STATE_VERSION,
   currentCollectionSkills,
   currentSkillVersion,
   sourceImports,
@@ -421,7 +422,7 @@ it.effect(
       });
       const original = structuredClone(local);
       const state = yield* Schema.decodeUnknownEffect(LibraryState)({
-        schemaVersion: 10,
+        schemaVersion: CURRENT_LIBRARY_STATE_VERSION,
         ...local,
         enabled: [{ skill: skillId }],
         repositories: [],

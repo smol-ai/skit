@@ -1,7 +1,8 @@
 import { Clock, Effect, FileSystem, Result } from "effect";
 import { dirname, join, resolve } from "node:path";
 import type { HarnessName } from "../../contracts.js";
-import type { LibraryState } from "../library-state.js";
+import type { InstalledSkill, LibraryState } from "../library-state.js";
+import * as InstalledSkillStatus from "../installed-skill-status.js";
 import { LinkStat } from "../../platform/link-stat.js";
 import { deterministicTreeHash } from "../../artifact/skit.js";
 import { physicalPath, pathIsWithin } from "../../platform/path-identity.js";
@@ -10,7 +11,7 @@ import {
   installedSkillDisplaced,
   readOwnershipMarker,
   inspectOwnershipMarker,
-} from "../../install/mutation.js";
+} from "../../install/files.js";
 import { keepInstalledSkillBackup, pendingInstalledSkillBackups } from "../../install/backups.js";
 import { LibraryStore } from "../store/library-store.js";
 export interface InventoryScanRoot {
@@ -29,44 +30,45 @@ export function deduplicateInventoryRoots(
     ).values(),
   ];
 }
-/** Observe a private snapshot without persistence or recovery capabilities. */
+/** Scan into a copy of `loaded`. Saves nothing and backs nothing up. */
 export const scanInventory = Effect.fn("Library.scanInventory")(function* (
   loaded: LibraryState,
   scanRoots: readonly InventoryScanRoot[],
 ) {
-  const state = structuredClone(loaded);
+  const fs = yield* FileSystem.FileSystem;
+  const installedSkills = yield* Effect.forEach(
+    loaded.installed_skills,
+    Effect.fnUntraced(function* (installedSkill: InstalledSkill) {
+      const skill = loaded.skills.find((item) => item.skill_id === installedSkill.skill_id);
+      const version = skill?.versions.find(
+        (item) => item.skill_version_id === installedSkill.skill_version_id,
+      );
+      if (skill === undefined || version === undefined) return installedSkill;
+      if (!(yield* fs.exists(installedSkill.path))) {
+        // Pending copies may be between managed retirement and sync rematerialization. Their
+        // absence is not evidence that the user deleted an installed copy.
+        if (installedSkill.status === "pending" || installedSkill.status === "suppressed")
+          return installedSkill;
+        // Nor is the absence of the very copy SKIT moved aside before it could save why.
+        return (yield* installedSkillDisplaced(installedSkill))
+          ? InstalledSkillStatus.pending(installedSkill)
+          : InstalledSkillStatus.suppressed(
+              installedSkill,
+              new Date(yield* Clock.currentTimeMillis).toISOString(),
+            );
+      }
+      const currentHash = yield* deterministicTreeHash(installedSkill.path);
+      const marker = yield* readOwnershipMarker(installedSkill.path);
+      const expected = expectedInstalledSkillHashResult(installedSkill, marker);
+      return marker && Result.isSuccess(expected) && currentHash === expected.success
+        ? InstalledSkillStatus.installed(installedSkill)
+        : InstalledSkillStatus.conflicted(installedSkill, currentHash);
+    }),
+  );
+  const state = { ...structuredClone(loaded), installed_skills: installedSkills };
   const scanIssues = (state.scanIssues ?? []).filter(
     (item) => !scanRoots.some(({ root }) => pathIsWithin(root, item.path)),
   );
-  const fs = yield* FileSystem.FileSystem;
-  for (const installedSkill of state.installed_skills) {
-    const skill = state.skills.find((item) => item.skill_id === installedSkill.skill_id);
-    const version = skill?.versions.find(
-      (item) => item.skill_version_id === installedSkill.skill_version_id,
-    );
-    if (skill === undefined || version === undefined) continue;
-    if (!(yield* fs.exists(installedSkill.path))) {
-      // Pending copies may be between managed retirement and sync rematerialization. Their
-      // absence is not evidence that the user deleted an installed copy.
-      if (installedSkill.status === "pending" || installedSkill.status === "suppressed") continue;
-      // Nor is the absence of the very copy SKIT moved aside before it could save why.
-      if (yield* installedSkillDisplaced(installedSkill)) installedSkill.status = "pending";
-      else {
-        installedSkill.status = "suppressed";
-        installedSkill.suppression_reason = "native_delete";
-        installedSkill.suppressed_at = new Date(yield* Clock.currentTimeMillis).toISOString();
-      }
-      continue;
-    }
-    const currentHash = yield* deterministicTreeHash(installedSkill.path);
-    const marker = yield* readOwnershipMarker(installedSkill.path);
-    installedSkill.current_hash = currentHash;
-    const expected = expectedInstalledSkillHashResult(installedSkill, marker);
-    installedSkill.status =
-      marker && Result.isSuccess(expected) && currentHash === expected.success
-        ? "installed"
-        : "conflicted";
-  }
   const managed = new Set<string>();
   for (const installedSkill of state.installed_skills)
     managed.add((yield* physicalPath(installedSkill.path)).key);
@@ -236,8 +238,7 @@ export const refreshLibraryInventory = Effect.fn("Library.refreshLibraryInventor
     const marker = yield* readOwnershipMarker(installedSkill.path);
     if (
       marker?.installed_skill_id === installedSkill.installed_skill_id &&
-      marker.skill_id === installedSkill.skill_id &&
-      installedSkill.current_hash === installedSkill.expected_hash
+      marker.skill_id === installedSkill.skill_id
     )
       for (const backup of yield* pendingInstalledSkillBackups(installedSkill))
         yield* keepInstalledSkillBackup(backup);

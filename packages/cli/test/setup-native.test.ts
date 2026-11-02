@@ -6,6 +6,7 @@ import { Effect, FileSystem, Layer, Result, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { expect } from "vitest";
 import {
+  CURRENT_LIBRARY_STATE_VERSION,
   type Hash,
   deterministicTreeHash,
   LibraryStore,
@@ -896,7 +897,7 @@ it.effect("matches an unresolvable lock to a retained Collection by canonical re
     const machineId = makeMachineId();
     const locator = "https://skills.example.test";
     const imported = Schema.decodeUnknownSync(LibraryState)({
-      schemaVersion: 10,
+      schemaVersion: CURRENT_LIBRARY_STATE_VERSION,
       collections: [
         {
           collection_id: collectionId,
@@ -1093,7 +1094,7 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
     yield* f.fs.writeFileString(join(installedSkill, ".skit-ownership.json"), installedSkillMarker);
     yield* f.fs.writeFileString(join(copiedSkill, ".skit-ownership.json"), installedSkillMarker);
     const state = Schema.decodeUnknownSync(LibraryState)({
-      schemaVersion: 10,
+      schemaVersion: CURRENT_LIBRARY_STATE_VERSION,
       collections: [
         {
           collection_id: collectionId,
@@ -1362,7 +1363,7 @@ it.effect(
         }),
       );
       const state = Schema.decodeUnknownSync(LibraryState)({
-        schemaVersion: 10,
+        schemaVersion: CURRENT_LIBRARY_STATE_VERSION,
         collections: [
           {
             collection_id: collectionId,
@@ -1506,7 +1507,7 @@ for (const kind of ["source", "edit"] as const) {
         contentIdentity: { status: "none", currentHash: hash, libraryMatches: [] },
       });
       const library = Schema.decodeUnknownSync(LibraryState)({
-        schemaVersion: 10,
+        schemaVersion: CURRENT_LIBRARY_STATE_VERSION,
         collections: [{ collection_id: collectionId, label: "Reviews" }],
         skills: [
           {

@@ -69,7 +69,7 @@ export const readCodexListingBudget = Effect.fn("Library.codexListingBudget")(fu
     const collectionsByPath = new Map<string, string>();
     for (const installedSkill of state.installed_skills.filter(
       (installedSkill) =>
-        installedSkill.destination === "agents" && installedSkill.suppression_reason === undefined,
+        installedSkill.destination === "agents" && installedSkill.status !== "suppressed",
     )) {
       const skill = state.skills.find((skill) => skill.skill_id === installedSkill.skill_id);
       if (skill === undefined) continue;

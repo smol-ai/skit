@@ -235,8 +235,8 @@ for (const repository of [false, true]) {
           );
           if (edited) {
             const installedSkill = after.installed_skills[0];
-            assert.ok(installedSkill?.current_hash);
-            assert.equal(installedSkill.status, "conflicted");
+            assert.equal(installedSkill?.status, "conflicted");
+            if (installedSkill?.status !== "conflicted") return;
             assert.equal(
               yield* fs.readFileString(
                 join(
@@ -507,7 +507,6 @@ it.effect("identity alignment preserves a native deletion recorded before first 
     const after = yield* b.state;
     assert.equal(after.installed_skills[0]?.skill_id, published.skill_id);
     assert.equal(after.installed_skills[0]?.status, "suppressed");
-    assert.equal(after.installed_skills[0]?.suppression_reason, "native_delete");
     assert.equal(
       after.installed_skills[0]?.installed_skill_id,
       deleted.installed_skills[0]?.installed_skill_id,

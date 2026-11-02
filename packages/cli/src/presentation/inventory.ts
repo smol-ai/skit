@@ -330,9 +330,8 @@ export function renderInventory(
       statuses: new Set<string>(),
       harnesses: new Set<HarnessName>(),
     };
-    if (installedSkill.destination !== "legacy")
-      for (const harness of installDestinationHarnesses[installedSkill.destination])
-        row.harnesses.add(harness);
+    for (const harness of installDestinationHarnesses[installedSkill.destination])
+      row.harnesses.add(harness);
     row.statuses.add(installedSkill.status);
     managed.set(path, row);
   }

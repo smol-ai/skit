@@ -1,3 +1,4 @@
+import { installEnabledSkills } from "./helpers/installed-skills.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
@@ -5,7 +6,6 @@ import {
   deterministicTreeHash,
   LibraryStore,
   libraryStoreLayer,
-  installEnabledSkills,
   skitLayer,
 } from "@smolai/skit-core";
 import { prepareEditImport } from "../src/workflows/library/import-edit.js";

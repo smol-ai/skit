@@ -1,10 +1,7 @@
 {
-  "$id": "skit.update.projection-retention.plan.v3",
+  "$id": "skit.update.projection-retention.v4",
   "type": "object",
   "properties": {
-    "revision": {
-      "type": "string"
-    },
     "skill_id": {
       "type": "string"
     },
@@ -14,21 +11,17 @@
     "previous_skill_version_id": {
       "type": "string"
     },
-    "selected_installed_skill_id": {
+    "imported_skill_version_id": {
       "type": "string"
     },
-    "current_hash": {
-      "type": "string",
-      "pattern": "^sha256:[a-f0-9]{64}$"
+    "collection_version_id": {
+      "type": "string"
     },
     "snapshot_digest": {
       "type": "string",
       "pattern": "^sha256:[a-f0-9]{64}$"
     },
-    "original_path": {
-      "type": "string"
-    },
-    "import_required": {
+    "imported": {
       "type": "boolean"
     },
     "installed_skills": {
@@ -43,23 +36,18 @@
             "type": "string",
             "enum": [
               "agents",
-              "claude",
-              "legacy"
+              "claude"
             ]
           },
           "path": {
             "type": "string"
           },
-          "current_hash": {
-            "type": "string",
-            "pattern": "^sha256:[a-f0-9]{64}$"
-          },
-          "agreement": {
+          "status": {
             "type": "string",
             "enum": [
-              "selected",
-              "identical",
-              "different"
+              "installed",
+              "conflicted",
+              "deferred"
             ]
           }
         },
@@ -67,23 +55,20 @@
           "installed_skill_id",
           "destination",
           "path",
-          "current_hash",
-          "agreement"
+          "status"
         ],
         "additionalProperties": true
       }
     }
   },
   "required": [
-    "revision",
     "skill_id",
     "skill_name",
     "previous_skill_version_id",
-    "selected_installed_skill_id",
-    "current_hash",
+    "imported_skill_version_id",
+    "collection_version_id",
     "snapshot_digest",
-    "original_path",
-    "import_required",
+    "imported",
     "installed_skills"
   ],
   "additionalProperties": true,

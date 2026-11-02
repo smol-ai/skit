@@ -1,3 +1,4 @@
+import { localLibrary } from "../library-application/library-owner.js";
 import { Effect, FileSystem, Layer, Result, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { join } from "node:path";
@@ -9,7 +10,6 @@ import {
   libraryStoreLayer,
   makeMachineId,
   collectionVersionPath,
-  importCollection,
   skitLayer,
   withLibraryWriter,
 } from "@smolai/skit-core";
@@ -40,7 +40,7 @@ export const syncJourney = (failDownload: boolean) =>
             join(sourcePath, "SKILL.md"),
             `# ${name}\nFixture Skill for sync preview.\n`,
           );
-          yield* importCollection({
+          yield* (yield* localLibrary).import.collection({
             machineId,
             source: { type: "github", owner: "fixture", repository: name },
             input: sourcePath,
