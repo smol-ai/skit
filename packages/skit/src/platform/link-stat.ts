@@ -8,6 +8,7 @@ import {
   accessSync,
   constants,
   lstat as nodeLstat,
+  rmdir as nodeRmdir,
   lstatSync,
   realpathSync,
   statSync,
@@ -42,6 +43,14 @@ export interface LinkStatShape {
    * the native resolver is exposed separately rather than silently substituted.
    */
   readonly realPathNative: (path: string) => Effect.Effect<string, PlatformError>;
+  /**
+   * Remove `path` only if it is an empty directory, atomically: rmdir refuses a directory that
+   * holds anything and a symbolic link. False when it is not an empty directory or is gone.
+   *
+   * FileSystem.remove is rm: it either refuses directories or deletes them recursively, so a file
+   * written between checking and removing would be lost.
+   */
+  readonly removeEmptyDirectory: (path: string) => Effect.Effect<boolean, PlatformError>;
 }
 
 /**
@@ -146,6 +155,16 @@ export const linkStatLayer: Layer.Layer<LinkStat> = Layer.succeed(LinkStat)({
         }
       }),
   },
+  removeEmptyDirectory: (path) =>
+    Effect.callback<boolean, PlatformError>((resume) => {
+      nodeRmdir(path, (cause) => {
+        if (cause === null) return resume(Effect.succeed(true));
+        // Not empty, not a directory (a symlink included), or already gone: leave it.
+        return ["ENOTEMPTY", "EEXIST", "ENOTDIR", "ENOENT"].includes(cause.code ?? "")
+          ? resume(Effect.succeed(false))
+          : resume(Effect.fail(platformFailure("removeEmptyDirectory", path)(cause)));
+      });
+    }),
   // node:fs/promises has no realpath.native, so the sync resolver is the faithful one.
   realPathNative: (path) =>
     Effect.try({

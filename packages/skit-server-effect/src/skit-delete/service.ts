@@ -129,8 +129,7 @@ export const layer = Layer.effect(
             [`${owner}/${slug}`, ...guardBindings],
           ),
           sql.unsafe(
-            `DELETE FROM draft_files WHERE revision_id IN
-             (SELECT revision_id FROM draft_revisions WHERE owner_slug = ? AND skit_slug = ?)
+            `DELETE FROM draft_revision_parents WHERE owner_slug = ? AND skit_slug = ?
              AND ${guard}`,
             [owner, slug, ...guardBindings],
           ),
@@ -139,6 +138,13 @@ export const layer = Layer.effect(
              AND ${guard} RETURNING revision_id`,
             [owner, slug, ...guardBindings],
           ),
+          // Trees are shared by hash, so only those no revision references any more go. Blobs
+          // stay in R2.
+          sql`DELETE FROM draft_tree_entries WHERE tree_hash IN (
+                SELECT tree_hash FROM draft_trees t WHERE NOT EXISTS (
+                  SELECT 1 FROM draft_revisions r WHERE r.tree_hash = t.tree_hash))`,
+          sql`DELETE FROM draft_trees WHERE NOT EXISTS (
+                SELECT 1 FROM draft_revisions r WHERE r.tree_hash = draft_trees.tree_hash)`,
           sql.unsafe(
             `DELETE FROM releases WHERE owner_slug = ? AND skit_slug = ?
              AND ${guard} RETURNING release_id, version, archive_object_key, published_at`,
@@ -150,7 +156,7 @@ export const layer = Layer.effect(
              ) RETURNING owner_slug`,
         ]),
       );
-      const deletedDraft = results[5];
+      const deletedDraft = results[7];
       if (deletedDraft?.length !== 1) {
         const remains = yield* db(
           "check failed skit deletion",
@@ -174,7 +180,7 @@ export const layer = Layer.effect(
         ),
       );
       const releases = yield* Schema.decodeUnknownEffect(Schema.Array(DeletedReleaseRow))(
-        results[4] ?? [],
+        results[6] ?? [],
       ).pipe(
         Effect.mapError(
           (cause) => new DatabaseError({ operation: "decode deleted releases", cause }),

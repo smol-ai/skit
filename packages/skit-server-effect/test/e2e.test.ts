@@ -4,14 +4,20 @@ import { chmod, cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "nod
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import process from "node:process";
-import { Schema } from "effect";
+import { BrowserCrypto } from "@effect/platform-browser";
+import { Effect, Schema } from "effect";
 // This Node test reads the CLI's device state file; it never runs in the Worker.
 // oxlint-disable-next-line no-restricted-imports
 import { LibraryState } from "@smolai/skit-core";
 import { createTestHarness } from "wrangler";
 import { expect, test } from "vitest";
 import type { RuntimeEnv } from "../src/platform/cloudflare.js";
-import { draftReadResponseSchema } from "@smolai/skit-core/universal/authoring";
+import {
+  DraftCurrentResponse,
+  History,
+  RevisionPostRequest,
+  RevisionReadResponse,
+} from "@smolai/skit-core/universal/authoring";
 import { expectedMigrations } from "../src/readiness/migrations.generated.js";
 
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
@@ -279,7 +285,7 @@ test.skip("runs the pre-release authoring product loop through the built CLI", a
       ]).stdout,
     );
     expect(createdDraft).toMatchObject({
-      schema: "skit.author.sync.v3",
+      schema: "skit.author.sync.v4",
       data: { status: "created", changed: true, revision_id: expect.any(String) },
     });
     skit(["author", "publish", authorSource, "--version", "1.0.0"]);
@@ -308,38 +314,59 @@ test.skip("runs the pre-release authoring product loop through the built CLI", a
       "Published from the generated scaffold.",
     );
 
-    const draftUrl = new URL("/api/skits/lifecycle-author/author-lifecycle/draft", registryUrl);
-    const remoteDraftResponse = await fetch(draftUrl, {
-      headers: { authorization: `Bearer ${cliToken}` },
+    const draftPath = "/api/skits/lifecycle-author/author-lifecycle";
+    const authorization = {
+      authorization: `Bearer ${cliToken}`,
+      "content-type": "application/json",
+    };
+    const currentResponse = await fetch(new URL(`${draftPath}/current`, registryUrl), {
+      headers: authorization,
     });
-    expect(remoteDraftResponse.status).toBe(200);
-    const remoteDraft = Schema.decodeUnknownSync(draftReadResponseSchema)(
-      await remoteDraftResponse.json(),
+    expect(currentResponse.status).toBe(200);
+    // The first sync moved `current`, so it is a revision.
+    const { current } = Schema.decodeUnknownSync(
+      Schema.Struct({ ...DraftCurrentResponse.fields, current: History.RevisionId }),
+    )(await currentResponse.json());
+    const remoteResponse = await fetch(new URL(`${draftPath}/revisions/${current}`, registryUrl), {
+      headers: authorization,
+    });
+    expect(remoteResponse.status).toBe(200);
+    const remote = Schema.decodeUnknownSync(Schema.toCodecJson(RevisionReadResponse))(
+      await remoteResponse.json(),
     );
-    const remoteFiles = remoteDraft.draft.files.map((file) =>
-      file.path === "README.md"
+    const remoteTree = remote.tree.map((entry) =>
+      entry.kind === "file" && entry.path === "README.md"
         ? {
-            ...file,
-            content_base64: Buffer.from(
-              `${Buffer.from(file.content_base64, "base64").toString("utf8")}\nEdited remotely.\n`,
-            ).toString("base64"),
+            ...entry,
+            bytes: new TextEncoder().encode(
+              `${new TextDecoder().decode(entry.bytes)}\nEdited remotely.\n`,
+            ),
           }
-        : file,
+        : entry,
     );
-    const remoteUpdate = await fetch(draftUrl, {
-      method: "PUT",
-      headers: { authorization: `Bearer ${cliToken}`, "content-type": "application/json" },
-      body: JSON.stringify({
-        title: remoteDraft.draft.title,
-        description: remoteDraft.draft.description,
-        visibility: remoteDraft.draft.visibility,
-        descriptor: remoteDraft.draft.descriptor,
-        diagnostics: remoteDraft.draft.diagnostics,
-        expected_revision_id: remoteDraft.draft.revision_id,
-        files: remoteFiles,
-      }),
+    // oxlint-disable-next-line skit/no-nested-runtime -- this Node test is a plain async scenario; it hashes one revision as a device would.
+    const remoteEdit = await Effect.runPromise(
+      Effect.gen(function* () {
+        const revision = {
+          tree: yield* History.treeHash(remoteTree),
+          parents: [current],
+          author: { device: remote.revision.author.device, at: Date.now() },
+        };
+        return { id: yield* History.revisionId(revision), revision, tree: remoteTree };
+      }).pipe(Effect.provide(BrowserCrypto.layer)),
+    );
+    const posted = await fetch(new URL(`${draftPath}/revisions`, registryUrl), {
+      method: "POST",
+      headers: authorization,
+      body: JSON.stringify(Schema.encodeSync(Schema.toCodecJson(RevisionPostRequest))(remoteEdit)),
     });
-    expect(remoteUpdate.status).toBe(200);
+    expect(posted.status).toBe(200);
+    const moved = await fetch(new URL(`${draftPath}/current`, registryUrl), {
+      method: "PUT",
+      headers: authorization,
+      body: JSON.stringify({ expected: current, id: remoteEdit.id }),
+    });
+    expect(moved.status).toBe(200);
     await cp(
       join(fixtures, "author-local-edit", "SKILL.md"),
       join(authorSource, "skills", "author-lifecycle", "SKILL.md"),
@@ -348,34 +375,23 @@ test.skip("runs the pre-release authoring product loop through the built CLI", a
       skit(["author", "sync", authorSource, "--home", authorHome, "--json"]).stdout,
     );
     expect(preview).toMatchObject({
-      schema: "skit.author.sync.v3",
-      data: {
-        status: "merge_ready",
-        changed: false,
-        paths: ["README.md", "skills/author-lifecycle/SKILL.md"],
-      },
+      schema: "skit.author.sync.v4",
+      data: { status: "ready", changed: false, action: "merge" },
     });
     const merged = JSON.parse(
       skit(["author", "sync", authorSource, "--home", authorHome, "--apply", "--json"]).stdout,
     );
     expect(merged).toMatchObject({
-      schema: "skit.author.sync.v3",
+      schema: "skit.author.sync.v4",
       data: { status: "merged", changed: true, revision_id: expect.any(String) },
     });
     expect(await readFile(join(authorSource, "README.md"), "utf8")).toContain("Edited remotely.");
-    const staleUpdate = await fetch(draftUrl, {
+    const staleMove = await fetch(new URL(`${draftPath}/current`, registryUrl), {
       method: "PUT",
-      headers: { authorization: `Bearer ${cliToken}`, "content-type": "application/json" },
-      body: JSON.stringify({
-        title: remoteDraft.draft.title,
-        description: remoteDraft.draft.description,
-        visibility: remoteDraft.draft.visibility,
-        descriptor: remoteDraft.draft.descriptor,
-        expected_revision_id: remoteDraft.draft.revision_id,
-        files: remoteDraft.draft.files,
-      }),
+      headers: authorization,
+      body: JSON.stringify({ expected: current, id: current }),
     });
-    expect(staleUpdate.status, await staleUpdate.clone().text()).toBe(409);
+    expect(staleMove.status, await staleMove.clone().text()).toBe(409);
 
     skit(["disable", "author-lifecycle", "--home", consumerHome]);
     expect(existsSync(join(roots.codex, "author-lifecycle"))).toBe(false);
@@ -389,7 +405,8 @@ test.skip("runs the pre-release authoring product loop through the built CLI", a
       data: {
         status: "delete_ready",
         changed: false,
-        draft_revisions: 3,
+        // The first push, the remote edit, and the merge: the device's own revision and the merge.
+        draft_revisions: 4,
         release_versions: ["1.0.0"],
       },
     });

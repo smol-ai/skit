@@ -36,7 +36,8 @@ Each verb has one meaning. Use these and no others for Library work.
 | scan | Walk skills directories to find what is there. Changes nothing. |
 | refresh | Scan, then save what was found into the Library. |
 | check | Verify without changing anything. |
-| sync | Merge this device's Library with the server's. |
+| sync | Bring an Author Workspace and its Registry Draft together, or merge this device's Library with the server's. These are separate operations. |
+| merge | Combine two changed versions of something with their common base. |
 | plan / apply | Preview a change, then make it. |
 | inspect | Show something in detail without changing it. |
 | send | Send feedback to SKIT's maintainers. |
@@ -226,6 +227,10 @@ _Avoid_: binding, installation, link
 **Library Manifest**:
 The portable form of the Library that sync exchanges: its Collections, Skills, Collection Versions, Imports and what is enabled everywhere. It holds what is wanted, not what this device has installed.
 _Avoid_: state file, backup
+
+**Overlap**:
+In a merge, a part both sides changed differently since their common base. A merge policy chooses which side wins it, or leaves it for the user; the losing side is reported, never dropped.
+_Avoid_: conflict (that is a folder SKIT cannot make match)
 
 **Sync Plan**:
 The changes a sync would make to bring this device's Library and the server's together.

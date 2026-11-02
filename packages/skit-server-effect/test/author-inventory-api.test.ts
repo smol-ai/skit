@@ -12,6 +12,10 @@ import { AuthoringAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import { requestDecodingLayer } from "../src/api/request-decoding.js";
 import { AuthorInventory, type AuthorInventoryService } from "../src/author-inventory/service.js";
 import type { Principal } from "../src/auth/authentication.js";
+import { History } from "@smolai/skit-core/universal/authoring";
+import { Schema } from "effect";
+
+const revisionId = Schema.decodeUnknownSync(History.RevisionId)(`sha256:${"a".repeat(64)}`);
 
 const principal = (scopes: Principal["scopes"]): Principal => ({
   id: "principal_test",
@@ -43,7 +47,7 @@ const inventory = Layer.succeed(
                 {
                   skit_id: "tim/tools",
                   visibility: "private" as const,
-                  draft_revision_id: "revision_test",
+                  draft_revision_id: revisionId,
                   most_recent_release_version: "1.2.3",
                 },
               ],
@@ -70,7 +74,7 @@ layer(handlers(principal(new Set(["authoring:write"]))))("AuthorInventoryApi", (
           {
             skit_id: "tim/tools",
             visibility: "private",
-            draft_revision_id: "revision_test",
+            draft_revision_id: revisionId,
             most_recent_release_version: "1.2.3",
           },
         ],

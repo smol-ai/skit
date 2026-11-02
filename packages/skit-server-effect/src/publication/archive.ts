@@ -8,7 +8,7 @@ import {
 } from "@smolai/skit-core/universal/authoring";
 import { Hash, sha256Hash } from "@smolai/skit-core/universal/consumer";
 import { IntegrityError } from "../integrity/contracts.js";
-import { validateArtifactBundle } from "../integrity/validate.js";
+import { unpublishableEntries, validateArtifactBundle } from "../integrity/validate.js";
 
 const invalidArchive = () => new IntegrityError({ code: "INVALID_ARCHIVE" });
 const manifestMismatch = () => new IntegrityError({ code: "ARCHIVE_MANIFEST_MISMATCH" });
@@ -125,74 +125,78 @@ export const readArchive = Effect.fn("Integrity.readArchive")(function* (archive
   return { names, files };
 });
 
-const DraftFileRow = Schema.Struct({
+const TreeEntryRow = Schema.Struct({
   path: Schema.String,
-  blob_digest: Hash,
-  byte_length: Schema.Int,
-  media_type: Schema.String,
-  executable: Schema.Int,
+  kind: Schema.Literals(["file", "directory", "symlink"]),
+  mode: Schema.NullOr(Schema.Int),
+  blob_hash: Schema.NullOr(Hash),
+  byte_length: Schema.NullOr(Schema.Int),
 });
 
-const DraftRevisionRow = Schema.Struct({
-  owner_slug: Schema.String,
-  skit_slug: Schema.String,
-  descriptor_json: Schema.String,
-});
+const RevisionRow = Schema.Struct({ tree_hash: Schema.String, descriptor_json: Schema.String });
 
 const JsonDocument = Schema.fromJsonString(Schema.Unknown);
 
+/**
+ * Check an uploaded archive against one revision of a Draft and validate it for publication. A
+ * tree with entries a Release cannot hold is refused with their diagnostics; otherwise the archive
+ * must hold exactly the tree's files, each with the same length and hash.
+ */
 export const verifyReleaseArchive = Effect.fn("Integrity.verifyReleaseArchive")(function* (
+  owner: string,
+  slug: string,
   revisionId: string,
   archive: Uint8Array,
 ) {
   const { names, files } = yield* readArchive(archive);
   const sql = yield* D1Client.D1Client;
-  const unknownRows = yield* sql`SELECT path, blob_digest, byte_length, media_type, executable
-    FROM draft_files WHERE revision_id = ${revisionId} ORDER BY path`.pipe(
+  const revisionRows = yield* sql`SELECT tree_hash, descriptor_json FROM draft_revisions
+    WHERE owner_slug = ${owner} AND skit_slug = ${slug} AND revision_id = ${revisionId}`.pipe(
+    databaseError("read release archive revision"),
+  );
+  if (revisionRows[0] === undefined)
+    return yield* new IntegrityError({ code: "DRAFT_REVISION_MISSING" });
+  const revision = yield* Schema.decodeUnknownEffect(RevisionRow)(revisionRows[0]).pipe(
+    Effect.mapError(
+      (error) => new IntegrityError({ code: "DRAFT_REVISION_MISSING", detail: error.message }),
+    ),
+  );
+  const unknownRows = yield* sql`SELECT path, kind, mode, blob_hash, byte_length
+    FROM draft_tree_entries WHERE tree_hash = ${revision.tree_hash}`.pipe(
     databaseError("read release archive manifest"),
   );
-  const rows = yield* Schema.decodeUnknownEffect(Schema.Array(DraftFileRow))(unknownRows).pipe(
+  const entries = yield* Schema.decodeUnknownEffect(Schema.Array(TreeEntryRow))(unknownRows).pipe(
     Effect.mapError(
       (error) => new IntegrityError({ code: "ARCHIVE_MANIFEST_MISMATCH", detail: error.message }),
     ),
   );
-  if (rows.length !== names.length || rows.some(({ path }, index) => path !== names[index]))
+  const unpublishable = unpublishableEntries(entries);
+  if (unpublishable.length > 0) return unpublishable;
+  const rows = entries.filter(({ kind }) => kind === "file");
+  // Archive names are unique, so equal counts and every path present means the same set.
+  if (rows.length !== names.length || rows.some(({ path }) => files[path] === undefined))
     return yield* manifestMismatch();
+  const verified = [];
   for (const row of rows) {
     const bytes = files[row.path];
     if (
       !bytes ||
       bytes.byteLength !== row.byte_length ||
-      (yield* sha256Hash(bytes)) !== row.blob_digest
+      row.blob_hash === null ||
+      (yield* sha256Hash(bytes)) !== row.blob_hash
     )
       return yield* manifestMismatch();
+    verified.push({
+      path: row.path,
+      bytes,
+      digest: row.blob_hash,
+      executable: row.mode === 0o755,
+    });
   }
-  const revisionRows = yield* sql`SELECT owner_slug, skit_slug, descriptor_json
-    FROM draft_revisions WHERE revision_id = ${revisionId}`.pipe(
-    databaseError("read release archive revision"),
-  );
-  if (revisionRows[0] === undefined)
-    return yield* new IntegrityError({ code: "DRAFT_REVISION_MISSING" });
-  const revision = yield* Schema.decodeUnknownEffect(DraftRevisionRow)(revisionRows[0]).pipe(
-    Effect.mapError(
-      (error) => new IntegrityError({ code: "DRAFT_REVISION_MISSING", detail: error.message }),
-    ),
-  );
   const descriptor = yield* Schema.decodeUnknownEffect(JsonDocument)(revision.descriptor_json).pipe(
     Effect.mapError(
       (error) => new IntegrityError({ code: "INVALID_DESCRIPTOR", detail: error.message }),
     ),
   );
-  return (yield* validateArtifactBundle(
-    revision.owner_slug,
-    revision.skit_slug,
-    descriptor,
-    rows.map((row) => ({
-      path: row.path,
-      bytes: files[row.path],
-      digest: row.blob_digest,
-      media_type: row.media_type,
-      executable: Boolean(row.executable),
-    })),
-  )).diagnostics;
+  return (yield* validateArtifactBundle(owner, slug, descriptor, verified)).diagnostics;
 });

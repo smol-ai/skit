@@ -521,20 +521,30 @@ function renderHarnessProbe(
     .join("\n\n");
 }
 
-function renderAuthorSync(data: ContractDataForId<"skit.author.sync.v3">): string {
-  if (data.status === "first_sync_ready")
-    return `First Draft sync ready for ${data.identity.locator} (${data.visibility}); no Release will be published; rerun with --apply`;
-  if (data.status === "merge_ready")
-    return `Draft merge ready (${data.paths.length} path(s)); rerun with --apply`;
-  const headline = {
-    created: "Created the remote Draft",
-    bound: "Connected this workspace to its remote Draft",
-    clean: "Draft is already synchronized",
-    merged: "Merged local and remote Draft changes",
-    conflicted: "Draft sync needs conflict resolution",
-    unbound_conflict: "Draft sync needs conflict resolution before this workspace can be connected",
-  }[data.status];
-  return `${headline}${"revision_id" in data ? ` (${data.revision_id})` : ""}`;
+function renderAuthorSync(data: ContractDataForId<"skit.author.sync.v4">): string {
+  switch (data.status) {
+    case "first_sync_ready":
+      return `First Draft sync ready for ${data.identity.locator} (${data.visibility}); no Release will be published; rerun with --apply`;
+    case "ready":
+      return `Draft ready to ${data.action}; rerun with --apply`;
+    case "blocked":
+      return `Draft sync paused: ${data.deleting} of ${data.of} files removed. Remote files are unchanged. To send these deletions, rerun with --apply --allow-large-deletion.`;
+    case "created":
+      return `Created the remote Draft (${data.revision_id})`;
+    case "up_to_date":
+      return `Draft is already synchronized (${data.revision_id})`;
+    case "pulled":
+      return `Updated ${data.paths.length} file(s) from the remote Draft (${data.revision_id})`;
+    case "pushed":
+      return `Sent local changes to the remote Draft (${data.revision_id})`;
+    case "merged":
+      return [
+        `Merged local and remote Draft changes (${data.revision_id})`,
+        ...data.choices.map(
+          (choice) => `  ${choice.path}: kept the ${choice.kept} version (${choice.kind})`,
+        ),
+      ].join("\n");
+  }
 }
 
 const setupGitStateOrder = [

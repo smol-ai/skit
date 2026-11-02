@@ -15,6 +15,7 @@ export const TreeErrorReason = Schema.Union([
   Schema.Struct({ _tag: Schema.Literal("EscapedPath"), path: Schema.String }),
   Schema.Struct({ _tag: Schema.Literal("InvalidSymlink"), path: Schema.String }),
   Schema.Struct({ _tag: Schema.Literal("UnsupportedEntry"), path: Schema.String }),
+  Schema.Struct({ _tag: Schema.Literal("ChangedDuringRead"), path: Schema.String }),
   Schema.Struct({
     _tag: Schema.Literal("CannotRetain"),
     entryType: Schema.String,
@@ -43,6 +44,8 @@ const renderReason = (reason: TreeErrorReason): string => {
       return `Symlinks are not valid SKIT content: ${reason.path}`;
     case "UnsupportedEntry":
       return `Unsupported filesystem entry: ${reason.path}`;
+    case "ChangedDuringRead":
+      return `Filesystem entry changed while reading: ${reason.path}`;
     case "CannotRetain":
       return `Cannot retain ${reason.entryType}: ${reason.path}`;
   }

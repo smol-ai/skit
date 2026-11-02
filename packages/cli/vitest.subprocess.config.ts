@@ -3,6 +3,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     include: [
+      "test/author-history-process.test.ts",
       "test/add-source-lifetime.test.ts",
       "test/add-cli-lifetime.test.ts",
       "test/add-git-parity.test.ts",

@@ -357,6 +357,53 @@ export class LocalFilesChangedDuringSync
   }
 }
 
+/** Incoming bytes cannot replace a local path that was excluded from the captured inventory. */
+export class AuthorLocalPathNotObserved
+  extends Data.TaggedError("AuthorLocalPathNotObserved")<{ path: string }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "CONFLICT" as const;
+  readonly remediation =
+    "SKIT kept this local path unchanged. Review its ignore rules or move it explicitly before retrying.";
+  get message(): string {
+    return `Cannot replace local path outside the recorded Author inventory: ${this.path}`;
+  }
+}
+
+/** A canonical transport key cannot bless a distinct native filesystem entry. */
+/** Two local names normalize to the path sync would write, so receiving it would pick one. */
+export class AuthorNormalizationTwin
+  extends Data.TaggedError("AuthorNormalizationTwin")<{
+    path: string;
+    nativePath: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "CONFLICT" as const;
+  readonly remediation = "Keep both files and give them distinct normalized names before retrying.";
+  get message(): string {
+    return `Normalization twin prevents receiving ${this.path}: ${this.nativePath}`;
+  }
+}
+
+/** A local path is spelled other than NFC, and this filesystem cannot reach it by its NFC name. */
+export class AuthorNonNfcPathUnsupported
+  extends Data.TaggedError("AuthorNonNfcPathUnsupported")<{
+    path: string;
+    nativePath: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "CONFLICT" as const;
+  readonly remediation = "Rename the local path to NFC deliberately before receiving updates.";
+  get message(): string {
+    return `Receiving a non-NFC native path is unsupported on this filesystem: ${this.nativePath}`;
+  }
+}
+
 /** The Library moved underneath a synchronization that had already planned against it. */
 export class LibraryChangedOnServer
   extends Data.TaggedError("LibraryChangedOnServer")<{}>

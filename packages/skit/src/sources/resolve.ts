@@ -24,6 +24,7 @@ import { LinkStat } from "../platform/link-stat.js";
 import { copyLocalTree } from "../platform/copy-tree.js";
 import { TreeError } from "../shared/tree-error.js";
 import { readSkitDescriptor } from "../artifact/skit.js";
+import { hasSkitReadmeDeclaration } from "../artifact/descriptor.js";
 import { SourceProcess, type SourceProcessFailure } from "../platform/source-process.js";
 import { containedPluginPath, PluginManifestInvalid } from "./plugin-manifests.js";
 import { discoveryPathExcluded, readDiscoveryExclusions } from "./discovery-exclusions.js";
@@ -699,7 +700,7 @@ function discoverRoot(
       if (yield* fs.exists(join(directory, "README.md"))) {
         yield* containedPluginPath(containmentRoot, directory, "README.md");
         const text = yield* fs.readFileString(join(directory, "README.md"));
-        if (/^---\r?\n[\s\S]*?^skit:\s*1\s*$/m.test(text))
+        if (hasSkitReadmeDeclaration(text))
           return { root: directory, descriptorKind: "declared" as const };
       }
       if (yield* fs.exists(join(directory, "SKILL.md"))) {
@@ -1134,9 +1135,7 @@ export function resolveSkitSource(
         for (const path of [...new Set(selectedPaths)].sort()) {
           const requested = yield* lockedSkillDirectory(root, path);
           const directory = yield* checkoutPath(checkoutRoot, requested).pipe(
-            Effect.catchTag("PlatformError", (error) =>
-              error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
-            ),
+            Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
           );
           if (directory !== undefined) selectedDirectories.set(path, directory);
         }

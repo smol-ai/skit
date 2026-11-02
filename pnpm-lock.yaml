@@ -39,6 +39,9 @@ importers:
       '@effect/platform-node':
         specifier: 4.1.1
         version: 4.1.1(effect@4.1.1)(redis@6.2.1)
+      '@effect/sql-sqlite-node':
+        specifier: 4.1.1
+        version: 4.1.1(effect@4.1.1)
       '@effect/vitest':
         specifier: 4.1.1
         version: 4.1.1(effect@4.1.1)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))
@@ -521,6 +524,11 @@ packages:
 
   '@effect/sql-d1@4.1.1':
     resolution: {integrity: sha512-CQMOiw9bmj4ifsUA4KLwIgBJBMpPHaF3OYdXnA9oOxeEmD61+XDLkJUSA2mG7BWCIEZc7MquGxl3HuUVOeqtSA==}
+    peerDependencies:
+      effect: 4.1.1
+
+  '@effect/sql-sqlite-node@4.1.1':
+    resolution: {integrity: sha512-vg4ZuqrVN2no19hQnueU0APEbzpSeJ58TMMcqZUek9k2LtfVVhmSOsAgPnkNS37NmQnfXoAHkMY1ZjZBt48D8A==}
     peerDependencies:
       effect: 4.1.1
 
@@ -3043,6 +3051,10 @@ snapshots:
   '@effect/sql-d1@4.1.1(effect@4.1.1)':
     dependencies:
       '@cloudflare/workers-types': 5.20261031.1
+      effect: 4.1.1
+
+  '@effect/sql-sqlite-node@4.1.1(effect@4.1.1)':
+    dependencies:
       effect: 4.1.1
 
   '@effect/vitest@4.1.1(effect@4.1.1)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))':

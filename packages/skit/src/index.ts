@@ -52,10 +52,14 @@ export * from "./artifact/descriptor.js";
 export * from "./artifact/skit.js";
 export * from "./artifact/tree-hasher.js";
 export * from "./sources/resolve.js";
-export * from "./shared/three-way-merge.js";
 export * from "./platform/tree-requirements.js";
 export * from "./shared/tree-error.js";
 export * from "./artifact/tree.js";
+export * from "./artifact/tree-entry.js";
+export {
+  AuthorIgnoreRepository,
+  authorIgnoreRepositoryLayer,
+} from "./artifact/plain-author-ignore.js";
 
 export * from "./library/store/library-store.js";
 export { withLibraryWriterLock } from "./library/store/writer-lock.js";
@@ -101,11 +105,22 @@ export * from "./library/snapshot-archive.js";
 export * from "./library/entity-ids.js";
 export * from "./library/machine-document.js";
 export * from "./library/audit/audit-log.js";
-export { writeRawAtomic, writeJsonAtomic, writeJsonExclusive } from "./platform/atomic-write.js";
+export {
+  writeRawAtomic,
+  writeJsonAtomic,
+  writeJsonExclusive,
+  syncPaths,
+} from "./platform/atomic-write.js";
+export { sha256Hash, hashHex } from "./shared/hash.js";
+export { isCanonicalRelativePath, parentDirectories } from "./shared/relative-path.js";
 export * from "./usage/contracts.js";
 export { SkillUsage, skillUsageLayer } from "./usage/scanner.js";
 
 export * as MachineSettings from "./library/machine-settings.js";
+export * as Merge from "./merge/merge.js";
+export * as History from "./history/history.js";
+export * as Sync from "./sync/sync.js";
+export { fileTree, historyTree, conflictKind, type Files } from "./merge/files.js";
 export {
   Unusable as MachineSettingsUnusable,
   type Settings as MachineSettingsSnapshot,

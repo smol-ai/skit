@@ -50,10 +50,10 @@ describe("author inventory", () => {
         sql.batch([
           sql`INSERT INTO namespaces VALUES ('tim', 'principal', 'principal_test')`,
           sql`INSERT INTO resource_grants VALUES ('grant_external', 'principal', 'principal_test', 'skit', 'zed/shared', 'read')`,
-          sql`INSERT INTO drafts VALUES ('tim', 'alpha', 'private', 'rev_alpha')`,
-          sql`INSERT INTO drafts VALUES ('tim', 'tools', 'unlisted', 'rev_tools')`,
-          sql`INSERT INTO drafts VALUES ('zed', 'shared', 'public', 'rev_shared')`,
-          sql`INSERT INTO drafts VALUES ('other', 'hidden', 'private', 'rev_hidden')`,
+          sql`INSERT INTO drafts VALUES ('tim', 'alpha', 'private', 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')`,
+          sql`INSERT INTO drafts VALUES ('tim', 'tools', 'unlisted', 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')`,
+          sql`INSERT INTO drafts VALUES ('zed', 'shared', 'public', 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc')`,
+          sql`INSERT INTO drafts VALUES ('other', 'hidden', 'private', 'sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd')`,
           sql`INSERT INTO releases VALUES ('tim', 'alpha', '1.0.0', '2026-01-01T00:00:00Z')`,
           sql`INSERT INTO releases VALUES ('tim', 'alpha', '1.1.0', '2026-02-01T00:00:00Z')`,
         ]),
@@ -68,13 +68,15 @@ describe("author inventory", () => {
           {
             skit_id: "tim/alpha",
             visibility: "private",
-            draft_revision_id: "rev_alpha",
+            draft_revision_id:
+              "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             most_recent_release_version: "1.1.0",
           },
           {
             skit_id: "tim/tools",
             visibility: "unlisted",
-            draft_revision_id: "rev_tools",
+            draft_revision_id:
+              "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             most_recent_release_version: null,
           },
         ],
@@ -86,7 +88,8 @@ describe("author inventory", () => {
           {
             skit_id: "zed/shared",
             visibility: "public",
-            draft_revision_id: "rev_shared",
+            draft_revision_id:
+              "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
             most_recent_release_version: null,
           },
         ],

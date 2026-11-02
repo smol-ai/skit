@@ -150,17 +150,16 @@ describe("Publication release archives", () => {
       ]);
       yield* Effect.flatMap(D1Client.D1Client, (sql) =>
         sql.batch([
-          sql`DROP TABLE IF EXISTS draft_files`,
+          sql`DROP TABLE IF EXISTS draft_tree_entries`,
           sql`DROP TABLE IF EXISTS draft_revisions`,
           sql`CREATE TABLE draft_revisions (
-            revision_id TEXT PRIMARY KEY, owner_slug TEXT, skit_slug TEXT, descriptor_json TEXT
+            owner_slug TEXT, skit_slug TEXT, revision_id TEXT, tree_hash TEXT, descriptor_json TEXT
           )`,
-          sql`CREATE TABLE draft_files (
-            revision_id TEXT, path TEXT, blob_digest TEXT, byte_length INTEGER,
-            media_type TEXT, executable INTEGER
+          sql`CREATE TABLE draft_tree_entries (
+            tree_hash TEXT, path TEXT, kind TEXT, mode INTEGER, blob_hash TEXT, byte_length INTEGER
           )`,
           sql`INSERT INTO draft_revisions
-              VALUES ('draft_test', 'alice', 'tools', ${JSON.stringify(descriptor)})`,
+              VALUES ('alice', 'tools', 'draft_test', 'tree_test', ${JSON.stringify(descriptor)})`,
         ]),
       );
       for (const [path, content] of contents) {
@@ -168,16 +167,20 @@ describe("Publication release archives", () => {
         yield* Effect.flatMap(
           D1Client.D1Client,
           (sql) =>
-            sql`INSERT INTO draft_files
-                VALUES ('draft_test', ${path}, ${digest}, ${content.byteLength}, 'text/plain', 0)`,
+            sql`INSERT INTO draft_tree_entries
+                VALUES ('tree_test', ${path}, 'file', 420, ${digest}, ${content.byteLength})`,
         );
       }
 
+      const archive = zipSync(Object.fromEntries(contents));
+      expect(yield* verifyReleaseArchive("alice", "tools", "draft_test", archive)).toEqual([]);
       expect(
-        yield* verifyReleaseArchive("draft_test", zipSync(Object.fromEntries(contents))),
-      ).toEqual([]);
+        yield* Effect.flip(verifyReleaseArchive("bob", "tools", "draft_test", archive)),
+      ).toMatchObject({ code: "DRAFT_REVISION_MISSING" });
       const drifted = yield* Effect.result(
         verifyReleaseArchive(
+          "alice",
+          "tools",
           "draft_test",
           zipSync({ ...Object.fromEntries(contents), "skills/review/SKILL.md": bytes("changed") }),
         ),

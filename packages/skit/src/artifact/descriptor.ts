@@ -113,6 +113,10 @@ const validateDescriptor = Effect.fn("Descriptor.validate")(function* (
   return descriptor;
 });
 
+/** Recognize declared README roots before choosing plain-folder discovery. Parsing stays strict. */
+export const hasSkitReadmeDeclaration = (text: string): boolean =>
+  /^---\r?\n[\s\S]*?^skit:\s*1\s*$/m.test(text);
+
 export const parseSkitReadme = Effect.fn("Descriptor.parseReadme")(function* (text: string) {
   const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
   if (!match) return yield* new ReadmeFrontmatterMissing();

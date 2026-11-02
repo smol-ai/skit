@@ -5,8 +5,8 @@ import {
   currentCollectionSkills,
   canonicalJson,
   currentLibraryManifest,
-  planThreeWayRecords,
   librarySnapshotDigests,
+  Merge,
   LibraryManifest,
   LibraryState,
   emptyLibraryState,
@@ -21,12 +21,40 @@ import {
   type CollectionVersion,
   type Import,
 } from "@smolai/skit-core";
-import { Data, Effect, Result, Schema } from "effect";
+import { Array, Data, Effect, Option, Order, Record, Result, Schema } from "effect";
 import { SyncConflictDetail } from "./library-sync-contract.js";
 
 const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
 const byKey = <T>(records: readonly T[], key: (record: T) => string) =>
-  Object.fromEntries(records.map((record) => [key(record), record])) as Record<string, T>;
+  Record.fromIterableBy(records, key);
+
+/**
+ * Merge keyed records one at a time, each as a whole. A record both devices changed differently
+ * is a conflict and stays out of the result, unless `takeRemote` names it.
+ *
+ * Not {@link Merge.run}: its conflicts carry no merged value, and callers report every conflict
+ * at once, including those found by merging what did not conflict.
+ */
+const mergeKeyed = <T>(
+  base: Readonly<Record<string, T>>,
+  local: Readonly<Record<string, T>>,
+  remote: Readonly<Record<string, T>>,
+  takeRemote: (key: string) => boolean = () => false,
+) => {
+  const outcome = Merge.record(Merge.whole<T>(equal))(
+    { base: Option.some(base), ours: Option.some(local), theirs: Option.some(remote) },
+    [],
+    (found) => (takeRemote(String(found.at[0])) ? Option.some("theirs") : Option.none()),
+  );
+  const conflicts = outcome.conflicts.map((found) => String(found.at[0]));
+  return {
+    records: Record.filter(
+      Option.getOrElse(outcome.value, Record.empty),
+      (_, key) => !conflicts.includes(key),
+    ),
+    conflicts,
+  };
+};
 const enabledKind = (item: Enabled) => ("collection" in item ? "collection" : "skill");
 const enabledId = (item: Enabled) => ("collection" in item ? item.collection : item.skill);
 
@@ -83,15 +111,18 @@ const takeCollection = (
   };
 };
 
-/** One device's global intent: which Collections it follows and which Skills are enabled now. */
+/**
+ * One device's global intent: which Collections it follows and which Skills are enabled now, each
+ * keyed by its own ID.
+ */
 const enabledIntent = (manifest: LibraryManifest) => ({
   followed: Object.fromEntries(
     manifest.enabled.flatMap((item) =>
-      "collection" in item ? [[item.collection, true] as const] : [],
+      "collection" in item ? [[item.collection, item.collection] as const] : [],
     ),
   ),
   enabled: Object.fromEntries(
-    enabledSkillIds(manifest, manifest.enabled).map((skillId) => [skillId, true] as const),
+    enabledSkillIds(manifest, manifest.enabled).map((skillId) => [skillId, skillId] as const),
   ),
 });
 
@@ -104,12 +135,17 @@ function mergeEnabledIntent(
   base: LibraryManifest,
   local: LibraryManifest,
   remote: LibraryManifest,
-  library: Parameters<typeof enabledSkillIds>[0] & { readonly collections: readonly Collection[] },
+  library: Parameters<typeof enabledSkillIds>[0] & {
+    readonly collections: readonly Collection[];
+  },
   takeRemote: ReadonlySet<string>,
 ) {
-  const [before, mine, theirs] = [base, local, remote].map(enabledIntent);
-  const followed = planThreeWayRecords(before!.followed, mine!.followed, theirs!.followed, equal);
-  const enabled = planThreeWayRecords(before!.enabled, mine!.enabled, theirs!.enabled, equal);
+  const before = enabledIntent(base);
+  const mine = enabledIntent(local);
+  const theirs = enabledIntent(remote);
+  // Only presence differs in these records, so the two devices can never overlap on one.
+  const followed = mergeKeyed(before.followed, mine.followed, theirs.followed);
+  const enabled = mergeKeyed(before.enabled, mine.enabled, theirs.enabled);
   // A removal on either device takes the removed records' items with it, exactly as removing
   // them after the other device's enable change would have.
   const collectionIds = new Set<string>(library.collections.map((item) => item.collection_id));
@@ -117,10 +153,8 @@ function mergeEnabledIntent(
   const present = (item: Enabled) =>
     "collection" in item ? collectionIds.has(item.collection) : skillIds.has(item.skill);
   const items: Enabled[] = [
-    ...Object.keys(followed.records).map((collectionId): Enabled => ({
-      collection: collectionId as CollectionId,
-    })),
-    ...Object.keys(enabled.records).map((skillId): Enabled => ({ skill: skillId as SkillId })),
+    ...Object.values(followed.records).map((collection): Enabled => ({ collection })),
+    ...Object.values(enabled.records).map((skill): Enabled => ({ skill })),
   ].filter(present);
   // A followed Collection enables every current member, so it cannot coexist with one disabled.
   const coherent = enabledSkillIds(
@@ -130,31 +164,44 @@ function mergeEnabledIntent(
   if (coherent) return { values: mergeEnabled(library, [items]), conflicts: [] };
   // `binding:global` is the key users already pass to --take-remote.
   return takeRemote.has("binding:global")
-    ? { values: mergeEnabled(library, [remote.enabled.filter(present)]), conflicts: [] }
+    ? {
+        values: mergeEnabled(library, [remote.enabled.filter(present)]),
+        conflicts: [],
+      }
     : { values: [...local.enabled], conflicts: ["binding:global"] };
 }
 
 export function normalizeLibraryManifest(manifest: LibraryManifest): LibraryManifest {
   return currentLibraryManifest({
-    collections: [...manifest.collections].sort((a, b) =>
-      a.collection_id.localeCompare(b.collection_id),
+    collections: Array.sort(
+      manifest.collections,
+      Order.mapInput(Order.String, (item: Collection) => item.collection_id),
     ),
-    skills: manifest.skills
-      .map((skill) => ({
+    skills: Array.sort(
+      manifest.skills.map((skill) => ({
         ...skill,
-        versions: [...skill.versions].sort((a, b) =>
-          a.skill_version_id.localeCompare(b.skill_version_id),
+        versions: Array.sort(
+          skill.versions,
+          Order.mapInput(Order.String, (item: Skill["versions"][number]) => item.skill_version_id),
         ),
-      }))
-      .sort((a, b) => a.skill_id.localeCompare(b.skill_id)),
-    collection_versions: [...manifest.collection_versions].sort((a, b) =>
-      a.collection_version_id.localeCompare(b.collection_version_id),
+      })),
+      Order.mapInput(Order.String, (item: Skill) => item.skill_id),
     ),
-    imports: [...manifest.imports].sort((a, b) => a.import_id.localeCompare(b.import_id)),
-    snapshot_digests: [...manifest.snapshot_digests].sort(),
-    enabled: [...manifest.enabled].sort(
-      (a, b) =>
-        enabledKind(a).localeCompare(enabledKind(b)) || enabledId(a).localeCompare(enabledId(b)),
+    collection_versions: Array.sort(
+      manifest.collection_versions,
+      Order.mapInput(Order.String, (item: CollectionVersion) => item.collection_version_id),
+    ),
+    imports: Array.sort(
+      manifest.imports,
+      Order.mapInput(Order.String, (item: Import) => item.import_id),
+    ),
+    snapshot_digests: Array.sort(manifest.snapshot_digests, Order.String),
+    enabled: Array.sort(
+      manifest.enabled,
+      Order.combine(
+        Order.mapInput(Order.String, enabledKind),
+        Order.mapInput(Order.String, enabledId),
+      ),
     ),
   });
 }
@@ -167,23 +214,14 @@ function mergeRecords<T>(
   key: (record: T) => string,
   takeRemote: ReadonlySet<string>,
 ) {
-  const planned = planThreeWayRecords(
-    byKey(base, key),
-    byKey(local, key),
-    byKey(remote, key),
-    equal,
+  // `--take-remote <label>:<key>` decides that record for the remote side; nothing else does.
+  const planned = mergeKeyed(byKey(base, key), byKey(local, key), byKey(remote, key), (id) =>
+    takeRemote.has(`${label}:${id}`),
   );
-  const records = { ...planned.records };
-  const conflicts = [];
-  for (const conflict of planned.conflicts) {
-    const coordinate = `${label}:${conflict}`;
-    if (takeRemote.has(coordinate)) {
-      const remoteRecord = byKey(remote, key)[conflict];
-      if (remoteRecord === undefined) delete records[conflict];
-      else records[conflict] = remoteRecord;
-    } else conflicts.push(coordinate);
-  }
-  return { values: Object.values(records).sort((a, b) => key(a).localeCompare(key(b))), conflicts };
+  return {
+    values: Array.sort(Object.values(planned.records), Order.mapInput(Order.String, key)),
+    conflicts: planned.conflicts.map((conflict) => `${label}:${conflict}`),
+  };
 }
 
 /** Pure accepted-base merge of portable Library entities and global Binding intent. */
@@ -519,5 +557,9 @@ export const prepareLibraryMerge = Effect.fn("Library.prepareMerge")(function* (
         merged.unresolvable,
       ),
     });
-  return MergePreparation.Ready({ manifest: merged.manifest, alignedLocal, device });
+  return MergePreparation.Ready({
+    manifest: merged.manifest,
+    alignedLocal,
+    device,
+  });
 });

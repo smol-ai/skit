@@ -31,23 +31,27 @@ export interface ValidatedArtifactBundle {
 const fail = (code: IntegrityErrorCode, detail?: string) =>
   Effect.fail(new IntegrityError({ code, ...(detail === undefined ? {} : { detail }) }));
 
-export const validateArtifactBundle = Effect.fn("Integrity.validateArtifactBundle")(function* (
-  owner: string,
-  slug: string,
-  descriptorInput: unknown,
+/** Transport integrity applies even when authored content is incomplete or invalid. */
+export const validateArtifactFiles = Effect.fn("Integrity.validateArtifactFiles")(function* (
   files: ReadonlyArray<ArtifactFile>,
 ) {
-  if (files.length < 1 || files.length > MAX_ARTIFACT_FILES) return yield* fail("INVALID_DRAFT");
+  if (files.length > MAX_ARTIFACT_FILES) return yield* fail("INVALID_DRAFT");
   if (new Set(files.map(({ path }) => path)).size !== files.length)
     return yield* fail("DUPLICATE_FILE_PATH");
   if (files.some(({ bytes }) => bytes.byteLength > MAX_ARTIFACT_CONTENT_BYTES))
     return yield* fail("DRAFT_FILE_TOO_LARGE");
   if (files.reduce((total, { bytes }) => total + bytes.byteLength, 0) > MAX_ARTIFACT_CONTENT_BYTES)
     return yield* fail("DRAFT_TOO_LARGE");
+});
 
+export const readArtifactDescriptor = Effect.fn("Integrity.readArtifactDescriptor")(function* (
+  owner: string,
+  slug: string,
+  files: ReadonlyArray<ArtifactFile>,
+) {
   const config = files.find(({ path }) => path === "skit.json");
   const readme = files.find(({ path }) => path === "README.md");
-  const localDescriptor = config
+  const local = config
     ? yield* parseSkitConfig(new TextDecoder().decode(config.bytes)).pipe(
         Effect.mapError(descriptorError),
       )
@@ -56,8 +60,19 @@ export const validateArtifactBundle = Effect.fn("Integrity.validateArtifactBundl
           Effect.mapError(descriptorError),
         )
       : yield* fail("DESCRIPTOR_MISSING");
-  if (localDescriptor.slug !== slug) return yield* fail("INVALID_DESCRIPTOR_ID");
-  const descriptor: RegistrySkitDescriptor = { ...localDescriptor, id: `${owner}/${slug}` };
+  if (local.slug !== slug) return yield* fail("INVALID_DESCRIPTOR_ID");
+  return { ...local, id: `${owner}/${slug}` } satisfies RegistrySkitDescriptor;
+});
+
+export const validateArtifactBundle = Effect.fn("Integrity.validateArtifactBundle")(function* (
+  owner: string,
+  slug: string,
+  descriptorInput: unknown,
+  files: ReadonlyArray<ArtifactFile>,
+) {
+  if (files.length < 1) return yield* fail("INVALID_DRAFT");
+  yield* validateArtifactFiles(files);
+  const descriptor = yield* readArtifactDescriptor(owner, slug, files);
   const normalizedLocal = yield* normalizeDescriptorDeclarations(descriptor);
   const normalizedInput = yield* normalizeDescriptorDeclarations(descriptorInput);
   if (canonicalJson(normalizedLocal) !== canonicalJson(normalizedInput))
@@ -121,3 +136,46 @@ export const validateArtifactBundle = Effect.fn("Integrity.validateArtifactBundl
 
   return { descriptor, diagnostics } satisfies ValidatedArtifactBundle;
 });
+
+/**
+ * The tree entries a Release cannot hold: every symlink, and every directory with no file beneath
+ * it. Publication refuses them; a Draft records these diagnostics so the author learns early.
+ */
+export const unpublishableEntries = (
+  entries: ReadonlyArray<{
+    readonly path: string;
+    readonly kind: "file" | "directory" | "symlink";
+  }>,
+): Array<ValidationDiagnostic> => {
+  const filled = new Set(
+    entries.flatMap(({ path, kind }) =>
+      kind === "file"
+        ? path
+            .split("/")
+            .slice(0, -1)
+            .map((_, index, parts) => parts.slice(0, index + 1).join("/"))
+        : [],
+    ),
+  );
+  return entries.flatMap(({ path, kind }): Array<ValidationDiagnostic> => {
+    if (kind === "symlink")
+      return [
+        {
+          code: "UNPUBLISHABLE_TREE_ENTRY",
+          severity: "error",
+          path,
+          message: `A Release cannot hold the symlink ${path}`,
+        },
+      ];
+    if (kind === "directory" && !filled.has(path))
+      return [
+        {
+          code: "UNPUBLISHABLE_TREE_ENTRY",
+          severity: "error",
+          path,
+          message: `A Release cannot hold the empty directory ${path}`,
+        },
+      ];
+    return [];
+  });
+};

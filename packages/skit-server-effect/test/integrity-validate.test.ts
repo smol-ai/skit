@@ -10,7 +10,6 @@ const file = Effect.fn("Test.file")(function* (path: string, contents: string) {
     path,
     bytes,
     digest: yield* sha256Hash(bytes),
-    media_type: "text/plain",
     executable: false,
   };
 });

@@ -1,12 +1,18 @@
 import { Schema } from "effect";
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/http-api";
+import * as History from "../../history/history.js";
 import {
   AuthorSkitDeleteResponse,
   AuthorSkitListResponse,
-  draftCreateRequestSchema,
-  draftReadResponseSchema,
-  draftUpdateRequestSchema,
-  draftWriteResponseSchema,
+  CurrentMoveRequest,
+  CurrentMoveResponse,
+  DraftCreateRequest,
+  DraftCreateResponse,
+  DraftCurrentResponse,
+  RevisionPage,
+  RevisionPostRequest,
+  RevisionPostResponse,
+  RevisionReadResponse,
   releasePublishRequestSchema,
   releasePublishResponseSchema,
   skitValidationDiagnosticsSchema,
@@ -21,6 +27,7 @@ import {
   apiErrorStatuses,
   ArchiveTooLargeResponse,
   DeleteRequiresPrivateResponse,
+  DraftExistsResponse,
   DraftNotFoundResponse,
   ForbiddenOriginResponse,
   ForbiddenResponse,
@@ -36,8 +43,10 @@ import {
 export const DraftTooLargeResponse = Schema.Struct({
   error: Schema.Literal("DRAFT_TOO_LARGE"),
 }).pipe(HttpApiSchema.status(apiErrorStatuses.DRAFT_TOO_LARGE));
-export const DraftRevisionConflictResponse = Schema.Struct({
+/** Another device moved `current` first; this is where it points now. */
+export const CurrentMovedResponse = Schema.Struct({
   error: Schema.Literal("REVISION_CONFLICT"),
+  current: Schema.NullOr(History.RevisionId),
 }).pipe(HttpApiSchema.status(apiErrorStatuses.REVISION_CONFLICT));
 const dedicatedDraftErrorCodes = new Set([
   "unauthorized",
@@ -48,6 +57,8 @@ const dedicatedDraftErrorCodes = new Set([
   "DRAFT_TOO_LARGE",
   "storage_failure",
   "REVISION_CONFLICT",
+  "draft_exists",
+  "draft_not_found",
 ]);
 export const InvalidDraftResponse = Schema.Struct({
   error: Schema.String.check(
@@ -79,29 +90,62 @@ const commonDraftErrors = [
   StorageFailureResponse,
 ] as const;
 
+const draftParams = { owner: Schema.String, slug: Schema.String };
+const draftReadErrors = [
+  InvalidRequestResponse,
+  InsufficientScopeResponse,
+  DraftNotFoundResponse,
+  DraftTooLargeResponse,
+  StorageFailureResponse,
+] as const;
+
+/**
+ * A Draft's revisions and its one `current` pointer. Posting a revision never changes what is
+ * current; only `move` does, and only if `current` still points where the caller expects.
+ */
 export class DraftApi extends HttpApiGroup.make("drafts")
   .add(
     HttpApiEndpoint.post("create", "/api/skits", {
-      payload: draftCreateRequestSchema,
-      success: draftWriteResponseSchema.pipe(HttpApiSchema.status(201)),
-      error: [...commonDraftErrors, InvalidDraftResponse, DraftRevisionConflictResponse],
+      payload: DraftCreateRequest,
+      success: DraftCreateResponse.pipe(HttpApiSchema.status(201)),
+      error: [...commonDraftErrors, InvalidDraftResponse, DraftExistsResponse],
     }),
-    HttpApiEndpoint.get("read", "/api/skits/:owner/:slug/draft", {
-      params: { owner: Schema.String, slug: Schema.String },
-      success: draftReadResponseSchema,
+    HttpApiEndpoint.get("current", "/api/skits/:owner/:slug/current", {
+      params: draftParams,
+      success: DraftCurrentResponse,
+      error: draftReadErrors,
+    }),
+    HttpApiEndpoint.put("move", "/api/skits/:owner/:slug/current", {
+      params: draftParams,
+      payload: CurrentMoveRequest,
+      success: CurrentMoveResponse,
       error: [
-        InvalidRequestResponse,
-        InsufficientScopeResponse,
+        ...commonDraftErrors,
+        InvalidDraftResponse,
         DraftNotFoundResponse,
-        DraftTooLargeResponse,
-        StorageFailureResponse,
+        CurrentMovedResponse,
       ],
     }),
-    HttpApiEndpoint.put("update", "/api/skits/:owner/:slug/draft", {
-      params: { owner: Schema.String, slug: Schema.String },
-      payload: draftUpdateRequestSchema,
-      success: draftWriteResponseSchema,
-      error: [...commonDraftErrors, InvalidDraftResponse, DraftRevisionConflictResponse],
+    HttpApiEndpoint.post("post", "/api/skits/:owner/:slug/revisions", {
+      params: draftParams,
+      payload: RevisionPostRequest,
+      success: RevisionPostResponse,
+      error: [...commonDraftErrors, InvalidDraftResponse, DraftNotFoundResponse],
+    }),
+    HttpApiEndpoint.get("revision", "/api/skits/:owner/:slug/revisions/:id", {
+      params: { ...draftParams, id: History.RevisionId },
+      success: RevisionReadResponse,
+      error: draftReadErrors,
+    }),
+    HttpApiEndpoint.get("ancestors", "/api/skits/:owner/:slug/revisions", {
+      params: draftParams,
+      query: {
+        ancestors: History.RevisionId,
+        limit: Schema.optionalKey(Schema.String),
+        cursor: Schema.optionalKey(Schema.String),
+      },
+      success: RevisionPage,
+      error: [...draftReadErrors, InvalidCursorResponse],
     }),
   )
   .middleware(RequestDecoding)

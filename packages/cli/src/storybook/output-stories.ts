@@ -1,5 +1,5 @@
 import { emptyUsageStory, usageStory } from "./usage-stories.js";
-import { estimateCodexListing } from "@smolai/skit-core";
+import { estimateCodexListing, History } from "@smolai/skit-core";
 import { Data } from "effect";
 import {
   makeCollectionId,
@@ -188,13 +188,13 @@ export const outputStories: ReadonlyArray<OutputStory> = [
         {
           identity: "https://registry.example/smol-ai/review-tools",
           visibility: "public",
-          draft_revision_id: "draft-7",
+          draft_revision_id: History.RevisionId.make(`sha256:${"7".repeat(64)}`),
           most_recent_release_version: "1.2.0",
         },
         {
           identity: "https://registry.example/smol-ai/triage-tools",
           visibility: "private",
-          draft_revision_id: "draft-3",
+          draft_revision_id: History.RevisionId.make(`sha256:${"3".repeat(64)}`),
           most_recent_release_version: null,
         },
       ],
@@ -973,11 +973,13 @@ export const outputStories: ReadonlyArray<OutputStory> = [
   ),
   resultStory(
     "sync",
-    "conflicted",
+    "merged",
     result("sync", {
-      status: "conflicted",
-      changed: false,
-      conflicts: [{ path: "SKIT.md", kind: "both_modified" }],
+      status: "merged",
+      changed: true,
+      revision_id: `sha256:${"a".repeat(64)}`,
+      paths: ["skills/review/SKILL.md"],
+      choices: [{ path: "skills/review/SKILL.md", kind: "both_modified", kept: "remote" }],
     }),
   ),
   resultStory(

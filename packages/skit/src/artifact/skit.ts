@@ -18,7 +18,8 @@ import {
   assessInvocationConformance,
   describeInvocationConformanceIssue,
 } from "../invocation/conformance.js";
-import { walkTree, type TreeEntry } from "./tree.js";
+import { walkTree } from "./tree.js";
+import type { TreeEntry } from "./tree-entry.js";
 import type { TreeRequirements } from "../platform/tree-requirements.js";
 import type { TreeError } from "../shared/tree-error.js";
 import {
@@ -43,11 +44,7 @@ export function readSkitDescriptor(
     // A missing skit.json falls back to the README; any other read failure is real.
     const config = yield* fs
       .readFileString(resolve(root, "skit.json"))
-      .pipe(
-        Effect.catchTag("PlatformError", (error) =>
-          error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
-        ),
-      );
+      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
     if (config !== undefined) return yield* parseSkitConfig(config);
     const readme = yield* fs.readFileString(resolve(root, "README.md"));
     return yield* parseSkitReadme(readme);

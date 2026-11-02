@@ -49,21 +49,16 @@ export interface SkitFileRecord {
   executable: boolean;
 }
 
-export interface SyncFileVersion {
-  digest: Hash;
-  bytes: Uint8Array;
-  mediaType: string;
-}
+/** One file as author sync merges it: its bytes and its mode, executable or not. */
+export const SyncFileVersion = Schema.Struct({
+  bytes: Schema.Uint8Array,
+  mode: Schema.Literals([0o644, 0o755]),
+});
+export type SyncFileVersion = typeof SyncFileVersion.Type;
 
 export interface SyncConflict {
   path: string;
   kind: "both_modified" | "delete_modify" | "binary" | "descriptor";
-}
-
-export interface SyncPlan {
-  files: Record<string, SyncFileVersion>;
-  conflicts: SyncConflict[];
-  changedPaths: string[];
 }
 
 export interface SkillExampleRecord {

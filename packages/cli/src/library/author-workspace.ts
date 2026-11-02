@@ -1,6 +1,5 @@
 import { localLibrary } from "../library-application/library-owner.js";
 import {
-  AUTHOR_WORKSPACE_METADATA_FILE,
   COLLECTION_CONTROL_DIRECTORY,
   LibraryStore,
   ImportContentInvalid,
@@ -9,71 +8,32 @@ import {
   writeJsonAtomic,
   writeJsonExclusive,
   withLibraryWriter,
+  syncPaths,
   type LibraryState,
   type Collection,
 } from "@smolai/skit-core";
 import { randomUUID } from "node:crypto";
-import { Clock, Effect, FileSystem, Schema } from "effect";
+import { Clock, Effect, FileSystem } from "effect";
 import { dirname, join, resolve } from "node:path";
+import { AuthorWorkspaceAlreadyRegistered, DirectoryAlreadyInLibrary } from "./failures.js";
+
 import {
-  AuthorWorkspaceMetadataInvalid,
-  AuthorWorkspaceAlreadyRegistered,
-  DirectoryAlreadyInLibrary,
-} from "./failures.js";
+  authorWorkspaceMetadataPath,
+  readAuthorWorkspace,
+  type AuthorWorkspaceMetadata,
+} from "./author-workspace-metadata.js";
 
-const AUTHOR_WORKSPACE_SCHEMA = "skit.author-workspace.v1" as const;
+/** Flush the metadata file and the directories that name it. */
+const flushWorkspaceMetadata = (root: string) =>
+  syncPaths([authorWorkspaceMetadataPath(root), dirname(authorWorkspaceMetadataPath(root)), root]);
 
-interface AuthorWorkspaceMetadata {
-  readonly schema: typeof AUTHOR_WORKSPACE_SCHEMA;
-  readonly workspace_id: string;
-  readonly registration?: "registered" | "removed";
-}
-
-const AuthorWorkspaceDocument = Schema.fromJsonString(
-  Schema.Struct({
-    schema: Schema.Literal(AUTHOR_WORKSPACE_SCHEMA),
-    workspace_id: Schema.String.check(Schema.isPattern(/^workspace_[a-f0-9]{32}$/u)),
-    registration: Schema.optionalKey(Schema.Literals(["registered", "removed"])),
-  }),
-);
-
-const metadataPath = (root: string) =>
-  join(root, COLLECTION_CONTROL_DIRECTORY, AUTHOR_WORKSPACE_METADATA_FILE);
-
-const readAuthorWorkspace = Effect.fn("Library.readAuthorWorkspace")(function* (root: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = metadataPath(root);
-  const text = yield* fs
-    .readFileString(path)
-    .pipe(
-      Effect.catchTag("PlatformError", (error) =>
-        error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
-      ),
-    );
-  if (text === undefined) return undefined;
-  const value = yield* Schema.decodeUnknownEffect(AuthorWorkspaceDocument, {
-    onExcessProperty: "error",
-  })(text).pipe(Effect.mapError(() => new AuthorWorkspaceMetadataInvalid({ path })));
-  return {
-    schema: value.schema,
-    workspace_id: value.workspace_id,
-    registration:
-      "registration" in value && value.registration === "removed"
-        ? "removed"
-        : "registration" in value && value.registration === "registered"
-          ? "registered"
-          : undefined,
-  } satisfies AuthorWorkspaceMetadata;
-});
-
-const writeAuthorWorkspace = Effect.fn("Library.writeAuthorWorkspace")(function* (
+/** Publish lifecycle changes atomically and durably before reporting registration. */
+export const writeAuthorWorkspace = Effect.fn("Library.writeAuthorWorkspace")(function* (
   root: string,
   metadata: AuthorWorkspaceMetadata,
 ) {
-  const fs = yield* FileSystem.FileSystem;
-  yield* fs.writeFileString(metadataPath(root), `${JSON.stringify(metadata, null, 2)}\n`, {
-    mode: 0o600,
-  });
+  yield* writeJsonAtomic(authorWorkspaceMetadataPath(root), metadata);
+  yield* flushWorkspaceMetadata(root);
 });
 
 /** Library storage comes from LibraryStore; these are workspace lifecycle choices only. */
@@ -83,7 +43,7 @@ export interface AuthorWorkspaceOptions {
   readonly workspaceId?: () => string;
 }
 
-const planWorkspace = Effect.fn("Author.planWorkspace")(function* (
+export const planAuthorWorkspace = Effect.fn("Author.planAuthorWorkspace")(function* (
   root: string,
   state: LibraryState,
   options: AuthorWorkspaceOptions,
@@ -144,30 +104,37 @@ const planWorkspace = Effect.fn("Author.planWorkspace")(function* (
   return { workspace: planned, missing: workspace === undefined, existing };
 });
 
+/** Metadata publication is independent of artifact validity; no authored config is written. */
+export const prepareAuthorWorkspaceMetadata = Effect.fn("Author.prepareAuthorWorkspaceMetadata")(
+  function* (root: string, plan: Effect.Success<ReturnType<typeof planAuthorWorkspace>>) {
+    const fs = yield* FileSystem.FileSystem;
+    const path = authorWorkspaceMetadataPath(root);
+    yield* fs.makeDirectory(dirname(path), { recursive: true, mode: 0o700 });
+    if (plan.missing) yield* writeJsonExclusive(path, plan.workspace);
+    yield* fs
+      .writeFileString(join(root, COLLECTION_CONTROL_DIRECTORY, ".gitignore"), "*\n", {
+        flag: "wx",
+        mode: 0o600,
+      })
+      .pipe(
+        Effect.uninterruptible,
+        Effect.catchReason("PlatformError", "AlreadyExists", () => Effect.void),
+      );
+    yield* syncPaths([join(root, COLLECTION_CONTROL_DIRECTORY, ".gitignore")]);
+    yield* flushWorkspaceMetadata(root);
+  },
+);
+
 const registerOwnedWorkspace = Effect.fn("Author.registerOwnedWorkspace")(function* (
   root: string,
-  plan: Effect.Success<ReturnType<typeof planWorkspace>>,
+  plan: Effect.Success<ReturnType<typeof planAuthorWorkspace>>,
   register: boolean,
 ) {
-  const fs = yield* FileSystem.FileSystem;
   const validated = yield* validateSkitDirectory(root, "source", {
     assessmentContext: "import",
   });
   if (plan.workspace.registration === "removed" && !register && !plan.existing) return undefined;
-  const path = metadataPath(root);
-  yield* fs.makeDirectory(dirname(path), { recursive: true, mode: 0o700 });
-  if (plan.missing) yield* writeJsonExclusive(path, plan.workspace);
-  yield* fs
-    .writeFileString(join(root, COLLECTION_CONTROL_DIRECTORY, ".gitignore"), "*\n", {
-      flag: "wx",
-      mode: 0o600,
-    })
-    .pipe(
-      Effect.uninterruptible,
-      Effect.catchTag("PlatformError", (error) =>
-        error.reason._tag === "AlreadyExists" ? Effect.void : Effect.fail(error),
-      ),
-    );
+  yield* prepareAuthorWorkspaceMetadata(root, plan);
   const collection = yield* (yield* localLibrary).import.authored({
     root,
     source: { type: "local", path: root },
@@ -181,7 +148,7 @@ const registerOwnedWorkspace = Effect.fn("Author.registerOwnedWorkspace")(functi
   });
   if (validated.descriptor.skills.length === 0)
     return yield* new ImportContentInvalid({ diagnostics: ["retained Skills are missing"] });
-  yield* writeJsonAtomic(path, { ...plan.workspace, registration: "registered" });
+  yield* writeAuthorWorkspace(root, { ...plan.workspace, registration: "registered" });
   return collection;
 });
 
@@ -192,7 +159,7 @@ export const ensureAuthorWorkspaceRegistered = Effect.fn("Author.ensureWorkspace
   const root = resolve(input);
   const store = yield* LibraryStore;
   const state = yield* store.load;
-  const plan = yield* planWorkspace(root, state, options);
+  const plan = yield* planAuthorWorkspace(root, state, options);
   const initialized = options.scaffold ? yield* initSkit(root) : undefined;
   const entry = yield* registerOwnedWorkspace(root, plan, options.register ?? false);
   return { initialized, entry };

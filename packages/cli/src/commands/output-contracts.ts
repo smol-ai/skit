@@ -131,7 +131,7 @@ export const outputContracts = {
   disable: effectOutput("skit.disable.v10", SetEnabledResult),
   disablePlan: effectOutput("skit.disable.plan.v9", SetEnabledChange),
   publish: effectOutput("skit.publish.v1", releasePublishResponseSchema),
-  sync: effectOutput("skit.author.sync.v3", AuthorSyncResult),
+  sync: effectOutput("skit.author.sync.v4", AuthorSyncResult),
   librarySync: effectOutput("skit.library.sync.v11", SyncResult),
   libraryHistory: effectOutput(
     "skit.library.history.v1",

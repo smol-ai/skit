@@ -27,3 +27,6 @@ export const sha256Hash = Effect.fn("Hash.sha256")(function* (bytes: Uint8Array)
   const hex = yield* (yield* Digest.Digest).digestHex(Digest.sha256, bytes);
   return `sha256:${hex}` as const satisfies Hash;
 });
+
+/** A hash's hex digits without the `sha256:` prefix, as stored objects are named. */
+export const hashHex = (hash: Hash) => hash.slice("sha256:".length);

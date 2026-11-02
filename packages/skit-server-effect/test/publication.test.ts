@@ -39,7 +39,7 @@ const prepareDatabase = Effect.fn("PublicationTest.prepareDatabase")(function* (
   yield* Effect.flatMap(D1Client.D1Client, (sql) =>
     sql.batch([
       sql`DROP TABLE IF EXISTS releases`,
-      sql`DROP TABLE IF EXISTS draft_files`,
+      sql`DROP TABLE IF EXISTS draft_tree_entries`,
       sql`DROP TABLE IF EXISTS draft_revisions`,
       sql`DROP TABLE IF EXISTS drafts`,
       sql`CREATE TABLE drafts (
@@ -47,12 +47,12 @@ const prepareDatabase = Effect.fn("PublicationTest.prepareDatabase")(function* (
         current_revision_id TEXT, PRIMARY KEY (owner_slug, skit_slug)
       )`,
       sql`CREATE TABLE draft_revisions (
-        revision_id TEXT PRIMARY KEY, owner_slug TEXT NOT NULL, skit_slug TEXT NOT NULL,
-        descriptor_json TEXT NOT NULL
+        owner_slug TEXT NOT NULL, skit_slug TEXT NOT NULL, revision_id TEXT NOT NULL,
+        tree_hash TEXT NOT NULL, descriptor_json TEXT NOT NULL
       )`,
-      sql`CREATE TABLE draft_files (
-        revision_id TEXT NOT NULL, path TEXT NOT NULL, blob_digest TEXT NOT NULL,
-        byte_length INTEGER NOT NULL, media_type TEXT NOT NULL, executable INTEGER NOT NULL
+      sql`CREATE TABLE draft_tree_entries (
+        tree_hash TEXT NOT NULL, path TEXT NOT NULL, kind TEXT NOT NULL, mode INTEGER,
+        blob_hash TEXT, byte_length INTEGER
       )`,
       sql`CREATE TABLE releases (
         owner_slug TEXT NOT NULL, skit_slug TEXT NOT NULL, version TEXT NOT NULL,
@@ -63,7 +63,7 @@ const prepareDatabase = Effect.fn("PublicationTest.prepareDatabase")(function* (
       )`,
       sql`INSERT INTO drafts VALUES ('alice', 'tools', 'private', 'draft_current')`,
       sql`INSERT INTO draft_revisions
-          VALUES ('draft_current', 'alice', 'tools', ${JSON.stringify(descriptor)})`,
+          VALUES ('alice', 'tools', 'draft_current', 'tree_current', ${JSON.stringify(descriptor)})`,
     ]),
   );
   for (const [path, content] of files) {
@@ -71,8 +71,8 @@ const prepareDatabase = Effect.fn("PublicationTest.prepareDatabase")(function* (
     yield* Effect.flatMap(
       D1Client.D1Client,
       (sql) =>
-        sql`INSERT INTO draft_files VALUES ('draft_current', ${path}, ${digest},
-            ${content.byteLength}, ${path === "skit.json" ? "application/json" : "text/markdown"}, 0)`,
+        sql`INSERT INTO draft_tree_entries VALUES ('tree_current', ${path}, 'file', 420, ${digest},
+            ${content.byteLength})`,
     );
   }
 });

@@ -10,9 +10,11 @@ const AuthorIdentity = Schema.Struct({
   locator: Schema.String,
 });
 
-const SyncConflict = Schema.Struct({
+/** A conflict a merge decided, and whose version it kept. */
+const SyncChoice = Schema.Struct({
   path: Schema.String,
   kind: Schema.Literals(["both_modified", "delete_modify", "binary", "descriptor"]),
+  kept: Schema.Literals(["local", "remote"]),
 });
 
 const syncResult = <const Status extends string, const Fields extends Schema.Struct.Fields>(
@@ -20,11 +22,13 @@ const syncResult = <const Status extends string, const Fields extends Schema.Str
   fields: Fields,
 ) => Schema.Struct({ status: Schema.Literal(status), changed: Schema.Boolean, ...fields });
 
+const count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
 export const AuthorSyncResult = Schema.Union([
   syncResult("first_sync_ready", {
     identity: AuthorIdentity,
     visibility: AuthorVisibility,
-    file_count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    file_count: count,
     effects: Schema.Array(Schema.Literals(["create_skit", "create_draft", "record_remote_home"])),
   }),
   syncResult("created", {
@@ -35,14 +39,17 @@ export const AuthorSyncResult = Schema.Union([
     remote_home_recorded: Schema.Boolean,
     published: Schema.Boolean,
   }),
-  syncResult("bound", { revision_id: Schema.String }),
-  syncResult("clean", { revision_id: Schema.String }),
-  syncResult("merge_ready", { paths: Schema.Array(Schema.String) }),
+  /** A preview: what `--apply` would do. */
+  syncResult("ready", { action: Schema.Literals(["pull", "push", "merge"]) }),
+  syncResult("up_to_date", { revision_id: Schema.String }),
+  syncResult("pulled", { revision_id: Schema.String, paths: Schema.Array(Schema.String) }),
+  syncResult("pushed", { revision_id: Schema.String }),
   syncResult("merged", {
     revision_id: Schema.String,
     paths: Schema.Array(Schema.String),
+    choices: Schema.Array(SyncChoice),
   }),
-  syncResult("conflicted", { conflicts: Schema.Array(SyncConflict) }),
-  syncResult("unbound_conflict", { conflicts: Schema.Array(SyncConflict) }),
+  /** Too many local deletions; `--allow-large-deletion` approves this exact removal. */
+  syncResult("blocked", { deleting: count, of: count, paths: Schema.Array(Schema.String) }),
 ]);
 export type AuthorSyncResult = typeof AuthorSyncResult.Type;

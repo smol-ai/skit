@@ -15,7 +15,7 @@ import {
 } from "../platform/cloudflare.js";
 
 const DraftRow = Schema.Struct({
-  current_revision_id: Schema.String,
+  current_revision_id: Schema.NullOr(Schema.String),
   visibility: Schema.Literals(["public", "unlisted", "private"]),
 });
 const ReleaseRow = Schema.Struct({ release_id: Schema.String });
@@ -112,11 +112,16 @@ export const layer = Layer.effect(
       );
       if (draftRows[0] === undefined) return yield* new DraftNotFound();
       const draft = yield* decodeDraft(draftRows[0]);
-      if (input.revisionId !== undefined && input.revisionId !== draft.current_revision_id)
+      // A Draft that no device has pointed at yet has nothing to publish.
+      const current = draft.current_revision_id;
+      if (current === null) return yield* new DraftNotFound();
+      if (input.revisionId !== undefined && input.revisionId !== current)
         return yield* new StaleDraftRevision();
 
       const diagnostics = yield* verifyReleaseArchive(
-        draft.current_revision_id,
+        input.owner,
+        input.slug,
+        current,
         input.archive,
       ).pipe(
         Effect.provideService(Bindings, bindings),
@@ -146,7 +151,7 @@ export const layer = Layer.effect(
            (owner_slug, skit_slug, version, release_id, source_revision, archive_digest,
             archive_bytes, archive_object_key, published_at, visibility)
            VALUES (${input.owner}, ${input.slug}, ${input.version}, ${releaseId},
-                   ${draft.current_revision_id}, ${archiveDigest}, ${input.archive.byteLength},
+                   ${current}, ${archiveDigest}, ${input.archive.byteLength},
                    ${objectKey}, ${publishedAt}, ${draft.visibility})`,
       );
       yield* insert.pipe(
@@ -175,7 +180,7 @@ export const layer = Layer.effect(
       return {
         release_id: releaseId,
         version: input.version,
-        revision_id: draft.current_revision_id,
+        revision_id: current,
         archive_digest: archiveDigest,
       };
     });

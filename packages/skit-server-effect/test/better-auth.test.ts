@@ -1202,8 +1202,8 @@ describe("Better Auth adapter", () => {
         D1Client.D1Client,
         (
           sql,
-        ) => sql`INSERT INTO drafts (owner_slug, skit_slug, title, visibility, current_revision_id, created_at, updated_at)
-          VALUES ('operator', 'tools', 'Tools', 'private', 'revision_tools', '2026-01-01', '2026-01-01')`,
+        ) => sql`INSERT INTO drafts (owner_slug, skit_slug, visibility, current_revision_id, created_at, updated_at)
+          VALUES ('operator', 'tools', 'private', ${"sha256:7777777777777777777777777777777777777777777777777777777777777777"}, '2026-01-01', '2026-01-01')`,
       );
       const authorInventory = yield* request("/api/author/skits", {
         headers: { cookie: sessionCookie },
@@ -1214,7 +1214,8 @@ describe("Better Auth adapter", () => {
           {
             skit_id: "operator/tools",
             visibility: "private",
-            draft_revision_id: "revision_tools",
+            draft_revision_id:
+              "sha256:7777777777777777777777777777777777777777777777777777777777777777",
             most_recent_release_version: null,
           },
         ],

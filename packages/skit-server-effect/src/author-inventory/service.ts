@@ -4,6 +4,7 @@ import type { Principal } from "../auth/authentication.js";
 import { Authorization, type AuthorizationService } from "../authorization/service.js";
 import { DatabaseError, databaseError, type DatabaseSqlClient } from "../platform/cloudflare.js";
 import type { AuthorSkitSummary } from "@smolai/skit-core/universal/api";
+import { History } from "@smolai/skit-core/universal/authoring";
 
 const ACCESS_BATCH_SIZE = 40;
 const SUBREQUEST_CONCURRENCY = 4;
@@ -13,7 +14,7 @@ const DraftRow = Schema.Struct({
   owner_slug: Schema.String,
   skit_slug: Schema.String,
   visibility: Schema.Literals(["public", "unlisted", "private"]),
-  current_revision_id: Schema.String,
+  current_revision_id: History.RevisionId,
   most_recent_release_version: Schema.NullOr(Schema.String),
 });
 

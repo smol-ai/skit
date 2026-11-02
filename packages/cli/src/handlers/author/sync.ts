@@ -24,6 +24,7 @@ import { result } from "../contracts.js";
 export const authorSyncCommand = Effect.fn("CLI.authorSync")(function* <AuthError>(options: {
   readonly root?: string;
   readonly apply: boolean;
+  readonly allowLargeDeletion?: boolean;
   readonly home?: string;
   readonly to?: string;
   readonly visibility?: AuthorVisibility;
@@ -56,6 +57,7 @@ export const authorSyncCommand = Effect.fn("CLI.authorSync")(function* <AuthErro
     Effect.scoped(
       syncDraft(options.root ?? ".", {
         apply: options.apply,
+        allowLargeDeletion: options.allowLargeDeletion,
         home: options.home,
         baseUrl: credentials.origin,
         token: credentials.token,
@@ -73,14 +75,19 @@ const visibility = Flag.Literals("visibility", ["private", "unlisted", "public"]
   Flag.optional,
 );
 const apply = Flag.Boolean("apply").pipe(
-  Flag.withDescription("Apply a conflict-free merge."),
+  Flag.withDescription("Apply the sync plan."),
+  Flag.withDefault(false),
+);
+
+const allowLargeDeletion = Flag.Boolean("allow-large-deletion").pipe(
+  Flag.withDescription("Allow deleting all files, or more than five files and half the tree."),
   Flag.withDefault(false),
 );
 
 export const authorSyncCliCommand = Command.make(
   "sync",
-  { path, to, visibility, apply, home: homeFlag, json: jsonFlag },
-  ({ path, to, visibility, apply, home }) =>
+  { path, to, visibility, apply, allowLargeDeletion, home: homeFlag, json: jsonFlag },
+  ({ path, to, visibility, apply, allowLargeDeletion, home }) =>
     Effect.gen(function* () {
       const paths = yield* SkitConfiguration;
 
@@ -92,13 +99,15 @@ export const authorSyncCliCommand = Command.make(
           const value = yield* authorSyncCommand({
             root: Option.getOrUndefined(path),
             apply,
+            allowLargeDeletion,
             home: selectedHome,
             to: Option.getOrUndefined(to),
             visibility: Option.getOrUndefined(visibility),
             authState,
           });
-          const conflicted = value.status === "conflicted" || value.status === "unbound_conflict";
-          yield* renderer.result(result("sync", value, conflicted ? 12 : undefined));
+          yield* renderer.result(
+            result("sync", value, value.status === "blocked" ? 12 : undefined),
+          );
         }),
       );
     }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),

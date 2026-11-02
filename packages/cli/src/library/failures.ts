@@ -55,7 +55,9 @@ export class AuthorWorkspaceAlreadyRegistered
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  readonly remediation = "Use the existing registration, or remove it before registering again.";
+  get remediation(): string {
+    return `Use the existing workspace at ${this.at}. If this folder is a copy, remove .skit/workspace.json only in the copy, then register it again for a new identity.`;
+  }
   get message(): string {
     return `Author Workspace ${this.workspaceId} is already registered at ${this.at}`;
   }

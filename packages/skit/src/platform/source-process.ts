@@ -8,11 +8,12 @@ const DEFAULT_STDOUT_BYTES = 4_000_000;
 const DEFAULT_STDERR_BYTES = 8_000;
 
 export interface SourceProcessOptions {
+  readonly stdin?: Stream.Stream<Uint8Array, PlatformError>;
   readonly cwd?: string;
   readonly timeoutMs?: number;
   readonly maxOutputBytes?: number;
   readonly maxErrorBytes?: number;
-  readonly environment?: Readonly<Record<string, string>>;
+  readonly environment?: Readonly<Record<string, string | undefined>>;
 }
 
 export interface SourceProcessResult {
@@ -100,13 +101,16 @@ export const sourceProcessLayer: Layer.Layer<
       const invocation = invocationOf(command, args);
       const outputLimit = options.maxOutputBytes ?? DEFAULT_STDOUT_BYTES;
       const errorLimit = options.maxErrorBytes ?? DEFAULT_STDERR_BYTES;
-      let child: ChildProcess.Command = ChildProcess.make(command, [...args], { extendEnv: true });
-      if (options.cwd !== undefined) child = ChildProcess.setCwd(child, options.cwd);
       const environment = {
         ...(command === "git" || command.endsWith("/git") ? { GIT_TERMINAL_PROMPT: "0" } : {}),
         ...options.environment,
       };
-      if (Object.keys(environment).length > 0) child = ChildProcess.setEnv(child, environment);
+      const child = ChildProcess.make(command, [...args], {
+        cwd: options.cwd,
+        extendEnv: true,
+        env: environment,
+        ...(options.stdin === undefined ? {} : { stdin: options.stdin }),
+      });
 
       const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
       return yield* Effect.scoped(

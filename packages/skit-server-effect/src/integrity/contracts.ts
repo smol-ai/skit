@@ -8,7 +8,6 @@ export const ArtifactFile = Schema.Struct({
   path: safePathSchema,
   bytes: Schema.Uint8Array,
   digest: Hash,
-  media_type: NonEmptyString,
   executable: Schema.Boolean,
 });
 export interface ArtifactFile extends Schema.Schema.Type<typeof ArtifactFile> {}
