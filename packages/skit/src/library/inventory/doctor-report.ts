@@ -21,7 +21,7 @@ export type LibraryDoctorReport = typeof LibraryDoctorReport.Type;
 
 export function libraryDoctorReport(state: LibraryState): LibraryDoctorReport {
   const issues: LibraryDoctorIssue[] = state.installed_skills
-    .filter((item) => item.status !== "installed" && item.status !== "unsupported")
+    .filter((item) => item.status !== "installed")
     .map((item) => ({
       code: item.status === "conflicted" ? "PROJECTION_CONFLICT" : "PROJECTION_DRIFT",
       skillId: item.skill_id,

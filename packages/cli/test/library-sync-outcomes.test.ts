@@ -607,8 +607,8 @@ const cases: readonly {
           (item) => item.installed_skill_id === installedSkill.installed_skill_id,
         );
         assert.deepStrictEqual(
-          [recorded?.status, recorded?.current_hash],
-          ["conflicted", currentHash],
+          recorded?.status === "conflicted" ? recorded.current_hash : recorded?.status,
+          currentHash,
         );
         yield* fs.remove(join(a.root, "second"));
         assert.strictEqual((yield* a.sync()).status, "clean");

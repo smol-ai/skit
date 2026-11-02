@@ -12,7 +12,7 @@ import {
   Skill,
   librarySnapshotDigests,
 } from "./library-contracts.js";
-import { HarnessInstallStatus, LibraryDeviceStateFields } from "./store/state-schema.js";
+import { LibraryDeviceStateFields } from "./store/state-schema.js";
 import { Hash, InvocationPolicy, RecordedInstallDestination } from "../vocabulary.js";
 import { canonicalJson } from "../shared/json.js";
 
@@ -33,21 +33,67 @@ export const Repository = Schema.Struct({
 });
 export interface Repository extends Schema.Schema.Type<typeof Repository> {}
 
-export const InstalledSkill = Schema.Struct({
+/** What every installed copy records, whatever its status. */
+const InstalledSkillFields = {
   installed_skill_id: InstalledSkillId,
   skill_id: SkillId,
   skill_version_id: SkillVersionId,
   destination: RecordedInstallDestination,
   root: AbsoluteDevicePath,
   path: AbsoluteDevicePath,
+  /** The hash of the folder SKIT wrote. */
   expected_hash: Hash,
-  current_hash: Schema.mutableKey(Schema.optional(Hash)),
-  status: Schema.mutableKey(HarnessInstallStatus),
-  suppression_reason: Schema.mutableKey(Schema.optional(Schema.Literal("native_delete"))),
-  suppressed_at: Schema.mutableKey(Schema.optional(Schema.String)),
   installed_at: Schema.String,
+} as const;
+
+/** On disk exactly as SKIT wrote it. */
+export const InstalledSkillInstalled = Schema.Struct({
+  ...InstalledSkillFields,
+  status: Schema.Literal("installed"),
 });
-export interface InstalledSkill extends Schema.Schema.Type<typeof InstalledSkill> {}
+export interface InstalledSkillInstalled extends Schema.Schema.Type<
+  typeof InstalledSkillInstalled
+> {}
+
+/** Recorded, but not on disk as SKIT wrote it: not written yet, or moved to recovery. */
+export const InstalledSkillPending = Schema.Struct({
+  ...InstalledSkillFields,
+  status: Schema.Literal("pending"),
+});
+export interface InstalledSkillPending extends Schema.Schema.Type<typeof InstalledSkillPending> {}
+
+/** The folder holds something other than what SKIT wrote: the user's edit, or a folder SKIT does not own. */
+export const InstalledSkillConflicted = Schema.Struct({
+  ...InstalledSkillFields,
+  status: Schema.Literal("conflicted"),
+  current_hash: Hash,
+});
+export interface InstalledSkillConflicted extends Schema.Schema.Type<
+  typeof InstalledSkillConflicted
+> {}
+
+/** The user deleted the folder; SKIT does not put it back unless asked to restore it. */
+export const InstalledSkillSuppressed = Schema.Struct({
+  ...InstalledSkillFields,
+  status: Schema.Literal("suppressed"),
+  suppression_reason: Schema.Literal("native_delete"),
+  suppressed_at: Schema.optionalKey(Schema.String),
+});
+export interface InstalledSkillSuppressed extends Schema.Schema.Type<
+  typeof InstalledSkillSuppressed
+> {}
+
+export const InstalledSkill = Schema.Union([
+  InstalledSkillInstalled,
+  InstalledSkillPending,
+  InstalledSkillConflicted,
+  InstalledSkillSuppressed,
+]);
+export type InstalledSkill =
+  | InstalledSkillInstalled
+  | InstalledSkillPending
+  | InstalledSkillConflicted
+  | InstalledSkillSuppressed;
 
 /**
  * The portable Library this state was last reconciled with. It lives in the same document as the
@@ -72,7 +118,7 @@ export const DeviceSkillSelection = Schema.Union([
 ]);
 export type DeviceSkillSelection = typeof DeviceSkillSelection.Type;
 
-export const CURRENT_LIBRARY_STATE_VERSION = 10 as const;
+export const CURRENT_LIBRARY_STATE_VERSION = 11 as const;
 
 export const LibraryState = Schema.Struct({
   ...LibraryDeviceStateFields,

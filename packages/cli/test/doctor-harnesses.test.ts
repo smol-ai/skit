@@ -1,7 +1,12 @@
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { Effect, Fiber, FileSystem, Layer, Result, Schedule, Schema } from "effect";
-import { SourceProcess, LibraryStore, libraryDoctorReport } from "@smolai/skit-core";
+import {
+  InstalledSkillStatus,
+  SourceProcess,
+  LibraryStore,
+  libraryDoctorReport,
+} from "@smolai/skit-core";
 import { ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
 import { expect, test } from "vitest";
@@ -390,7 +395,6 @@ test("doctor treats matching managed targets with the shared copy selected as he
 });
 
 test.each([
-  "different-content",
   "different-version",
   "edited",
   "foreign",
@@ -401,10 +405,10 @@ test.each([
   const { state, check } = collisionFixture();
   const claude = state.installed_skills[1];
   if (!claude) throw new Error("Missing fixture installed skill");
-  if (kind === "different-content") claude.current_hash = `sha256:${"b".repeat(64)}`;
+  if (kind === "edited")
+    state.installed_skills[1] = InstalledSkillStatus.conflicted(claude, `sha256:${"b".repeat(64)}`);
   if (kind === "different-version")
     state.installed_skills[1] = { ...claude, skill_version_id: makeSkillVersionId() };
-  if (kind === "edited") claude.status = "conflicted";
   if (kind === "foreign") state.installed_skills.pop();
   if (kind === "claude-selected")
     check.skills = [
@@ -426,7 +430,6 @@ test("doctor accepts intact target-specific invocation renderings of the same Ve
   state.installed_skills[1] = {
     ...claude,
     expected_hash: claudeHash,
-    current_hash: claudeHash,
   };
   expect(classifyOpenCodeWarnings(check, state).warnings).toEqual([]);
 });

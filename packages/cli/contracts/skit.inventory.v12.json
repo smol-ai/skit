@@ -383,96 +383,235 @@
     "installed_skills": {
       "type": "array",
       "items": {
-        "type": "object",
-        "properties": {
-          "installed_skill_id": {
-            "type": "string"
-          },
-          "skill_id": {
-            "type": "string"
-          },
-          "skill_version_id": {
-            "type": "string"
-          },
-          "destination": {
-            "type": "string",
-            "enum": [
-              "agents",
-              "claude",
-              "legacy"
-            ]
-          },
-          "root": {
-            "type": "string"
-          },
-          "path": {
-            "type": "string"
-          },
-          "expected_hash": {
-            "type": "string",
-            "pattern": "^sha256:[a-f0-9]{64}$"
-          },
-          "current_hash": {
-            "anyOf": [
-              {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "installed_skill_id": {
+                "type": "string"
+              },
+              "skill_id": {
+                "type": "string"
+              },
+              "skill_version_id": {
+                "type": "string"
+              },
+              "destination": {
+                "type": "string",
+                "enum": [
+                  "agents",
+                  "claude",
+                  "legacy"
+                ]
+              },
+              "root": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "expected_hash": {
                 "type": "string",
                 "pattern": "^sha256:[a-f0-9]{64}$"
               },
-              {
-                "type": "null"
+              "installed_at": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "installed"
+                ]
               }
-            ]
+            },
+            "required": [
+              "installed_skill_id",
+              "skill_id",
+              "skill_version_id",
+              "destination",
+              "root",
+              "path",
+              "expected_hash",
+              "installed_at",
+              "status"
+            ],
+            "additionalProperties": true
           },
-          "status": {
-            "type": "string",
-            "enum": [
-              "pending",
-              "installed",
-              "drifted",
-              "conflicted",
-              "unsupported",
-              "suppressed"
-            ]
+          {
+            "type": "object",
+            "properties": {
+              "installed_skill_id": {
+                "type": "string"
+              },
+              "skill_id": {
+                "type": "string"
+              },
+              "skill_version_id": {
+                "type": "string"
+              },
+              "destination": {
+                "type": "string",
+                "enum": [
+                  "agents",
+                  "claude",
+                  "legacy"
+                ]
+              },
+              "root": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "expected_hash": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "installed_at": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "pending"
+                ]
+              }
+            },
+            "required": [
+              "installed_skill_id",
+              "skill_id",
+              "skill_version_id",
+              "destination",
+              "root",
+              "path",
+              "expected_hash",
+              "installed_at",
+              "status"
+            ],
+            "additionalProperties": true
           },
-          "suppression_reason": {
-            "anyOf": [
-              {
+          {
+            "type": "object",
+            "properties": {
+              "installed_skill_id": {
+                "type": "string"
+              },
+              "skill_id": {
+                "type": "string"
+              },
+              "skill_version_id": {
+                "type": "string"
+              },
+              "destination": {
+                "type": "string",
+                "enum": [
+                  "agents",
+                  "claude",
+                  "legacy"
+                ]
+              },
+              "root": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "expected_hash": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "installed_at": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "conflicted"
+                ]
+              },
+              "current_hash": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "installed_skill_id",
+              "skill_id",
+              "skill_version_id",
+              "destination",
+              "root",
+              "path",
+              "expected_hash",
+              "installed_at",
+              "status",
+              "current_hash"
+            ],
+            "additionalProperties": true
+          },
+          {
+            "type": "object",
+            "properties": {
+              "installed_skill_id": {
+                "type": "string"
+              },
+              "skill_id": {
+                "type": "string"
+              },
+              "skill_version_id": {
+                "type": "string"
+              },
+              "destination": {
+                "type": "string",
+                "enum": [
+                  "agents",
+                  "claude",
+                  "legacy"
+                ]
+              },
+              "root": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              },
+              "expected_hash": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              "installed_at": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "suppressed"
+                ]
+              },
+              "suppression_reason": {
                 "type": "string",
                 "enum": [
                   "native_delete"
                 ]
               },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "suppressed_at": {
-            "anyOf": [
-              {
+              "suppressed_at": {
                 "type": "string"
-              },
-              {
-                "type": "null"
               }
-            ]
-          },
-          "installed_at": {
-            "type": "string"
+            },
+            "required": [
+              "installed_skill_id",
+              "skill_id",
+              "skill_version_id",
+              "destination",
+              "root",
+              "path",
+              "expected_hash",
+              "installed_at",
+              "status",
+              "suppression_reason"
+            ],
+            "additionalProperties": true
           }
-        },
-        "required": [
-          "installed_skill_id",
-          "skill_id",
-          "skill_version_id",
-          "destination",
-          "root",
-          "path",
-          "expected_hash",
-          "status",
-          "installed_at"
-        ],
-        "additionalProperties": true
+        ]
       }
     },
     "machine": {

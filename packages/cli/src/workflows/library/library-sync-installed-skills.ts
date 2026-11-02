@@ -2,6 +2,7 @@ import { localLibrary } from "../../library-application/library-owner.js";
 import { Effect, Option, Schema } from "effect";
 import { join } from "node:path";
 import {
+  InstalledSkillStatus,
   LibraryManifest,
   LibraryState,
   InstalledSkill,
@@ -236,11 +237,7 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
               resolution: "local",
             }),
           );
-          installedSkills.push({
-            ...installedSkill,
-            status: "conflicted",
-            current_hash: ownership.observed,
-          });
+          installedSkills.push(InstalledSkillStatus.conflicted(installedSkill, ownership.observed));
           continue;
         }
         // Normal updates preserve edited bytes as variants. Inactive routes are reported by
@@ -253,14 +250,14 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
           (!removing || !missingVersion) &&
           (!missingVersion || selected !== undefined)
         ) {
-          installedSkills.push({
-            ...installedSkill,
-            ...(missingVersion && selected !== undefined
-              ? { skill_version_id: selected.skill_version_id }
-              : {}),
-            status: "conflicted",
-            current_hash: ownership.observed,
-          });
+          installedSkills.push(
+            InstalledSkillStatus.conflicted(
+              missingVersion && selected !== undefined
+                ? { ...installedSkill, skill_version_id: selected.skill_version_id }
+                : installedSkill,
+              ownership.observed,
+            ),
+          );
           continue;
         }
         conflicts.push(
@@ -291,15 +288,15 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
       continue;
     }
     if (reidentifying) toUninstall.push(original.installed_skill_id);
-    installedSkills.push({
-      ...installedSkill,
-      ...(reidentifying && installedSkill.suppression_reason !== "native_delete"
-        ? { status: "pending" as const }
-        : {}),
-      ...(missingVersion && selected !== undefined
-        ? { skill_version_id: selected.skill_version_id }
-        : {}),
-    });
+    const versioned =
+      missingVersion && selected !== undefined
+        ? { ...installedSkill, skill_version_id: selected.skill_version_id }
+        : installedSkill;
+    installedSkills.push(
+      reidentifying && versioned.status !== "suppressed"
+        ? InstalledSkillStatus.pending(versioned)
+        : versioned,
+    );
   }
   return yield* SyncInstalledSkillPlan.makeEffect({
     projections: installedSkills,

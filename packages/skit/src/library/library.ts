@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { collectionVersionPath } from "./collection-version.js";
 import { Clock, Context, Data, Effect, FileSystem, Layer, Option, Predicate, Result } from "effect";
 import { InstalledSkills } from "./installed-skills.js";
+import * as InstalledSkillStatus from "./installed-skill-status.js";
 import {
   LibraryStore,
   withLibraryWriter,
@@ -370,12 +371,12 @@ export const make = Effect.gen(function* () {
       if (onConflict === "throw") return yield* new UninstallConflict({ detail: message });
       recorder.copies.push({
         _tag: "Conflicted",
-        copy: { ...copy, status: "conflicted", current_hash: owned.hash },
+        copy: InstalledSkillStatus.conflicted(copy, owned.hash),
       });
       return { kind: "conflicted" as const, observed: owned.hash };
     }
     yield* unwrap(files.uninstall(copy.root, copy.path, copy.installed_skill_id));
-    const pending: InstalledSkill = { ...copy, status: "pending" };
+    const pending = InstalledSkillStatus.pending(copy);
     recorder.onDisk.set(copy.installed_skill_id, pending);
     recorder.copies.push({ _tag: "Uninstalled", copy });
     return { kind: "uninstalled" as const, observed: owned.hash };
@@ -480,11 +481,7 @@ export const make = Effect.gen(function* () {
           return yield* new InstalledSkillInvalid({ detail: `${decided.failure}: ${path}` });
         const decision = decided.success;
         const written = (installed: InstalledSkills.Installed) => {
-          const result: InstalledSkill = {
-            ...row,
-            status: "installed",
-            current_hash: installed.hash,
-          };
+          const result = InstalledSkillStatus.installed(row, installed.hash);
           recorder.onDisk.set(result.installed_skill_id, result);
           recorder.copies.push({ _tag: "Installed", copy: result });
           return result;
@@ -503,7 +500,10 @@ export const make = Effect.gen(function* () {
                 // An unverified successor now stands where the original was: never call it pending.
                 const now = yield* files.inspect(path).pipe(Effect.option);
                 if (prior !== undefined && Option.isSome(now) && now.value.entry._tag === "Absent")
-                  recorder.onDisk.set(prior.installed_skill_id, { ...prior, status: "pending" });
+                  recorder.onDisk.set(
+                    prior.installed_skill_id,
+                    InstalledSkillStatus.pending(prior),
+                  );
               }),
             ),
             unwrap,
@@ -511,13 +511,10 @@ export const make = Effect.gen(function* () {
           );
         switch (decision._tag) {
           case "KeepSuppressed": {
-            const result: InstalledSkill = {
-              ...row,
-              status: "suppressed",
-              suppression_reason: "native_delete",
-              ...(prior?.suppressed_at === undefined ? {} : { suppressed_at: prior.suppressed_at }),
-              ...(prior?.current_hash === undefined ? {} : { current_hash: prior.current_hash }),
-            };
+            const result = InstalledSkillStatus.suppressed(
+              row,
+              prior?.status === "suppressed" ? prior.suppressed_at : undefined,
+            );
             recorder.copies.push({ _tag: "Suppressed", copy: result });
             return result;
           }
@@ -538,21 +535,16 @@ export const make = Effect.gen(function* () {
                   ),
                 ),
               );
-            const result: InstalledSkill = {
-              ...row,
-              ...(decision.edited ? { expected_hash: decision.expectedHash } : {}),
-              status: "conflicted",
-              current_hash: decision.hash,
-            };
+            const result = InstalledSkillStatus.conflicted(
+              row,
+              decision.hash,
+              decision.edited ? decision.expectedHash : row.expected_hash,
+            );
             recorder.copies.push({ _tag: "Conflicted", copy: result });
             return result;
           }
           case "Unchanged": {
-            const result: InstalledSkill = {
-              ...row,
-              status: "installed",
-              current_hash: staged.hash,
-            };
+            const result = InstalledSkillStatus.installed(row);
             recorder.copies.push({ _tag: "Unchanged", copy: result });
             return result;
           }
@@ -692,10 +684,10 @@ export const make = Effect.gen(function* () {
             active.some((destination) => destination === copy.destination) ? "throw" : "report",
             `Refusing to remove modified ${skill.name} at ${copy.path}`,
           );
-          if (result.kind === "conflicted") {
-            copy.status = "conflicted";
-            copy.current_hash = result.observed;
-          } else removeRow(copy.installed_skill_id);
+          if (result.kind === "conflicted")
+            candidate.installed_skills[candidate.installed_skills.indexOf(copy)] =
+              InstalledSkillStatus.conflicted(copy, result.observed);
+          else removeRow(copy.installed_skill_id);
         }
         if (!options.install) return;
         const former: InstalledSkill[] = [];
@@ -1113,7 +1105,9 @@ export const make = Effect.gen(function* () {
                   );
                   if (removal.drop.includes(id))
                     candidate.installed_skills.splice(candidate.installed_skills.indexOf(copy), 1);
-                  else if (copy.suppression_reason !== "native_delete") copy.status = "pending";
+                  else if (copy.status !== "suppressed")
+                    candidate.installed_skills[candidate.installed_skills.indexOf(copy)] =
+                      InstalledSkillStatus.pending(copy);
                 }
               }),
             );

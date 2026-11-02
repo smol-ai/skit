@@ -114,6 +114,7 @@ export * as InstalledSkillFiles from "./install/files.js";
 export * as InstalledSkillBackups from "./install/backups.js";
 
 export { InstalledSkills } from "./library/installed-skills.js";
+export * as InstalledSkillStatus from "./library/installed-skill-status.js";
 export { InstalledSkillsNode } from "./library/installed-skills-node.js";
 export { Library } from "./library/library.js";
 export type {

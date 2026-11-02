@@ -4,6 +4,7 @@ import { syncJourney } from "./sync-journey.js";
 import { join } from "node:path";
 import { ConfigProvider, Effect, FileSystem, Option, Schema } from "effect";
 import {
+  CURRENT_LIBRARY_STATE_VERSION,
   LibraryState,
   LibraryStore,
   libraryAuditLogLayer,
@@ -42,7 +43,7 @@ const skillId = makeSkillId();
 const importId = makeImportId();
 const machineId = makeMachineId();
 const storyState = Schema.decodeUnknownSync(LibraryState)({
-  schemaVersion: 10,
+  schemaVersion: CURRENT_LIBRARY_STATE_VERSION,
   collections: [
     {
       collection_id: collectionId,
@@ -166,7 +167,6 @@ const previewDoctorCleanup = Effect.scoped(
               root: skillsRoot,
               path,
               expected_hash: hash,
-              current_hash: hash,
               status: "installed",
               installed_at: "2026-10-18T00:00:00.000Z",
             },

@@ -1004,7 +1004,6 @@ it.effect(
       yield* refresh;
       const deleted = (yield* load).installed_skills[0];
       assert.strictEqual(deleted?.status, "suppressed");
-      assert.strictEqual(deleted?.suppression_reason, "native_delete");
     }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -1039,7 +1038,7 @@ for (const stale of ["observed-successor", "settle-failure"] as const)
       );
       yield* fs.remove(installedSkill.path, { recursive: true });
       yield* refresh;
-      assert.strictEqual((yield* load).installed_skills[0]?.suppression_reason, "native_delete");
+      assert.strictEqual((yield* load).installed_skills[0]?.status, "suppressed");
     }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
   );
 

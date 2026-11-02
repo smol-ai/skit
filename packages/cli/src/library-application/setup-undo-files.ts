@@ -39,7 +39,8 @@ export const installedSkillChoice = (installedSkill: InstalledSkill | undefined)
         target: installedSkill.destination,
         expected_hash: installedSkill.expected_hash,
         status: installedSkill.status,
-        suppressed_at: installedSkill.suppressed_at,
+        suppressed_at:
+          installedSkill.status === "suppressed" ? installedSkill.suppressed_at : undefined,
       };
 const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
 
