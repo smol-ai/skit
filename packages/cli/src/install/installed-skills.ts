@@ -2,7 +2,6 @@ import { Context, Effect, FileSystem, Layer, Option, Path } from "effect";
 import { Digest } from "effect/crypto";
 import {
   InstalledSkills,
-  InstalledSkillsNode,
   LinkStat,
   SourceProcess,
   TreeHasher,
@@ -24,7 +23,7 @@ import { findDuplicates, readableSkillsDirectories } from "./duplicates.js";
 export const make = Effect.fn("InstalledSkills.make")(function* (
   configuration?: InventoryRootOptions,
 ) {
-  if (configuration === undefined) return yield* InstalledSkillsNode.make();
+  if (configuration === undefined) return yield* InstalledSkills.make();
   const routing = {
     home: configuration.home,
     configHome: configuration.configHome,
@@ -45,7 +44,7 @@ export const make = Effect.fn("InstalledSkills.make")(function* (
   );
   const failed = (cause: InstalledSkills.Cause) =>
     new InstalledSkills.Failed({ path: routing.home, cause, displaced: Option.none() });
-  return yield* InstalledSkillsNode.make({
+  return yield* InstalledSkills.make({
     active: activeInstallDestinations(routing).pipe(
       Effect.provide(context),
       Effect.mapError(failed),

@@ -1,7 +1,6 @@
 import { Effect } from "effect";
 import {
   InstalledSkills,
-  InstalledSkillsNode,
   Library,
   LibraryStore,
   type Hash,
@@ -14,8 +13,8 @@ import {
 const library = (active?: readonly InstallDestination[]) =>
   Effect.gen(function* () {
     const files = yield* active === undefined
-      ? InstalledSkillsNode.make()
-      : InstalledSkillsNode.make({
+      ? InstalledSkills.make()
+      : InstalledSkills.make({
           active: Effect.succeed(active),
           destinations: () => Effect.succeed([]),
           duplicates: { scan: () => Effect.succeed({ copies: [], warnings: [], roots: [] }) },

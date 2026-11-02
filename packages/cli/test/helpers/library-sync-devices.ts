@@ -12,7 +12,6 @@ import {
   makeMachineId,
   Library,
   InstalledSkills,
-  InstalledSkillsNode,
   importCollection,
   withLibraryWriter,
   LibraryState,
@@ -198,7 +197,7 @@ export const devices = Effect.gen(function* () {
               )?.collection_id;
               assert.ok(id);
               const library = yield* Library.make.pipe(
-                Effect.provideService(InstalledSkills.Service, yield* InstalledSkillsNode.make()),
+                Effect.provideService(InstalledSkills.Service, yield* InstalledSkills.make()),
               );
               return yield* library.apply(
                 yield* library.plan([{ _tag: "Remove", collectionId: id }], { base: state }),

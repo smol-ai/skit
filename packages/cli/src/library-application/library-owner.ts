@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { InstalledSkills, InstalledSkillsNode, Library } from "@smolai/skit-core";
+import { InstalledSkills, Library } from "@smolai/skit-core";
 
 /**
  * The Library owner for work that needs no install routing: imports, removals and installs at
@@ -7,6 +7,6 @@ import { InstalledSkills, InstalledSkillsNode, Library } from "@smolai/skit-core
  */
 export const localLibrary = Effect.gen(function* () {
   return yield* Library.make.pipe(
-    Effect.provideService(InstalledSkills.Service, yield* InstalledSkillsNode.make()),
+    Effect.provideService(InstalledSkills.Service, yield* InstalledSkills.make()),
   );
 });

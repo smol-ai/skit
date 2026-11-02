@@ -1,7 +1,6 @@
 import { Effect } from "effect";
 import { Library } from "../../src/library/library.js";
 import { InstalledSkills } from "../../src/library/installed-skills.js";
-import { InstalledSkillsNode } from "../../src/library/installed-skills-node.js";
 import { CollectionRemovalMissing } from "../../src/library/installation/remove.js";
 import { LibraryStore } from "../../src/library/store/library-store.js";
 import type { LibraryState, InstalledSkill } from "../../src/library/library-state.js";
@@ -13,8 +12,8 @@ import type { Hash, InstallDestination } from "../../src/vocabulary.js";
 const library = (active?: readonly InstallDestination[]) =>
   Effect.gen(function* () {
     const files = yield* active === undefined
-      ? InstalledSkillsNode.make()
-      : InstalledSkillsNode.make({
+      ? InstalledSkills.make()
+      : InstalledSkills.make({
           active: Effect.succeed(active),
           destinations: () => Effect.succeed([]),
           duplicates: {
