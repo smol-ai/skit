@@ -40,7 +40,15 @@ export interface Facts {
   readonly insideRepository: boolean;
   /** `.git` or `skit.remote.json` inside the folder. */
   readonly holdsRepositoryFiles: boolean;
+  /**
+   * Why the folder is someone else's in itself, so no Library plan touches it: a repository's
+   * (`.git` or `skit.remote.json` inside it), an author's (`skit.json` or `.skit` inside it), or
+   * pnpm's. A repository above the folder does not protect it. Null when it is not; plain data,
+   * like the rest of an Observed, so it survives cloning into a plan.
+   */
+  readonly protection: Protection | null;
 }
+export type Protection = "repository" | "authored" | "package-manager";
 export type Entry =
   | { readonly _tag: "Absent" }
   | {

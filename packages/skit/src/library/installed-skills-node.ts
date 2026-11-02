@@ -14,6 +14,7 @@ import { deterministicTreeHash } from "../artifact/skit.js";
 import { ensureSkillsDirectoryWritable } from "../install/writable.js";
 import { installDestinationPathIdentity } from "../platform/path-identity.js";
 import { sha256Hash } from "../shared/hash.js";
+import { pnpmSkillOwner } from "../install/pnpm-skills.js";
 import type { TreeRequirements } from "../platform/tree-requirements.js";
 import type { OwnershipMarker } from "../contracts.js";
 import type { LibraryState } from "./library-state.js";
@@ -110,6 +111,15 @@ export const make = Effect.fn("InstalledSkills.make")(function* (routing?: Routi
       }
       if (dirname(directory) === directory) break;
     }
+    const holdsRepositoryFiles =
+      (yield* fs.exists(join(path, ".git"))) || (yield* fs.exists(join(path, "skit.remote.json")));
+    const protection: InstalledSkills.Protection | null = holdsRepositoryFiles
+      ? "repository"
+      : (yield* fs.exists(join(path, "skit.json"))) || (yield* fs.exists(join(path, ".skit")))
+        ? "authored"
+        : (yield* pnpmSkillOwner(path)) !== undefined
+          ? "package-manager"
+          : null;
     return {
       marker: yield* InstalledSkillFiles.inspectOwnershipMarker(path),
       hash: yield* deterministicTreeHash(path).pipe(
@@ -120,9 +130,8 @@ export const make = Effect.fn("InstalledSkills.make")(function* (routing?: Routi
       ),
       realPath,
       insideRepository,
-      holdsRepositoryFiles:
-        (yield* fs.exists(join(path, ".git"))) ||
-        (yield* fs.exists(join(path, "skit.remote.json"))),
+      holdsRepositoryFiles,
+      protection,
     } satisfies InstalledSkills.Facts;
   });
 

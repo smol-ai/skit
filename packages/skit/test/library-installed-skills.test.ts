@@ -700,19 +700,19 @@ it.effect(
     Effect.gen(function* () {
       const { fs, targetRoot, load, project } = yield* installedSkillFixture();
       const target = join(targetRoot, "review");
-      yield* fs.makeDirectory(join(target, ".git"), { recursive: true });
-      yield* fs.makeDirectory(join(target, "notes"));
-      yield* fs.writeFileString(join(target, ".git", "HEAD"), "ref: refs/heads/main\n");
+      yield* fs.makeDirectory(join(target, "notes", ".git"), { recursive: true });
+      yield* fs.makeDirectory(join(target, "empty"));
+      yield* fs.writeFileString(join(target, "notes", ".git", "HEAD"), "ref: refs/heads/main\n");
       yield* fs.writeFileString(join(target, "SKILL.md"), "raw Skill bytes\n");
       yield* project({
         root: targetRoot,
         manage: { path: target, currentHash: yield* deterministicTreeHash(target) },
       });
       assert.strictEqual(
-        yield* fs.readFileString(join(target, ".git", "HEAD")),
+        yield* fs.readFileString(join(target, "notes", ".git", "HEAD")),
         "ref: refs/heads/main\n",
       );
-      assert.strictEqual((yield* fs.stat(join(target, "notes"))).type, "Directory");
+      assert.strictEqual((yield* fs.stat(join(target, "empty"))).type, "Directory");
       assert.strictEqual((yield* inspectOwnershipMarker(target)).kind, "valid");
       assert.strictEqual((yield* load).installed_skills[0]?.status, "installed");
       assert.deepStrictEqual(yield* backupsBeside(targetRoot), []);
@@ -772,8 +772,8 @@ for (const content of ["reproducible", "git-bytes", "empty-directory"] as const)
         const target = join(targetRoot, "review");
         yield* project();
         if (content === "git-bytes") {
-          yield* fs.makeDirectory(join(target, ".git"));
-          yield* fs.writeFileString(join(target, ".git", "config"), "[core]\n");
+          yield* fs.makeDirectory(join(target, "notes", ".git"), { recursive: true });
+          yield* fs.writeFileString(join(target, "notes", ".git", "config"), "[core]\n");
         }
         if (content === "empty-directory") yield* fs.makeDirectory(join(target, "my-notes"));
         if (action === "replace") {
@@ -790,7 +790,7 @@ for (const content of ["reproducible", "git-bytes", "empty-directory"] as const)
         );
         if (content === "git-bytes") {
           assert.strictEqual(
-            yield* fs.readFileString(join(backups[0]!.path, ".git", "config")),
+            yield* fs.readFileString(join(backups[0]!.path, "notes", ".git", "config")),
             "[core]\n",
           );
           // Backups beside a repository's root must never be committed with it.
@@ -1233,8 +1233,8 @@ it.effect("backs up beside a symlinked root's real directory, on the copy's own 
     const alias = join(home, "dotfiles-alias");
     yield* fs.symlink(targetRoot, alias);
     yield* project({ root: alias });
-    yield* fs.makeDirectory(join(alias, "review", ".git"));
-    yield* fs.writeFileString(join(alias, "review", ".git", "HEAD"), "ref\n");
+    yield* fs.makeDirectory(join(alias, "review", "notes", ".git"), { recursive: true });
+    yield* fs.writeFileString(join(alias, "review", "notes", ".git", "HEAD"), "ref\n");
     yield* edit(explicitPolicies);
     yield* project({ root: alias });
     assert.deepStrictEqual(
@@ -1344,4 +1344,53 @@ it.effect(
         "/home/me/.claude/skills",
       );
     }),
+);
+
+for (const protection of [
+  { marker: ".git", make: "directory" },
+  { marker: "skit.json", make: "file" },
+] as const)
+  it.effect(
+    `leaves a copy whose folder holds ${protection.marker}, and its record, as they are`,
+    () =>
+      Effect.gen(function* () {
+        const { fs, targetRoot, load, edit, project } = yield* installedSkillFixture();
+        const target = join(targetRoot, "review");
+        yield* project();
+        if (protection.make === "directory")
+          yield* fs.makeDirectory(join(target, protection.marker));
+        else yield* fs.writeFileString(join(target, protection.marker), "{}\n");
+        const before = yield* deterministicTreeHash(target);
+        const marker = yield* fs.readFileString(join(target, ".skit-ownership.json"));
+        const recorded = (yield* load).installed_skills;
+        // A new invocation policy would otherwise rewrite the copy.
+        yield* edit(explicitPolicies);
+
+        assert.strictEqual(yield* project(), 0);
+        assert.strictEqual(yield* deterministicTreeHash(target), before);
+        assert.strictEqual(yield* fs.readFileString(join(target, ".skit-ownership.json")), marker);
+        assert.strictEqual(yield* fs.exists(join(target, protection.marker)), true);
+        assert.deepStrictEqual((yield* load).installed_skills, recorded);
+        assert.deepStrictEqual(yield* backupsBeside(targetRoot), []);
+      }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  );
+
+it.effect("still updates a copy inside a repository whose root is above the skills folder", () =>
+  Effect.gen(function* () {
+    const { fs, targetRoot, load, edit, project } = yield* installedSkillFixture();
+    const target = join(targetRoot, "review");
+    // A dotfiles repository tracking the harness directory.
+    yield* fs.makeDirectory(join(dirname(targetRoot), ".git"));
+    yield* project();
+    const before = yield* deterministicTreeHash(target);
+    const [recorded] = (yield* load).installed_skills;
+    yield* edit(explicitPolicies);
+
+    assert.strictEqual(yield* project(), 1);
+    assert.notStrictEqual(yield* deterministicTreeHash(target), before);
+    const [updated] = (yield* load).installed_skills;
+    assert.strictEqual(updated?.status, "installed");
+    assert.strictEqual(updated?.installed_skill_id, recorded?.installed_skill_id);
+    assert.notStrictEqual(updated?.expected_hash, recorded?.expected_hash);
+  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
 );

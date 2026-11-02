@@ -206,6 +206,8 @@ export type CopyChange = {
   | { readonly _tag: "Forget" }
   /** Nothing wants it, but it was edited where agents read it: apply refuses. */
   | { readonly _tag: "Refuse"; readonly detail: string }
+  /** The folder is someone else's in itself: it and its record are left exactly as they are. */
+  | { readonly _tag: "Protected"; readonly reason: InstalledSkills.Protection }
 );
 export interface RemoveChange {
   readonly _tag: "Remove";
@@ -375,6 +377,19 @@ type Step =
       readonly change: CopyChange;
       readonly copy: InstalledSkill;
     }
+  /** A folder that is someone else's in itself: nothing happens to it or its record. */
+  | {
+      readonly _tag: "Protected";
+      readonly change: CopyChange;
+      readonly wanted: Wanted;
+      readonly reason: InstalledSkills.Protection;
+    }
+  | {
+      readonly _tag: "Protected";
+      readonly change: CopyChange;
+      readonly copy: InstalledSkill;
+      readonly reason: InstalledSkills.Protection;
+    }
   /** An edited copy where agents do not read it: kept, and recorded as conflicted. */
   | {
       readonly _tag: "Keep";
@@ -436,7 +451,8 @@ export const make = Effect.gen(function* () {
     const read = yield* unwrap(files.inspect(copy.path));
     if (read.entry._tag === "Absent" || read.entry.facts === null)
       return { _tag: "Absent" as const };
-    const { marker } = read.entry.facts;
+    const { marker, protection } = read.entry.facts;
+    if (protection !== null) return { _tag: "Protected" as const, reason: protection };
     const hash = yield* unwrap(files.hash(copy.path));
     return marker.kind !== "valid" ||
       marker.marker.skill_id !== copy.skill_id ||
@@ -658,6 +674,16 @@ export const make = Effect.gen(function* () {
         installing.push({ _tag: "Install", change: { ...at, _tag: "Install" }, wanted: item });
         continue;
       }
+      if (facts.protection !== null) {
+        const reason = facts.protection;
+        installing.push({
+          _tag: "Protected",
+          change: { ...at, _tag: "Protected", reason },
+          wanted: item,
+          reason,
+        });
+        continue;
+      }
       if (typeof facts.hash !== "string") {
         const reason = `${facts.hash.reason}: ${path}`;
         installing.push({
@@ -770,6 +796,16 @@ export const make = Effect.gen(function* () {
     for (const copy of unwanted) {
       const change = { skillId: copy.skill_id, destination: copy.destination, path: copy.path };
       const owned = yield* ownership(copy);
+      if (owned._tag === "Protected") {
+        const { reason } = owned;
+        uninstalling.push({
+          _tag: "Protected",
+          change: { ...change, _tag: "Protected", reason },
+          copy,
+          reason,
+        });
+        continue;
+      }
       if (owned._tag === "Absent") {
         uninstalling.push({ _tag: "Forget", change: { ...change, _tag: "Forget" }, copy });
         continue;
@@ -882,6 +918,7 @@ export const make = Effect.gen(function* () {
           (step) =>
             step._tag !== "Unchanged" &&
             step._tag !== "KeepDeleted" &&
+            step._tag !== "Protected" &&
             (request.enabled ? subject(step.change.skillId) : "copy" in step),
         );
       shown.push({
@@ -988,7 +1025,7 @@ export const make = Effect.gen(function* () {
 
   /** Carry out one step at a wanted copy's folder: the record it leaves, and what happened. */
   const install = Effect.fn("Library.install")(function* (
-    step: Extract<Step, { readonly wanted: Wanted }>,
+    step: Exclude<Extract<Step, { readonly wanted: Wanted }>, { readonly _tag: "Protected" }>,
   ) {
     const { wanted } = step;
     const installedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
@@ -1159,7 +1196,7 @@ export const make = Effect.gen(function* () {
             files.prepare([
               ...new Set(
                 again.steps.flatMap((step) =>
-                  "wanted" in step && step._tag !== "KeepDeleted"
+                  "wanted" in step && step._tag !== "KeepDeleted" && step._tag !== "Protected"
                     ? [step.wanted.destination.root]
                     : [],
                 ),
@@ -1212,7 +1249,7 @@ export const make = Effect.gen(function* () {
           const run = Effect.gen(function* () {
             const installedAt = new Set<string>();
             for (const step of again.steps) {
-              if (!("wanted" in step)) continue;
+              if (!("wanted" in step) || step._tag === "Protected") continue;
               const { wanted } = step;
               const done = yield* install(step).pipe(
                 Effect.tapError(() =>
@@ -1236,9 +1273,10 @@ export const make = Effect.gen(function* () {
                 installedAt.add(`${done.copy.skill_id}\0${done.copy.destination}`);
             }
             for (const step of again.steps) {
-              if ("wanted" in step) continue;
+              if ("wanted" in step || step._tag === "Protected") continue;
               const { copy } = step;
-              // Keep the last working copy where its successor is blocked or locally modified.
+              // Keep the last working copy where its successor is blocked, protected or locally
+              // modified: only a copy apply installed is a successor.
               const succeeded = again.steps.some(
                 (other) =>
                   "wanted" in other &&

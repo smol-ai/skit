@@ -9,7 +9,7 @@ import {
   SkillVersionId,
 } from "@smolai/skit-core";
 import { Schema } from "effect";
-import { PnpmSkillOwner } from "../../install/pnpm-skills.js";
+import { PnpmSkillOwner } from "@smolai/skit-core";
 
 export const SetupVersionChoice = Schema.Struct({
   skillId: SkillId,

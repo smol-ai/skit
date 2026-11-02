@@ -17,7 +17,7 @@ import {
 import { Data, Clock, Effect, FileSystem } from "effect";
 import { basename, dirname, join, relative } from "node:path";
 import { RegistryAuth } from "../registry/auth-service.js";
-import { leavePnpmSkill } from "../install/pnpm-skills.js";
+import { leavePnpmSkill } from "@smolai/skit-core";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
 export class AddNoSkills

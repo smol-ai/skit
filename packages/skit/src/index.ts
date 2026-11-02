@@ -45,6 +45,7 @@ export {
 export { inspectInstalledSkillBackups } from "./install/backups.js";
 export { copyLocalTree } from "./platform/copy-tree.js";
 export { ensureSkillsDirectoryWritable } from "./install/writable.js";
+export * from "./install/pnpm-skills.js";
 export { discoveryPathExcluded } from "./sources/discovery-exclusions.js";
 export * from "./distribution/registry-identity.js";
 export * from "./artifact/descriptor.js";

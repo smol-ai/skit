@@ -17,7 +17,7 @@ import { PlanIsStale } from "../../library/failures.js";
 import { recordSetupCopies } from "./setup-copy-backup.js";
 import { prepareRecoveryMoves } from "../../library-application/recovery-moves.js";
 import { resolveLibrarySubject } from "./subject-resolution.js";
-import { leavePnpmSkill } from "../../install/pnpm-skills.js";
+import { leavePnpmSkill } from "@smolai/skit-core";
 import {
   duplicateSymlinksToBackUp,
   ApprovedSymlink,

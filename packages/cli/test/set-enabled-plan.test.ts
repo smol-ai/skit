@@ -855,10 +855,8 @@ it.effect(
       const failure = yield* Effect.flip(f.home.owned(applySetEnabledPlan(plan)));
       assert.instanceOf(failure, SetEnabledIncomplete);
 
-      assert.deepStrictEqual(
-        failure.results[0]?.installed_skills.map((p) => p.status),
-        ["conflicted"],
-      );
+      // A checkout is someone else's: SKIT neither writes into it nor records it.
+      assert.deepStrictEqual(failure.results[0]?.installed_skills, []);
       assert.strictEqual((yield* inspectOwnershipMarker(checkout)).kind, "absent");
       assert.strictEqual(yield* f.fs.exists(join(checkout, ".git", "HEAD")), true);
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),

@@ -13,7 +13,7 @@ import { sourceIdentityLabel } from "../../library-application/skill-metadata.js
 import { ownershipAt, type SetupEvidence } from "./setup-discovery.js";
 import { lockMatches } from "./skills-sh-lock-source.js";
 import { classifyOwner } from "./setup-onboarding.js";
-import { makePnpmSkillCheck, pnpmSkillOwner } from "../../install/pnpm-skills.js";
+import { makePnpmSkillCheck, pnpmSkillOwner } from "@smolai/skit-core";
 import { probeHarnesses } from "../../harness/probe.js";
 import type {
   SetupAuthoredCollection,

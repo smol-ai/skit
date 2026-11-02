@@ -1,8 +1,9 @@
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { Cache, Data, Duration, Effect, Exit, FileSystem, Option, Schema } from "effect";
-import { LinkStat, pathIsWithin } from "@smolai/skit-core";
 import { parseDocument } from "yaml";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { LinkStat } from "../platform/link-stat.js";
+import { pathIsWithin } from "../platform/path-identity.js";
+import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 export const PnpmSkillOwner = Schema.Struct({
   kind: Schema.tag("pnpm"),
