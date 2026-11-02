@@ -1,5 +1,5 @@
 {
-  "$id": "skit.setup.applied.v3",
+  "$id": "skit.setup.applied.v4",
   "type": "object",
   "properties": {
     "changes": {

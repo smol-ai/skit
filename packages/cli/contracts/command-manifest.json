@@ -474,7 +474,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.doctor.v8",
+        "skit.doctor.v9",
         "skit.disable.plan.v9",
         "skit.disable.v10"
       ],
@@ -908,7 +908,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.inventory.v12"
+        "skit.inventory.v13"
       ],
       "exitCodes": [
         0,
@@ -2294,9 +2294,9 @@
         ]
       },
       "outputSchemas": [
-        "skit.setup.v10",
-        "skit.setup.applied.v3",
-        "skit.setup.review.v2",
+        "skit.setup.v11",
+        "skit.setup.applied.v4",
+        "skit.setup.review.v3",
         "skit.setup.failed.v1",
         "skit.setup.comparison.v2"
       ],
@@ -2606,8 +2606,8 @@
       "outputSchemas": [
         "skit.update.v9",
         "skit.update.plan.v6",
-        "skit.update.projection-retention.v3",
-        "skit.update.projection-retention.plan.v3"
+        "skit.update.projection-retention.v4",
+        "skit.update.projection-retention.plan.v4"
       ],
       "exitCodes": [
         0,

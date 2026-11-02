@@ -705,7 +705,7 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
     first(["add", raw]);
     first(["add", gitRemote]);
     const imported = await state(firstHome);
-    expect(imported.schemaVersion).toBe(10);
+    expect(imported.schemaVersion).toBe(11);
     expect(imported.collections).toHaveLength(2);
     expect(imported.enabled).toEqual([]);
     const collectionId = imported.collections[0].collection_id;
@@ -747,7 +747,7 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
     expect(second(["sync"])).toMatchObject({ data: { status: "pull_ready" } });
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "pulled" } });
     const restored = await state(secondHome);
-    expect(restored.schemaVersion).toBe(10);
+    expect(restored.schemaVersion).toBe(11);
     expect(restored.collections.some((item) => item.collection_id === collectionId)).toBe(true);
     expect(restored.imports[0].lock_file_entries).toEqual([]);
     expect(restored.enabled).toEqual([]);

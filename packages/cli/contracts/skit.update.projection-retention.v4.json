@@ -1,5 +1,5 @@
 {
-  "$id": "skit.update.projection-retention.v3",
+  "$id": "skit.update.projection-retention.v4",
   "type": "object",
   "properties": {
     "skill_id": {

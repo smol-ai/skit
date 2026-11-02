@@ -359,7 +359,7 @@ describe("CLI contracts", () => {
             : JSON.parse(processResult.stderr).error;
         expect(failure.code).toBe("VALIDATION_FAILED");
         expect(failure.message).toContain("schema v2");
-        expect(failure.message).toContain("supports v4–v10");
+        expect(failure.message).toContain("supports v4–v11");
         expect(failure.remediation).toContain("Back up the state file");
         expect(failure.remediation).toContain("skit setup");
         expect(failure.remediation).not.toContain("author validate");
@@ -507,7 +507,7 @@ describe("CLI contracts", () => {
     expect(result.stderr).toBe("");
     expect(JSON.parse(result.stdout)).toEqual(
       expect.objectContaining({
-        schema: "skit.doctor.v8",
+        schema: "skit.doctor.v9",
         data: expect.objectContaining({ ok: false, issues: expect.any(Array) }),
       }),
     );
@@ -684,13 +684,11 @@ describe("CLI contracts", () => {
     await writeFile(join(repo, ".agents", "skills", "review", "SKILL.md"), "changed externally\n");
     const result = args(["disable", "review", "--repo", repo, "--json"]);
     expect(result.status).toBe(12);
-    // The disable choice is saved; only removing the edited copy failed.
-    expect(JSON.parse(result.stdout).data.application).toMatchObject({
-      intent: "saved",
-      status: "incomplete",
-      failure: { code: "CONFLICT" },
-    });
-    expect(result.stderr).toBe("");
+    // The edited copy is refused before anything is saved, and stays as the user left it.
+    expect(JSON.parse(result.stderr).error.code).toBe("CONFLICT");
+    expect(readFileSync(join(repo, ".agents", "skills", "review", "SKILL.md"), "utf8")).toBe(
+      "changed externally\n",
+    );
   });
 
   test("retains selected installed-skill bytes through the built CLI without overwriting disagreement", async () => {
