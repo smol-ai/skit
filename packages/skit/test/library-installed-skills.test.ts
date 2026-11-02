@@ -1079,8 +1079,7 @@ it.effect("an unchanged batch still saves onto its loaded state before settling 
 
 it.effect("a backup is never settled against a state the Library has moved on from", () =>
   Effect.gen(function* () {
-    const { home, targetRoot, storeLayer, variantsPath, load, edit, project } =
-      yield* installedSkillFixture();
+    const { home, targetRoot, storeLayer, load, edit, project } = yield* installedSkillFixture();
     yield* project();
     const loaded = yield* load;
     const installedSkill = loaded.installed_skills[0]!;

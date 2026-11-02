@@ -750,6 +750,15 @@ it.effect("migrates v9 Bindings to enabled lists and renames stored records", ()
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
+/** The status fields a v10 installed copy stored, written as raw JSON. */
+interface StoredStatusFields {
+  readonly status: string;
+  readonly current_hash?: string;
+  readonly suppression_reason?: string;
+  readonly suppressed_at?: string;
+  readonly destination?: string;
+}
+
 it.effect(
   "migrates v10 installed copies to the fields their status uses, dropping former folders",
   () =>
@@ -770,7 +779,7 @@ it.effect(
         ...copy
       } = current.state.installed_skills[0]!;
       const hash = copy.expected_hash;
-      const row = (name: string, fields: Record<string, unknown>) => ({
+      const row = (name: string, fields: StoredStatusFields) => ({
         ...copy,
         installed_skill_id: makeInstalledSkillId(),
         path: `${path}-${name}`,
