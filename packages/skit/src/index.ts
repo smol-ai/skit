@@ -116,17 +116,13 @@ export * as InstalledSkillBackups from "./install/backups.js";
 
 export { InstalledSkills } from "./library/installed-skills.js";
 export * as InstalledSkillStatus from "./library/installed-skill-status.js";
-export { InstalledSkillsNode } from "./library/installed-skills-node.js";
 export { Library } from "./library/library.js";
 export type {
   PlanError as LibraryPlanError,
   ApplyError as LibraryApplyError,
 } from "./library/library.js";
 
-export {
-  InstalledSkillWouldReplaceLink,
-  InstalledSkillWouldDuplicate,
-} from "./library/library.js";
+export { InstalledSkillWouldReplaceLink, InstalledSkillWouldDuplicate } from "./library/library.js";
 
 export { DuplicateScanIncomplete } from "./library/installed-skills.js";
 export { InvalidIntent, StalePlan, DestinationsIncomplete } from "./library/library.js";

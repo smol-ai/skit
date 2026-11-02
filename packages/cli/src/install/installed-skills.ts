@@ -2,7 +2,6 @@ import { Context, Effect, FileSystem, Layer, Path } from "effect";
 import { Digest } from "effect/crypto";
 import {
   InstalledSkills,
-  InstalledSkillsNode,
   LinkStat,
   SourceProcess,
   TreeHasher,
@@ -24,7 +23,7 @@ import { findDuplicates, readableSkillsDirectories } from "./duplicates.js";
 export const make = Effect.fn("InstalledSkills.make")(function* (
   configuration?: InventoryRootOptions,
 ) {
-  if (configuration === undefined) return yield* InstalledSkillsNode.make();
+  if (configuration === undefined) return yield* InstalledSkills.make();
   const routing = {
     home: configuration.home,
     configHome: configuration.configHome,
@@ -43,7 +42,7 @@ export const make = Effect.fn("InstalledSkills.make")(function* (
       SkitConfiguration,
     ),
   );
-  return yield* InstalledSkillsNode.make({
+  return yield* InstalledSkills.make({
     active: activeInstallDestinations(routing).pipe(Effect.provide(context)),
     destinations: Effect.fn("InstalledSkills.destinations")(function* (scope: InstallScope) {
       return (yield* activeInstallDestinations(routing).pipe(Effect.provide(context))).map(

@@ -2,7 +2,6 @@ import { Effect } from "effect";
 import {
   canonicalJson,
   InstalledSkills,
-  InstalledSkillsNode,
   Library,
   LibraryStore,
   type Hash,
@@ -19,8 +18,8 @@ const library = (
   add?: InstalledSkills.Destination & { readonly scope: InstallScope },
 ) =>
   Effect.gen(function* () {
-    const recorded = yield* InstalledSkillsNode.recordedRouting(state);
-    const files = yield* InstalledSkillsNode.make({
+    const recorded = yield* InstalledSkills.recordedRouting(state);
+    const files = yield* InstalledSkills.make({
       ...recorded,
       active: Effect.succeed(["agents", "claude"]),
       destinations: (scope) =>

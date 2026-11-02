@@ -1,7 +1,6 @@
 import { Effect } from "effect";
 import { Library } from "../../src/library/library.js";
 import { InstalledSkills } from "../../src/library/installed-skills.js";
-import { InstalledSkillsNode } from "../../src/library/installed-skills-node.js";
 import { CollectionRemovalMissing } from "../../src/library/installation/remove.js";
 import { LibraryStore } from "../../src/library/store/library-store.js";
 import type { LibraryState, InstalledSkill } from "../../src/library/library-state.js";
@@ -22,9 +21,9 @@ const library = (
   } = {},
 ) =>
   Effect.gen(function* () {
-    const recorded = yield* InstalledSkillsNode.recordedRouting(state);
+    const recorded = yield* InstalledSkills.recordedRouting(state);
     const { add, active } = options;
-    const files = yield* InstalledSkillsNode.make({
+    const files = yield* InstalledSkills.make({
       ...recorded,
       ...(active === undefined ? {} : { active: Effect.succeed(active) }),
       destinations: (scope) =>

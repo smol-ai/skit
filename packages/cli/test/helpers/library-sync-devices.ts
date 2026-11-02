@@ -12,7 +12,6 @@ import {
   makeMachineId,
   Library,
   InstalledSkills,
-  InstalledSkillsNode,
   importCollection,
   withLibraryWriter,
   LibraryState,

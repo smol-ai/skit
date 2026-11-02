@@ -1,10 +1,5 @@
 import { Effect } from "effect";
-import {
-  InstalledSkills,
-  InstalledSkillsNode,
-  Library,
-  type LibraryState,
-} from "@smolai/skit-core";
+import { InstalledSkills, Library, type LibraryState } from "@smolai/skit-core";
 
 /**
  * The Library owner for work that needs no install routing: imports. Anything needing this
@@ -12,7 +7,7 @@ import {
  */
 export const localLibrary = Effect.gen(function* () {
   return yield* Library.make.pipe(
-    Effect.provideService(InstalledSkills.Service, yield* InstalledSkillsNode.make()),
+    Effect.provideService(InstalledSkills.Service, yield* InstalledSkills.make()),
   );
 });
 
@@ -24,7 +19,7 @@ export const recordedLibrary = Effect.fn("Library.recorded")(function* (state: L
   return yield* Library.make.pipe(
     Effect.provideService(
       InstalledSkills.Service,
-      yield* InstalledSkillsNode.make(yield* InstalledSkillsNode.recordedRouting(state)),
+      yield* InstalledSkills.make(yield* InstalledSkills.recordedRouting(state)),
     ),
   );
 });

@@ -21,7 +21,6 @@ import {
   repositorySelectsInstalledSkill,
   Library,
   InstalledSkills,
-  InstalledSkillsNode,
   InstalledSkillInvalid,
   type InstallDestination,
   type Enabled,
@@ -319,7 +318,7 @@ export const syncInstalledSkills = Effect.fn("Library.sync.installedSkills")(fun
     rootFor === undefined
       ? [...targets]
       : targets.filter((target) => rootFor(target) !== undefined);
-  return yield* InstalledSkillsNode.make({
+  return yield* InstalledSkills.make({
     active: Effect.succeed(active),
     destinations: (scope) =>
       Effect.succeed(
