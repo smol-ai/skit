@@ -120,10 +120,7 @@ export type {
   ApplyError as LibraryApplyError,
 } from "./library/library.js";
 
-export {
-  InstalledSkillWouldReplaceLink,
-  InstalledSkillWouldDuplicate,
-} from "./library/library.js";
+export { InstalledSkillWouldReplaceLink, InstalledSkillWouldDuplicate } from "./library/library.js";
 
 export { DuplicateScanIncomplete } from "./library/installed-skills.js";
 export { InvalidIntent, StalePlan, DestinationsIncomplete } from "./library/library.js";
