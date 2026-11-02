@@ -9,7 +9,7 @@ import type { ManageOptions } from "../../workflows/library/manage-existing.js";
 import type { SetupDuplicateAction as SetupDuplicateActionType } from "../../workflows/library/setup-decisions.js";
 import type { SetupApplied } from "../../workflows/library/setup-contract.js";
 import type { SetupCommandSelection } from "../../commands/setup-actions.js";
-import { changeResults } from "../../workflows/library/installed-skill-changes.js";
+import { changeResults } from "../../workflows/library/setup-installed-skills.js";
 
 /**
  * `skit setup --apply`: the non-interactive apply. The plan ID is the caller's consent: it must

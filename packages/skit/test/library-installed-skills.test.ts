@@ -10,6 +10,7 @@ import { currentSkillVersion, versionBacking } from "../src/library/library-cont
 import { collectionVersionPath } from "../src/library/collection-version.js";
 import {
   installEnabledSkills,
+  planUpdate,
   removeCollection,
   uninstallCopies,
   uninstallLeftovers,
@@ -1392,5 +1393,60 @@ it.effect("still updates a copy inside a repository whose root is above the skil
     assert.strictEqual(updated?.status, "installed");
     assert.strictEqual(updated?.installed_skill_id, recorded?.installed_skill_id);
     assert.notStrictEqual(updated?.expected_hash, recorded?.expected_hash);
+  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("replaces an edited copy only as approved, keeping the edit in recovery", () =>
+  Effect.gen(function* () {
+    const { fs, home, targetRoot, storeLayer, load, project } = yield* installedSkillFixture();
+    const target = join(targetRoot, "review");
+    yield* project();
+    const written = yield* deterministicTreeHash(target);
+    yield* fs.writeFileString(join(target, "SKILL.md"), "my edit\n");
+    const editedHash = yield* deterministicTreeHash(target);
+    const [recorded] = (yield* load).installed_skills;
+    assert.ok(recorded);
+    const plan = (approvals: Parameters<typeof planUpdate>[0]["approvals"]) =>
+      planUpdate({ target: "agents", root: targetRoot, approvals }).pipe(
+        Effect.provide(storeLayer),
+      );
+    const change = (planned: Effect.Success<ReturnType<typeof plan>>) =>
+      planned.plan.changes.find((item) => "path" in item && item.path === target);
+
+    // Unapproved, or approved for different bytes, the edit is a conflict that stays.
+    const unapproved = yield* plan([]);
+    assert.deepInclude(change(unapproved), {
+      _tag: "Conflict",
+      edited: true,
+      skillVersionId: recorded.skill_version_id,
+      recorded: { installedSkillId: recorded.installed_skill_id, hash: written },
+      currentHash: editedHash,
+      wantedHash: written,
+    });
+    const stale = yield* plan([
+      { _tag: "ReplaceEdit", installedSkillId: recorded.installed_skill_id, currentHash: written },
+    ]);
+    assert.strictEqual(change(stale)?._tag, "Conflict");
+
+    const approved = yield* plan([
+      {
+        _tag: "ReplaceEdit",
+        installedSkillId: recorded.installed_skill_id,
+        currentHash: editedHash,
+      },
+    ]);
+    assert.strictEqual(change(approved)?._tag, "Update");
+    yield* withLibraryWriterLock(home, approved.apply.pipe(Effect.provide(storeLayer)));
+
+    assert.strictEqual(yield* fs.readFileString(join(target, "SKILL.md")), "raw Skill bytes\n");
+    const [installed] = (yield* load).installed_skills;
+    assert.strictEqual(installed?.status, "installed");
+    assert.strictEqual(installed?.expected_hash, written);
+    const backups = yield* backupsBeside(targetRoot);
+    assert.deepStrictEqual(
+      backups.map((backup) => backup.disposition),
+      ["kept"],
+    );
+    assert.strictEqual(yield* fs.readFileString(join(backups[0]!.path, "SKILL.md")), "my edit\n");
   }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
 );

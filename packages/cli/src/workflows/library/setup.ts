@@ -12,10 +12,10 @@ import type { SetupResult } from "./setup-contract.js";
 import { collectBrokenLinks, SetupDiscovery, suggestRepositoryRoots } from "./setup-discovery.js";
 import { scanSetupCopies } from "./setup-scan.js";
 import {
-  findInstalledSkillChanges,
+  planInstalledSkillChanges,
   hasChangesToApply,
   changesNeedingChoice,
-} from "./installed-skill-changes.js";
+} from "./setup-installed-skills.js";
 import { classifySetupOnboarding } from "./setup-onboarding.js";
 import {
   copyConflict,
@@ -123,11 +123,7 @@ const scanForSetup = Effect.fn("Library.setup")(
       };
     });
     const sortedInstances = instances.sort((left, right) => left.path.localeCompare(right.path));
-    const installedSkillChanges = yield* findInstalledSkillChanges(
-      library,
-      options.inventory,
-      sortedInstances,
-    );
+    const installedSkillChanges = yield* planInstalledSkillChanges(library, options.inventory);
     const recommended = recommendedSetupSelection(
       sortedInstances,
       onboarding,

@@ -31,10 +31,13 @@ import {
   type SetupCopyConflict,
   type SetupDuplicateAction,
 } from "./setup-decisions.js";
-import { setupVersionAlternatives } from "./setup-version-choice.js";
 import { planSetupRemovals, setupRemovablePaths } from "./setup-removal.js";
 import { recordSetupCopies } from "./setup-copy-backup.js";
-import { hasChangesToApply, changesNeedingChoice } from "./installed-skill-changes.js";
+import {
+  hasChangesToApply,
+  changesNeedingChoice,
+  setupVersionAlternatives,
+} from "./setup-installed-skills.js";
 
 /**
  * Applying the recommended plan would create another agent-visible copy of these skills, and

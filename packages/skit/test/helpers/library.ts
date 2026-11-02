@@ -105,6 +105,27 @@ export const installEnabledSkills = (options: {
     return applied(outcome, "Installed");
   });
 
+/**
+ * Plan an update of every installed copy, with what is enabled globally also routed to this
+ * destination, and the apply of exactly that plan.
+ */
+export const planUpdate = (options: {
+  readonly target: InstallDestination;
+  readonly root: string;
+  readonly approvals: readonly Library.Approval[];
+}) =>
+  Effect.gen(function* () {
+    const state = yield* (yield* LibraryStore).load;
+    const owner = yield* library(state, {
+      add: { scope: { kind: "global" }, destination: options.target, root: options.root },
+    });
+    const plan = yield* owner.plan(
+      { _tag: "Update" },
+      { base: state, approvals: options.approvals },
+    );
+    return { plan, apply: owner.apply(plan) };
+  });
+
 /** Update every installed copy with only these destinations active. */
 export const uninstallLeftovers = (options: {
   readonly activeTargets: readonly InstallDestination[];

@@ -234,7 +234,7 @@ it.effect("declining or previewing the plan applies nothing after one scan", () 
 );
 
 it.effect(
-  "protected foreign installed skills refuse setup after only the loader's backed-up migration",
+  "a foreign record setup would forget changes only the loader's backed-up migration until confirmed",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture({ machine: true });
@@ -246,9 +246,19 @@ it.effect(
       );
       yield* f.fs.writeFileString(f.home.statePath, legacy);
       const before = yield* captureDisk(f.disk);
-      const { exit } = yield* f.setup([["alpha"]]);
-      assert.isTrue(Exit.isFailure(exit));
-      if (Exit.isFailure(exit)) assert.match(String(exit.cause), /ChangeChoiceRequired/);
+      // The record's folder is gone and no route wants it here: applying would forget it, and
+      // install the copies the Library wants where nothing is installed yet.
+      const { exit } = yield* f.setup([["alpha"], false]);
+      assert.isTrue(Exit.isSuccess(exit));
+      if (Exit.isSuccess(exit))
+        assert.deepStrictEqual(
+          exit.value.changes?.map((fact) => [fact.path, fact.status]),
+          [
+            ["/skills/review", "uninstall"],
+            [f.path("review"), "install"],
+            ["/workspace/.agents/skills/review", "install"],
+          ],
+        );
       const paths = changedPaths(f.root, yield* diskChanges(before));
       assert.deepStrictEqual(paths.deleted, []);
       assert.deepStrictEqual(paths.changed, ["library/state.json"]);

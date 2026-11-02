@@ -211,13 +211,14 @@ export const SetupInstalledSkill = Schema.Struct({
 });
 export type SetupInstalledSkill = typeof SetupInstalledSkill.Type;
 
+/** One copy an update would change, keyed by its path: a copy not yet installed has no record. */
 export const InstalledSkillChange = Schema.Struct({
-  installedSkillId: InstalledSkillId,
+  installedSkillId: Schema.optionalKey(InstalledSkillId),
   skillId: SkillId,
   name: Schema.String,
   path: Schema.String,
   destination: Schema.Literals(["agents", "claude"]),
-  baselineHash: Hash,
+  baselineHash: Schema.optionalKey(Hash),
   currentHash: Schema.optionalKey(Hash),
   desiredHash: Schema.optionalKey(Hash),
   desiredVersionId: Schema.optionalKey(SkillVersionId),
@@ -229,6 +230,8 @@ export const InstalledSkillChange = Schema.Struct({
     "competing",
     "protected",
     "native-delete",
+    "uninstall",
+    "install",
   ]),
   metadataChanged: Schema.Boolean,
   reason: Schema.optionalKey(Schema.String),
@@ -236,10 +239,18 @@ export const InstalledSkillChange = Schema.Struct({
 export type InstalledSkillChange = typeof InstalledSkillChange.Type;
 export const InstalledSkillChangeResult = Schema.Struct({
   reason: Schema.optionalKey(Schema.String),
-  installedSkillId: InstalledSkillId,
+  installedSkillId: Schema.optionalKey(InstalledSkillId),
   name: Schema.String,
   path: Schema.String,
-  status: Schema.Literals(["updated", "unchanged", "local-kept", "native-delete", "pending"]),
+  status: Schema.Literals([
+    "installed",
+    "updated",
+    "unchanged",
+    "local-kept",
+    "native-delete",
+    "pending",
+    "uninstalled",
+  ]),
 });
 export type InstalledSkillChangeResult = typeof InstalledSkillChangeResult.Type;
 

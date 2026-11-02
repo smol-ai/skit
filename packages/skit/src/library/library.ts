@@ -49,6 +49,7 @@ import {
   type CollectionId,
   type InstalledSkillId,
   type SkillId,
+  type SkillVersionId,
 } from "./entity-ids.js";
 import {
   decide,
@@ -114,7 +115,13 @@ export type Approval =
       readonly marker: OwnershipMarker;
     }
   /** Put back this copy, which the user deleted. */
-  | { readonly _tag: "Restore"; readonly installedSkillId: InstalledSkillId };
+  | { readonly _tag: "Restore"; readonly installedSkillId: InstalledSkillId }
+  /** The user's edited copy, as previewed, goes to recovery and the selected Version replaces it. */
+  | {
+      readonly _tag: "ReplaceEdit";
+      readonly installedSkillId: InstalledSkillId;
+      readonly currentHash: Hash;
+    };
 
 // ── Errors ───────────────────────────────────────────────────────────────────────────────────────
 export class StalePlan
@@ -182,22 +189,35 @@ export type BindingChange = Calculated["plan"] & {
   }[];
 };
 
-/** What happens to one skill folder. */
+/** What happens to one skill folder, with what a review of it shows. */
 export type CopyChange = {
   readonly skillId: SkillId;
   readonly destination: InstalledSkill["destination"];
   readonly path: string;
+  /** The Version the copy should hold; for a copy nothing wants, the one recorded. */
+  readonly skillVersionId: SkillVersionId;
+  /** The Library's record of this copy, when it has one. */
+  readonly recorded?: { readonly installedSkillId: InstalledSkillId; readonly hash: Hash };
+  /** What the folder holds now, when it is there and readable. */
+  readonly currentHash?: Hash;
+  /** What SKIT would write there, when plan built it. */
+  readonly wantedHash?: Hash;
+  /** The folder as plan inspected it, including what its hash leaves out. */
+  readonly evidence: string;
 } & (
   | /** Nothing is there yet. */ { readonly _tag: "Install" }
   /** SKIT's unedited copy of another Version or rendering goes to recovery. */
   | { readonly _tag: "Update" }
-  /** SKIT's marker goes on a folder that already holds exactly the copy's bytes. */
-  | { readonly _tag: "Manage" }
+  /**
+   * SKIT's marker goes on a folder that already holds exactly the copy's bytes. `marker`: SKIT's
+   * own copy, where only the Version changed.
+   */
+  | { readonly _tag: "Manage"; readonly verification: "replacement" | "adoption" | "marker" }
   | { readonly _tag: "Unchanged" }
   /** The user deleted it; it stays deleted. */
   | { readonly _tag: "KeepDeleted" }
   /** The folder holds what SKIT did not write; it is left, and recorded as conflicted. */
-  | { readonly _tag: "Conflict"; readonly edited: boolean; readonly hash: Hash }
+  | { readonly _tag: "Conflict"; readonly edited: boolean; readonly currentHash: Hash }
   /** The folder there cannot be read as skill content; apply fails on it. */
   | { readonly _tag: "Unreadable"; readonly reason: string }
   /** Nothing wants it: SKIT's copy goes to recovery. */
@@ -446,20 +466,26 @@ export const make = Effect.gen(function* () {
       Effect.provide(importing),
     );
 
-  /** Whether a recorded copy is still the one SKIT wrote. Changes nothing. */
+  /** Whether a recorded copy is still the one SKIT wrote, and its folder as read. Changes nothing. */
   const ownership = Effect.fn("Library.ownership")(function* (copy: InstalledSkill) {
     const read = yield* unwrap(files.inspect(copy.path));
     if (read.entry._tag === "Absent" || read.entry.facts === null)
-      return { _tag: "Absent" as const };
+      return { _tag: "Absent" as const, read };
     const { marker, protection } = read.entry.facts;
-    if (protection !== null) return { _tag: "Protected" as const, reason: protection };
+    if (protection !== null)
+      return {
+        _tag: "Protected" as const,
+        read,
+        reason: protection,
+        ...(typeof read.entry.facts.hash === "string" ? { hash: read.entry.facts.hash } : {}),
+      };
     const hash = yield* unwrap(files.hash(copy.path));
     return marker.kind !== "valid" ||
       marker.marker.skill_id !== copy.skill_id ||
       marker.marker.installed_skill_id !== copy.installed_skill_id ||
       hash !== marker.marker.expected_hash
-      ? { _tag: "Edited" as const, hash, marked: marker.kind !== "absent" }
-      : { _tag: "Intact" as const, hash };
+      ? { _tag: "Edited" as const, read, hash, marked: marker.kind !== "absent" }
+      : { _tag: "Intact" as const, read, hash };
   });
 
   /** A pending backup still holds the copy this row describes, so it explains its absence. */
@@ -573,6 +599,11 @@ export const make = Effect.gen(function* () {
         approval._tag === "AcceptEdit" ? [[approval.installedSkillId, approval] as const] : [],
       ),
     );
+    const replaced = new Map(
+      approvals.flatMap((approval) =>
+        approval._tag === "ReplaceEdit" ? [[approval.installedSkillId, approval] as const] : [],
+      ),
+    );
 
     // Where every scope this device uses, or this intent touches, installs.
     const intended = intent._tag === "Uninstall" ? [] : deviceInstallationIntent(next).byScope;
@@ -645,8 +676,20 @@ export const make = Effect.gen(function* () {
     const installing: Step[] = [];
     for (const item of wanted) {
       const { copy, path, prior, folder } = item;
-      const at = { skillId: copy.skillId, destination: item.destination.destination, path };
       const facts = folder.entry._tag === "Present" ? folder.entry.facts : null;
+      const at = {
+        skillId: copy.skillId,
+        destination: item.destination.destination,
+        path,
+        skillVersionId: copy.skillVersionId,
+        ...(prior === undefined
+          ? {}
+          : {
+              recorded: { installedSkillId: prior.installed_skill_id, hash: prior.expected_hash },
+            }),
+        ...(facts !== null && typeof facts.hash === "string" ? { currentHash: facts.hash } : {}),
+        evidence: folder.evidence,
+      };
       if (folder.entry._tag === "Present" && facts === null && folder.entry.kind !== "SymbolicLink")
         return yield* new InstalledSkillInvalid({ detail: `Not a skill folder: ${path}` });
       if (facts === null) {
@@ -695,6 +738,7 @@ export const make = Effect.gen(function* () {
         continue;
       }
       const staged = yield* unwrap(files.build(copy, item.destination));
+      const built = { ...at, wantedHash: staged.hash };
       const recorded = prior?.installed_skill_id === copy.installedSkillId ? prior : undefined;
       const approval = accepted.get(copy.installedSkillId);
       const manage = yield* approvedForManage(approvals, path);
@@ -741,16 +785,34 @@ export const make = Effect.gen(function* () {
         case "Manage":
           installing.push({
             _tag: "Manage",
-            change: { ...at, _tag: "Manage" },
+            change: { ...built, _tag: "Manage", verification: decision.verification },
             wanted: item,
             staged,
             verification: decision.verification,
           });
           break;
-        case "Conflict":
+        case "Conflict": {
+          // The user approved replacing exactly this edit: it goes to recovery, and is kept there.
+          if (
+            decision.edited &&
+            replaced.get(copy.installedSkillId)?.currentHash === decision.hash
+          ) {
+            installing.push({
+              _tag: "Update",
+              change: { ...built, _tag: "Update" },
+              wanted: item,
+              staged,
+            });
+            break;
+          }
           installing.push({
             _tag: "Conflict",
-            change: { ...at, _tag: "Conflict", edited: decision.edited, hash: decision.hash },
+            change: {
+              ...built,
+              _tag: "Conflict",
+              edited: decision.edited,
+              currentHash: decision.hash,
+            },
             wanted: item,
             staged,
             edited: decision.edited,
@@ -758,10 +820,11 @@ export const make = Effect.gen(function* () {
             expectedHash: decision.edited ? decision.expectedHash : staged.hash,
           });
           break;
+        }
         case "Unchanged":
           installing.push({
             _tag: "Unchanged",
-            change: { ...at, _tag: "Unchanged" },
+            change: { ...built, _tag: "Unchanged" },
             wanted: item,
             staged,
           });
@@ -769,7 +832,7 @@ export const make = Effect.gen(function* () {
         case "Replace":
           installing.push({
             _tag: "Update",
-            change: { ...at, _tag: "Update" },
+            change: { ...built, _tag: "Update" },
             wanted: item,
             staged,
           });
@@ -794,8 +857,16 @@ export const make = Effect.gen(function* () {
               ),
           );
     for (const copy of unwanted) {
-      const change = { skillId: copy.skill_id, destination: copy.destination, path: copy.path };
       const owned = yield* ownership(copy);
+      const change = {
+        skillId: copy.skill_id,
+        destination: copy.destination,
+        path: copy.path,
+        skillVersionId: copy.skill_version_id,
+        recorded: { installedSkillId: copy.installed_skill_id, hash: copy.expected_hash },
+        ...(owned._tag === "Absent" || owned.hash === undefined ? {} : { currentHash: owned.hash }),
+        evidence: owned.read.evidence,
+      };
       if (owned._tag === "Protected") {
         const { reason } = owned;
         uninstalling.push({
@@ -838,7 +909,7 @@ export const make = Effect.gen(function* () {
       }
       uninstalling.push({
         _tag: "Keep",
-        change: { ...change, _tag: "Conflict", edited: true, hash: owned.hash },
+        change: { ...change, _tag: "Conflict", edited: true, currentHash: owned.hash },
         copy,
         hash: owned.hash,
       });
