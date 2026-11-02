@@ -22,6 +22,8 @@ Each verb has one meaning. Use these and no others for Library work.
 | add | Put a Source into the Library. |
 | import | Store a Source's files as a Collection Version. |
 | enable / disable | Choose what is on at a Scope. |
+| prepare | Create what a later step needs before anything is saved. |
+| keep / discard | Keep a recovery backup, or delete one proven reproducible. |
 | install / uninstall | Write or remove a skill folder in a skills directory. |
 | update | Bring a Source, or installed skills, up to date. |
 | manage | Take over an existing folder so SKIT owns it. |

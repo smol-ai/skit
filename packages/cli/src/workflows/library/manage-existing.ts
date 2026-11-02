@@ -10,9 +10,9 @@ import {
 } from "../../install/duplicates.js";
 import {
   applySetEnabledPlan,
-  planSetEnabled,
   type SetEnabledRequest,
 } from "../../library-application/set-enabled.js";
+import { make as makeInstalledSkills } from "../../install/installed-skills.js";
 import { PlanIsStale } from "../../library/failures.js";
 import { recordSetupCopies } from "./setup-copy-backup.js";
 import { prepareRecoveryMoves } from "../../library-application/recovery-moves.js";
@@ -43,6 +43,8 @@ import {
   type SkitFailure,
   InstallScope,
   walkTree,
+  Library,
+  InstalledSkills,
 } from "@smolai/skit-core";
 import { Effect, FileSystem, Schema } from "effect";
 import { createHash } from "node:crypto";
@@ -471,31 +473,54 @@ const installCopy = Effect.fn("Manage.installCopy")(function* (
   manage: NonNullable<SetEnabledRequest["manage"]>,
   backup?: NonNullable<Effect.Success<ReturnType<typeof planDuplicateBackup>>>,
 ) {
-  const plan = yield* planSetEnabled(
-    [
-      {
-        query: subjectId,
-        keepUnselectedInstalledSkills: true,
-        all: false,
-        allowDuplicate:
-          selection.duplicateAction === "keep-both" ||
-          selection.duplicateAction === "preserve-duplicates",
-        ...(backup
-          ? {
-              allowedDuplicateSymlinks: backup.symlinks.map((entry) => ({
-                ...entry,
-                canonicalPath: selection.sourcePath,
-              })),
-            }
-          : {}),
-        selectedSkills: [selection.name],
-        scope: { kind: "global" },
-        enabled: true,
-        manage,
-      },
-    ],
-    roots,
+  const state = yield* (yield* LibraryStore).load;
+  const resolved = yield* resolveLibrarySubject(state, subjectId);
+  const subject =
+    resolved.kind === "collection"
+      ? { _tag: "Collection" as const, id: resolved.collection.collection_id }
+      : { _tag: "Skill" as const, id: resolved.skill.skill_id };
+  const library = yield* Library.make.pipe(
+    Effect.provideService(InstalledSkills.Service, yield* makeInstalledSkills(roots)),
   );
+  const plan = {
+    changes: [],
+    owner: {
+      configuration: roots,
+      plan: yield* library.plan(
+        [
+          {
+            _tag: "Enable",
+            subject,
+            members: state.skills
+              .filter(
+                (skill) =>
+                  skill.name === selection.name &&
+                  (subject._tag === "Collection"
+                    ? skill.collection_id === subject.id
+                    : skill.skill_id === subject.id),
+              )
+              .map((skill) => skill.skill_id),
+            where: [{ kind: "global" }],
+            allowDuplicate:
+              selection.duplicateAction === "keep-both" ||
+              selection.duplicateAction === "preserve-duplicates",
+            setup: {
+              onlySelected: true,
+              manage,
+              approvedSymlinks: (backup?.symlinks ?? []).map((entry) => ({
+                path: entry.path,
+                canonicalPath: selection.sourcePath,
+                dev: String(entry.dev),
+                ino: String(entry.ino),
+                linkTarget: entry.linkTarget,
+              })),
+            },
+          },
+        ],
+        { base: state },
+      ),
+    },
+  };
   const applied = yield* applySetEnabledPlan(plan).pipe(
     Effect.map((results) => ({ results, warnings: [] as { name: string; message: string }[] })),
     Effect.catchTag("Library.SetEnabledIncomplete", (failure) =>

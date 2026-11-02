@@ -3,8 +3,7 @@ import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
-import { installEnabledSkills } from "../src/library/installation/install-enabled.js";
-import { removeCollection } from "../src/library/installation/remove.js";
+import { installEnabledSkills, removeCollection } from "./helpers/library.js";
 import type { Enabled } from "../src/library/library-contracts.js";
 import { importCollection } from "../src/library/import-collection.js";
 import { LibraryStore, libraryStoreLayer } from "../src/library/store/library-store.js";
@@ -132,10 +131,10 @@ it.effect("refuses to remove a Collection that gained a member after removal was
 
     yield* refresh(["alpha", "beta"]);
     yield* project;
-    const error = yield* withLibraryWriterLock(
-      home,
-      removeCollection(planned, { collectionId, variantsPath: join(home, "variants") }),
-    ).pipe(Effect.provide(storeLayer), Effect.flip);
+    const error = yield* withLibraryWriterLock(home, removeCollection(planned, collectionId)).pipe(
+      Effect.provide(storeLayer),
+      Effect.flip,
+    );
 
     assert.strictEqual(error._tag, "LibraryChanged");
     const state = yield* load;

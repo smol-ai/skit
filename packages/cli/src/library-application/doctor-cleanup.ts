@@ -1,5 +1,4 @@
 import {
-  LibraryStore,
   type LibraryState,
   type ListingBudget,
   type UsageReport,
@@ -7,7 +6,7 @@ import {
 } from "@smolai/skit-core";
 import { Array, Effect } from "effect";
 import { resolve } from "node:path";
-import { setEnabledSession, type SetEnabledIntent } from "./set-enabled.js";
+import { openSetEnabledSession, type SetEnabledIntent } from "./set-enabled.js";
 import { enabledCollections } from "../workflows/library/set-enabled-request.js";
 import {
   skillsDirectoryFor,
@@ -130,9 +129,8 @@ export const openDoctorCleanupSelection = Effect.fn("Doctor.openCleanupSelection
   days: number,
   progress: (completed: number, total: number) => Effect.Effect<void>,
 ) {
-  const store = yield* LibraryStore;
-  const state = yield* store.load;
-  const selection = setEnabledSession(state, store.home, store.originalsPath);
+  const selection = yield* openSetEnabledSession();
+  const state = selection.state;
   const usage = yield* scanLocalUsage(state, { userHome: configuration.home, days, progress });
   const candidates = suggestDoctorCleanup(state, budgets, usage, configuration);
   return {

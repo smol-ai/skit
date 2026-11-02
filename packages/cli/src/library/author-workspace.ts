@@ -1,3 +1,4 @@
+import { localLibrary } from "../library-application/library-owner.js";
 import {
   AUTHOR_WORKSPACE_METADATA_FILE,
   COLLECTION_CONTROL_DIRECTORY,
@@ -5,7 +6,6 @@ import {
   ImportContentInvalid,
   initSkit,
   validateSkitDirectory,
-  importAuthoredCollection,
   writeJsonAtomic,
   writeJsonExclusive,
   withLibraryWriter,
@@ -168,7 +168,7 @@ const registerOwnedWorkspace = Effect.fn("Author.registerOwnedWorkspace")(functi
         error.reason._tag === "AlreadyExists" ? Effect.void : Effect.fail(error),
       ),
     );
-  const collection = yield* importAuthoredCollection({
+  const collection = yield* (yield* localLibrary).import.authored({
     root,
     source: { type: "local", path: root },
     sourceIdentity: {

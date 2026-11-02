@@ -1,15 +1,11 @@
+import { installEnabledSkills } from "./helpers/installed-skills.js";
 import { join } from "node:path";
 import { systemError } from "effect/PlatformError";
 import { Clock, Effect, FileSystem } from "effect";
 import { TestClock } from "effect/testing";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import {
-  LibraryStore,
-  libraryStateRevision,
-  installEnabledSkills,
-  skitLayer,
-} from "@smolai/skit-core";
+import { LibraryStore, libraryStateRevision, skitLayer } from "@smolai/skit-core";
 import { prepareSetupCommand, setupApplyCommand } from "../src/handlers/library/setup-machine.js";
 import { renderContract } from "../src/presentation/contract-presenters.js";
 import { setupCommand } from "../src/handlers/library/setup.js";

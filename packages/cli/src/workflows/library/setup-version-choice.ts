@@ -1,3 +1,5 @@
+import { localLibrary } from "../../library-application/library-owner.js";
+import { installSkills } from "../../library-application/install-skills.js";
 import { join, resolve } from "node:path";
 import { Clock, Effect, FileSystem } from "effect";
 import {
@@ -7,8 +9,6 @@ import {
   hashParts,
   LibraryStore,
   prepareInstalledSkillRebuild,
-  installEnabledSkills,
-  importEdit,
   globalEnabled,
 } from "@smolai/skit-core";
 import type { InstalledSkillChange, SetupVersionChoice } from "./setup-contract.js";
@@ -80,15 +80,13 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
     if (choice.version !== "local") continue;
     const copy = live.find((fact) => fact.path === choice.path && fact.skillId === choice.skillId);
     if (!copy?.currentHash) return yield* new PlanIsStale();
-    yield* Effect.scoped(
-      importEdit({
-        skillId: copy.skillId,
-        installedSkillId: copy.installedSkillId,
-        path: copy.path,
-        currentHash: copy.currentHash,
-        importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
-      }),
-    );
+    yield* (yield* localLibrary).import.edit({
+      skillId: copy.skillId,
+      installedSkillId: copy.installedSkillId,
+      path: copy.path,
+      currentHash: copy.currentHash,
+      importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
+    });
   }
   const imported = yield* store.load;
   // Render all selected destinations before displacing any of them. This also uses their policy.
@@ -136,13 +134,12 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
     const installedSkill = imported.installed_skills.find(
       (item) => item.installed_skill_id === fact.installedSkillId,
     )!;
-    yield* installEnabledSkills({
-      target: fact.destination,
+    yield* installSkills({
       scope: { kind: "global" },
-      root: installedSkill.root,
-      variantsPath: store.variantsPath,
-      onlySkillIds: [fact.skillId],
-      restoreNativeDeletedSkills: [fact.skillId],
+      destination: { destination: fact.destination, root: installedSkill.root },
+      only: [fact.skillId],
+      restoreDeleted: [fact.skillId],
+      manageIdentical: false,
     });
     const after = (yield* store.load).installed_skills.find(
       (item) => item.installed_skill_id === fact.installedSkillId,

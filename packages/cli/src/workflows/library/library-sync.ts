@@ -19,12 +19,12 @@ import { prepareSyncTransfer } from "./library-sync-snapshots.js";
 import { silentSyncProgress, type SyncProgress } from "./library-sync-progress.js";
 import { librarySyncApi } from "./library-sync-api.js";
 import { prepareLibraryMerge, normalizeLibraryManifest } from "./library-merge.js";
-import { updateInstalledSkills } from "./update-installed-skills.js";
 import { planLibrarySync } from "./library-sync-plan.js";
 import type { SyncPlan } from "./library-sync-contract.js";
 import {
   prepareSyncDeviceTransition,
   resolveSyncInstalledSkillCollisions,
+  updateSyncInstalledSkills,
 } from "./library-sync-installed-skills.js";
 import { SyncConflictDetail } from "./library-sync-contract.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
@@ -96,11 +96,6 @@ export const syncLibrary = Effect.fn("Library.sync")(
     const progress = options.progress ?? silentSyncProgress;
 
     const store = yield* LibraryStore;
-    const installedSkillOptions = {
-      home: store.home,
-      variantsPath: store.variantsPath,
-      ...(options.installedSkill === undefined ? {} : { rootFor: options.installedSkill.rootFor }),
-    };
     const api = yield* librarySyncApi({ origin: options.origin, token: options.token });
     const local = yield* progress.around({ kind: "inspect-local" }, store.inspect);
     const manifest = local.present
@@ -346,10 +341,7 @@ export const syncLibrary = Effect.fn("Library.sync")(
         if (!choosing) {
           const result = yield* progress.around(
             { kind: "enable" },
-            updateInstalledSkills({
-              ...installedSkillOptions,
-              includeRepositories: true,
-            }),
+            updateSyncInstalledSkills(options.installedSkill?.rootFor),
           );
           return { ...installedSkillCounts(result), issues: [] as string[] };
         }
@@ -387,10 +379,7 @@ export const syncLibrary = Effect.fn("Library.sync")(
         const attempt = yield* Effect.result(
           progress.around(
             { kind: "enable" },
-            updateInstalledSkills({
-              ...installedSkillOptions,
-              includeRepositories: true,
-            }),
+            updateSyncInstalledSkills(options.installedSkill?.rootFor),
           ),
         );
         if (Result.isFailure(attempt))

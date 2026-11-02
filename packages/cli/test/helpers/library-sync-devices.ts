@@ -1,3 +1,4 @@
+import { installEnabledSkills } from "./installed-skills.js";
 import { assert } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Schema } from "effect";
 import { join } from "node:path";
@@ -9,8 +10,9 @@ import {
   deterministicTreeHash,
   libraryStoreLayer,
   makeMachineId,
-  installEnabledSkills,
-  removeCollection,
+  Library,
+  InstalledSkills,
+  InstalledSkillsNode,
   importCollection,
   withLibraryWriter,
   LibraryState,
@@ -190,7 +192,18 @@ export const devices = Effect.gen(function* () {
       remove: (collectionId: string) =>
         Effect.flatMap(LibraryStore, (store) => store.load).pipe(
           Effect.flatMap((state) =>
-            removeCollection(state, { collectionId, variantsPath: join(home, "variants") }),
+            Effect.gen(function* () {
+              const id = state.collections.find(
+                (item) => item.collection_id === collectionId,
+              )?.collection_id;
+              assert.ok(id);
+              const library = yield* Library.make.pipe(
+                Effect.provideService(InstalledSkills.Service, yield* InstalledSkillsNode.make()),
+              );
+              return yield* library.apply(
+                yield* library.plan([{ _tag: "Remove", collectionId: id }], { base: state }),
+              );
+            }),
           ),
           withLibraryWriter,
           Effect.provide(layer),

@@ -10,7 +10,7 @@ import {
   installedSkillDisplaced,
   readOwnershipMarker,
   inspectOwnershipMarker,
-} from "../../install/mutation.js";
+} from "../../install/files.js";
 import { keepInstalledSkillBackup, pendingInstalledSkillBackups } from "../../install/backups.js";
 import { LibraryStore } from "../store/library-store.js";
 export interface InventoryScanRoot {

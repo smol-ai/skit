@@ -8,9 +8,12 @@ import { TreeHasher, treeHasherLayer } from "../src/artifact/tree-hasher.js";
 import { makeSkillVersionId, migratedMachineId } from "../src/library/entity-ids.js";
 import { currentSkillVersion, versionBacking } from "../src/library/library-contracts.js";
 import { collectionVersionPath } from "../src/library/collection-version.js";
-import { installEnabledSkills } from "../src/library/installation/install-enabled.js";
-import { removeCollection } from "../src/library/installation/remove.js";
-import { leftoverSkills, uninstallSkills } from "../src/library/installation/uninstall.js";
+import {
+  installEnabledSkills,
+  removeCollection,
+  uninstallCopies,
+  uninstallLeftovers,
+} from "./helpers/library.js";
 import { importEdit, importCollection } from "../src/library/import-collection.js";
 import type { LibraryState } from "../src/library/library-state.js";
 import { Hash } from "../src/vocabulary.js";
@@ -28,28 +31,7 @@ import {
   losslessTree,
   installedSkillWorkDirectory,
 } from "../src/install/backups.js";
-import { inspectOwnershipMarker, withInstalledSkillMutation } from "../src/install/mutation.js";
-
-/** Uninstall the leftover global copies, as updating installed skills does. */
-const uninstallLeftovers = (options: {
-  variantsPath: string;
-  activeTargets: Parameters<typeof leftoverSkills>[1]["activeDestinations"];
-  desiredBindings?: Parameters<typeof leftoverSkills>[1]["enabled"];
-  inactiveOnly?: boolean;
-  onlySkillIds?: Parameters<typeof leftoverSkills>[1]["onlySkillIds"];
-}) =>
-  Effect.gen(function* () {
-    const state = yield* (yield* LibraryStore).load;
-    return yield* uninstallSkills(
-      leftoverSkills(state, {
-        activeDestinations: options.activeTargets,
-        ...(options.desiredBindings === undefined ? {} : { enabled: options.desiredBindings }),
-        ...(options.inactiveOnly === undefined ? {} : { inactiveOnly: options.inactiveOnly }),
-        ...(options.onlySkillIds === undefined ? {} : { onlySkillIds: options.onlySkillIds }),
-      }),
-      { variantsPath: options.variantsPath, activeDestinations: options.activeTargets },
-    );
-  });
+import { inspectOwnershipMarker } from "../src/install/files.js";
 
 const machineId = migratedMachineId(
   "019950c0-4c00-7000-8000-000000000001",
@@ -704,10 +686,10 @@ const installedSkillFixture = (second = false, emptyDirectories: readonly string
     const remove = (state: LibraryState) =>
       withLibraryWriterLock(
         home,
-        removeCollection(state, {
-          collectionId: state.collections[0]!.collection_id,
-          variantsPath,
-        }).pipe(Effect.asVoid, Effect.provide(storeLayer)),
+        removeCollection(state, state.collections[0]!.collection_id).pipe(
+          Effect.asVoid,
+          Effect.provide(storeLayer),
+        ),
       );
     const refresh = withLibraryWriterLock(
       home,
@@ -1130,18 +1112,7 @@ it.effect("a backup is never settled against a state the Library has moved on fr
     yield* edit(explicitPolicies);
     const failed = yield* withLibraryWriterLock(
       home,
-      LibraryStore.use((store) =>
-        withInstalledSkillMutation(
-          loaded,
-          {
-            rootFor: () => undefined,
-            variantsPath,
-            originalsPath: store.originalsPath,
-            save: store.save,
-          },
-          (mutation) => mutation.uninstall(installedSkill, "report", "unexpected conflict"),
-        ),
-      ).pipe(Effect.provide(storeLayer), Effect.flip),
+      uninstallCopies(loaded, [installedSkill]).pipe(Effect.provide(storeLayer), Effect.flip),
     );
     assert.strictEqual(failed._tag, "LibraryChanged");
     assert.deepStrictEqual(

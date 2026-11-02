@@ -9,7 +9,7 @@ import { Data, Cause, Effect, FileSystem, Predicate } from "effect";
 import type { InventoryRootOptions } from "../install/roots.js";
 import { importSource, inspectLibrarySource } from "./import-source.js";
 import type { UpdateFailure } from "../workflows/library/update-contract.js";
-import { updateInstalledSkills } from "../workflows/library/update-installed-skills.js";
+import { make as makeInstalledSkills } from "../install/installed-skills.js";
 import { LibraryProgress } from "./progress.js";
 import {
   latestSourceImport,
@@ -18,7 +18,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { isPlatformError } from "effect/PlatformError";
 import { commandFailure } from "../failure-classification.js";
-import { sourceLocator } from "@smolai/skit-core";
+import { sourceLocator, Library, InstalledSkills } from "@smolai/skit-core";
 import { sourceFromUpstream } from "../workflows/library/upstream-source.js";
 import { FailureTypeId, isSkitFailure, type SkitFailure } from "@smolai/skit-core";
 
@@ -235,19 +235,22 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
         phase = "install";
         const installedSkillUpdate = yield* progress.around(
           { kind: "install", subject },
-          updateInstalledSkills({
-            roots: options.roots,
-            variantsPath: store.variantsPath,
-            onlyScopes: enabledByScope(current).filter((list) =>
-              list.enabled.some((item) =>
-                "collection" in item
-                  ? item.collection === collectionId
-                  : current.skills.some(
-                      (skill) =>
-                        skill.skill_id === item.skill && skill.collection_id === collectionId,
-                    ),
+          Effect.gen(function* () {
+            const library = yield* Library.make.pipe(
+              Effect.provideService(
+                InstalledSkills.Service,
+                yield* makeInstalledSkills(options.roots),
               ),
-            ),
+            );
+            const outcome = yield* library.apply(
+              yield* library.plan([{ _tag: "Update", collectionId }], { base: current }),
+            );
+            return {
+              installed:
+                outcome._tag === "Applied"
+                  ? outcome.copies.filter((copy) => copy._tag === "Installed").length
+                  : 0,
+            };
           }),
           (value) => ({ kind: "installed-skills-updated", installed: value.installed }),
         );

@@ -1,3 +1,4 @@
+import { installEnabledSkills } from "./helpers/installed-skills.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer } from "effect";
@@ -9,7 +10,6 @@ import {
   LibraryStore,
   libraryStoreLayer,
   collectionVersionPath,
-  installEnabledSkills,
   SourceProcess,
   type SkitSource,
 } from "@smolai/skit-core";

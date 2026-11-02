@@ -38,13 +38,10 @@ export {
   inspectInstalledSkill,
   installedSkillDisplaced,
   installedSkillName,
-  withInstalledSkillMutation,
   prepareInstalledSkillRebuild,
-  type InstalledSkillMutation,
-  type NativeInstalledSkillContext,
   type InstalledSkillMutationError,
   type ManageApproval,
-} from "./install/mutation.js";
+} from "./install/files.js";
 export { inspectInstalledSkillBackups } from "./install/backups.js";
 export { copyLocalTree } from "./platform/copy-tree.js";
 export { ensureSkillsDirectoryWritable } from "./install/writable.js";
@@ -98,6 +95,7 @@ export * from "./library/installation/remove.js";
 export * from "./library/installed-skill-hash.js";
 export * from "./library/import-collection.js";
 export * from "./library/installation/install-enabled.js";
+export { installedSkillSource } from "./library/installation/installed-skill-source.js";
 export * from "./library/snapshot-archive.js";
 export * from "./library/entity-ids.js";
 export * from "./library/machine-document.js";
@@ -111,3 +109,22 @@ export {
   Unusable as MachineSettingsUnusable,
   type Settings as MachineSettingsSnapshot,
 } from "./library/machine-settings.js";
+
+export * as InstalledSkillFiles from "./install/files.js";
+export * as InstalledSkillBackups from "./install/backups.js";
+
+export { InstalledSkills } from "./library/installed-skills.js";
+export { InstalledSkillsNode } from "./library/installed-skills-node.js";
+export { Library } from "./library/library.js";
+export type {
+  PlanError as LibraryPlanError,
+  ApplyError as LibraryApplyError,
+} from "./library/library.js";
+
+export {
+  InstalledSkillWouldReplaceLink,
+  InstalledSkillWouldDuplicate,
+} from "./library/library.js";
+
+export { DuplicateScanIncomplete } from "./library/installed-skills.js";
+export { InvalidIntent, StalePlan, DestinationsIncomplete } from "./library/library.js";

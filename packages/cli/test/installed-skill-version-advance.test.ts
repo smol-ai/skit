@@ -1,3 +1,4 @@
+import { installEnabledSkills, updateInstalledSkills } from "./helpers/installed-skills.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
@@ -7,11 +8,9 @@ import {
   deterministicTreeHash,
   LibraryStore,
   libraryStoreLayer,
-  installEnabledSkills,
   refreshLibraryInventory,
 } from "@smolai/skit-core";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
-import { updateInstalledSkills } from "../src/workflows/library/update-installed-skills.js";
 import { isolatedRoots } from "./helpers/isolated-library.js";
 import { initializeLibraryMachine, importCollectionIn, writingTo } from "./helpers/library-home.js";
 

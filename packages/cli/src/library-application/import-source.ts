@@ -1,3 +1,4 @@
+import { localLibrary } from "./library-owner.js";
 import { officialRegistryOrigin } from "../registry/accounts.js";
 import { withLibraryWriter } from "@smolai/skit-core";
 import {
@@ -10,8 +11,6 @@ import {
   sourceLocator,
   prepareImport,
   resolveSkitSource,
-  importAuthoredCollection,
-  importCollection,
   type SkitSource,
   type ResolvedSkitSource,
 } from "@smolai/skit-core";
@@ -198,10 +197,11 @@ export const importSource = Effect.fn("Library.addSource")(function* (
           revision: resolved.revision,
           importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
         };
+        const library = yield* localLibrary;
         const imported =
           resolved.descriptorKind === "declared"
-            ? yield* importAuthoredCollection({ ...request, root: resolved.root })
-            : yield* importCollection({
+            ? yield* library.import.authored({ ...request, root: resolved.root })
+            : yield* library.import.collection({
                 ...request,
                 skills: yield* describeSourceSkills(resolved, historicalInput),
                 lockFileEntries: [],

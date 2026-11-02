@@ -1,3 +1,4 @@
+import { installSkills } from "../../library-application/install-skills.js";
 import { basename, join, resolve } from "node:path";
 import { Data, Effect, FileSystem } from "effect";
 import {
@@ -12,7 +13,6 @@ import {
   installedSkillDisplaced,
   repositorySelectsInstalledSkill,
   globalEnabled,
-  installEnabledSkills,
   FailureTypeId,
   type SkitFailure,
   type LibraryState,
@@ -300,17 +300,21 @@ export const installSelectedVersions = Effect.fn("Setup.installSelectedVersions"
       continue;
     const evidence = hashParts([canonicalJson(yield* readSkillPathDetails(resolve(fact.path)))]);
     if (evidence !== fact.evidence || current !== fact.currentHash) return yield* new PlanIsStale();
-    yield* installEnabledSkills({
-      target: fact.destination,
+    yield* installSkills({
       scope: { kind: "global" },
-      root: installedSkill.root,
-      variantsPath: store.variantsPath,
-      onlySkillIds: [fact.skillId],
+      destination: { destination: fact.destination, root: installedSkill.root },
+      only: [fact.skillId],
+      restoreDeleted: [],
+      manageIdentical: false,
       ...(current === fact.desiredHash
         ? {
-            acceptedCopies: new Map([
-              [fact.installedSkillId, { currentHash: current, marker: marker.marker }],
-            ]),
+            acceptedCopies: [
+              {
+                installedSkillId: fact.installedSkillId,
+                currentHash: current,
+                marker: marker.marker,
+              },
+            ],
           }
         : {}),
     });

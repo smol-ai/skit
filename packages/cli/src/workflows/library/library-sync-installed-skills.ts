@@ -1,4 +1,5 @@
-import { Effect, Schema } from "effect";
+import { localLibrary } from "../../library-application/library-owner.js";
+import { Effect, Option, Schema } from "effect";
 import { join } from "node:path";
 import {
   LibraryManifest,
@@ -17,7 +18,10 @@ import {
   installedSkillName,
   installDestinationPathIdentity,
   repositorySelectsInstalledSkill,
-  withInstalledSkillMutation,
+  Library,
+  InstalledSkills,
+  InstalledSkillsNode,
+  InstalledSkillInvalid,
   type InstallDestination,
   type Enabled,
 } from "@smolai/skit-core";
@@ -307,6 +311,61 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
 });
 
 /**
+ * This device's skill folders as sync routes them: global copies at `rootFor`'s roots, repository
+ * copies at the routes they already use. Without `rootFor`, every destination counts as active.
+ */
+export const syncInstalledSkills = Effect.fn("Library.sync.installedSkills")(function* (
+  state: LibraryState,
+  rootFor: ((target: InstallDestination) => string | undefined) | undefined,
+) {
+  const active =
+    rootFor === undefined
+      ? [...targets]
+      : targets.filter((target) => rootFor(target) !== undefined);
+  return yield* InstalledSkillsNode.make({
+    active: Effect.succeed(active),
+    destinations: (scope) =>
+      Effect.succeed(
+        active.flatMap((destination) => {
+          const root =
+            scope.kind === "global"
+              ? rootFor?.(destination)
+              : existingRepositorySkillsDirectory(state, scope.root, destination);
+          return root === undefined ? [] : [{ destination, root }];
+        }),
+      ),
+    duplicates: {
+      scan: () =>
+        Effect.fail(
+          new InstalledSkills.Failed({
+            path: "",
+            cause: new InstalledSkillInvalid({ detail: "Sync does not scan for duplicates" }),
+            displaced: Option.none(),
+          }),
+        ),
+    },
+  });
+});
+
+/** Every copy SKIT installed, brought in line with what is enabled, as sync routes them. */
+export const updateSyncInstalledSkills = Effect.fn("Library.sync.updateInstalledSkills")(function* (
+  rootFor: ((target: InstallDestination) => string | undefined) | undefined,
+) {
+  const current = yield* (yield* LibraryStore).load;
+  const library = yield* Library.make.pipe(
+    Effect.provideService(InstalledSkills.Service, yield* syncInstalledSkills(current, rootFor)),
+  );
+  const outcome = yield* library.apply(
+    yield* library.plan([{ _tag: "Update" }], { base: current }),
+  );
+  const copies = outcome._tag === "Applied" ? outcome.copies : [];
+  return {
+    installed: copies.filter((copy) => copy._tag === "Installed").length,
+    uninstalled: copies.filter((copy) => copy._tag === "Uninstalled").length,
+  };
+});
+
+/**
  * Keep old references durable until portable state and ancestry can be saved together.
  * Saves only onto `current`, the state sync planned from, and returns the state it saved.
  */
@@ -316,41 +375,19 @@ const uninstallForSync = Effect.fn("Library.sync.uninstallForSync")(function* (
 ) {
   const store = yield* LibraryStore;
   if (plan.retire.length === 0) return { uninstalled: 0, state: current };
-  const result = yield* withInstalledSkillMutation(
-    current,
-    {
-      rootFor: () => undefined,
-      variantsPath: store.variantsPath,
-      originalsPath: store.originalsPath,
-      save: store.save,
-    },
-    (mutation) =>
-      Effect.gen(function* () {
-        let uninstalled = 0;
-        for (const id of plan.retire) {
-          const installedSkill = mutation.state.installed_skills.find(
-            (item) => item.installed_skill_id === id,
-          );
-          if (installedSkill === undefined) continue;
-          const outcome = yield* mutation.uninstall(
-            installedSkill,
-            "throw",
-            `Refusing to remove modified Skill at ${installedSkill.path}`,
-          );
-          if (outcome.kind === "uninstalled") uninstalled++;
-          if (plan.remove.includes(id))
-            mutation.state.installed_skills.splice(
-              0,
-              mutation.state.installed_skills.length,
-              ...mutation.state.installed_skills.filter((item) => item.installed_skill_id !== id),
-            );
-          else if (installedSkill.suppression_reason !== "native_delete")
-            installedSkill.status = "pending";
-        }
-        return uninstalled;
-      }),
+  const library = yield* localLibrary;
+  const outcome = yield* library.apply(
+    yield* library.plan([{ _tag: "Uninstall", copies: plan.retire, drop: plan.remove }], {
+      base: current,
+    }),
   );
-  return { uninstalled: result.value, state: result.state };
+  return {
+    uninstalled:
+      outcome._tag === "Applied"
+        ? outcome.copies.filter((copy) => copy._tag === "Uninstalled").length
+        : 0,
+    state: yield* store.load,
+  };
 });
 
 /** Prepare this device's local transition before remote publication; keep mutation records private. */

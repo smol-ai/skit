@@ -1,3 +1,5 @@
+import { localLibrary } from "../../library-application/library-owner.js";
+import { installSkills } from "../../library-application/install-skills.js";
 import {
   canonicalJson,
   deterministicTreeHash,
@@ -8,8 +10,6 @@ import {
   enabledSkillIds,
   currentSkillVersion,
   prepareImport,
-  installEnabledSkills,
-  importEdit,
   collectionVersionPath,
   versionBacking,
   withLibraryWriter,
@@ -208,15 +208,13 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
           installedSkill.installed_skill_id === preview.selected_installed_skill_id,
       )!;
       const imported = preview.import_required
-        ? yield* Effect.scoped(
-            importEdit({
-              skillId: preview.skill_id,
-              installedSkillId: preview.selected_installed_skill_id,
-              path: selected.path,
-              currentHash: preview.current_hash,
-              importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
-            }),
-          )
+        ? yield* (yield* localLibrary).import.edit({
+            skillId: preview.skill_id,
+            installedSkillId: preview.selected_installed_skill_id,
+            path: selected.path,
+            currentHash: preview.current_hash,
+            importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
+          })
         : yield* Effect.gen(function* () {
             const skill = current.skills.find(
               (candidate) => candidate.skill_id === preview.skill_id,
@@ -266,12 +264,15 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
         const coordinate = `${installedSkill.destination}\0${canonicalJson(scope)}\0${installedSkill.root}`;
         if (reconciled.has(coordinate)) continue;
         reconciled.add(coordinate);
-        yield* installEnabledSkills({
-          target: installedSkill.destination,
+        yield* installSkills({
           scope,
-          root: installedSkill.root,
-          variantsPath: store.variantsPath,
-          acceptedCopies: accepted,
+          destination: { destination: installedSkill.destination, root: installedSkill.root },
+          restoreDeleted: [],
+          manageIdentical: false,
+          acceptedCopies: [...accepted].map(([installedSkillId, copy]) => ({
+            installedSkillId,
+            ...copy,
+          })),
         });
       }
       const settled = yield* store.load;

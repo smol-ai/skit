@@ -1,9 +1,9 @@
+import { localLibrary } from "../../library-application/library-owner.js";
 import { markAuthorWorkspaceRemoved } from "../../library/author-workspace.js";
-import { LibraryStore, withLibraryWriter } from "@smolai/skit-core";
 import {
   enabledSkillIds,
-  removeCollection,
   SkillRemovalRequiresCollection,
+  CollectionRemovalMissing,
   type LibraryState,
 } from "@smolai/skit-core";
 import { Effect } from "effect";
@@ -56,23 +56,28 @@ export const planRemove = Effect.fn("Library.planRemove")(function* (
   };
 });
 
-export const executeRemove = Effect.fn("Library.executeRemove")(
-  function* (state: LibraryState, options: RemoveOptions) {
-    const plan = yield* planRemove(state, options.query);
-    if (options.dryRun) return { kind: "plan" as const, value: plan };
-    // Planning only admits a Skill that is its Collection's only Skill, so removal is of a Collection.
-    // It removes exactly what was planned, and is refused if the Library has since moved on.
-    const removed = yield* removeCollection(state, {
-      collectionId:
-        plan.subject_kind === "collection"
-          ? plan.subject_id
-          : (state.skills.find((skill) => skill.skill_id === plan.subject_id)?.collection_id ??
-            plan.subject_id),
-      variantsPath: (yield* LibraryStore).variantsPath,
-    });
-    if (plan.subject_kind === "collection")
-      yield* markAuthorWorkspaceRemoved(state, plan.subject_id);
-    return { kind: "removed" as const, value: { ...plan, uninstalled: removed.uninstalled } };
-  },
-  (effect, _state, options) => (options.dryRun ? effect : withLibraryWriter(effect)),
-);
+export const executeRemove = Effect.fn("Library.executeRemove")(function* (
+  state: LibraryState,
+  options: RemoveOptions,
+) {
+  const plan = yield* planRemove(state, options.query);
+  if (options.dryRun) return { kind: "plan" as const, value: plan };
+  // Planning only admits a Skill that is its Collection's only Skill, so removal is of a Collection.
+  // Library removes exactly what was planned, and refuses if the Library has since moved on.
+  const collectionId =
+    plan.subject_kind === "collection"
+      ? state.collections.find((item) => item.collection_id === plan.subject_id)?.collection_id
+      : state.skills.find((skill) => skill.skill_id === plan.subject_id)?.collection_id;
+  if (collectionId === undefined)
+    return yield* new CollectionRemovalMissing({ collection_id: plan.subject_id });
+  const library = yield* localLibrary;
+  const outcome = yield* library.apply(
+    yield* library.plan([{ _tag: "Remove", collectionId }], { base: state }),
+  );
+  const uninstalled =
+    outcome._tag === "Applied"
+      ? outcome.copies.filter((copy) => copy._tag === "Uninstalled").length
+      : 0;
+  if (plan.subject_kind === "collection") yield* markAuthorWorkspaceRemoved(state, plan.subject_id);
+  return { kind: "removed" as const, value: { ...plan, uninstalled } };
+});

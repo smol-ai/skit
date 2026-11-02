@@ -13,6 +13,7 @@ import {
   SkillsDirectoryNotWritable,
   skillUsageLayer,
   SkillUsage,
+  TreeHasher,
 } from "@smolai/skit-core";
 import { withSandboxDenying } from "./helpers/sandbox.js";
 import {
@@ -1406,3 +1407,362 @@ it.effect("the CLI adapter keeps the I/O failure exit code after saving enableme
     assert.strictEqual(yield* f.fs.exists(join(f.destination, "alpha")), false);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
+
+for (const drift of ["create", "modify", "symlink", "source"] as const)
+  it.effect(`Library owner refuses ${drift} drift before accepting intent`, () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      const path = join(f.destination, "alpha");
+      if (drift === "modify" || drift === "symlink") {
+        const initial = yield* f.home.owned(planSetEnabled([f.request], f.home.installOptions));
+        yield* f.home.owned(applySetEnabledPlan(initial));
+      }
+      const selection = yield* f.home.owned(openSetEnabledSession());
+      const plan = yield* f.home.owned(
+        selection.plan(
+          {
+            subject: f.request.query,
+            members: ["alpha"],
+            enabled: true,
+            where: [{ kind: "global" }],
+          },
+          f.home.installOptions,
+        ),
+      );
+      assert.ok(plan.owner);
+      if (drift === "source") {
+        const store = yield* f.home.owned(LibraryStore);
+        const source = plan.owner.plan.observed.find((e) =>
+          e.path.startsWith(store.originalsPath + "/"),
+        );
+        assert.ok(source);
+        yield* f.fs.writeFileString(
+          join(source.path, "alpha", "SKILL.md"),
+          "changed retained bytes\n",
+        );
+      } else if (drift === "symlink") {
+        const outside = join(f.root, "outside");
+        yield* f.fs.rename(path, outside);
+        yield* f.fs.symlink(outside, path);
+      } else {
+        yield* f.fs.makeDirectory(path, { recursive: true });
+        yield* f.fs.writeFileString(join(path, "SKILL.md"), "changed native bytes\n");
+      }
+      const before = yield* f.home.durable;
+      const error = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
+      assert.strictEqual(error._tag, "Library.SetEnabledStale");
+      assert.deepStrictEqual(yield* f.home.durable, before);
+      if (drift === "symlink")
+        assert.strictEqual(yield* f.fs.readLink(path), join(f.root, "outside"));
+      else if (drift !== "source")
+        assert.strictEqual(
+          yield* f.fs.readFileString(join(path, "SKILL.md")),
+          "changed native bytes\n",
+        );
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+  );
+
+for (const directory of ["empty", "nested-symlink"] as const)
+  it.effect(`Library owner previews a foreign ${directory} directory without changing it`, () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      const path = join(f.destination, "alpha");
+      yield* f.fs.makeDirectory(path, { recursive: true });
+      if (directory === "nested-symlink") {
+        yield* f.fs.writeFileString(join(path, "SKILL.md"), "foreign\n");
+        yield* f.fs.symlink(f.root, join(path, "link"));
+      }
+      const selection = yield* f.home.owned(openSetEnabledSession());
+      const plan = yield* f.home.owned(
+        selection.plan(
+          {
+            subject: f.request.query,
+            members: ["alpha"],
+            enabled: true,
+            where: [{ kind: "global" }],
+          },
+          f.home.installOptions,
+        ),
+      );
+      assert.ok(plan.owner);
+      assert.ok(plan.owner.plan.observed.some((e) => e.path === path && e.entry._tag !== "Absent"));
+      const failure = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
+      assert.instanceOf(failure, SetEnabledIncomplete);
+      assert.strictEqual(yield* f.fs.exists(join(path, ".skit-ownership.json")), false);
+      if (directory === "nested-symlink")
+        assert.strictEqual(yield* f.fs.readLink(join(path, "link")), f.root);
+      else assert.deepStrictEqual(yield* f.fs.readDirectory(path), []);
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+  );
+
+it.effect(
+  "Library owner checks one batch baseline when the same destination is enabled twice",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      const selection = yield* f.home.owned(openSetEnabledSession());
+      const intent = {
+        subject: f.request.query,
+        members: ["alpha"],
+        enabled: true,
+        where: [{ kind: "global" as const }],
+      };
+      const plan = yield* f.home.owned(selection.planMany([intent, intent], f.home.installOptions));
+      const results = yield* f.home.owned(applySetEnabledPlan(plan));
+      assert.strictEqual(results.length, 2);
+      assert.strictEqual(
+        (yield* f.home.durable).installed_skills.filter(
+          (copy) => copy.path === join(f.destination, "alpha"),
+        ).length,
+        1,
+      );
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect("Library owner refuses an unwritable root before saving intent", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const selection = yield* f.home.owned(openSetEnabledSession());
+    const plan = yield* f.home.owned(
+      selection.plan(
+        {
+          subject: f.request.query,
+          members: ["alpha"],
+          enabled: true,
+          where: [{ kind: "global" }],
+        },
+        f.home.installOptions,
+      ),
+    );
+    const before = yield* f.home.durable;
+    const error = yield* f.home
+      .owned(applySetEnabledPlan(plan))
+      .pipe(withSandboxDenying(join(f.root, "account", ".agents")), Effect.flip);
+    assert.instanceOf(error, SkillsDirectoryNotWritable);
+    assert.deepStrictEqual(yield* f.home.durable, before);
+    assert.strictEqual(yield* f.fs.exists(f.destination), false);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect("Library owner rejects forged destination coordinates in a plain plan", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const selection = yield* f.home.owned(openSetEnabledSession());
+    const plan = yield* f.home.owned(
+      selection.plan(
+        {
+          subject: f.request.query,
+          members: ["alpha"],
+          enabled: true,
+          where: [{ kind: "global" }],
+        },
+        f.home.installOptions,
+      ),
+    );
+    assert.ok(plan.owner);
+    const outside = join(f.root, "unreviewed");
+    const forged = {
+      ...plan,
+      owner: {
+        ...plan.owner,
+        plan: {
+          ...plan.owner.plan,
+          routes: plan.owner.plan.routes.map((route) => ({
+            ...route,
+            destinations: route.destinations.map((target) => ({ ...target, root: outside })),
+          })),
+        },
+      },
+    };
+    const before = yield* f.home.durable;
+    const error = yield* f.home.owned(applySetEnabledPlan(forged)).pipe(Effect.flip);
+    assert.strictEqual(error._tag, "Library.SetEnabledStale");
+    assert.deepStrictEqual(yield* f.home.durable, before);
+    assert.strictEqual(yield* f.fs.exists(outside), false);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect(
+  "Library owner records a displaced predecessor as pending when its successor rename fails",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      const first = yield* f.home.owned(openSetEnabledSession());
+      const initial = yield* f.home.owned(
+        first.plan(
+          {
+            subject: f.request.query,
+            members: ["alpha"],
+            enabled: true,
+            where: [{ kind: "global" }],
+          },
+          f.home.installOptions,
+        ),
+      );
+      yield* f.home.owned(applySetEnabledPlan(initial));
+      const before = yield* f.home.durable;
+      const old = before.installed_skills[0];
+      assert.ok(old);
+      const selection = yield* f.home.owned(openSetEnabledSession());
+      const plan = yield* f.home.owned(
+        selection.plan(
+          {
+            subject: f.request.query,
+            members: ["alpha"],
+            enabled: true,
+            invocation: "explicit",
+            where: [{ kind: "global" }],
+          },
+          f.home.installOptions,
+        ),
+      );
+      const path = join(f.destination, "alpha");
+      const error = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(
+        Effect.provideServiceEffect(
+          FileSystem.FileSystem,
+          Effect.map(FileSystem.FileSystem, (fs) => ({
+            ...fs,
+            rename: (from: string, to: string) =>
+              to === path
+                ? Effect.fail(
+                    systemError({
+                      _tag: "PermissionDenied",
+                      module: "FileSystem",
+                      method: "rename",
+                      pathOrDescriptor: to,
+                    }),
+                  )
+                : fs.rename(from, to),
+          })),
+        ),
+        Effect.flip,
+      );
+      assert.instanceOf(error, SetEnabledIncomplete);
+      const row = (yield* f.home.durable).installed_skills.find(
+        (copy) => copy.installed_skill_id === old.installed_skill_id,
+      );
+      assert.strictEqual(row?.status, "pending");
+      assert.strictEqual(row?.skill_version_id, old.skill_version_id);
+      assert.strictEqual(row?.expected_hash, old.expected_hash);
+      assert.strictEqual(yield* f.fs.exists(path), false);
+      const backups = (yield* f.fs.readDirectory(
+        join(f.destination, "..", ".skit-backups"),
+      )).filter((name) => name.startsWith("pending-"));
+      assert.strictEqual(backups.length, 1);
+      assert.strictEqual(
+        yield* f.fs.readFileString(
+          join(f.destination, "..", ".skit-backups", backups[0], "SKILL.md"),
+        ),
+        "# alpha\n",
+      );
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect(
+  "Library owner leaves the predecessor row unchanged when a present successor fails verification",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      const first = yield* f.home.owned(openSetEnabledSession());
+      const initial = yield* f.home.owned(
+        first.plan(
+          {
+            subject: f.request.query,
+            members: ["alpha"],
+            enabled: true,
+            where: [{ kind: "global" }],
+          },
+          f.home.installOptions,
+        ),
+      );
+      yield* f.home.owned(applySetEnabledPlan(initial));
+      const old = (yield* f.home.durable).installed_skills[0];
+      assert.ok(old);
+      const selection = yield* f.home.owned(openSetEnabledSession());
+      const plan = yield* f.home.owned(
+        selection.plan(
+          {
+            subject: f.request.query,
+            members: ["alpha"],
+            enabled: true,
+            invocation: "explicit",
+            where: [{ kind: "global" }],
+          },
+          f.home.installOptions,
+        ),
+      );
+      const path = join(f.destination, "alpha");
+      const backups = join(f.destination, "..", ".skit-backups");
+      // Verification of the successor is the only hash read after its predecessor moved aside.
+      const failed = yield* f.home
+        .owned(
+          applySetEnabledPlan(plan).pipe(
+            Effect.provideService(TreeHasher, {
+              hash: (candidate) =>
+                candidate !== path
+                  ? deterministicTreeHash(candidate)
+                  : f.fs.readDirectory(backups).pipe(
+                      Effect.orElseSucceed((): string[] => []),
+                      Effect.flatMap((names) =>
+                        names.some((name) => name.startsWith("pending-"))
+                          ? Effect.succeed(`sha256:${"0".repeat(64)}` as const)
+                          : deterministicTreeHash(candidate),
+                      ),
+                    ),
+            }),
+          ),
+        )
+        .pipe(Effect.flip);
+      assert.instanceOf(failed, SetEnabledIncomplete);
+      assert.deepStrictEqual(
+        (yield* f.home.durable).installed_skills.find(
+          (copy) => copy.installed_skill_id === old.installed_skill_id,
+        ),
+        old,
+      );
+      assert.strictEqual(yield* f.fs.exists(path), true);
+      const pending = (yield* f.fs.readDirectory(
+        join(f.destination, "..", ".skit-backups"),
+      )).filter((name) => name.startsWith("pending-"));
+      assert.strictEqual(pending.length, 1);
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+for (const extras of ["reproducible", "empty-directory"] as const)
+  it.effect(`Library owner settles an acknowledged uninstall backup (${extras})`, () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      const initial = yield* f.home.owned(planSetEnabled([f.request], f.home.installOptions));
+      yield* f.home.owned(applySetEnabledPlan(initial));
+      if (extras === "empty-directory")
+        yield* f.fs.makeDirectory(join(f.destination, "alpha", "notes"));
+      const selection = yield* f.home.owned(openSetEnabledSession());
+      const plan = yield* f.home.owned(
+        selection.plan(
+          {
+            subject: f.request.query,
+            members: ["alpha"],
+            enabled: false,
+            where: [{ kind: "global" }],
+          },
+          f.home.installOptions,
+        ),
+      );
+      yield* f.home.owned(applySetEnabledPlan(plan));
+      assert.strictEqual(yield* f.fs.exists(join(f.destination, "alpha")), false);
+      assert.deepStrictEqual((yield* f.home.durable).installed_skills, []);
+      const backups = (yield* f.fs.readDirectory(
+        join(f.destination, "..", ".skit-backups"),
+      )).filter((name) => name !== ".gitignore");
+      assert.strictEqual(backups.length, extras === "reproducible" ? 0 : 1);
+      if (extras === "empty-directory") {
+        assert.ok(backups[0].startsWith("kept-"));
+        assert.deepStrictEqual(
+          yield* f.fs.readDirectory(
+            join(f.destination, "..", ".skit-backups", backups[0], "notes"),
+          ),
+          [],
+        );
+      }
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+  );
