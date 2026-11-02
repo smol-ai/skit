@@ -222,13 +222,14 @@ for (const failurePhase of ["install", "source-cleanup"] as const) {
         assert.strictEqual(outcomes[0].phase, failurePhase === "install" ? "install" : "source");
         assert.strictEqual(outcomes[0].source_imported, true);
         assert.isTrue("changed" in outcomes[1]! && outcomes[1].changed);
-        assert.strictEqual(yield* f.fs.readFileString(installedSkillPath), original);
+        // The next Collection's update brings every installed copy up to date, this one too.
+        assert.notStrictEqual(yield* f.fs.readFileString(installedSkillPath), original);
         const imported = yield* f.run(Effect.flatMap(LibraryStore, (store) => store.load));
         const retry = yield* writingTo(
           f.home,
           f.run(updateSubjects(options).pipe(Effect.provide(rendererTestLayer()))),
         );
-        assert.isTrue("changed" in retry[0]! && !retry[0].changed && retry[0].installed === 1);
+        assert.isTrue("changed" in retry[0]! && !retry[0].changed && retry[0].installed === 0);
         assert.include(yield* f.fs.readFileString(installedSkillPath), "after");
         const after = yield* f.run(Effect.flatMap(LibraryStore, (store) => store.load));
         assert.strictEqual(after.imports.length, imported.imports.length);

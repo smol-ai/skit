@@ -1,4 +1,4 @@
-import { installSkills } from "../../library-application/install-skills.js";
+import { updateInstalledSkills } from "../../library-application/update-installed-skills.js";
 import { basename, join, resolve } from "node:path";
 import { Data, Effect, FileSystem } from "effect";
 import {
@@ -300,24 +300,18 @@ export const installSelectedVersions = Effect.fn("Setup.installSelectedVersions"
       continue;
     const evidence = hashParts([canonicalJson(yield* readSkillPathDetails(resolve(fact.path)))]);
     if (evidence !== fact.evidence || current !== fact.currentHash) return yield* new PlanIsStale();
-    yield* installSkills({
-      scope: { kind: "global" },
-      destination: { destination: fact.destination, root: installedSkill.root },
-      only: [fact.skillId],
-      restoreDeleted: [],
-      manageIdentical: false,
-      ...(current === fact.desiredHash
-        ? {
-            acceptedCopies: [
-              {
-                installedSkillId: fact.installedSkillId,
-                currentHash: current,
-                marker: marker.marker,
-              },
-            ],
-          }
-        : {}),
-    });
+    yield* updateInstalledSkills(
+      current === fact.desiredHash
+        ? [
+            {
+              _tag: "AcceptEdit",
+              installedSkillId: fact.installedSkillId,
+              currentHash: current,
+              marker: marker.marker,
+            },
+          ]
+        : [],
+    );
     const after = (yield* store.load).installed_skills.find(
       (item) => item.installed_skill_id === fact.installedSkillId,
     );

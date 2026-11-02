@@ -1,41 +1,52 @@
 import { Effect } from "effect";
 import {
+  canonicalJson,
   InstalledSkills,
   InstalledSkillsNode,
   Library,
   LibraryStore,
   type Hash,
   type InstallDestination,
+  type InstallScope,
+  type LibraryState,
   type ManageApproval,
   type OwnershipMarker,
 } from "@smolai/skit-core";
 
-/** A Library owner over this device's folders; with destinations active, but none routed. */
-const library = (active?: readonly InstallDestination[]) =>
+/** A Library owner routed where this device already has copies, or to `add` for its scope. */
+const library = (
+  state: LibraryState,
+  add?: InstalledSkills.Destination & { readonly scope: InstallScope },
+) =>
   Effect.gen(function* () {
-    const files = yield* active === undefined
-      ? InstalledSkillsNode.make()
-      : InstalledSkillsNode.make({
-          active: Effect.succeed(active),
-          destinations: () => Effect.succeed([]),
-          duplicates: { scan: () => Effect.succeed({ copies: [], warnings: [], roots: [] }) },
-        });
+    const recorded = yield* InstalledSkillsNode.recordedRouting(state);
+    const files = yield* InstalledSkillsNode.make({
+      ...recorded,
+      active: Effect.succeed(["agents", "claude"]),
+      destinations: (scope) =>
+        Effect.map(recorded.destinations(scope), (targets) =>
+          add !== undefined && canonicalJson(add.scope) === canonicalJson(scope)
+            ? [
+                ...targets.filter((target) => target.destination !== add.destination),
+                { destination: add.destination, root: add.root },
+              ]
+            : targets,
+        ),
+    });
     return yield* Library.make.pipe(Effect.provideService(InstalledSkills.Service, files));
   });
 
 const count = (outcome: Library.Outcome, tag: Library.CopyResult["_tag"]) =>
   outcome._tag === "Applied" ? outcome.copies.filter((copy) => copy._tag === tag).length : 0;
 
-/** Install what is enabled at one scope into one destination, planned against the Library now. */
+/** Update every installed copy, with what is enabled at `scope` also routed to this destination. */
 export const installEnabledSkills = (options: {
   readonly target: InstallDestination;
   readonly root: string;
   readonly variantsPath?: string;
-  readonly scope?: { kind: "global" } | { kind: "repository"; root: string };
-  readonly onlySkillIds?: readonly string[];
+  readonly scope?: InstallScope;
   readonly restoreNativeDeletedSkills?: readonly string[];
   readonly manage?: ManageApproval;
-  readonly manageIdentical?: boolean;
   readonly acceptedCopies?: ReadonlyMap<
     string,
     { readonly currentHash: Hash; readonly marker: OwnershipMarker }
@@ -43,41 +54,43 @@ export const installEnabledSkills = (options: {
 }) =>
   Effect.gen(function* () {
     const state = yield* (yield* LibraryStore).load;
-    const ids = (listed: readonly string[] | undefined) =>
-      state.skills
-        .filter((skill) => listed?.includes(skill.skill_id))
-        .map((skill) => skill.skill_id);
-    const owner = yield* library();
+    const owner = yield* library(state, {
+      scope: options.scope ?? { kind: "global" },
+      destination: options.target,
+      root: options.root,
+    });
+    const approvals: Library.Approval[] = [
+      ...state.installed_skills
+        .filter((copy) => options.restoreNativeDeletedSkills?.includes(copy.skill_id))
+        .map((copy) => ({ _tag: "Restore" as const, installedSkillId: copy.installed_skill_id })),
+      ...(options.manage === undefined
+        ? []
+        : [{ _tag: "Manage" as const, manage: options.manage }]),
+      ...state.installed_skills.flatMap((copy) => {
+        const accepted = options.acceptedCopies?.get(copy.installed_skill_id);
+        return accepted === undefined
+          ? []
+          : [
+              {
+                _tag: "AcceptEdit" as const,
+                installedSkillId: copy.installed_skill_id,
+                ...accepted,
+              },
+            ];
+      }),
+    ];
     const outcome = yield* owner.apply(
-      yield* owner.plan(
-        [
-          {
-            _tag: "Install",
-            scope: options.scope ?? { kind: "global" },
-            destination: { destination: options.target, root: options.root },
-            ...(options.onlySkillIds === undefined ? {} : { only: ids(options.onlySkillIds) }),
-            restoreDeleted: ids(options.restoreNativeDeletedSkills),
-            manageIdentical: options.manageIdentical ?? false,
-            ...(options.manage === undefined ? {} : { manage: options.manage }),
-            acceptedCopies: state.installed_skills.flatMap((copy) => {
-              const accepted = options.acceptedCopies?.get(copy.installed_skill_id);
-              return accepted === undefined
-                ? []
-                : [{ installedSkillId: copy.installed_skill_id, ...accepted }];
-            }),
-          },
-        ],
-        { base: state },
-      ),
+      yield* owner.plan({ _tag: "Update" }, { base: state, approvals }),
     );
+    if (outcome._tag === "Incomplete") return yield* Effect.fail(outcome.cause);
     return count(outcome, "Installed");
   });
 
-/** Update every copy with every destination active but none routed: uninstalls leftovers. */
+/** Update every installed copy where it is recorded. */
 export const updateInstalledSkills = (_options: { readonly variantsPath?: string }) =>
   Effect.gen(function* () {
     const state = yield* (yield* LibraryStore).load;
-    const owner = yield* library(["agents", "claude"]);
-    const outcome = yield* owner.apply(yield* owner.plan([{ _tag: "Update" }], { base: state }));
+    const owner = yield* library(state);
+    const outcome = yield* owner.apply(yield* owner.plan({ _tag: "Update" }, { base: state }));
     return { installed: count(outcome, "Installed"), uninstalled: count(outcome, "Uninstalled") };
   });

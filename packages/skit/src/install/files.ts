@@ -309,6 +309,14 @@ export const decide = (
       edited: true,
       expectedHash: wanted.recordedHash ?? marker.expected_hash,
     });
+  // A marker that disagrees with what the Library recorded writing was not written by SKIT.
+  if (wanted.recordedHash !== undefined && marker.expected_hash !== wanted.recordedHash)
+    return Result.succeed({
+      _tag: "Conflict",
+      hash: facts.hash,
+      edited: false,
+      expectedHash: wanted.recordedHash,
+    });
   if (facts.hash === wanted.hash)
     return Result.succeed(
       marker.skill_version_id !== wanted.skillVersionId

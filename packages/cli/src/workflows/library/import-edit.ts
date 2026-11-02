@@ -1,5 +1,5 @@
 import { localLibrary } from "../../library-application/library-owner.js";
-import { installSkills } from "../../library-application/install-skills.js";
+import { updateInstalledSkills } from "../../library-application/update-installed-skills.js";
 import {
   canonicalJson,
   deterministicTreeHash,
@@ -247,34 +247,14 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
             marker: marker.marker,
           });
       }
-      const afterRetention = yield* store.load;
-      const reconciled = new Set<string>();
-      for (const previewed of preview.installed_skills) {
-        const installedSkill = afterRetention.installed_skills.find(
-          (candidate) => candidate.installed_skill_id === previewed.installed_skill_id,
-        );
-        const scope =
-          installedSkill === undefined ? undefined : enablingScope(afterRetention, installedSkill);
-        if (
-          installedSkill === undefined ||
-          scope === undefined ||
-          installedSkill.destination === "legacy"
-        )
-          continue;
-        const coordinate = `${installedSkill.destination}\0${canonicalJson(scope)}\0${installedSkill.root}`;
-        if (reconciled.has(coordinate)) continue;
-        reconciled.add(coordinate);
-        yield* installSkills({
-          scope,
-          destination: { destination: installedSkill.destination, root: installedSkill.root },
-          restoreDeleted: [],
-          manageIdentical: false,
-          acceptedCopies: [...accepted].map(([installedSkillId, copy]) => ({
+      if (preview.installed_skills.length > 0)
+        yield* updateInstalledSkills(
+          [...accepted].map(([installedSkillId, copy]) => ({
+            _tag: "AcceptEdit" as const,
             installedSkillId,
             ...copy,
           })),
-        });
-      }
+        );
       const settled = yield* store.load;
       return {
         skill_id: preview.skill_id,

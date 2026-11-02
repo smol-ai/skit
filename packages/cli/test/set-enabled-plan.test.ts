@@ -1028,41 +1028,30 @@ it.effect("a refused intent save remains a refusal and creates no installed copy
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect(
-  "a failed disable saves the desired removal while preserving the edited active copy",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture;
-      const enable = yield* f.home.owned(planSetEnabled([f.request], f.home.installOptions));
-      yield* f.home.owned(applySetEnabledPlan(enable));
-      const path = join(f.destination, "alpha", "SKILL.md");
-      yield* f.fs.writeFileString(path, "Independent user edits\n");
-      const disable = yield* f.home.owned(
-        planSetEnabled([{ ...f.request, enabled: false }], f.home.installOptions),
-      );
-      const failed = yield* Effect.flip(f.home.owned(applySetEnabledPlan(disable)));
-      assert.instanceOf(failed, SetEnabledIncomplete);
-      assert.strictEqual(failed.code, "CONFLICT");
-      const state = yield* f.home.durable;
-      const enabled = enabledAt(state, { kind: "global" });
-      assert.ok(enabled);
-      assert.deepStrictEqual(enabledSkillIds(state, enabled.enabled), []);
-      assert.strictEqual(failed.results[0]?.application.intent, "saved");
-      assert.strictEqual(failed.results[0]?.application.status, "incomplete");
-      assert.strictEqual(failed.results[0]?.application.revision, libraryStateRevision(state));
-      assert.strictEqual(yield* f.fs.readFileString(path), "Independent user edits\n");
-      assert.strictEqual(
-        (yield* inspectOwnershipMarker(join(f.destination, "alpha"))).kind,
-        "valid",
-      );
-      yield* f.fs.writeFileString(path, "# alpha\n");
-      const retry = yield* f.home.owned(
-        planSetEnabled([{ ...f.request, enabled: false }], f.home.installOptions),
-      );
-      const [completed] = yield* f.home.owned(applySetEnabledPlan(retry));
-      assert.strictEqual(completed.value.application.status, "complete");
-      assert.strictEqual(yield* f.fs.exists(join(f.destination, "alpha")), false);
-    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+it.effect("a disable refuses an edited active copy before saving anything", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const enable = yield* f.home.owned(planSetEnabled([f.request], f.home.installOptions));
+    yield* f.home.owned(applySetEnabledPlan(enable));
+    const path = join(f.destination, "alpha", "SKILL.md");
+    yield* f.fs.writeFileString(path, "Independent user edits\n");
+    const before = yield* f.home.durable;
+    const disable = yield* f.home.owned(
+      planSetEnabled([{ ...f.request, enabled: false }], f.home.installOptions),
+    );
+    const failed = yield* Effect.flip(f.home.owned(applySetEnabledPlan(disable)));
+    assert.strictEqual(failed._tag, "UninstallConflict");
+    assert.deepStrictEqual(yield* f.home.durable, before);
+    assert.strictEqual(yield* f.fs.readFileString(path), "Independent user edits\n");
+    assert.strictEqual((yield* inspectOwnershipMarker(join(f.destination, "alpha"))).kind, "valid");
+    yield* f.fs.writeFileString(path, "# alpha\n");
+    const retry = yield* f.home.owned(
+      planSetEnabled([{ ...f.request, enabled: false }], f.home.installOptions),
+    );
+    const [completed] = yield* f.home.owned(applySetEnabledPlan(retry));
+    assert.strictEqual(completed.value.application.status, "complete");
+    assert.strictEqual(yield* f.fs.exists(join(f.destination, "alpha")), false);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect(
@@ -1096,7 +1085,7 @@ it.effect(
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("a batch retains earlier results and stops after an accepted scope cannot install", () =>
+it.effect("a batch saves every intent together and reports the scope that cannot install", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
     const repository = join(f.root, "project");
@@ -1110,7 +1099,6 @@ it.effect("a batch retains earlier results and stops after an accepted scope can
             selectedSkills: ["beta"],
             scope: { kind: "repository", root: repository },
           },
-          { ...f.request, enabled: false },
         ],
         f.home.installOptions,
       ),
@@ -1135,12 +1123,11 @@ it.effect("a batch retains earlier results and stops after an accepted scope can
     );
     assert.instanceOf(failed, SetEnabledIncomplete);
     assert.deepStrictEqual(
-      failed.results.map((result) => result.application.status),
-      ["complete", "incomplete"],
-    );
-    assert.deepStrictEqual(
-      failed.results.map((result) => result.skills),
-      [["alpha"], ["beta"]],
+      failed.results.map((result) => [result.skills, result.application.status]),
+      [
+        [["alpha"], "complete"],
+        [["beta"], "incomplete"],
+      ],
     );
     assert.strictEqual(
       yield* f.fs.readFileString(join(f.destination, "alpha", "SKILL.md")),
@@ -1256,61 +1243,6 @@ it.effect("a newly active agent target invalidates the review before any binding
 );
 
 it.effect(
-  "a later refusal keeps earlier scope results without claiming the refused intent was saved",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture;
-      const configuration = { ...f.home.installOptions, overrides: {} };
-      const plan = yield* f.home.owned(
-        planSetEnabled([f.request, { ...f.request, selectedSkills: ["beta"] }], configuration),
-      );
-      const duplicate = join(f.home.inventory.home, ".codex", "skills", "beta");
-      let introduced = false;
-      const failed = yield* Effect.flip(
-        f.home.owned(
-          applySetEnabledPlan(plan).pipe(
-            Effect.provideServiceEffect(
-              LibraryStore,
-              Effect.map(LibraryStore, (store) => ({
-                ...store,
-                save: (next, base) =>
-                  Effect.gen(function* () {
-                    yield* store.save(next, base);
-                    if (!introduced) {
-                      introduced = true;
-                      yield* f.fs.makeDirectory(duplicate, { recursive: true });
-                      yield* f.fs.writeFileString(
-                        join(duplicate, "SKILL.md"),
-                        "Independent beta copy\n",
-                      );
-                    }
-                  }),
-              })),
-            ),
-          ),
-        ),
-      );
-      assert.instanceOf(failed, SetEnabledIncomplete);
-      assert.strictEqual(failed.reason, "request");
-      assert.strictEqual(failed.code, "CONFLICT");
-      assert.deepStrictEqual(
-        failed.results.map((result) => result.skills),
-        [["alpha"]],
-      );
-      assert.strictEqual(failed.results[0]?.application.status, "complete");
-      const state = yield* f.home.durable;
-      const enabled = enabledAt(state, { kind: "global" });
-      assert.ok(enabled);
-      assert.strictEqual(enabledSkillIds(state, enabled.enabled).length, 1);
-      assert.strictEqual(yield* f.fs.exists(join(f.destination, "beta")), false);
-      assert.strictEqual(
-        yield* f.fs.readFileString(join(duplicate, "SKILL.md")),
-        "Independent beta copy\n",
-      );
-    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-);
-
-it.effect(
   "an intervening state change after intent acceptance is not rebased by saving installed skills",
   () =>
     Effect.gen(function* () {
@@ -1342,7 +1274,7 @@ it.effect(
         ),
       );
       assert.instanceOf(failed, SetEnabledIncomplete);
-      assert.strictEqual(failed.reason, "reconciliation");
+      assert.strictEqual(failed.reason, "update");
       assert.strictEqual(failed.code, "CONFLICT");
       const current = yield* f.home.durable;
       assert.deepStrictEqual(current.ownershipIssues, []);
@@ -1432,7 +1364,7 @@ for (const drift of ["create", "modify", "symlink", "source"] as const)
       assert.ok(plan.owner);
       if (drift === "source") {
         const store = yield* f.home.owned(LibraryStore);
-        const source = plan.owner.plan.observed.find((e) =>
+        const source = plan.owner.plan.folders.find((e) =>
           e.path.startsWith(store.originalsPath + "/"),
         );
         assert.ok(source);
@@ -1485,7 +1417,7 @@ for (const directory of ["empty", "nested-symlink"] as const)
         ),
       );
       assert.ok(plan.owner);
-      assert.ok(plan.owner.plan.observed.some((e) => e.path === path && e.entry._tag !== "Absent"));
+      assert.ok(plan.owner.plan.folders.some((e) => e.path === path && e.entry._tag !== "Absent"));
       const failure = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
       assert.instanceOf(failure, SetEnabledIncomplete);
       assert.strictEqual(yield* f.fs.exists(join(path, ".skit-ownership.json")), false);

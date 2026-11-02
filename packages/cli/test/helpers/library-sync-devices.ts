@@ -20,6 +20,7 @@ import {
 } from "@smolai/skit-core";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
 import { syncLibrary } from "../../src/workflows/library/library-sync.js";
+import { syncInstalledSkills } from "../../src/workflows/library/library-sync-installed-skills.js";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 import { faultQueue, librarySyncServer } from "./library-sync-server.js";
 
@@ -197,11 +198,17 @@ export const devices = Effect.gen(function* () {
                 (item) => item.collection_id === collectionId,
               )?.collection_id;
               assert.ok(id);
+              // Routed as this device's sync installs.
               const library = yield* Library.make.pipe(
-                Effect.provideService(InstalledSkills.Service, yield* InstalledSkillsNode.make()),
+                Effect.provideService(
+                  InstalledSkills.Service,
+                  yield* syncInstalledSkills(state, (target) =>
+                    target === "agents" ? root : undefined,
+                  ),
+                ),
               );
               return yield* library.apply(
-                yield* library.plan([{ _tag: "Remove", collectionId: id }], { base: state }),
+                yield* library.plan({ _tag: "Remove", collectionId: id }, { base: state }),
               );
             }),
           ),

@@ -16,6 +16,8 @@ import { installDestinationPathIdentity } from "../platform/path-identity.js";
 import { sha256Hash } from "../shared/hash.js";
 import type { TreeRequirements } from "../platform/tree-requirements.js";
 import type { OwnershipMarker } from "../contracts.js";
+import type { LibraryState } from "./library-state.js";
+import type { InstallScope } from "../vocabulary.js";
 
 /** Where this machine installs: its active destinations, and copies Harnesses already read. */
 export interface Routing {
@@ -351,5 +353,48 @@ export const make = Effect.fn("InstalledSkills.make")(function* (routing?: Routi
     },
   });
 });
+/**
+ * Routes from where this device already has copies: each scope's recorded roots, each active. For
+ * work that changes no routes, such as removing a Collection or updating copies in place.
+ */
+export const recordedRouting = Effect.fn("InstalledSkills.recordedRouting")(function* (
+  state: LibraryState,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const real = new Map<string, string>();
+  for (const path of [
+    ...state.repositories.map((repository) => repository.root),
+    ...state.installed_skills.map((copy) => copy.root),
+  ])
+    real.set(path, yield* fs.realPath(path).pipe(Effect.orElseSucceed(() => resolve(path))));
+  const inside = (root: string, path: string) => {
+    const [parent, child] = [real.get(root) ?? root, real.get(path) ?? path];
+    return child === parent || child.startsWith(`${parent}/`);
+  };
+  const recorded = state.installed_skills.flatMap((copy) =>
+    copy.destination === "legacy" ? [] : [{ ...copy, destination: copy.destination }],
+  );
+  const active = [...new Set(recorded.map((copy) => copy.destination))];
+  const destinations = (scope: InstallScope): readonly InstalledSkills.Destination[] =>
+    recorded
+      .filter((copy) =>
+        scope.kind === "repository"
+          ? inside(scope.root, copy.root)
+          : !state.repositories.some((repository) => inside(repository.root, copy.root)),
+      )
+      .map((copy) => ({ destination: copy.destination, root: copy.root }))
+      .filter(
+        (target, index, all) =>
+          all.findIndex(
+            (other) => other.destination === target.destination && other.root === target.root,
+          ) === index,
+      );
+  return {
+    active: Effect.succeed(active),
+    destinations: (scope) => Effect.succeed(destinations(scope)),
+    duplicates: { scan: () => Effect.succeed({ copies: [], warnings: [], roots: [] }) },
+  } satisfies Routing;
+});
+
 export const layer = (routing?: Routing) => Layer.effect(InstalledSkills.Service, make(routing));
 export * as InstalledSkillsNode from "./installed-skills-node.js";

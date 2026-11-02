@@ -245,6 +245,9 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
       conflicts.push(`Occupied original path: ${file.path}`);
       continue;
     }
+    // Only a copy the operation installed is setup's to move or remove; a folder that appeared
+    // where it recorded a deletion is the user's own.
+    if (file.entry === null && after?.status !== "installed") continue;
     if (details.entry && owned) moves.push({ name: basename(file.path), installedSkill: current });
     if (file.entry === null) {
       if (details.entry) actions.push({ path: file.path, kind: "remove-created" });

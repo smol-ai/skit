@@ -19,8 +19,6 @@ export interface SetEnabledRequest {
   readonly scope: InstallScope;
   readonly enabled: boolean;
   readonly invocation?: InvocationOption;
-  /** Setup changes only its explicitly selected subjects, preserving other installed copies. */
-  readonly keepUnselectedInstalledSkills?: boolean;
   readonly allowDuplicate?: boolean;
   /** Setup consent applies only to these exact symlinks, until installing succeeds. */
   readonly allowedDuplicateSymlinks?: readonly {
@@ -66,6 +64,8 @@ export interface SetEnabledIntent {
   readonly allowDuplicate?: boolean;
   /** What a setup review approved, and nothing else. */
   readonly setup?: import("@smolai/skit-core").Library.SetupApproval;
+  /** The folder the user approved managing, as previewed. */
+  readonly manage?: ManageApproval;
 }
 
 export interface EnabledCollection {

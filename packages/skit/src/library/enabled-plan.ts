@@ -3,7 +3,6 @@ import { currentCollectionSkills, enabledSkillIds, Enabled } from "./library-con
 import { enabledAt, globalEnabled, type LibraryState } from "./library-state.js";
 import type { SkillId, CollectionId } from "./entity-ids.js";
 import type { InstallScope, InvocationPolicy } from "../vocabulary.js";
-import type { ManageApproval } from "../install/files.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 import { resolve } from "node:path";
 export type Subject =
@@ -12,10 +11,6 @@ export type Subject =
 export type Invocation = "declared" | InvocationPolicy;
 /** What a setup review approved for one enable, and nothing else. */
 export interface SetupApproval {
-  /** Touch only the selected Skills, preserving every other installed copy. */
-  readonly onlySelected: boolean;
-  /** The folder the user approved managing, as previewed. */
-  readonly manage?: ManageApproval;
   /** The exact links the user approved keeping beside SKIT's copy, as previewed. */
   readonly approvedSymlinks: readonly {
     readonly path: string;

@@ -41,7 +41,7 @@ export type SetEnabledStale = Library.StalePlan;
 export class SetEnabledIncomplete
   extends Schema.TaggedError<SetEnabledIncomplete>()("Library.SetEnabledIncomplete", {
     results: Schema.Array(SetEnabledResult),
-    reason: Schema.Literals(["destinations", "reconciliation", "request"]),
+    reason: Schema.Literals(["destinations", "update"]),
     failure: Schema.Unknown,
   })
   implements SkitFailure
@@ -92,13 +92,10 @@ const intentFor = (request: SetEnabledRequest): SetEnabledIntent => ({
   where: [request.scope],
   ...(request.invocation === undefined ? {} : { invocation: request.invocation }),
   ...(request.allowDuplicate === undefined ? {} : { allowDuplicate: request.allowDuplicate }),
-  ...(request.keepUnselectedInstalledSkills ||
-  request.manage !== undefined ||
-  request.allowedDuplicateSymlinks !== undefined
+  ...(request.manage === undefined ? {} : { manage: request.manage }),
+  ...(request.allowedDuplicateSymlinks !== undefined
     ? {
         setup: {
-          onlySelected: request.keepUnselectedInstalledSkills ?? false,
-          ...(request.manage === undefined ? {} : { manage: request.manage }),
           approvedSymlinks: (request.allowedDuplicateSymlinks ?? []).map((link) => ({
             path: link.path,
             canonicalPath: link.canonicalPath,

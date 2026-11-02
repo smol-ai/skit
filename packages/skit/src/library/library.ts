@@ -1,6 +1,17 @@
 import { join } from "node:path";
-import { collectionVersionPath } from "./collection-version.js";
-import { Clock, Context, Data, Effect, FileSystem, Layer, Option, Predicate, Result } from "effect";
+import {
+  Clock,
+  Context,
+  Data,
+  Effect,
+  FileSystem,
+  Layer,
+  Option,
+  Predicate,
+  Ref,
+  Result,
+  type Scope,
+} from "effect";
 import { InstalledSkills } from "./installed-skills.js";
 import * as InstalledSkillStatus from "./installed-skill-status.js";
 import {
@@ -11,11 +22,11 @@ import {
 } from "./store/library-store.js";
 import {
   libraryStateRevision,
-  enabledAt,
   setEnabledAt,
   pruneEmptyEnabled,
   type LibraryState,
   type InstalledSkill,
+  type InstalledSkillSuppressed,
 } from "./library-state.js";
 import {
   calculateEnabled,
@@ -28,11 +39,10 @@ import {
   skillsToCheckForDuplicates,
   deviceInstallationIntent,
   removeFromEnabled,
-  enabledByScope,
 } from "./enabled.js";
 import { currentSkillVersion, enabledSkillIds, versionBacking } from "./library-contracts.js";
+import { collectionVersionPath } from "./collection-version.js";
 import { InstalledSkillInvalid } from "./installation/install-enabled.js";
-import { leftoverSkills, repositorySelectsInstalledSkill } from "./installation/uninstall.js";
 import { CollectionRemovalMissing } from "./installation/remove.js";
 import {
   makeInstalledSkillId,
@@ -44,13 +54,13 @@ import {
   decide,
   installedSkillName,
   installedSkillVariantPath,
-  type Decision,
   type ManageApproval,
 } from "../install/files.js";
 import { declaredInvocationIntent, overrideInvocationIntent } from "../install/policy.js";
-import { pathIsWithin } from "../platform/path-identity.js";
 import type { OwnershipMarker } from "../contracts.js";
+import type { Hash, InstallDestination, InstallScope } from "../vocabulary.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
+import { canonicalJson } from "../shared/json.js";
 import { UninstallConflict, LibraryChanged } from "../failures.js";
 import { importCollection, importAuthoredCollection, importEdit } from "./import-collection.js";
 import type { TreeRequirements } from "../platform/tree-requirements.js";
@@ -62,49 +72,49 @@ export {
   sameInstallScope,
 } from "./enabled-plan.js";
 export type { Subject, Invocation, EnabledCollection, SetupApproval } from "./enabled-plan.js";
+
+// ── Intents ──────────────────────────────────────────────────────────────────────────────────────
+// Each intent says how the Library should change. Which copies to install or uninstall is never
+// part of an intent: plan works it out from the Library the intent leaves.
+
+/** Change what is enabled. */
+export interface Enabled {
+  readonly _tag: "Enabled";
+  readonly changes: readonly [EnabledIntent, ...EnabledIntent[]];
+}
 /** Remove a Collection with its Skills, imports, enabled entries and installed copies. */
 export interface Remove {
   readonly _tag: "Remove";
   readonly collectionId: CollectionId;
 }
-/**
- * Bring installed copies up to date: of one Collection, at every scope enabling it; or, without a
- * Collection, every copy everywhere, uninstalling what nothing enables any more.
- */
+/** Change nothing; bring every installed copy on this device up to date. */
 export interface Update {
   readonly _tag: "Update";
-  readonly collectionId?: CollectionId;
 }
-/** Uninstall these recorded copies. Their records stay, as pending, unless listed to drop. */
+/**
+ * Uninstall these recorded copies ahead of a sync. Their records stay, as pending, unless listed
+ * to drop.
+ */
 export interface Uninstall {
   readonly _tag: "Uninstall";
   readonly copies: readonly InstalledSkillId[];
   readonly drop: readonly InstalledSkillId[];
 }
-/**
- * Install the selected Skills' copies at one destination, as a setup or version choice reviewed
- * them. Its approvals are the only exceptions to the default safety rules it may use.
- */
-export interface Install {
-  readonly _tag: "Install";
-  readonly scope: Request["scope"];
-  readonly destination: InstalledSkills.Destination;
-  /** Only these Skills; every Skill enabled at the scope when absent. */
-  readonly only?: readonly SkillId[];
-  /** Put back copies of these Skills that the user deleted. */
-  readonly restoreDeleted: readonly SkillId[];
-  /** Manage a folder that already holds exactly SKIT's bytes. */
-  readonly manageIdentical: boolean;
-  /** Folders the user approved managing, as previewed. */
-  readonly manage?: ManageApproval;
-  /** Edited copies the user accepted as the selected Version, as previewed. */
-  readonly acceptedCopies?: readonly {
-    readonly installedSkillId: InstalledSkillId;
-    readonly currentHash: InstalledSkill["expected_hash"];
-    readonly marker: OwnershipMarker;
-  }[];
-}
-export type Intent = EnabledIntent | Remove | Update | Install | Uninstall;
+export type Intent = Enabled | Remove | Update | Uninstall;
+
+/** What the user approved beyond the default safety rules, as previewed. */
+export type Approval =
+  /** Take over this folder, which holds exactly SKIT's bytes. */
+  | { readonly _tag: "Manage"; readonly manage: ManageApproval }
+  /** The user's edited copy becomes the selected Version. */
+  | {
+      readonly _tag: "AcceptEdit";
+      readonly installedSkillId: InstalledSkillId;
+      readonly currentHash: Hash;
+      readonly marker: OwnershipMarker;
+    }
+  /** Put back this copy, which the user deleted. */
+  | { readonly _tag: "Restore"; readonly installedSkillId: InstalledSkillId };
 
 // ── Errors ───────────────────────────────────────────────────────────────────────────────────────
 export class StalePlan
@@ -115,8 +125,6 @@ export class StalePlan
   readonly code = "CONFLICT" as const;
   readonly remediation = "Preview the Binding change again.";
 }
-const stale = (message = "Library changed after this Binding change was previewed") =>
-  new StalePlan({ message });
 
 /** Enabling would replace the user's own link where SKIT writes the copy; keeping both is impossible. */
 export class InstalledSkillWouldReplaceLink
@@ -173,12 +181,32 @@ export type BindingChange = Calculated["plan"] & {
     readonly path: string;
   }[];
 };
-export interface CopyChange {
-  readonly _tag: "Install" | "Uninstall";
-  readonly skillId: InstalledSkill["skill_id"];
+
+/** What happens to one skill folder. */
+export type CopyChange = {
+  readonly skillId: SkillId;
   readonly destination: InstalledSkill["destination"];
   readonly path: string;
-}
+} & (
+  | /** Nothing is there yet. */ { readonly _tag: "Install" }
+  /** SKIT's unedited copy of another Version or rendering goes to recovery. */
+  | { readonly _tag: "Update" }
+  /** SKIT's marker goes on a folder that already holds exactly the copy's bytes. */
+  | { readonly _tag: "Manage" }
+  | { readonly _tag: "Unchanged" }
+  /** The user deleted it; it stays deleted. */
+  | { readonly _tag: "KeepDeleted" }
+  /** The folder holds what SKIT did not write; it is left, and recorded as conflicted. */
+  | { readonly _tag: "Conflict"; readonly edited: boolean; readonly hash: Hash }
+  /** The folder there cannot be read as skill content; apply fails on it. */
+  | { readonly _tag: "Unreadable"; readonly reason: string }
+  /** Nothing wants it: SKIT's copy goes to recovery. */
+  | { readonly _tag: "Uninstall" }
+  /** Nothing wants it, and the folder is gone or was never SKIT's: only the record goes. */
+  | { readonly _tag: "Forget" }
+  /** Nothing wants it, but it was edited where agents read it: apply refuses. */
+  | { readonly _tag: "Refuse"; readonly detail: string }
+);
 export interface RemoveChange {
   readonly _tag: "Remove";
   readonly collectionId: CollectionId;
@@ -186,18 +214,21 @@ export interface RemoveChange {
 }
 export type Change = BindingChange | CopyChange | RemoveChange;
 
+export interface Route {
+  readonly scope: InstallScope;
+  readonly destinations: readonly InstalledSkills.Destination[];
+}
+
 /**
- * Plain data. Nothing in it is trusted at apply: apply reloads the Library and refuses a different
- * revision, recomputes every change from the intents, and re-observes every path.
+ * Plain data. Nothing in it is trusted at apply: apply plans again from the loaded Library, and
+ * refuses a different revision, different changes or different folders.
  */
 export interface Plan {
   readonly baseRevision: string;
-  readonly intents: readonly Intent[];
-  readonly routes: readonly {
-    readonly scope: Request["scope"];
-    readonly destinations: readonly InstalledSkills.Destination[];
-  }[];
-  readonly observed: readonly InstalledSkills.Observed[];
+  readonly intent: Intent;
+  readonly approvals: readonly Approval[];
+  readonly routes: readonly Route[];
+  readonly folders: readonly InstalledSkills.Observed[];
   readonly changes: readonly Change[];
 }
 
@@ -230,7 +261,7 @@ export type Outcome =
   | {
       readonly _tag: "Incomplete";
       readonly results: readonly AppliedChange[];
-      readonly reason: "destinations" | "reconciliation" | "request";
+      readonly reason: "destinations" | "update";
       readonly cause: ApplyError;
     };
 
@@ -239,11 +270,11 @@ export type PlanError =
   | InvalidIntent
   | StalePlan
   | CollectionRemovalMissing
+  | InstalledSkillInvalid
   | InstalledSkills.Cause;
 export type ApplyError =
   | PlanError
   | LibraryStateWriteError
-  | InstalledSkillInvalid
   | InstalledSkillWouldDuplicate
   | InstalledSkillWouldReplaceLink
   | UninstallConflict
@@ -256,8 +287,8 @@ export interface Interface {
    * the Library has changed since.
    */
   readonly plan: (
-    intents: readonly Intent[],
-    options: { readonly base: LibraryState },
+    intent: Intent,
+    options: { readonly base: LibraryState; readonly approvals?: readonly Approval[] },
   ) => Effect.Effect<Plan, PlanError>;
   readonly apply: (plan: Plan) => Effect.Effect<Outcome, ApplyError>;
   /**
@@ -289,16 +320,84 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("skit/library/Library") {}
 
 // ── Internals ────────────────────────────────────────────────────────────────────────────────────
-/** What the installed skills batch has done on disk, so a failure records only real work. */
-interface Recorder {
-  /** Rows whose copies are on disk as recorded: verified installs, and pending displacements. */
-  readonly onDisk: Map<InstalledSkillId, InstalledSkill>;
-  /** Every recorded copy the batch touched, whose pending backups it settles. */
-  readonly touched: Map<InstalledSkillId, InstalledSkill>;
-  readonly copies: CopyResult[];
+
+/** One copy the next Library should have installed, with what installing it would write. */
+interface Wanted {
+  readonly copy: InstalledSkills.Copy;
+  readonly destination: InstalledSkills.Destination;
+  readonly name: string;
+  readonly path: string;
+  /** The record at this place before, matched by physical root. */
+  readonly prior: InstalledSkill | undefined;
+  readonly folder: InstalledSkills.Observed;
 }
 
-/** Operations report their cause inside Failed; callers see the cause itself, as before. */
+/** One change with what apply needs to carry it out. */
+type Step =
+  | { readonly _tag: "Install"; readonly change: CopyChange; readonly wanted: Wanted }
+  | {
+      readonly _tag: "Unreadable";
+      readonly change: CopyChange;
+      readonly wanted: Wanted;
+      readonly reason: string;
+    }
+  | {
+      readonly _tag: "KeepDeleted";
+      readonly change: CopyChange;
+      readonly wanted: Wanted;
+      readonly prior: InstalledSkillSuppressed;
+    }
+  | {
+      readonly _tag: "Update" | "Unchanged";
+      readonly change: CopyChange;
+      readonly wanted: Wanted;
+      /** Built to decide what happens at a folder that is already there. */
+      readonly staged: InstalledSkills.Staged;
+    }
+  | {
+      readonly _tag: "Manage";
+      readonly change: CopyChange;
+      readonly wanted: Wanted;
+      readonly staged: InstalledSkills.Staged;
+      readonly verification: "replacement" | "adoption" | "marker";
+    }
+  | {
+      readonly _tag: "Conflict";
+      readonly change: CopyChange;
+      readonly wanted: Wanted;
+      readonly staged: InstalledSkills.Staged;
+      readonly edited: boolean;
+      readonly hash: Hash;
+      readonly expectedHash: Hash;
+    }
+  | {
+      readonly _tag: "Uninstall" | "Forget" | "Refuse";
+      readonly change: CopyChange;
+      readonly copy: InstalledSkill;
+    }
+  /** An edited copy where agents do not read it: kept, and recorded as conflicted. */
+  | {
+      readonly _tag: "Keep";
+      readonly change: CopyChange;
+      readonly copy: InstalledSkill;
+      readonly hash: Hash;
+    };
+
+/** Everything plan shows and apply carries out. Builds live as long as the Scope. */
+interface Work {
+  readonly next: LibraryState;
+  readonly routes: readonly Route[];
+  readonly steps: readonly Step[];
+  readonly folders: readonly InstalledSkills.Observed[];
+  readonly changes: readonly Change[];
+  readonly requests: readonly {
+    readonly request: Request;
+    readonly change: BindingChange;
+    readonly skillIds: readonly SkillId[];
+  }[];
+}
+
+/** Operations report their cause inside Failed; callers see the cause itself. */
 const unwrap = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.catchIf(
@@ -308,16 +407,16 @@ const unwrap = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     ),
   );
 
-const markerFor = (
-  copy: InstalledSkills.Copy,
-  hash: InstalledSkill["expected_hash"],
-): OwnershipMarker => ({
+const markerFor = (copy: InstalledSkills.Copy, hash: Hash): OwnershipMarker => ({
   schemaVersion: 5,
   installed_skill_id: copy.installedSkillId,
   skill_id: copy.skillId,
   skill_version_id: copy.skillVersionId,
   expected_hash: hash,
 });
+
+const sameScope = (left: InstallScope, right: InstallScope) =>
+  canonicalJson(left) === canonicalJson(right);
 
 export const make = Effect.gen(function* () {
   const store = yield* LibraryStore;
@@ -334,17 +433,17 @@ export const make = Effect.gen(function* () {
 
   /** Whether a recorded copy is still the one SKIT wrote. Changes nothing. */
   const ownership = Effect.fn("Library.ownership")(function* (copy: InstalledSkill) {
-    const observed = yield* unwrap(files.inspect(copy.path));
-    if (observed.entry._tag === "Absent" || observed.entry.facts === null)
-      return { _tag: "Absent" as const, observed };
-    const { marker } = observed.entry.facts;
+    const read = yield* unwrap(files.inspect(copy.path));
+    if (read.entry._tag === "Absent" || read.entry.facts === null)
+      return { _tag: "Absent" as const };
+    const { marker } = read.entry.facts;
     const hash = yield* unwrap(files.hash(copy.path));
     return marker.kind !== "valid" ||
       marker.marker.skill_id !== copy.skill_id ||
       marker.marker.installed_skill_id !== copy.installed_skill_id ||
       hash !== marker.marker.expected_hash
-      ? { _tag: "Conflicted" as const, observed, hash }
-      : { _tag: "Intact" as const, observed, hash };
+      ? { _tag: "Edited" as const, hash, marked: marker.kind !== "absent" }
+      : { _tag: "Intact" as const, hash };
   });
 
   /** A pending backup still holds the copy this row describes, so it explains its absence. */
@@ -357,1115 +456,610 @@ export const make = Effect.gen(function* () {
     );
   });
 
-  /** Move a recorded copy SKIT still owns to recovery. An edited one is reported or refused. */
-  const uninstall = Effect.fn("Library.uninstall")(function* (
-    recorder: Recorder,
-    copy: InstalledSkill,
-    onConflict: "throw" | "report",
-    message: string,
+  /** The approved folder at this path, compared by physical path. */
+  const approvedForManage = Effect.fn("Library.approvedForManage")(function* (
+    approvals: readonly Approval[],
+    path: string,
   ) {
-    recorder.touched.set(copy.installed_skill_id, copy);
-    const owned = yield* ownership(copy);
-    if (owned._tag === "Absent") return { kind: "absent" as const };
-    if (owned._tag === "Conflicted") {
-      if (onConflict === "throw") return yield* new UninstallConflict({ detail: message });
-      recorder.copies.push({
-        _tag: "Conflicted",
-        copy: InstalledSkillStatus.conflicted(copy, owned.hash),
-      });
-      return { kind: "conflicted" as const, observed: owned.hash };
-    }
-    yield* unwrap(files.uninstall(copy.root, copy.path, copy.installed_skill_id));
-    const pending = InstalledSkillStatus.pending(copy);
-    recorder.onDisk.set(copy.installed_skill_id, pending);
-    recorder.copies.push({ _tag: "Uninstalled", copy });
-    return { kind: "uninstalled" as const, observed: owned.hash };
+    const target = (yield* unwrap(files.identify(path))).key;
+    for (const approval of approvals)
+      if (approval._tag === "Manage")
+        for (const approved of [approval.manage.path, ...(approval.manage.equalPaths ?? [])])
+          if ((yield* unwrap(files.identify(approved))).key === target) return approval.manage;
+    return undefined;
   });
 
-  /** Whether a folder is one the user approved managing, compared by physical path. */
-  const approved = Effect.fn("Library.approved")(function* (
-    manage: ManageApproval | undefined,
-    destination: string,
-  ) {
-    if (manage === undefined) return false;
-    const target = (yield* unwrap(files.identify(destination))).key;
-    for (const path of [manage.path, ...(manage.equalPaths ?? [])])
-      if ((yield* unwrap(files.identify(path))).key === target) return true;
-    return false;
-  });
-
-  /** Install one Skill at one destination: build, observe, decide, then do only that. */
-  const install = Effect.fn("Library.install")(function* (
-    recorder: Recorder,
-    request: {
-      readonly state: LibraryState;
-      readonly copy: InstalledSkills.Copy;
-      readonly destination: InstalledSkills.Destination;
-      readonly name: string;
-      readonly previous: InstalledSkill | undefined;
-      readonly restoreDeleted: boolean;
-      readonly manageIdentical: boolean;
-      readonly manage?: ManageApproval;
-      readonly accepted?: {
-        readonly currentHash: InstalledSkill["expected_hash"];
-        readonly marker: OwnershipMarker;
-      };
-    },
-  ) {
-    const { copy, destination, previous } = request;
-    const name = yield* installedSkillName(request.name);
-    const path = join(destination.root, name);
-    yield* unwrap(files.prepare([destination.root]));
-    const prior = previous?.installed_skill_id === copy.installedSkillId ? previous : undefined;
-    const installedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
-    return yield* Effect.scoped(
-      Effect.gen(function* () {
-        const staged = yield* unwrap(files.build(copy, destination));
-        const row: InstalledSkill = {
-          installed_skill_id: copy.installedSkillId,
-          skill_id: copy.skillId,
-          skill_version_id: copy.skillVersionId,
-          destination: destination.destination,
-          root: destination.root,
-          path,
-          expected_hash: staged.hash,
-          status: "pending",
-          installed_at: installedAt,
-        };
-        const observed = yield* unwrap(files.inspect(path));
-        const facts = observed.entry._tag === "Present" ? observed.entry.facts : null;
-        if (
-          observed.entry._tag === "Present" &&
-          facts === null &&
-          observed.entry.kind !== "SymbolicLink"
-        )
-          return yield* new InstalledSkillInvalid({ detail: `Not a skill folder: ${path}` });
-        // Decided against the hash an installed copy is verified with; an unreadable folder fails.
-        const current = facts === null ? undefined : yield* unwrap(files.hash(path));
-        const decided: Result.Result<Decision, "ManageTargetChanged" | "ManageContentMismatch"> =
-          facts !== null && current !== undefined
-            ? decide(
-                {
-                  marker: facts.marker,
-                  hash: current,
-                  directory:
-                    observed.entry._tag === "Present" && observed.entry.kind === "Directory",
-                  insideRepository: facts.insideRepository,
-                  holdsRepositoryFiles: facts.holdsRepositoryFiles,
-                  approvedForManage: yield* approved(request.manage, path),
-                },
-                {
-                  installedSkillId: copy.installedSkillId,
-                  skillId: copy.skillId,
-                  skillVersionId: copy.skillVersionId,
-                  hash: staged.hash,
-                  recordedHash: prior?.expected_hash,
-                  manage:
-                    request.manage === undefined ? undefined : { hash: request.manage.currentHash },
-                  manageIdentical: request.manageIdentical,
-                  replacement:
-                    request.accepted === undefined
-                      ? undefined
-                      : { hash: request.accepted.currentHash, marker: request.accepted.marker },
-                },
-              )
-            : Result.succeed(
-                !request.restoreDeleted &&
-                  prior?.status === "suppressed" &&
-                  prior.suppression_reason === "native_delete" &&
-                  !(yield* displaced(prior))
-                  ? { _tag: "KeepSuppressed" }
-                  : { _tag: "Install" },
-              );
-        if (Result.isFailure(decided))
-          return yield* new InstalledSkillInvalid({ detail: `${decided.failure}: ${path}` });
-        const decision = decided.success;
-        const written = (installed: InstalledSkills.Installed) => {
-          const result = InstalledSkillStatus.installed(row, installed.hash);
-          recorder.onDisk.set(result.installed_skill_id, result);
-          recorder.copies.push({ _tag: "Installed", copy: result });
-          return result;
-        };
-        const committed = (
-          operation: Effect.Effect<InstalledSkills.Installed, InstalledSkills.Failed>,
-        ) =>
-          operation.pipe(
-            Effect.tapError((failure) =>
-              Effect.gen(function* () {
-                if (
-                  failure._tag !== "Library.InstalledSkillsFailed" ||
-                  Option.isNone(failure.displaced)
-                )
-                  return;
-                // An unverified successor now stands where the original was: never call it pending.
-                const now = yield* files.inspect(path).pipe(Effect.option);
-                if (prior !== undefined && Option.isSome(now) && now.value.entry._tag === "Absent")
-                  recorder.onDisk.set(
-                    prior.installed_skill_id,
-                    InstalledSkillStatus.pending(prior),
-                  );
-              }),
-            ),
-            unwrap,
-            Effect.map(written),
-          );
-        switch (decision._tag) {
-          case "KeepSuppressed": {
-            const result = InstalledSkillStatus.suppressed(
-              row,
-              prior?.status === "suppressed" ? prior.suppressed_at : undefined,
-            );
-            recorder.copies.push({ _tag: "Suppressed", copy: result });
-            return result;
-          }
-          case "Manage":
-            return yield* committed(
-              files.manage(staged, markerFor(copy, staged.hash), observed, decision.verification),
-            );
-          case "Conflict": {
-            if (decision.edited)
-              yield* unwrap(
-                files.backUp(
-                  path,
-                  installedSkillVariantPath(
-                    store.variantsPath,
-                    destination.destination,
-                    name,
-                    decision.hash,
-                  ),
-                ),
-              );
-            const result = InstalledSkillStatus.conflicted(
-              row,
-              decision.hash,
-              decision.edited ? decision.expectedHash : row.expected_hash,
-            );
-            recorder.copies.push({ _tag: "Conflicted", copy: result });
-            return result;
-          }
-          case "Unchanged": {
-            const result = InstalledSkillStatus.installed(row);
-            recorder.copies.push({ _tag: "Unchanged", copy: result });
-            return result;
-          }
-          case "Replace":
-          case "Install":
-            return yield* committed(files.install(staged, markerFor(copy, staged.hash), observed));
-        }
-      }),
-    );
-  });
-
-  /**
-   * One batch of copy changes over `loaded`. `stage` edits a private candidate and records the real
-   * work on disk; nothing is rolled back. Saves once; a failure saves only what is really on disk:
-   * verified copies, and copies moved aside with nothing in their place, as pending. Pending backups
-   * of every copy the batch touched are then kept, or discarded when `loaded` proves them reproducible.
-   */
-  const batch = Effect.fn("Library.batch")(function* <E, R>(
-    store: LibraryStore["Service"],
-    loaded: LibraryState,
-    /** Edits `candidate` in place, or returns the state to save instead. */
-    stage: (
-      recorder: Recorder,
-      candidate: LibraryState,
-    ) => Effect.Effect<LibraryState | void, E, R>,
-  ) {
-    const recorder: Recorder = { onDisk: new Map(), touched: new Map(), copies: [] };
-    const candidate = structuredClone(loaded);
-    const recordFailure = Effect.suspend(() => {
-      if (recorder.onDisk.size === 0) return Effect.void;
-      const next = structuredClone(loaded);
-      for (const row of recorder.onDisk.values()) {
-        const index = next.installed_skills.findIndex(
-          (item) => item.installed_skill_id === row.installed_skill_id,
-        );
-        if (index < 0) next.installed_skills.push(row);
-        else next.installed_skills[index] = row;
-      }
-      return store.save(next, loaded);
-    }).pipe(
-      Effect.catchCause((cause) =>
-        Effect.logWarning("Installed skills changed, but the Library could not record them", cause),
-      ),
-    );
-    const next =
-      (yield* stage(recorder, candidate).pipe(Effect.onError(() => recordFailure))) ?? candidate;
-    const pending = yield* Effect.forEach([...recorder.touched.values()], (copy) =>
-      unwrap(files.backups.scan(copy.root, copy.installed_skill_id)).pipe(
-        Effect.map((backups) => backups.map((backup) => ({ backup, copy }))),
-      ),
-    ).pipe(
-      Effect.map((groups) => groups.flat()),
-      Effect.catchCause((cause) =>
-        Effect.as(Effect.logWarning("Installed-skill backups stayed pending", cause), []),
-      ),
-    );
-    // The save also proves `loaded` is still the Library's, which settling a backup relies on.
-    if (
-      recorder.onDisk.size > 0 ||
-      pending.length > 0 ||
-      libraryStateRevision(next) !== libraryStateRevision(loaded)
-    )
-      yield* store.save(next, loaded);
-    for (const { backup, copy } of pending)
-      yield* Effect.gen(function* () {
-        const reproducible = yield* files.backups
-          .check(backup, loaded, store.originalsPath, copy.installed_skill_id)
-          .pipe(Effect.orElseSucceed(() => false));
-        yield* reproducible ? files.backups.discard(backup) : files.backups.keep(backup);
-      }).pipe(
-        Effect.catchCause((cause) =>
-          Effect.logWarning("Library changed, but installed-skill backups stayed pending", cause),
-        ),
-      );
-    return { state: next, copies: recorder.copies };
-  });
-
-  /**
-   * Bring this device's skill folders in line with `loaded` for one request: uninstall what no
-   * setting asks for, install what is enabled at each destination, then uninstall former copies only
-   * after every successor is in place.
-   */
-  const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(function* (
-    store: LibraryStore["Service"],
-    loaded: LibraryState,
-    options: {
-      readonly scope: Request["scope"];
-      /** Install what is enabled at the scope; without it, only uninstall leftovers. */
-      readonly install: boolean;
-      /** Enabling puts back copies of these Skills that the user deleted. */
-      readonly restoreDeleted: readonly string[];
-      /** Manage a folder that already holds exactly SKIT's bytes. */
-      readonly manageIdentical: boolean;
-      /**
-       * First uninstall copies no setting asks for: none, those at inactive or former destinations,
-       * or also those whose Skill is no longer enabled.
-       */
-      readonly leftovers: "none" | "inactive" | "all";
-      /** Touch only these Skills: selection, uninstalls and relocation. */
-      readonly only?: readonly SkillId[];
-      /** Folders the user approved managing, as previewed. */
-      readonly manage?: ManageApproval;
-      /** Edited copies the user accepted as the selected Version, as previewed. */
-      readonly acceptedCopies?: ReadonlyMap<
-        string,
-        { readonly currentHash: InstalledSkill["expected_hash"]; readonly marker: OwnershipMarker }
-      >;
-    },
-    targets: readonly InstalledSkills.Destination[],
-  ) {
-    return yield* batch(store, loaded, (recorder, candidate) =>
-      Effect.gen(function* () {
-        const removeRow = (id: InstalledSkillId) => {
-          const index = candidate.installed_skills.findIndex(
-            (item) => item.installed_skill_id === id,
-          );
-          if (index >= 0) candidate.installed_skills.splice(index, 1);
-        };
-        // Copies at an inactive or former destination are never wanted.
-        const intent = deviceInstallationIntent(candidate);
-        const active = options.leftovers === "none" ? [] : yield* unwrap(files.active);
-        for (const copy of options.leftovers === "none"
-          ? []
-          : leftoverSkills(candidate, {
-              activeDestinations: active,
-              enabled: intent.globals[0]?.enabled ?? [],
-              inactiveOnly: options.leftovers === "inactive",
-              ...(options.only === undefined ? {} : { onlySkillIds: options.only }),
-            })) {
-          const skill = candidate.skills.find((item) => item.skill_id === copy.skill_id);
-          if (skill === undefined) continue;
-          // An edited copy at an active destination is refused; at an inactive or former one it
-          // is kept and reported, so it cannot block every later update.
-          const result = yield* uninstall(
-            recorder,
-            copy,
-            active.some((destination) => destination === copy.destination) ? "throw" : "report",
-            `Refusing to remove modified ${skill.name} at ${copy.path}`,
-          );
-          if (result.kind === "conflicted")
-            candidate.installed_skills[candidate.installed_skills.indexOf(copy)] =
-              InstalledSkillStatus.conflicted(copy, result.observed);
-          else removeRow(copy.installed_skill_id);
-        }
-        if (!options.install) return;
-        const former: InstalledSkill[] = [];
-        for (const target of targets) {
-          const state = structuredClone(candidate);
-          const scope = options.scope;
-          const enabled = enabledAt(state, scope);
-          if (enabled === undefined)
-            return yield* new InstalledSkillInvalid({ detail: "Nothing is enabled at this scope" });
-          const bound = enabledSkillIds(state, enabled.enabled).filter(
-            (id) => options.only === undefined || options.only.includes(id),
-          );
-          const selected = state.skills
-            .filter((skill) => bound.includes(skill.skill_id))
-            .flatMap((skill) => {
-              const version = currentSkillVersion(state, skill);
-              return version === undefined || versionBacking(state, skill, version) === undefined
-                ? []
-                : [{ skill, version }];
-            });
-          if (selected.length !== bound.length)
-            return yield* new InstalledSkillInvalid({
-              detail: "An enabled Skill has no selected retained Version",
-            });
-          // Compare physical roots so a configured symlink alias cannot retire the active copy.
-          const keys = new Map<string, { key: string; canonicalPath: string }>();
-          for (const root of new Set([
-            target.root,
-            ...state.installed_skills
-              .filter((item) => item.destination === target.destination)
-              .map((item) => item.root),
-            ...state.repositories.map((repository) => repository.root),
-          ]))
-            keys.set(root, yield* unwrap(files.identify(root)));
-          const atTarget = (copy: InstalledSkill) =>
-            copy.destination === target.destination &&
-            (options.only === undefined || options.only.includes(copy.skill_id)) &&
-            keys.get(copy.root)?.key === keys.get(target.root)?.key;
-          const formerHere =
-            scope.kind === "global"
-              ? state.installed_skills.filter(
-                  (copy) =>
-                    copy.destination === target.destination &&
-                    !atTarget(copy) &&
-                    bound.includes(copy.skill_id) &&
-                    !repositorySelectsInstalledSkill(state, copy) &&
-                    !state.repositories.some(
-                      (repository) =>
-                        enabledSkillIds(state, repository.enabled).includes(copy.skill_id) &&
-                        pathIsWithin(
-                          keys.get(repository.root)?.canonicalPath ?? repository.root,
-                          keys.get(copy.root)?.canonicalPath ?? copy.root,
-                        ),
-                    ),
-                )
-              : [];
-          // Refuse an edited former copy before installing anything or removing any old copy.
-          for (const copy of formerHere)
-            if ((yield* ownership(copy))._tag === "Conflicted")
-              return yield* new UninstallConflict({
-                detail: `Refusing to relocate modified Skill from ${copy.path}`,
-              });
-          for (const existing of candidate.installed_skills.filter(
-            (copy) => atTarget(copy) && !bound.includes(copy.skill_id),
-          )) {
-            const skill = candidate.skills.find((item) => item.skill_id === existing.skill_id);
-            if (skill === undefined) continue;
-            // A copy without SKIT's marker was never SKIT's to remove: disabling drops the record and
-            // leaves the folder. A managed copy edited since SKIT wrote it is refused.
-            const owned = yield* unwrap(files.inspect(existing.path));
-            const markerAbsent =
-              owned.entry._tag === "Absent" ||
-              owned.entry.facts === null ||
-              owned.entry.facts.marker.kind === "absent";
-            yield* uninstall(
-              recorder,
-              existing,
-              markerAbsent ? "report" : "throw",
-              `Refusing to disable ${skill.name}: ${existing.path} was edited after SKIT wrote it`,
-            );
-          }
-          candidate.installed_skills.splice(
-            0,
-            candidate.installed_skills.length,
-            ...candidate.installed_skills.filter((copy) => !atTarget(copy)),
-          );
-          for (const { skill, version } of selected) {
-            const previous = state.installed_skills.find(
-              (copy) => copy.skill_id === skill.skill_id && atTarget(copy),
-            );
-            const policy = enabled.invocation_policies?.[skill.skill_id];
-            const accepted =
-              previous === undefined
-                ? undefined
-                : options.acceptedCopies?.get(previous.installed_skill_id);
-            const installed = yield* install(recorder, {
-              state: candidate,
-              copy: {
-                state: candidate,
-                originalsPath: store.originalsPath,
-                installedSkillId: previous?.installed_skill_id ?? makeInstalledSkillId(),
-                skillId: skill.skill_id,
-                skillVersionId: version.skill_version_id,
-                invocationIntent:
-                  policy === undefined
-                    ? declaredInvocationIntent
-                    : overrideInvocationIntent(policy),
-              },
-              destination: target,
-              name: skill.name,
-              previous,
-              restoreDeleted: options.restoreDeleted.includes(skill.skill_id),
-              manageIdentical: options.manageIdentical,
-              ...(options.manage === undefined ? {} : { manage: options.manage }),
-              ...(accepted === undefined ? {} : { accepted }),
-            });
-            recorder.touched.set(installed.installed_skill_id, installed);
-            candidate.installed_skills.push(installed);
-            // Keep the last working copy when the new destination is blocked or locally modified.
-            if (installed.status === "installed")
-              former.push(...formerHere.filter((copy) => copy.skill_id === skill.skill_id));
-          }
-        }
-        // Every successor at every destination is in place before any former copy is uninstalled.
-        for (const copy of former)
-          if ((yield* ownership(copy))._tag === "Conflicted")
-            return yield* new UninstallConflict({
-              detail: `Refusing to relocate modified Skill from ${copy.path}`,
-            });
-        for (const copy of former) {
-          yield* uninstall(
-            recorder,
-            copy,
-            "throw",
-            `Refusing to relocate modified Skill from ${copy.path}`,
-          );
-          removeRow(copy.installed_skill_id);
-        }
-      }),
-    );
-  });
-
-  /** Everything plan shows and apply rechecks: the changes, routes and observed paths. */
-  const preview = Effect.fn("Library.preview")(function* (
-    state: LibraryState,
-    intents: readonly EnabledIntent[],
-  ) {
-    const requests = (yield* Effect.forEach(intents, (intent) =>
-      expandIntent(state, intent),
-    )).flat();
-    let candidate = state;
-    const changes: BindingChange[] = [];
-    const copies: CopyChange[] = [];
-    const routes: Plan["routes"][number][] = [];
-    const paths = new Set<string>(state.installed_skills.map((copy) => copy.path));
-    for (const request of requests) {
-      const { plan, skillIds, newlyEnabledSkills, hasList } = yield* calculateEnabled(
-        candidate,
-        request,
-      );
-      const destinations = yield* unwrap(files.destinations(plan.scope));
-      routes.push({ scope: plan.scope, destinations });
-      const names = skillsToCheckForDuplicates(
-        candidate,
-        plan.scope,
-        request.enabled ? plan.skills : [],
-        newlyEnabledSkills,
-      );
-      const duplicates = yield* unwrap(files.duplicates.scan(plan.scope, names));
-      // Duplicates are not evidence: apply scans for them again and refuses by policy.
-      const unmanaged: { destination: "agents" | "claude"; path: string }[] = [];
-      let repair = false;
-      const enabledIds = enabledSkillIds(candidate, plan.enabled);
-      for (const target of destinations) {
-        for (const id of new Set([...skillIds, ...enabledIds])) {
-          const skill = candidate.skills.find((item) => item.skill_id === id);
-          if (skill === undefined) continue;
-          const path = join(target.root, yield* installedSkillName(skill.name));
-          const previous = state.installed_skills.find((copy) => copy.path === path);
-          paths.add(path);
-          if (enabledIds.includes(id))
-            copies.push({ _tag: "Install", skillId: id, destination: target.destination, path });
-          const observed = yield* unwrap(files.inspect(path));
-          const facts = observed.entry._tag === "Present" ? observed.entry.facts : null;
-          if (
-            request.enabled &&
-            skillIds.includes(id) &&
-            observed.entry._tag === "Present" &&
-            observed.entry.kind !== "SymbolicLink" &&
-            facts?.marker.kind !== "valid"
-          )
-            unmanaged.push({ destination: target.destination, path });
-          if (!plan.changed && request.enabled && skillIds.includes(id))
-            repair ||=
-              previous === undefined ||
-              previous.status !== "installed" ||
-              facts === null ||
-              facts.hash !== previous.expected_hash;
-          for (const version of skill.versions) {
-            const backing = versionBacking(state, skill, version);
-            if (backing) paths.add(collectionVersionPath(store.originalsPath, backing.copy.hash));
-          }
-        }
-        if (!plan.changed && !request.enabled && hasList) {
-          for (const copy of candidate.installed_skills.filter(
-            (copy) =>
-              copy.root === target.root &&
-              copy.destination === target.destination &&
-              !enabledIds.includes(copy.skill_id),
-          ))
-            repair ||= (yield* unwrap(files.inspect(copy.path))).entry._tag !== "Absent";
-        }
-      }
-      for (const copy of candidate.installed_skills)
-        if (
-          !destinations.some((target) => target.destination === copy.destination) ||
-          (destinations.some(
-            (target) => target.destination === copy.destination && target.root === copy.root,
-          ) &&
-            !enabledIds.includes(copy.skill_id))
-        )
-          copies.push({
-            _tag: "Uninstall",
-            skillId: copy.skill_id,
-            destination: copy.destination,
-            path: copy.path,
-          });
-      changes.push({
-        ...plan,
-        _tag: request.enabled ? "Enable" : "Disable",
-        ...(repair ? { repair } : {}),
-        ...(duplicates.copies.length ? { duplicates: duplicates.copies } : {}),
-        ...(duplicates.warnings.length ? { warnings: duplicates.warnings } : {}),
-        ...(unmanaged.length ? { unmanaged_destinations: unmanaged } : {}),
-      });
-      if (plan.changed) candidate = setEnabledAt(candidate, plan.scope, plan);
-    }
-    return { requests, changes, routes, paths: [...paths], copies };
-  });
-
-  /** What removing a Collection changes: its Skills, and every copy of them, observed. */
-  const previewRemoval = Effect.fn("Library.previewRemoval")(function* (
-    state: LibraryState,
-    removal: Remove,
-  ) {
-    if (!state.collections.some((item) => item.collection_id === removal.collectionId))
-      return yield* new CollectionRemovalMissing({ collection_id: removal.collectionId });
-    const skillIds = state.skills
-      .filter((skill) => skill.collection_id === removal.collectionId)
-      .map((skill) => skill.skill_id);
-    const copies = state.installed_skills.filter((copy) => skillIds.includes(copy.skill_id));
-    const paths = copies.map((copy) => copy.path);
-    const changes: Change[] = [
-      { _tag: "Remove", collectionId: removal.collectionId, skillIds },
-      ...copies.map((copy): CopyChange => ({
-        _tag: "Uninstall",
-        skillId: copy.skill_id,
-        destination: copy.destination,
-        path: copy.path,
-      })),
-    ];
-    return { changes, paths };
-  });
-
-  /** A plan either changes what is enabled, or removes or updates one Collection on its own. */
-  const split = (
-    intents: readonly Intent[],
-  ):
-    | { readonly _tag: "Enabled"; readonly intents: readonly EnabledIntent[] }
-    | { readonly _tag: "Remove"; readonly removal: Remove }
-    | { readonly _tag: "Update"; readonly update: Update }
-    | { readonly _tag: "Install"; readonly install: Install }
-    | { readonly _tag: "Uninstall"; readonly uninstall: Uninstall }
-    | { readonly _tag: "Mixed" } => {
-    const enabled = intents.filter(
-      (intent): intent is EnabledIntent => intent._tag === "Enable" || intent._tag === "Disable",
-    );
-    const [only] = intents;
-    if (enabled.length === intents.length) return { _tag: "Enabled", intents: enabled };
-    if (intents.length !== 1 || only === undefined) return { _tag: "Mixed" };
-    return only._tag === "Remove"
-      ? { _tag: "Remove", removal: only }
-      : only._tag === "Update"
-        ? { _tag: "Update", update: only }
-        : only._tag === "Install"
-          ? { _tag: "Install", install: only }
-          : only._tag === "Uninstall"
-            ? { _tag: "Uninstall", uninstall: only }
-            : { _tag: "Mixed" };
-  };
-  const mixed = () => new InvalidIntent({ detail: "Remove or update one Collection on its own" });
-
-  /** What updating a Collection's copies touches: every scope enabling it, at every destination. */
-  const previewUpdate = Effect.fn("Library.previewUpdate")(function* (
-    state: LibraryState,
-    update: Update,
-  ) {
-    const enables = (id: string) =>
-      state.skills.some(
-        (skill) => skill.skill_id === id && skill.collection_id === update.collectionId,
-      );
-    const routes: Plan["routes"][number][] = [];
-    const changes: Change[] = [];
-    const paths = new Set<string>(state.installed_skills.map((copy) => copy.path));
-    for (const list of update.collectionId === undefined
-      ? deviceInstallationIntent(state).byScope
-      : enabledByScope(state).filter((list) =>
-          list.enabled.some((item) =>
-            "collection" in item ? item.collection === update.collectionId : enables(item.skill),
-          ),
-        )) {
-      const destinations = yield* unwrap(files.destinations(list.scope));
-      routes.push({ scope: list.scope, destinations });
-      for (const target of destinations)
-        for (const id of enabledSkillIds(state, list.enabled)) {
-          const skill = state.skills.find((item) => item.skill_id === id);
-          if (skill === undefined) continue;
-          const path = join(target.root, yield* installedSkillName(skill.name));
-          paths.add(path);
-          changes.push({ _tag: "Install", skillId: id, destination: target.destination, path });
-        }
-    }
-    return { changes, routes, paths: [...paths] };
-  });
-
-  /** What installing selected Skills at one destination touches. */
-  const previewInstall = Effect.fn("Library.previewInstall")(function* (
-    state: LibraryState,
-    install: Install,
-  ) {
-    const changes: Change[] = [];
-    const ids =
-      install.only ?? enabledSkillIds(state, enabledAt(state, install.scope)?.enabled ?? []);
-    const paths = new Set<string>(
-      state.installed_skills.filter((copy) => ids.includes(copy.skill_id)).map((copy) => copy.path),
-    );
-    for (const id of ids) {
-      const skill = state.skills.find((item) => item.skill_id === id);
-      if (skill === undefined) continue;
-      const path = join(install.destination.root, yield* installedSkillName(skill.name));
-      paths.add(path);
-      changes.push({
-        _tag: "Install",
-        skillId: id,
-        destination: install.destination.destination,
-        path,
-      });
-    }
-    return { changes, paths: [...paths] };
-  });
-
-  /**
-   * What one plan is, for every intent alike: the changes it shows, the routes and paths it rests
-   * on, the policy it refuses by, and the work apply runs once all of that is rechecked.
-   */
-  interface Work {
-    readonly changes: readonly Change[];
-    readonly routes: Plan["routes"];
-    readonly paths: readonly string[];
-    readonly refuse: Effect.Effect<void, ApplyError>;
-    readonly run: Effect.Effect<Outcome, ApplyError>;
-  }
-  const applied = (copies: readonly CopyResult[]): Outcome => ({
-    _tag: "Applied",
-    results: [],
-    copies,
-  });
-
-  const prepare = Effect.fn("Library.prepare")(function* (
-    base: LibraryState,
-    intents: readonly Intent[],
-  ): Effect.fn.Return<Work, PlanError> {
-    const kind = split(intents);
-    switch (kind._tag) {
-      case "Mixed":
-        return yield* mixed();
+  /** What each intent changes in the Library itself, before any copy is considered. */
+  const edit = Effect.fn("Library.edit")(function* (base: LibraryState, intent: Intent) {
+    switch (intent._tag) {
+      case "Update":
+      case "Uninstall":
+        return { next: base, requests: [] };
       case "Remove": {
-        const { changes, paths } = yield* previewRemoval(base, kind.removal);
-        return {
-          changes,
-          routes: [],
-          paths,
-          refuse: Effect.void,
-          run: Effect.map(applyRemoval(base, kind.removal), applied),
-        };
-      }
-      case "Uninstall": {
-        const removal = kind.uninstall;
-        const listed = base.installed_skills.filter((copy) =>
-          removal.copies.includes(copy.installed_skill_id),
+        if (!base.collections.some((item) => item.collection_id === intent.collectionId))
+          return yield* new CollectionRemovalMissing({ collection_id: intent.collectionId });
+        const skills = new Set<string>(
+          base.skills
+            .filter((skill) => skill.collection_id === intent.collectionId)
+            .map((skill) => skill.skill_id),
         );
+        const imports = base.imports.filter((item) => item.collection_id !== intent.collectionId);
+        const surviving = new Set(imports.map((item) => item.collection_version_id));
+        const pruned = removeFromEnabled(base, {
+          skills,
+          collections: new Set([intent.collectionId]),
+        });
         return {
-          changes: listed.map((copy): Change => ({
-            _tag: "Uninstall",
-            skillId: copy.skill_id,
-            destination: copy.destination,
-            path: copy.path,
-          })),
-          routes: [],
-          paths: listed.map((copy) => copy.path),
-          refuse: Effect.void,
-          run: Effect.gen(function* () {
-            const { copies } = yield* batch(store, base, (recorder, candidate) =>
-              Effect.gen(function* () {
-                for (const id of removal.copies) {
-                  const copy = candidate.installed_skills.find(
-                    (item) => item.installed_skill_id === id,
-                  );
-                  if (copy === undefined) continue;
-                  yield* uninstall(
-                    recorder,
-                    copy,
-                    "throw",
-                    `Refusing to remove modified Skill at ${copy.path}`,
-                  );
-                  if (removal.drop.includes(id))
-                    candidate.installed_skills.splice(candidate.installed_skills.indexOf(copy), 1);
-                  else if (copy.status !== "suppressed")
-                    candidate.installed_skills[candidate.installed_skills.indexOf(copy)] =
-                      InstalledSkillStatus.pending(copy);
-                }
-              }),
-            );
-            return applied(copies);
-          }),
-        };
-      }
-      case "Install": {
-        const install = kind.install;
-        const { changes, paths } = yield* previewInstall(base, install);
-        return {
-          changes,
-          routes: [],
-          paths,
-          refuse: Effect.void,
-          run: Effect.gen(function* () {
-            const updated = yield* updateInstalledSkills(
-              store,
-              base,
-              {
-                scope: install.scope,
-                install: true,
-                restoreDeleted: install.restoreDeleted,
-                manageIdentical: install.manageIdentical,
-                leftovers: "none",
-                ...(install.only === undefined ? {} : { only: install.only }),
-                ...(install.manage === undefined ? {} : { manage: install.manage }),
-                acceptedCopies: new Map(
-                  (install.acceptedCopies ?? []).map((copy) => [
-                    copy.installedSkillId,
-                    { currentHash: copy.currentHash, marker: copy.marker },
-                  ]),
-                ),
-              },
-              [install.destination],
-            );
-            return applied(updated.copies);
-          }),
-        };
-      }
-      case "Update": {
-        const update = kind.update;
-        const { changes, routes: planned, paths } = yield* previewUpdate(base, update);
-        return {
-          changes,
-          routes: planned,
-          paths,
-          refuse: Effect.void,
-          run: Effect.gen(function* () {
-            let state = base;
-            const copies: CopyResult[] = [];
-            // Leftovers once, first: of every Skill nothing enables, when updating everything.
-            const leftovers = update.collectionId === undefined ? "all" : "inactive";
-            const routes =
-              planned.length > 0
-                ? planned
-                : [{ scope: { kind: "global" as const }, destinations: [] }];
-            for (const [index, route] of routes.entries()) {
-              const updated = yield* updateInstalledSkills(
-                store,
-                state,
-                {
-                  scope: route.scope,
-                  install: planned.length > 0,
-                  restoreDeleted: [],
-                  manageIdentical: false,
-                  leftovers: index === 0 ? leftovers : "none",
-                },
-                route.destinations,
-              );
-              state = updated.state;
-              copies.push(...updated.copies);
-            }
-            return applied(copies);
-          }),
+          next: {
+            ...pruned,
+            collections: pruned.collections.filter(
+              (item) => item.collection_id !== intent.collectionId,
+            ),
+            skills: pruned.skills.filter((skill) => !skills.has(skill.skill_id)),
+            imports,
+            collection_versions: pruned.collection_versions.filter((version) =>
+              surviving.has(version.collection_version_id),
+            ),
+          },
+          requests: [],
         };
       }
       case "Enabled": {
-        const recomputed = yield* preview(base, kind.intents);
+        const requests = (yield* Effect.forEach(intent.changes, (change) =>
+          expandIntent(base, change),
+        )).flat();
+        const edited = yield* Effect.reduce(
+          requests,
+          (): { next: LibraryState; requests: { request: Request; calculated: Calculated }[] } => ({
+            next: base,
+            requests: [],
+          }),
+          (sofar, request) =>
+            Effect.map(calculateEnabled(sofar.next, request), (calculated) => ({
+              next: calculated.plan.changed
+                ? setEnabledAt(sofar.next, request.scope, calculated.plan)
+                : sofar.next,
+              requests: [...sofar.requests, { request, calculated }],
+            })),
+        );
         return {
-          changes: [...recomputed.changes, ...recomputed.copies],
-          routes: recomputed.routes,
-          paths: recomputed.paths,
-          refuse: Effect.gen(function* () {
-            let candidate = base;
-            for (const request of recomputed.requests) {
-              const calculated = yield* calculateEnabled(candidate, request);
-              const targets = yield* unwrap(files.destinations(request.scope));
-              yield* refuseDuplicates(candidate, request, calculated, targets);
-              if (calculated.plan.changed)
-                candidate = setEnabledAt(candidate, request.scope, calculated.plan);
-            }
-          }),
-          run: Effect.gen(function* () {
-            let revision = libraryStateRevision(base);
-            // What this writer itself last saved: a result never claims another writer's state.
-            let saved: LibraryState | undefined;
-            // Every save in this batch must build on the batch's own last save.
-            const guarded = {
-              ...store,
-              save: (next: LibraryState, previous: LibraryState) =>
-                libraryStateRevision(previous) !== revision
-                  ? Effect.fail(new LibraryChanged({ path: store.statePath }))
-                  : store.save(next, previous).pipe(
-                      Effect.tap(() =>
-                        Effect.sync(() => {
-                          revision = libraryStateRevision(next);
-                          saved = next;
-                        }),
-                      ),
-                    ),
-            };
-            let state = base;
-            const results: AppliedChange[] = [];
-            for (const [index, request] of recomputed.requests.entries()) {
-              const accepted = { value: false };
-              const change = recomputed.changes[index];
-              const destinations = recomputed.routes[index]?.destinations ?? [];
-              if (change === undefined) return yield* stale();
-              const attempted = yield* applyRequest(
-                guarded,
-                state,
-                request,
-                destinations,
-                accepted,
-              ).pipe(
-                Effect.catchTag("LibraryChanged", () => Effect.fail(stale())),
-                Effect.result,
-              );
-              if (Result.isFailure(attempted) && !accepted.value) {
-                if (results.length === 0) return yield* Effect.fail(attempted.failure);
-                return {
-                  _tag: "Incomplete",
-                  results,
-                  reason: "request",
-                  cause: attempted.failure,
-                } satisfies Outcome;
-              }
-              const durable = yield* store.load;
-              const recorded = Result.isSuccess(attempted)
-                ? attempted.success.state
-                : (saved ?? state);
-              if (Result.isSuccess(attempted) && libraryStateRevision(durable) !== revision)
-                return yield* stale();
-              const selected = yield* calculateEnabled(state, request);
-              const result = finish(
-                change,
-                selected.skillIds,
-                destinations,
-                Result.isSuccess(attempted) ? attempted.success.copies : [],
-                recorded,
-              );
-              results.push(result);
-              state = recorded;
-              if (Result.isFailure(attempted))
-                return {
-                  _tag: "Incomplete",
-                  results,
-                  reason: "reconciliation",
-                  cause: attempted.failure,
-                } satisfies Outcome;
-              if (result.unresolved.length)
-                return {
-                  _tag: "Incomplete",
-                  results,
-                  reason: "destinations",
-                  cause: new DestinationsIncomplete({ paths: result.unresolved }),
-                } satisfies Outcome;
-            }
-            return {
-              _tag: "Applied",
-              results,
-              copies: results.flatMap((result) => result.copies),
-            } satisfies Outcome;
-          }),
+          next: requests.some((request) => !request.enabled)
+            ? pruneEmptyEnabled(edited.next)
+            : edited.next,
+          requests: edited.requests,
         };
       }
     }
   });
 
-  const plan: Interface["plan"] = Effect.fn("Library.plan")(function* (intents, options) {
-    const state = structuredClone(options.base);
-    const reviewed = structuredClone(intents);
-    const work = yield* prepare(state, reviewed);
-    return {
-      baseRevision: libraryStateRevision(state),
-      intents: reviewed,
-      changes: [...work.changes],
-      routes: work.routes,
-      observed: yield* Effect.forEach([...new Set(work.paths)].sort(), (path) =>
-        unwrap(files.inspect(path)),
+  /**
+   * Plan one intent: edit the Library, then compare the copies it should have installed with what
+   * is recorded and on disk. Builds each wanted copy, so the Scope must outlive any apply.
+   */
+  const work = Effect.fn("Library.work")(function* (
+    base: LibraryState,
+    intent: Intent,
+    approvals: readonly Approval[],
+  ): Effect.fn.Return<Work, PlanError, Scope.Scope> {
+    const { next, requests } = yield* edit(base, intent);
+    const enabling = requests.filter(({ request }) => request.enabled);
+    // Enabling a Skill puts back its deleted copies; otherwise only an approved copy comes back.
+    const enabled = new Set<string>(enabling.flatMap(({ calculated }) => calculated.skillIds));
+    const restored = new Set<string>(
+      approvals.flatMap((approval) =>
+        approval._tag === "Restore" ? [approval.installedSkillId] : [],
       ),
+    );
+    const restore = (copy: InstalledSkills.Copy) =>
+      enabled.has(copy.skillId) || restored.has(copy.installedSkillId);
+    const accepted = new Map(
+      approvals.flatMap((approval) =>
+        approval._tag === "AcceptEdit" ? [[approval.installedSkillId, approval] as const] : [],
+      ),
+    );
+
+    // Where every scope this device uses, or this intent touches, installs.
+    const intended = intent._tag === "Uninstall" ? [] : deviceInstallationIntent(next).byScope;
+    const scopes = [
+      ...intended.map((item) => item.scope),
+      ...requests.map(({ request }) => request.scope),
+    ].filter((scope, index, all) => all.findIndex((other) => sameScope(scope, other)) === index);
+    const routes = yield* Effect.forEach(scopes, (scope) =>
+      Effect.map(unwrap(files.destinations(scope)), (destinations): Route => ({
+        scope,
+        destinations,
+      })),
+    );
+    const active: readonly InstallDestination[] =
+      intent._tag === "Uninstall" ? [] : yield* unwrap(files.active);
+
+    // Physical roots, so a configured symlink alias is the same place.
+    const keys = new Map<string, string>();
+    for (const root of new Set([
+      ...routes.flatMap((route) => route.destinations.map((target) => target.root)),
+      ...base.installed_skills.map((copy) => copy.root),
+    ]))
+      keys.set(root, (yield* unwrap(files.identify(root))).key);
+    const at = (copy: InstalledSkill, target: InstalledSkills.Destination) =>
+      copy.destination === target.destination && keys.get(copy.root) === keys.get(target.root);
+
+    // Every copy the next Library should have installed, built so it can be compared.
+    const wanted: Wanted[] = [];
+    for (const enabled of intended) {
+      const route = routes.find((item) => sameScope(item.scope, enabled.scope));
+      for (const target of route?.destinations ?? [])
+        for (const skillId of enabledSkillIds(next, enabled.enabled)) {
+          const skill = next.skills.find((item) => item.skill_id === skillId);
+          const version = skill === undefined ? undefined : currentSkillVersion(next, skill);
+          if (
+            skill === undefined ||
+            version === undefined ||
+            versionBacking(next, skill, version) === undefined
+          )
+            return yield* new InstalledSkillInvalid({
+              detail: "An enabled Skill has no selected retained Version",
+            });
+          const prior = base.installed_skills.find(
+            (copy) => copy.skill_id === skill.skill_id && at(copy, target),
+          );
+          const policy = enabled.invocation_policies?.[skill.skill_id];
+          const copy: InstalledSkills.Copy = {
+            state: next,
+            originalsPath: store.originalsPath,
+            installedSkillId: prior?.installed_skill_id ?? makeInstalledSkillId(),
+            skillId: skill.skill_id,
+            skillVersionId: version.skill_version_id,
+            invocationIntent:
+              policy === undefined ? declaredInvocationIntent : overrideInvocationIntent(policy),
+          };
+          const name = yield* installedSkillName(skill.name);
+          const path = join(target.root, name);
+          wanted.push({
+            copy,
+            destination: target,
+            name,
+            path,
+            prior,
+            folder: yield* unwrap(files.inspect(path)),
+          });
+        }
+    }
+
+    // What happens at each wanted copy's folder.
+    const installing: Step[] = [];
+    for (const item of wanted) {
+      const { copy, path, prior, folder } = item;
+      const at = { skillId: copy.skillId, destination: item.destination.destination, path };
+      const facts = folder.entry._tag === "Present" ? folder.entry.facts : null;
+      if (folder.entry._tag === "Present" && facts === null && folder.entry.kind !== "SymbolicLink")
+        return yield* new InstalledSkillInvalid({ detail: `Not a skill folder: ${path}` });
+      if (facts === null) {
+        // A copy the user deleted stays deleted unless they asked to restore it, or a backup
+        // shows SKIT moved it aside. An installed copy whose folder is gone was deleted too.
+        if (
+          (prior?.status === "suppressed" || prior?.status === "installed") &&
+          !restore(copy) &&
+          !(yield* displaced(prior))
+        ) {
+          installing.push({
+            _tag: "KeepDeleted",
+            change: { ...at, _tag: "KeepDeleted" },
+            wanted: item,
+            prior:
+              prior.status === "suppressed"
+                ? prior
+                : InstalledSkillStatus.suppressed(
+                    prior,
+                    new Date(yield* Clock.currentTimeMillis).toISOString(),
+                  ),
+          });
+          continue;
+        }
+        installing.push({ _tag: "Install", change: { ...at, _tag: "Install" }, wanted: item });
+        continue;
+      }
+      if (typeof facts.hash !== "string") {
+        const reason = `${facts.hash.reason}: ${path}`;
+        installing.push({
+          _tag: "Unreadable",
+          change: { ...at, _tag: "Unreadable", reason },
+          wanted: item,
+          reason,
+        });
+        continue;
+      }
+      const staged = yield* unwrap(files.build(copy, item.destination));
+      const recorded = prior?.installed_skill_id === copy.installedSkillId ? prior : undefined;
+      const approval = accepted.get(copy.installedSkillId);
+      const manage = yield* approvedForManage(approvals, path);
+      // Decided against the hash an installed copy is verified with; an unreadable folder fails.
+      const decided = decide(
+        {
+          marker: facts.marker,
+          hash: facts.hash,
+          directory: folder.entry._tag === "Present" && folder.entry.kind === "Directory",
+          insideRepository: facts.insideRepository,
+          holdsRepositoryFiles: facts.holdsRepositoryFiles,
+          approvedForManage: manage !== undefined,
+        },
+        {
+          installedSkillId: copy.installedSkillId,
+          skillId: copy.skillId,
+          skillVersionId: copy.skillVersionId,
+          hash: staged.hash,
+          recordedHash: recorded?.expected_hash,
+          manage: manage === undefined ? undefined : { hash: manage.currentHash },
+          // Enabling may take over a folder that is exactly SKIT's bytes; updating never does.
+          manageIdentical: enabling.some(({ request }) =>
+            routes.some(
+              (route) =>
+                sameScope(route.scope, request.scope) &&
+                route.destinations.some((target) => target.root === item.destination.root),
+            ),
+          ),
+          replacement:
+            approval === undefined
+              ? undefined
+              : { hash: approval.currentHash, marker: approval.marker },
+        },
+      );
+      if (Result.isFailure(decided))
+        return yield* new InstalledSkillInvalid({ detail: `${decided.failure}: ${path}` });
+      const decision = decided.success;
+      switch (decision._tag) {
+        case "KeepSuppressed":
+          // decide keeps a copy deleted only when its folder is gone, which is handled above.
+          return yield* new InstalledSkillInvalid({
+            detail: `Deleted copy still present: ${path}`,
+          });
+        case "Manage":
+          installing.push({
+            _tag: "Manage",
+            change: { ...at, _tag: "Manage" },
+            wanted: item,
+            staged,
+            verification: decision.verification,
+          });
+          break;
+        case "Conflict":
+          installing.push({
+            _tag: "Conflict",
+            change: { ...at, _tag: "Conflict", edited: decision.edited, hash: decision.hash },
+            wanted: item,
+            staged,
+            edited: decision.edited,
+            hash: decision.hash,
+            expectedHash: decision.edited ? decision.expectedHash : staged.hash,
+          });
+          break;
+        case "Unchanged":
+          installing.push({
+            _tag: "Unchanged",
+            change: { ...at, _tag: "Unchanged" },
+            wanted: item,
+            staged,
+          });
+          break;
+        case "Replace":
+          installing.push({
+            _tag: "Update",
+            change: { ...at, _tag: "Update" },
+            wanted: item,
+            staged,
+          });
+          break;
+        case "Install":
+          installing.push({ _tag: "Install", change: { ...at, _tag: "Install" }, wanted: item });
+          break;
+      }
+    }
+
+    // Every recorded copy nothing wants any more.
+    const uninstalling: Step[] = [];
+    const unwanted =
+      intent._tag === "Uninstall"
+        ? base.installed_skills.filter((copy) => intent.copies.includes(copy.installed_skill_id))
+        : base.installed_skills.filter(
+            (copy) =>
+              !wanted.some(
+                (item) =>
+                  item.copy.installedSkillId === copy.installed_skill_id ||
+                  (item.copy.skillId === copy.skill_id && at(copy, item.destination)),
+              ),
+          );
+    for (const copy of unwanted) {
+      const change = { skillId: copy.skill_id, destination: copy.destination, path: copy.path };
+      const owned = yield* ownership(copy);
+      if (owned._tag === "Absent") {
+        uninstalling.push({ _tag: "Forget", change: { ...change, _tag: "Forget" }, copy });
+        continue;
+      }
+      if (owned._tag === "Intact") {
+        uninstalling.push({ _tag: "Uninstall", change: { ...change, _tag: "Uninstall" }, copy });
+        continue;
+      }
+      // A copy still wanted elsewhere at its destination is moving; an edited one is refused.
+      const moving = wanted.some(
+        (item) =>
+          item.copy.skillId === copy.skill_id && item.destination.destination === copy.destination,
+      );
+      // Otherwise a folder without SKIT's marker was never SKIT's to remove: only its record goes.
+      if (!owned.marked && !moving && intent._tag !== "Uninstall") {
+        uninstalling.push({ _tag: "Forget", change: { ...change, _tag: "Forget" }, copy });
+        continue;
+      }
+      // An edited copy where agents read it, or of a Skill the Library no longer has, is refused;
+      // elsewhere it is kept and reported, so it cannot block every later update.
+      if (
+        intent._tag === "Uninstall" ||
+        moving ||
+        !next.skills.some((skill) => skill.skill_id === copy.skill_id) ||
+        active.some((destination) => destination === copy.destination)
+      ) {
+        const detail = `Refusing to remove modified Skill at ${copy.path}`;
+        uninstalling.push({ _tag: "Refuse", change: { ...change, _tag: "Refuse", detail }, copy });
+        continue;
+      }
+      uninstalling.push({
+        _tag: "Keep",
+        change: { ...change, _tag: "Conflict", edited: true, hash: owned.hash },
+        copy,
+        hash: owned.hash,
+      });
+    }
+
+    const steps = [...installing, ...uninstalling];
+    // The originals each wanted copy is built from: a change to them makes the plan stale.
+    const originals = [
+      ...new Set(
+        wanted.flatMap((item) => {
+          const skill = next.skills.find((candidate) => candidate.skill_id === item.copy.skillId);
+          const version = skill?.versions.find(
+            (candidate) => candidate.skill_version_id === item.copy.skillVersionId,
+          );
+          const backing =
+            skill === undefined || version === undefined
+              ? undefined
+              : versionBacking(next, skill, version);
+          return backing === undefined
+            ? []
+            : [collectionVersionPath(store.originalsPath, backing.copy.hash)];
+        }),
+      ),
+    ];
+    const folders = [
+      ...wanted.map((item) => item.folder),
+      ...(yield* Effect.forEach(originals, (path) => unwrap(files.inspect(path)))),
+      ...(yield* Effect.forEach(
+        unwanted.filter((copy) => !wanted.some((item) => item.path === copy.path)),
+        (copy) => unwrap(files.inspect(copy.path)),
+      )),
+    ].sort((left, right) => left.path.localeCompare(right.path));
+
+    // What each enabled change shows: duplicates and unmanaged folders, and whether it repairs.
+    const shown: {
+      request: Request;
+      change: BindingChange;
+      skillIds: readonly SkillId[];
+    }[] = [];
+    for (const { request, calculated } of requests) {
+      const route = routes.find((item) => sameScope(item.scope, request.scope));
+      const duplicates = yield* unwrap(
+        files.duplicates.scan(
+          request.scope,
+          skillsToCheckForDuplicates(
+            base,
+            request.scope,
+            request.enabled ? calculated.plan.skills : [],
+            calculated.newlyEnabledSkills,
+          ),
+        ),
+      );
+      const here = steps.filter((step) =>
+        route?.destinations.some((target) =>
+          "wanted" in step
+            ? step.wanted.destination.root === target.root &&
+              step.wanted.destination.destination === target.destination
+            : at(step.copy, target),
+        ),
+      );
+      const subject = (skillId: string) =>
+        (calculated.skillIds as readonly string[]).includes(skillId);
+      const unmanaged = request.enabled
+        ? wanted.flatMap((item) =>
+            subject(item.copy.skillId) &&
+            here.some((step) => "wanted" in step && step.wanted === item) &&
+            item.folder.entry._tag === "Present" &&
+            item.folder.entry.kind !== "SymbolicLink" &&
+            item.folder.entry.facts?.marker.kind !== "valid"
+              ? [{ destination: item.destination.destination, path: item.path }]
+              : [],
+          )
+        : [];
+      const repair =
+        !calculated.plan.changed &&
+        here.some(
+          (step) =>
+            step._tag !== "Unchanged" &&
+            step._tag !== "KeepDeleted" &&
+            (request.enabled ? subject(step.change.skillId) : "copy" in step),
+        );
+      shown.push({
+        request,
+        skillIds: calculated.skillIds,
+        change: {
+          ...calculated.plan,
+          _tag: request.enabled ? "Enable" : "Disable",
+          ...(repair ? { repair } : {}),
+          ...(duplicates.copies.length ? { duplicates: duplicates.copies } : {}),
+          ...(duplicates.warnings.length ? { warnings: duplicates.warnings } : {}),
+          ...(unmanaged.length ? { unmanaged_destinations: unmanaged } : {}),
+        },
+      });
+    }
+
+    const removal: Change[] =
+      intent._tag === "Remove"
+        ? [
+            {
+              _tag: "Remove",
+              collectionId: intent.collectionId,
+              skillIds: base.skills
+                .filter((skill) => skill.collection_id === intent.collectionId)
+                .map((skill) => skill.skill_id),
+            },
+          ]
+        : [];
+    return {
+      next,
+      routes,
+      steps,
+      folders,
+      changes: [
+        ...shown.map((item) => item.change),
+        ...removal,
+        ...steps.map((step) => step.change),
+      ],
+      requests: shown,
     };
   });
 
-  /** Remove a Collection exactly as planned; a failed batch saves only the copies it moved aside. */
-  const applyRemoval = Effect.fn("Library.applyRemoval")(function* (
-    base: LibraryState,
-    removal: Remove,
-  ) {
-    const removedSkillIds = new Set<string>(
-      base.skills
-        .filter((skill) => skill.collection_id === removal.collectionId)
-        .map((skill) => skill.skill_id),
-    );
-    const { copies } = yield* batch(store, base, (recorder, candidate) =>
-      Effect.gen(function* () {
-        for (const copy of candidate.installed_skills.filter((item) =>
-          removedSkillIds.has(item.skill_id),
-        )) {
-          const skill = candidate.skills.find((item) => item.skill_id === copy.skill_id);
-          if (skill === undefined) continue;
-          yield* uninstall(
-            recorder,
-            copy,
-            "throw",
-            `Refusing to remove modified ${skill.name} at ${copy.path}`,
-          );
-        }
-        // Only a batch that uninstalled every copy removes the Collection.
-        const imports = candidate.imports.filter(
-          (sourceImport) => sourceImport.collection_id !== removal.collectionId,
-        );
-        const surviving = new Set(
-          imports.map((sourceImport) => sourceImport.collection_version_id),
-        );
-        const pruned = removeFromEnabled(candidate, {
-          skills: removedSkillIds,
-          collections: new Set([removal.collectionId]),
-        });
-        return {
-          ...pruned,
-          collections: pruned.collections.filter(
-            (item) => item.collection_id !== removal.collectionId,
-          ),
-          installed_skills: pruned.installed_skills.filter(
-            (item) => !removedSkillIds.has(item.skill_id),
-          ),
-          skills: pruned.skills.filter((skill) => !removedSkillIds.has(skill.skill_id)),
-          imports,
-          collection_versions: pruned.collection_versions.filter((copy) =>
-            surviving.has(copy.collection_version_id),
-          ),
-        };
-      }),
-    );
-    return copies;
+  const plan: Interface["plan"] = Effect.fn("Library.plan")(function* (intent, options) {
+    const base = structuredClone(options.base);
+    const approvals = structuredClone(options.approvals ?? []);
+    const reviewed = structuredClone(intent);
+    const planned = yield* Effect.scoped(work(base, reviewed, approvals));
+    return {
+      baseRevision: libraryStateRevision(base),
+      intent: reviewed,
+      approvals,
+      routes: planned.routes,
+      folders: planned.folders,
+      changes: planned.changes,
+    };
   });
 
   /** Policy: refuse a duplicate the request did not allow, or a link SKIT's copy would replace. */
   const refuseDuplicates = Effect.fn("Library.refuseDuplicates")(function* (
-    current: LibraryState,
     request: Request,
-    calculated: Calculated,
+    change: BindingChange,
     targets: readonly InstalledSkills.Destination[],
   ) {
-    const names = skillsToCheckForDuplicates(
-      current,
-      request.scope,
-      request.enabled ? calculated.plan.skills : [],
-      calculated.newlyEnabledSkills,
-    );
-    const duplicates = yield* unwrap(files.duplicates.scan(request.scope, names));
-    if (request.enabled && duplicates.copies.length) {
-      if (!request.allowDuplicate) {
-        // Setup consent covers only these exact links, while they are still the links reviewed.
-        const remaining: InstalledSkills.Duplicate[] = [];
-        for (const duplicate of duplicates.copies) {
-          const aliases = [];
-          for (const alias of duplicate.aliases) {
-            const reviewed = request.setup?.approvedSymlinks.find(
-              (item) => item.path === alias.path && item.canonicalPath === duplicate.canonicalPath,
-            );
-            if (reviewed !== undefined) {
-              const entry = (yield* unwrap(files.inspect(alias.path))).entry;
-              if (
-                entry._tag === "Present" &&
-                entry.kind === "SymbolicLink" &&
-                entry.identity.dev === reviewed.dev &&
-                entry.identity.ino === reviewed.ino &&
-                entry.linkTarget === reviewed.linkTarget
-              )
-                continue;
-            }
-            aliases.push(alias);
-          }
-          if (aliases.length) remaining.push({ ...duplicate, aliases });
-        }
-        if (remaining.length)
-          return yield* new InstalledSkillWouldDuplicate({ duplicates: remaining });
-      } else {
-        const paths = targets.flatMap((target) =>
-          calculated.plan.skills.map((name) => join(target.root, name)),
-        );
-        const links = duplicates.copies.flatMap((copy) =>
-          copy.aliases
-            .filter(
-              (alias) =>
-                alias.via === "symlink" &&
-                alias.linkPath === alias.path &&
-                paths.includes(alias.path),
+    if (!request.enabled || change.duplicates === undefined) return;
+    if (!request.allowDuplicate) {
+      // Setup consent covers only these exact links, while they are still the links reviewed.
+      const remaining: InstalledSkills.Duplicate[] = [];
+      for (const duplicate of change.duplicates) {
+        const aliases = [];
+        for (const alias of duplicate.aliases) {
+          const reviewed = request.setup?.approvedSymlinks.find(
+            (item) => item.path === alias.path && item.canonicalPath === duplicate.canonicalPath,
+          );
+          if (reviewed !== undefined) {
+            const entry = (yield* unwrap(files.inspect(alias.path))).entry;
+            if (
+              entry._tag === "Present" &&
+              entry.kind === "SymbolicLink" &&
+              entry.identity.dev === reviewed.dev &&
+              entry.identity.ino === reviewed.ino &&
+              entry.linkTarget === reviewed.linkTarget
             )
-            .map((alias) => alias.path),
+              continue;
+          }
+          aliases.push(alias);
+        }
+        if (aliases.length) remaining.push({ ...duplicate, aliases });
+      }
+      if (remaining.length)
+        return yield* new InstalledSkillWouldDuplicate({ duplicates: remaining });
+      return;
+    }
+    const paths = targets.flatMap((target) => change.skills.map((name) => join(target.root, name)));
+    const links = change.duplicates.flatMap((copy) =>
+      copy.aliases
+        .filter(
+          (alias) =>
+            alias.via === "symlink" && alias.linkPath === alias.path && paths.includes(alias.path),
+        )
+        .map((alias) => alias.path),
+    );
+    if (links.length) return yield* new InstalledSkillWouldReplaceLink({ links });
+  });
+
+  /** Carry out one step at a wanted copy's folder: the record it leaves, and what happened. */
+  const install = Effect.fn("Library.install")(function* (
+    step: Extract<Step, { readonly wanted: Wanted }>,
+  ) {
+    const { wanted } = step;
+    const installedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
+    if (step._tag === "KeepDeleted")
+      return { copy: step.prior, result: { _tag: "Suppressed", copy: step.prior } as const };
+    if (step._tag === "Unreadable")
+      return yield* new InstalledSkillInvalid({ detail: step.reason });
+    // A folder that was not there is built only now, once its root exists.
+    const staged =
+      step._tag === "Install"
+        ? yield* unwrap(files.build(wanted.copy, wanted.destination))
+        : step.staged;
+    const row: InstalledSkill = {
+      installed_skill_id: wanted.copy.installedSkillId,
+      skill_id: wanted.copy.skillId,
+      skill_version_id: wanted.copy.skillVersionId,
+      destination: wanted.destination.destination,
+      root: wanted.destination.root,
+      path: wanted.path,
+      expected_hash: staged.hash,
+      status: "pending",
+      installed_at: installedAt,
+    };
+    switch (step._tag) {
+      case "Unchanged": {
+        const copy = InstalledSkillStatus.installed(row);
+        return { copy, result: { _tag: "Unchanged", copy } as const };
+      }
+      case "Conflict": {
+        const { hash, edited } = step;
+        if (edited)
+          yield* unwrap(
+            files.backUp(
+              wanted.path,
+              installedSkillVariantPath(
+                store.variantsPath,
+                wanted.destination.destination,
+                wanted.name,
+                hash,
+              ),
+            ),
+          );
+        const copy = InstalledSkillStatus.conflicted(row, hash, step.expectedHash);
+        return { copy, result: { _tag: "Conflicted", copy } as const };
+      }
+      case "Manage":
+      case "Update":
+      case "Install": {
+        // Apply created the root since plan read this folder; nothing may have appeared there.
+        const folder =
+          step._tag === "Install" ? yield* unwrap(files.inspect(wanted.path)) : wanted.folder;
+        if (folder.entry._tag !== "Absent" && step._tag === "Install")
+          return yield* new StalePlan({
+            message: `Installed skill evidence changed at ${wanted.path}`,
+          });
+        const marker = markerFor(wanted.copy, staged.hash);
+        const installed = yield* unwrap(
+          step._tag === "Manage"
+            ? files.manage(staged, marker, folder, step.verification)
+            : files.install(staged, marker, folder),
         );
-        if (links.length) return yield* new InstalledSkillWouldReplaceLink({ links });
+        const copy = InstalledSkillStatus.installed(row, installed.hash);
+        return { copy, result: { _tag: "Installed", copy } as const };
       }
     }
   });
 
-  /** One request: refuse what policy forbids, save intent, then update installed skills. */
-  const applyRequest = Effect.fn("Library.applyRequest")(function* (
-    store: LibraryStore["Service"],
-    expected: LibraryState,
-    request: Request,
-    destinations: readonly InstalledSkills.Destination[],
-    accepted: { value: boolean },
-  ) {
-    const current = yield* store.load;
-    if (libraryStateRevision(current) !== libraryStateRevision(expected)) return yield* stale();
-    const calculated = yield* calculateEnabled(current, request);
-    const targets = yield* unwrap(files.destinations(request.scope));
-    if (JSON.stringify(targets) !== JSON.stringify(destinations))
-      return yield* stale("Installed agent targets changed after preview");
-    yield* refuseDuplicates(current, request, calculated, targets);
-    if (request.enabled) yield* unwrap(files.prepare(targets.map((target) => target.root)));
-    let state = current;
-    if (calculated.plan.changed) {
-      state = setEnabledAt(current, request.scope, calculated.plan);
-      yield* store.save(state, current);
-    }
-    accepted.value = true;
-    const updated = yield* updateInstalledSkills(
-      store,
-      state,
-      {
-        scope: request.scope,
-        install: calculated.hasList,
-        restoreDeleted: request.enabled ? calculated.skillIds : [],
-        manageIdentical: request.enabled,
-        leftovers: "inactive",
-        ...(request.setup?.onlySelected ? { only: calculated.skillIds } : {}),
-        ...(request.setup?.manage === undefined ? {} : { manage: request.setup.manage }),
-      },
-      targets,
-    );
-    state = updated.state;
-    if (!request.enabled) {
-      const pruned = pruneEmptyEnabled(state);
-      if (pruned !== state) yield* store.save(pruned, state);
-      state = pruned;
-    }
-    return { state, calculated, copies: updated.copies };
-  });
-
-  /** The public result, derived only from what the Library recorded. */
+  /** The public result of one enabled change, derived only from what the Library recorded. */
   const finish = (
     change: BindingChange,
-    skillIds: readonly string[],
+    skillIds: readonly SkillId[],
     targets: readonly InstalledSkills.Destination[],
     copies: readonly CopyResult[],
     state: LibraryState,
@@ -1516,7 +1110,9 @@ export const make = Effect.gen(function* () {
       intent: change.changed ? "saved" : "unchanged",
       revision: libraryStateRevision(state),
       installedSkills,
-      copies,
+      copies: copies.filter(
+        (copy) => copy._tag !== "Failed" && skillIds.includes(copy.copy.skill_id),
+      ),
       unresolved,
     };
   };
@@ -1524,30 +1120,313 @@ export const make = Effect.gen(function* () {
   const apply: Interface["apply"] = Effect.fn("Library.apply")(function* (reviewed) {
     // A plan is never a source of write coordinates or Library rows.
     const input = structuredClone(reviewed);
+    const stale = (message: string) => new StalePlan({ message });
+    const changedSincePreview = () =>
+      input.intent._tag === "Enabled"
+        ? stale("Library changed after this Binding change was previewed")
+        : new LibraryChanged({ path: store.statePath });
     return yield* withLibraryWriter(
-      Effect.gen(function* () {
-        const base = yield* store.load;
-        if (libraryStateRevision(base) !== input.baseRevision)
-          return yield* split(input.intents)._tag === "Enabled"
-            ? stale()
-            : new LibraryChanged({ path: store.statePath });
-        const work = yield* prepare(base, input.intents);
-        // A refusal by policy says more than "changed since preview", so it is checked first.
-        yield* work.refuse;
-        if (
-          JSON.stringify(work.routes) !== JSON.stringify(input.routes) ||
-          JSON.stringify([...new Set(work.paths)].sort()) !==
-            JSON.stringify(input.observed.map((item) => item.path))
-        )
-          return yield* stale("Installed agent targets or paths changed after preview");
-        yield* unwrap(files.check(input.observed)).pipe(
-          Effect.catchTag("Library.InstalledSkillsChanged", (error) =>
-            Effect.fail(stale(error.message)),
-          ),
-        );
-        return yield* work.run;
-      }),
-    ).pipe(Effect.provideService(LibraryStore, store), Effect.provide(writer));
+      Effect.scoped(
+        Effect.gen(function* () {
+          const base = yield* store.load;
+          if (libraryStateRevision(base) !== input.baseRevision)
+            return yield* changedSincePreview();
+          const again = yield* work(base, input.intent, input.approvals);
+          // A refusal by policy says more than "changed since preview", so it is checked first.
+          for (const step of again.steps)
+            if (step.change._tag === "Refuse")
+              return yield* new UninstallConflict({ detail: step.change.detail });
+          for (const { request, change } of again.requests)
+            yield* refuseDuplicates(
+              request,
+              change,
+              again.routes.find((route) => sameScope(route.scope, request.scope))?.destinations ??
+                [],
+            );
+          if (
+            canonicalJson(again.routes) !== canonicalJson(input.routes) ||
+            canonicalJson(again.changes) !== canonicalJson(input.changes)
+          )
+            return yield* stale("Installed agent targets or paths changed after preview");
+          yield* unwrap(files.check(input.folders)).pipe(
+            Effect.catchTag("Library.InstalledSkillsChanged", (error) =>
+              Effect.fail(stale(error.message)),
+            ),
+          );
+
+          // Folders exist and are writable before the Library saves what it wants.
+          yield* unwrap(
+            files.prepare([
+              ...new Set(
+                again.steps.flatMap((step) =>
+                  "wanted" in step && step._tag !== "KeepDeleted"
+                    ? [step.wanted.destination.root]
+                    : [],
+                ),
+              ),
+            ]),
+          );
+          // What is enabled is saved first. A removed Collection is saved only with its copies'
+          // uninstalls, since records may not name what the Library no longer has.
+          const edited =
+            input.intent._tag === "Remove" ||
+            libraryStateRevision(again.next) === libraryStateRevision(base)
+              ? base
+              : yield* Effect.as(store.save(again.next, base), again.next);
+
+          // What changed for each record once everything succeeds (null once it is gone), and
+          // what a failure records instead: only what is really on disk.
+          const records = yield* Ref.make(new Map<InstalledSkillId, InstalledSkill | null>());
+          const onDisk = yield* Ref.make(new Map<InstalledSkillId, InstalledSkill>());
+          const copies = yield* Ref.make<readonly CopyResult[]>([]);
+          const record = (
+            copy: InstalledSkill,
+            changes: {
+              readonly final: InstalledSkill | null;
+              readonly onDisk?: InstalledSkill;
+              readonly result?: CopyResult;
+            },
+          ) =>
+            Effect.all([
+              Ref.update(records, (all) =>
+                new Map(all).set(copy.installed_skill_id, changes.final),
+              ),
+              changes.onDisk === undefined
+                ? Effect.void
+                : Ref.update(onDisk, (all) =>
+                    new Map(all).set(copy.installed_skill_id, changes.onDisk!),
+                  ),
+              changes.result === undefined
+                ? Effect.void
+                : Ref.update(copies, (all) => [...all, changes.result!]),
+            ]);
+          const kept = (copy: InstalledSkill) =>
+            input.intent._tag === "Uninstall" &&
+            !input.intent.drop.includes(copy.installed_skill_id)
+              ? copy.status === "suppressed"
+                ? copy
+                : InstalledSkillStatus.pending(copy)
+              : null;
+
+          // Install first; a Skill's old copy is uninstalled only after its new one is installed.
+          const run = Effect.gen(function* () {
+            const installedAt = new Set<string>();
+            for (const step of again.steps) {
+              if (!("wanted" in step)) continue;
+              const { wanted } = step;
+              const done = yield* install(step).pipe(
+                Effect.tapError(() =>
+                  Effect.gen(function* () {
+                    // An unverified successor stands where the original was: never call it pending.
+                    if (wanted.prior === undefined) return;
+                    const now = yield* files.inspect(wanted.path).pipe(Effect.option);
+                    if (Option.isSome(now) && now.value.entry._tag === "Absent") {
+                      const pending = InstalledSkillStatus.pending(wanted.prior);
+                      yield* record(wanted.prior, { final: pending, onDisk: pending });
+                    }
+                  }),
+                ),
+              );
+              yield* record(done.copy, {
+                final: done.copy,
+                ...(done.result._tag === "Installed" ? { onDisk: done.copy } : {}),
+                result: done.result,
+              });
+              if (done.copy.status === "installed")
+                installedAt.add(`${done.copy.skill_id}\0${done.copy.destination}`);
+            }
+            for (const step of again.steps) {
+              if ("wanted" in step) continue;
+              const { copy } = step;
+              // Keep the last working copy where its successor is blocked or locally modified.
+              const succeeded = again.steps.some(
+                (other) =>
+                  "wanted" in other &&
+                  other.wanted.copy.skillId === copy.skill_id &&
+                  other.wanted.destination.destination === copy.destination,
+              );
+              if (succeeded && !installedAt.has(`${copy.skill_id}\0${copy.destination}`)) continue;
+              switch (step._tag) {
+                case "Forget":
+                  yield* record(copy, { final: kept(copy) });
+                  break;
+                case "Keep": {
+                  const conflicted = InstalledSkillStatus.conflicted(copy, step.hash);
+                  yield* record(copy, {
+                    final: conflicted,
+                    result: { _tag: "Conflicted", copy: conflicted },
+                  });
+                  break;
+                }
+                case "Uninstall":
+                  yield* unwrap(files.uninstall(copy.root, copy.path, copy.installed_skill_id));
+                  // Moved to recovery: until the Library records why, it is pending, never deleted.
+                  yield* record(copy, {
+                    final: kept(copy),
+                    onDisk:
+                      copy.status === "suppressed" ? copy : InstalledSkillStatus.pending(copy),
+                    result: { _tag: "Uninstalled", copy },
+                  });
+                  break;
+              }
+            }
+          });
+
+          /** `onto` with these records changed. */
+          const withRecords = (
+            onto: LibraryState,
+            changed: ReadonlyMap<InstalledSkillId, InstalledSkill | null>,
+          ): LibraryState => ({
+            ...onto,
+            installed_skills: [
+              ...onto.installed_skills.flatMap((copy) => {
+                const now = changed.get(copy.installed_skill_id);
+                return now === undefined ? [copy] : now === null ? [] : [now];
+              }),
+              ...[...changed.values()].filter(
+                (copy): copy is InstalledSkill =>
+                  copy !== null &&
+                  !onto.installed_skills.some(
+                    (item) => item.installed_skill_id === copy.installed_skill_id,
+                  ),
+              ),
+            ],
+          });
+          const ran = yield* Effect.result(run);
+          if (Result.isFailure(ran)) {
+            // A failure saves only what is really on disk, onto what was already saved.
+            const written = yield* Ref.get(onDisk);
+            const saved =
+              written.size === 0
+                ? edited
+                : yield* Effect.as(
+                    store.save(withRecords(edited, written), edited),
+                    withRecords(edited, written),
+                  ).pipe(
+                    Effect.catchCause((cause) =>
+                      Effect.as(
+                        Effect.logWarning(
+                          "Installed skills changed, but the Library could not record them",
+                          cause,
+                        ),
+                        edited,
+                      ),
+                    ),
+                  );
+            if (input.intent._tag !== "Enabled") return yield* Effect.fail(ran.failure);
+            return {
+              _tag: "Incomplete",
+              results: again.requests.map(({ request, change, skillIds }) =>
+                finish(
+                  change,
+                  skillIds,
+                  again.routes.find((route) => sameScope(route.scope, request.scope))
+                    ?.destinations ?? [],
+                  [],
+                  saved,
+                ),
+              ),
+              reason: "update",
+              cause: ran.failure,
+            } satisfies Outcome;
+          }
+
+          // Pending backups of every copy this apply touched are kept, or discarded when the
+          // Library proves them reproducible. The save proves the Library is still `edited`.
+          const changed = yield* Ref.get(records);
+          const pending = yield* Effect.forEach(
+            [...edited.installed_skills, ...[...changed.values()].filter((copy) => copy !== null)]
+              .filter((copy) => changed.has(copy.installed_skill_id))
+              .filter(
+                (copy, index, all) =>
+                  all.findIndex(
+                    (other) =>
+                      other.installed_skill_id === copy.installed_skill_id &&
+                      other.root === copy.root,
+                  ) === index,
+              ),
+            (copy) =>
+              Effect.map(
+                unwrap(files.backups.scan(copy.root, copy.installed_skill_id)),
+                (backups) => backups.map((backup) => ({ backup, copy })),
+              ),
+          ).pipe(
+            Effect.map((groups) => groups.flat()),
+            Effect.catchCause((cause) =>
+              Effect.as(Effect.logWarning("Installed-skill backups stayed pending", cause), []),
+            ),
+          );
+          const final = withRecords(input.intent._tag === "Remove" ? again.next : edited, changed);
+          const recorded = yield* Effect.result(
+            pending.length > 0 || libraryStateRevision(final) !== libraryStateRevision(edited)
+              ? Effect.as(store.save(final, edited), final)
+              : Effect.succeed(edited),
+          );
+          // Copies are written but could not be recorded: what was saved stands, unrecorded.
+          if (Result.isFailure(recorded)) {
+            if (input.intent._tag !== "Enabled") return yield* Effect.fail(recorded.failure);
+            const touched = yield* Ref.get(copies);
+            return {
+              _tag: "Incomplete",
+              results: again.requests.map(({ request, change, skillIds }) =>
+                finish(
+                  change,
+                  skillIds,
+                  again.routes.find((route) => sameScope(route.scope, request.scope))
+                    ?.destinations ?? [],
+                  touched,
+                  edited,
+                ),
+              ),
+              reason: "update",
+              cause: recorded.failure,
+            } satisfies Outcome;
+          }
+          const saved = recorded.success;
+          for (const { backup, copy } of pending)
+            yield* Effect.gen(function* () {
+              const reproducible = yield* files.backups
+                .check(backup, edited, store.originalsPath, copy.installed_skill_id)
+                .pipe(Effect.orElseSucceed(() => false));
+              yield* reproducible ? files.backups.discard(backup) : files.backups.keep(backup);
+            }).pipe(
+              Effect.catchCause((cause) =>
+                Effect.logWarning(
+                  "Library changed, but installed-skill backups stayed pending",
+                  cause,
+                ),
+              ),
+            );
+
+          const touched = yield* Ref.get(copies);
+          const results = again.requests.map(({ request, change, skillIds }) =>
+            finish(
+              change,
+              skillIds,
+              again.routes.find((route) => sameScope(route.scope, request.scope))?.destinations ??
+                [],
+              touched,
+              saved,
+            ),
+          );
+          const unresolved = results.flatMap((result) => result.unresolved);
+          if (unresolved.length)
+            return {
+              _tag: "Incomplete",
+              results,
+              reason: "destinations",
+              cause: new DestinationsIncomplete({ paths: unresolved }),
+            } satisfies Outcome;
+          return { _tag: "Applied", results, copies: touched } satisfies Outcome;
+        }),
+      ),
+    ).pipe(
+      Effect.catchTag("LibraryChanged", (error) =>
+        Effect.fail(input.intent._tag === "Enabled" ? changedSincePreview() : error),
+      ),
+      Effect.provideService(LibraryStore, store),
+      Effect.provide(writer),
+    );
   });
 
   return Service.of({

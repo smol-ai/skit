@@ -487,37 +487,38 @@ const installCopy = Effect.fn("Manage.installCopy")(function* (
     owner: {
       configuration: roots,
       plan: yield* library.plan(
-        [
-          {
-            _tag: "Enable",
-            subject,
-            members: state.skills
-              .filter(
-                (skill) =>
-                  skill.name === selection.name &&
-                  (subject._tag === "Collection"
-                    ? skill.collection_id === subject.id
-                    : skill.skill_id === subject.id),
-              )
-              .map((skill) => skill.skill_id),
-            where: [{ kind: "global" }],
-            allowDuplicate:
-              selection.duplicateAction === "keep-both" ||
-              selection.duplicateAction === "preserve-duplicates",
-            setup: {
-              onlySelected: true,
-              manage,
-              approvedSymlinks: (backup?.symlinks ?? []).map((entry) => ({
-                path: entry.path,
-                canonicalPath: selection.sourcePath,
-                dev: String(entry.dev),
-                ino: String(entry.ino),
-                linkTarget: entry.linkTarget,
-              })),
+        {
+          _tag: "Enabled",
+          changes: [
+            {
+              _tag: "Enable",
+              subject,
+              members: state.skills
+                .filter(
+                  (skill) =>
+                    skill.name === selection.name &&
+                    (subject._tag === "Collection"
+                      ? skill.collection_id === subject.id
+                      : skill.skill_id === subject.id),
+                )
+                .map((skill) => skill.skill_id),
+              where: [{ kind: "global" }],
+              allowDuplicate:
+                selection.duplicateAction === "keep-both" ||
+                selection.duplicateAction === "preserve-duplicates",
+              setup: {
+                approvedSymlinks: (backup?.symlinks ?? []).map((entry) => ({
+                  path: entry.path,
+                  canonicalPath: selection.sourcePath,
+                  dev: String(entry.dev),
+                  ino: String(entry.ino),
+                  linkTarget: entry.linkTarget,
+                })),
+              },
             },
-          },
-        ],
-        { base: state },
+          ],
+        },
+        { base: state, approvals: [{ _tag: "Manage", manage }] },
       ),
     },
   };

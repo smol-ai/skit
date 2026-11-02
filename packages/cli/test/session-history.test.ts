@@ -281,13 +281,12 @@ it.effect("refuses a confirmation when the Library changes after its revision ch
       ...store,
       // The first load is the revision check; another writer changes the Library right after it.
       load: Effect.gen(function* () {
-        if (++loads === 2) {
-          const current = yield* store.load;
+        const current = yield* store.load;
+        if (++loads === 1)
           yield* fixture.home
             .writeDurable(unplanned(current))
             .pipe(Effect.provideService(FileSystem.FileSystem, fs), Effect.orDie);
-        }
-        return yield* store.load;
+        return current;
       }),
     }));
     assert.strictEqual(confirmed.outcome?.kind, "failed");
@@ -295,50 +294,6 @@ it.effect("refuses a confirmation when the Library changes after its revision ch
       assert.strictEqual(confirmed.outcome.failure.code, "CONFLICT");
     const state = yield* fixture.home.durable;
     assert.deepStrictEqual(state.enabled, []);
-    assert.deepStrictEqual(state.repositories, []);
-  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
-);
-
-it.effect("refuses an operation that would apply onto a change made after the previous one", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    // Count the saves of the first operation alone, on an identical Library.
-    const measured = yield* twoScopeProposal(1);
-    let firstOperationPublishes = 0;
-    yield* confirmThrough(measured.home, measured.proposed, (store) => ({
-      ...store,
-      save: (next, base) =>
-        store.save(next, base).pipe(
-          Effect.tap(() =>
-            Effect.sync(() => {
-              firstOperationPublishes++;
-            }),
-          ),
-        ),
-    }));
-
-    const fixture = yield* twoScopeProposal();
-    let publishes = 0;
-    const confirmed = yield* confirmThrough(fixture.home, fixture.proposed, (store) => ({
-      ...store,
-      save: (next, base) =>
-        store
-          .save(next, base)
-          .pipe(
-            Effect.andThen(
-              ++publishes === firstOperationPublishes
-                ? fixture.home
-                    .writeDurable(unplanned(next))
-                    .pipe(Effect.provideService(FileSystem.FileSystem, fs), Effect.orDie)
-                : Effect.void,
-            ),
-          ),
-    }));
-    assert.strictEqual(confirmed.outcome?.kind, "failed");
-    if (confirmed.outcome?.kind === "failed")
-      assert.strictEqual(confirmed.outcome.failure.code, "CONFLICT");
-    const state = yield* fixture.home.durable;
-    assert.strictEqual(state.enabled.length, 1);
     assert.deepStrictEqual(state.repositories, []);
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );

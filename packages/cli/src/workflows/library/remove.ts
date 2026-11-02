@@ -1,4 +1,4 @@
-import { localLibrary } from "../../library-application/library-owner.js";
+import { recordedLibrary } from "../../library-application/library-owner.js";
 import { markAuthorWorkspaceRemoved } from "../../library/author-workspace.js";
 import {
   enabledSkillIds,
@@ -70,9 +70,9 @@ export const executeRemove = Effect.fn("Library.executeRemove")(function* (
       : state.skills.find((skill) => skill.skill_id === plan.subject_id)?.collection_id;
   if (collectionId === undefined)
     return yield* new CollectionRemovalMissing({ collection_id: plan.subject_id });
-  const library = yield* localLibrary;
+  const library = yield* recordedLibrary(state);
   const outcome = yield* library.apply(
-    yield* library.plan([{ _tag: "Remove", collectionId }], { base: state }),
+    yield* library.plan({ _tag: "Remove", collectionId }, { base: state }),
   );
   const uninstalled =
     outcome._tag === "Applied"

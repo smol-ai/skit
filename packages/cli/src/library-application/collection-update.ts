@@ -243,7 +243,7 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
               ),
             );
             const outcome = yield* library.apply(
-              yield* library.plan([{ _tag: "Update", collectionId }], { base: current }),
+              yield* library.plan({ _tag: "Update" }, { base: current }),
             );
             return {
               installed:

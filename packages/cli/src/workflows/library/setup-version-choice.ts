@@ -1,5 +1,5 @@
 import { localLibrary } from "../../library-application/library-owner.js";
-import { installSkills } from "../../library-application/install-skills.js";
+import { updateInstalledSkills } from "../../library-application/update-installed-skills.js";
 import { join, resolve } from "node:path";
 import { Clock, Effect, FileSystem } from "effect";
 import {
@@ -131,16 +131,7 @@ export const applyChosenSetupVersions = Effect.fn("Setup.applyChosenVersions")(f
       return yield* new PlanIsStale();
   yield* backup.apply();
   for (const fact of live) {
-    const installedSkill = imported.installed_skills.find(
-      (item) => item.installed_skill_id === fact.installedSkillId,
-    )!;
-    yield* installSkills({
-      scope: { kind: "global" },
-      destination: { destination: fact.destination, root: installedSkill.root },
-      only: [fact.skillId],
-      restoreDeleted: [fact.skillId],
-      manageIdentical: false,
-    });
+    yield* updateInstalledSkills([{ _tag: "Restore", installedSkillId: fact.installedSkillId }]);
     const after = (yield* store.load).installed_skills.find(
       (item) => item.installed_skill_id === fact.installedSkillId,
     );

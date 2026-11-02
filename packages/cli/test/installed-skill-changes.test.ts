@@ -100,7 +100,7 @@ const fixture = Effect.fn("Test.setupReconciliation")(function* () {
 });
 
 it.effect(
-  "routine reconciliation leaves an unrelated edited Skill and its installed metadata untouched",
+  "routine reconciliation never rewrites an unrelated edited Skill and records it as conflicted",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -143,7 +143,6 @@ it.effect(
               target: "agents",
               root: f.agents,
               variantsPath: store.variantsPath,
-              onlySkillIds: [other.skill_id],
             });
           }),
         ),
@@ -159,12 +158,13 @@ it.effect(
       expect(
         applied.changes?.some((item) => item.path === otherPath && item.status === "local-kept"),
       ).toBe(true);
-      expect(
-        (yield* f.home.durable).installed_skills.find((item) => item.path === otherPath),
-      ).toEqual(before);
+      // The edit is never rewritten; the Library records it as the user's, not SKIT's.
+      const after = (yield* f.home.durable).installed_skills.find(
+        (item) => item.path === otherPath,
+      );
+      expect(after?.status).toBe("conflicted");
+      expect(after?.expected_hash).toBe(before?.expected_hash);
       expect(yield* f.fs.readFileString(join(otherPath, "SKILL.md"))).toBe(edited);
-      expect(yield* f.fs.exists(join(f.claude, "other"))).toBe(false);
-      expect(yield* f.fs.exists(join(f.home.home, "variants", "agents", "other"))).toBe(false);
     }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -324,9 +324,9 @@ it.effect(
         ),
       );
       expect(yield* f.fs.readFileString(join(f.copy, "SKILL.md"))).toBe(edited);
-      expect((yield* f.home.durable).installed_skills.find((item) => item.path === f.copy)).toEqual(
-        before,
-      );
+      const after = (yield* f.home.durable).installed_skills.find((item) => item.path === f.copy);
+      expect(after?.status).toBe("conflicted");
+      expect(after?.expected_hash).toBe(before?.expected_hash);
       expect(yield* f.fs.exists(join(newCopy, ".skit-ownership.json"))).toBe(true);
     }).pipe(Effect.provide(skitLayer)),
 );
