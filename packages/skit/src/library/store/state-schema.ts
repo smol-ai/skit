@@ -45,6 +45,9 @@ export const HarnessInstallStatus = Schema.Literals([
   "suppressed",
 ]);
 export type HarnessInstallStatus = typeof HarnessInstallStatus.Type;
+/** Where states before v11 recorded a copy, including former per-Harness folders. */
+export const RecordedInstallDestination = Schema.Literals(["agents", "claude", "legacy"]);
+export type RecordedInstallDestination = typeof RecordedInstallDestination.Type;
 export const OwnershipIssue = Schema.Struct({
   code: Schema.Literals(["ORPHANED_OWNERSHIP_MARKER", "INVALID_OWNERSHIP_MARKER"]),
   path: Schema.String,

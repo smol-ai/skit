@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { SkillId } from "../entity-ids.js";
-import { HarnessName, RecordedInstallDestination } from "../../vocabulary.js";
+import { HarnessName, InstallDestination } from "../../vocabulary.js";
 import type { LibraryState } from "../library-state.js";
 
 /** One diagnostic report over an observed inventory snapshot. Pure: the caller does the reading. */
@@ -8,7 +8,7 @@ export const LibraryDoctorIssue = Schema.Struct({
   code: Schema.String,
   skillId: Schema.optional(SkillId),
   path: Schema.optional(Schema.String),
-  target: Schema.optional(RecordedInstallDestination),
+  target: Schema.optional(InstallDestination),
   harnesses: Schema.optional(Schema.Array(HarnessName)),
 });
 export type LibraryDoctorIssue = typeof LibraryDoctorIssue.Type;

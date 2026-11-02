@@ -140,9 +140,11 @@ export const applyLibraryChange = Effect.fn("LibrarySelection.apply")(function* 
     const failure = failed ? classifyFailure(outcome.cause) : undefined;
     return {
       ...change,
-      installed_skills: result.installedSkills.flatMap(({ destination, path, status }) =>
-        destination === "legacy" ? [] : [{ destination, path, status }],
-      ),
+      installed_skills: result.installedSkills.map(({ destination, path, status }) => ({
+        destination,
+        path,
+        status,
+      })),
       application: {
         intent: result.intent,
         revision: result.revision,

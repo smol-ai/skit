@@ -47,8 +47,7 @@ export function suggestDoctorCleanup(
         (p) => resolve(p.path, "SKILL.md") === resolve(entry.path) && p.status === "installed",
       );
       const skill = state.skills.find((s) => s.skill_id === installedSkill?.skill_id);
-      if (!installedSkill || !skill || installedSkill.destination === "legacy" || entry.demand <= 0)
-        continue;
+      if (!installedSkill || !skill || entry.demand <= 0) continue;
       const target = installedSkill.destination;
       // Any observed access protects the skill, including zero-use raw read evidence.
       if (

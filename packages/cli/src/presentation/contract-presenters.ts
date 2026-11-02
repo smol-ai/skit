@@ -241,7 +241,7 @@ function renderDoctor(data: ContractDataForId<"skit.doctor.v8">, context: Render
   let hasCollisions = data.codex.findings.some((finding) => finding.kind !== "layered-name");
   for (const issue of data.issues) {
     findings.push(
-      `  ${color.red("✕")} ${conditionHeadline(issue.code, "Local library issue")}${issue.target ? color.dim(` · ${issue.target === "legacy" ? "former skills directory" : `.${issue.target}`}`) : ""}`,
+      `  ${color.red("✕")} ${conditionHeadline(issue.code, "Local library issue")}${issue.target ? color.dim(` · .${issue.target}`) : ""}`,
     );
     if (issue.path) findings.push(`      ${path(issue.path)}`);
     else if (issue.skillId) findings.push(`      ${color.dim(issue.skillId)}`);

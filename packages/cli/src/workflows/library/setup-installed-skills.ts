@@ -121,7 +121,6 @@ const installedSkillChanges = (state: LibraryState, plan: Library.Plan) =>
     .flatMap((change): InstalledSkillChange[] => {
       if (!("evidence" in change)) return [];
       const { destination, recorded } = change;
-      if (destination === "legacy") return [];
       const record =
         recorded === undefined
           ? undefined
@@ -218,26 +217,22 @@ export const planInstalledSkillChanges = Effect.fn("Setup.planInstalledSkillChan
     // Setup still discovers when the Library cannot plan its copies, and touches none of them.
     Effect.catch((error) =>
       Effect.succeed(
-        state.installed_skills.flatMap((copy): InstalledSkillChange[] =>
-          copy.destination === "legacy"
-            ? []
-            : [
-                {
-                  installedSkillId: copy.installed_skill_id,
-                  skillId: copy.skill_id,
-                  name:
-                    state.skills.find((skill) => skill.skill_id === copy.skill_id)?.name ??
-                    basename(copy.path),
-                  path: copy.path,
-                  destination: copy.destination,
-                  baselineHash: copy.expected_hash,
-                  evidence: hashParts([copy.path, "unplanned"]),
-                  status: "protected",
-                  reason: `The Library cannot plan its installed copies: ${error.message}`,
-                  metadataChanged: false,
-                },
-              ],
-        ),
+        state.installed_skills.flatMap((copy): InstalledSkillChange[] => [
+          {
+            installedSkillId: copy.installed_skill_id,
+            skillId: copy.skill_id,
+            name:
+              state.skills.find((skill) => skill.skill_id === copy.skill_id)?.name ??
+              basename(copy.path),
+            path: copy.path,
+            destination: copy.destination,
+            baselineHash: copy.expected_hash,
+            evidence: hashParts([copy.path, "unplanned"]),
+            status: "protected",
+            reason: `The Library cannot plan its installed copies: ${error.message}`,
+            metadataChanged: false,
+          },
+        ]),
       ),
     ),
   );
@@ -319,17 +314,6 @@ export const applyInstalledSkillChanges = Effect.fn("Setup.applyInstalledSkillCh
       !chosen.has(fact.skillId) &&
       writes(fact) &&
       canonicalJson(fact) !== canonicalJson(reviewed.find((item) => item.path === fact.path))
-    )
-      return yield* new PlanIsStale();
-  // Setup does not show legacy records, so it never writes one.
-  for (const change of plan.changes)
-    if (
-      "evidence" in change &&
-      change.destination === "legacy" &&
-      (change._tag === "Update" ||
-        change._tag === "Manage" ||
-        change._tag === "Uninstall" ||
-        change._tag === "Refuse")
     )
       return yield* new PlanIsStale();
   // A chosen copy that the update would still leave edited was not the copy reviewed.

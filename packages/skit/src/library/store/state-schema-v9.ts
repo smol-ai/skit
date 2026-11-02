@@ -3,12 +3,7 @@ import { CollectionId, InstalledSkillId, SkillId, SkillVersionId } from "../enti
 import { Collection } from "../library-contracts.js";
 import { AbsoluteDevicePath } from "../library-state.js";
 import { LibraryStateFromV10 } from "./state-schema-v10.js";
-import {
-  Hash,
-  HarnessName,
-  InvocationPolicy,
-  RecordedInstallDestination,
-} from "../../vocabulary.js";
+import { Hash, HarnessName, InvocationPolicy } from "../../vocabulary.js";
 import {
   BindingEntryV7,
   BindingV7,
@@ -26,6 +21,7 @@ import {
   HarnessInstallStatus,
   InventoryScanIssue,
   SkillAssessmentAcceptance,
+  RecordedInstallDestination,
 } from "./state-schema.js";
 
 /** An assessment acceptance as v9 stored it: the content hash was `artifactContentDigest`. */

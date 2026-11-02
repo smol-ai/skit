@@ -219,10 +219,7 @@ const scanSetupInstalledSkills = Effect.fn("Setup.scanInstalledSkills")(function
       skillId: skill.skill_id,
       name: skill.name,
       path,
-      harnesses:
-        installedSkill.destination === "legacy"
-          ? []
-          : [...installDestinationHarnesses[installedSkill.destination]],
+      harnesses: [...installDestinationHarnesses[installedSkill.destination]],
       status: !present ? "missing" : installedSkill.status === "installed" ? "current" : "modified",
     });
   }

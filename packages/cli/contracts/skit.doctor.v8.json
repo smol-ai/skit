@@ -39,8 +39,7 @@
                 "type": "string",
                 "enum": [
                   "agents",
-                  "claude",
-                  "legacy"
+                  "claude"
                 ]
               },
               {

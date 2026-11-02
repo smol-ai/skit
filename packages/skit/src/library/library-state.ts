@@ -13,7 +13,7 @@ import {
   librarySnapshotDigests,
 } from "./library-contracts.js";
 import { LibraryDeviceStateFields } from "./store/state-schema.js";
-import { Hash, InvocationPolicy, RecordedInstallDestination } from "../vocabulary.js";
+import { Hash, InstallDestination, InvocationPolicy } from "../vocabulary.js";
 import { canonicalJson } from "../shared/json.js";
 
 export const AbsoluteDevicePath = Schema.String.check(
@@ -38,7 +38,7 @@ const InstalledSkillFields = {
   installed_skill_id: InstalledSkillId,
   skill_id: SkillId,
   skill_version_id: SkillVersionId,
-  destination: RecordedInstallDestination,
+  destination: InstallDestination,
   root: AbsoluteDevicePath,
   path: AbsoluteDevicePath,
   /** The hash of the folder SKIT wrote. */

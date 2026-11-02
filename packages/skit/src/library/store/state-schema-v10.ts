@@ -7,8 +7,8 @@ import {
   LibraryStateDocument,
   type InstalledSkill,
 } from "../library-state.js";
-import { Hash, RecordedInstallDestination } from "../../vocabulary.js";
-import { HarnessInstallStatus } from "./state-schema.js";
+import { Hash } from "../../vocabulary.js";
+import { HarnessInstallStatus, RecordedInstallDestination } from "./state-schema.js";
 
 // Frozen v10 state. Every older state migrates through these shapes, so they stay as v10 defined
 // them while the current model moves on.
@@ -52,30 +52,42 @@ export const installedSkillFromV10 = ({
   status,
   suppression_reason: _suppressionReason,
   suppressed_at,
-  ...copy
-}: InstalledSkillV10): InstalledSkill => {
+  destination,
+  ...fields
+}: InstalledSkillV10): readonly InstalledSkill[] => {
+  // A copy SKIT wrote into a former per-Harness folder is no longer the Library's: its record
+  // goes, its folder stays, and refresh reports SKIT's marker in it.
+  if (destination === "legacy") return [];
+  const copy = { ...fields, destination };
   switch (status) {
     case "installed":
-      return { ...copy, status };
+      return [{ ...copy, status }];
     case "conflicted":
-      return current_hash === undefined
-        ? { ...copy, status: "pending" }
-        : { ...copy, status, current_hash };
+      return [
+        current_hash === undefined
+          ? { ...copy, status: "pending" }
+          : { ...copy, status, current_hash },
+      ];
     case "suppressed":
-      return {
-        ...copy,
-        status,
-        suppression_reason: "native_delete",
-        ...(suppressed_at === undefined ? {} : { suppressed_at }),
-      };
+      return [
+        {
+          ...copy,
+          status,
+          suppression_reason: "native_delete",
+          ...(suppressed_at === undefined ? {} : { suppressed_at }),
+        },
+      ];
     case "pending":
     case "drifted":
     case "unsupported":
-      return { ...copy, status: "pending" };
+      return [{ ...copy, status: "pending" }];
   }
 };
 
-/** v10 → v11: an installed copy records only the fields its status uses. */
+/**
+ * v10 → v11: an installed copy records only the fields its status uses, and copies in former
+ * per-Harness folders are no longer recorded.
+ */
 export const LibraryStateFromV10 = Schema.Unknown.pipe(
   Schema.refine(Schema.is(LibraryStateV10)),
   Schema.decodeTo(LibraryStateDocument, {
@@ -83,7 +95,7 @@ export const LibraryStateFromV10 = Schema.Unknown.pipe(
       ({ installed_skills, ...state }: LibraryStateV10): LibraryState => ({
         ...state,
         schemaVersion: CURRENT_LIBRARY_STATE_VERSION,
-        installed_skills: installed_skills.map(installedSkillFromV10),
+        installed_skills: installed_skills.flatMap(installedSkillFromV10),
       }),
     ),
     encode: SchemaGetter.forbidden(() => "v10 Library state is decode-only"),

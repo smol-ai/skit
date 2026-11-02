@@ -161,7 +161,6 @@ const enablingScope = (
 ): InstallScope | undefined =>
   enabledByScope(state).find(
     ({ scope, enabled }) =>
-      installedSkill.destination !== "legacy" &&
       enabledSkillIds(state, enabled).includes(installedSkill.skill_id) &&
       (scope.kind === "global" || resolve(scope.root) === resolve(installedSkill.root)),
   )?.scope;

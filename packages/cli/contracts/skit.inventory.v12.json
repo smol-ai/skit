@@ -400,8 +400,7 @@
                 "type": "string",
                 "enum": [
                   "agents",
-                  "claude",
-                  "legacy"
+                  "claude"
                 ]
               },
               "root": {
@@ -453,8 +452,7 @@
                 "type": "string",
                 "enum": [
                   "agents",
-                  "claude",
-                  "legacy"
+                  "claude"
                 ]
               },
               "root": {
@@ -506,8 +504,7 @@
                 "type": "string",
                 "enum": [
                   "agents",
-                  "claude",
-                  "legacy"
+                  "claude"
                 ]
               },
               "root": {
@@ -564,8 +561,7 @@
                 "type": "string",
                 "enum": [
                   "agents",
-                  "claude",
-                  "legacy"
+                  "claude"
                 ]
               },
               "root": {

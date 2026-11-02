@@ -496,7 +496,7 @@ it.effect("migrates v5 state: whole Sources, entries, retained edits, all histor
 
 for (const agreed of [true, false])
   it.effect(
-    `migrates v6 per-Harness Bindings into one and marks former roots legacy (agreed=${agreed})`,
+    `migrates v6 per-Harness Bindings into one and stops recording former roots (agreed=${agreed})`,
     () =>
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
@@ -560,9 +560,10 @@ for (const agreed of [true, false])
           migrated.state.invocation_policies,
           agreed ? { [skill.skill_id]: "explicit" } : undefined,
         );
+        // Copies in former per-Harness folders (OpenCode, Devin) are no longer recorded.
         assert.deepStrictEqual(
           migrated.state.installed_skills.map((item) => item.destination),
-          ["agents", "claude", "legacy", "legacy"],
+          ["agents", "claude"],
         );
       }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
@@ -749,94 +750,98 @@ it.effect("migrates v9 Bindings to enabled lists and renames stored records", ()
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("migrates v10 installed copies to the fields their status uses", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-v10-migration-" });
-    yield* fs.writeFileString(
-      join(home, "state.json"),
-      yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
-    );
-    const current = yield* inspectLibrary(home);
-    assert.strictEqual(current.present, true);
-    if (!current.present) return;
-    const {
-      installed_skill_id: _id,
-      path,
-      status: _status,
-      ...copy
-    } = current.state.installed_skills[0]!;
-    const hash = copy.expected_hash;
-    const row = (name: string, fields: Record<string, unknown>) => ({
-      ...copy,
-      installed_skill_id: makeInstalledSkillId(),
-      path: `${path}-${name}`,
-      ...fields,
-    });
-    const rows = [
-      row("installed", {
-        status: "installed",
-        current_hash: hash,
-        suppression_reason: "native_delete",
-      }),
-      row("drifted", { status: "drifted", current_hash: hash }),
-      row("unsupported", { status: "unsupported" }),
-      row("conflicted-unknown", { status: "conflicted" }),
-      row("conflicted", { status: "conflicted", current_hash: hash }),
-      row("suppressed", { status: "suppressed", suppressed_at: "2026-10-01T00:00:00.000Z" }),
-    ];
-    yield* fs.writeFileString(
-      join(home, "state.json"),
-      JSON.stringify({ ...current.state, schemaVersion: 10, installed_skills: rows }),
-    );
+it.effect(
+  "migrates v10 installed copies to the fields their status uses, dropping former folders",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-v10-migration-" });
+      yield* fs.writeFileString(
+        join(home, "state.json"),
+        yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
+      );
+      const current = yield* inspectLibrary(home);
+      assert.strictEqual(current.present, true);
+      if (!current.present) return;
+      const {
+        installed_skill_id: _id,
+        path,
+        status: _status,
+        ...copy
+      } = current.state.installed_skills[0]!;
+      const hash = copy.expected_hash;
+      const row = (name: string, fields: Record<string, unknown>) => ({
+        ...copy,
+        installed_skill_id: makeInstalledSkillId(),
+        path: `${path}-${name}`,
+        ...fields,
+      });
+      const rows = [
+        row("installed", {
+          status: "installed",
+          current_hash: hash,
+          suppression_reason: "native_delete",
+        }),
+        row("drifted", { status: "drifted", current_hash: hash }),
+        row("unsupported", { status: "unsupported" }),
+        row("conflicted-unknown", { status: "conflicted" }),
+        row("conflicted", { status: "conflicted", current_hash: hash }),
+        row("suppressed", { status: "suppressed", suppressed_at: "2026-10-01T00:00:00.000Z" }),
+        // A copy in a former per-Harness folder is no longer recorded.
+        row("legacy", { status: "installed", destination: "legacy" }),
+      ];
+      yield* fs.writeFileString(
+        join(home, "state.json"),
+        JSON.stringify({ ...current.state, schemaVersion: 10, installed_skills: rows }),
+      );
 
-    const migrated = yield* inspectLibrary(home);
-    assert.strictEqual(migrated.present, true);
-    if (!migrated.present) return;
-    assert.strictEqual(migrated.state.schemaVersion, 11);
-    assert.deepStrictEqual(migrated.state.installed_skills, [
-      {
-        ...copy,
-        installed_skill_id: rows[0]!.installed_skill_id,
-        path: rows[0]!.path,
-        status: "installed",
-      },
-      {
-        ...copy,
-        installed_skill_id: rows[1]!.installed_skill_id,
-        path: rows[1]!.path,
-        status: "pending",
-      },
-      {
-        ...copy,
-        installed_skill_id: rows[2]!.installed_skill_id,
-        path: rows[2]!.path,
-        status: "pending",
-      },
-      {
-        ...copy,
-        installed_skill_id: rows[3]!.installed_skill_id,
-        path: rows[3]!.path,
-        status: "pending",
-      },
-      {
-        ...copy,
-        installed_skill_id: rows[4]!.installed_skill_id,
-        path: rows[4]!.path,
-        status: "conflicted",
-        current_hash: hash,
-      },
-      {
-        ...copy,
-        installed_skill_id: rows[5]!.installed_skill_id,
-        path: rows[5]!.path,
-        status: "suppressed",
-        suppression_reason: "native_delete",
-        suppressed_at: "2026-10-01T00:00:00.000Z",
-      },
-    ]);
-    assert.isTrue(
-      (yield* fs.readDirectory(home)).some((name) => name.startsWith("state.json.v10.backup-")),
-    );
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      const migrated = yield* inspectLibrary(home);
+      assert.strictEqual(migrated.present, true);
+      if (!migrated.present) return;
+      assert.strictEqual(migrated.state.schemaVersion, 11);
+      assert.deepStrictEqual(migrated.state.installed_skills, [
+        {
+          ...copy,
+          installed_skill_id: rows[0]!.installed_skill_id,
+          path: rows[0]!.path,
+          status: "installed",
+        },
+        {
+          ...copy,
+          installed_skill_id: rows[1]!.installed_skill_id,
+          path: rows[1]!.path,
+          status: "pending",
+        },
+        {
+          ...copy,
+          installed_skill_id: rows[2]!.installed_skill_id,
+          path: rows[2]!.path,
+          status: "pending",
+        },
+        {
+          ...copy,
+          installed_skill_id: rows[3]!.installed_skill_id,
+          path: rows[3]!.path,
+          status: "pending",
+        },
+        {
+          ...copy,
+          installed_skill_id: rows[4]!.installed_skill_id,
+          path: rows[4]!.path,
+          status: "conflicted",
+          current_hash: hash,
+        },
+        {
+          ...copy,
+          installed_skill_id: rows[5]!.installed_skill_id,
+          path: rows[5]!.path,
+          status: "suppressed",
+          suppression_reason: "native_delete",
+          suppressed_at: "2026-10-01T00:00:00.000Z",
+        },
+      ]);
+      assert.isTrue(
+        (yield* fs.readDirectory(home)).some((name) => name.startsWith("state.json.v10.backup-")),
+      );
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

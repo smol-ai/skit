@@ -15,8 +15,6 @@ export type InstallDestination = typeof InstallDestination.Type;
  * A recorded installed skill's target. `legacy` marks a copy at a former per-Harness directory; it is
  * never desired, so reconciliation retires it under the ordinary ownership checks.
  */
-export const RecordedInstallDestination = Schema.Literals(["agents", "claude", "legacy"]);
-export type RecordedInstallDestination = typeof RecordedInstallDestination.Type;
 export const InvocationPolicy = Schema.Literals(["explicit", "implicit", "host-policy"]);
 export type InvocationPolicy = typeof InvocationPolicy.Type;
 export const InstallScope = Schema.Union([

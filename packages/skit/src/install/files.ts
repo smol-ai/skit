@@ -120,10 +120,6 @@ export const prepareInstalledSkillRebuild = Effect.fn("Install.prepareRebuild")(
   invocationIntent: InvocationIntent,
 ) {
   const target = installedSkill.destination;
-  if (target === "legacy")
-    return yield* new InstalledSkillFailure({
-      message: "Legacy installed skills require their original saved bytes",
-    });
   const skill = state.skills.find((item) => item.skill_id === installedSkill.skill_id);
   const version = skill?.versions.find(
     (item) => item.skill_version_id === installedSkill.skill_version_id,
@@ -523,8 +519,7 @@ export const reproducible = Effect.fn("Install.reproducible")(function* (
     (item) => item.skill_version_id === recorded.skill_version_id,
   );
   const target = recorded.destination;
-  // A former per-Harness root's transforms are no longer known, so its copy cannot be restaged.
-  if (skill === undefined || version === undefined || target === "legacy") return false;
+  if (skill === undefined || version === undefined) return false;
   const source = yield* installedSkillSource(prior, originalsPath, skill, version);
   const expected = yield* losslessTree(backup);
   if (source.kind === "invalid" || expected === undefined) return false;

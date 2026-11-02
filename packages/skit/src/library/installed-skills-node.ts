@@ -380,9 +380,7 @@ export const recordedRouting = Effect.fn("InstalledSkills.recordedRouting")(func
     const [parent, child] = [real.get(root) ?? root, real.get(path) ?? path];
     return child === parent || child.startsWith(`${parent}/`);
   };
-  const recorded = state.installed_skills.flatMap((copy) =>
-    copy.destination === "legacy" ? [] : [{ ...copy, destination: copy.destination }],
-  );
+  const recorded = state.installed_skills;
   const active = [...new Set(recorded.map((copy) => copy.destination))];
   const destinations = (scope: InstallScope): readonly InstalledSkills.Destination[] =>
     recorded

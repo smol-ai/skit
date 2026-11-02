@@ -4,11 +4,8 @@ import { SkillId } from "../entity-ids.js";
 import { Collection } from "../library-contracts.js";
 import { SkillV7 } from "./manifest-v7.js";
 import { AbsoluteDevicePath } from "../library-state.js";
-import {
-  HarnessName,
-  InvocationPolicy,
-  type RecordedInstallDestination,
-} from "../../vocabulary.js";
+import { HarnessName, InvocationPolicy } from "../../vocabulary.js";
+import type { RecordedInstallDestination } from "./state-schema.js";
 import { BindingV6 } from "./manifest-v6.js";
 import {
   BindingEntryV7,

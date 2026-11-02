@@ -1,7 +1,7 @@
 import {
   Hash,
   InstalledSkillId,
-  RecordedInstallDestination,
+  InstallDestination,
   SkillId,
   SkillVersionId,
 } from "@smolai/skit-core";
@@ -9,7 +9,7 @@ import { Schema } from "effect";
 
 const EditCandidate = Schema.Struct({
   installed_skill_id: InstalledSkillId,
-  destination: RecordedInstallDestination,
+  destination: InstallDestination,
   path: Schema.String,
   current_hash: Hash,
   agreement: Schema.Literals(["selected", "identical", "different"]),
@@ -40,7 +40,7 @@ export const EditImportResult = Schema.Struct({
   installed_skills: Schema.Array(
     Schema.Struct({
       installed_skill_id: InstalledSkillId,
-      destination: RecordedInstallDestination,
+      destination: InstallDestination,
       path: Schema.String,
       status: Schema.Literals(["installed", "conflicted", "deferred"]),
     }),
