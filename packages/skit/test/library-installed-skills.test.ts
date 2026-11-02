@@ -30,7 +30,7 @@ import { refreshLibraryInventory } from "../src/library/inventory/refresh.js";
 import {
   backUpInstalledSkill,
   losslessTree,
-  installedSkillWorkDirectory,
+  installedSkillStagingDirectory,
 } from "../src/install/backups.js";
 import { inspectOwnershipMarker } from "../src/install/files.js";
 
@@ -1333,13 +1333,13 @@ it.effect(
             } as FileSystem.File.Info),
         });
       assert.strictEqual(
-        yield* installedSkillWorkDirectory("/home/me/.claude/skills").pipe(
+        yield* installedSkillStagingDirectory("/home/me/.claude/skills").pipe(
           Effect.provide(devices(1n, 1n)),
         ),
         "/home/me/.claude",
       );
       assert.strictEqual(
-        yield* installedSkillWorkDirectory("/home/me/.claude/skills").pipe(
+        yield* installedSkillStagingDirectory("/home/me/.claude/skills").pipe(
           Effect.provide(devices(2n, 1n)),
         ),
         "/home/me/.claude/skills",
@@ -1419,9 +1419,10 @@ it.effect("replaces an edited copy only as approved, keeping the edit in recover
       _tag: "Conflict",
       edited: true,
       skillVersionId: recorded.skill_version_id,
-      recorded: { installedSkillId: recorded.installed_skill_id, hash: written },
+      recorded,
       currentHash: editedHash,
-      wantedHash: written,
+      hash: written,
+      expectedHash: written,
     });
     const stale = yield* plan([
       { _tag: "ReplaceEdit", installedSkillId: recorded.installed_skill_id, currentHash: written },

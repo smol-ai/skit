@@ -21,10 +21,12 @@ import {
   OwnershipMarkerInspection,
   type InstalledSkillMutationError,
   type reproducible,
+  type StagedInstalledSkill,
 } from "../install/files.js";
 import { InstalledSkillInvalid } from "./installation/install-enabled.js";
 import { installedSkillSource } from "./installation/installed-skill-source.js";
-import type { InvocationIntent } from "../install/policy.js";
+import { declaredInvocationIntent, overrideInvocationIntent } from "../install/policy.js";
+import type { Invocation } from "./enabled-plan.js";
 import type { SkitFailure } from "../shared/failure.js";
 import { FailureTypeId } from "../shared/failure.js";
 import type { TreeError } from "../shared/tree-error.js";
@@ -58,7 +60,7 @@ export const Facts = Schema.Struct({
    * Why the folder is someone else's in itself, so no Library plan touches it: a repository's
    * (`.git` or `skit.remote.json` inside it), an author's (`skit.json` or `.skit` inside it), or
    * pnpm's. A repository above the folder does not protect it. Null when it is not; plain data,
-   * like the rest of an Observed, so it survives cloning into a plan.
+   * like the rest of a Folder, so it survives cloning into a plan.
    */
   protection: Schema.NullOr(Protection),
 });
@@ -78,36 +80,19 @@ export const Entry = Schema.Union([
   }),
 ]);
 export type Entry = typeof Entry.Type;
-/** One path as seen when it was inspected. Plain data: it survives cloning into a plan. */
-export const Observed = Schema.Struct({
+/** One path as it was when inspected. Plain data: it survives cloning into a plan. */
+export const Folder = Schema.Struct({
   path: Schema.String,
   entry: Entry,
   /** Lossless evidence of everything in the entry, including what the hash leaves out. */
   evidence: Schema.String,
   ancestors: Schema.Array(Schema.Struct({ path: Schema.String, evidence: Schema.String })),
 });
-export type Observed = typeof Observed.Type;
+export type Folder = typeof Folder.Type;
 /** A folder in recovery. */
 export interface Backup {
   readonly path: string;
   readonly marker: OwnershipMarkerInspection;
-}
-/** What to build. Identity only: the build produces the hash, and so the marker. */
-export interface Copy {
-  /** The byte builder reads the real Library; a narrower input is a later change. */
-  readonly state: LibraryState;
-  readonly originalsPath: string;
-  readonly installedSkillId: InstalledSkillId;
-  readonly skillId: SkillId;
-  readonly skillVersionId: SkillVersionId;
-  readonly invocationIntent: InvocationIntent;
-}
-/** Built bytes in staging on the destination's own device. Lives as long as its Scope. */
-export interface Staged {
-  readonly copy: Copy;
-  readonly destination: Destination;
-  readonly path: string;
-  readonly hash: Hash;
 }
 export interface Installed {
   readonly path: string;
@@ -147,7 +132,7 @@ export class Changed
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  readonly remediation = "Preview the Binding change again.";
+  readonly remediation = "Preview the change again.";
   get message() {
     return `Installed skill evidence changed at ${this.path}`;
   }
@@ -173,32 +158,43 @@ export interface Interface {
     path: string,
   ) => Effect.Effect<{ readonly key: string; readonly canonicalPath: string }, Cause>;
   /** Changes nothing. */
-  readonly inspect: (path: string) => Effect.Effect<Observed, Cause>;
+  readonly inspect: (path: string) => Effect.Effect<Folder, Cause>;
   /** The hash an installed copy is decided and verified against. Changes nothing. */
   readonly hash: (path: string) => Effect.Effect<Hash, Cause>;
-  /** Changes nothing: every path still matches what was observed. */
-  readonly check: (observed: readonly Observed[]) => Effect.Effect<void, Changed | Cause>;
+  /** Changes nothing: every folder is still exactly as it was inspected. */
+  readonly check: (folders: readonly Folder[]) => Effect.Effect<void, Changed | Cause>;
   /** Create roots and prove them writable, before the Library saves intent. */
   readonly prepare: (roots: readonly string[]) => Effect.Effect<void, Cause>;
-  /** Build the bytes first, so Library can compare their hash with what is on disk. */
+  /**
+   * Build one Installed Skill's bytes from `state`, the Library being planned or applied, so
+   * Library can compare their hash with what is on disk. Staged beside `root`, they live as long as
+   * the Scope.
+   */
   readonly build: (
-    copy: Copy,
-    destination: Destination,
-  ) => Effect.Effect<Staged, Cause, Scope.Scope>;
+    installedSkill: {
+      readonly skillId: SkillId;
+      readonly skillVersionId: SkillVersionId;
+      readonly destination: InstallDestination;
+      readonly root: string;
+      readonly invocation: Invocation;
+    },
+    state: LibraryState,
+    originalsPath: string,
+  ) => Effect.Effect<StagedInstalledSkill, Cause, Scope.Scope>;
   /**
    * Into an absent path, or over an owned copy, which goes to recovery as pending. `recheck` runs
    * immediately before the commit. Every operation below does only what Library decided.
    */
   readonly install: (
-    staged: Staged,
+    staged: StagedInstalledSkill,
     marker: OwnershipMarker,
-    recheck: Observed,
+    recheck: Folder,
   ) => Effect.Effect<Installed, Cause>;
   /** Stamp SKIT's marker on a folder that already holds exactly the staged bytes. */
   readonly manage: (
-    staged: Staged,
+    staged: StagedInstalledSkill,
     marker: OwnershipMarker,
-    recheck: Observed,
+    recheck: Folder,
     verification: string,
   ) => Effect.Effect<Installed, Cause>;
   /** Copy an edited folder to `into`, once, and leave it in place. */
@@ -293,7 +289,7 @@ export const make = Effect.fn("make")(function* (routing?: Routing) {
       Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed("absent")),
     );
   });
-  // Includes entries normalized hashes omit, and observes links without following them.
+  // Includes entries normalized hashes omit, and reads links without following them.
   const tree = Effect.fn("tree")(function* (path: string): Effect.fn.Return<string, PlatformError> {
     const entry = yield* identity(path);
     if (entry === "absent") return entry;
@@ -363,7 +359,7 @@ export const make = Effect.fn("make")(function* (routing?: Routing) {
         entry: { _tag: "Absent" },
         evidence: "absent",
         ancestors,
-      } satisfies Observed;
+      } satisfies Folder;
     const followed = yield* links.identity
       .stat(absolute)
       .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
@@ -386,11 +382,11 @@ export const make = Effect.fn("make")(function* (routing?: Routing) {
       },
       evidence: yield* tree(absolute),
       ancestors,
-    } satisfies Observed;
+    } satisfies Folder;
   });
 
   /** Rerun immediately before a commit: the destination is still exactly what was decided on. */
-  const unchanged = (expected: Observed) =>
+  const unchanged = (expected: Folder) =>
     Effect.gen(function* () {
       const current = yield* inspect(expected.path).pipe(Effect.provide(context));
       if (JSON.stringify(current) !== JSON.stringify(expected))
@@ -400,45 +396,37 @@ export const make = Effect.fn("make")(function* (routing?: Routing) {
     });
 
   const commit = Effect.fn("commit")(function* (
-    staged: Staged,
+    staged: StagedInstalledSkill,
     options: {
       readonly mode: "manage" | "replace" | "install";
       readonly marker: OwnershipMarker;
-      readonly recheck: Observed;
+      readonly recheck: Folder;
       readonly verification: string;
     },
   ) {
     const destination = options.recheck.path;
     let displaced: Option.Option<Backup> = Option.none();
-    const committed = yield* InstalledSkillFiles.commitInstalledSkill(
-      {
-        root: staged.destination.root,
-        staging: dirname(staged.path),
-        path: staged.path,
-        hash: staged.hash,
-      },
-      {
-        mode: options.mode,
-        destination,
-        marker: options.marker,
-        backUp: InstalledSkillBackups.backUpInstalledSkill(
-          {
-            root: staged.destination.root,
-            path: destination,
-            installed_skill_id: staged.copy.installedSkillId,
-          },
-          "replace",
-        ).pipe(
-          Effect.flatMap((path) =>
-            Effect.map(InstalledSkillFiles.inspectOwnershipMarker(path), (marker) => {
-              displaced = Option.some({ path, marker });
-            }),
-          ),
+    const committed = yield* InstalledSkillFiles.commitInstalledSkill(staged, {
+      mode: options.mode,
+      destination,
+      marker: options.marker,
+      backUp: InstalledSkillBackups.backUpInstalledSkill(
+        {
+          root: staged.root,
+          path: destination,
+          installed_skill_id: options.marker.installed_skill_id,
+        },
+        "replace",
+      ).pipe(
+        Effect.flatMap((path) =>
+          Effect.map(InstalledSkillFiles.inspectOwnershipMarker(path), (marker) => {
+            displaced = Option.some({ path, marker });
+          }),
         ),
-        check: unchanged(options.recheck),
-        verification: options.verification,
-      },
-    ).pipe(Effect.provide(context));
+      ),
+      check: unchanged(options.recheck),
+      verification: options.verification,
+    }).pipe(Effect.provide(context));
     return { path: destination, hash: committed.hash, replaced: displaced };
   });
 
@@ -459,8 +447,8 @@ export const make = Effect.fn("make")(function* (routing?: Routing) {
       ),
     inspect: (path) => inspect(path).pipe(Effect.provide(context)),
     hash: (path) => hasher.hash(path).pipe(Effect.provide(context)),
-    check: Effect.fn("check")(function* (observed) {
-      for (const expected of observed) {
+    check: Effect.fn("check")(function* (folders) {
+      for (const expected of folders) {
         const current = yield* inspect(expected.path).pipe(Effect.provide(context));
         if (JSON.stringify(current) !== JSON.stringify(expected))
           return yield* new Changed({ path: expected.path });
@@ -470,33 +458,34 @@ export const make = Effect.fn("make")(function* (routing?: Routing) {
       for (const root of new Set(roots))
         yield* ensureSkillsDirectoryWritable(root).pipe(Effect.provide(context));
     }),
-    build: Effect.fn("build")(function* (copy, destination) {
-      const skill = copy.state.skills.find((item) => item.skill_id === copy.skillId);
-      const version = skill?.versions.find((item) => item.skill_version_id === copy.skillVersionId);
+    build: Effect.fn("build")(function* (installedSkill, state, originalsPath) {
+      const skill = state.skills.find((item) => item.skill_id === installedSkill.skillId);
+      const version = skill?.versions.find(
+        (item) => item.skill_version_id === installedSkill.skillVersionId,
+      );
       if (skill === undefined || version === undefined)
         return yield* new InstalledSkillInvalid({
-          detail: "An enabled Skill has no selected retained Version",
+          detail: "An enabled Skill has no selected stored Version",
         });
-      const source = yield* installedSkillSource(
-        copy.state,
-        copy.originalsPath,
-        skill,
-        version,
-      ).pipe(Effect.provide(context));
+      const source = yield* installedSkillSource(state, originalsPath, skill, version).pipe(
+        Effect.provide(context),
+      );
       if (source.kind === "invalid")
         return yield* new InstalledSkillInvalid({ detail: source.detail });
-      const staged = yield* InstalledSkillFiles.stageInstalledSkill({
-        root: destination.root,
+      return yield* InstalledSkillFiles.stageInstalledSkill({
+        root: installedSkill.root,
         libraryPath: source.libraryPath,
         sourcePath: source.sourcePath,
-        target: destination.destination,
-        invocationIntent: copy.invocationIntent,
+        target: installedSkill.destination,
+        invocationIntent:
+          installedSkill.invocation === "declared"
+            ? declaredInvocationIntent
+            : overrideInvocationIntent(installedSkill.invocation),
         ...(source.shared === undefined ? {} : { shared: source.shared }),
         ...(source.declaredInvocation === undefined
           ? {}
           : { declaredInvocation: source.declaredInvocation }),
       }).pipe(Effect.provide(context));
-      return { copy, destination, path: staged.path, hash: staged.hash };
     }),
     install: (staged, marker, recheck) =>
       commit(staged, {
@@ -512,7 +501,7 @@ export const make = Effect.fn("make")(function* (routing?: Routing) {
     uninstall: Effect.fn("uninstall")(function* (root, path, installedSkillId) {
       const backup = yield* InstalledSkillBackups.backUpInstalledSkill(
         { root, path, installed_skill_id: installedSkillId },
-        "retire",
+        "uninstall",
       ).pipe(Effect.provide(context));
       return {
         path: backup,

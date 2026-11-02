@@ -31,18 +31,13 @@ import {
   UnsafeInstalledSkillBackups,
   UnsafeInstalledSkillName,
 } from "../failures.js";
-import {
-  type InstalledSkillId as InstalledSkillIdType,
-  type SkillId as SkillIdType,
-  type SkillVersionId as SkillVersionIdType,
-} from "../library/entity-ids.js";
 import type { InstalledSkill } from "../library/library-state.js";
 import { globalEnabled, type LibraryState } from "../library/library-state.js";
 import { installedSkillSource } from "../library/installation/installed-skill-source.js";
 import {
   losslessTree,
   pendingInstalledSkillBackups,
-  installedSkillWorkDirectory,
+  installedSkillStagingDirectory,
 } from "./backups.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
@@ -126,7 +121,7 @@ export const prepareInstalledSkillRebuild = Effect.fn("Install.prepareRebuild")(
   );
   if (!skill || !version)
     return yield* new InstalledSkillFailure({
-      message: "Former installed skill has no retained Skill Version",
+      message: "Former installed skill has no stored Skill Version",
     });
   const source = yield* installedSkillSource(state, originalsPath, skill, version);
   if (source.kind !== "source") return yield* new InstalledSkillFailure({ message: source.detail });
@@ -211,119 +206,6 @@ export function expectedInstalledSkillHashResult(
   return Result.succeed(installedSkill.expected_hash);
 }
 
-export interface DestinationFacts {
-  readonly marker: OwnershipMarkerInspection;
-  readonly hash: Hash;
-  readonly directory: boolean;
-  /** A `.git` at or above the folder: a checkout owns it. */
-  readonly insideRepository: boolean;
-  /** `.git` or `skit.remote.json` inside the folder. */
-  readonly holdsRepositoryFiles: boolean;
-  /** The folder is one the user approved managing, by physical path. */
-  readonly approvedForManage: boolean;
-}
-
-/** What this install would write at the destination, and what the intent permits. */
-export interface WantedCopy {
-  readonly installedSkillId: InstalledSkillIdType;
-  readonly skillId: SkillIdType;
-  readonly skillVersionId: SkillVersionIdType;
-  readonly hash: Hash;
-  /** The hash the Library last recorded for this copy, if it recorded one. */
-  readonly recordedHash: Hash | undefined;
-  readonly manage: { readonly hash: Hash } | undefined;
-  readonly manageIdentical: boolean;
-  readonly replacement: { readonly hash: Hash; readonly marker: OwnershipMarker } | undefined;
-}
-
-export type Decision =
-  /** Leave a copy the user deleted deleted. */
-  | { readonly _tag: "KeepSuppressed" }
-  /** Stamp SKIT's marker in place on bytes that already equal the copy. */
-  | { readonly _tag: "Manage"; readonly verification: "replacement" | "adoption" | "marker" }
-  /** Leave the folder as it is. `edited` means SKIT wrote it and it was changed since. */
-  | {
-      readonly _tag: "Conflict";
-      readonly hash: Hash;
-      readonly edited: boolean;
-      readonly expectedHash: Hash;
-    }
-  | { readonly _tag: "Unchanged" }
-  /** Move the owned, unedited copy to recovery and install over it. */
-  | { readonly _tag: "Replace" }
-  | { readonly _tag: "Install" };
-
-/**
- * What to do at an existing destination, decided only from facts. Changes nothing. Refuses when an
- * approved folder changed since it was previewed, or does not hold exactly the copy's bytes.
- */
-export const decide = (
-  facts: DestinationFacts,
-  wanted: WantedCopy,
-): Result.Result<Decision, "ManageTargetChanged" | "ManageContentMismatch"> => {
-  const marker = facts.marker.kind === "valid" ? facts.marker.marker : null;
-  if (
-    wanted.replacement !== undefined &&
-    wanted.replacement.hash === facts.hash &&
-    facts.hash === wanted.hash &&
-    marker !== null &&
-    sameMarker(marker, wanted.replacement.marker)
-  )
-    return Result.succeed({ _tag: "Manage", verification: "replacement" });
-  // Ownership is the installed skill and Skill; a new selected Version is an ordinary rewrite, and
-  // the expected-hash check below is what detects local edits.
-  if (
-    marker === null ||
-    marker.installed_skill_id !== wanted.installedSkillId ||
-    marker.skill_id !== wanted.skillId
-  ) {
-    if (facts.marker.kind === "absent" && wanted.manage !== undefined && facts.approvedForManage) {
-      if (facts.hash !== wanted.manage.hash) return Result.fail("ManageTargetChanged");
-      if (facts.hash !== wanted.hash) return Result.fail("ManageContentMismatch");
-      return Result.succeed({ _tag: "Manage", verification: "adoption" });
-    }
-    // Unasked managing only takes a folder that is nothing more than the copy: the hash leaves out
-    // `.git`, so a checkout with the same files, and its history, would otherwise become SKIT's.
-    if (
-      facts.marker.kind === "absent" &&
-      wanted.manageIdentical &&
-      !facts.insideRepository &&
-      facts.hash === wanted.hash &&
-      facts.directory &&
-      !facts.holdsRepositoryFiles
-    )
-      return Result.succeed({ _tag: "Manage", verification: "adoption" });
-    return Result.succeed({
-      _tag: "Conflict",
-      hash: facts.hash,
-      edited: false,
-      expectedHash: wanted.hash,
-    });
-  }
-  if (facts.hash !== marker.expected_hash)
-    return Result.succeed({
-      _tag: "Conflict",
-      hash: facts.hash,
-      edited: true,
-      expectedHash: wanted.recordedHash ?? marker.expected_hash,
-    });
-  // A marker that disagrees with what the Library recorded writing was not written by SKIT.
-  if (wanted.recordedHash !== undefined && marker.expected_hash !== wanted.recordedHash)
-    return Result.succeed({
-      _tag: "Conflict",
-      hash: facts.hash,
-      edited: false,
-      expectedHash: wanted.recordedHash,
-    });
-  if (facts.hash === wanted.hash)
-    return Result.succeed(
-      marker.skill_version_id !== wanted.skillVersionId
-        ? { _tag: "Manage", verification: "marker" }
-        : { _tag: "Unchanged" },
-    );
-  return Result.succeed({ _tag: "Replace" });
-};
-
 /** Built bytes in staging on the root's own device, so installing them is a rename. */
 export interface StagedInstalledSkill {
   readonly root: string;
@@ -338,10 +220,10 @@ export const stageInstalledSkill = Effect.fn("Install.stage")(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const staging = yield* fs.makeTempDirectoryScoped({
-    directory: yield* installedSkillWorkDirectory(request.root),
+    directory: yield* installedSkillStagingDirectory(request.root),
     prefix: ".skit-stage-",
   });
-  const path = join(staging, "projection");
+  const path = join(staging, "skill");
   yield* copySkill({ ...request, destination: path });
   return {
     root: request.root,
@@ -355,7 +237,7 @@ export const stageInstalledSkill = Effect.fn("Install.stage")(function* (
  * Put staged bytes at `destination` under SKIT's marker and verify them. `manage` stamps the marker
  * on equal bytes in place, keeping whatever the hash leaves out; `replace` first runs `backUp` to
  * move the owned original into a pending backup; `install` refuses a destination that appeared since
- * it was observed. A linked destination is never stamped through: it is replaced, its link backed up.
+ * it was inspected. A linked destination is never stamped through: it is replaced, its link backed up.
  */
 export const commitInstalledSkill = Effect.fn("Install.commit")(function* (
   staged: StagedInstalledSkill,
@@ -447,31 +329,31 @@ export const installedSkillVariantPath = (
 /**
  * Whether a recorded installed skill is still the one SKIT wrote.
  *
- * This is the ownership question `retire` asks immediately before displacing anything, separated so
- * a caller can also ask it *first*. A batch may use that to refuse before changing any derived
+ * This is the ownership question uninstalling asks immediately before displacing anything, separated
+ * so a caller can also ask it *first*. A batch may use that to refuse before changing any derived
  * directory.
  */
 export const inspectInstalledSkill = Effect.fn("Install.inspectInstalledSkill")(function* (
   installedSkill: InstalledSkill,
 ): Effect.fn.Return<
   | { kind: "absent" }
-  | { kind: "intact"; observed: Hash; marker: OwnershipMarker }
-  | { kind: "conflicted"; observed: Hash },
+  | { kind: "intact"; currentHash: Hash; marker: OwnershipMarker }
+  | { kind: "conflicted"; currentHash: Hash },
   OwnershipMarkerDisagrees | TreeError | PlatformError,
   TreeRequirements | TreeHasher
 > {
   const destination = installedSkill.path;
   if (!(yield* exists(destination))) return { kind: "absent" as const };
   const marker = yield* readOwnershipMarker(destination);
-  const observed = yield* (yield* TreeHasher).hash(destination);
+  const currentHash = yield* (yield* TreeHasher).hash(destination);
   if (
     !marker ||
     marker.skill_id !== installedSkill.skill_id ||
     marker.installed_skill_id !== installedSkill.installed_skill_id ||
-    observed !== markerExpectedHash(marker)
+    currentHash !== markerExpectedHash(marker)
   )
-    return { kind: "conflicted" as const, observed };
-  return { kind: "intact" as const, observed, marker };
+    return { kind: "conflicted" as const, currentHash };
+  return { kind: "intact" as const, currentHash, marker };
 });
 
 /**
@@ -495,7 +377,7 @@ export const installedSkillDisplaced = Effect.fn("Install.displaced")(function* 
 /**
  * Whether a backup is exactly what SKIT would write again, proven only from `prior`, the Library
  * state the mutation loaded: the backup's marker must name the recorded installed skill and Version, that
- * Version's retained original must be intact, and restaging it under a recorded invocation policy
+ * Version's stored original must be intact, and restaging it under a recorded invocation policy
  * must reproduce every name, type, mode and byte. Anything short of that proof keeps the backup.
  */
 export const reproducible = Effect.fn("Install.reproducible")(function* (
@@ -539,7 +421,7 @@ export const reproducible = Effect.fn("Install.reproducible")(function* (
       Effect.gen(function* () {
         const destination = join(
           yield* fs.makeTempDirectoryScoped({ prefix: "skit-reproduce-" }),
-          "projection",
+          "skill",
         );
         yield* copySkill({ ...source, target, invocationIntent, destination });
         return yield* losslessTree(destination);

@@ -1,13 +1,11 @@
 import { Effect } from "effect";
 import { setEnabledAt, pruneEmptyEnabled, type LibraryState } from "./library-state.js";
-import { calculateEnabled, expandIntent, type Request } from "./enabled-plan.js";
+import { calculateEnabled, expandIntent } from "./enabled-plan.js";
 import { removeFromEnabled } from "./enabled.js";
 import { CollectionRemovalMissing } from "./installation/remove.js";
 import type { Intent } from "./library-plan.js";
 
-type Calculated = Effect.Success<ReturnType<typeof calculateEnabled>>;
-
-/** What each intent changes in the Library itself, before any copy is considered. */
+/** What each intent changes in the Library itself, before any Installed Skill is considered. */
 export const edit = Effect.fn("Library.edit")(function* (base: LibraryState, intent: Intent) {
   switch (intent._tag) {
     case "Update":
@@ -43,28 +41,19 @@ export const edit = Effect.fn("Library.edit")(function* (base: LibraryState, int
       };
     }
     case "Enabled": {
-      const requests = (yield* Effect.forEach(intent.changes, (change) =>
+      let next = base;
+      const requests = [];
+      // Each request is calculated against the Library the requests before it leave.
+      for (const request of (yield* Effect.forEach(intent.changes, (change) =>
         expandIntent(base, change),
-      )).flat();
-      const edited = yield* Effect.reduce(
-        requests,
-        (): { next: LibraryState; requests: { request: Request; calculated: Calculated }[] } => ({
-          next: base,
-          requests: [],
-        }),
-        (sofar, request) =>
-          Effect.map(calculateEnabled(sofar.next, request), (calculated) => ({
-            next: calculated.plan.changed
-              ? setEnabledAt(sofar.next, request.scope, calculated.plan)
-              : sofar.next,
-            requests: [...sofar.requests, { request, calculated }],
-          })),
-      );
+      )).flat()) {
+        const calculated = yield* calculateEnabled(next, request);
+        if (calculated.plan.changed) next = setEnabledAt(next, request.scope, calculated.plan);
+        requests.push({ request, calculated });
+      }
       return {
-        next: requests.some((request) => !request.enabled)
-          ? pruneEmptyEnabled(edited.next)
-          : edited.next,
-        requests: edited.requests,
+        next: requests.some(({ request }) => !request.enabled) ? pruneEmptyEnabled(next) : next,
+        requests,
       };
     }
   }

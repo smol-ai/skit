@@ -666,7 +666,7 @@ const backUpDuplicates = Effect.fn("Manage.backUpDuplicates")(function* (
     if (
       !installedSkill ||
       ownership?.kind !== "intact" ||
-      ownership.observed !== installedSkill.expected_hash ||
+      ownership.currentHash !== installedSkill.expected_hash ||
       ownership.marker.expected_hash !== installedSkill.expected_hash ||
       ownership.marker.skill_version_id !== installedSkill.skill_version_id ||
       (yield* (yield* LinkStat).lstat(path)).type !== "Directory"

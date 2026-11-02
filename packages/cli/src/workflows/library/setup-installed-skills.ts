@@ -30,12 +30,12 @@ export class ChangeChoiceRequired
     return this.facts
       .map(
         (fact) =>
-          `${fact.name} at ${fact.path}: ${fact.status === "competing" ? `current ${fact.currentHash} and retained ${fact.desiredHash} need a version choice` : (fact.reason ?? "custody needs resolution")}`,
+          `${fact.name} at ${fact.path}: ${fact.status === "competing" ? `current ${fact.currentHash} and the Library's ${fact.desiredHash} need a version choice` : (fact.reason ?? "custody needs resolution")}`,
       )
       .join("; ");
   }
   readonly remediation =
-    "Review setup's current copy and retained-version facts before applying these unresolved changes.";
+    "Review setup's current copy and Library-version facts before applying these unresolved changes.";
 }
 
 export const changesNeedingChoice = (
@@ -109,96 +109,6 @@ export const setupVersionAlternatives = (facts: readonly InstalledSkillChange[])
   });
 };
 
-const protection = {
-  repository: "A repository owns this folder",
-  authored: "An author's workspace owns this folder",
-  "package-manager": "A package manager owns this folder",
-} as const;
-
-/** What setup shows of every copy in a Library plan, keyed by its path. */
-const installedSkillChanges = (state: LibraryState, plan: Library.Plan) =>
-  plan.changes
-    .flatMap((change): InstalledSkillChange[] => {
-      if (!("evidence" in change)) return [];
-      const { destination, recorded } = change;
-      const record =
-        recorded === undefined
-          ? undefined
-          : state.installed_skills.find(
-              (copy) => copy.installed_skill_id === recorded.installedSkillId,
-            );
-      const fact = {
-        ...(recorded === undefined
-          ? {}
-          : { installedSkillId: recorded.installedSkillId, baselineHash: recorded.hash }),
-        skillId: change.skillId,
-        name:
-          state.skills.find((skill) => skill.skill_id === change.skillId)?.name ??
-          basename(change.path),
-        path: change.path,
-        destination,
-        ...(change.currentHash === undefined ? {} : { currentHash: change.currentHash }),
-        ...(change.wantedHash === undefined ? {} : { desiredHash: change.wantedHash }),
-        ...(change._tag === "Uninstall" || change._tag === "Forget" || change._tag === "Refuse"
-          ? {}
-          : { desiredVersionId: change.skillVersionId }),
-        evidence: hashParts([change.evidence]),
-        metadataChanged: false,
-      };
-      const kept = (reason: string): InstalledSkillChange => ({
-        ...fact,
-        status: "protected",
-        reason,
-      });
-      switch (change._tag) {
-        case "Unchanged":
-          return [
-            {
-              ...fact,
-              status: "unchanged",
-              metadataChanged:
-                record === undefined ||
-                record.status !== "installed" ||
-                record.skill_version_id !== change.skillVersionId ||
-                record.expected_hash !== change.wantedHash,
-            },
-          ];
-        case "Manage":
-          return [{ ...fact, status: "unchanged", metadataChanged: true }];
-        // With a record, SKIT puts back what it moved aside.
-        case "Install":
-          return [{ ...fact, status: recorded === undefined ? "install" : "incoming-update" }];
-        case "Update":
-          return [{ ...fact, status: "incoming-update" }];
-        case "Conflict":
-          if (!change.edited) return [kept("The folder holds what SKIT did not write")];
-          // The edit already is the selected Version: only the marker changes.
-          if (change.currentHash === change.wantedHash)
-            return [{ ...fact, status: "unchanged", metadataChanged: true }];
-          return [
-            {
-              ...fact,
-              status:
-                change.wantedHash === undefined || change.wantedHash === recorded?.hash
-                  ? "local-only"
-                  : "competing",
-            },
-          ];
-        case "Protected":
-          return [kept(protection[change.reason])];
-        case "Unreadable":
-          return [kept(`The folder cannot be read as a skill: ${change.reason}`)];
-        case "Refuse":
-          return [kept(change.detail)];
-        case "KeepDeleted":
-          return [{ ...fact, status: "native-delete", reason: "Native deletion is preserved" }];
-        case "Uninstall":
-        case "Forget":
-          return [{ ...fact, status: "uninstall" }];
-      }
-    })
-    .sort((left, right) => left.path.localeCompare(right.path));
-
 /** The Library owner routed by setup's roots. Built where it runs, so it saves through that store. */
 const setupLibrary = Effect.fn("Setup.library")(function* (roots: InventoryRootOptions) {
   return yield* Library.make.pipe(
@@ -213,7 +123,7 @@ export const planInstalledSkillChanges = Effect.fn("Setup.planInstalledSkillChan
 ) {
   const library = yield* setupLibrary(roots);
   return yield* library.plan({ _tag: "Update" }, { base: state }).pipe(
-    Effect.map((plan) => installedSkillChanges(state, plan)),
+    Effect.map(Library.reviewInstalledSkillChanges),
     // Setup still discovers when the Library cannot plan its copies, and touches none of them.
     Effect.catch((error) =>
       Effect.succeed(
@@ -279,19 +189,19 @@ export const applyInstalledSkillChanges = Effect.fn("Setup.applyInstalledSkillCh
   // reviewed edit of its Skill, which goes to recovery and is kept there.
   const approvals = planned.changes.flatMap((change): Library.Approval[] => {
     if (
-      !("evidence" in change) ||
       change._tag !== "Conflict" ||
+      !("edited" in change) ||
       !change.edited ||
       change.recorded === undefined
     )
       return [];
-    const { installedSkillId } = change.recorded;
+    const installedSkillId = change.recorded.installed_skill_id;
     if (reviewed.find((fact) => fact.path === change.path)?.currentHash !== change.currentHash)
       return [];
     const current = marker(change.path);
     const accept: Library.Approval[] =
       current === undefined ||
-      (change.currentHash !== change.wantedHash && !local.some((fact) => fact.path === change.path))
+      (change.currentHash !== change.hash && !local.some((fact) => fact.path === change.path))
         ? []
         : [
             {
@@ -306,7 +216,7 @@ export const applyInstalledSkillChanges = Effect.fn("Setup.applyInstalledSkillCh
       : accept;
   });
   const plan = yield* library.plan({ _tag: "Update" }, { base: state, approvals });
-  const facts = installedSkillChanges(state, plan);
+  const facts = Library.reviewInstalledSkillChanges(plan);
 
   // Outside the chosen Skills, whatever the update writes is exactly what was reviewed.
   for (const fact of facts)

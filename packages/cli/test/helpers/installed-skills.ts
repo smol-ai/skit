@@ -35,7 +35,7 @@ const library = (
     return yield* Library.make.pipe(Effect.provideService(InstalledSkills.Service, files));
   });
 
-const count = (outcome: Library.Outcome, tag: Library.CopyResult["_tag"]) =>
+const count = (outcome: Library.Outcome, tag: Library.InstalledSkillResult["_tag"]) =>
   outcome._tag === "Applied" ? outcome.copies.filter((copy) => copy._tag === tag).length : 0;
 
 /** Update every installed copy, with what is enabled at `scope` also routed to this destination. */

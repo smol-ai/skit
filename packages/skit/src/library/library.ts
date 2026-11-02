@@ -21,9 +21,10 @@ import {
 } from "./import-collection.js";
 import type { TreeRequirements } from "../platform/tree-requirements.js";
 import type { ApplyError, Approval, Intent, Outcome, Plan, PlanError } from "./library-plan.js";
-import { work } from "./plan-changes.js";
+import { planChanges } from "./plan-changes.js";
 import { apply } from "./apply-plan.js";
 export * from "./library-plan.js";
+export { reviewInstalledSkillChanges } from "./installed-skill-review.js";
 export {
   InvalidIntent,
   calculateEnabled,
@@ -80,7 +81,7 @@ export const make = Effect.gen(function* () {
       const base = structuredClone(options.base);
       const approvals = structuredClone(options.approvals ?? []);
       const reviewed = structuredClone(intent);
-      const planned = yield* Effect.scoped(work(base, reviewed, approvals)).pipe(
+      const planned = yield* Effect.scoped(planChanges(base, reviewed, approvals)).pipe(
         Effect.provideService(LibraryStore, store),
         Effect.provideService(InstalledSkills.Service, files),
       );
@@ -90,7 +91,8 @@ export const make = Effect.gen(function* () {
         approvals,
         routes: planned.routes,
         folders: planned.folders,
-        changes: planned.changes,
+        next: planned.next,
+        changes: [...planned.enabled.map(({ change }) => change), ...planned.changes],
       };
     }),
     apply: (plan) =>

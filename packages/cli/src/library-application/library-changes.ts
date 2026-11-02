@@ -101,7 +101,7 @@ export function libraryChangeSelection(
     );
     return {
       changes: plan.changes.filter(
-        (change): change is Library.BindingChange =>
+        (change): change is Library.EnabledChange =>
           change._tag === "Enable" || change._tag === "Disable",
       ),
       owner: { plan, configuration: routing },

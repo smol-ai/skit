@@ -236,7 +236,9 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
               resolution: "local",
             }),
           );
-          installedSkills.push(InstalledSkillStatus.conflicted(installedSkill, ownership.observed));
+          installedSkills.push(
+            InstalledSkillStatus.conflicted(installedSkill, ownership.currentHash),
+          );
           continue;
         }
         // Normal updates preserve edited bytes as variants. Inactive routes are reported by
@@ -254,7 +256,7 @@ const planSyncInstalledSkills = Effect.fn("Library.sync.planInstalledSkills")(fu
               missingVersion && selected !== undefined
                 ? { ...installedSkill, skill_version_id: selected.skill_version_id }
                 : installedSkill,
-              ownership.observed,
+              ownership.currentHash,
             ),
           );
           continue;

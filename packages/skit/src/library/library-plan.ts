@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { InstalledSkills } from "./installed-skills.js";
 import type { LibraryStateReadError, LibraryStateWriteError } from "./store/library-store.js";
-import { InvocationPolicies, type InstalledSkill } from "./library-state.js";
+import { InstalledSkill, InvocationPolicies, LibraryState } from "./library-state.js";
 import { Intent as EnabledIntent, Invocation, type InvalidIntent } from "./enabled-plan.js";
 import { Enabled as EnabledItem } from "./library-contracts.js";
 import type { InstalledSkillInvalid } from "./installation/install-enabled.js";
@@ -14,8 +14,8 @@ import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 import type { UninstallConflict } from "../failures.js";
 
 // ── Intents ──────────────────────────────────────────────────────────────────────────────────────
-// Each intent says how the Library should change. Which copies to install or uninstall is never
-// part of an intent: plan works it out from the Library the intent leaves.
+// Each intent says how the Library should change. Which Installed Skills to install or uninstall is
+// never part of an intent: plan works it out from the Library the intent leaves.
 
 /** Change what is enabled. */
 export const Enabled = Schema.TaggedStruct("Enabled", {
@@ -64,7 +64,7 @@ export class StalePlan
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT";
-  readonly remediation = "Preview the Binding change again.";
+  readonly remediation = "Preview the change again.";
 }
 
 /** Enabling would replace the user's own link where SKIT writes the copy; keeping both is impossible. */
@@ -93,7 +93,7 @@ export class InstalledSkillWouldDuplicate
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT";
   readonly remediation =
-    "Remove the redundant agent location, retain without enabling, or explicitly use --allow-duplicate.";
+    "Remove the redundant agent location, keep the Skill in the Library without enabling it, or explicitly use --allow-duplicate.";
   get message() {
     return `Enabling would create duplicate skills: ${this.duplicates.flatMap((item) => item.aliases.map((alias) => `${item.name} (${item.harness}): ${alias.path}${alias.via === "symlink" ? ` -> ${item.canonicalPath} (symlink${alias.linkPath !== alias.path ? ` at ${alias.linkPath} -> ${alias.linkTarget}` : ""})` : ""}`)).join("; ")}`;
   }
@@ -108,7 +108,7 @@ export class DestinationsIncomplete
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT";
   readonly remediation =
-    "Inspect these destinations and preserve foreign or modified content before retrying.";
+    "Inspect these destinations and keep foreign or modified content before retrying.";
   get message() {
     return `Selected destinations have not converged: ${this.paths.join(", ")}`;
   }
@@ -116,7 +116,7 @@ export class DestinationsIncomplete
 
 // ── Plan and outcome ─────────────────────────────────────────────────────────────────────────────
 /** One enabled change at one scope, with what a review of it shows. */
-export const BindingChange = Schema.Struct({
+export const EnabledChange = Schema.Struct({
   _tag: Schema.Literals(["Enable", "Disable"]),
   subject_id: Schema.Union([SkillId, CollectionId]),
   skills: Schema.Array(Schema.String),
@@ -133,62 +133,78 @@ export const BindingChange = Schema.Struct({
     Schema.Array(Schema.Struct({ destination: InstallDestination, path: Schema.String })),
   ),
 });
-export type BindingChange = typeof BindingChange.Type;
+export type EnabledChange = typeof EnabledChange.Type;
 
-/** What every change to one skill folder shows. */
-const CopyFields = {
+/**
+ * The Installed Skill the next Library has at one folder, and the Library's record there. A new
+ * Installed Skill gets its id when apply installs it, so planning twice plans the same change.
+ */
+const installedSkillFields = {
   skillId: SkillId,
-  destination: InstallDestination,
-  path: Schema.String,
-  /** The Version the copy should hold; for a copy nothing wants, the one recorded. */
   skillVersionId: SkillVersionId,
-  /** The Library's record of this copy, when it has one. */
-  recorded: Schema.optionalKey(Schema.Struct({ installedSkillId: InstalledSkillId, hash: Hash })),
-  /** What the folder holds now, when it is there and readable. */
-  currentHash: Schema.optionalKey(Hash),
-  /** What SKIT would write there, when plan built it. */
-  wantedHash: Schema.optionalKey(Hash),
-  /** The folder as plan inspected it, including what its hash leaves out. */
-  evidence: Schema.String,
-};
-/** What happens to one skill folder, with what a review of it shows. */
-export const CopyChange = Schema.Union([
-  /** Nothing is there yet. */
-  Schema.TaggedStruct("Install", CopyFields),
-  /** SKIT's unedited copy of another Version or rendering goes to recovery. */
-  Schema.TaggedStruct("Update", CopyFields),
+  destination: InstallDestination,
+  root: Schema.String,
+  path: Schema.String,
   /**
-   * SKIT's marker goes on a folder that already holds exactly the copy's bytes. `marker`: SKIT's
-   * own copy, where only the Version changed.
+   * The Library's record of this folder, when it has one: its id is this Installed Skill's, and
+   * its hash is what SKIT last wrote, so it shows an edit and names the recovery backups of that
+   * write. It never takes the new hash.
+   */
+  recorded: Schema.optionalKey(InstalledSkill),
+};
+/**
+ * What happens at one skill folder. A change where the next Library installs a Skill names that
+ * Installed Skill; one where nothing installs any more names only the record.
+ */
+export const InstalledSkillChange = Schema.Union([
+  /** Nothing is there yet. Its bytes are built at apply, once the root exists. */
+  Schema.TaggedStruct("Install", { ...installedSkillFields, invocation: Invocation }),
+  /** SKIT's unedited folder, or an edit the user approved replacing, goes to recovery for `hash`. */
+  Schema.TaggedStruct("Update", { ...installedSkillFields, invocation: Invocation, hash: Hash }),
+  /**
+   * SKIT's marker goes on a folder that already holds exactly `hash`. `marker`: SKIT's own folder,
+   * where only the Version changed; `manage`: a folder SKIT did not write; `replacement`: an edit
+   * the user approved keeping.
    */
   Schema.TaggedStruct("Manage", {
-    ...CopyFields,
-    verification: Schema.Literals(["replacement", "adoption", "marker"]),
+    ...installedSkillFields,
+    invocation: Invocation,
+    hash: Hash,
+    verification: Schema.Literals(["replacement", "manage", "marker"]),
   }),
-  Schema.TaggedStruct("Unchanged", CopyFields),
+  /** The folder already is `hash`, under SKIT's marker. */
+  Schema.TaggedStruct("Unchanged", { ...installedSkillFields, hash: Hash }),
   /** The user deleted it; it stays deleted. */
-  Schema.TaggedStruct("KeepDeleted", CopyFields),
-  /** The folder holds what SKIT did not write; it is left, and recorded as conflicted. */
-  Schema.TaggedStruct("Conflict", { ...CopyFields, edited: Schema.Boolean, currentHash: Hash }),
-  /** The folder there cannot be read as skill content; apply fails on it. */
-  Schema.TaggedStruct("Unreadable", { ...CopyFields, reason: Schema.String }),
-  /** Nothing wants it: SKIT's copy goes to recovery. */
-  Schema.TaggedStruct("Uninstall", CopyFields),
-  /** Nothing wants it, and the folder is gone or was never SKIT's: only the record goes. */
-  Schema.TaggedStruct("Forget", CopyFields),
-  /** Nothing wants it, but it was edited where agents read it: apply refuses. */
-  Schema.TaggedStruct("Refuse", { ...CopyFields, detail: Schema.String }),
+  Schema.TaggedStruct("KeepDeleted", { ...installedSkillFields, recorded: InstalledSkill }),
+  /**
+   * The folder holds `currentHash`, which SKIT would replace with `hash`; it is left, and recorded
+   * as conflicted against `expectedHash`. `edited`: SKIT wrote it and it was changed since.
+   */
+  Schema.TaggedStruct("Conflict", {
+    ...installedSkillFields,
+    hash: Hash,
+    currentHash: Hash,
+    expectedHash: Hash,
+    edited: Schema.Boolean,
+  }),
+  /** Nothing installs here any more, but the folder was edited where agents do not read it: it is left, and recorded as conflicted. */
+  Schema.TaggedStruct("Conflict", { recorded: InstalledSkill, currentHash: Hash }),
   /** The folder is someone else's in itself: it and its record are left exactly as they are. */
-  Schema.TaggedStruct("Protected", { ...CopyFields, reason: InstalledSkills.Protection }),
+  Schema.TaggedStruct("Protected", { ...installedSkillFields, reason: InstalledSkills.Protection }),
+  Schema.TaggedStruct("Protected", {
+    recorded: InstalledSkill,
+    reason: InstalledSkills.Protection,
+  }),
+  /** The folder there cannot be read as skill content; apply fails on it. */
+  Schema.TaggedStruct("Unreadable", { ...installedSkillFields, reason: Schema.String }),
+  /** Nothing installs here any more: SKIT's folder goes to recovery. */
+  Schema.TaggedStruct("Uninstall", { recorded: InstalledSkill }),
+  /** Nothing installs here any more, and the folder is gone or was never SKIT's: only the record goes. */
+  Schema.TaggedStruct("Forget", { recorded: InstalledSkill }),
+  /** Nothing installs here any more, but it was edited where agents read it: apply refuses. */
+  Schema.TaggedStruct("Refuse", { recorded: InstalledSkill, detail: Schema.String }),
 ]);
-export type CopyChange = typeof CopyChange.Type;
-export const RemoveChange = Schema.TaggedStruct("Remove", {
-  collectionId: CollectionId,
-  skillIds: Schema.Array(SkillId),
-});
-export type RemoveChange = typeof RemoveChange.Type;
-export const Change = Schema.Union([BindingChange, CopyChange, RemoveChange]);
-export type Change = typeof Change.Type;
+export type InstalledSkillChange = typeof InstalledSkillChange.Type;
 
 export const Route = Schema.Struct({
   scope: InstallScope,
@@ -205,13 +221,16 @@ export const Plan = Schema.Struct({
   intent: Intent,
   approvals: Schema.Array(Approval),
   routes: Schema.Array(Route),
-  folders: Schema.Array(InstalledSkills.Observed),
-  changes: Schema.Array(Change),
+  /** Every folder the changes were decided on, and every original they are built from. */
+  folders: Schema.Array(InstalledSkills.Folder),
+  /** The Library the intent leaves, before apply records its Installed Skills. */
+  next: LibraryState,
+  changes: Schema.Array(Schema.Union([EnabledChange, InstalledSkillChange])),
 });
 export type Plan = typeof Plan.Type;
 
-/** The final state of one copy SKIT touched, as the Library recorded it. */
-export type CopyResult =
+/** The final state of one Installed Skill apply touched, as the Library recorded it. */
+export type InstalledSkillResult =
   | {
       readonly _tag: "Installed" | "Unchanged" | "Conflicted" | "Suppressed";
       readonly copy: InstalledSkill;
@@ -222,19 +241,19 @@ export type CopyResult =
   | { readonly _tag: "Failed"; readonly path: string; readonly cause: ApplyError };
 
 export interface AppliedChange {
-  readonly change: BindingChange;
+  readonly change: EnabledChange;
   readonly intent: "saved" | "unchanged";
   readonly revision: string;
   readonly installedSkills: readonly InstalledSkill[];
-  readonly copies: readonly CopyResult[];
+  readonly copies: readonly InstalledSkillResult[];
   readonly unresolved: readonly string[];
 }
 export type Outcome =
   | {
       readonly _tag: "Applied";
       readonly results: readonly AppliedChange[];
-      /** Every copy the plan touched, as the Library recorded it. */
-      readonly copies: readonly CopyResult[];
+      /** Every Installed Skill the plan touched, as the Library recorded it. */
+      readonly copies: readonly InstalledSkillResult[];
     }
   | {
       readonly _tag: "Incomplete";

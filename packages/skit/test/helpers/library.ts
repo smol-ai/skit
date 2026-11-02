@@ -40,7 +40,7 @@ const library = (
     return yield* Library.make.pipe(Effect.provideService(InstalledSkills.Service, files));
   });
 
-const applied = (outcome: Library.Outcome, tag: Library.CopyResult["_tag"]) =>
+const applied = (outcome: Library.Outcome, tag: Library.InstalledSkillResult["_tag"]) =>
   outcome._tag === "Applied" ? outcome.copies.filter((copy) => copy._tag === tag).length : 0;
 
 /** Remove a Collection through the Library owner, planned against `state`. */
