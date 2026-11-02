@@ -3,10 +3,10 @@ import { Data, Effect, FileSystem, Result, Schema } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { dirname, join, relative, resolve } from "node:path";
 import {
-  type OwnershipMarker,
+  OwnershipMarker,
   StoredOwnershipMarker,
   type InstallDestination,
-  type Hash,
+  Hash,
   type InvocationPolicy,
 } from "../contracts.js";
 import { LinkStat } from "../platform/link-stat.js";
@@ -156,10 +156,12 @@ export function readOwnershipMarker(
   );
 }
 
-export type OwnershipMarkerInspection =
-  | { kind: "absent" }
-  | { kind: "invalid"; detail: string }
-  | { kind: "valid"; marker: OwnershipMarker };
+export const OwnershipMarkerInspection = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("absent") }),
+  Schema.Struct({ kind: Schema.Literal("invalid"), detail: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal("valid"), marker: OwnershipMarker }),
+]);
+export type OwnershipMarkerInspection = typeof OwnershipMarkerInspection.Type;
 
 export function parseOwnershipMarker(value: unknown): OwnershipMarkerInspection {
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -552,11 +554,12 @@ export const reproducible = Effect.fn("Install.reproducible")(function* (
  * copies with identical bytes already at another target's destination. Each is managed only while
  * its content still hashes to `currentHash`, so managing one adds SKIT's marker and nothing else.
  */
-export interface ManageApproval {
-  readonly path: string;
-  readonly equalPaths?: readonly string[];
-  readonly currentHash: Hash;
-}
+export const ManageApproval = Schema.Struct({
+  path: Schema.String,
+  equalPaths: Schema.optionalKey(Schema.Array(Schema.String)),
+  currentHash: Hash,
+});
+export type ManageApproval = typeof ManageApproval.Type;
 
 export type InstalledSkillMutationError =
   | ManageContentMismatch

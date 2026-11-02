@@ -1,5 +1,5 @@
 import { localLibrary } from "../../library-application/library-owner.js";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { join } from "node:path";
 import {
   InstalledSkillStatus,
@@ -333,13 +333,7 @@ export const syncInstalledSkills = Effect.fn("Library.sync.installedSkills")(fun
       ),
     duplicates: {
       scan: () =>
-        Effect.fail(
-          new InstalledSkills.Failed({
-            path: "",
-            cause: new InstalledSkillInvalid({ detail: "Sync does not scan for duplicates" }),
-            displaced: Option.none(),
-          }),
-        ),
+        Effect.fail(new InstalledSkillInvalid({ detail: "Sync does not scan for duplicates" })),
     },
   });
 });

@@ -296,7 +296,7 @@ it.effect("refuses a plan when the Library changed during interactive selection"
       ),
     );
     const error = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
-    assert.strictEqual(error._tag, "Library.SetEnabledStale");
+    assert.strictEqual(error._tag, "Library.StalePlan");
     assert.deepStrictEqual((yield* f.home.durable).enabled, []);
     assert.strictEqual(yield* f.fs.exists(f.destination), false);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -339,7 +339,7 @@ it.effect("refuses to apply a prepared plan to another Library", () =>
     const plan = yield* f.home.owned(planSetEnabled([f.request], f.home.installOptions));
     const other = yield* libraryHome({ home: join(f.root, "other-library") });
     const error = yield* other.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
-    assert.strictEqual(error._tag, "Library.SetEnabledStale");
+    assert.strictEqual(error._tag, "Library.StalePlan");
     assert.deepStrictEqual((yield* other.durable).enabled, []);
     assert.strictEqual(yield* f.fs.exists(f.destination), false);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -1233,7 +1233,7 @@ it.effect("a newly active agent target invalidates the review before any binding
     const before = yield* f.home.durable;
     yield* f.fs.makeDirectory(claude, { recursive: true });
     const error = yield* Effect.flip(f.home.owned(applySetEnabledPlan(plan)));
-    assert.strictEqual(error._tag, "Library.SetEnabledStale");
+    assert.strictEqual(error._tag, "Library.StalePlan");
     assert.deepStrictEqual(yield* f.home.durable, before);
     assert.strictEqual(yield* f.fs.exists(join(f.destination, "alpha")), false);
     assert.strictEqual(yield* f.fs.exists(join(claude, "alpha")), false);
@@ -1380,7 +1380,7 @@ for (const drift of ["create", "modify", "symlink", "source"] as const)
       }
       const before = yield* f.home.durable;
       const error = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
-      assert.strictEqual(error._tag, "Library.SetEnabledStale");
+      assert.strictEqual(error._tag, "Library.StalePlan");
       assert.deepStrictEqual(yield* f.home.durable, before);
       if (drift === "symlink")
         assert.strictEqual(yield* f.fs.readLink(path), join(f.root, "outside"));
@@ -1506,7 +1506,7 @@ it.effect("Library owner rejects forged destination coordinates in a plain plan"
     };
     const before = yield* f.home.durable;
     const error = yield* f.home.owned(applySetEnabledPlan(forged)).pipe(Effect.flip);
-    assert.strictEqual(error._tag, "Library.SetEnabledStale");
+    assert.strictEqual(error._tag, "Library.StalePlan");
     assert.deepStrictEqual(yield* f.home.durable, before);
     assert.strictEqual(yield* f.fs.exists(outside), false);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),

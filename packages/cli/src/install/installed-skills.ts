@@ -1,4 +1,4 @@
-import { Context, Effect, FileSystem, Layer, Option, Path } from "effect";
+import { Context, Effect, FileSystem, Layer, Path } from "effect";
 import { Digest } from "effect/crypto";
 import {
   InstalledSkills,
@@ -43,30 +43,21 @@ export const make = Effect.fn("InstalledSkills.make")(function* (
       SkitConfiguration,
     ),
   );
-  const failed = (cause: InstalledSkills.Cause) =>
-    new InstalledSkills.Failed({ path: routing.home, cause, displaced: Option.none() });
   return yield* InstalledSkillsNode.make({
-    active: activeInstallDestinations(routing).pipe(
-      Effect.provide(context),
-      Effect.mapError(failed),
-    ),
+    active: activeInstallDestinations(routing).pipe(Effect.provide(context)),
     destinations: Effect.fn("InstalledSkills.destinations")(function* (scope: InstallScope) {
-      return (yield* activeInstallDestinations(routing).pipe(
-        Effect.provide(context),
-        Effect.mapError(failed),
-      )).map((destination) => ({
-        destination,
-        root: skillsDirectoryFor(destination, scope, routing),
-      }));
+      return (yield* activeInstallDestinations(routing).pipe(Effect.provide(context))).map(
+        (destination) => ({
+          destination,
+          root: skillsDirectoryFor(destination, scope, routing),
+        }),
+      );
     }),
     duplicates: {
       scan: Effect.fn("InstalledSkills.duplicates")(function* (scope, names) {
         const warnings: InstalledSkills.Warning[] = [];
         const copies = names.length
-          ? yield* findDuplicates(routing, scope, names, warnings).pipe(
-              Effect.provide(context),
-              Effect.mapError(failed),
-            )
+          ? yield* findDuplicates(routing, scope, names, warnings).pipe(Effect.provide(context))
           : [];
         return {
           copies,

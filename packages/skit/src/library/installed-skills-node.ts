@@ -34,13 +34,7 @@ export interface Routing {
 export const make = Effect.fn("InstalledSkills.make")(function* (routing?: Routing) {
   const unrouted = () =>
     Effect.fail(
-      new InstalledSkills.Failed({
-        path: "",
-        cause: new InstalledSkillInvalid({
-          detail: "This device's install destinations are unknown",
-        }),
-        displaced: Option.none(),
-      }),
+      new InstalledSkillInvalid({ detail: "This device's install destinations are unknown" }),
     );
   const context = (yield* Effect.context<TreeRequirements | TreeHasher | Digest.Digest>()).pipe(
     Context.pick(
@@ -55,10 +49,6 @@ export const make = Effect.fn("InstalledSkills.make")(function* (routing?: Routi
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
   const hasher = yield* TreeHasher;
-  const failed =
-    (path: string, displaced: Option.Option<InstalledSkills.Backup> = Option.none()) =>
-    (cause: InstalledSkills.Cause) =>
-      new InstalledSkills.Failed({ path, cause, displaced });
 
   /** The entry's own identity, and where a link points. Never follows a link to inspect it. */
   const identity = Effect.fn("InstalledSkills.identity")(function* (path: string) {
@@ -226,10 +216,7 @@ export const make = Effect.fn("InstalledSkills.make")(function* (routing?: Routi
         check: unchanged(options.recheck),
         verification: options.verification,
       },
-    ).pipe(
-      Effect.provide(context),
-      Effect.mapError((cause) => failed(destination, displaced)(cause)),
-    );
+    ).pipe(Effect.provide(context));
     return { path: destination, hash: committed.hash, replaced: displaced };
   });
 
@@ -248,44 +235,34 @@ export const make = Effect.fn("InstalledSkills.make")(function* (routing?: Routi
         })),
         Effect.provide(context),
       ),
-    inspect: (path) => inspect(path).pipe(Effect.provide(context), Effect.mapError(failed(path))),
-    hash: (path) => hasher.hash(path).pipe(Effect.provide(context), Effect.mapError(failed(path))),
+    inspect: (path) => inspect(path).pipe(Effect.provide(context)),
+    hash: (path) => hasher.hash(path).pipe(Effect.provide(context)),
     check: Effect.fn("InstalledSkills.check")(function* (observed) {
       for (const expected of observed) {
-        const current = yield* inspect(expected.path).pipe(
-          Effect.provide(context),
-          Effect.mapError(failed(expected.path)),
-        );
+        const current = yield* inspect(expected.path).pipe(Effect.provide(context));
         if (JSON.stringify(current) !== JSON.stringify(expected))
           return yield* new InstalledSkills.Changed({ path: expected.path });
       }
     }),
     prepare: Effect.fn("InstalledSkills.prepare")(function* (roots) {
       for (const root of new Set(roots))
-        yield* ensureSkillsDirectoryWritable(root).pipe(
-          Effect.provide(context),
-          Effect.mapError(failed(root)),
-        );
+        yield* ensureSkillsDirectoryWritable(root).pipe(Effect.provide(context));
     }),
     build: Effect.fn("InstalledSkills.build")(function* (copy, destination) {
       const skill = copy.state.skills.find((item) => item.skill_id === copy.skillId);
       const version = skill?.versions.find((item) => item.skill_version_id === copy.skillVersionId);
       if (skill === undefined || version === undefined)
-        return yield* failed(destination.root)(
-          new InstalledSkillInvalid({
-            detail: "An enabled Skill has no selected retained Version",
-          }),
-        );
+        return yield* new InstalledSkillInvalid({
+          detail: "An enabled Skill has no selected retained Version",
+        });
       const source = yield* installedSkillSource(
         copy.state,
         copy.originalsPath,
         skill,
         version,
-      ).pipe(Effect.provide(context), Effect.mapError(failed(destination.root)));
+      ).pipe(Effect.provide(context));
       if (source.kind === "invalid")
-        return yield* failed(destination.root)(
-          new InstalledSkillInvalid({ detail: source.detail }),
-        );
+        return yield* new InstalledSkillInvalid({ detail: source.detail });
       const staged = yield* InstalledSkillFiles.stageInstalledSkill({
         root: destination.root,
         libraryPath: source.libraryPath,
@@ -296,7 +273,7 @@ export const make = Effect.fn("InstalledSkills.make")(function* (routing?: Routi
         ...(source.declaredInvocation === undefined
           ? {}
           : { declaredInvocation: source.declaredInvocation }),
-      }).pipe(Effect.provide(context), Effect.mapError(failed(destination.root)));
+      }).pipe(Effect.provide(context));
       return { copy, destination, path: staged.path, hash: staged.hash };
     }),
     install: (staged, marker, recheck) =>
@@ -309,20 +286,16 @@ export const make = Effect.fn("InstalledSkills.make")(function* (routing?: Routi
     manage: (staged, marker, recheck, verification) =>
       commit(staged, { mode: "manage", marker, recheck, verification }),
     backUp: (path, into) =>
-      InstalledSkillFiles.keepInstalledSkillVariant(path, into).pipe(
-        Effect.provide(context),
-        Effect.mapError(failed(path)),
-      ),
+      InstalledSkillFiles.keepInstalledSkillVariant(path, into).pipe(Effect.provide(context)),
     uninstall: Effect.fn("InstalledSkills.uninstall")(function* (root, path, installedSkillId) {
       const backup = yield* InstalledSkillBackups.backUpInstalledSkill(
         { root, path, installed_skill_id: installedSkillId },
         "retire",
-      ).pipe(Effect.provide(context), Effect.mapError(failed(path)));
+      ).pipe(Effect.provide(context));
       return {
         path: backup,
         marker: yield* InstalledSkillFiles.inspectOwnershipMarker(backup).pipe(
           Effect.provide(context),
-          Effect.mapError(failed(backup)),
         ),
       };
     }),
@@ -345,20 +318,14 @@ export const make = Effect.fn("InstalledSkills.make")(function* (routing?: Routi
             ),
           ),
           Effect.provide(context),
-          Effect.mapError(failed(root)),
         ),
       check: (backup, state, originalsPath, installedSkillId) =>
         InstalledSkillFiles.reproducible(backup.path, state, originalsPath, installedSkillId).pipe(
           Effect.provide(context),
-          Effect.mapError(failed(backup.path)),
         ),
       keep: (backup) =>
-        InstalledSkillBackups.keepInstalledSkillBackup(backup.path).pipe(
-          Effect.provide(context),
-          Effect.mapError(failed(backup.path)),
-        ),
-      discard: (backup) =>
-        fs.remove(backup.path, { recursive: true }).pipe(Effect.mapError(failed(backup.path))),
+        InstalledSkillBackups.keepInstalledSkillBackup(backup.path).pipe(Effect.provide(context)),
+      discard: (backup) => fs.remove(backup.path, { recursive: true }),
     },
   });
 });

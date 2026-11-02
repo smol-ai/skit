@@ -162,7 +162,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       ).pipe(Effect.provide(layer)),
     );
     const stale = yield* applySetEnabledPlan(previewed).pipe(Effect.provide(layer), Effect.flip);
-    assert.strictEqual(stale._tag, "Library.SetEnabledStale");
+    assert.strictEqual(stale._tag, "Library.StalePlan");
     yield* writingTo(
       home,
       LibraryStore.use((store) =>

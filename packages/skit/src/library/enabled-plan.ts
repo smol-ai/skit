@@ -1,34 +1,41 @@
 import { Effect, Schema, Data } from "effect";
 import { currentCollectionSkills, enabledSkillIds, Enabled } from "./library-contracts.js";
 import { enabledAt, globalEnabled, type LibraryState } from "./library-state.js";
-import type { SkillId, CollectionId } from "./entity-ids.js";
-import type { InstallScope, InvocationPolicy } from "../vocabulary.js";
+import { CollectionId, SkillId } from "./entity-ids.js";
+import { InstallScope, InvocationPolicy } from "../vocabulary.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 import { resolve } from "node:path";
-export type Subject =
-  | { readonly _tag: "Skill"; readonly id: SkillId }
-  | { readonly _tag: "Collection"; readonly id: CollectionId };
-export type Invocation = "declared" | InvocationPolicy;
+export const Subject = Schema.Union([
+  Schema.Struct({ _tag: Schema.Literal("Skill"), id: SkillId }),
+  Schema.Struct({ _tag: Schema.Literal("Collection"), id: CollectionId }),
+]);
+export type Subject = typeof Subject.Type;
+export const Invocation = Schema.Union([Schema.Literal("declared"), InvocationPolicy]);
+export type Invocation = typeof Invocation.Type;
 /** What a setup review approved for one enable, and nothing else. */
-export interface SetupApproval {
+export const SetupApproval = Schema.Struct({
   /** The exact links the user approved keeping beside SKIT's copy, as previewed. */
-  readonly approvedSymlinks: readonly {
-    readonly path: string;
-    readonly canonicalPath: string;
-    readonly dev: string;
-    readonly ino: string;
-    readonly linkTarget?: string;
-  }[];
-}
-export interface Intent {
-  readonly _tag: "Enable" | "Disable";
-  readonly subject: Subject;
-  readonly members?: "whole" | readonly SkillId[];
-  readonly where: readonly InstallScope[] | "where-enabled";
-  readonly invocation?: Invocation;
-  readonly allowDuplicate?: boolean;
-  readonly setup?: SetupApproval;
-}
+  approvedSymlinks: Schema.Array(
+    Schema.Struct({
+      path: Schema.String,
+      canonicalPath: Schema.String,
+      dev: Schema.String,
+      ino: Schema.String,
+      linkTarget: Schema.optionalKey(Schema.String),
+    }),
+  ),
+});
+export type SetupApproval = typeof SetupApproval.Type;
+export const Intent = Schema.Struct({
+  _tag: Schema.Literals(["Enable", "Disable"]),
+  subject: Subject,
+  members: Schema.optionalKey(Schema.Union([Schema.Literal("whole"), Schema.Array(SkillId)])),
+  where: Schema.Union([Schema.Array(InstallScope), Schema.Literal("where-enabled")]),
+  invocation: Schema.optionalKey(Invocation),
+  allowDuplicate: Schema.optionalKey(Schema.Boolean),
+  setup: Schema.optionalKey(SetupApproval),
+});
+export type Intent = typeof Intent.Type;
 export interface Request {
   readonly subject: Subject;
   readonly all?: boolean;
