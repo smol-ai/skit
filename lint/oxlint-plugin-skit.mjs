@@ -507,18 +507,29 @@ const effectRules = {
       const file = relative(repositoryRoot, context.filename);
       const fileDirectory = dirname(context.filename);
       const owners = boundaryOwners.filter(
-        (owner) => !file.startsWith(owner.owner) && !owner.allow.includes(file),
+        (owner) =>
+          ![owner.owner].flat().some((path) => file.startsWith(path)) &&
+          !(owner.allow ?? []).includes(file),
       );
       if (owners.length === 0) return {};
       const allowed = new Set(boundaryDebt[file] ?? []);
+      // An owner's names arrive through core (default) or through the modules listed in `sources`.
+      const carries = (owner, source) => {
+        if (owner.sources === undefined) return carriesCoreNames(fileDirectory, source);
+        if (!source.startsWith(".")) return false;
+        const target = relative(repositoryRoot, resolve(fileDirectory, source));
+        return owner.sources.some((path) => target.startsWith(path));
+      };
       const check = (node) => {
         const source = node.source?.value;
-        if (typeof source !== "string" || !carriesCoreNames(fileDirectory, source)) return;
+        if (typeof source !== "string") return;
+        const reachable = owners.filter((owner) => carries(owner, source));
+        if (reachable.length === 0) return;
         for (const specifier of node.specifiers ?? []) {
           const imported = specifier.imported ?? specifier.local;
           const name = imported?.type === "Identifier" ? imported.name : imported?.value;
           if (typeof name !== "string" || allowed.has(name)) continue;
-          const owner = owners.find((candidate) => candidate.private.includes(name));
+          const owner = reachable.find((candidate) => candidate.private.includes(name));
           if (owner)
             context.report({
               node: specifier,

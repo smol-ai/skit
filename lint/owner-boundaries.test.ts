@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import { approvedServices, debt, owners, serviceDebt } from "../architecture/boundaries.mjs";
@@ -11,10 +11,13 @@ const pluginPath = join(import.meta.dirname, "oxlint-plugin-skit.mjs");
 const oxlintPath = fileURLToPath(new URL("bin/oxlint", import.meta.resolve("oxlint/package.json")));
 
 /** Lints one file outside every owner and returns the first word of each report from `rule`. */
-async function reported(source: string, rule = "owner-boundaries"): Promise<string[]> {
+async function reported(
+  source: string | ((directory: string) => string),
+  rule = "owner-boundaries",
+): Promise<string[]> {
   const directory = await mkdtemp(join(tmpdir(), "skit-owner-boundaries-"));
   const file = join(directory, "handler.ts");
-  await writeFile(file, source);
+  await writeFile(file, typeof source === "string" ? source : source(directory));
   await writeFile(
     join(directory, ".oxlintrc.json"),
     JSON.stringify({ jsPlugins: [pluginPath], rules: { [`skit/${rule}`]: "error" } }),
@@ -49,6 +52,18 @@ describe("skit/owner-boundaries", () => {
     expect(await reported(`import { Library, InstalledSkills } from "@smolai/skit-core";`)).toEqual(
       [],
     );
+  });
+
+  test("a handler cannot write author state around AuthorWorkspace or AuthorHistory", async () => {
+    const author = (directory: string, module: string) =>
+      relative(directory, join(root, "packages/cli/src/workflows/author", `${module}.js`));
+    expect(
+      await reported(
+        (directory) =>
+          `import { saveAuthorConnection, writeAuthorTree } from "${author(directory, "sync")}";
+import { withDeviceStore } from "${author(directory, "device-store")}";`,
+      ),
+    ).toEqual(["saveAuthorConnection", "writeAuthorTree", "withDeviceStore"]);
   });
 
   test("debt only shrinks: every listed violation still exists", async () => {

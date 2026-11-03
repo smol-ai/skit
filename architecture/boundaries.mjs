@@ -1,6 +1,11 @@
 /**
- * Owner boundaries, checked by lint (skit/owner-boundaries). Generated from app.ts's Library and
- * InstalledSkills owners; edit app.ts and this file together, in a reviewed architecture change.
+ * Owner boundaries, checked by lint (skit/owner-boundaries). Generated from app.ts's Library,
+ * InstalledSkills, AuthorWorkspace and AuthorHistory owners; edit app.ts and this file together,
+ * in a reviewed architecture change.
+ *
+ * `sources`: modules whose exports carry the owner's private names (default: core). AuthorWorkspace
+ * and AuthorHistory have no conformance check yet because neither service exists; the change that
+ * creates one adds architecture/conformance/author.ts, as library.ts is checked.
  *
  * `private`: names only code under `owner` may import. `debt`: today's violations, NOT approved.
  * The debt list may only shrink: lint/owner-boundaries.test.ts fails on a stale entry, and the
@@ -36,12 +41,58 @@ export const owners = [
       "stageInstalledSkill",
     ],
   },
+  {
+    // NEW owner (architecture/author.ts). Today its state is written from workflows/author/sync.ts
+    // and workspace-identity.ts; those exports are private, and their importers are debt.
+    name: "AuthorWorkspace",
+    owner: "packages/cli/src/author/",
+    sources: [
+      "packages/cli/src/workflows/author/sync",
+      "packages/cli/src/workflows/author/workspace-identity",
+    ],
+    private: [
+      "saveAuthorConnection",
+      "removeAuthorConnection",
+      "writeRemote",
+      "loadAuthorRemote",
+      "loadAuthorConnection",
+      "loadAuthorSyncRemote",
+      "writeAuthorTree",
+      "ensureAuthorWorkspaceIdentity",
+    ],
+  },
+  {
+    // RESHAPE owner (architecture/author.ts): history, its journal and the device store.
+    name: "AuthorHistory",
+    owner: [
+      "packages/cli/src/workflows/author/history",
+      "packages/cli/src/workflows/author/device-store",
+    ],
+    sources: [
+      "packages/cli/src/workflows/author/history",
+      "packages/cli/src/workflows/author/device-store",
+      "packages/cli/src/workflows/author/sync",
+    ],
+    private: [
+      "withDeviceStore",
+      "writeAuthorHistoryEvent",
+      "loadAuthorHistoryEvents",
+      "loadAuthorHistory",
+      "loadAuthorTree",
+      "loadStoredTrees",
+      "refreshAuthorHistory",
+      "historyDirectory",
+      "saveSyncState",
+    ],
+  },
 ];
 
 export const debt = {
   "packages/cli/src/audit/local.ts": ["LibraryStore", "libraryStoreLayer"],
   "packages/cli/src/configuration-writer.ts": ["withLibraryWriterLock"],
   "packages/cli/src/front-end.ts": ["libraryStoreLayer"],
+  "packages/cli/src/handlers/author/publish.ts": ["loadAuthorRemote"],
+  "packages/cli/src/handlers/author/sync.ts": ["loadAuthorSyncRemote"],
   "packages/cli/src/handlers/library/add.ts": ["LibraryStore"],
   "packages/cli/src/handlers/library/check.ts": ["LibraryStore"],
   "packages/cli/src/handlers/library/history.ts": ["LibraryAuditLog"],
@@ -91,7 +142,17 @@ export const debt = {
     "libraryStoreLayer",
     "withLibraryWriter",
   ],
-  "packages/cli/src/workflows/author/workspace-identity.ts": ["LibraryStore", "withLibraryWriter"],
+  "packages/cli/src/workflows/author/publish.ts": ["loadAuthorRemote"],
+  "packages/cli/src/workflows/author/sync.ts": [
+    "historyDirectory",
+    "refreshAuthorHistory",
+    "withDeviceStore",
+  ],
+  "packages/cli/src/workflows/author/workspace-identity.ts": [
+    "LibraryStore",
+    "refreshAuthorHistory",
+    "withLibraryWriter",
+  ],
   "packages/cli/src/workflows/library/check.ts": ["LibraryStore"],
   "packages/cli/src/workflows/library/import-edit.ts": [
     "LibraryStore",
@@ -111,10 +172,35 @@ export const debt = {
   "packages/cli/src/workflows/library/setup-manage.ts": ["LibraryStore"],
   "packages/cli/src/workflows/library/skills-sh-update-check.ts": ["LibraryStore"],
   "packages/cli/test/application-boundaries.test.ts": ["LibraryStore", "withLibraryWriter"],
-  "packages/cli/test/author-workspace-identity.test.ts": ["withLibraryWriter"],
+  "packages/cli/test/author-history-journal.test.ts": [
+    "loadAuthorHistory",
+    "loadAuthorTree",
+    "loadStoredTrees",
+    "refreshAuthorHistory",
+  ],
+  "packages/cli/test/author-history-process.test.ts": ["loadAuthorHistory", "loadStoredTrees"],
+  "packages/cli/test/author-history.test.ts": [
+    "loadAuthorHistory",
+    "loadStoredTrees",
+    "refreshAuthorHistory",
+  ],
+  "packages/cli/test/author-sync-world.test.ts": [
+    "loadAuthorHistory",
+    "loadStoredTrees",
+    "refreshAuthorHistory",
+  ],
+  "packages/cli/test/author-workspace-identity.test.ts": [
+    "ensureAuthorWorkspaceIdentity",
+    "loadAuthorHistory",
+    "loadStoredTrees",
+    "refreshAuthorHistory",
+    "withLibraryWriter",
+  ],
   "packages/cli/test/collection-load.test.ts": ["LibraryStore", "libraryStoreLayer"],
   "packages/cli/test/doctor-harnesses.test.ts": ["LibraryStore"],
   "packages/cli/test/duplicates.test.ts": ["LibraryStore"],
+  "packages/cli/test/fixtures/author-history-worker.ts": ["refreshAuthorHistory"],
+  "packages/cli/test/helpers/author-sync-world.ts": ["loadStoredTrees"],
   "packages/cli/test/helpers/collection-import.ts": ["LibraryStore", "libraryStoreLayer"],
   "packages/cli/test/helpers/installed-skills.ts": ["LibraryStore"],
   "packages/cli/test/helpers/library-home.ts": [
@@ -159,6 +245,7 @@ export const debt = {
   "packages/cli/test/library-update-failures.test.ts": ["LibraryStore", "libraryStoreLayer"],
   "packages/cli/test/plugin-source-regression.test.ts": ["LibraryStore", "libraryStoreLayer"],
   "packages/cli/test/plugin-update.test.ts": ["LibraryStore", "libraryStoreLayer"],
+  "packages/cli/test/publication-read-effects.test.ts": ["loadAuthorRemote"],
   "packages/cli/test/session-history.test.ts": ["LibraryAuditLog", "LibraryStore"],
   "packages/cli/test/set-enabled-plan.test.ts": ["LibraryStore"],
   "packages/cli/test/setup-apply-outcomes.test.ts": ["LibraryStore"],
@@ -175,6 +262,8 @@ export const debt = {
   "packages/cli/test/skill-metadata.test.ts": ["LibraryStore", "importAuthoredCollection"],
   "packages/cli/test/skills-sh-update-check.test.ts": ["LibraryStore", "libraryStoreLayer"],
   "packages/cli/test/sync-command.test.ts": ["LibraryStore"],
+  "packages/cli/test/sync.test.ts": ["loadStoredTrees"],
+  "packages/cli/test/untrusted-json-decoding.test.ts": ["loadAuthorRemote"],
   "packages/skit/test/audit-log.test.ts": ["LibraryAuditLog", "libraryAuditLogLayer"],
   "packages/skit/test/claude-listing-budget.test.ts": ["LibraryStore"],
   "packages/skit/test/codex-listing-budget.test.ts": ["LibraryStore"],
@@ -272,6 +361,8 @@ export const approvedServices = [
   "@skit-server-effect/Feedback",
   "@skit-server-effect/ServerConfiguration",
   "skit/AuthorIgnoreRepository",
+  "skit/author/AuthorWorkspace",
+  "skit/author/AuthorHistory",
 ];
 
 export const serviceDebt = {
