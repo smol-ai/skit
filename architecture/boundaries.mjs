@@ -363,6 +363,7 @@ export const approvedServices = [
   "skit/AuthorIgnoreRepository",
   "skit/author/AuthorWorkspace",
   "skit/author/AuthorHistory",
+  "skit/ProcessLock",
 ];
 
 export const serviceDebt = {

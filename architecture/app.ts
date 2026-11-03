@@ -136,9 +136,9 @@ export const owners = {
       "workspace tree writes during sync",
     ],
     ops: [
-      "root(input): WorkspaceRoot (canonical; A1)",
+      "resolveRoot(input): WorkspaceRoot (canonical; A1)",
       "read: { identity, connection: Unconnected | Connecting | Connected { leftover } } (never writes)",
-      "identity(root) (workspace.json only; for AuthorHistory, A10)",
+      "readIdentity(root) (workspace.json only; for AuthorHistory, A10)",
       "acquire(root): scoped WorkspaceLease { register, transition, writeTree, withLeaseReleased } (A8)",
     ],
     requires: [
@@ -149,6 +149,7 @@ export const owners = {
       "AuthorIgnoreRepository",
       "Digest",
       "SecureRandom",
+      "ProcessLock",
     ],
     invariants: [
       "every workspace write happens under the lease; lease before home lock before Library writer (A8)",
@@ -169,10 +170,10 @@ export const owners = {
     module: "packages/cli/src/workflows/author/{history,history-journal,device-store,sync}.ts",
     owns: ["<home>/history/**", "<home>/sync-bindings.json"],
     ops: [
-      "observe(root): { id, revision, treeHash }",
+      "capture(root): { id, revision, treeHash }",
       "retain(tree)",
       "engineStore: History.Store adapter (immutable, content-addressed, idempotent writes; A7)",
-      "syncState.{read, transition, prepareWrite} keyed by { workspaceId, locator } (A5, A6)",
+      "syncState.{read, save, prepareWrite} keyed by { workspaceId, locator } (A5, A6)",
     ],
     // Runs no sync: the plain sync workflow drives Sync.run with engineStore and syncState (A7).
     requires: [
@@ -190,7 +191,7 @@ export const owners = {
     removes: [
       "LegacySyncStates v2 'drafts' and PreReleaseBindings in the workflow (sync.ts:99-110)",
       "skit.sync-bindings.v3 locator-only keys: rejected as invalid, no migration (author commands never shipped; A5)",
-      "historyDirectory / withDeviceStore exports (replaced by observe, retain, engineStore; A7)",
+      "historyDirectory / withDeviceStore exports (replaced by capture, retain, engineStore; A7)",
       "Sync.Remote as a Context.Service (packages/skit/src/sync/sync.ts:95-124) → plain engine input built per command from the Registry client (A7)",
       "module-global journal semaphore (history-journal.ts:29) → per layer, one layer per home (A9)",
     ],
@@ -338,6 +339,7 @@ export const workflows = {
 /** Platform services, each kept under the service rule above (not every entry is re-checked yet). */
 export const platform = [
   "HomeLock (one exclusive lock per <home>, reentrant with leases as WriterAuthority is today: writer-lock.ts:9-13,133-135)", // D3
+  "ProcessLock (crash-released exclusive lock over node:sqlite, for the workspace lease; A8)",
   "AuthorIgnoreRepository (runtime-scoped resource; author-sync-testing.md:1117-1135)",
 
   "Renderer",

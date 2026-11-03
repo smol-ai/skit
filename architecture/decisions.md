@@ -283,7 +283,7 @@ API: `architecture/author.ts`. Each entry is a choice today's code does not sett
 **Recommend:**
 - `read` reports `Connected { leftover: None | Matching | Mismatched | Invalid }`. The portable `skit.remote.json` is the authority (ADR-0010:13, ADR-0011:5).
 - Sync deletes only a `Matching` leftover, through its own transition. That transition touches nothing but `connection.json` and never resets the sync checkpoint. `Mismatched` or `Invalid` stops sync, which reports it and changes nothing. Publish ignores the leftover.
-- `Connecting → Connected` requires a `CreateReceipt` whose request id and destination match the checkpoint (`sync.ts:615-629`). Only that receipt may reset the checkpoint to `Idle { base: null }` (`syncState.transition` with `reset`).
+- `Connecting → Connected` requires a `CreateReceipt` whose request id and destination match the checkpoint (`sync.ts:615-629`). Only that receipt may reset the checkpoint to `Idle { base: null }` (`syncState.save` with `reset`).
 
 **Evidence:** after a crash, t3code re-runs only the steps on its `REPLAY_SAFE_EFFECT_TYPES_AFTER_PROCESS_LOSS` list (`"checkpoint.capture"`, the cleanups) ([T/apps/server/src/orchestration-v2/EffectOutbox.ts#L125-L144](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/orchestration-v2/EffectOutbox.ts#L125-L144)). This is the same rule as D4.
 
@@ -302,7 +302,7 @@ API: `architecture/author.ts`. Each entry is a choice today's code does not sett
 
 **Problem:** `saveSyncState` reads the whole `sync-bindings.json`, changes one entry and renames the file over the old one (`sync.ts:339-374`). Nothing holds a lock. Two SKITs syncing at once can each erase the other's checkpoint, and a lost `Sending` or `Writing` checkpoint is exactly what recovery needs.
 
-**Recommend:** `syncState.transition` holds the home lock (D3) for the whole read-modify-write.
+**Recommend:** `syncState.save` holds the home lock (D3) for the whole read-modify-write.
 - It refuses with `AuthorSyncStateConflict` unless the saved entry still equals `from`.
 - It rewrites only that entry and keeps every other entry.
 - It refuses `AuthorSyncStateIllegal` unless the engine's pure step policy allows `from → to`.
@@ -315,9 +315,9 @@ API: `architecture/author.ts`. Each entry is a choice today's code does not sett
 **Problem:** `app.ts` gave AuthorHistory a `sync(remote)` operation. A `withStore` escape hatch would instead give any caller raw store authority (core `history.ts:95-105`). `Sync.Remote` is a `Context.Service` (core `sync.ts:95-124`), yet it owns no state, holds no resource, and is built anew for every command (`sync.ts:517-590`).
 
 **Decided:**
-- AuthorHistory exposes owner methods (`observe`, `retain`, `syncState.{read, transition}`) and one narrow `engineStore`, a `History.Store` adapter it builds over `<home>/history`. **Approved storage port:** the engine may write through that adapter because its writes (`putTree`, `commit`) are immutable, content-addressed and idempotent (`device-store.ts:32-66`). The adapter never touches the journal or `sync-bindings.json`.
+- AuthorHistory exposes owner methods (`capture`, `retain`, `syncState.{read, save, prepareWrite}`) and one narrow `engineStore`, a `History.Store` adapter it builds over `<home>/history`. **Approved storage port:** the engine may write through that adapter because its writes (`putTree`, `commit`) are immutable, content-addressed and idempotent (`device-store.ts:32-66`). The adapter never touches the journal or `sync-bindings.json`.
 - `Sync.Remote` becomes a plain `remote` input to `Sync.loadPlanInput` and `Sync.run`, built by the workflow from the Registry client. This follows the service rule, which allows a service only when it owns state or holds a resource. Listed in `app.ts` removals.
-- The workflow drives `Sync.run`. Its `write` callback calls `observe` and then `lease.writeTree`. AuthorHistory needs neither the Registry nor AuthorWorkspace's write side.
+- The workflow drives `Sync.run`. Its `write` callback calls `capture` and then `lease.writeTree`. AuthorHistory needs neither the Registry nor AuthorWorkspace's write side.
 
 **Evidence (partial):** t3code's stores expose narrow writes, for example `/** Call inside the commit transaction. */ readonly apply` ([ProjectStore.ts#L73-L77](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/orchestration-v2/ProjectStore.ts#L73-L77)). A separate driver composes them into one commit ([EventSink.ts#L739-L766](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/orchestration-v2/EventSink.ts#L739-L766)). In t3code that driver is a service, while here the rules make it a plain function.
 
@@ -328,9 +328,9 @@ API: `architecture/author.ts`. Each entry is a choice today's code does not sett
 **Decided:**
 - `AuthorWorkspace.acquire(root)` returns a scoped `WorkspaceLease`. All workspace writes are methods on the lease: `register`, `transition` and `writeTree`. The plain built-in edits (`init` scaffold, `invocation`) take the lease as evidence, and `register`, remove and sync all hold it.
 - The lease is not reentrant: a second acquire fails `AuthorWorkspaceBusy` at once, in this process or another.
-- The lock file is `.skit/lock`. Before taking it, acquire checks that `realPath(root) === root`, refuses a `.skit` that is not a real directory, and opens the lock with no-follow, refusing anything but a regular file (`AuthorWorkspaceUnsafe`). The OS releases the lock on crash.
+- The lock is an exclusive SQLite transaction on `.skit/lock.sqlite` (`PRAGMA busy_timeout = 0; BEGIN EXCLUSIVE`), held through a new `ProcessLock` platform port over `node:sqlite`, which SKIT already uses for the history journal. The file never holds data and is never unlinked; the OS releases the lock when the process exits, even on SIGKILL, so a crash never leaves the folder locked (decided, Tim, 2026-11-04, over a fail-closed pid@host lock file). Before taking it, acquire checks that `realPath(root) === root`, refuses a `.skit` that is not a real directory, and refuses a lock path that is not a regular file (`AuthorWorkspaceUnsafe`).
 - Previews and reads never acquire it, so they never create `.skit` or the lock.
-- `lease.withLeaseReleased(sleep)` releases the lease during network retry sleeps and then takes it back. Every later transition re-checks `from`.
+- `lease.withLeaseReleased(sleep)` releases the lease during network retry sleeps and then takes it back. Every later transition re-checks `from`. States are held → released → held | closed; a handle used while released or closed fails `AuthorLeaseNotHeld`. If the retake fails, the handle closes: the sleep's own failure or interruption wins if it had one, otherwise the retake failure is reported. The per-operation SyncRemote runs every retry delay through it, so retry sites cannot forget. No corpus precedent for release-and-retake.
 - Lock order: workspace lease, then the short home-lock writes, then the Library writer. Only the lease spans network calls.
 
 **Evidence:** t3code's lock: "the OS releases it when the process exits, even on SIGKILL, so a crashed owner never blocks the next start" ([T/apps/server/src/serverOwnership.ts#L177-L197](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/serverOwnership.ts#L177-L197)).
@@ -351,7 +351,7 @@ API: `architecture/author.ts`. Each entry is a choice today's code does not sett
 **Problem:** history reads `workspace.json` directly, both for this root and for an older root when it checks for a live copy (`workflows/author/history.ts:117`, `history-journal.ts:48`), with a path-provenance fallback (`history.ts:115-119`). The full `read` also decodes the connection files and can fail `AuthorRemoteMetadataInvalid` or `AuthorSyncStateInvalid`, which would block backup.
 
 **Decided:**
-- AuthorHistory requires AuthorWorkspace and uses only `identity(root)`, which reads `workspace.json` alone.
+- AuthorHistory requires AuthorWorkspace and uses only `readIdentity(root)`, which reads `workspace.json` alone.
 - Only `AuthorWorkspaceMetadataInvalid` falls back to path provenance. An absent file, or a gone root, is `None`. Other failures propagate, so "no identity" is never confused with "could not read".
 - AuthorWorkspace never requires AuthorHistory, so there is no cycle.
 
@@ -377,7 +377,7 @@ API: `architecture/author.ts`. Each entry is a choice today's code does not sett
 - Replanning after a lost Registry compare-and-set (`Sync.Moved`, `sync.ts:460-464`) is separate and unchanged.
 
 **Options:**
-- **resume:** each path whose file matches the checkpoint's `from` or `to` entry is finished to `to`. If any path matches neither, sync stops and reports those paths. It keeps the `Writing` checkpoint and leaves the edited files alone, which `observe` has already backed up. This needs an explicit way forward for the user.
+- **resume:** each path whose file matches the checkpoint's `from` or `to` entry is finished to `to`. If any path matches neither, sync stops and reports those paths. It keeps the `Writing` checkpoint and leaves the edited files alone, which `capture` has already backed up. This needs an explicit way forward for the user.
 - **merge (today):** as described above, plus a new `Writing` saved for the merged tree before it is written.
 
 **Decided (Tim, 2026-11-04): merge.** The next sync carries on like a normal sync: it keeps your edits, finishes the server's changes, and reports a file you both changed as a conflict instead of overwriting it. This is an exception to D4's stop-and-report rule. D4 is about Library setup steps, where stopping is safe; here, stopping would only make the user do a merge by hand that sync can already do safely.
@@ -387,7 +387,9 @@ API: `architecture/author.ts`. Each entry is a choice today's code does not sett
 **Problem:** `writeTree` took bare trees (`author.ts`, earlier draft), so nothing proved a `Writing` checkpoint existed. Today it stages in the global temp dir (`sync.ts:417`) and renames across (`:427`), which is EXDEV on another filesystem. It also never fsyncs (`sync.ts:421-434`), while the engine advances the checkpoint right after (core `sync.ts:569-572`).
 
 **Decided:**
-- `syncState.prepareWrite` saves a `Writing` and returns a `PreparedWrite`, after checking that both trees are stored. `syncState.transition` handles every other step and returns nothing, so the token is never optional. `lease.writeTree` requires one and refuses `AuthorWriteNotPrepared` unless the trees hash to it.
+- `syncState.prepareWrite` saves a `Writing` and returns a `PreparedWrite`, after checking that both trees are stored. `syncState.save` handles every other step and returns nothing, so the token is never optional. `lease.writeTree` requires one and refuses `AuthorWriteNotPrepared` unless the trees hash to it, it was prepared under this lease's `ownerId` at its current `revision`, its workspace id is this workspace's, and it is unused.
+- Every checkpoint step (`save`, `prepareWrite`) takes the lease and changes its `revision`, so an outstanding token goes stale after any later step or a release-and-retake. Any write attempt uses its token up, a failed or partial one too; recovery prepares again. This is t3code's outbox guard, status and lease owner checked at the moment of the write ([T/apps/server/src/orchestration-v2/EffectOutbox.ts#L586-L642](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/orchestration-v2/EffectOutbox.ts#L586-L642)).
+- `prepareWrite` reports a missing, unreadable or wrong-hash tree as `AuthorHistoryInvalid`.
 - `writeTree` stages under `<root>/.skit/stage-*`, on the target filesystem. EXDEV from a nested mount is reported, never copied around.
 - Before success, `writeTree` fsyncs every written file and every directory whose entries changed. The next acquire removes leftover stage folders.
 
@@ -395,7 +397,7 @@ API: `architecture/author.ts`. Each entry is a choice today's code does not sett
 
 **Problem:** `Observation` dropped `treeHash`, and sync scans a second time (`sync.ts:511`) while using the first observation's timestamp as its edit time (`sync.ts:670`).
 
-**Decided:** `observe` returns `treeHash`, and `scanAuthorSyncTree` reports the verbatim hash of the snapshot it normalized. If the two differ, sync observes and scans again, a bounded number of times, and then fails `LocalFilesChangedDuringSync`.
+**Decided:** `capture` returns `treeHash`, and `scanAuthorSyncTree` reports the verbatim hash of the snapshot it normalized. If the two differ, sync captures and scans again, a bounded number of times, and then fails `LocalFilesChangedDuringSync`.
 
 **OPEN (sync policy, not blocking):** a timestamp per path and how clock skew is reported (`docs/author-sync-port.md`, "Next slices" 1).
 
@@ -415,3 +417,11 @@ A retry that finds `Removing` runs `Library.apply` again only if the collection 
 **Problem:** `author delete` touches only the Registry. The earlier draft claimed the next first connection resets the stale checkpoint, which is not automatically true: a Connected workspace never reconnects by itself.
 
 **Decided (Tim, 2026-11-04):** delete leaves `skit.remote.json`, the checkpoint and the history as they are. The next sync of that workspace reports `remote_missing` and stops. Reconnecting is an explicit user action, such as removing `skit.remote.json` and syncing with `--to`. Its first connection then resets the checkpoint through a `CreateReceipt` (A4). Nothing resets on its own, because a missing remote may be an outage or a permissions problem rather than a deletion.
+
+## Author API names (decided, Tim, 2026-11-04)
+
+- `observe` → `capture`: it saves the folder's tree to history. opencode `capture` "Capture the current … filesystem state as a content-addressed tree" ([O/packages/core/src/snapshot.ts#L43-L49](https://github.com/anomalyco/opencode/blob/68bc26b7da1990ce10ffecfbc1e09eb13aa5d824/packages/core/src/snapshot.ts#L43-L49)); yielded-auth `capture` ([AuthenticationAuthority.ts#L29-L32](https://github.com/yielded-dev/auth/blob/f1e2449efef2db039120e92d7018e6d2d671228a/packages/auth/src/sessions/AuthenticationAuthority.ts#L29-L32)).
+- `syncState.transition` → `syncState.save`: the engine's own name for the step (`packages/skit/src/sync/sync.ts:388`, `save: (state) => …`).
+- `identity` → `readIdentity`, `root` → `resolveRoot`: verb plus object, as t3code's CheckpointStore (`captureCheckpoint`, `restoreCheckpoint`: [T/…/CheckpointStore.ts#L45-L75](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/checkpointing/CheckpointStore.ts#L45-L75)); `resolve` after Effect `Path.resolve`.
+- Lease `holder` → `ownerId` + `revision`: t3code's per-hold `ownerId` ([T/apps/server/src/serverOwnership.ts#L183-L190](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/serverOwnership.ts#L183-L190)); yielded-auth "Reject unless the captured revision is still current" ([AuthenticationAuthority.ts#L33](https://github.com/yielded-dev/auth/blob/f1e2449efef2db039120e92d7018e6d2d671228a/packages/auth/src/sessions/AuthenticationAuthority.ts#L33-L36)).
+- Not renamed, no corpus precedent found for an alternative: `retain`, `lease.transition`, `lease.register`, `lease.advance`.
