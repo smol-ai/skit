@@ -36,12 +36,9 @@ export interface ListedPat extends Schema.Schema.Type<typeof ListedPat> {}
 export class CurrentPrincipal extends Context.Service<CurrentPrincipal, Principal>()(
   "@smolai/skit-core/CurrentPrincipal",
 ) {}
-export class CurrentRequest extends Context.Service<CurrentRequest, Request>()(
-  "@smolai/skit-core/CurrentRequest",
-) {}
 export class PrincipalAuthentication extends HttpApiMiddleware.Service<
   PrincipalAuthentication,
-  { provides: CurrentPrincipal | CurrentRequest }
+  { provides: CurrentPrincipal }
 >()("@smolai/skit-core/PrincipalAuthentication", {
   error: [UnauthorizedResponse, StorageFailureResponse],
 }) {}

@@ -1,7 +1,8 @@
+import { HttpServerRequest } from "effect/http";
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { ReadinessInspector } from "../readiness/service.js";
-import { CurrentPrincipal, CurrentRequest } from "./authentication.js";
+import { CurrentPrincipal } from "./authentication.js";
 import { ConsumerAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import { forbiddenResponse, sessionRequiredResponse, storageFailureResponse } from "./errors.js";
 import { noStore } from "./response.js";
@@ -24,8 +25,8 @@ export const readinessHandlers = HttpApiBuilder.group(
           );
           if (!operator) return yield* Effect.fail(forbiddenResponse);
 
-          const request = yield* CurrentRequest;
-          const readiness = yield* inspector.inspect(new URL(request.url).origin);
+          const request = yield* HttpServerRequest.HttpServerRequest;
+          const readiness = yield* inspector.inspect(new URL(request.originalUrl).origin);
           yield* noStore;
           return { schema: "skit.server.readiness.v1" as const, ...readiness };
         }),

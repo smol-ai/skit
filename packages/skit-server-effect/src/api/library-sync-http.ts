@@ -1,9 +1,10 @@
+import { HttpServerRequest } from "effect/http";
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { credentialOriginAllowed } from "../auth/request-context.js";
 import { ServerConfiguration } from "../configuration.js";
 import { LibrarySync } from "../library/library-sync.js";
-import { CurrentPrincipal, CurrentRequest } from "./authentication.js";
+import { CurrentPrincipal } from "./authentication.js";
 import { ConsumerAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import {
   forbiddenOriginResponse,
@@ -46,9 +47,13 @@ export const librarySyncHandlers = HttpApiBuilder.group(
         write: ({ payload }) =>
           Effect.gen(function* () {
             const principal = yield* principalWithScope;
-            const request = yield* CurrentRequest;
+            const request = yield* HttpServerRequest.HttpServerRequest;
             if (
-              !credentialOriginAllowed(principal.credential, request, configuration.publicAppOrigin)
+              !credentialOriginAllowed(
+                principal.credential,
+                request.headers.origin,
+                configuration.publicAppOrigin,
+              )
             )
               return yield* Effect.fail(forbiddenOriginResponse);
             const library = yield* libraries

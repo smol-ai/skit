@@ -18,6 +18,6 @@ export const authenticateRequest = Effect.fn("Authentication.authenticateRequest
 
 export const credentialOriginAllowed = (
   credential: Principal["credential"],
-  request: Request,
+  origin: string | undefined,
   publicAppOrigin: string,
-) => credential !== "session" || request.headers.get("origin") === publicAppOrigin;
+) => credential !== "session" || origin === publicAppOrigin;

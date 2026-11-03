@@ -1,3 +1,4 @@
+import { HttpServerRequest } from "effect/http";
 import { Effect, Schema } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { credentialOriginAllowed } from "../auth/request-context.js";
@@ -10,7 +11,7 @@ import {
 import { Skits } from "../skits/service.js";
 import type { DatabaseError } from "../platform/cloudflare.js";
 import { AuthoringAuthenticatedApi } from "@smolai/skit-core/universal/api";
-import { CurrentPrincipal, CurrentRequest } from "./authentication.js";
+import { CurrentPrincipal } from "./authentication.js";
 import {
   skitExistsResponse,
   skitNotFoundResponse,
@@ -56,7 +57,7 @@ export const skitAuthoringHandlers = HttpApiBuilder.group(
         if (
           !credentialOriginAllowed(
             principal.credential,
-            yield* CurrentRequest,
+            (yield* HttpServerRequest.HttpServerRequest).headers.origin,
             configuration.publicAppOrigin,
           )
         )

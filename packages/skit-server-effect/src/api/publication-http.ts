@@ -1,3 +1,4 @@
+import { HttpServerRequest } from "effect/http";
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { Authorization } from "../authorization/service.js";
@@ -9,7 +10,7 @@ import {
   releasePublishRequestSchema,
 } from "@smolai/skit-core/universal/authoring";
 import { Publication } from "../publication/service.js";
-import { CurrentPrincipal, CurrentRequest } from "./authentication.js";
+import { CurrentPrincipal } from "./authentication.js";
 import { PublicationAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import {
   archiveTooLargeResponse,
@@ -44,9 +45,13 @@ export const publicationHandlers = HttpApiBuilder.group(
           if (!principal.scopes.has("publication:write"))
             return yield* Effect.fail(insufficientScopeResponse);
 
-          const request = yield* CurrentRequest;
+          const request = yield* HttpServerRequest.HttpServerRequest;
           if (
-            !credentialOriginAllowed(principal.credential, request, configuration.publicAppOrigin)
+            !credentialOriginAllowed(
+              principal.credential,
+              request.headers.origin,
+              configuration.publicAppOrigin,
+            )
           )
             return yield* Effect.fail(forbiddenOriginResponse);
 

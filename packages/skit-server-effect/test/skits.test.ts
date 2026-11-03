@@ -67,6 +67,7 @@ const signIn = Effect.gen(function* () {
     baseUrl: origin,
   });
   return {
+    cookie,
     skits: authoring.skits,
     authorInventory: authoring.authorInventory,
     skitDelete: authoring.skitDelete,
@@ -99,6 +100,26 @@ const archiveOf = (tree: History.Tree) =>
       ),
     ),
   );
+
+it.effect("rejects a session write from another site", () =>
+  withRegistry(({ cookie }) =>
+    Effect.gen(function* () {
+      for (const headers of [{ cookie, origin: "https://evil.test" }, { cookie }]) {
+        const httpClient = (yield* HttpClient.HttpClient).pipe(
+          HttpClient.mapRequest(HttpClientRequest.setHeaders(headers)),
+        );
+        const { skits } = yield* HttpApiClient.makeWith(AuthoringAuthenticatedApi, {
+          httpClient,
+          baseUrl: origin,
+        });
+        expect(
+          yield* Effect.flip(skits.create({ payload: { ...params, visibility: "private" } })),
+        ).toEqual({ error: "forbidden_origin" });
+      }
+      expect(yield* countRows("skits")).toBe(0);
+    }),
+  ),
+);
 
 it.effect("creation replays only its saved request and never resets a current revision", () =>
   withRegistry(({ skits }) =>

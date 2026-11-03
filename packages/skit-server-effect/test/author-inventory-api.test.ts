@@ -2,11 +2,7 @@ import { expect, layer } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { HttpServer } from "effect/http";
 import { HttpApiTest } from "effect/http-api";
-import {
-  CurrentPrincipal,
-  CurrentRequest,
-  PrincipalAuthentication,
-} from "../src/api/authentication.js";
+import { CurrentPrincipal, PrincipalAuthentication } from "../src/api/authentication.js";
 import { authorInventoryHandlers } from "../src/api/author-inventory-http.js";
 import { AuthoringAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import { requestDecodingLayer } from "../src/api/request-decoding.js";
@@ -27,10 +23,7 @@ const middleware = (current: Principal) =>
   Layer.succeed(
     PrincipalAuthentication,
     PrincipalAuthentication.of((effect) =>
-      effect.pipe(
-        Effect.provideService(CurrentPrincipal, current),
-        Effect.provideService(CurrentRequest, new Request("https://skit.test/api/author/skits")),
-      ),
+      effect.pipe(Effect.provideService(CurrentPrincipal, current)),
     ),
   );
 
