@@ -40,7 +40,7 @@ export const owners = {
     intents: [
       "Enable | Disable | Remove | Update | Install | Uninstall", // EXISTS
       "Undo | Restore | AcceptFinding | RefreshInventory | Manage", // D4: NEW intents
-      "Sync(remote result, expected revision)", // D5
+      "Sync(remote result, expected revision)", // decisions.md "Library sync owns no state"
     ],
     requires: ["InstalledSkills", "FileSystem", "Path", "LinkStat", "SourceProcess", "HomeLock"],
     layer:
@@ -85,7 +85,7 @@ export const owners = {
       "exported writeRawAtomic/writeJsonAtomic/writeJsonExclusive/copyLocalTree/ensureSkillsDirectoryWritable",
       "CLI marker and folder writes (setup-undo-files.ts:95,101,376,406; recovery-moves.ts:315)",
       "inventory/refresh.ts calling keepInstalledSkillBackup directly → InstalledSkills.backups.keep after a verified successor (architecture.md:223)",
-      "TreeHasher service (one impl; tests inject a failing hash — D11)",
+      "TreeHasher service (one impl; tests inject a failing hash — decisions.md: When something is a Context.Service)",
     ],
   },
 
@@ -131,7 +131,7 @@ export const owners = {
     module: "packages/cli/src/author/**",
     owns: [
       "<root>/.skit/workspace.json, .skit/.gitignore",
-      "<root>/.skit/connection.json (device checkpoint, git-ignored) + <root>/skit.remote.json (committed, portable; ADR-0010, ADR-0011) — two files stay, one logical state", // D6
+      "<root>/.skit/connection.json (device checkpoint, git-ignored) + <root>/skit.remote.json (committed, portable; ADR-0010, ADR-0011) — two files stay, one logical state", // decisions.md "The author connection is one state"
       "<root>/.skit/lock (workspace lease; A8), <root>/.skit/stage-* (writeTree staging; A13)",
       "workspace tree writes during sync",
     ],
@@ -216,7 +216,7 @@ export const owners = {
       "claimUsername",
       "createOperator",
       "tokens.{create, list, revoke}",
-      "DESIGNED, NOT IMPLEMENTED: suspend, reinstate, invalidateCredentials (writes state, authorization_generation)", // D9
+      "DESIGNED, NOT IMPLEMENTED: suspend, reinstate, invalidateCredentials (writes state, authorization_generation)", // decisions.md "One Identity owner"
     ],
     removes: [
       "auth/provisioning.ts helper written from two services",
@@ -244,7 +244,7 @@ export const owners = {
     owns: [
       "skits",
       "revisions, revision_parents, revision_trees, revision_tree_entries",
-      "releases (a published state of a revision)", // D7
+      "releases (a published state of a revision)", // decisions.md "Skits owns the whole SKIT"
       "draft-blobs/**, releases/**.zip",
     ],
     ops: [
@@ -281,14 +281,14 @@ export const owners = {
     ],
   },
 
-  // D8 (decided): resource_grants dropped; access is namespace owner or team member. HttpApi
+  // decisions.md "No per-SKIT grants" (decided): resource_grants dropped; access is namespace owner or team member. HttpApi
   // middleware establishes principal + scope; each owner enforces access.
   AuthorizationMiddleware: {
     status: "RESHAPE",
     owns: [],
     ops: ["principal + scope for the matched route"],
     removes: [
-      "resource_grants table, its indexes and every grant query (D8)",
+      "resource_grants table, its indexes and every grant query (decisions.md: No per-SKIT grants)",
       "Authorization service and its 7 single-caller can*/has*/scope methods",
       "authorization checks split between handlers and services",
       "Readiness.isServerOperator and Teams' private ownedTeam SQL",
@@ -303,7 +303,7 @@ export const workflows = {
   LibrarySync: {
     status: "RESHAPE",
     module: "packages/cli/src/workflows/library/library-sync*.ts",
-    owns: [], // D5: owns no state; local writes are Library.apply(Sync)
+    owns: [], // decisions.md "Library sync owns no state": owns no state; local writes are Library.apply(Sync)
     ops: ["sync(origin)"],
     requires: ["Library", "Registry", "RegistryHttp", "HomeLock"],
     invariants: [
@@ -350,7 +350,7 @@ export const removedServices = [
   "server re-export shims (api/bootstrap.ts, api/errors.ts, bootstrap/contracts.ts); auth/contracts.ts's own types (CreatePatInput …) move, not deleted",
 ] as const;
 
-/** Deleted commands (D14): never wired since the initial public release. */
+/** Deleted commands (decisions.md "Unwired commands"): never wired since the initial public release. */
 export const removedCommands = [
   "audit command (handlers/audit.ts only; audit/local.ts stays: the TUI is built on it)",
   "harness probe (handlers/harness/probe.ts)",
@@ -358,7 +358,7 @@ export const removedCommands = [
 
 /** Composition: one boundary layer per process; handlers yield owners and nothing else. */
 export const entries = {
-  cli: "main.ts provides platform once; one helper builds owner layers per command from flags (--home)", // D12
+  cli: "main.ts provides platform once; one helper builds owner layers per command from flags (--home)", // decisions.md "Wiring"
   tui: "same boundary layer; imports only Library + session API, not CLI source paths",
   server: "applicationLayers: one provider site per service",
   removes: [

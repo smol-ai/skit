@@ -85,6 +85,152 @@ E  = https://github.com/Effect-TS/effect/blob/3b28bf686bf26e9700edd39c025aff2744
   - t3code re-runs only steps listed as safe to repeat and cancels the rest ([EffectOutbox.ts#L125-L144](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/orchestration-v2/EffectOutbox.ts#L125-L144), [#L492-L519](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/orchestration-v2/EffectOutbox.ts#L492-L519)).
   - Effect workflows replay after a crash and compensate only on failure ([Workflow.ts#L942-L961](https://github.com/Effect-TS/effect/blob/3b28bf686bf26e9700edd39c025aff2744dc5303/packages/effect/src/workflow/Workflow.ts#L942-L961)).
 
+## Library sync owns no state
+
+**Recommend:** sync keeps its merge and transfer logic, but writes only through `Library.apply(Sync)` with the expected revision.
+
+**Evidence:**
+- maple `mutate(transform)` re-reads, re-applies and then writes only if the version is unchanged, with a bounded number of retries (DashboardPersistenceService.ts L573-L579).
+- t3code takes single-writer ownership before it writes: "never write behind it" (D3 link).
+
+## The author connection is one state with one way to change it
+
+**Problem:** today the connection is spread over `connection.json` and `skit.remote.json`, with three save APIs (`workflows/author/sync.ts:288-309`). `SyncDestination` already models NewRemote, Connecting and Connected (`:238`).
+
+**Recommend:** one stored value, decoded at one boundary, and one transition function that returns the next state.
+
+**Evidence:**
+- maple's alert lifecycle `Clear | Breaching | Open` is one record with one fold, `foldObservation`, and it decodes through Schema instead of asserting the shape ([M/packages/alerting-core/src/hysteresis.ts#L1-L50](https://github.com/MapleTechLabs/maple/blob/24ff600da525eddfbe4f65bd4ca9da5e902e4c44/packages/alerting-core/src/hysteresis.ts#L1-L50), L311-L337). It replaced two hand-written copies that "agreed only by luck".
+- t3code's runtime state is one record with one `publish` ([T/apps/server/src/serverRuntimeState.ts#L12-L25](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/serverRuntimeState.ts#L12-L25)).
+- I found no per-state save methods anywhere in the corpus.
+
+## Skits owns the whole SKIT, including releases, publishing and deletion
+
+**Recommend:**
+- A release is a published state of a revision, owned by Skits.
+- SkitDeletion, Publication, ReleaseStore and AuthorInventory fold into Skits.
+
+**Evidence:**
+- maple keeps `Dashboards` and `DashboardVersions` in one owner whose API includes `restoreVersion` and `delete`. Its delete drops the history rows itself (DashboardPersistenceService.ts L25, L644-L679, L790-L827).
+- Counter-example to avoid: maple's organization delete removes rows directly from about 50 tables that other services own ([M/packages/backend/src/services/org/OrganizationService.ts#L119-L179](https://github.com/MapleTechLabs/maple/blob/24ff600da525eddfbe4f65bd4ca9da5e902e4c44/packages/backend/src/services/org/OrganizationService.ts#L119-L179)). That is today's SkitDeletion. If a cross-owner delete is ever needed, each owner should expose its own purge.
+
+**Decided (Tim, 2026-11-03): keep storing release zips.**
+- The zip under `releases/**.zip` is owned by Skits and written at publish time.
+- The archive's byte-for-byte match with the revision tree stays a publish-time check inside Skits. Today that check reads Skits' tables directly from `publication/archive.ts`.
+
+## No per-SKIT grants: access is namespace owner or team member
+
+**Recommended before the decision below:**
+- There is no Authorization service that owns grants. Whatever owns a resource writes its grants.
+- An HttpApi middleware establishes who is calling and what scope they have.
+- The owners enforce roles themselves. That replaces the seven single-caller `can*` methods and the mixed checks between handlers and services.
+
+**Evidence:**
+- maple checks authentication and route scope in an HttpApi security middleware ([M/apps/api/src/…/ApiAuthorizationV2Live.ts#L80-L114](https://github.com/MapleTechLabs/maple/blob/24ff600da525eddfbe4f65bd4ca9da5e902e4c44/apps/api/src)). The path was not fully resolved, so this link is to the directory.
+- maple's domain service checks roles itself (`requireAdmin(roles, …)`, OrganizationService.ts L436).
+- maple's `ApiKeysService.revoke` revokes the related grants in the same transaction.
+- executor has one admin gate. Its own comments describe a privilege-escalation bug caused by trusting a caller-supplied organization id (`X/apps/host-selfhost/src/admin/require-admin.ts#L1-L46`).
+
+**Decided (Tim, 2026-11-03): drop resource grants.**
+- Sharing one SKIT with one person is not wanted soon.
+- `resource_grants`, its indexes, and every grant query in Authorization are removed. These are `hasGrantForSubjects`, the grant branches of the read, author, publish and delete checks, `readableReleaseIds`, and the granted-SKIT half of `authorInventoryScope`.
+- Access becomes namespace owner or team member only.
+- Nothing can create a grant row today, so no data is lost.
+- `docs/architecture.md:335` and `docs/self-hosting.md:282` describe grants and need updating in the same change.
+
+## One Identity owner beside Better Auth
+
+**Recommend:**
+- Identity is the only writer of `user`, `account`, `principals` and `namespaces`.
+- First-boot setup of the initial operator is idempotent and goes through the library's own API.
+- Revocation uses a `revokedAt` timestamp, or tokens that re-read their row on use.
+
+**Evidence:**
+- executor keeps its own tables beside the provider, written by one mirror service ("WorkOS owns users … This service keeps the accounts / memberships rows in step", `X/apps/cloud/src/auth/workos-mirror.ts#L1-L17`).
+- executor's first boot creates the admin through `auth.api.createUser` rather than raw inserts (`X/apps/host-selfhost/src/auth/seed.ts#L8-L78`). SKIT's Bootstrap inserts into Better Auth's tables directly.
+- t3code `SessionTokenRevokedError { revokedAt }` (`T/apps/server/src/auth/SessionStore.ts#L132-L142`).
+- maple: "their tokens re-read the row, so deleting it ends them" (OrganizationService.ts L171).
+- yielded-auth checks the exact revision of the evidence at commit time, which works like a generation counter (`packages/auth/src/sessions/AuthenticationAuthority.ts#L24-L41`).
+
+**Decided (Tim, 2026-11-03): keep account locking.**
+- `principals.state` and `authorization_generation` stay, along with the checks every request already does.
+- Identity is their only writer. Its write API (`suspend`, `reinstate`, `invalidateCredentials`) is declared in the contract as *designed, not implemented* until a feature needs it.
+- `docs/self-hosting.md:282` already expects operator routes for suspension.
+
+Still open: whether `principals` becomes columns on Better Auth's `user` table. I found no corpus evidence for or against Better Auth's `additionalFields`.
+
+## No garbage collection yet; each owner does its own cleanup later
+
+**Recommend:**
+- Skits and ServerLibrary each expose a `cleanup` operation.
+- A cron trigger runs it in batches, and a storage lifecycle rule in R2 acts as a backstop.
+- A "deferred" archive cleanup becomes a queued row that is retried, not a status message.
+
+**Evidence:**
+- t3code's outbox: "Persist rows only. Notify workers after the surrounding transaction commits". Work is claimed under a lease and retried, and the attachment cleanup is idempotent ([T/apps/server/src/orchestration-v2/EffectOutbox.ts#L107-L247](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/orchestration-v2/EffectOutbox.ts#L107-L247)).
+- t3code's Cloudflare D1 + R2 worker runs a per-minute cron that calls the owning `Cache` service's `cleanup` in batches "below D1's 1,000-query invocation limit", with an R2 age rule as backstop (`T/infra/task-cache/…/Cleanup.ts#L4-L12`, `resources.ts#L24-L37`).
+- I found no example of compensating after a failed commit, which is what SKIT does today.
+
+**Decided (Tim, 2026-11-03): unreachable but still stored is acceptable for now.**
+- There is no garbage collection yet.
+- Deleting a SKIT removes its rows only, so its blobs and zips become unreachable.
+- The best-effort zip delete in SkitDeletion and its "deferred" status go away. So does Publication's delete-on-failure compensation, since an orphaned zip is unreachable too. Both are partial-failure paths that no longer buy anything.
+- When cleanup is wanted, the owners above do it with a reference-checked sweep.
+
+## When something is a Context.Service
+
+**Decided (Tim, 2026-11-03; wording updated 2026-11-04 after the corpus review):** a `Context.Service` exists only if it owns state, holds a resource, is a platform boundary that a real second implementation replaces, or is a key the framework requires (HttpApi middleware, command annotations). Test substitution is never the reason; tests are rewritten instead. Everything else is a plain function. Workflows that coordinate owners are plain functions, never services. The rule is also stated at the top of `app.ts`.
+
+- Otherwise it becomes private functions inside its owner.
+- Effect makes services of real boundaries: its CLI output formatter is a service "overridden for custom formatting" ([E/packages/effect/src/cli/CliOutput.ts#L208-L235](https://github.com/Effect-TS/effect/blob/3b28bf686bf26e9700edd39c025aff2744dc5303/packages/effect/src/cli/CliOutput.ts#L208-L235)), and HttpApi requires middleware to be a service ([M/packages/domain/src/http/current-tenant.ts#L92-L121](https://github.com/MapleTechLabs/maple/blob/24ff600da525eddfbe4f65bd4ca9da5e902e4c44/packages/domain/src/http/current-tenant.ts#L92-L121)).
+- "No coordinator services" is SKIT's choice, not an Effect convention: t3code's CLI coordinates in plain functions ([T/apps/server/src/cli/project.ts#L425-L453](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/cli/project.ts#L425-L453)), but its server has a coordinator service, `GitWorkflowService` ([T/apps/server/src/git/GitWorkflowService.ts#L37-L40](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/git/GitWorkflowService.ts#L37-L40)).
+- TreeHasher becomes a plain function over Effect's `Crypto`. Tests fail it with `Crypto.make({ digest: () => fail })`.
+
+**Evidence:**
+- maple keeps its storage helpers as closures inside `make`.
+- t3code `acquireServerOwnership` is a plain `Effect.fn` (D3 link).
+- t3code's single-implementation services hold a resource (`ServerSecretStore` creates its directory with mode 0700, `T/apps/server/src/auth/ServerSecretStore.ts#L138-L151`).
+- Effect documents `Crypto.make` for "a platform integration, test layer, or custom runtime", and its own test substitutes digest that way (`E/packages/effect/src/Crypto.ts#L225-L244`, `E/packages/effect/test/Crypto.test.ts#L6-L10`).
+- `FileSystem.layerNoop` is "a no-op FileSystem implementation for testing" (`E/packages/effect/src/FileSystem.ts#L753-L786`).
+- Effect's docs give no guidance on when *not* to make a service.
+
+## Wiring: platform once per process, owner layers per command
+
+**Recommend:**
+- `main.ts` provides the platform services once.
+- Each command builds its owners' layers from flags such as `--home`, through one shared helper rather than four `handleXCommand` variants.
+- Handlers `yield*` owners only.
+
+**Evidence:**
+- t3code provides `layerCliRuntime` once at `runMain` ([T/apps/server/src/binCli.ts#L102-L106](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/binCli.ts#L102-L106)), then builds its config layer from flags in each command (`cli/auth.ts#L40-L45`, `cli/project.ts#L425-L453`).
+- opencode builds its layers inside each handler (`O/packages/cli/src/index.ts#L36-L83`, `session/list.ts#L85`).
+- maple's handlers call domain services only (`M/apps/api/src/routes/auth.http.ts#L24-L43`).
+
+## Enforcement
+
+**Built (2026-11-03):** conformance types in `architecture/conformance/` check each owner's real interface and requirements against its contract, with debt that only shrinks; lint rules `skit/owner-boundaries` and `skit/approved-services` (`lint/oxlint-plugin-skit.mjs`, lists in `architecture/boundaries.mjs`) enforce imports and the service list. Item 4 below is not built.
+
+**Recommended, in order:**
+1. Each owner's implementation is checked against its declared interface with `satisfies`, with method names compared in both directions.
+2. Each owner's layer gets an explicit type annotation of what it provides and requires.
+3. A lint rule forbids importing another owner's private modules.
+4. Later, compile-time checks on which tiers may depend on which.
+
+**Evidence:**
+- maple: `return {…} satisfies OrganizationServiceApi` (OrganizationService.ts L517-L522).
+- t3code: `const layerBase: Layer.Layer<EventStoreV2, never, OrchestrationEventStore> = …` (`T/apps/server/src/orchestration-v2/EventStore.ts#L79`).
+- opencode's `LayerNode` fails compilation with "Missing dependencies" or "Invalid tag dependencies" ([O/packages/util/src/effect/layer-node.ts#L133-L189](https://github.com/anomalyco/opencode/blob/68bc26b7da1990ce10ffecfbc1e09eb13aa5d824/packages/util/src/effect/layer-node.ts#L133-L189), `app-node.ts#L3-L12`).
+- I found no lint or dependency-boundary configuration in any corpus app. effect-grep has no full-text search, so that is not proof they don't exist.
+
+## Unwired commands
+
+`author {sync, publish, validate, invocation, init, list, delete}`, `audit` and `harness probe` are defined but are not in `commands/tree.ts`.
+
+**Decided (Tim, 2026-11-03):**
+- `author` is in-development work (branch `feat/author-sync-v3`). It stays in the model, governed by the AuthorWorkspace and AuthorHistory owners.
+- The `audit` command handler and `harness probe` are deleted. They have never been wired since the initial public release.
+- **Correction:** `audit/local.ts` stays. The TUI's main view is built on it (`packages/tui/src/index.ts:49,123`; ADR-0024:240).
+
 ## Author owners
 
 API: `architecture/author.ts`. Each entry is a choice today's code does not settle. Line refs are under `packages/cli/src`. **OPEN-FOR-TIM** marks a product choice waiting on Tim; the contract holds for every option.
