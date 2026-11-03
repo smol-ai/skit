@@ -1,7 +1,8 @@
 import { dirname, join } from "node:path";
-import { Effect, Exit, Fiber, FileSystem, Ref, Scope } from "effect";
+import { Effect, Exit, Fiber, FileSystem, Layer, Ref, Scope } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { syncAuthorWorkspace } from "../../src/workflows/author/sync.js";
+import { AuthorWorkspace } from "../../src/author/workspace.js";
 import { loadStoredTrees } from "../../src/workflows/author/history.js";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
 import { testHttpClientLayer } from "./http-test-client.js";
@@ -22,7 +23,10 @@ const remote = {
  */
 export const makeAuthorSyncWorld = Effect.fn("Test.makeAuthorSyncWorld")(function* () {
   const fs = yield* FileSystem.FileSystem;
-  const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-author-world-" });
+  // Canonical, as the workspace owner resolves it, so tests can match the paths it writes.
+  const root = yield* fs.realPath(
+    yield* fs.makeTempDirectoryScoped({ prefix: "skit-author-world-" }),
+  );
   const server = yield* makeAuthorSyncServer();
   const edits = yield* Ref.make<ReadonlyArray<AuthorEdit>>([]);
 
@@ -84,7 +88,11 @@ export const makeAuthorSyncWorld = Effect.fn("Test.makeAuthorSyncWorld")(functio
             home,
             baseUrl: remote.origin,
             ...(first ? { to: "swyx/tools", visibility: "private" as const } : {}),
-          }).pipe(Effect.provide(registryHttpLayer(testHttpClientLayer(server.transport(name))))),
+          }).pipe(
+            Effect.provide(registryHttpLayer(testHttpClientLayer(server.transport(name)))),
+            // Fresh, so the workspace owner writes through a FileSystem a test provides here.
+            Effect.provide(Layer.fresh(AuthorWorkspace.layer)),
+          ),
         ),
         yield* Ref.get(runtime),
       );

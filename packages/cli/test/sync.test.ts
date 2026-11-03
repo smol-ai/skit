@@ -72,7 +72,7 @@ it.effect("first sync previews then records one remote home without publishing i
       "---\nname: review\ndescription: Review code.\n---\n# Review\n",
     );
     yield* makeDir(join(root, ".skit"));
-    yield* writeText(join(root, ".skit", "workspace.json"), '{"device":"local"}\n');
+    yield* writeText(join(root, ".skit", "device.json"), '{"device":"local"}\n');
     yield* makeDir(join(root, "skills", "review", ".skit"));
     yield* writeText(join(root, "skills", "review", ".skit", "fixture.txt"), "included\n");
     yield* Effect.sync(() => execFileSync("git", ["init", "--quiet", root]));
@@ -118,6 +118,7 @@ it.effect("first sync previews then records one remote home without publishing i
     expect(yield* server.current()).toBe(created?.id);
     const paths = created?.tree.map((entry) => entry.path) ?? [];
     expect(paths).not.toContain("skit.remote.json");
+    expect(paths).not.toContain(".skit/device.json");
     expect(paths).not.toContain(".skit/workspace.json");
     expect(paths).not.toContain("device-local.json");
     expect(paths).toContain("new-author-content.md");
@@ -147,7 +148,10 @@ it.effect("a pending first connection cannot be redirected or change visibility"
     };
     yield* server.dropNextResponse("a", "after-create");
     yield* Effect.result(runAuthorSync(root, options, transport));
-    const path = join(root, ".skit/connection.json");
+    const path = join(
+      yield* Effect.flatMap(FileSystem.FileSystem, (fs) => fs.realPath(root)),
+      ".skit/connection.json",
+    );
     const pending = yield* readText(path);
     const events = yield* server.events();
     expect(

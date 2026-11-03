@@ -12,6 +12,7 @@ import {
 import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { SkitConfiguration } from "../src/configuration/skit-configuration.js";
+import { AuthorWorkspace } from "../src/author/workspace.js";
 
 it.effect("A → B → A records three ordered revisions referencing two stored trees", () =>
   Effect.gen(function* () {
@@ -184,6 +185,7 @@ it.effect(
         Effect.provideService(SkitConfiguration, yield* SkitConfiguration),
         Effect.provideService(Digest.Digest, yield* Digest.Digest),
         Effect.provideService(Path.Path, yield* Path.Path),
+        Effect.provideService(AuthorWorkspace, yield* AuthorWorkspace),
         Effect.orDie,
       );
       let interrupted = false;

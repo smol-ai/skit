@@ -1,5 +1,12 @@
 import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
-import { Effect, Option } from "effect";
+import {
+  ImportContentInvalid,
+  initSkit,
+  validateSkitDirectory,
+  type Collection,
+  type LibraryState,
+} from "@smolai/skit-core";
+import { Clock, Effect, FileSystem, Option, Path, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleLibraryCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
@@ -7,16 +14,143 @@ import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags } from "../../commands/parameters.js";
 import { result } from "../../handlers/contracts.js";
 import { Renderer } from "../../presentation/renderer.js";
-import { ensureAuthorWorkspaceRegistered } from "../../library/author-workspace.js";
+import { localLibrary } from "../../library-application/library-owner.js";
+import {
+  AuthorWorkspaceAlreadyRegistered,
+  AuthorWorkspaceRemovalUnfinished,
+  DirectoryAlreadyInLibrary,
+} from "../../library/failures.js";
+import {
+  AuthorWorkspace,
+  WorkspaceId,
+  type Identity,
+  type WorkspaceRoot,
+} from "../../author/workspace.js";
 
+/**
+ * What the Library already says about this folder: no other Collection may claim it, and a
+ * Collection imported from it keeps its workspace id when workspace.json has gone (A3).
+ */
+const checkLibraryClaims = Effect.fn("Author.checkLibraryClaims")(function* (
+  root: WorkspaceRoot,
+  state: LibraryState,
+  identity: Option.Option<Identity>,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const importsFor = (collection: Collection) =>
+    state.imports.filter((sourceImport) => sourceImport.collection_id === collection.collection_id);
+  const sameRoot: Collection[] = [];
+  for (const collection of state.collections) {
+    const inputs = importsFor(collection).map((sourceImport) => sourceImport.input.value);
+    for (const input of inputs)
+      if ((yield* fs.exists(input)) && (yield* fs.realPath(input)) === root) {
+        sameRoot.push(collection);
+        break;
+      }
+  }
+  const authoredId = (collection: Collection | undefined) =>
+    collection?.upstream?.source_identity.kind === "authored-workspace"
+      ? collection.upstream.source_identity.workspace_id
+      : undefined;
+  const imported = sameRoot.find((collection) => authoredId(collection) !== undefined);
+  const expected = Option.isSome(identity) ? identity.value.workspaceId : authoredId(imported);
+  const conflict = sameRoot.find(
+    (collection) => authoredId(collection) === undefined || authoredId(collection) !== expected,
+  );
+  if (conflict)
+    return yield* new DirectoryAlreadyInLibrary({ collectionId: conflict.collection_id });
+  const existing =
+    expected === undefined
+      ? undefined
+      : state.collections.find((collection) => authoredId(collection) === expected);
+  const existingInput = existing === undefined ? undefined : importsFor(existing)[0]?.input.value;
+  if (
+    expected !== undefined &&
+    existingInput !== undefined &&
+    (yield* fs.exists(existingInput)) &&
+    (yield* fs.realPath(existingInput)) !== root
+  )
+    return yield* new AuthorWorkspaceAlreadyRegistered({
+      workspaceId: expected,
+      at: existingInput,
+    });
+  return {
+    adopt: Option.isSome(identity)
+      ? Option.none<WorkspaceId>()
+      : Option.flatMap(
+          Option.fromUndefinedOr(authoredId(imported)),
+          Schema.decodeUnknownOption(WorkspaceId),
+        ),
+    existing,
+  };
+});
+
+/**
+ * `author init`: scaffold the folder and register it for installation, under the workspace lease
+ * (A11). A removed workspace stays opted out unless `register` opts it back in. If the Library
+ * then refuses the import, the workspace stays Registered and a retry reuses its identity (A3).
+ */
 export const authorInitCommand = Effect.fn("CLI.authorInit")(function* (
   input: string,
   register: boolean,
 ) {
-  const result = yield* ensureAuthorWorkspaceRegistered(input, { register, scaffold: true });
-  const initialized = yield* Effect.fromNullishOr(result.initialized).pipe(Effect.orDie);
-  return { initialized, entry: result.entry };
-});
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const workspaces = yield* AuthorWorkspace;
+  const folder = path.resolve(input);
+  // `author init` may start a new Collection: the folder itself is created first.
+  yield* fs.makeDirectory(folder, { recursive: true });
+  const root = yield* workspaces.resolveRoot(folder);
+  const lease = yield* workspaces.acquire(root);
+  const library = yield* localLibrary;
+  const identity = yield* workspaces.readIdentity(root);
+  const claims = yield* checkLibraryClaims(root, yield* library.load, identity);
+  const initialized = yield* initSkit(folder);
+  const validated = yield* validateSkitDirectory(folder, "source", {
+    assessmentContext: "import",
+  });
+  const registered = Option.isNone(identity)
+    ? yield* lease.register({ from: identity, to: "Registered", adopt: claims.adopt })
+    : identity.value.registration === "IdentityOnly"
+      ? yield* lease.register({
+          from: { ...identity.value, registration: "IdentityOnly" },
+          to: "Registered",
+        })
+      : identity.value;
+  // A removal whose Library half finished is completed here; one still in the Library is not.
+  const settled =
+    registered.registration === "Removing"
+      ? claims.existing === undefined
+        ? yield* lease.register({
+            from: { ...registered, registration: "Removing" },
+            to: "Removed",
+          })
+        : yield* new AuthorWorkspaceRemovalUnfinished({
+            collectionId: claims.existing.collection_id,
+          })
+      : registered;
+  if (settled.registration === "Removed" && !register) return { initialized, entry: undefined };
+  const workspace =
+    settled.registration === "Removed"
+      ? yield* lease.register({
+          from: { ...settled, registration: "Removed" },
+          to: "Registered",
+          optIn: true,
+        })
+      : settled;
+  const entry = yield* library.import.authored({
+    root: folder,
+    source: { type: "local", path: folder },
+    sourceIdentity: { kind: "authored-workspace", workspace_id: workspace.workspaceId },
+    label: validated.identity.slug,
+    input: folder,
+    importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
+  });
+  if (validated.descriptor.skills.length === 0)
+    return yield* new ImportContentInvalid({ diagnostics: ["retained Skills are missing"] });
+  return { initialized, entry };
+  // The lease ends with the command.
+}, Effect.scoped);
 
 const path = Argument.String("path").pipe(Argument.optional);
 const register = Flag.Boolean("register").pipe(

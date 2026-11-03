@@ -11,11 +11,8 @@ import {
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
 import { importSource } from "../src/library-application/import-source.js";
 import { executeRemove } from "../src/workflows/library/remove.js";
-import { systemError } from "effect/PlatformError";
-import {
-  ensureAuthorWorkspaceRegistered,
-  type AuthorWorkspaceOptions,
-} from "../src/library/author-workspace.js";
+import { authorInitCommand } from "../src/workflows/author/initialization.js";
+import { AuthorWorkspace } from "../src/author/workspace.js";
 import {
   copySkitFixtureEffect,
   initializeLibraryMachine,
@@ -33,10 +30,7 @@ it.effect(
       yield* copySkitFixtureEffect("authored", source);
       const home = yield* libraryHome({ home: join(root, "home") });
       yield* initializeLibraryMachine(home.home);
-      const options = {
-        workspaceId: () => `workspace_${"a".repeat(32)}`,
-      };
-      const first = yield* home.owned(ensureAuthorWorkspaceRegistered(source, options));
+      const first = yield* home.owned(authorInitCommand(source, false));
       assert.ok(first.entry);
       assert.strictEqual(
         first.entry.collection?.upstream?.source_identity.kind,
@@ -53,7 +47,7 @@ it.effect(
 
       const skillPath = join(source, "skills", "review", "SKILL.md");
       yield* fs.writeFileString(skillPath, `${yield* fs.readFileString(skillPath)}\nUpdated.\n`);
-      const refreshed = yield* home.owned(ensureAuthorWorkspaceRegistered(source, options));
+      const refreshed = yield* home.owned(authorInitCommand(source, false));
       assert.ok(refreshed.entry);
       assert.strictEqual(
         refreshed.entry.collection?.collection_id,
@@ -67,7 +61,7 @@ it.effect(
         [true, false],
       );
       assert.strictEqual(state.skills.find((skill) => skill.name === "review")?.versions.length, 2);
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(AuthorWorkspace.layer), Effect.provide(skitLayer), Effect.scoped),
 );
 
 const workspaceFixture = Effect.gen(function* () {
@@ -78,8 +72,7 @@ const workspaceFixture = Effect.gen(function* () {
   const home = yield* libraryHome({ home: join(root, "home") });
   yield* initializeLibraryMachine(home.home);
   const path = join(source, COLLECTION_CONTROL_DIRECTORY, AUTHOR_WORKSPACE_METADATA_FILE);
-  const ensure = (options: AuthorWorkspaceOptions = {}) =>
-    home.owned(ensureAuthorWorkspaceRegistered(source, options));
+  const init = (register = false, path = source) => home.owned(authorInitCommand(path, register));
   const metadata = fs.readFileString(path).pipe(
     Effect.flatMap(
       Schema.decodeUnknownEffect(
@@ -92,48 +85,42 @@ const workspaceFixture = Effect.gen(function* () {
       ),
     ),
   );
-  return { fs, root, source, home, path, ensure, metadata };
+  return { fs, root, source, home, path, init, metadata };
 });
 
 it.effect("recovers a missing workspace document from the retained identity", () =>
   Effect.gen(function* () {
     const f = yield* workspaceFixture;
-    const first = yield* f.ensure();
+    const first = yield* f.init();
     const before = yield* f.metadata;
     yield* f.fs.remove(f.path);
-    const recovered = yield* f.ensure({
-      workspaceId: () => {
-        throw new Error("identity must be recovered");
-      },
-    });
+    const recovered = yield* f.init();
     assert.strictEqual(
       recovered.entry?.collection.collection_id,
       first.entry?.collection.collection_id,
     );
     assert.deepStrictEqual(yield* f.metadata, before);
     assert.strictEqual((yield* f.home.durable).collections.length, 1);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(AuthorWorkspace.layer), Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("rejects a copied workspace identity before scaffolding or publishing", () =>
   Effect.gen(function* () {
     const f = yield* workspaceFixture;
-    yield* f.ensure();
+    yield* f.init();
     const copy = join(f.root, "copy");
     yield* f.fs.copy(f.source, copy);
     const before = yield* captureDisk([f.source, copy, f.home.home], { identity: true });
-    const failure = yield* Effect.flip(
-      f.home.owned(ensureAuthorWorkspaceRegistered(copy, { scaffold: true })),
-    );
+    const failure = yield* Effect.flip(f.init(false, copy));
     assert.strictEqual(failure._tag, "AuthorWorkspaceAlreadyRegistered");
     yield* assertDiskUnchanged(before);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(AuthorWorkspace.layer), Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("removal requires explicit re-registration and preserves workspace identity", () =>
   Effect.gen(function* () {
     const f = yield* workspaceFixture;
-    const first = yield* f.ensure();
+    const first = yield* f.init();
     assert.ok(first.entry);
     const identity = (yield* f.metadata).workspace_id;
     const state = yield* f.home.durable;
@@ -141,22 +128,22 @@ it.effect("removal requires explicit re-registration and preserves workspace ide
       executeRemove(state, { query: first.entry.collection.collection_id, dryRun: false }),
     );
     assert.strictEqual((yield* f.metadata).registration, "removed");
-    assert.strictEqual((yield* f.ensure()).entry, undefined);
+    assert.strictEqual((yield* f.init()).entry, undefined);
     assert.strictEqual((yield* f.home.durable).collections.length, 0);
-    const registered = yield* f.ensure({ register: true });
+    const registered = yield* f.init(true);
     assert.ok(registered.entry);
     assert.deepStrictEqual(yield* f.metadata, {
       workspace_id: identity,
       registration: "registered",
     });
     assert.strictEqual((yield* f.home.durable).collections.length, 1);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(AuthorWorkspace.layer), Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("removal leaves a different workspace identity untouched", () =>
   Effect.gen(function* () {
     const f = yield* workspaceFixture;
-    const first = yield* f.ensure();
+    const first = yield* f.init();
     assert.ok(first.entry);
     const replacement = JSON.stringify({
       schema: "skit.author-workspace.v1",
@@ -172,49 +159,26 @@ it.effect("removal leaves a different workspace identity untouched", () =>
     );
     assert.strictEqual(yield* f.fs.readFileString(f.path), replacement);
     assert.strictEqual((yield* f.home.durable).collections.length, 0);
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(AuthorWorkspace.layer), Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect(
-  "a failed registration marker leaves retained bytes and identity available for retry",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* workspaceFixture;
-      const failure = yield* Effect.flip(
-        f.ensure().pipe(
-          Effect.provideService(FileSystem.FileSystem, {
-            ...f.fs,
-            rename: (from, to) =>
-              to === f.path
-                ? Effect.fail(
-                    systemError({
-                      _tag: "PermissionDenied",
-                      module: "FileSystem",
-                      method: "rename",
-                      pathOrDescriptor: to,
-                    }),
-                  )
-                : f.fs.rename(from, to),
-          }),
-        ),
-      );
-      assert.strictEqual(failure._tag, "PlatformError");
-      const pending = yield* f.metadata;
-      assert.strictEqual(pending.registration, undefined);
-      const imported = yield* f.home.durable;
-      assert.strictEqual(imported.collections.length, 1);
-      const copy = imported.collection_versions[0]!;
-      assert.isTrue(
-        yield* f.fs.exists(join(collectionVersionPath(f.home.originals, copy.hash), "skit.json")),
-      );
-      const retried = yield* f.ensure();
-      assert.strictEqual(
-        retried.entry?.collection.collection_id,
-        imported.collections[0]?.collection_id,
-      );
-      assert.strictEqual((yield* f.metadata).workspace_id, pending.workspace_id);
-      assert.strictEqual((yield* f.metadata).registration, "registered");
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+it.effect("a refused Library import leaves the workspace registered for a retry", () =>
+  Effect.gen(function* () {
+    const f = yield* workspaceFixture;
+    // Another process holds the Library writer, so Library refuses the import.
+    const lock = join(f.home.home, ".lock");
+    yield* f.fs.writeFileString(lock, "999999999@elsewhere token\n");
+    const failure = yield* Effect.flip(f.init());
+    assert.strictEqual(failure._tag, "LibraryBusy");
+    const pending = yield* f.metadata;
+    assert.strictEqual(pending.registration, "registered");
+    assert.strictEqual((yield* f.home.durable).collections.length, 0);
+    yield* f.fs.remove(lock);
+    const retried = yield* f.init();
+    assert.ok(retried.entry);
+    assert.strictEqual((yield* f.metadata).workspace_id, pending.workspace_id);
+    assert.strictEqual((yield* f.home.durable).collections.length, 1);
+  }).pipe(Effect.provide(AuthorWorkspace.layer), Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect(
@@ -223,10 +187,13 @@ it.effect(
     Effect.gen(function* () {
       const f = yield* workspaceFixture;
       yield* f.home.owned(importSource(f.source));
-      const before = yield* captureDisk([f.source, f.home.home], { identity: true });
-      const failure = yield* Effect.flip(f.ensure({ scaffold: true }));
+      const before = yield* captureDisk([f.home.home], { identity: true });
+      const descriptor = yield* f.fs.readFileString(join(f.source, "skit.json"));
+      const failure = yield* Effect.flip(f.init());
       assert.strictEqual(failure._tag, "DirectoryAlreadyInLibrary");
       yield* assertDiskUnchanged(before);
+      // The lease's own files may exist; no identity, and no scaffold, was written.
       assert.isFalse(yield* f.fs.exists(f.path));
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+      assert.strictEqual(yield* f.fs.readFileString(join(f.source, "skit.json")), descriptor);
+    }).pipe(Effect.provide(AuthorWorkspace.layer), Effect.provide(skitLayer), Effect.scoped),
 );

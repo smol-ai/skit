@@ -10,10 +10,10 @@ import { AuthenticationRequired } from "../../registry/failures.js";
 import { Renderer } from "../../presentation/renderer.js";
 import {
   parseAuthorDestination,
-  loadAuthorSyncRemote,
   syncAuthorWorkspace,
   type AuthorVisibility,
 } from "../../workflows/author/sync.js";
+import { AuthorWorkspace } from "../../author/workspace.js";
 import { handleRegistryCommand } from "../../application.js";
 import { resolveAuth } from "../../registry/auth.js";
 import { CommandMetadata } from "../../commands/metadata.js";
@@ -30,7 +30,10 @@ export const authorSyncCommand = Effect.fn("CLI.authorSync")(function* <AuthErro
   readonly visibility?: AuthorVisibility;
   readonly authState: Result.Result<ResolvedAuth, AuthError>;
 }) {
-  const storedRemote = yield* loadAuthorSyncRemote(options.root ?? ".");
+  // The credential origin for both a pending and a completed connection.
+  const workspaces = yield* AuthorWorkspace;
+  const { connection } = yield* workspaces.read(yield* workspaces.resolveRoot(options.root ?? "."));
+  const storedRemote = connection._tag === "Unconnected" ? undefined : connection.remote;
   let credentials = storedRemote
     ? yield* resolveAuthForOrigin(storedRemote.origin, options.home)
     : undefined;

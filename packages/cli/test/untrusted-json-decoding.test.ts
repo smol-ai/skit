@@ -9,7 +9,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Cause, Effect, Exit, FileSystem } from "effect";
 import { join } from "node:path";
 import { resolveAuth } from "../src/registry/auth.js";
-import { loadAuthorRemote } from "../src/workflows/author/sync.js";
+import { AuthorWorkspace } from "../src/author/workspace.js";
 
 const ORIGIN = "https://registry.example";
 const credential = { token: "t", tokenId: "i", tokenPrefix: "p", scopes: ["library:sync"] };
@@ -25,7 +25,13 @@ const withRemote = Effect.fn("withRemote")(function* (document: string) {
   const fs = yield* FileSystem.FileSystem;
   const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-remote-" });
   yield* fs.writeFileString(join(root, "skit.remote.json"), document);
-  return yield* Effect.exit(loadAuthorRemote(root));
+  const workspaces = yield* AuthorWorkspace;
+  return yield* Effect.exit(
+    workspaces.resolveRoot(root).pipe(
+      Effect.flatMap(workspaces.read),
+      Effect.map(({ connection }) => connection),
+    ),
+  );
 });
 
 /** The tag of the single reason in a failed exit, or how it failed instead. */
@@ -98,7 +104,12 @@ describe("Author Workspace remote metadata", () => {
     Effect.gen(function* () {
       const exit = yield* withRemote(JSON.stringify(canonical));
       assert.isTrue(Exit.isSuccess(exit));
-      if (Exit.isSuccess(exit)) assert.deepStrictEqual({ ...exit.value }, canonical);
+      if (Exit.isSuccess(exit))
+        assert.deepStrictEqual(exit.value, {
+          _tag: "Connected",
+          remote: canonical,
+          leftover: { _tag: "None" },
+        });
     }).pipe(Effect.provide(testPlatformLayer)),
   );
 

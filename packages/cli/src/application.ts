@@ -6,6 +6,7 @@ import { libraryApplicationLayer } from "./library-application/layers.js";
 import { skitConfigurationLayer, SkitConfiguration } from "./configuration/skit-configuration.js";
 import { commandFailure } from "./failure-classification.js";
 import { Renderer, consoleRendererLayer } from "./presentation/renderer.js";
+import { AuthorWorkspace } from "./author/workspace.js";
 
 export function renderCommandFailures<A, E, R>(program: Effect.Effect<A, E, R>) {
   return Effect.uninterruptibleMask((restore) =>
@@ -21,9 +22,11 @@ export function renderCommandFailures<A, E, R>(program: Effect.Effect<A, E, R>) 
 
 export const registryApplicationLayer = Layer.unwrap(
   Effect.map(SkitConfiguration, (paths) =>
-    Layer.merge(registryHttpLayer(), registryAuthLayer(paths.skitHome)).pipe(
-      Layer.provideMerge(skitLayer),
-    ),
+    Layer.mergeAll(
+      registryHttpLayer(),
+      registryAuthLayer(paths.skitHome),
+      AuthorWorkspace.layer,
+    ).pipe(Layer.provideMerge(skitLayer)),
   ),
 );
 
@@ -43,7 +46,9 @@ export function commandApplicationLayer(json: boolean, home: string) {
 
 /** Keep requirements inferred until the selected composition boundary supplies them. */
 export function handlePlatformCommand<E, R>(program: Effect.Effect<void, E, R>) {
-  return renderCommandFailures(Effect.scoped(program)).pipe(Effect.provide(skitLayer));
+  return renderCommandFailures(Effect.scoped(program)).pipe(
+    Effect.provide(AuthorWorkspace.layer.pipe(Layer.provideMerge(skitLayer))),
+  );
 }
 
 export function handleLibraryCommand<E, R>(program: Effect.Effect<void, E, R>) {

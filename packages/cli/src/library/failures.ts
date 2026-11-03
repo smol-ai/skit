@@ -5,7 +5,7 @@
 // retained, whether its identity moved, or whether the acquired bytes disagree with the Registry.
 
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
-import { Data } from "effect";
+import { Data, Schema } from "effect";
 
 /** A preview the operator confirmed no longer describes the Library. */
 export class PlanIsStale extends Data.TaggedError("PlanIsStale")<{}> implements SkitFailure {
@@ -60,5 +60,23 @@ export class AuthorWorkspaceAlreadyRegistered
   }
   get message(): string {
     return `Author Workspace ${this.workspaceId} is already registered at ${this.at}`;
+  }
+}
+
+/** A Library removal recorded its intent on the workspace but the Collection is still there (A15). */
+export class AuthorWorkspaceRemovalUnfinished
+  extends Schema.TaggedError<AuthorWorkspaceRemovalUnfinished>()(
+    "AuthorWorkspaceRemovalUnfinished",
+    { collectionId: Schema.String },
+  )
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "CONFLICT" as const;
+  get remediation(): string {
+    return `Run \`skit remove ${this.collectionId}\` to finish removing it, then initialize the workspace again with --register.`;
+  }
+  get message(): string {
+    return `Removing this Author Workspace's Collection ${this.collectionId} did not finish`;
   }
 }

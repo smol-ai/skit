@@ -8,7 +8,7 @@ import { MissingRequirement } from "../../workflows/failures.js";
 import { publish } from "../../workflows/author/publish.js";
 import { AuthenticationRequired } from "../../registry/failures.js";
 import { Renderer } from "../../presentation/renderer.js";
-import { loadAuthorRemote } from "../../workflows/author/sync.js";
+import { AuthorWorkspace } from "../../author/workspace.js";
 import { NotBoundToRegistry } from "../../registry/failures.js";
 import { handleRegistryCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
@@ -20,9 +20,11 @@ const requireRegistryBinding = Effect.fn("Publish.requireRegistryBinding")(funct
   path: string,
 ) {
   yield* readSkitDescriptor(resolve(path));
-  const remote = yield* loadAuthorRemote(resolve(path));
-  if (!remote) return yield* new NotBoundToRegistry();
-  return remote;
+  const workspaces = yield* AuthorWorkspace;
+  const { connection } = yield* workspaces.read(yield* workspaces.resolveRoot(path));
+  // The portable remote is the authority; a leftover checkpoint beside it does not matter.
+  if (connection._tag !== "Connected") return yield* new NotBoundToRegistry();
+  return connection.remote;
 });
 
 export const publishCommand = Effect.fn("CLI.publish")(function* (options: {

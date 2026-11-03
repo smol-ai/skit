@@ -1,30 +1,70 @@
 import { ChildProcessSpawner } from "effect/process";
 import { SkitConfiguration } from "../src/configuration/skit-configuration.js";
 import { testPlatformLayer } from "./helpers/platform.js";
-import { Cause, Config, Deferred, Effect, Fiber, FileSystem } from "effect";
+import { Cause, Config, Deferred, Effect, Fiber, FileSystem, Layer } from "effect";
 import { it } from "@effect/vitest";
-import { systemError } from "effect/PlatformError";
+import { systemError, type PlatformError } from "effect/PlatformError";
 import { expect } from "vitest";
 import {
   RegistryOriginInvalid,
   type AuthorRemoteMetadataInvalid,
   type CredentialsUnusable,
 } from "../src/registry/failures.js";
-import { loadAuthorRemote } from "../src/workflows/author/sync.js";
+import type { AuthorWorkspaceMetadataInvalid } from "../src/library/failures.js";
+import type {
+  AuthorSyncStateInvalid,
+  AuthorWorkspaceRootInvalid,
+} from "../src/author/workspace.js";
+
+type ReadError =
+  | AuthorRemoteMetadataInvalid
+  | AuthorWorkspaceMetadataInvalid
+  | AuthorSyncStateInvalid
+  | AuthorWorkspaceRootInvalid
+  | PlatformError
+  | CredentialsUnusable
+  | Config.ConfigError;
+import { AuthorWorkspace } from "../src/author/workspace.js";
 import { readConfig, resolveAuthForOrigin } from "../src/registry/auth.js";
 
-const remote = loadAuthorRemote("/author");
+/** The workspace read, with only skit.remote.json present: every other workspace file is absent. */
+const remote = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  return yield* Effect.gen(function* () {
+    const workspaces = yield* AuthorWorkspace;
+    return yield* workspaces.read(yield* workspaces.resolveRoot("/"));
+  }).pipe(
+    // Fresh: the platform layer's own AuthorWorkspace reads the real FileSystem.
+    Effect.provide(Layer.fresh(AuthorWorkspace.layer)),
+    Effect.provideService(FileSystem.FileSystem, {
+      ...fs,
+      readFileString: (path, encoding) =>
+        path.endsWith("skit.remote.json")
+          ? fs.readFileString(path, encoding)
+          : Effect.fail(
+              systemError({
+                _tag: "NotFound",
+                module: "FileSystem",
+                method: "readFileString",
+                pathOrDescriptor: path,
+              }),
+            ),
+    }),
+  );
+});
 const config = readConfig("/auth");
+type Requirements =
+  | FileSystem.FileSystem
+  | SkitConfiguration
+  | ChildProcessSpawner.ChildProcessSpawner
+  | Layer.Services<typeof AuthorWorkspace.layer>;
 
 it.effect.each(["remote", "config"] as const)(
   "%s read preserves defects and interruption",
   (helper) =>
     Effect.gen(function* () {
-      const operation: Effect.Effect<
-        void,
-        AuthorRemoteMetadataInvalid | CredentialsUnusable | Config.ConfigError,
-        FileSystem.FileSystem | SkitConfiguration | ChildProcessSpawner.ChildProcessSpawner
-      > = helper === "remote" ? remote.pipe(Effect.asVoid) : config.pipe(Effect.asVoid);
+      const operation: Effect.Effect<void, ReadError, Requirements> =
+        helper === "remote" ? remote.pipe(Effect.asVoid) : config.pipe(Effect.asVoid);
       // The effect signals readiness through an unsafe completion so the whole test can stay
       // inside one runtime instead of awaiting a raw Promise from outside it.
       const ready = Deferred.makeUnsafe<void>();
@@ -70,11 +110,8 @@ it.effect.each(["remote", "config"] as const)(
   "%s read retains legacy I/O and malformed-value classifications",
   (helper) =>
     Effect.gen(function* () {
-      const operation: Effect.Effect<
-        void,
-        AuthorRemoteMetadataInvalid | CredentialsUnusable | Config.ConfigError,
-        FileSystem.FileSystem | SkitConfiguration | ChildProcessSpawner.ChildProcessSpawner
-      > = helper === "remote" ? remote.pipe(Effect.asVoid) : config.pipe(Effect.asVoid);
+      const operation: Effect.Effect<void, ReadError, Requirements> =
+        helper === "remote" ? remote.pipe(Effect.asVoid) : config.pipe(Effect.asVoid);
       for (const input of [
         Effect.succeed("null"),
         Effect.fail(

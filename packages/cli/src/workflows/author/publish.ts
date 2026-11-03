@@ -38,7 +38,12 @@ import {
   registryApiFailure,
   registryApiFailureMessage,
 } from "../../registry/api-client.js";
-import { loadAuthorRemote } from "./sync.js";
+import {
+  AuthorWorkspace,
+  type AuthorSyncStateInvalid,
+  type AuthorWorkspaceRootInvalid,
+} from "../../author/workspace.js";
+import type { AuthorWorkspaceMetadataInvalid } from "../../library/failures.js";
 import {
   AuthorRemoteMetadataInvalid,
   AuthorSyncRequired,
@@ -70,6 +75,9 @@ export type PublicationFailure =
   | TreeError
   | PlatformError
   | AuthorRemoteMetadataInvalid
+  | AuthorWorkspaceMetadataInvalid
+  | AuthorSyncStateInvalid
+  | AuthorWorkspaceRootInvalid
   | NoRemoteHome
   | RegistryMismatch
   | PublicationBlocked
@@ -104,13 +112,16 @@ export const publish = Effect.fn("publish")(function* (
 ): Effect.fn.Return<
   ReleasePublishResponse,
   PublicationFailure,
-  TreeRequirements | FileSystem.FileSystem | RegistryHttp | Scope.Scope
+  TreeRequirements | FileSystem.FileSystem | RegistryHttp | AuthorWorkspace | Scope.Scope
 > {
   const absolute = resolve(root);
   const commandPath = /^[A-Za-z0-9_./-]+$/.test(root) ? root : `'${root.replaceAll("'", `'\\''`)}'`;
   yield* readSkitDescriptor(absolute);
-  const remote = yield* loadAuthorRemote(absolute);
-  if (!remote) return yield* Effect.fail(new NoRemoteHome());
+  const workspaces = yield* AuthorWorkspace;
+  const { connection } = yield* workspaces.read(yield* workspaces.resolveRoot(absolute));
+  // The portable remote is the authority; a leftover checkpoint beside it does not matter.
+  if (connection._tag !== "Connected") return yield* Effect.fail(new NoRemoteHome());
+  const remote = connection.remote;
   const owner = remote.namespace;
   const slug = remote.skit;
   const configuredBase = options.baseUrl;

@@ -1,12 +1,12 @@
 import { recordedLibrary } from "../../library-application/library-owner.js";
-import { markAuthorWorkspaceRemoved } from "../../library/author-workspace.js";
+import { AuthorWorkspace } from "../../author/workspace.js";
 import {
   enabledSkillIds,
   SkillRemovalRequiresCollection,
   CollectionRemovalMissing,
   type LibraryState,
 } from "@smolai/skit-core";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { resolveLibrarySubject } from "./subject-resolution.js";
 
 export interface RemoveOptions {
@@ -71,13 +71,60 @@ export const executeRemove = Effect.fn("Library.executeRemove")(function* (
   if (collectionId === undefined)
     return yield* new CollectionRemovalMissing({ collection_id: plan.subject_id });
   const library = yield* recordedLibrary(state);
-  const outcome = yield* library.apply(
-    yield* library.plan({ _tag: "Remove", collectionId }, { base: state }),
+  const remove = Effect.flatMap(
+    library.plan({ _tag: "Remove", collectionId }, { base: state }),
+    library.apply,
   );
+  // An authored Collection's workspace records the removal before the Library applies it, and
+  // completes it after, under the workspace lease (A15). Only a workspace that still carries the
+  // Collection's identity is marked; if its folder is gone, the Library removal runs alone.
+  const collection = state.collections.find((item) => item.collection_id === collectionId);
+  const workspaceId =
+    plan.subject_kind === "collection" &&
+    collection?.upstream?.source_identity.kind === "authored-workspace"
+      ? collection.upstream.source_identity.workspace_id
+      : undefined;
+  const workspacePath =
+    workspaceId === undefined
+      ? undefined
+      : state.imports.find(
+          (sourceImport) =>
+            sourceImport.collection_id === collectionId &&
+            sourceImport.source_identity.kind === "authored-workspace",
+        )?.input.value;
+  const workspaces = yield* AuthorWorkspace;
+  const root =
+    workspacePath === undefined
+      ? Option.none()
+      : yield* workspaces.resolveRoot(workspacePath).pipe(
+          Effect.map(Option.some),
+          Effect.catchTag("AuthorWorkspaceRootInvalid", () => Effect.succeedNone),
+        );
+  const outcome = Option.isNone(root)
+    ? yield* remove
+    : yield* Effect.scoped(
+        Effect.gen(function* () {
+          const lease = yield* workspaces.acquire(root.value);
+          const identity = yield* workspaces.readIdentity(root.value);
+          if (Option.isNone(identity) || identity.value.workspaceId !== workspaceId)
+            return yield* remove;
+          const { registration } = identity.value;
+          const removing =
+            registration === "IdentityOnly" || registration === "Registered"
+              ? yield* lease.register({ from: { ...identity.value, registration }, to: "Removing" })
+              : identity.value;
+          const removed = yield* remove;
+          if (removing.registration === "Removing")
+            yield* lease.register({
+              from: { ...removing, registration: "Removing" },
+              to: "Removed",
+            });
+          return removed;
+        }),
+      );
   const uninstalled =
     outcome._tag === "Applied"
       ? outcome.copies.filter((copy) => copy._tag === "Uninstalled").length
       : 0;
-  if (plan.subject_kind === "collection") yield* markAuthorWorkspaceRemoved(state, plan.subject_id);
   return { kind: "removed" as const, value: { ...plan, uninstalled } };
 });

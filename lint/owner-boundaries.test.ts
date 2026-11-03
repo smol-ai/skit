@@ -55,15 +55,16 @@ describe("skit/owner-boundaries", () => {
   });
 
   test("a handler cannot write author state around AuthorWorkspace or AuthorHistory", async () => {
-    const author = (directory: string, module: string) =>
-      relative(directory, join(root, "packages/cli/src/workflows/author", `${module}.js`));
+    const module = (directory: string, path: string) =>
+      relative(directory, join(root, "packages/cli/src", `${path}.js`));
     expect(
       await reported(
         (directory) =>
-          `import { saveAuthorConnection, writeAuthorTree } from "${author(directory, "sync")}";
-import { withDeviceStore } from "${author(directory, "device-store")}";`,
+          `import { mintPreparedWrite } from "${module(directory, "author/workspace")}";
+import { writeWorkspaceTree } from "${module(directory, "author/write-tree")}";
+import { withDeviceStore } from "${module(directory, "workflows/author/device-store")}";`,
       ),
-    ).toEqual(["saveAuthorConnection", "writeAuthorTree", "withDeviceStore"]);
+    ).toEqual(["mintPreparedWrite", "writeWorkspaceTree", "withDeviceStore"]);
   });
 
   test("debt only shrinks: every listed violation still exists", async () => {

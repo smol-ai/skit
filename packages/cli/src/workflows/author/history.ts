@@ -1,7 +1,7 @@
-import { Clock, Effect, FileSystem, Path, Result, Schema } from "effect";
+import { Clock, Effect, FileSystem, Option, Path, Result, Schema } from "effect";
 import { History, LinkStat, MachineSettings, syncPaths, walkAuthorTree } from "@smolai/skit-core";
 import { configurationForHome } from "../../configuration/skit-configuration.js";
-import { loadAuthorWorkspaceMetadata } from "../../library/author-workspace-metadata.js";
+import { AuthorWorkspace } from "../../author/workspace.js";
 import { LocalFilesChangedDuringSync } from "../../registry/failures.js";
 import { AuthorHistoryInvalid } from "./history-contracts.js";
 import { loadAuthorHistoryEvents, writeAuthorHistoryEvent } from "./history-journal.js";
@@ -28,14 +28,17 @@ export const loadAuthorHistory = Effect.fn("Author.loadHistory")(function* (
   input: string,
   home?: string,
 ) {
-  const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const root = yield* fs.realPath(path.resolve(input));
-  const workspace = yield* loadAuthorWorkspaceMetadata(root).pipe(
+  const workspaces = yield* AuthorWorkspace;
+  const root = yield* workspaces.resolveRoot(input);
+  const workspaceId = yield* workspaces.readIdentity(root).pipe(
+    Effect.map((identity) =>
+      Option.getOrUndefined(Option.map(identity, (value) => value.workspaceId)),
+    ),
     Effect.catchTag("AuthorWorkspaceMetadataInvalid", () => Effect.succeed(undefined)),
   );
   const directory = yield* historyDirectory(home);
-  const events = yield* loadAuthorHistoryEvents(directory, root, workspace?.workspace_id);
+  const events = yield* loadAuthorHistoryEvents(directory, root, workspaceId);
   return yield* Effect.gen(function* () {
     const store = yield* History.Store;
     return yield* Effect.forEach(events, (event) =>
@@ -75,8 +78,9 @@ export const refreshAuthorHistory = Effect.fn("Author.refreshHistory")(function*
 ) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
+  const workspaces = yield* AuthorWorkspace;
   const requestedRoot = path.resolve(input);
-  const root = yield* fs.realPath(requestedRoot);
+  const root = yield* workspaces.resolveRoot(input);
   const directory = yield* historyDirectory(home);
   const skitHome = path.dirname(directory);
   const insideRoot = (candidatePath: string) =>
@@ -114,7 +118,10 @@ export const refreshAuthorHistory = Effect.fn("Author.refreshHistory")(function*
     });
   // Broken device-local metadata must not prevent backing up the authored files. This is
   // path-provenance fallback only; it neither creates nor repairs a workspace identity.
-  const workspace = yield* loadAuthorWorkspaceMetadata(root).pipe(
+  const workspaceId = yield* workspaces.readIdentity(root).pipe(
+    Effect.map((identity) =>
+      Option.getOrUndefined(Option.map(identity, (value) => value.workspaceId)),
+    ),
     Effect.catchTag("AuthorWorkspaceMetadataInvalid", () => Effect.succeed(undefined)),
   );
   // Machine identity may need the Library writer. Never acquire that writer while holding the
@@ -155,12 +162,12 @@ export const refreshAuthorHistory = Effect.fn("Author.refreshHistory")(function*
       return { ...recorded, tree, treeHash };
     }).pipe(withDeviceStore(directory));
 
-  const saved = yield* writeAuthorHistoryEvent(directory, root, workspace?.workspace_id, save);
+  const saved = yield* writeAuthorHistoryEvent(directory, root, workspaceId, save);
   // The SQL client has closed/checkpointed before acknowledgement; persist new directory entries.
   yield* syncPaths([directory, skitHome, path.dirname(skitHome)]);
   return {
     ...saved,
     root,
-    ...(workspace ? { workspace_id: workspace.workspace_id } : {}),
+    ...(workspaceId === undefined ? {} : { workspace_id: workspaceId }),
   };
 });

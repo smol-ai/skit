@@ -5,6 +5,7 @@ import { it } from "@effect/vitest";
 import { Cause, Effect, Exit, FileSystem, Schema } from "effect";
 import { skitLayer } from "@smolai/skit-core";
 import { publish } from "../src/workflows/author/publish.js";
+import { AuthorWorkspace } from "../src/author/workspace.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 import { copySkitFixtureEffect, scratch } from "./helpers/library-home.js";
@@ -24,7 +25,10 @@ const runPublish = (
   publish(root, version, revision, {
     baseUrl: options.baseUrl,
     token: options.token,
-  }).pipe(Effect.provide(registryHttpLayer(testHttpClientLayer(options.transport))));
+  }).pipe(
+    Effect.provide(registryHttpLayer(testHttpClientLayer(options.transport))),
+    Effect.provide(AuthorWorkspace.layer),
+  );
 
 /** The error a publication failed or died with, or `undefined` when it succeeded. */
 const failure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>

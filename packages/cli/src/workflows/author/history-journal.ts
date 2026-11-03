@@ -8,7 +8,7 @@ import {
   AuthorHistoryInvalid,
   AuthorHistoryBusy,
 } from "./history-contracts.js";
-import { loadAuthorWorkspaceMetadata } from "../../library/author-workspace-metadata.js";
+import { AuthorWorkspace } from "../../author/workspace.js";
 import { AuthorWorkspaceAlreadyRegistered } from "../../library/failures.js";
 import { Hash, sha256Hash, type History } from "@smolai/skit-core";
 
@@ -45,10 +45,16 @@ const resolveWorkspace = Effect.fn("Author.resolveHistoryWorkspace")(function* (
     if (rows.length > 0) {
       const workspace = yield* Schema.decodeUnknownEffect(Workspace)(rows[0]);
       if (workspace.root !== root) {
-        const previous = yield* loadAuthorWorkspaceMetadata(workspace.root).pipe(
-          Effect.catchTag("AuthorWorkspaceMetadataInvalid", () => Effect.succeed(undefined)),
+        // Only a live copy elsewhere refuses: a gone root, or one without this identity, does not.
+        const workspaces = yield* AuthorWorkspace;
+        const previous = yield* workspaces.resolveRoot(workspace.root).pipe(
+          Effect.flatMap(workspaces.readIdentity),
+          Effect.catchTags({
+            AuthorWorkspaceRootInvalid: () => Effect.succeedNone,
+            AuthorWorkspaceMetadataInvalid: () => Effect.succeedNone,
+          }),
         );
-        if (previous?.workspace_id === workspaceId)
+        if (Option.exists(previous, (identity) => identity.workspaceId === workspaceId))
           return yield* new AuthorWorkspaceAlreadyRegistered({ workspaceId, at: workspace.root });
       }
       if (writable && workspace.root !== root)

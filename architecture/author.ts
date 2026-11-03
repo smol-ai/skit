@@ -1,6 +1,7 @@
 /**
  * Architecture contract: the two device-side author owners, AuthorWorkspace and AuthorHistory.
- * Target API, types only. Approved; not yet enforced by conformance. Same shape as library.ts.
+ * Target API, types only. Approved. AuthorWorkspace is enforced by conformance/author.ts;
+ * AuthorHistory is not built yet. Same shape as library.ts.
  *
  * Markers: FROM CODE = today's behaviour, cited at its file:line. NEW = not in today's code.
  * OPEN: = a choice the code does not settle; each names its entry in decisions.md "Author owners" (A1…).
@@ -93,6 +94,23 @@ import type {
   AuthorWorkspaceAlreadyRegistered,
   AuthorWorkspaceMetadataInvalid,
 } from "../packages/cli/src/library/failures.js";
+// The NEW errors below, bound to their Schema.TaggedError classes (decisions.md "Errors"); each
+// keeps the fields stated here.
+import type {
+  AuthorLeaseNotHeld,
+  AuthorWorkspaceBusy,
+  AuthorWorkspaceConflict,
+  AuthorWorkspaceRootInvalid,
+  AuthorWorkspaceUnsafe,
+  AuthorWriteNotPrepared,
+} from "../packages/cli/src/author/workspace.js";
+export type {
+  AuthorLeaseNotHeld,
+  AuthorWorkspaceBusy,
+  AuthorWorkspaceConflict,
+  AuthorWorkspaceUnsafe,
+  AuthorWriteNotPrepared,
+};
 
 // ── Shared vocabulary ──────────────────────────────────────────────────────────────────────────
 
@@ -281,40 +299,17 @@ export type RegistrationTransition =
       readonly to: "Removed";
     };
 
-/** NEW: what a transition or register planned from is no longer what is on disk. */
-export interface AuthorWorkspaceConflict {
-  readonly _tag: "AuthorWorkspaceConflict";
-  readonly root: WorkspaceRoot;
-  readonly found: Workspace;
-}
-
-/** NEW: the input is not an existing directory (A1). */
-export interface WorkspaceRootInvalid {
-  readonly _tag: "AuthorWorkspaceRootInvalid";
-  readonly input: string;
-}
-
-/**
- * NEW (A8): the lease could not be taken safely: the root no longer realPaths to itself, .skit is
- * not a real directory, or .skit/lock is a symlink or not a regular file.
- */
-export interface AuthorWorkspaceUnsafe {
-  readonly _tag: "AuthorWorkspaceUnsafe";
-  readonly path: string;
-  readonly reason: string;
-}
-
-/** NEW: another process (or this one) holds the workspace lease. Retryable. */
-export interface AuthorWorkspaceBusy {
-  readonly _tag: "AuthorWorkspaceBusy";
-  readonly root: WorkspaceRoot;
-}
-
-/** NEW (A13): writeTree's trees are not the ones the prepared checkpoint names. */
-export interface AuthorWriteNotPrepared {
-  readonly _tag: "AuthorWriteNotPrepared";
-  readonly key: SyncKey;
-}
+// NEW: AuthorWorkspaceConflict { root: WorkspaceRoot; found: Workspace }: what a transition or
+//   register planned from is no longer what is on disk.
+// NEW (A1): AuthorWorkspaceRootInvalid { input }: the input is not an existing directory.
+export type WorkspaceRootInvalid = AuthorWorkspaceRootInvalid;
+// NEW (A8): AuthorWorkspaceUnsafe { path; reason }: the lease could not be taken safely: the root
+//   no longer realPaths to itself, .skit is not a real directory, or .skit/lock.sqlite is a
+//   symlink, not a regular file, or not a lock SQLite can take.
+// NEW: AuthorWorkspaceBusy { root: WorkspaceRoot }: another process (or this one) holds the
+//   workspace lease. Retryable.
+// NEW (A13): AuthorWriteNotPrepared { key: SyncKey }: writeTree's trees are not the ones the
+//   prepared checkpoint names.
 
 export type WorkspaceReadError =
   | AuthorWorkspaceMetadataInvalid // workspace.json (author-workspace-metadata.ts:30)
@@ -371,14 +366,14 @@ export interface WorkspaceLease {
   /** The registration lifecycle. Returns the identity now on disk. */
   readonly register: (
     change: RegistrationTransition,
-  ) => Effect.Effect<Identity, AuthorWorkspaceConflict | WorkspaceReadError>;
+  ) => Effect.Effect<Identity, AuthorWorkspaceConflict | AuthorLeaseNotHeld | WorkspaceReadError>;
   /**
    * The connection lifecycle. Every write is flushed with its directory entries before returning
    * (sync.ts:295, :301, :310), so a caller may talk to the Registry right after. Returns the new state.
    */
   readonly transition: (
     change: ConnectionTransition,
-  ) => Effect.Effect<Connection, AuthorWorkspaceConflict | WorkspaceReadError>;
+  ) => Effect.Effect<Connection, AuthorWorkspaceConflict | AuthorLeaseNotHeld | WorkspaceReadError>;
   /**
    * FROM CODE writeAuthorTree (sync.ts:381-449): make the files `to` if they are still `from`.
    * NEW (A13): takes the PreparedWrite AuthorHistory returned when it saved the Writing checkpoint
@@ -400,7 +395,7 @@ export interface WorkspaceLease {
     readonly prepared: PreparedWrite;
     readonly from: History.Tree;
     readonly to: History.Tree;
-  }) => Effect.Effect<void, WriteTreeError>;
+  }) => Effect.Effect<void, WriteTreeError | AuthorLeaseNotHeld>;
   /**
    * NEW (ADR-0026:233-236): run `effect` (a network retry sleep) with the lease released, then take
    * it back. States: held → released → held | closed. Every transition re-checks `from`
@@ -430,12 +425,8 @@ export interface WorkspaceLease {
   >;
 }
 
-/** NEW: a lease handle used while released, after close, or released twice. */
-export interface AuthorLeaseNotHeld {
-  readonly _tag: "AuthorLeaseNotHeld";
-  readonly root: WorkspaceRoot;
-  readonly state: "released" | "closed";
-}
+// NEW: AuthorLeaseNotHeld { root: WorkspaceRoot; state: "released" | "closed" }: a lease handle
+//   used while released, after close, or released twice.
 
 /**
  * One service per process; every method takes the root (A1). Holds state (four files) and a
