@@ -235,6 +235,8 @@ Still open: whether `principals` becomes columns on Better Auth's `user` table. 
 
 **Decided (Tim, 2026-11-04):** new errors are `Schema.TaggedError` classes whose tag is the class name, optionally prefixed by the owner (`"Library.StalePlan"`). Existing `Data.TaggedError` classes are converted when their owner is reworked, not in one sweep. One "the Library moved on" error, `StalePlan`, carries the revision planned from and the one found.
 
+**Where errors live (decided, Tim, 2026-11-04):** each error is defined once, as a class in the owner's module next to its service interface; the architecture contract imports it rather than restating its fields, so conformance checks signatures, not error fields. opencode declares its errors, their `Error` union, `Interface` and `Service` in one module ([O/packages/core/src/worktree.ts#L50-L104](https://github.com/anomalyco/opencode/blob/68bc26b7da1990ce10ffecfbc1e09eb13aa5d824/packages/core/src/worktree.ts#L50-L104)); t3code's SessionStore does the same ([T/apps/server/src/auth/SessionStore.ts#L121-L142](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/auth/SessionStore.ts#L121-L142)).
+
 **Evidence:**
 - t3code: `class ServerAlreadyRunningError extends Schema.TaggedError<…>()("ServerAlreadyRunningError", …)` ([T/apps/server/src/serverOwnership.ts#L39-L41](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/serverOwnership.ts#L39-L41)).
 - opencode prefixes the owner: `Schema.TaggedError<…>()("Worktree.SourceDirectoryNotFoundError", …)` ([O/packages/core/src/worktree.ts#L50-L80](https://github.com/anomalyco/opencode/blob/68bc26b7da1990ce10ffecfbc1e09eb13aa5d824/packages/core/src/worktree.ts#L50-L80)).
