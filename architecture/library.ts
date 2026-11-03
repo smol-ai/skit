@@ -221,7 +221,7 @@ export type Intent =
       readonly fingerprint: Hash;
       readonly principal: string;
       readonly rationale: string;
-      readonly expiresAt?: string;
+      readonly expiresAt: Option.Option<string>;
     }
   | { readonly _tag: "RefreshInventory"; readonly roots: readonly InventoryScanRoot[] } // NEW: inventory/refresh.ts:233
   | {
@@ -459,7 +459,7 @@ export interface Library {
       target: LibraryManifest,
       source: {
         readonly localArchives: readonly SnapshotArchive[];
-        readonly download: Option.Option<(digest: Hash) => Effect.Effect<SnapshotArchive, E, R>>; // library-restore.ts:332-333
+        readonly download?: (digest: Hash) => Effect.Effect<SnapshotArchive, E, R>; // library-restore.ts:332-333
         readonly registry: { readonly origin: string; readonly token: Option.Option<string> }; // library-sync-snapshots.ts:53-54
       },
     ) => Effect.Effect<StagedContent, ContentStageError | E, R>;

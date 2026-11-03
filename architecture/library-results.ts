@@ -29,6 +29,7 @@
  * `import type` in the real contract. Vocabulary this contract itself declares comes from
  * ./library.js, so the two files share one Intent, evidence and Revision.
  */
+import type { Option } from "effect";
 import type { FolderEvidence, Intent, LinkEvidence, OperationId, Revision } from "./library.js";
 
 interface Ref<Where extends string> {
@@ -291,7 +292,7 @@ export type SyncRemote =
   | {
       readonly _tag: "Expected";
       readonly origin: string; // library-sync.ts:157-165 ancestryAt origin
-      readonly libraryId: string | undefined; // absent on a first push; the receipt names it (library-sync.ts:305-309)
+      readonly libraryId: Option.Option<string>; // absent on a first push; the receipt names it (library-sync.ts:305-309)
       readonly manifestDigest: Hash; // = StagedContent.manifestDigest of `desired`, library-sync.ts:304-309
     };
 
@@ -299,8 +300,8 @@ export type SyncRemote =
 export interface SyncChange<Remote extends SyncRemote = SyncRemote> {
   /** Device state after merge and selection, library-sync.ts:180-186. */
   readonly device: LibraryState;
-  readonly deviceSelection: DeviceSkillSelection | undefined; // library-sync.ts:180-185
-  readonly installedSkills: SyncInstalledSkillsChange | undefined; // absent when no local Library (:-installed-skills.ts:401-410)
+  readonly deviceSelection: Option.Option<DeviceSkillSelection>; // library-sync.ts:180-185
+  readonly installedSkills: Option.Option<SyncInstalledSkillsChange>; // absent when no local Library (:-installed-skills.ts:401-410)
   /** library-sync.ts:275-280; shown in merge/adoption preview. */
   readonly collectionsToRemove: number;
   /** Selected skills/collections no longer in the Library. library-sync.ts:194-197, reported at :348-349. */
@@ -314,7 +315,7 @@ export interface SyncChange<Remote extends SyncRemote = SyncRemote> {
    * library-sync.ts:155). Not the ancestry apply saves: that is RemoteReceipt.ancestry, known only
    * after the CAS (library-sync.ts:316 `ancestryAt(saved, desired)`).
    */
-  readonly acceptedBase: SyncAncestry | undefined;
+  readonly acceptedBase: Option.Option<SyncAncestry>;
   readonly remote: Remote;
   /** Content staged by Library.content.stage before planning (replaces transfer.restore, library-sync.ts:292). */
   readonly staged: StagedContent;
@@ -328,7 +329,7 @@ export interface SyncResult {
   /** Non-empty → status "enablement_incomplete" (library-sync.ts:245-250, :328-331, :348-407). */
   readonly enablementIssues: readonly string[];
   /** The ancestry saved: the receipt's, or unchanged on the "None" path. */
-  readonly ancestry: SyncAncestry | undefined;
+  readonly ancestry: Option.Option<SyncAncestry>;
 }
 
 /**
@@ -374,8 +375,8 @@ export interface ManageSelectionChange {
   readonly approvedSymlinks: readonly LinkEvidence[]; // manage-existing.ts:328-332, :558-597
   readonly approvedCopies: readonly FolderEvidence[]; // manage-existing.ts:308-317
   /** Undefined when nothing is installed (retain-only), manage-existing.ts:350-353. */
-  readonly enable: ExistingPlan | undefined; // manage-existing.ts:487-522
-  readonly backup: ManageBackupPreview | undefined; // manage-existing.ts:364-370, :425-449, :624-640
+  readonly enable: Option.Option<ExistingPlan>; // manage-existing.ts:487-522
+  readonly backup: Option.Option<ManageBackupPreview>; // manage-existing.ts:364-370, :425-449, :624-640
   /**
    * "new" copies are imported first (manage-existing.ts:383-403). Standalone, the plan carries
    * the import source and `enable` is computed at apply under the writer; in setup the Import step
@@ -435,8 +436,8 @@ export type SetupStopReason =
       readonly step: number;
       readonly path: string;
       readonly expected: {
-        readonly before: FolderEvidence | LinkEvidence | undefined;
-        readonly after: FolderEvidence | LinkEvidence | undefined;
+        readonly before: Option.Option<FolderEvidence | LinkEvidence>;
+        readonly after: Option.Option<FolderEvidence | LinkEvidence>;
       };
     }
   | {
