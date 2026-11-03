@@ -332,7 +332,6 @@ export const platform = [
   "LinkStat",
   "SourceProcess",
   "History.Store",
-  "BootstrapOperations",
   "CurrentPrincipal",
   "CurrentRequest",
   "Bindings",
@@ -347,6 +346,7 @@ export const removedServices = [
   "NativeCrypto → SecureRandom + Digest",
   "Pat/Bootstrap/FeedbackRateLimiter tags → one RateLimiter shape, auth included; bindings stay separate (self-hosting.md:119,257)",
   "ReadinessInspector → plain inspect()",
+  "BootstrapOperations → plain functions over ChildProcessSpawner, RegistryHttp and SecureRandom",
   "server re-export shims (api/bootstrap.ts, api/errors.ts, bootstrap/contracts.ts); auth/contracts.ts's own types (CreatePatInput …) move, not deleted",
 ] as const;
 

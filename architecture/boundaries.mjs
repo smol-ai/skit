@@ -265,7 +265,6 @@ export const approvedServices = [
   "skit/LinkStat",
   "skit/SourceProcess",
   "@smolai/skit-core/History/Store",
-  "skit/BootstrapOperations",
   "@smolai/skit-core/CurrentPrincipal",
   "@smolai/skit-core/CurrentRequest",
   "@skit-server-effect/CloudflareBindings",
