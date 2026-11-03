@@ -341,7 +341,7 @@ export const platform = [
   "AuthorIgnoreRepository (runtime-scoped resource; author-sync-testing.md:1117-1135)",
 
   "Renderer",
-  "Prompter",
+  "Prompter (second real implementation: the storybook journey recorder, presentation/interaction-recorder.ts)",
   "LibraryProgress (Context.Reference, silent by default; front ends provide a reporter)",
   "RegistryHttp",
   "SkitConfiguration",
