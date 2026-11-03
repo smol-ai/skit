@@ -1,7 +1,7 @@
 import { NodeRuntime } from "@effect/platform-node";
 import { Console, Effect, FileSystem, Schema, Stream } from "effect";
 import { dirname, join } from "node:path";
-import { refreshAuthorHistory } from "../../src/workflows/author/history.js";
+import { authorLayer, captureWorkspace } from "../helpers/author-history.js";
 import { testPlatformLayer } from "../helpers/platform.js";
 
 const Arguments = Schema.Struct({
@@ -19,9 +19,10 @@ NodeRuntime.runMain(
       });
       const fs = yield* FileSystem.FileSystem;
       const directory = join(home, "history");
-      const recording = refreshAuthorHistory(root, home);
       let attempts = 0;
-      const controlled = recording.pipe(
+      // The owners are built over the controlled FileSystem, so capture runs through it.
+      const controlled = captureWorkspace(root).pipe(
+        Effect.provide(authorLayer(home)),
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
           chmod: Effect.fn("Test.observeLockRetry")(function* (path, modeBits) {

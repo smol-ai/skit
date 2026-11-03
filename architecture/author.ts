@@ -1,7 +1,7 @@
 /**
  * Architecture contract: the two device-side author owners, AuthorWorkspace and AuthorHistory.
- * Target API, types only. Approved. AuthorWorkspace is enforced by conformance/author.ts;
- * AuthorHistory is not built yet. Same shape as library.ts.
+ * Target API, types only. Approved. Both owners are enforced by conformance/author.ts. Same shape
+ * as library.ts.
  *
  * Markers: FROM CODE = today's behaviour, cited at its file:line. NEW = not in today's code.
  * OPEN: = a choice the code does not settle; each names its entry in decisions.md "Author owners" (A1…).
@@ -82,7 +82,9 @@ import type { AuthorVisibility } from "../packages/cli/src/workflows/author/sync
 import type {
   AuthorHistoryBusy,
   AuthorHistoryInvalid,
-} from "../packages/cli/src/workflows/author/history-contracts.js";
+  AuthorSyncStateConflict,
+  AuthorSyncStateIllegal,
+} from "../packages/cli/src/author/history.js";
 import type {
   AuthorLocalPathNotObserved,
   AuthorNonNfcPathUnsupported,
@@ -106,6 +108,8 @@ import type {
 } from "../packages/cli/src/author/workspace.js";
 export type {
   AuthorLeaseNotHeld,
+  AuthorSyncStateConflict,
+  AuthorSyncStateIllegal,
   AuthorWorkspaceBusy,
   AuthorWorkspaceConflict,
   AuthorWorkspaceUnsafe,
@@ -533,20 +537,10 @@ export type PreparedWrite = Brand.Branded<
   "PreparedWrite"
 >;
 
-/** NEW: the saved checkpoint is no longer the one the step planned from. */
-export interface AuthorSyncStateConflict {
-  readonly _tag: "AuthorSyncStateConflict";
-  readonly key: SyncKey;
-  readonly found: Sync.SyncState;
-}
-
-/** NEW (A6): `from → to` is not a step the engine's policy allows (pure check in core Sync). */
-export interface AuthorSyncStateIllegal {
-  readonly _tag: "AuthorSyncStateIllegal";
-  readonly key: SyncKey;
-  readonly from: Sync.SyncState;
-  readonly to: Sync.SyncState;
-}
+// NEW: AuthorSyncStateConflict { key: SyncKey; found: Sync.SyncState }: the saved checkpoint is
+//   no longer the one the step planned from.
+// NEW (A6): AuthorSyncStateIllegal { key: SyncKey; from; to: Sync.SyncState }: `from → to` is not a
+//   step the engine's policy allows (pure check in core Sync: Sync.allowsStep).
 
 export type CaptureError =
   | AuthorHistoryInvalid // history inside its workspace, journal symlink, store unreadable (history.ts:87-114; device-store.ts:95-105)

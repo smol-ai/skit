@@ -1,8 +1,10 @@
 import { expect, it } from "@effect/vitest";
-import { Effect, Stream, FileSystem, Schema } from "effect";
+import { Clock, Effect, Stream, FileSystem, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
-import { loadAuthorHistory, loadStoredTrees } from "../src/workflows/author/history.js";
+import { History } from "@smolai/skit-core";
+import { AuthorHistory } from "../src/author/history.js";
+import { authorLayer, captureWorkspace, storedTreesAt } from "./helpers/author-history.js";
 import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
@@ -34,6 +36,17 @@ const eventsFrom = (
     Stream.runCollect,
   );
 
+/** The latest revision of `workspace` in `home` (an unchanged capture records nothing) and how many revisions lead to it. */
+const latest = (workspace: string, home: string) =>
+  Effect.gen(function* () {
+    const saved = yield* captureWorkspace(workspace);
+    const reached = yield* History.ancestors(saved.id).pipe(
+      Stream.runCollect,
+      Effect.provideService(History.Store, (yield* AuthorHistory).engineStore),
+    );
+    return { ...saved, recorded: Array.from(reached).length };
+  }).pipe(Effect.provide(authorLayer(home)));
+
 it.live("independent recording processes deduplicate the same new observation", () =>
   Effect.gen(function* () {
     const { a } = yield* makeAuthorSyncWorld();
@@ -51,8 +64,11 @@ it.live("independent recording processes deduplicate the same new observation", 
     yield* Stream.make(Buffer.from("release\n")).pipe(Stream.run(first.stdin));
     expect(yield* first.exitCode).toBe(0);
     expect(yield* second.exitCode).toBe(0);
-    expect(yield* loadAuthorHistory(a.workspace, a.home)).toHaveLength(1);
-    expect(yield* loadStoredTrees(a.home)).toHaveLength(1);
+    // One root revision: a second event would name the first as its parent.
+    const saved = yield* latest(a.workspace, a.home);
+    expect(saved.revision.parents).toEqual([]);
+    expect(saved.recorded).toBe(1);
+    expect(yield* storedTreesAt(a.home)).toHaveLength(1);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
@@ -69,12 +85,14 @@ it.live("a held write lock exhausts bounded retries as busy, then recording reco
       { event: "busy", code: "CONFLICT", retryable: true },
     ]);
     expect(yield* blocked.exitCode).toBe(0);
-    expect(yield* loadAuthorHistory(a.workspace, a.home)).toEqual([]);
     yield* Stream.make(Buffer.from("release\n")).pipe(Stream.run(held.stdin));
     expect(yield* held.exitCode).toBe(0);
     const recovered = yield* spawner.spawn(command("record", a.workspace, a.home));
     expect(yield* recovered.exitCode).toBe(0);
-    expect(yield* loadAuthorHistory(a.workspace, a.home)).toHaveLength(1);
+    // Only the held recording saved a revision; the busy one and the recovery added none.
+    const saved = yield* latest(a.workspace, a.home);
+    expect(saved.revision.parents).toEqual([]);
+    expect(saved.recorded).toBe(1);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
@@ -85,7 +103,7 @@ it.live("a fresh process resumes after SIGKILL during an uncommitted observation
     yield* a.edit("notes/a.txt", "A");
     const first = yield* spawner.spawn(command("record", a.workspace, a.home));
     expect(yield* first.exitCode).toBe(0);
-    const original = yield* loadAuthorHistory(a.workspace, a.home);
+    const original = yield* latest(a.workspace, a.home);
     yield* a.edit("notes/a.txt", "B");
     const paused = yield* spawner.spawn(command("pause", a.workspace, a.home));
     const ready = yield* eventsFrom(paused, 1);
@@ -99,13 +117,16 @@ it.live("a fresh process resumes after SIGKILL during an uncommitted observation
       },
     });
     expect(yield* paused.isRunning).toBe(false);
+    const killedAt = yield* Clock.currentTimeMillis;
     // No finalizers ran in the killed process. SQLite must roll back and release its lock.
-    expect(yield* loadAuthorHistory(a.workspace, a.home)).toEqual(original);
-    expect(yield* loadStoredTrees(a.home)).toHaveLength(2);
+    expect(yield* storedTreesAt(a.home)).toHaveLength(2);
     const resumed = yield* spawner.spawn(command("record", a.workspace, a.home));
     expect(yield* resumed.exitCode).toBe(0);
-    const events = yield* loadAuthorHistory(a.workspace, a.home);
-    expect(events.map((event) => event.sequence)).toEqual([1, 2]);
-    expect(events[0]?.revision.author.device).toBe(events[1]?.revision.author.device);
+    // The resumed process recorded B after the original; the killed one committed nothing.
+    const saved = yield* latest(a.workspace, a.home);
+    expect(saved.revision.parents).toEqual([original.id]);
+    expect(saved.revision.author.at).toBeGreaterThanOrEqual(killedAt);
+    expect(saved.recorded).toBe(2);
+    expect(saved.revision.author.device).toBe(original.revision.author.device);
   }).pipe(Effect.provide(testPlatformLayer)),
 );

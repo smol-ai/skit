@@ -1,31 +1,41 @@
 import { expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Result } from "effect";
+import { Effect, FileSystem, Result, Stream } from "effect";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
+import { History } from "@smolai/skit-core";
+import { AuthorHistory } from "../src/author/history.js";
 import {
-  loadAuthorHistory,
-  loadStoredTrees,
-  refreshAuthorHistory,
-} from "../src/workflows/author/history.js";
+  authorLayer,
+  captureWorkspace,
+  capturedTree,
+  storedTrees,
+  storedTreesAt,
+} from "./helpers/author-history.js";
 import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
-it.effect("ignored edits neither enter raw history nor append chronological observations", () =>
+it.effect("ignored edits neither enter raw history nor record a new revision", () =>
   Effect.gen(function* () {
     const world = yield* makeAuthorSyncWorld();
     const fs = yield* FileSystem.FileSystem;
     yield* Effect.sync(() => execFileSync("git", ["init", "--quiet", world.a.workspace]));
     yield* fs.writeFileString(join(world.a.workspace, ".gitignore"), "*.local\n");
     yield* fs.writeFileString(join(world.a.workspace, "private.local"), "first ignored value\n");
-    const before = yield* refreshAuthorHistory(world.a.workspace, world.a.home);
-    yield* fs.writeFileString(join(world.a.workspace, "private.local"), "second ignored value\n");
-    const after = yield* refreshAuthorHistory(world.a.workspace, world.a.home);
-    expect(after.treeHash).toBe(before.treeHash);
-    expect(after.tree.some((entry) => entry.path === "private.local")).toBe(false);
-    const versions = yield* loadStoredTrees(world.a.home);
-    expect(versions).toHaveLength(1);
-    expect(versions[0]?.tree.some((entry) => entry.path === "private.local")).toBe(false);
-    expect(yield* loadAuthorHistory(world.a.workspace, world.a.home)).toHaveLength(1);
+    yield* Effect.gen(function* () {
+      const before = yield* captureWorkspace(world.a.workspace);
+      yield* fs.writeFileString(join(world.a.workspace, "private.local"), "second ignored value\n");
+      const after = yield* captureWorkspace(world.a.workspace);
+      expect(after.treeHash).toBe(before.treeHash);
+      // The same revision: the unchanged capture recorded nothing.
+      expect(after.id).toBe(before.id);
+      expect(after.revision.parents).toEqual([]);
+      expect((yield* capturedTree(after)).some((entry) => entry.path === "private.local")).toBe(
+        false,
+      );
+      const versions = yield* storedTrees;
+      expect(versions).toHaveLength(1);
+      expect(versions[0]?.tree.some((entry) => entry.path === "private.local")).toBe(false);
+    }).pipe(Effect.provide(authorLayer(world.a.home)));
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
@@ -60,15 +70,16 @@ it.effect(
       const world = yield* makeAuthorSyncWorld();
       const fs = yield* FileSystem.FileSystem;
       yield* world.a.edit("notes/a.txt", "one stable tree\n", "local-history");
-      const versions = yield* Effect.all(
-        [
-          refreshAuthorHistory(world.a.workspace, world.a.home),
-          refreshAuthorHistory(world.a.workspace, world.a.home),
-        ],
-        { concurrency: "unbounded" },
-      );
-      expect(versions[0]?.treeHash).toBe(versions[1]?.treeHash);
-      const stored = yield* loadStoredTrees(world.a.home);
+      // One runtime, as the CLI has: both recordings share the home's journal permit.
+      const { versions, stored } = yield* Effect.gen(function* () {
+        const versions = yield* Effect.all(
+          [captureWorkspace(world.a.workspace), captureWorkspace(world.a.workspace)],
+          { concurrency: "unbounded" },
+        );
+        return { versions, stored: yield* storedTrees };
+      }).pipe(Effect.provide(authorLayer(world.a.home)));
+      expect(versions[0].treeHash).toBe(versions[1].treeHash);
+      expect(versions[0].id).toBe(versions[1].id);
       expect(stored).toHaveLength(1);
       for (const version of stored) {
         const path = join(world.a.home, "history", "trees", `${version.hash.slice(7)}.json`);
@@ -86,7 +97,8 @@ it.effect("retries a tree that changes between reads instead of recording a mixe
     yield* world.a.edit("notes/a.txt", "before\n");
     const path = yield* fs.realPath(join(world.a.workspace, "notes/a.txt"));
     let reads = 0;
-    const version = yield* refreshAuthorHistory(world.a.workspace, world.a.home).pipe(
+    yield* captureWorkspace(world.a.workspace).pipe(
+      Effect.provide(authorLayer(world.a.home)),
       Effect.provideService(FileSystem.FileSystem, {
         ...fs,
         readFile: Effect.fn("Test.changeDuringHistoryRead")(function* (input) {
@@ -100,10 +112,11 @@ it.effect("retries a tree that changes between reads instead of recording a mixe
       }),
     );
     expect(reads).toBe(4);
-    const file = version.tree.find((entry) => entry.path === "notes/a.txt");
+    const stored = yield* storedTreesAt(world.a.home);
+    expect(stored).toHaveLength(1);
+    const file = stored[0]?.tree.find((entry) => entry.path === "notes/a.txt");
     expect(file?.kind).toBe("file");
     if (file?.kind === "file") expect(Buffer.from(file.bytes).toString()).toBe("after\n");
-    expect(yield* loadStoredTrees(world.a.home)).toHaveLength(1);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
@@ -117,17 +130,20 @@ it.effect(
       yield* fs.chmod(join(world.a.workspace, "notes/run.sh"), 0o755);
       yield* fs.symlink("run.sh", join(world.a.workspace, "notes/link"));
       yield* fs.writeFile(join(world.a.workspace, "notes/binary"), new Uint8Array([0, 128, 255]));
-      const version = yield* refreshAuthorHistory(world.a.workspace, world.a.home);
-      expect(version.tree.find((entry) => entry.path === "notes/run.sh")).toMatchObject({
+      const tree = yield* captureWorkspace(world.a.workspace).pipe(
+        Effect.flatMap(capturedTree),
+        Effect.provide(authorLayer(world.a.home)),
+      );
+      expect(tree.find((entry) => entry.path === "notes/run.sh")).toMatchObject({
         kind: "file",
         mode: 0o755,
       });
-      expect(version.tree.find((entry) => entry.path === "notes/link")).toEqual({
+      expect(tree.find((entry) => entry.path === "notes/link")).toEqual({
         kind: "symlink",
         path: "notes/link",
         target: "run.sh",
       });
-      const binary = version.tree.find((entry) => entry.path === "notes/binary");
+      const binary = tree.find((entry) => entry.path === "notes/binary");
       expect(binary?.kind).toBe("file");
       if (binary?.kind === "file") expect(Array.from(binary.bytes)).toEqual([0, 128, 255]);
     }).pipe(Effect.provide(testPlatformLayer)),
@@ -139,18 +155,16 @@ it.effect(
     Effect.gen(function* () {
       const world = yield* makeAuthorSyncWorld();
       const fs = yield* FileSystem.FileSystem;
-      const version = yield* refreshAuthorHistory(world.a.workspace, world.a.home);
-      const path = join(world.a.home, "history", "trees", `${version.treeHash.slice(7)}.json`);
-      yield* fs.writeFileString(path, "corrupted");
-      expect(yield* Effect.flip(loadStoredTrees(world.a.home))).toMatchObject({
-        _tag: "AuthorHistoryInvalid",
-      });
-      expect(
-        yield* Effect.flip(refreshAuthorHistory(world.a.workspace, world.a.home)),
-      ).toMatchObject({
-        _tag: "AuthorHistoryInvalid",
-      });
-      expect(yield* fs.readFileString(path)).toBe("corrupted");
+      yield* Effect.gen(function* () {
+        const version = yield* captureWorkspace(world.a.workspace);
+        const path = join(world.a.home, "history", "trees", `${version.treeHash.slice(7)}.json`);
+        yield* fs.writeFileString(path, "corrupted");
+        expect(yield* Effect.flip(storedTrees)).toMatchObject({ _tag: "History.StoreCorrupt" });
+        expect(yield* Effect.flip(captureWorkspace(world.a.workspace))).toMatchObject({
+          _tag: "AuthorHistoryInvalid",
+        });
+        expect(yield* fs.readFileString(path)).toBe("corrupted");
+      }).pipe(Effect.provide(authorLayer(world.a.home)));
     }).pipe(Effect.provide(testPlatformLayer)),
 );
 
@@ -170,9 +184,11 @@ it.effect("rejects a history home inside its workspace before creating it", () =
     const world = yield* makeAuthorSyncWorld();
     const fs = yield* FileSystem.FileSystem;
     const home = join(world.a.workspace, "nested-history");
-    expect(yield* Effect.flip(refreshAuthorHistory(world.a.workspace, home))).toMatchObject({
-      _tag: "AuthorHistoryInvalid",
-    });
+    expect(
+      yield* Effect.flip(captureWorkspace(world.a.workspace)).pipe(
+        Effect.provide(authorLayer(home)),
+      ),
+    ).toMatchObject({ _tag: "AuthorHistoryInvalid" });
     expect(yield* fs.exists(home)).toBe(false);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
@@ -183,11 +199,11 @@ it.effect("rejects a history directory symlink into its workspace", () =>
     const fs = yield* FileSystem.FileSystem;
     const before = (yield* fs.readDirectory(world.a.workspace)).sort();
     yield* fs.symlink(world.a.workspace, join(world.a.home, "history"));
-    expect(yield* Effect.flip(refreshAuthorHistory(world.a.workspace, world.a.home))).toMatchObject(
-      {
-        _tag: "AuthorHistoryInvalid",
-      },
-    );
+    expect(
+      yield* Effect.flip(captureWorkspace(world.a.workspace)).pipe(
+        Effect.provide(authorLayer(world.a.home)),
+      ),
+    ).toMatchObject({ _tag: "AuthorHistoryInvalid" });
     expect((yield* fs.readDirectory(world.a.workspace)).sort()).toEqual(before);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
@@ -202,9 +218,9 @@ it.effect(
       const target = join(a.workspace, "journal.sqlite");
       yield* fs.makeDirectory(directory);
       yield* fs.symlink(target, join(directory, "journal.sqlite"));
-      expect(yield* Effect.flip(refreshAuthorHistory(a.workspace, a.home))).toMatchObject({
-        _tag: "AuthorHistoryInvalid",
-      });
+      expect(
+        yield* Effect.flip(captureWorkspace(a.workspace)).pipe(Effect.provide(authorLayer(a.home))),
+      ).toMatchObject({ _tag: "AuthorHistoryInvalid" });
       expect(yield* fs.exists(target)).toBe(false);
     }).pipe(Effect.provide(testPlatformLayer)),
 );
@@ -222,13 +238,28 @@ it.effect(
         metadata,
         JSON.stringify({ schema: "skit.author-workspace.v1", workspace_id: workspaceId }),
       );
-      expect((yield* refreshAuthorHistory(world.a.workspace, world.a.home)).workspace_id).toBe(
-        workspaceId,
-      );
-      yield* fs.writeFileString(metadata, "unfinished metadata");
-      const version = yield* refreshAuthorHistory(world.a.workspace, world.a.home);
-      expect(version.workspace_id).toBeUndefined();
-      expect(version.tree.some((entry) => entry.path.startsWith(".skit/"))).toBe(false);
+      yield* Effect.gen(function* () {
+        const first = yield* captureWorkspace(world.a.workspace);
+        // The identity was recorded: a live copy carrying it is refused under that identity.
+        const copy = join(world.a.home, "copy");
+        yield* fs.copy(world.a.workspace, copy);
+        expect(yield* Effect.flip(captureWorkspace(copy))).toMatchObject({
+          _tag: "AuthorWorkspaceAlreadyRegistered",
+          workspaceId,
+        });
+        yield* fs.writeFileString(metadata, "unfinished metadata");
+        yield* world.a.edit("notes/a.txt", "after the metadata broke\n");
+        const version = yield* captureWorkspace(world.a.workspace);
+        // Recorded on the same history, after the revision made under the valid identity.
+        expect(version.revision.parents).toEqual([first.id]);
+        const tree = yield* capturedTree(version);
+        expect(tree.some((entry) => entry.path === "notes/a.txt")).toBe(true);
+        expect(tree.some((entry) => entry.path.startsWith(".skit/"))).toBe(false);
+        const history = yield* Stream.runCollect(History.ancestors(version.id)).pipe(
+          Effect.provideService(History.Store, (yield* AuthorHistory).engineStore),
+        );
+        expect(history.map((entry) => entry.id)).toEqual([version.id, first.id]);
+      }).pipe(Effect.provide(authorLayer(world.a.home)));
       expect(yield* fs.readFileString(metadata)).toBe("unfinished metadata");
     }).pipe(Effect.provide(testPlatformLayer)),
 );

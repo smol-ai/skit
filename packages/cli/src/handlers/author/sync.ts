@@ -61,7 +61,6 @@ export const authorSyncCommand = Effect.fn("CLI.authorSync")(function* <AuthErro
       syncAuthorWorkspace(options.root ?? ".", {
         apply: options.apply,
         allowLargeDeletion: options.allowLargeDeletion,
-        home: options.home,
         baseUrl: credentials.origin,
         token: credentials.token,
         to: options.to,

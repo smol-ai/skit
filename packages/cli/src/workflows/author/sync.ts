@@ -1,4 +1,3 @@
-import { configurationForHome } from "../../configuration/skit-configuration.js";
 import {
   AuthoringAuthenticatedApi,
   CurrentMovedResponse,
@@ -9,7 +8,7 @@ import {
   InsufficientScopeResponse,
   UnauthorizedResponse,
 } from "@smolai/skit-core/universal/api";
-import { Data, Effect, FileSystem, Option, Ref, Result, Schema, Stream } from "effect";
+import { Data, Effect, Option, Ref, Result, Schema, Stream } from "effect";
 import { HttpApiClient } from "effect/http-api";
 import {
   authenticatedApiMiddleware,
@@ -17,8 +16,7 @@ import {
   registryApiFailureMessage,
 } from "../../registry/api-client.js";
 import { isRegistryTransportError, RegistryHttp } from "../../registry/registry-http.js";
-import { dirname, join } from "node:path";
-import { isErrno } from "../../platform/errno.js";
+import { join } from "node:path";
 import {
   AuthorDestinationInvalid,
   AuthorDestinationMalformed,
@@ -27,8 +25,6 @@ import {
   VisibilityNotAccepted,
 } from "../../registry/failures.js";
 import type { AuthorSyncResult, AuthorVisibility } from "./sync-contract.js";
-import { historyDirectory, refreshAuthorHistory } from "./history.js";
-import { withDeviceStore } from "./device-store.js";
 import { authorDecider, authorTree } from "./device-view.js";
 import { scanAuthorSyncTree } from "./local-tree.js";
 import { decodeUrl, normalizeRemote, type AuthorRemoteHome } from "../../author/remote.js";
@@ -36,9 +32,8 @@ import {
   AuthorSyncStateInvalid,
   AuthorWorkspace,
   type Connecting,
-  type PreparedWrite,
-  mintPreparedWrite,
 } from "../../author/workspace.js";
+import { AuthorHistory, AuthorHistoryInvalid, type PreparedWrite } from "../../author/history.js";
 
 export type { AuthorVisibility } from "./sync-contract.js";
 export type { AuthorRemoteHome } from "../../author/remote.js";
@@ -67,26 +62,6 @@ export class SyncRejected
   readonly code = "OPERATION_FAILED" as const;
   readonly remediation = "Check the Registry's reason, then sync again.";
 }
-
-/** One sync state per SKIT, by the SKIT's `skit://` locator. */
-const SavedSyncStates = Schema.Struct({
-  schema: Schema.Literal("skit.sync-bindings.v3"),
-  skits: Schema.Record(Schema.String, Sync.SyncState),
-});
-/** Read-only compatibility for checkpoints written before SKITs owned their revisions. */
-const LegacySyncStates = Schema.Struct({
-  schema: Schema.Literal("skit.sync-bindings.v2"),
-  drafts: Schema.Record(Schema.String, Sync.SyncState),
-});
-type SavedSyncStates = typeof SavedSyncStates.Type;
-/** The pre-release format, a base copy of every file per SKIT, recognized only to drop it. */
-const PreReleaseBindings = Schema.Record(
-  Schema.String,
-  Schema.Struct({ skitId: Schema.String, revisionId: Schema.String }),
-);
-const SyncStatesDocument = Schema.fromJsonString(
-  Schema.Union([SavedSyncStates, LegacySyncStates, PreReleaseBindings]),
-);
 
 const decodeAuthorSegment = (input: string) =>
   Schema.decodeUnknownEffect(Schema.StringFromUriComponent)(input).pipe(
@@ -146,75 +121,11 @@ type Destination =
     }
   | { readonly _tag: "ConnectedRemote"; readonly remote: AuthorRemoteHome };
 
-/**
- * Load the sync state of every SKIT. Pre-release bindings name SKIT revisions the Registry no
- * longer has, so they are dropped and each SKIT syncs again from no base.
- */
-const loadSyncStates = Effect.fn("Sync.loadSyncStates")(function* (home?: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = (yield* configurationForHome(home)).syncBindingsPath;
-  const text = yield* fs
-    .readFileString(path)
-    .pipe(
-      Effect.catchTag("PlatformError", (error) =>
-        isErrno(error, "ENOENT") ? Effect.succeed(undefined) : Effect.fail(error),
-      ),
-    );
-  if (text === undefined) return {};
-  const document = yield* Schema.decodeUnknownEffect(SyncStatesDocument)(text).pipe(
-    Effect.mapError((error) => new AuthorSyncStateInvalid({ path, reason: String(error) })),
-  );
-  return Schema.is(SavedSyncStates)(document)
-    ? document.skits
-    : Schema.is(LegacySyncStates)(document)
-      ? document.drafts
-      : {};
-});
-
-/** Save one SKIT's sync state durably: flushed, then renamed over the old file. */
-const saveSyncState = Effect.fn("Sync.saveSyncState")(function* (
-  home: string | undefined,
-  locator: string,
-  state: Sync.SyncState,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = (yield* configurationForHome(home)).syncBindingsPath;
-  const states: SavedSyncStates = {
-    schema: "skit.sync-bindings.v3",
-    skits: { ...(yield* loadSyncStates(home)), [locator]: state },
-  };
-  yield* fs.makeDirectory(dirname(path), { recursive: true, mode: 0o700 });
-  yield* Effect.scoped(
-    Effect.gen(function* () {
-      const staging = yield* fs.makeTempDirectoryScoped({
-        directory: dirname(path),
-        prefix: ".sync-state-",
-      });
-      const temporary = join(staging, "state.json");
-      const file = yield* fs.open(temporary, { flag: "wx", mode: 0o600 });
-      // The bindings are built from decoded states, so failing to encode them is a defect.
-      const text = yield* Schema.encodeEffect(Schema.fromJsonString(SavedSyncStates))(states).pipe(
-        Effect.orDie,
-      );
-      yield* file.writeAll(new TextEncoder().encode(text));
-      yield* file.sync;
-      yield* Effect.uninterruptible(
-        Effect.gen(function* () {
-          yield* fs.rename(temporary, path);
-          const directory = yield* fs.open(dirname(path), { flag: "r" });
-          yield* directory.sync;
-        }),
-      );
-    }),
-  );
-});
-
 export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
   rootInput: string,
   options: {
     apply: boolean;
     allowLargeDeletion?: boolean;
-    home?: string;
     baseUrl?: string;
     token?: string;
     to?: string;
@@ -222,6 +133,7 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
   },
 ) {
   const workspaces = yield* AuthorWorkspace;
+  const history = yield* AuthorHistory;
   const root = yield* workspaces.resolveRoot(rootInput);
   const configuredBase = options.baseUrl;
   // Applying holds the workspace lease for the whole command; a preview takes none (A8).
@@ -309,12 +221,23 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
     });
 
   // Every observed tree is saved on this device before sync talks to the Registry.
-  const saved = yield* refreshAuthorHistory(root, options.home);
+  const saved = yield* history.capture(root);
   const local = yield* scanAuthorSyncTree(root);
-  const directory = yield* historyDirectory(options.home);
-  const localHash = yield* Effect.flatMap(History.Store, (history) =>
-    history.putTree(local.tree),
-  ).pipe(withDeviceStore(directory));
+  const localHash = yield* history.retain(local.tree);
+  // The engine's store reports what it cannot read back; that is unusable history.
+  const storeFailure = (error: History.StoreError) =>
+    Effect.fail(
+      new AuthorHistoryInvalid({
+        path:
+          error._tag === "History.StoreFailed" ? "history" : `history ${error.kind} ${error.hash}`,
+        reason:
+          error._tag === "History.StoreFailed"
+            ? String(error.cause)
+            : error._tag === "History.StoreMissing"
+              ? `${error.kind} is missing`
+              : error.reason,
+      }),
+    );
 
   const transport = yield* (yield* RegistryHttp).client;
   const client = yield* HttpApiClient.makeWith(AuthoringAuthenticatedApi, {
@@ -390,8 +313,15 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
         ),
       ),
   });
-  // Decode all saved checkpoints before creating anything or replacing a base.
-  const states = yield* loadSyncStates(options.home);
+  // This workspace's checkpoint: none until it has an identity (A5). Decoding the saved
+  // checkpoints comes before creating anything or replacing a base.
+  const workspaceId =
+    applying === undefined
+      ? Option.map(workspace.identity, (value) => value.workspaceId)
+      : Option.some(applying.workspaceId);
+  const savedState = Option.isSome(workspaceId)
+    ? yield* history.syncState.read({ workspaceId: workspaceId.value, locator })
+    : Sync.Idle.make({ base: null });
   if (destination._tag !== "ConnectedRemote") {
     if (destination._tag === "NewRemote") {
       const existing = yield* client.skits.current({ params }).pipe(Effect.result);
@@ -437,8 +367,11 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
         ),
       );
     // No revision writes precede this commit point. A pending retry can safely start at no base.
-    yield* saveSyncState(options.home, locator, Sync.Idle.make({ base: null }));
-    yield* applying.lease.advance;
+    yield* history.syncState.save(
+      applying.lease,
+      { workspaceId: applying.workspaceId, locator },
+      { from: savedState, reset: { requestId: pending.requestId, remote: pending.remote } },
+    );
     yield* applying.lease.transition({
       from: pending,
       to: { _tag: "Connected" },
@@ -447,12 +380,12 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
   }
 
   const state =
-    (destination._tag === "ConnectedRemote" ? states[locator] : undefined) ??
-    Sync.Idle.make({ base: null });
+    destination._tag === "ConnectedRemote" ? savedState : Sync.Idle.make({ base: null });
   const planned = yield* Sync.loadPlanInput(state, localHash).pipe(
     Effect.map((view) => Sync.plan(view)),
     Effect.provideService(Sync.Remote, registry),
-    withDeviceStore(directory),
+    Effect.provideService(History.Store, history.engineStore),
+    Effect.catchIf(Schema.is(History.StoreError), storeFailure),
   );
   if (applying === undefined)
     switch (planned._tag) {
@@ -478,6 +411,8 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
         return { status: "ready", changed: false, action: "merge" } satisfies AuthorSyncResult;
     }
   const key = { workspaceId: applying.workspaceId, locator };
+  // The checkpoint last saved, which every step names as its `from`.
+  const last = yield* Ref.make<Sync.SyncState>(state);
   // The PreparedWrite for the Writing checkpoint just saved; each write uses its own up.
   const prepared = yield* Ref.make(Option.none<PreparedWrite>());
   const { outcome } = yield* Sync.run({
@@ -491,41 +426,39 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
     ...(options.allowLargeDeletion && planned._tag === "Blocked"
       ? { approved: planned.removal }
       : {}),
-    // Every checkpoint step advances the lease; the step into Writing mints the write's token
-    // (until AuthorHistory.syncState.prepareWrite exists).
+    // Every checkpoint step advances the lease; the step into Writing returns the write's token.
     save: (next) =>
-      saveSyncState(options.home, locator, next).pipe(
-        Effect.andThen(
-          next._tag === "Writing"
-            ? mintPreparedWrite(applying.lease, key, { from: next.from, to: next.to }).pipe(
-                Effect.flatMap((token) => Ref.set(prepared, Option.some(token))),
-              )
-            : applying.lease.advance,
-        ),
-      ),
+      Effect.gen(function* () {
+        const from = yield* Ref.get(last);
+        if (next._tag === "Writing")
+          yield* Ref.set(
+            prepared,
+            Option.some(
+              yield* history.syncState.prepareWrite(applying.lease, key, { from, to: next }),
+            ),
+          );
+        else yield* history.syncState.save(applying.lease, key, { from, to: next });
+        yield* Ref.set(last, next);
+      }),
     // Any edit made since sync read the files is saved to history first, and stops the write.
     write: (from, to) =>
       Effect.gen(function* () {
-        yield* refreshAuthorHistory(root, options.home);
+        yield* history.capture(root);
         const token = yield* Ref.getAndSet(prepared, Option.none());
-        yield* applying.lease.writeTree({
-          // The engine's recovered merge writes a tree no saved checkpoint names (A12; core
-          // sync.ts Write case). Until AuthorHistory saves a Writing for it, mint one here.
-          prepared: Option.isSome(token)
-            ? token.value
-            : yield* mintPreparedWrite(applying.lease, key, {
-                from: yield* History.treeHash(from),
-                to: yield* History.treeHash(to),
-              }),
-          from,
-          to,
-        });
+        // The engine saves a Writing before every write, so a ticket is always waiting here.
+        if (Option.isNone(token))
+          return yield* Effect.die("A write without a prepared Writing checkpoint");
+        yield* applying.lease.writeTree({ prepared: token.value, from, to });
       }),
-  }).pipe(Effect.provideService(Sync.Remote, registry), withDeviceStore(directory));
+  }).pipe(
+    Effect.provideService(Sync.Remote, registry),
+    Effect.provideService(History.Store, history.engineStore),
+    Effect.catchIf(Schema.is(History.StoreError), storeFailure),
+  );
   if (outcome.status === "blocked")
     return { status: "blocked", changed: false, ...outcome.removal } satisfies AuthorSyncResult;
   // Record what sync wrote as this workspace's latest observation.
-  yield* refreshAuthorHistory(root, options.home);
+  yield* history.capture(root);
   if (destination._tag !== "ConnectedRemote")
     return {
       status: "created",

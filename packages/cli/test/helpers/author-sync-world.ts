@@ -1,9 +1,8 @@
 import { dirname, join } from "node:path";
-import { Effect, Exit, Fiber, FileSystem, Layer, Ref, Scope } from "effect";
+import { Effect, Exit, Fiber, FileSystem, Ref, Scope } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { syncAuthorWorkspace } from "../../src/workflows/author/sync.js";
-import { AuthorWorkspace } from "../../src/author/workspace.js";
-import { loadStoredTrees } from "../../src/workflows/author/history.js";
+import { authorLayer, storedTreesAt } from "./author-history.js";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
 import { testHttpClientLayer } from "./http-test-client.js";
 import { makeAuthorSyncServer, type AuthorDevice } from "./author-sync-server.js";
@@ -85,13 +84,12 @@ export const makeAuthorSyncWorld = Effect.fn("Test.makeAuthorSyncWorld")(functio
           syncAuthorWorkspace(workspace, {
             apply,
             allowLargeDeletion,
-            home,
             baseUrl: remote.origin,
             ...(first ? { to: "swyx/tools", visibility: "private" as const } : {}),
           }).pipe(
             Effect.provide(registryHttpLayer(testHttpClientLayer(server.transport(name)))),
-            // Fresh, so the workspace owner writes through a FileSystem a test provides here.
-            Effect.provide(Layer.fresh(AuthorWorkspace.layer)),
+            // Fresh, so the author owners write through a FileSystem a test provides here.
+            Effect.provide(authorLayer(home)),
           ),
         ),
         yield* Ref.get(runtime),
@@ -153,7 +151,7 @@ export const makeAuthorSyncWorld = Effect.fn("Test.makeAuthorSyncWorld")(functio
       const copies: AuthorCopy[] = [];
       for (const device of devices) {
         copies.push({ location: device.name, kind: "workspace", files: yield* device.files() });
-        for (const stored of yield* loadStoredTrees(device.home))
+        for (const stored of yield* storedTreesAt(device.home))
           copies.push({
             location: `${device.name}:${stored.hash}`,
             kind: "local-history",

@@ -60,11 +60,10 @@ describe("skit/owner-boundaries", () => {
     expect(
       await reported(
         (directory) =>
-          `import { mintPreparedWrite } from "${module(directory, "author/workspace")}";
-import { writeWorkspaceTree } from "${module(directory, "author/write-tree")}";
-import { withDeviceStore } from "${module(directory, "workflows/author/device-store")}";`,
+          `import { writeWorkspaceTree } from "${module(directory, "author/write-tree")}";
+import { makeHistoryStore } from "${module(directory, "author/history-store")}";`,
       ),
-    ).toEqual(["mintPreparedWrite", "writeWorkspaceTree", "withDeviceStore"]);
+    ).toEqual(["writeWorkspaceTree", "makeHistoryStore"]);
   });
 
   test("debt only shrinks: every listed violation still exists", async () => {

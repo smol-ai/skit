@@ -1,17 +1,14 @@
 import { expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Deferred, Fiber, Option } from "effect";
+import { Effect, FileSystem, Deferred, Fiber, Layer, Option, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
-import { withLibraryWriter } from "@smolai/skit-core";
+import { History, withLibraryWriter } from "@smolai/skit-core";
+import { AuthorHistory } from "../src/author/history.js";
 import { AuthorWorkspace, type Identity } from "../src/author/workspace.js";
 
 /** No identity, typed as the state a first registration plans from. */
 const absent = Option.none<Identity>();
-import {
-  loadAuthorHistory,
-  loadStoredTrees,
-  refreshAuthorHistory,
-} from "../src/workflows/author/history.js";
+import { authorLayer, captureWorkspace, storedTreesAt } from "./helpers/author-history.js";
 import { libraryHome } from "./helpers/library-home.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { captureDisk, assertDiskUnchanged } from "./helpers/disk-snapshot.js";
@@ -36,7 +33,8 @@ const fixture = Effect.gen(function* () {
           : yield* lease.register({ from: identity, to: "IdentityOnly", adopt: Option.none() });
       }),
     );
-  const capture = (path = source) => home.owned(refreshAuthorHistory(path, home.home));
+  const capture = (path = source) =>
+    home.owned(captureWorkspace(path).pipe(Effect.provide(authorLayer(home.home))));
   const metadata = (path = source) =>
     fs.readFileString(join(path, ".skit/workspace.json")).pipe(Effect.map(JSON.parse));
   return { fs, workspaces, root, source, home, identify, capture, metadata };
@@ -56,16 +54,16 @@ it.effect("an identity-only registration writes no config, registration or Libra
     });
     const state = yield* f.home.durable;
     expect(state.collections).toEqual([]);
-    yield* f.capture();
-    const trees = yield* f.home.owned(loadStoredTrees(f.home.home));
+    const recorded = yield* f.capture();
+    const trees = yield* storedTreesAt(f.home.home);
     expect(trees).toHaveLength(1);
     const saved = trees[0]?.tree.find((entry) => entry.path === "review/SKILL.md");
     expect(saved?.kind === "file" ? Buffer.from(saved.bytes).toString() : undefined).toBe(
       "---\ninvalid: [\n",
     );
     expect(yield* f.identify()).toEqual(identity);
-    yield* f.capture();
-    expect(yield* f.home.owned(loadAuthorHistory(f.source, f.home.home))).toHaveLength(1);
+    // The unchanged capture records nothing: it returns the revision already recorded.
+    expect((yield* f.capture()).id).toBe(recorded.id);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
@@ -76,7 +74,7 @@ it.effect("an empty readable workspace receives identity without inventing conte
     yield* f.identify();
     expect(yield* f.fs.readDirectory(f.source)).toEqual([".skit"]);
     yield* f.capture();
-    const trees = yield* f.home.owned(loadStoredTrees(f.home.home));
+    const trees = yield* storedTreesAt(f.home.home);
     expect(trees[0]?.tree).toEqual([]);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
@@ -85,7 +83,8 @@ it.effect("identity-only workspaces detect copies and retain identity when moved
   Effect.gen(function* () {
     const f = yield* fixture;
     const first = yield* f.identify();
-    const firstRoot = (yield* f.capture()).root;
+    const firstCapture = yield* f.capture();
+    const firstRoot = yield* f.workspaces.resolveRoot(f.source);
     const copy = join(f.root, "copy");
     yield* f.fs.copy(f.source, copy);
     const before = yield* captureDisk([copy], { identity: true });
@@ -102,12 +101,18 @@ it.effect("identity-only workspaces detect copies and retain identity when moved
     // An edit after the move saves a second revision under the same history.
     yield* f.fs.writeFileString(join(moved, "review/SKILL.md"), "edited after the move");
     expect((yield* f.identify(moved)).workspaceId).toBe(first.workspaceId);
-    expect((yield* f.capture(moved)).workspace_id).toBe(first.workspaceId);
+    // The moved workspace continues its identity's history: the edit's parent is the first capture.
+    const second = yield* f.capture(moved);
+    expect(second.revision.parents).toEqual([firstCapture.id]);
     yield* f.fs.makeDirectory(f.source);
     expect((yield* f.identify()).workspaceId).not.toBe(first.workspaceId);
-    expect(
-      (yield* f.home.owned(loadAuthorHistory(moved, f.home.home))).map((event) => event.sequence),
-    ).toEqual([1, 2]);
+    const history = yield* Effect.gen(function* () {
+      const store = (yield* AuthorHistory).engineStore;
+      return yield* Stream.runCollect(History.ancestors(second.id)).pipe(
+        Effect.provideService(History.Store, store),
+      );
+    }).pipe(Effect.provide(authorLayer(f.home.home)));
+    expect(history.map((entry) => entry.id)).toEqual([second.id, firstCapture.id]);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
@@ -217,41 +222,48 @@ it.effect(
       const readIdentity = yield* Deferred.make<void>();
       const proceed = yield* Deferred.make<void>();
       let firstRead = true;
-      // Fork before taking the writer, so this recorder inherits no writer lease.
-      const other = yield* Effect.forkChild(
-        Deferred.await(start).pipe(
-          Effect.andThen(
-            f.home.owned(refreshAuthorHistory(f.source, f.home.home)).pipe(
-              Effect.provideService(FileSystem.FileSystem, {
-                ...f.fs,
-                readFileString: (path, options) =>
-                  Effect.gen(function* () {
-                    if (path.endsWith("/machine.json") && firstRead) {
-                      firstRead = false;
-                      const result = yield* Effect.result(f.fs.readFileString(path, options));
-                      yield* Deferred.succeed(readIdentity, undefined);
-                      yield* Deferred.await(proceed);
-                      return yield* Effect.fromResult(result);
-                    }
-                    return yield* f.fs.readFileString(path, options);
-                  }),
-              }),
+      // Both recorders run in one runtime, as the CLI does, so they share the journal permit. Only
+      // the history owner reads through the paused FileSystem; the Library writer does not.
+      const patched: FileSystem.FileSystem = {
+        ...f.fs,
+        readFileString: (path, options) =>
+          Effect.gen(function* () {
+            if (path.endsWith("/machine.json") && firstRead) {
+              firstRead = false;
+              const result = yield* Effect.result(f.fs.readFileString(path, options));
+              yield* Deferred.succeed(readIdentity, undefined);
+              yield* Deferred.await(proceed);
+              return yield* Effect.fromResult(result);
+            }
+            return yield* f.fs.readFileString(path, options);
+          }),
+      };
+      const [mine, theirs] = yield* f.home.owned(
+        Effect.gen(function* () {
+          // Fork before taking the writer, so this recorder inherits no writer lease.
+          const other = yield* Effect.forkChild(
+            Deferred.await(start).pipe(Effect.andThen(captureWorkspace(f.source))),
+          );
+          const mine = yield* withLibraryWriter(
+            Effect.gen(function* () {
+              yield* Deferred.succeed(start, undefined);
+              yield* Deferred.await(readIdentity);
+              yield* Deferred.succeed(proceed, undefined);
+              return yield* captureWorkspace(f.source);
+            }),
+          );
+          return [mine, yield* Fiber.join(other)] as const;
+        }).pipe(
+          Effect.provide(
+            authorLayer(f.home.home).pipe(
+              Layer.provide(Layer.succeed(FileSystem.FileSystem, patched)),
             ),
           ),
         ),
       );
-      yield* f.home.owned(
-        withLibraryWriter(
-          Effect.gen(function* () {
-            yield* Deferred.succeed(start, undefined);
-            yield* Deferred.await(readIdentity);
-            yield* Deferred.succeed(proceed, undefined);
-            yield* refreshAuthorHistory(f.source, f.home.home);
-          }),
-        ),
-      );
-      yield* Fiber.join(other);
-      expect(yield* f.home.owned(loadAuthorHistory(f.source, f.home.home))).toHaveLength(1);
+      // One revision: whichever recorder came second found the tree already recorded.
+      expect(theirs.id).toBe(mine.id);
+      expect(mine.revision.parents).toEqual([]);
     }).pipe(Effect.provide(testPlatformLayer)),
 );
 
@@ -263,7 +275,7 @@ it.effect(
       yield* f.fs.writeFileString(join(f.home.home, "machine.json"), "{broken machine settings");
       yield* f.identify();
       expect(yield* Effect.flip(f.capture())).toMatchObject({ _tag: "MachineSettingsUnusable" });
-      const trees = yield* f.home.owned(loadStoredTrees(f.home.home));
+      const trees = yield* storedTreesAt(f.home.home);
       expect(trees).toHaveLength(1);
       const saved = trees[0]?.tree.find((entry) => entry.path === "review/SKILL.md");
       expect(saved?.kind === "file" ? Buffer.from(saved.bytes).toString() : undefined).toBe(

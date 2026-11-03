@@ -4,8 +4,7 @@
  * in a reviewed architecture change.
  *
  * `sources`: modules whose exports carry the owner's private names (default: core). AuthorWorkspace
- * is checked by architecture/conformance/author.ts, as library.ts is checked; AuthorHistory joins it
- * when that service exists.
+ * and AuthorHistory are checked by architecture/conformance/author.ts, as library.ts is checked.
  *
  * `private`: names only code under `owner` may import. `debt`: today's violations, NOT approved.
  * The debt list may only shrink: lint/owner-boundaries.test.ts fails on a stale entry, and the
@@ -42,41 +41,27 @@ export const owners = [
     ],
   },
   {
-    // NEW owner (architecture/author.ts). Callers use AuthorWorkspace and its lease; these exports
-    // serve the owner itself, and AuthorHistory's PreparedWrite until syncState.prepareWrite exists.
+    // NEW owner (architecture/author.ts). Callers use AuthorWorkspace and its lease; this export
+    // serves the owner itself.
     name: "AuthorWorkspace",
     owner: "packages/cli/src/author/",
     sources: ["packages/cli/src/author/"],
-    private: ["mintPreparedWrite", "writeWorkspaceTree"],
+    private: ["writeWorkspaceTree"],
   },
   {
-    // RESHAPE owner (architecture/author.ts): history, its journal and the device store.
+    // RESHAPE owner (architecture/author.ts): history, its journal and the history store.
+    // Callers use AuthorHistory; these exports serve the owner itself.
     name: "AuthorHistory",
-    owner: [
-      "packages/cli/src/workflows/author/history",
-      "packages/cli/src/workflows/author/device-store",
-    ],
-    sources: [
-      "packages/cli/src/workflows/author/history",
-      "packages/cli/src/workflows/author/device-store",
-      "packages/cli/src/workflows/author/sync",
-    ],
-    private: [
-      "withDeviceStore",
-      "writeAuthorHistoryEvent",
-      "loadAuthorHistoryEvents",
-      "loadAuthorHistory",
-      "loadAuthorTree",
-      "loadStoredTrees",
-      "refreshAuthorHistory",
-      "historyDirectory",
-      "saveSyncState",
-    ],
+    owner: "packages/cli/src/author/history",
+    sources: ["packages/cli/src/author/"],
+    private: ["makeHistoryStore", "storedPath"],
   },
 ];
 
 export const debt = {
   "packages/cli/src/audit/local.ts": ["LibraryStore", "libraryStoreLayer"],
+  // The home lock is withLibraryWriterLock until the home-lock function exists (D3; A6).
+  "packages/cli/src/author/history.ts": ["withLibraryWriterLock"],
   "packages/cli/src/configuration-writer.ts": ["withLibraryWriterLock"],
   "packages/cli/src/front-end.ts": ["libraryStoreLayer"],
   "packages/cli/src/handlers/library/add.ts": ["LibraryStore"],
@@ -127,13 +112,6 @@ export const debt = {
     "libraryStoreLayer",
     "withLibraryWriter",
   ],
-  // mintPreparedWrite: AuthorHistory's job; sync mints until syncState.prepareWrite exists (step 2).
-  "packages/cli/src/workflows/author/sync.ts": [
-    "historyDirectory",
-    "mintPreparedWrite",
-    "refreshAuthorHistory",
-    "withDeviceStore",
-  ],
   "packages/cli/src/workflows/library/check.ts": ["LibraryStore"],
   "packages/cli/src/workflows/library/import-edit.ts": [
     "LibraryStore",
@@ -153,35 +131,10 @@ export const debt = {
   "packages/cli/src/workflows/library/setup-manage.ts": ["LibraryStore"],
   "packages/cli/src/workflows/library/skills-sh-update-check.ts": ["LibraryStore"],
   "packages/cli/test/application-boundaries.test.ts": ["LibraryStore", "withLibraryWriter"],
-  "packages/cli/test/author-history-journal.test.ts": [
-    "loadAuthorHistory",
-    "loadAuthorTree",
-    "loadStoredTrees",
-    "refreshAuthorHistory",
-  ],
-  "packages/cli/test/author-history-process.test.ts": ["loadAuthorHistory", "loadStoredTrees"],
-  "packages/cli/test/author-history.test.ts": [
-    "loadAuthorHistory",
-    "loadStoredTrees",
-    "refreshAuthorHistory",
-  ],
-  "packages/cli/test/author-sync-world.test.ts": [
-    "loadAuthorHistory",
-    "loadStoredTrees",
-    "refreshAuthorHistory",
-  ],
-  "packages/cli/test/author-workspace-identity.test.ts": [
-    "loadAuthorHistory",
-    "loadStoredTrees",
-    "refreshAuthorHistory",
-    "withLibraryWriter",
-  ],
-  "packages/cli/test/author-workspace.test.ts": ["mintPreparedWrite"],
+  "packages/cli/test/author-workspace-identity.test.ts": ["withLibraryWriter"],
   "packages/cli/test/collection-load.test.ts": ["LibraryStore", "libraryStoreLayer"],
   "packages/cli/test/doctor-harnesses.test.ts": ["LibraryStore"],
   "packages/cli/test/duplicates.test.ts": ["LibraryStore"],
-  "packages/cli/test/fixtures/author-history-worker.ts": ["refreshAuthorHistory"],
-  "packages/cli/test/helpers/author-sync-world.ts": ["loadStoredTrees"],
   "packages/cli/test/helpers/collection-import.ts": ["LibraryStore", "libraryStoreLayer"],
   "packages/cli/test/helpers/installed-skills.ts": ["LibraryStore"],
   "packages/cli/test/helpers/library-home.ts": [
@@ -242,7 +195,6 @@ export const debt = {
   "packages/cli/test/skill-metadata.test.ts": ["LibraryStore", "importAuthoredCollection"],
   "packages/cli/test/skills-sh-update-check.test.ts": ["LibraryStore", "libraryStoreLayer"],
   "packages/cli/test/sync-command.test.ts": ["LibraryStore"],
-  "packages/cli/test/sync.test.ts": ["loadStoredTrees"],
   "packages/skit/test/audit-log.test.ts": ["LibraryAuditLog", "libraryAuditLogLayer"],
   "packages/skit/test/claude-listing-budget.test.ts": ["LibraryStore"],
   "packages/skit/test/codex-listing-budget.test.ts": ["LibraryStore"],

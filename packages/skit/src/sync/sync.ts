@@ -34,9 +34,27 @@ export const Writing = Schema.TaggedStruct("Writing", {
   from: History.TreeHash,
   to: History.TreeHash,
   next: Schema.Union([Schema.Struct({ ...Idle.fields, base: History.RevisionId }), Sending]),
+  /** The write applies a merge, so a resumed run still reports "merged" (A12). */
+  merged: Schema.Boolean,
 });
 export const SyncState = Schema.Union([Idle, Sending, Writing]);
 export type SyncState = typeof SyncState.Type;
+
+const sameState = Schema.toEquivalence(SyncState);
+
+/**
+ * Whether {@link run} ever saves `to` right after `from`. `Idle { base: null }` is where a SKIT
+ * starts, never a step. An unfinished write only finishes into the state it names, or is
+ * prepared again for a different tree with the same base and next state (the recovered merge).
+ */
+export const allowsStep = (from: SyncState, to: SyncState): boolean => {
+  if (to._tag === "Idle" && to.base === null) return false;
+  if (from._tag !== "Writing") return true;
+  return (
+    sameState(to, from.next) ||
+    (to._tag === "Writing" && to.base === from.base && sameState(to.next, from.next))
+  );
+};
 
 /**
  * Files the device deleted since its base: how many, out of how many it knew, and which. Too many
@@ -514,6 +532,17 @@ export const run = <SaveError, WriteError, R>(
             );
             const files = History.sortTree(Option.getOrElse(merged.value, () => []));
             const hash = yield* store.putTree(files);
+            // The merged tree is not the one the interrupted Writing names: save a Writing for
+            // exactly this write before it starts, so it is recoverable too (A12).
+            yield* saved(
+              Writing.make({
+                base: state.base,
+                from: progress.local.hash,
+                to: hash,
+                next: state.next,
+                merged: true,
+              }),
+            );
             yield* options.write(progress.local.tree, files);
             return yield* step(
               {
@@ -523,7 +552,7 @@ export const run = <SaveError, WriteError, R>(
                 choices: [...progress.choices, ...merged.choices],
                 status: stronger(
                   progress,
-                  edited || state.next._tag === "Sending" ? "merged" : "pulled",
+                  edited || state.merged || state.next._tag === "Sending" ? "merged" : "pulled",
                 ),
               },
               steps + 1,
@@ -564,6 +593,7 @@ export const run = <SaveError, WriteError, R>(
                 from: progress.local.hash,
                 to: next.current.revision.tree,
                 next: { _tag: "Idle", base: next.current.id },
+                merged: false,
               }),
             );
             yield* options.write(progress.local.tree, next.current.tree);
@@ -620,6 +650,7 @@ export const run = <SaveError, WriteError, R>(
                 from: progress.local.hash,
                 to: recorded.revision.tree,
                 next: sending,
+                merged: true,
               }),
             );
             yield* options.write(progress.local.tree, tree);

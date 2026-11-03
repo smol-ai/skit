@@ -8,7 +8,8 @@ import { parseAuthorDestination, syncAuthorWorkspace } from "../src/workflows/au
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 import { copySkitFixtureEffect, scratch } from "./helpers/library-home.js";
-import { loadStoredTrees } from "../src/workflows/author/history.js";
+import { SkitConfiguration } from "../src/configuration/skit-configuration.js";
+import { authorLayer, storedTreesAt } from "./helpers/author-history.js";
 import { makeAuthorSyncServer } from "./helpers/author-sync-server.js";
 
 /**
@@ -21,14 +22,18 @@ import { makeAuthorSyncServer } from "./helpers/author-sync-server.js";
  */
 const runAuthorSync = (
   root: string,
-  options: Parameters<typeof syncAuthorWorkspace>[1],
+  { home, ...options }: Parameters<typeof syncAuthorWorkspace>[1] & { readonly home?: string },
   transport: TestHttpHandler,
 ) =>
-  Effect.scoped(
-    syncAuthorWorkspace(root, options).pipe(
-      Effect.provide(registryHttpLayer(testHttpClientLayer(transport))),
-    ),
-  );
+  Effect.gen(function* () {
+    const historyHome = home ?? (yield* SkitConfiguration).skitHome;
+    return yield* Effect.scoped(
+      syncAuthorWorkspace(root, options).pipe(
+        Effect.provide(registryHttpLayer(testHttpClientLayer(transport))),
+        Effect.provide(authorLayer(historyHome)),
+      ),
+    );
+  });
 
 /** The error a sync failed or died with, or `undefined` when it succeeded. */
 const failure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -344,7 +349,7 @@ it.effect("an interrupted sync aborts its SKIT request without recording a bindi
     expect(yield* exists(join(root, "skit.remote.json"))).toBe(false);
     // The observed tree was saved on this device before sync spoke to the Registry.
     expect(
-      (yield* loadStoredTrees(home)).some(({ tree }) =>
+      (yield* storedTreesAt(home)).some(({ tree }) =>
         tree.some((entry) => entry.path === "skit.json"),
       ),
     ).toBe(true);

@@ -166,7 +166,7 @@ export const owners = {
 
   AuthorHistory: {
     status: "RESHAPE",
-    module: "packages/cli/src/workflows/author/{history,history-journal,device-store,sync}.ts",
+    module: "packages/cli/src/author/{history,history-store}.ts",
     owns: ["<home>/history/**", "<home>/sync-bindings.json"],
     ops: [
       "capture(root): { id, revision, treeHash }",

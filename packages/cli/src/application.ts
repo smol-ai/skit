@@ -7,6 +7,7 @@ import { skitConfigurationLayer, SkitConfiguration } from "./configuration/skit-
 import { commandFailure } from "./failure-classification.js";
 import { Renderer, consoleRendererLayer } from "./presentation/renderer.js";
 import { AuthorWorkspace } from "./author/workspace.js";
+import { AuthorHistory } from "./author/history.js";
 
 export function renderCommandFailures<A, E, R>(program: Effect.Effect<A, E, R>) {
   return Effect.uninterruptibleMask((restore) =>
@@ -25,7 +26,9 @@ export const registryApplicationLayer = Layer.unwrap(
     Layer.mergeAll(
       registryHttpLayer(),
       registryAuthLayer(paths.skitHome),
-      AuthorWorkspace.layer,
+      // One author layer per runtime: AuthorHistory over AuthorWorkspace, built once, so one
+      // journal permit guards this home (A9).
+      AuthorHistory.layer({ home: paths.skitHome }).pipe(Layer.provideMerge(AuthorWorkspace.layer)),
     ).pipe(Layer.provideMerge(skitLayer)),
   ),
 );

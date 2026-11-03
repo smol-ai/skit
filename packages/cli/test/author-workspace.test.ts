@@ -1,14 +1,11 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Option, Scope } from "effect";
 import { join } from "node:path";
-import { History } from "@smolai/skit-core";
-import {
-  AuthorWorkspace,
-  type Identity,
-  type WorkspaceLease,
-  mintPreparedWrite,
-} from "../src/author/workspace.js";
+import { History, Sync } from "@smolai/skit-core";
+import { AuthorWorkspace, type Identity, type WorkspaceLease } from "../src/author/workspace.js";
+import { AuthorHistory } from "../src/author/history.js";
 import { scanAuthorSyncTree } from "../src/workflows/author/local-tree.js";
+import { authorLayer } from "./helpers/author-history.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
 const remote = {
@@ -245,50 +242,72 @@ const identified = (lease: WorkspaceLease) =>
 it.effect("writeTree writes only with a current, unused PreparedWrite for exactly its trees", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    const lease = yield* f.workspaces.acquire(f.root);
-    const { workspaceId } = yield* identified(lease);
-    const key = { workspaceId, locator: "skit://registry.example/swyx/tools" };
-    const { from, to, fromHash, toHash } = yield* trees(f.root);
-    const notPrepared = { _tag: "AuthorWriteNotPrepared" };
+    const home = yield* f.fs.makeTempDirectoryScoped({ prefix: "skit-author-home-" });
+    yield* Effect.gen(function* () {
+      const history = yield* AuthorHistory;
+      const lease = yield* f.workspaces.acquire(f.root);
+      const { workspaceId } = yield* identified(lease);
+      const key = { workspaceId, locator: "skit://registry.example/swyx/tools" };
+      const { from, to, fromHash, toHash } = yield* trees(f.root);
+      yield* history.retain(from);
+      yield* history.retain(to);
+      const idle = Sync.Idle.make({ base: null });
+      const writing = Sync.Writing.make({
+        base: null,
+        from: fromHash,
+        to: toHash,
+        next: Sync.Sending.make({ base: null, revision: History.RevisionId.make(toHash) }),
+        merged: false,
+      });
+      const notPrepared = { _tag: "AuthorWriteNotPrepared" };
 
-    // A later checkpoint step makes an outstanding PreparedWrite stale.
-    const stale = yield* mintPreparedWrite(lease, key, { from: fromHash, to: toHash });
-    yield* lease.advance;
-    expect(yield* Effect.flip(lease.writeTree({ prepared: stale, from, to }))).toMatchObject(
-      notPrepared,
-    );
+      // A later checkpoint step makes an outstanding PreparedWrite stale.
+      const stale = yield* history.syncState.prepareWrite(lease, key, { from: idle, to: writing });
+      yield* lease.advance;
+      expect(yield* Effect.flip(lease.writeTree({ prepared: stale, from, to }))).toMatchObject(
+        notPrepared,
+      );
 
-    // One for other trees is refused, and the attempt uses it up.
-    const prepared = yield* mintPreparedWrite(lease, key, { from: fromHash, to: toHash });
-    expect(yield* Effect.flip(lease.writeTree({ prepared, from, to: from }))).toMatchObject(
-      notPrepared,
-    );
-    expect(yield* Effect.flip(lease.writeTree({ prepared, from, to }))).toMatchObject(notPrepared);
+      // One for other trees is refused, and the attempt uses it up.
+      const prepared = yield* history.syncState.prepareWrite(lease, key, {
+        from: writing,
+        to: writing,
+      });
+      expect(yield* Effect.flip(lease.writeTree({ prepared, from, to: from }))).toMatchObject(
+        notPrepared,
+      );
+      expect(yield* Effect.flip(lease.writeTree({ prepared, from, to }))).toMatchObject(
+        notPrepared,
+      );
 
-    // One for another workspace is refused.
-    const foreign = yield* mintPreparedWrite(
-      lease,
-      { ...key, workspaceId: (yield* identified(yield* otherLease)).workspaceId },
-      { from: fromHash, to: toHash },
-    );
-    expect(yield* Effect.flip(lease.writeTree({ prepared: foreign, from, to }))).toMatchObject(
-      notPrepared,
-    );
-    expect(yield* f.fs.readFileString(join(f.root, "notes.txt"))).toBe("before\n");
+      // One for another workspace is refused.
+      const foreign = yield* history.syncState.prepareWrite(
+        lease,
+        { ...key, workspaceId: (yield* identified(yield* otherLease)).workspaceId },
+        { from: idle, to: writing },
+      );
+      expect(yield* Effect.flip(lease.writeTree({ prepared: foreign, from, to }))).toMatchObject(
+        notPrepared,
+      );
+      expect(yield* f.fs.readFileString(join(f.root, "notes.txt"))).toBe("before\n");
 
-    const current = yield* mintPreparedWrite(lease, key, { from: fromHash, to: toHash });
-    yield* lease.writeTree({ prepared: current, from, to });
-    expect(yield* f.fs.readFileString(join(f.root, "notes.txt"))).toBe("after\n");
-    // The write's own stage folder is gone with it.
-    expect(
-      (yield* f.fs.readDirectory(join(f.root, ".skit"))).filter((name) =>
-        name.startsWith("stage-"),
-      ),
-    ).toEqual([]);
-    // Used once, it is used up.
-    expect(
-      yield* Effect.flip(lease.writeTree({ prepared: current, from: to, to: from })),
-    ).toMatchObject(notPrepared);
+      const current = yield* history.syncState.prepareWrite(lease, key, {
+        from: writing,
+        to: writing,
+      });
+      yield* lease.writeTree({ prepared: current, from, to });
+      expect(yield* f.fs.readFileString(join(f.root, "notes.txt"))).toBe("after\n");
+      // The write's own stage folder is gone with it.
+      expect(
+        (yield* f.fs.readDirectory(join(f.root, ".skit"))).filter((name) =>
+          name.startsWith("stage-"),
+        ),
+      ).toEqual([]);
+      // Used once, it is used up.
+      expect(
+        yield* Effect.flip(lease.writeTree({ prepared: current, from: to, to: from })),
+      ).toMatchObject(notPrepared);
+    }).pipe(Effect.provide(authorLayer(home)));
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 

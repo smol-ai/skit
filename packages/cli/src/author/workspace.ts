@@ -50,6 +50,7 @@ import {
 import { AuthorVisibility } from "../workflows/author/sync-contract.js";
 import { AuthorRemoteHome, normalizeRemote } from "./remote.js";
 import { writeWorkspaceTree } from "./write-tree.js";
+import type { PreparedWrite } from "./history.js";
 
 // ── Vocabulary ─────────────────────────────────────────────────────────────────────────────────
 
@@ -144,21 +145,8 @@ const Workspace = Schema.Struct({
 export type Workspace = typeof Workspace.Type;
 
 /** Which sync checkpoint: workspace identity plus SKIT locator (A5). */
-const SyncKey = Schema.Struct({ workspaceId: WorkspaceId, locator: Schema.String });
+export const SyncKey = Schema.Struct({ workspaceId: WorkspaceId, locator: Schema.String });
 export type SyncKey = typeof SyncKey.Type;
-
-/**
- * Proof that a durable Writing checkpoint names exactly these trees, under this lease hold at this
- * revision (A13). WorkspaceLease.writeTree requires one and uses it up.
- */
-const PreparedWrite = Schema.Struct({
-  key: SyncKey,
-  from: History.TreeHash,
-  to: History.TreeHash,
-  ownerId: Schema.String,
-  revision: Schema.Number,
-}).pipe(Schema.brand("PreparedWrite"));
-export type PreparedWrite = typeof PreparedWrite.Type;
 
 /** What the create call proved: this request id created this destination. */
 export interface CreateReceipt {
@@ -817,18 +805,3 @@ export class AuthorWorkspace extends Context.Service<AuthorWorkspace, AuthorWork
 ) {
   static readonly layer = Layer.effect(AuthorWorkspace, make);
 }
-
-/**
- * For AuthorHistory only (architecture/boundaries.mjs keeps every other caller out). Until
- * AuthorHistory.syncState.prepareWrite exists, the sync workflow calls this right after it saves
- * the Writing checkpoint for exactly these trees: it advances the lease and binds the token to
- * the new revision, so any later checkpoint step or retake makes it stale.
- */
-export const mintPreparedWrite = Effect.fn("AuthorWorkspace.mintPreparedWrite")(function* (
-  lease: WorkspaceLease,
-  key: SyncKey,
-  trees: { readonly from: History.TreeHash; readonly to: History.TreeHash },
-) {
-  const revision = yield* lease.advance;
-  return PreparedWrite.make({ key, ...trees, ownerId: lease.ownerId, revision });
-});

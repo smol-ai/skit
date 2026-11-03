@@ -13,12 +13,15 @@ import { testHttpClientLayer } from "./helpers/http-test-client.js";
 import { scratch } from "./helpers/library-home.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 import { MissingRequirement } from "../src/workflows/failures.js";
+import { authorLayer } from "./helpers/author-history.js";
 
 const failure = new CredentialsUnusable({ path: "/broken/auth.json", reason: "invalid" });
 
 const services = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.provide(rendererTestLayer()),
+    // Building the owner touches no disk; these commands fail before they capture anything.
+    Effect.provide(authorLayer("/unreachable")),
     Effect.provide(testPlatformLayer),
     Effect.provideService(
       LibraryStore,
@@ -122,6 +125,7 @@ it.effect.each(["connected", "connecting"] as const)(
       }).pipe(
         Effect.exit,
         Effect.provide(rendererTestLayer()),
+        Effect.provide(authorLayer(home)),
         Effect.provide(
           registryHttpLayer(
             testHttpClientLayer((request) =>
