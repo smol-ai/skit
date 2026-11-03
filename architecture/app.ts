@@ -139,7 +139,7 @@ export const owners = {
       "root(input): WorkspaceRoot (canonical; A1)",
       "read: { identity, connection: Unconnected | Connecting | Connected { leftover } } (never writes)",
       "identity(root) (workspace.json only; for AuthorHistory, A10)",
-      "acquire(root): scoped WorkspaceLease { register, transition, writeTree, releasedFor } (A8)",
+      "acquire(root): scoped WorkspaceLease { register, transition, writeTree, withLeaseReleased } (A8)",
     ],
     requires: [
       "FileSystem",
@@ -172,7 +172,7 @@ export const owners = {
       "observe(root): { id, revision, treeHash }",
       "retain(tree)",
       "engineStore: History.Store adapter (immutable, content-addressed, idempotent writes; A7)",
-      "syncState.{read, transition} keyed by { workspaceId, locator } (A5, A6)",
+      "syncState.{read, transition, prepareWrite} keyed by { workspaceId, locator } (A5, A6)",
     ],
     // Runs no sync: the plain sync workflow drives Sync.run with engineStore and syncState (A7).
     requires: [

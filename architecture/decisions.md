@@ -330,7 +330,7 @@ API: `architecture/author.ts`. Each entry is a choice today's code does not sett
 - The lease is not reentrant: a second acquire fails `AuthorWorkspaceBusy` at once, in this process or another.
 - The lock file is `.skit/lock`. Before taking it, acquire checks that `realPath(root) === root`, refuses a `.skit` that is not a real directory, and opens the lock with no-follow, refusing anything but a regular file (`AuthorWorkspaceUnsafe`). The OS releases the lock on crash.
 - Previews and reads never acquire it, so they never create `.skit` or the lock.
-- `lease.releasedFor(sleep)` releases the lease during network retry sleeps and then takes it back. Every later transition re-checks `from`.
+- `lease.withLeaseReleased(sleep)` releases the lease during network retry sleeps and then takes it back. Every later transition re-checks `from`.
 - Lock order: workspace lease, then the short home-lock writes, then the Library writer. Only the lease spans network calls.
 
 **Evidence:** t3code's lock: "the OS releases it when the process exits, even on SIGKILL, so a crashed owner never blocks the next start" ([T/apps/server/src/serverOwnership.ts#L177-L197](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/serverOwnership.ts#L177-L197)).
@@ -387,7 +387,7 @@ API: `architecture/author.ts`. Each entry is a choice today's code does not sett
 **Problem:** `writeTree` took bare trees (`author.ts`, earlier draft), so nothing proved a `Writing` checkpoint existed. Today it stages in the global temp dir (`sync.ts:417`) and renames across (`:427`), which is EXDEV on another filesystem. It also never fsyncs (`sync.ts:421-434`), while the engine advances the checkpoint right after (core `sync.ts:569-572`).
 
 **Decided:**
-- `syncState.transition` returns a `PreparedWrite` when it saves a `Writing`, after checking that both trees are stored. `lease.writeTree` requires one and refuses `AuthorWriteNotPrepared` unless the trees hash to it.
+- `syncState.prepareWrite` saves a `Writing` and returns a `PreparedWrite`, after checking that both trees are stored. `syncState.transition` handles every other step and returns nothing, so the token is never optional. `lease.writeTree` requires one and refuses `AuthorWriteNotPrepared` unless the trees hash to it.
 - `writeTree` stages under `<root>/.skit/stage-*`, on the target filesystem. EXDEV from a nested mount is reported, never copied around.
 - Before success, `writeTree` fsyncs every written file and every directory whose entries changed. The next acquire removes leftover stage folders.
 

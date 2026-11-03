@@ -390,7 +390,7 @@ export interface WorkspaceLease {
    * it back. Every transition re-checks `from` afterwards, so a change made meanwhile surfaces as a
    * conflict, never as a lost write. Handle methods called while released are a defect.
    */
-  readonly releasedFor: <A, E, R>(
+  readonly withLeaseReleased: <A, E, R>(
     effect: Effect.Effect<A, E, R>,
   ) => Effect.Effect<
     A,
@@ -561,15 +561,33 @@ export interface AuthorHistory {
      * other entry byte-for-byte as decoded; refuses AuthorSyncStateIllegal unless the engine allows the step.
      * `reset` (NEW, A4) is the only way back to Idle { base: null } from another state: the first
      * connection, proven by a CreateReceipt (was sync.ts:631). Leftover cleanup never resets.
-     * Returns Some(PreparedWrite) exactly when the saved state is Writing (A13).
+     * Every step except into Writing; that one is prepareWrite.
      */
     readonly transition: (
       key: SyncKey,
       change:
-        | { readonly from: Sync.SyncState; readonly to: Sync.SyncState }
+        | {
+            readonly from: Sync.SyncState;
+            readonly to: Exclude<Sync.SyncState, { readonly _tag: "Writing" }>;
+          }
         | { readonly from: Sync.SyncState; readonly reset: CreateReceipt },
     ) => Effect.Effect<
-      Option.Option<PreparedWrite>,
+      void,
+      AuthorSyncStateConflict | AuthorSyncStateIllegal | HomeBusy | SyncStateError
+    >;
+    /**
+     * NEW (A13): the step into Writing, with transition's checks, after checking both trees are in
+     * the store. Returns the PreparedWrite that lease.writeTree requires. One method per kind of
+     * step, as t3code's outbox has one compare-and-set per transition (EffectOutbox.ts#L586-L637).
+     */
+    readonly prepareWrite: (
+      key: SyncKey,
+      change: {
+        readonly from: Sync.SyncState;
+        readonly to: Extract<Sync.SyncState, { readonly _tag: "Writing" }>;
+      },
+    ) => Effect.Effect<
+      PreparedWrite,
       AuthorSyncStateConflict | AuthorSyncStateIllegal | HomeBusy | SyncStateError
     >;
   };
@@ -657,7 +675,7 @@ export type WritingRecovery = "merge";
  *      checks as sync.ts:466-495 (pure). Connected with Leftover Matching → lease.transition
  *      { Connected(Matching) → Connected }; Mismatched or Invalid → stop and report, change nothing (A4).
  *   6. creds = Registry.credentials(destination.remote.origin); remote: SyncRemote over the authoring
- *      client (sync.ts:517-590). Every retry schedule's sleep runs inside lease.releasedFor.
+ *      client (sync.ts:517-590). Every retry schedule's sleep runs inside lease.withLeaseReleased.
  *   7. obs = AuthorHistory.observe(root): every tree saved before talking to the Registry (sync.ts:509-510).
  *      local = scanAuthorSyncTree(root); local.verbatimHash must equal obs.treeHash, else observe and
  *      scan again (bounded; then LocalFilesChangedDuringSync) (A14). localHash = retain(local.tree).
@@ -668,8 +686,9 @@ export type WritingRecovery = "merge";
  *      { Connecting → Connected, receipt }. A crash anywhere replays from Connecting.
  *   9. Connected: key = { workspaceId, locator }; state = syncState.read(key). Registry has no such
  *      SKIT → report remote_missing and stop (A16). Preview = Sync.loadPlanInput + Sync.plan with
- *      remote and engineStore. Apply = Sync.run({ remote, save: next → syncState.transition(key,
- *      { from: last, to: next }) keeping the returned PreparedWrite, write: (from, to) →
+ *      remote and engineStore. Apply = Sync.run({ remote, save: next → next is Writing
+ *      ? syncState.prepareWrite(key, { from: last, to: next }), keeping the PreparedWrite
+ *      : syncState.transition(key, { from: last, to: next }), write: (from, to) →
  *      observe(root) *> lease.writeTree({ prepared, from, to }) }) (sync.ts:636-680); an
  *      interrupted Writing follows WritingRecovery. Then observe(root) once more (sync.ts:684).
  * `skit author publish` → read once; require Connected, else NoRemoteHome (OPEN: today two errors,
