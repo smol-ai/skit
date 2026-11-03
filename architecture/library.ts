@@ -522,14 +522,14 @@ export type LibraryRequires =
 export declare namespace InstalledSkills {
   /** Changes nothing on disk. Anyone may hold these. */
   interface Facts {
-    readonly active: Effect.Effect<readonly InstallDestination[], Cause>;
-    readonly destinations: (scope: InstallScope) => Effect.Effect<readonly Destination[], Cause>;
+    readonly active: Effect.Effect<readonly InstallDestination[], Error>;
+    readonly destinations: (scope: InstallScope) => Effect.Effect<readonly Destination[], Error>;
     readonly identify: (
       path: string,
-    ) => Effect.Effect<{ readonly key: string; readonly canonicalPath: string }, Cause>;
-    readonly inspect: (path: string) => Effect.Effect<Folder, Cause>;
-    readonly hash: (path: string) => Effect.Effect<Hash, Cause>;
-    readonly check: (folders: readonly Folder[]) => Effect.Effect<void, Changed | Cause>;
+    ) => Effect.Effect<{ readonly key: string; readonly canonicalPath: string }, Error>;
+    readonly inspect: (path: string) => Effect.Effect<Folder, Error>;
+    readonly hash: (path: string) => Effect.Effect<Hash, Error>;
+    readonly check: (folders: readonly Folder[]) => Effect.Effect<void, Changed | Error>;
     readonly build: (
       installedSkill: {
         readonly skillId: SkillId;
@@ -540,7 +540,7 @@ export declare namespace InstalledSkills {
       },
       state: LibraryState,
       originalsPath: string,
-    ) => Effect.Effect<StagedInstalledSkill, Cause, Scope.Scope>;
+    ) => Effect.Effect<StagedInstalledSkill, Error, Scope.Scope>;
     readonly duplicates: {
       readonly scan: (
         scope: InstallScope,
@@ -551,30 +551,30 @@ export declare namespace InstalledSkills {
           readonly warnings: readonly Warning[];
           readonly roots: readonly string[];
         },
-        Cause
+        Error
       >;
     };
   }
   /** Change skill folders. Only Library may call these. */
   interface Operations {
-    readonly prepare: (roots: readonly string[]) => Effect.Effect<void, Cause>;
+    readonly prepare: (roots: readonly string[]) => Effect.Effect<void, Error>;
     readonly install: (
       staged: StagedInstalledSkill,
       marker: OwnershipMarker,
       recheck: Folder,
-    ) => Effect.Effect<Installed, Cause>;
+    ) => Effect.Effect<Installed, Error>;
     readonly manage: (
       staged: StagedInstalledSkill,
       marker: OwnershipMarker,
       recheck: Folder,
       verification: string,
-    ) => Effect.Effect<Installed, Cause>;
-    readonly backUp: (path: string, into: string) => Effect.Effect<void, Cause>;
+    ) => Effect.Effect<Installed, Error>;
+    readonly backUp: (path: string, into: string) => Effect.Effect<void, Error>;
     readonly uninstall: (
       root: string,
       path: string,
       installedSkillId: InstalledSkillId,
-    ) => Effect.Effect<Backup, Cause>;
+    ) => Effect.Effect<Backup, Error>;
   }
   /** `scan` and `check` change nothing; `keep` and `discard` are operations: Library only. */
   interface Backups {
@@ -582,17 +582,19 @@ export declare namespace InstalledSkills {
       readonly scan: (
         root: string,
         installedSkillId: InstalledSkillId,
-      ) => Effect.Effect<readonly Backup[], Cause>;
+      ) => Effect.Effect<readonly Backup[], Error>;
       readonly check: (
         backup: Backup,
         state: LibraryState,
         originalsPath: string,
         installedSkillId: InstalledSkillId,
-      ) => Effect.Effect<boolean, Cause>;
-      readonly keep: (backup: Backup) => Effect.Effect<void, Cause>;
-      readonly discard: (backup: Backup) => Effect.Effect<void, Cause>;
+      ) => Effect.Effect<boolean, Error>;
+      readonly keep: (backup: Backup) => Effect.Effect<void, Error>;
+      readonly discard: (backup: Backup) => Effect.Effect<void, Error>;
     };
   }
+  /** Today's union is named `Error` in code, which shadows Effect's Error module; renamed here. */
+  type Error = Cause;
   type Interface = Facts & Operations & Backups;
   /** Stand-in for the service tag; the checker binds it to the real one. */
   interface Service {

@@ -72,7 +72,6 @@ import type { SourceProcess } from "../packages/skit/src/platform/source-process
 import type { AuthorIgnoreRepository } from "../packages/skit/src/artifact/plain-author-ignore.js";
 import type { TreeError } from "../packages/skit/src/shared/tree-error.js";
 import type { SkitContractError } from "../packages/skit/src/protocol/api-contracts.js";
-import type { LibraryBusy } from "../packages/skit/src/failures.js";
 import type { Unusable as MachineSettingsUnusable } from "../packages/skit/src/library/machine-settings.js";
 import type {
   AuthorRemoteHome,
@@ -113,8 +112,12 @@ export type RemoteHome = AuthorRemoteHome;
 /** FROM CODE: `skit://<authority>/<namespace>/<skit>` (sync.ts:195-198). */
 export type Locator = string;
 
-/** NEW: the home lock (D3). Today the same lock fails LibraryBusy (packages/skit/src/failures.ts:594). */
-export type HomeBusy = LibraryBusy;
+/** NEW: another process holds the home lock (D3). Today the same lock fails LibraryBusy (packages/skit/src/failures.ts:594). */
+export interface HomeBusy {
+  readonly _tag: "HomeBusy";
+  readonly path: string;
+  readonly owner: string; // pid@host, as LibraryBusy reports today
+}
 
 /**
  * NEW (core change): the Registry side of one SKIT, a plain value passed to Sync.loadPlanInput and
@@ -202,7 +205,7 @@ export interface Workspace {
 
 /**
  * The connection's one transition. Each case is a pair the code really performs; any other pair is
- * unrepresentable. The owner re-reads under the lease and fails WorkspaceConflict unless the
+ * unrepresentable. The owner re-reads under the lease and fails AuthorWorkspaceConflict unless the
  * connection still equals `from` (D1-style check, here by value: the state is tiny and carries a
  * requestId, so equal values mean the same checkpoint).
  */
@@ -237,7 +240,7 @@ export type ConnectionTransition =
 
 /**
  * The registration lifecycle's one transition (A2). The owner re-reads under the lease and fails
- * WorkspaceConflict unless the identity on disk equals `from` by value (id and registration), so
+ * AuthorWorkspaceConflict unless the identity on disk equals `from` by value (id and registration), so
  * an id is never replaced. Content goes through Library.import.authored, called by the workflow.
  */
 export type RegistrationTransition =
@@ -279,7 +282,7 @@ export type RegistrationTransition =
     };
 
 /** NEW: what a transition or register planned from is no longer what is on disk. */
-export interface WorkspaceConflict {
+export interface AuthorWorkspaceConflict {
   readonly _tag: "AuthorWorkspaceConflict";
   readonly root: WorkspaceRoot;
   readonly found: Workspace;
@@ -308,7 +311,7 @@ export interface AuthorWorkspaceBusy {
 }
 
 /** NEW (A13): writeTree's trees are not the ones the prepared checkpoint names. */
-export interface WriteNotPrepared {
+export interface AuthorWriteNotPrepared {
   readonly _tag: "AuthorWriteNotPrepared";
   readonly key: SyncKey;
 }
@@ -321,7 +324,7 @@ export type WorkspaceReadError =
 
 /** Everything writeTree refuses, FROM CODE sync.ts:390-406 and local-tree.ts:60-180. */
 export type WriteTreeError =
-  | WriteNotPrepared
+  | AuthorWriteNotPrepared
   | LocalFilesChangedDuringSync // files are no longer `from` (sync.ts:390-391; local-tree.ts:115, :119, :148, :172)
   | SkitContractError // `to` holds a directory/symlink (sync.ts:396-406), or a non-canonical target (local-tree.ts:67)
   | AuthorLocalPathNotObserved // local-tree.ts:110, :139, :143
@@ -356,19 +359,19 @@ export interface WorkspaceLease {
   /** The registration lifecycle. Returns the identity now on disk. */
   readonly register: (
     change: RegistrationTransition,
-  ) => Effect.Effect<Identity, WorkspaceConflict | WorkspaceReadError>;
+  ) => Effect.Effect<Identity, AuthorWorkspaceConflict | WorkspaceReadError>;
   /**
    * The connection lifecycle. Every write is flushed with its directory entries before returning
    * (sync.ts:295, :301, :310), so a caller may talk to the Registry right after. Returns the new state.
    */
   readonly transition: (
     change: ConnectionTransition,
-  ) => Effect.Effect<Connection, WorkspaceConflict | WorkspaceReadError>;
+  ) => Effect.Effect<Connection, AuthorWorkspaceConflict | WorkspaceReadError>;
   /**
    * FROM CODE writeAuthorTree (sync.ts:381-449): make the files `to` if they are still `from`.
    * NEW (A13): takes the PreparedWrite AuthorHistory returned when it saved the Writing checkpoint
    * for exactly these trees, so a write without a durable checkpoint is unrepresentable; refuses
-   * WriteNotPrepared unless hash(from) and hash(to) equal it.
+   * AuthorWriteNotPrepared unless hash(from) and hash(to) equal it.
    * Rescans and refuses unless the tree hash equals `from`'s (sync.ts:389-391); checks every target
    * before writing any (sync.ts:414) and again just before each mutation (local-tree.ts:145-172).
    * That check is not atomic against an external editor: an editor save racing a rename can be
@@ -494,14 +497,14 @@ export type PreparedWrite = Brand.Branded<
 >;
 
 /** NEW: the saved checkpoint is no longer the one the step planned from. */
-export interface SyncStateConflict {
+export interface AuthorSyncStateConflict {
   readonly _tag: "AuthorSyncStateConflict";
   readonly key: SyncKey;
   readonly found: Sync.SyncState;
 }
 
 /** NEW (A6): `from → to` is not a step the engine's policy allows (pure check in core Sync). */
-export interface SyncStateIllegal {
+export interface AuthorSyncStateIllegal {
   readonly _tag: "AuthorSyncStateIllegal";
   readonly key: SyncKey;
   readonly from: Sync.SyncState;
@@ -553,9 +556,9 @@ export interface AuthorHistory {
     readonly read: (key: SyncKey) => Effect.Effect<Sync.SyncState, SyncStateError>;
     /**
      * FROM CODE saveSyncState (sync.ts:339-374): flushed, then renamed over the old file.
-     * NEW (A6): under the home lock for the whole read-modify-write; refuses SyncStateConflict
+     * NEW (A6): under the home lock for the whole read-modify-write; refuses AuthorSyncStateConflict
      * unless the saved entry for `key` still equals `from`; rewrites only that entry and keeps every
-     * other entry byte-for-byte as decoded; refuses SyncStateIllegal unless the engine allows the step.
+     * other entry byte-for-byte as decoded; refuses AuthorSyncStateIllegal unless the engine allows the step.
      * `reset` (NEW, A4) is the only way back to Idle { base: null } from another state: the first
      * connection, proven by a CreateReceipt (was sync.ts:631). Leftover cleanup never resets.
      * Returns Some(PreparedWrite) exactly when the saved state is Writing (A13).
@@ -567,7 +570,7 @@ export interface AuthorHistory {
         | { readonly from: Sync.SyncState; readonly reset: CreateReceipt },
     ) => Effect.Effect<
       Option.Option<PreparedWrite>,
-      SyncStateConflict | SyncStateIllegal | HomeBusy | SyncStateError
+      AuthorSyncStateConflict | AuthorSyncStateIllegal | HomeBusy | SyncStateError
     >;
   };
 }

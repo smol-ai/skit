@@ -231,6 +231,15 @@ Still open: whether `principals` becomes columns on Better Auth's `user` table. 
 - The `audit` command handler and `harness probe` are deleted. They have never been wired since the initial public release.
 - **Correction:** `audit/local.ts` stays. The TUI's main view is built on it (`packages/tui/src/index.ts:49,123`; ADR-0024:240).
 
+## Errors
+
+**Decided (Tim, 2026-11-04):** new errors are `Schema.TaggedError` classes whose tag is the class name, optionally prefixed by the owner (`"Library.StalePlan"`). Existing `Data.TaggedError` classes are converted when their owner is reworked, not in one sweep. One "the Library moved on" error, `StalePlan`, carries the revision planned from and the one found.
+
+**Evidence:**
+- t3code: `class ServerAlreadyRunningError extends Schema.TaggedError<…>()("ServerAlreadyRunningError", …)` ([T/apps/server/src/serverOwnership.ts#L39-L41](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/serverOwnership.ts#L39-L41)).
+- opencode prefixes the owner: `Schema.TaggedError<…>()("Worktree.SourceDirectoryNotFoundError", …)` ([O/packages/core/src/worktree.ts#L50-L80](https://github.com/anomalyco/opencode/blob/68bc26b7da1990ce10ffecfbc1e09eb13aa5d824/packages/core/src/worktree.ts#L50-L80)).
+- maple's concurrency error carries the ids, not only a message ([M/…/DashboardPersistenceService.ts#L502-L507](https://github.com/MapleTechLabs/maple/blob/24ff600da525eddfbe4f65bd4ca9da5e902e4c44/packages/backend/src/services/dashboards/DashboardPersistenceService.ts#L502-L507)).
+
 ## Author owners
 
 API: `architecture/author.ts`. Each entry is a choice today's code does not settle. Line refs are under `packages/cli/src`. **OPEN-FOR-TIM** marks a product choice waiting on Tim; the contract holds for every option.

@@ -8,7 +8,8 @@
  *    DeviceSettings' own (library.ts DeviceSettingsSetupRecord).
  * 3. planId stays as folder-evidence digest alongside baseRevision: revision covers state.json,
  *    planId covers the folders on disk. Apply rechecks both, and refuses with StalePlan.
- * 4. One stale error: Library's StalePlan (library-plan.ts:61-62). The CLI's PlanIsStale goes.
+ * 4. One stale error: Library's StalePlan, carrying the revision planned from and the one found.
+ *    The CLI's PlanIsStale, sync's SyncLocalChanged and the store's LibraryChanged fold into it.
  * 5. AcceptFinding: acceptedAt is stamped at apply (the moment recorded), so it is in the result,
  *    not the preview; expiry is checked at plan for the preview and again at apply.
  * 6. Sync: plan the local change before the remote write; apply takes the remote result
@@ -70,9 +71,18 @@ type IntentOf<Tag extends Intent["_tag"]> = Extract<Intent, { readonly _tag: Tag
 // Errors that exist today (Data/Schema tagged errors), referenced by name.
 type PlatformError = Ref<"effect PlatformError">;
 type LibraryStateReadError = Ref<"skit/src/library/store/library-store.ts:17">;
-type LibraryStateWriteError = Ref<"skit/src/library/store/library-store.ts:18-22">; // includes LibraryChanged
-type LibraryChanged = Ref<"skit/src/failures.ts:607">;
-type StalePlan = Ref<"skit/src/library/library-plan.ts:61-62">; // replaces cli/src/library/failures.ts:11 PlanIsStale
+type LibraryStateWriteError = Ref<"skit/src/library/store/library-store.ts:18-22">; // minus LibraryChanged, which becomes StalePlan
+/**
+ * RESHAPE of skit/src/library/library-plan.ts:61-62, which carries only a message. The single
+ * "the Library moved on" error: replaces PlanIsStale (cli/src/library/failures.ts:11),
+ * SyncLocalChanged (cli/src/workflows/library/library-sync.ts:60-70) and LibraryChanged
+ * (skit/src/failures.ts:607).
+ */
+export interface StalePlan {
+  readonly _tag: "Library.StalePlan";
+  readonly expected: Revision;
+  readonly actual: Revision;
+}
 type RecoveryInvalid = Ref<"cli/src/library-application/recovery-evidence.ts:6-7">;
 type RestoreInvalid = Ref<"skit/src/library/library-restore.ts:28">;
 type ContentAddressCollision = Ref<"skit/src/failures.ts:335">;
@@ -80,7 +90,6 @@ type AcceptanceIncomplete = Ref<"skit/src/failures.ts:457-460">;
 type SecurityFindingAbsent = Ref<"skit/src/failures.ts:442-445">;
 type UnknownInstalledSkill = Ref<"skit/src/failures.ts:349-352">;
 type TreeError = Ref<"skit/src/shared/tree-error.ts:56">;
-type SyncLocalChanged = Ref<"cli/src/workflows/library/library-sync.ts:60-70">;
 type ManageInvalid = Ref<"cli/src/workflows/library/manage-existing.ts:250-254">;
 type SetupManageSelectionInvalid = Ref<"cli/src/workflows/library/setup-manage.ts:9-25">;
 type SetEnabledIncomplete = Ref<"cli/src/library-application/set-enabled.ts:41-42">;
@@ -333,14 +342,12 @@ export interface SyncResult {
 }
 
 /**
- * library-sync.ts:239, :300, :317 SyncLocalChanged; -installed-skills.ts:421 LibraryChanged;
+ * library-sync.ts:239, :300, :317 SyncLocalChanged and -installed-skills.ts:421 LibraryChanged, both now StalePlan;
  * :370-376 nested Uninstall plan/apply; :350 nested Update; a receipt not matching the plan's
  * SyncRemote is StalePlan. Device-selection flag validation (library-sync.ts:189-193,
  * OptionCombinationInvalid) stays with the caller (resolution 7).
  */
 export type SyncError =
-  | SyncLocalChanged
-  | LibraryChanged
   | StalePlan
   | RestoreInvalid // staged.missing non-empty at plan
   | LibraryStateReadError
