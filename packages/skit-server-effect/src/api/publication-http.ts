@@ -1,9 +1,6 @@
-import { HttpServerRequest } from "effect/http";
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { Authorization } from "../authorization/service.js";
-import { credentialOriginAllowed } from "../auth/request-context.js";
-import { ServerConfiguration } from "../configuration.js";
 import {
   MAX_RELEASE_ARCHIVE_BASE64_LENGTH,
   MAX_RELEASE_ARCHIVE_BYTES,
@@ -15,7 +12,6 @@ import { PublicationAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import {
   archiveTooLargeResponse,
   skitNotFoundResponse,
-  forbiddenOriginResponse,
   forbiddenResponse,
   insufficientScopeResponse,
   invalidRequestResponse,
@@ -36,7 +32,6 @@ export const publicationHandlers = HttpApiBuilder.group(
   (handlers) =>
     Effect.gen(function* () {
       const authorization = yield* Authorization;
-      const configuration = yield* ServerConfiguration;
       const publication = yield* Publication;
 
       return handlers.handleRaw("publish", ({ params, request: rawRequest }) =>
@@ -44,16 +39,6 @@ export const publicationHandlers = HttpApiBuilder.group(
           const principal = yield* CurrentPrincipal;
           if (!principal.scopes.has("publication:write"))
             return yield* Effect.fail(insufficientScopeResponse);
-
-          const request = yield* HttpServerRequest.HttpServerRequest;
-          if (
-            !credentialOriginAllowed(
-              principal.credential,
-              request.headers.origin,
-              configuration.publicAppOrigin,
-            )
-          )
-            return yield* Effect.fail(forbiddenOriginResponse);
 
           const allowed = yield* authorization
             .canPublish(principal, params.owner, params.slug)

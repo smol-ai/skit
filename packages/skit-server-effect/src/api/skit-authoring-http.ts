@@ -1,9 +1,6 @@
-import { HttpServerRequest } from "effect/http";
 import { Effect, Schema } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
-import { credentialOriginAllowed } from "../auth/request-context.js";
 import { Authorization } from "../authorization/service.js";
-import { ServerConfiguration } from "../configuration.js";
 import {
   MAX_ARTIFACT_CONTENT_BYTES,
   RevisionPostRequest,
@@ -15,7 +12,6 @@ import { CurrentPrincipal } from "./authentication.js";
 import {
   skitExistsResponse,
   skitNotFoundResponse,
-  forbiddenOriginResponse,
   forbiddenResponse,
   insufficientScopeResponse,
   invalidCursorResponse,
@@ -41,7 +37,6 @@ export const skitAuthoringHandlers = HttpApiBuilder.group(
     Effect.gen(function* () {
       const skits = yield* Skits;
       const authorization = yield* Authorization;
-      const configuration = yield* ServerConfiguration;
 
       const authorize = (effect: Effect.Effect<boolean, DatabaseError>) =>
         effect.pipe(Effect.catch(storageFailure("skit authorization failed")));
@@ -51,24 +46,11 @@ export const skitAuthoringHandlers = HttpApiBuilder.group(
           return yield* Effect.fail(insufficientScopeResponse);
         return principal;
       });
-      /** A write needs an allowed credential origin, as well as the scope. */
-      const requireWriter = Effect.gen(function* () {
-        const principal = yield* requireAuthor;
-        if (
-          !credentialOriginAllowed(
-            principal.credential,
-            (yield* HttpServerRequest.HttpServerRequest).headers.origin,
-            configuration.publicAppOrigin,
-          )
-        )
-          return yield* Effect.fail(forbiddenOriginResponse);
-        return principal;
-      });
       const requireChange = Effect.fn("SkitHttp.requireChange")(function* (
         owner: string,
         slug: string,
       ) {
-        const principal = yield* requireWriter;
+        const principal = yield* requireAuthor;
         if (!(yield* authorize(authorization.canAuthor(principal, owner, slug, "change"))))
           return yield* Effect.fail(forbiddenResponse);
         return principal;
@@ -86,7 +68,7 @@ export const skitAuthoringHandlers = HttpApiBuilder.group(
       return handlers
         .handle("create", ({ payload }) =>
           Effect.gen(function* () {
-            const principal = yield* requireWriter;
+            const principal = yield* requireAuthor;
             if (!(yield* authorize(authorization.ownsNamespace(principal, payload.owner))))
               return yield* Effect.fail(forbiddenResponse);
             yield* skits

@@ -1,6 +1,6 @@
 import { expect, layer } from "@effect/vitest";
 import { Effect, Layer } from "effect";
-import { Headers, HttpServer, HttpServerRequest } from "effect/http";
+import { HttpServer } from "effect/http";
 import { HttpApiTest } from "effect/http-api";
 import { CurrentPrincipal, PrincipalAuthentication } from "../src/api/authentication.js";
 import { PublicationAuthenticatedApi } from "@smolai/skit-core/universal/api";
@@ -20,15 +20,7 @@ const principal = {
 const authentication = Layer.succeed(
   PrincipalAuthentication,
   PrincipalAuthentication.of((effect) =>
-    effect.pipe(
-      Effect.provideService(CurrentPrincipal, principal),
-      // A browser publish from the app's own origin.
-      Effect.updateService(HttpServerRequest.HttpServerRequest, (request) =>
-        request.modify({
-          headers: Headers.set(request.headers, "origin", "https://registry.test"),
-        }),
-      ),
-    ),
+    effect.pipe(Effect.provideService(CurrentPrincipal, principal)),
   ),
 );
 

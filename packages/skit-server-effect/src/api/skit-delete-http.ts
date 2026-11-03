@@ -1,14 +1,11 @@
-import { HttpServerRequest } from "effect/http";
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { Authorization } from "../authorization/service.js";
-import { ServerConfiguration } from "../configuration.js";
 import { SkitDeletion } from "../skit-delete/service.js";
 import { CurrentPrincipal } from "./authentication.js";
 import { AuthoringAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import {
   deleteRequiresPrivateResponse,
-  forbiddenOriginResponse,
   insufficientScopeResponse,
   skitNotFoundResponse,
   storageFailureResponse,
@@ -22,20 +19,12 @@ export const skitDeleteHandlers = HttpApiBuilder.group(
     Effect.gen(function* () {
       const authorization = yield* Authorization;
       const deletion = yield* SkitDeletion;
-      const configuration = yield* ServerConfiguration;
 
       return handlers.handle("deletePrivate", ({ params, query }) =>
         Effect.gen(function* () {
           const principal = yield* CurrentPrincipal;
           if (!principal.scopes.has("authoring:write"))
             return yield* Effect.fail(insufficientScopeResponse);
-
-          const request = yield* HttpServerRequest.HttpServerRequest;
-          if (
-            principal.credential === "session" &&
-            request.headers.origin !== configuration.publicAppOrigin
-          )
-            return yield* Effect.fail(forbiddenOriginResponse);
 
           const permitted = yield* authorization
             .canDeleteSkit(principal, params.owner, params.slug)

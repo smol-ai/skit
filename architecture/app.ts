@@ -287,7 +287,11 @@ export const owners = {
     status: "RESHAPE",
     owns: [],
     ops: ["principal + scope for the matched route"],
+    invariants: [
+      "a session write (not GET/HEAD) must carry Origin = PUBLIC_APP_ORIGIN; checked once, in the middleware (done)",
+    ],
     removes: [
+      "per-handler origin checks (done: 9 copies and credentialOriginAllowed removed)",
       "resource_grants table, its indexes and every grant query (decisions.md: No per-SKIT grants)",
       "Authorization service and its 7 single-caller can*/has*/scope methods",
       "authorization checks split between handlers and services",

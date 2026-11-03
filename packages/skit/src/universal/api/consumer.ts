@@ -14,7 +14,6 @@ import {
   Scope,
 } from "./authentication.js";
 import {
-  ForbiddenOriginResponse,
   ForbiddenResponse,
   InsufficientScopeResponse,
   InvalidExpiryResponse,
@@ -81,7 +80,6 @@ export class TokensApi extends HttpApiGroup.make("tokens")
       error: [
         InvalidRequestResponse,
         SessionRequiredResponse,
-        ForbiddenOriginResponse,
         RateLimitedResponse,
         InvalidScopeResponse,
         InvalidExpiryResponse,
@@ -99,7 +97,6 @@ export class TokensApi extends HttpApiGroup.make("tokens")
       error: [
         InvalidRequestResponse,
         SessionRequiredResponse,
-        ForbiddenOriginResponse,
         TokenNotFoundResponse,
         StorageFailureResponse,
       ],
@@ -120,7 +117,6 @@ export class TeamsApi extends HttpApiGroup.make("teams")
       error: [
         InvalidRequestResponse,
         SessionRequiredResponse,
-        ForbiddenOriginResponse,
         TeamSessionRequiredResponse,
         InvalidTeamResponse,
         TeamConflictResponse,
@@ -134,7 +130,6 @@ export class TeamsApi extends HttpApiGroup.make("teams")
       error: [
         InvalidRequestResponse,
         SessionRequiredResponse,
-        ForbiddenOriginResponse,
         TeamSessionRequiredResponse,
         TeamForbiddenResponse,
         PrincipalNotFoundResponse,
@@ -148,7 +143,6 @@ export class TeamsApi extends HttpApiGroup.make("teams")
       error: [
         InvalidRequestResponse,
         SessionRequiredResponse,
-        ForbiddenOriginResponse,
         TeamSessionRequiredResponse,
         TeamForbiddenResponse,
         MembershipNotFoundResponse,
@@ -167,7 +161,6 @@ export class LibrarySnapshotsApi extends HttpApiGroup.make("librarySnapshots")
       error: [
         InvalidRequestResponse,
         InsufficientScopeResponse,
-        ForbiddenOriginResponse,
         StorageFailureResponse,
       ],
     }),
@@ -196,7 +189,6 @@ export class LibrarySyncApi extends HttpApiGroup.make("librarySync")
       success: LibraryResponse,
       error: [
         InsufficientScopeResponse,
-        ForbiddenOriginResponse,
         InvalidRequestResponse,
         RevisionConflictResponse,
         StorageFailureResponse,

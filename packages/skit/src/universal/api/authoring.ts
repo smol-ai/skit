@@ -29,7 +29,6 @@ import {
   DeleteRequiresPrivateResponse,
   SkitExistsResponse,
   SkitNotFoundResponse,
-  ForbiddenOriginResponse,
   ForbiddenResponse,
   InsufficientScopeResponse,
   InvalidCursorResponse,
@@ -84,7 +83,6 @@ export class AuthorInventoryApi extends HttpApiGroup.make("authorInventory")
 const commonAuthoringErrors = [
   InvalidRequestResponse,
   InsufficientScopeResponse,
-  ForbiddenOriginResponse,
   ForbiddenResponse,
   ArtifactTooLargeResponse,
   StorageFailureResponse,
@@ -161,7 +159,6 @@ export class SkitDeleteApi extends HttpApiGroup.make("skitDelete")
       error: [
         InvalidRequestResponse,
         InsufficientScopeResponse,
-        ForbiddenOriginResponse,
         SkitNotFoundResponse,
         DeleteRequiresPrivateResponse,
         StorageFailureResponse,
@@ -210,7 +207,6 @@ export class PublicationApi extends HttpApiGroup.make("publication")
       error: [
         InvalidRequestResponse,
         InsufficientScopeResponse,
-        ForbiddenOriginResponse,
         ForbiddenResponse,
         ArchiveTooLargeResponse,
         SkitNotFoundResponse,

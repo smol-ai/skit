@@ -101,20 +101,22 @@ const archiveOf = (tree: History.Tree) =>
     ),
   );
 
-it.effect("rejects a session write from another site", () =>
+it.effect("rejects a session write from another site but serves its reads", () =>
   withRegistry(({ cookie }) =>
     Effect.gen(function* () {
       for (const headers of [{ cookie, origin: "https://evil.test" }, { cookie }]) {
         const httpClient = (yield* HttpClient.HttpClient).pipe(
           HttpClient.mapRequest(HttpClientRequest.setHeaders(headers)),
         );
-        const { skits } = yield* HttpApiClient.makeWith(AuthoringAuthenticatedApi, {
-          httpClient,
-          baseUrl: origin,
-        });
+        const { skits, authorInventory } = yield* HttpApiClient.makeWith(
+          AuthoringAuthenticatedApi,
+          { httpClient, baseUrl: origin },
+        );
         expect(
           yield* Effect.flip(skits.create({ payload: { ...params, visibility: "private" } })),
         ).toEqual({ error: "forbidden_origin" });
+        // Browsers do not always send Origin on a same-site GET, so reads are not checked.
+        expect((yield* authorInventory.read({ query: {} })).skits).toEqual([]);
       }
       expect(yield* countRows("skits")).toBe(0);
     }),

@@ -1,6 +1,11 @@
 import { Context, Schema } from "effect";
 import { HttpApiMiddleware } from "effect/http-api";
-import { InvalidRequestResponse, StorageFailureResponse, UnauthorizedResponse } from "./errors.js";
+import {
+  ForbiddenOriginResponse,
+  InvalidRequestResponse,
+  StorageFailureResponse,
+  UnauthorizedResponse,
+} from "./errors.js";
 
 export const Scope = Schema.Literals(["library:sync", "authoring:write", "publication:write"]);
 export type Scope = typeof Scope.Type;
@@ -40,7 +45,7 @@ export class PrincipalAuthentication extends HttpApiMiddleware.Service<
   PrincipalAuthentication,
   { provides: CurrentPrincipal }
 >()("@smolai/skit-core/PrincipalAuthentication", {
-  error: [UnauthorizedResponse, StorageFailureResponse],
+  error: [UnauthorizedResponse, ForbiddenOriginResponse, StorageFailureResponse],
 }) {}
 export class RequestDecoding extends HttpApiMiddleware.Service<RequestDecoding>()(
   "@smolai/skit-core/RequestDecoding",

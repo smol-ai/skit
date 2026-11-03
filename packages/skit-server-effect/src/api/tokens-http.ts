@@ -1,14 +1,11 @@
 import { Effect } from "effect";
-import { HttpEffect, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { HttpEffect, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 import { Authentication } from "../auth/authentication.js";
-import { credentialOriginAllowed } from "../auth/request-context.js";
-import { ServerConfiguration } from "../configuration.js";
 import { PatRateLimiter } from "../platform/rate-limiter.js";
 import { CurrentPrincipal } from "./authentication.js";
 import { ConsumerAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import {
-  forbiddenOriginResponse,
   invalidExpiryResponse,
   invalidScopeResponse,
   rateLimitedResponse,
@@ -25,7 +22,6 @@ const retryAfter = HttpEffect.appendPreResponseHandler((_request, response) =>
 export const tokenHandlers = HttpApiBuilder.group(ConsumerAuthenticatedApi, "tokens", (handlers) =>
   Effect.gen(function* () {
     const authentication = yield* Authentication;
-    const configuration = yield* ServerConfiguration;
     const rateLimiter = yield* PatRateLimiter;
 
     return handlers.handleAll({
@@ -34,15 +30,6 @@ export const tokenHandlers = HttpApiBuilder.group(ConsumerAuthenticatedApi, "tok
           const principal = yield* CurrentPrincipal;
           if (principal.credential !== "session")
             return yield* Effect.fail(sessionRequiredResponse);
-          const request = yield* HttpServerRequest.HttpServerRequest;
-          if (
-            !credentialOriginAllowed(
-              principal.credential,
-              request.headers.origin,
-              configuration.publicAppOrigin,
-            )
-          )
-            return yield* Effect.fail(forbiddenOriginResponse);
 
           const outcome = yield* rateLimiter.limit(principal.id).pipe(
             Effect.tapError((error) => Effect.logError("token rate limit failed", error)),
@@ -92,15 +79,6 @@ export const tokenHandlers = HttpApiBuilder.group(ConsumerAuthenticatedApi, "tok
       revoke: ({ params }) =>
         Effect.gen(function* () {
           const principal = yield* CurrentPrincipal;
-          const request = yield* HttpServerRequest.HttpServerRequest;
-          if (
-            !credentialOriginAllowed(
-              principal.credential,
-              request.headers.origin,
-              configuration.publicAppOrigin,
-            )
-          )
-            return yield* Effect.fail(forbiddenOriginResponse);
           const revoked = yield* authentication.revokePat(principal, params.token_id).pipe(
             Effect.catchTags({
               "Authentication.SessionRequired": () => Effect.fail(sessionRequiredResponse),
