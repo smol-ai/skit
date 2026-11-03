@@ -14,7 +14,7 @@
  * Markers: APPROVE marks today's boundary, unchanged, for approval as-is. PROPOSED marks a change
  * from today's code. DEBT marks today's code that breaks the contract and is not approved.
  */
-import type { Effect, FileSystem, Option, Path, Scope } from "effect";
+import type { Brand, Effect, FileSystem, Option, Path, Scope } from "effect";
 import type { Digest } from "effect/crypto";
 import type { LibraryState } from "../packages/skit/src/library/library-state.js";
 import type {
@@ -97,9 +97,9 @@ export type Snapshot =
   | { readonly _tag: "Absent"; readonly revision: Revision }
   | { readonly _tag: "Present"; readonly revision: Revision; readonly state: LibraryState };
 /** Covers presence, state and any unfinished operation recorded in state.json. */
-export type Revision = string & { readonly Revision: unique symbol };
+export type Revision = Brand.Branded<string, "Revision">;
 /** One recorded operation. Today the recovery directory's basename (setup-operation.ts:316). */
-export type OperationId = string;
+export type OperationId = Brand.Branded<string, "OperationId">;
 
 // ── Filesystem evidence (core vocabulary) ───────────────────────────────────────────────────────
 // What a plan saw at a path, so apply and resume can tell "as recorded" from "changed". Today

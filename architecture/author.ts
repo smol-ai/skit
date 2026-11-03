@@ -63,7 +63,7 @@
  *   - the handler's own loadAuthorSyncRemote read (handlers/author/sync.ts:33) and publish's
  *     requireRegistryBinding (handlers/author/publish.ts:19-26): the workflow reads once
  */
-import type { Effect, FileSystem, Layer, Option, Path, PlatformError, Scope } from "effect";
+import type { Brand, Effect, FileSystem, Layer, Option, Path, PlatformError, Scope } from "effect";
 import type { Digest, SecureRandom } from "effect/crypto";
 import type * as History from "../packages/skit/src/history/history.js";
 import type * as Sync from "../packages/skit/src/sync/sync.js";
@@ -102,10 +102,10 @@ import type {
  * directory (today history.ts:79; workspace-identity.ts:21). Journal rows store roots that were
  * WorkspaceRoots when written, so AuthorHistory decodes them as such.
  */
-export type WorkspaceRoot = string & { readonly WorkspaceRoot: unique symbol };
+export type WorkspaceRoot = Brand.Branded<string, "WorkspaceRoot">;
 
 /** FROM CODE: `workspace_<32 hex>` (library/author-workspace-metadata.ts:11). Device-local, never portable (ADR-0026:9-10). */
-export type WorkspaceId = string & { readonly WorkspaceId: unique symbol };
+export type WorkspaceId = Brand.Branded<string, "WorkspaceId">;
 
 /** FROM CODE: skit.remote.v1, origin + namespace + skit, normalized (sync.ts:115-121, :142-155). ADR-0010/0011 contract, unchanged. */
 export type RemoteHome = AuthorRemoteHome;
@@ -389,7 +389,11 @@ export interface WorkspaceLease {
    */
   readonly releasedFor: <A, E, R>(
     effect: Effect.Effect<A, E, R>,
-  ) => Effect.Effect<A, E | AuthorWorkspaceBusy | AuthorWorkspaceUnsafe | PlatformError.PlatformError, R>;
+  ) => Effect.Effect<
+    A,
+    E | AuthorWorkspaceBusy | AuthorWorkspaceUnsafe | PlatformError.PlatformError,
+    R
+  >;
 }
 
 /**
@@ -480,12 +484,14 @@ export interface SyncKey {
  * NEW (A13): proof minted only by AuthorHistory.syncState.transition when it durably saved a
  * Writing checkpoint and checked both trees are in the store. writeTree requires it.
  */
-export interface PreparedWrite {
-  readonly PreparedWrite: unique symbol;
-  readonly key: SyncKey;
-  readonly from: History.TreeHash;
-  readonly to: History.TreeHash;
-}
+export type PreparedWrite = Brand.Branded<
+  {
+    readonly key: SyncKey;
+    readonly from: History.TreeHash;
+    readonly to: History.TreeHash;
+  },
+  "PreparedWrite"
+>;
 
 /** NEW: the saved checkpoint is no longer the one the step planned from. */
 export interface SyncStateConflict {
