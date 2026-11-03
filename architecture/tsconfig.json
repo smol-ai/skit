@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "typeRoots": ["../packages/skit/node_modules/@types"],
+    "paths": {
+      "effect": ["../packages/skit/node_modules/effect/dist/index.d.ts"],
+      "effect/*": ["../packages/skit/node_modules/effect/dist/*/index.d.ts"]
+    }
+  },
+  "include": ["*.ts", "conformance/*.ts"]
+}

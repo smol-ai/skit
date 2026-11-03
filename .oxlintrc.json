@@ -67,7 +67,9 @@
         "skit/no-cast-parsed-json": "error",
         "skit/no-structural-object-probe": "error",
         "skit/no-handrolled-fetch-double": "warn",
-        "skit/no-node-fs": "error"
+        "skit/no-node-fs": "error",
+        "skit/owner-boundaries": "error",
+        "skit/approved-services": "error"
       }
     },
     {

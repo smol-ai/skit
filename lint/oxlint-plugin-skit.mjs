@@ -1,3 +1,24 @@
+import { dirname, relative, resolve } from "node:path";
+import {
+  approvedServices,
+  owners as boundaryOwners,
+  debt as boundaryDebt,
+  serviceDebt,
+} from "../architecture/boundaries.mjs";
+
+const repositoryRoot = resolve(import.meta.dirname, "..");
+
+/** Sources that can carry an owner's private names: core, and the CLI facades that re-export it. */
+function carriesCoreNames(fileDirectory, source) {
+  if (source === "@smolai/skit-core" || source.startsWith("@smolai/skit-core/")) return true;
+  if (!source.startsWith(".")) return false;
+  const target = relative(repositoryRoot, resolve(fileDirectory, source));
+  return (
+    target.startsWith("packages/skit/src/") ||
+    /^packages\/cli\/src\/(front-end|library-application\/index)(\.js)?$/.test(target)
+  );
+}
+
 const streamNames = new Set(["stdout", "stderr"]);
 
 function containsProcessStream(node) {
@@ -468,6 +489,74 @@ const effectRules = {
           const source = node.source?.value;
           if (typeof source === "string" && source.startsWith("node:fs"))
             context.report({ node: node.source, messageId: "forbidden" });
+        },
+      };
+    },
+  },
+
+  "owner-boundaries": {
+    meta: {
+      type: "problem",
+      docs: { description: "Only an owner may use its private storage and writers" },
+      messages: {
+        forbidden:
+          "{{name}} is private to {{owner}} (architecture/boundaries.mjs). Call {{owner}} instead. Existing violations are listed as debt there; new ones are not allowed.",
+      },
+    },
+    create(context) {
+      const file = relative(repositoryRoot, context.filename);
+      const fileDirectory = dirname(context.filename);
+      const owners = boundaryOwners.filter(
+        (owner) => !file.startsWith(owner.owner) && !owner.allow.includes(file),
+      );
+      if (owners.length === 0) return {};
+      const allowed = new Set(boundaryDebt[file] ?? []);
+      const check = (node) => {
+        const source = node.source?.value;
+        if (typeof source !== "string" || !carriesCoreNames(fileDirectory, source)) return;
+        for (const specifier of node.specifiers ?? []) {
+          const imported = specifier.imported ?? specifier.local;
+          const name = imported?.type === "Identifier" ? imported.name : imported?.value;
+          if (typeof name !== "string" || allowed.has(name)) continue;
+          const owner = owners.find((candidate) => candidate.private.includes(name));
+          if (owner)
+            context.report({
+              node: specifier,
+              messageId: "forbidden",
+              data: { name, owner: owner.name },
+            });
+        }
+      };
+      return { ImportDeclaration: check, ExportNamedDeclaration: check };
+    },
+  },
+
+  "approved-services": {
+    meta: {
+      type: "problem",
+      docs: { description: "Only services the architecture model approves may exist" },
+      messages: {
+        forbidden:
+          "{{id}} is not an approved service (architecture/boundaries.mjs). A service must own state or hold a resource; otherwise write a plain function. New services are an architecture change.",
+      },
+    },
+    create(context) {
+      const known = new Set([...approvedServices, ...Object.keys(serviceDebt)]);
+      const isContext = (callee, member) =>
+        callee?.type === "MemberExpression" &&
+        !callee.computed &&
+        callee.object?.type === "Identifier" &&
+        callee.object.name === "Context" &&
+        callee.property?.name === member;
+      return {
+        CallExpression(node) {
+          const id = node.arguments[0];
+          if (id?.type !== "Literal" || typeof id.value !== "string") return;
+          const declares =
+            isContext(node.callee, "Reference") ||
+            (node.callee?.type === "CallExpression" && isContext(node.callee.callee, "Service"));
+          if (declares && !known.has(id.value))
+            context.report({ node: id, messageId: "forbidden", data: { id: id.value } });
         },
       };
     },
