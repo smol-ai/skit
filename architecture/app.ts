@@ -89,8 +89,8 @@ export const owners = {
     ],
   },
 
-  DeviceSettings: {
-    status: "RESHAPE", // D3: today MachineSettings, borrowing the Library lock
+  MachineSettings: {
+    status: "RESHAPE", // D3: plain functions today, borrowing the Library lock
     module: "packages/skit/src/library/machine-settings.ts",
     owns: ["<home>/machine.json"],
     ops: [
@@ -184,7 +184,7 @@ export const owners = {
       "Digest",
       "SecureRandom",
       "HomeLock",
-      "DeviceSettings (device identity)",
+      "MachineSettings (device identity)",
       "AuthorWorkspace (identity only; A10)",
     ],
     removes: [
@@ -335,9 +335,13 @@ export const workflows = {
   },
 } as const;
 
+/**
+ * Plain platform functions (not services, under the service rule): acquireWorkspaceLock (A8) and
+ * the home lock, one exclusive lock per <home>, reentrant with leases as WriterAuthority is today
+ * (writer-lock.ts:9-13,133-135; D3), a plain Effect.fn as t3code's directory lock is.
+ */
 /** Platform services, each kept under the service rule above (not every entry is re-checked yet). */
 export const platform = [
-  "HomeLock (one exclusive lock per <home>, reentrant with leases as WriterAuthority is today: writer-lock.ts:9-13,133-135)", // D3
   "AuthorIgnoreRepository (runtime-scoped resource; author-sync-testing.md:1117-1135)",
 
   "Renderer",

@@ -49,9 +49,9 @@ E  = https://github.com/Effect-TS/effect/blob/3b28bf686bf26e9700edd39c025aff2744
 ## D3. MachineSettings stays its own owner and stops borrowing the Library lock (Revised)
 
 **Recommend:**
-- A `DeviceSettings` owner for `machine.json`.
+- MachineSettings stays the owner of `machine.json`, under its existing name.
 - The device identity is written once, by atomically linking a finished file into place and treating "already exists" as success, so it needs no lock.
-- One home-directory lock is a shared platform function that every owner writing under `<home>` takes. That replaces `withConfigurationWriter` and each owner borrowing the Library's lock.
+- One home-directory lock is a shared plain function (not a service, like t3code's) that every owner writing under `<home>` takes. That replaces `withConfigurationWriter` and each owner borrowing the Library's lock.
 
 **Evidence:**
 - t3code gives settings, identity, runtime state, secrets and the database separate paths and separate owners under one state directory ([T/apps/server/src/config.ts#L37-L56](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/config.ts#L37-L56)).
@@ -79,7 +79,7 @@ E  = https://github.com/Effect-TS/effect/blob/3b28bf686bf26e9700edd39c025aff2744
 - On startup, for any operation recorded but not finished, Library finishes steps safe to repeat, otherwise stops and reports.
 - `removed/` holds the moved-aside folders plus a note for each move, written before the move and never deleted (setup-recovery-refactor.md:26,43).
 - **Stopped setup doesn't block (decided, Tim, 2026-11-03):** other Library changes stay allowed. Resume and undo recheck every folder and stop if anything changed. Corpus: t3code parks a failed step and carries on ([EffectOutbox.ts#L492-L519](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/orchestration-v2/EffectOutbox.ts#L492-L519)); humanlayer parks one setup only ([setup.machine.ts#L45-L70](https://github.com/humanlayer/humanlayer/blob/0dbe4f58f0df9e337783defb2928e8ab18b88725/apps/riptide-daemon/src/effects/services/workspace-repository-setup/workspace-repository-setup.machine.ts#L45-L70)).
-- **Undoing setup (decided, Tim, 2026-11-03):** undo also puts back the discovery folders setup saved in `machine.json`. It never touches the machine ID, the name or repository choices, which matches today (`setup-undo.ts:155-157,272-288`). The setup command calls both owners: Library for skills and folders, DeviceSettings for discovery folders. It is not a new service, and Library never writes `machine.json`.
+- **Undoing setup (decided, Tim, 2026-11-03):** undo also puts back the discovery folders setup saved in `machine.json`. It never touches the machine ID, the name or repository choices, which matches today (`setup-undo.ts:155-157,272-288`). The setup command calls both owners: Library for skills and folders, MachineSettings for discovery folders. It is not a new service, and Library never writes `machine.json`.
 - **Crash halfway (decided, Tim, 2026-11-03):** setup's steps are saved in `state.json` before any runs. The next run finishes steps that are safe to repeat. If anything differs from what was recorded, it stops and reports, and the user can undo. It never rolls back on its own.
   - humanlayer's workspace setup resumes from its saved step and parks on error ([setup.machine.ts#L45-L70](https://github.com/humanlayer/humanlayer/blob/0dbe4f58f0df9e337783defb2928e8ab18b88725/apps/riptide-daemon/src/effects/services/workspace-repository-setup/workspace-repository-setup.machine.ts#L45-L70)).
   - t3code re-runs only steps listed as safe to repeat and cancels the rest ([EffectOutbox.ts#L125-L144](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/orchestration-v2/EffectOutbox.ts#L125-L144), [#L492-L519](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/orchestration-v2/EffectOutbox.ts#L492-L519)).

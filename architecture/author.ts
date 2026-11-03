@@ -50,7 +50,7 @@
  *     AuthorSyncStateInvalid at the loader; no migration, no back-compat (decided; A5)
  *   - module-global journal semaphore `writers` (history-journal.ts:29) → held by the layer (A9)
  *   - MachineSettings.read / ensureIdentity called from history (history.ts:123-128)
- *     → DeviceSettings.identity (D3); the "never take the Library writer" ordering note goes away
+ *     → MachineSettings.identity (D3); the "never take the Library writer" ordering note goes away
  *   - loadAuthorHistory, loadStoredTrees, loadAuthorTree (history.ts:17-64): only tests call them
  *     (packages/cli/test/**). Removed; tests never justify code.
  * Core sync engine (packages/skit/src/sync/sync.ts):
@@ -473,7 +473,7 @@ export interface AuthorWorkspace {
 export type AuthorWorkspaceConfig = Record<never, never>;
 export type AuthorWorkspaceLayerError = never;
 
-/** What AuthorWorkspace.layer may require. No Library, no AuthorHistory, no Registry, no HomeLock. */
+/** What AuthorWorkspace.layer may require. No Library, no AuthorHistory, no Registry, no home lock. */
 export type AuthorWorkspaceRequires =
   | FileSystem.FileSystem
   | Path.Path
@@ -553,7 +553,7 @@ export type CaptureError =
   | AuthorHistoryBusy // SQLite contention after retries (history-journal.ts:197-205)
   | LocalFilesChangedDuringSync // no stable scan after 2 retries (history.ts:132-141)
   | AuthorWorkspaceAlreadyRegistered // a live copy of this workspace id elsewhere (history-journal.ts:47-53)
-  | MachineSettingsUnusable // OPEN: becomes DeviceSettings' error (D3); today history.ts:125-126, :152
+  | MachineSettingsUnusable // OPEN: becomes MachineSettings' error (D3); today history.ts:125-126, :152
   | TreeError
   | PlatformError.PlatformError; // includes AuthorWorkspace.readIdentity's I/O errors; only a malformed workspace.json falls back
 
@@ -569,7 +569,7 @@ export type SyncStateError = AuthorSyncStateInvalid | PlatformError.PlatformErro
 export interface AuthorHistory {
   /**
    * FROM CODE refreshAuthorHistory (history.ts:72-166): scan the workspace verbatim until stable,
-   * store its tree, record a revision when the tree changed (author = DeviceSettings identity +
+   * store its tree, record a revision when the tree changed (author = MachineSettings identity +
    * Clock), append a journal event in one SQLite transaction, then flush directories. An unchanged
    * scan returns the latest revision and records nothing. NEW (A10): reads the workspace id through
    * AuthorWorkspace.readIdentity (this root, and an older root for the copy check, history-journal.ts:48);
@@ -653,7 +653,7 @@ export interface AuthorHistory {
  *
  * Composition (NEW): Effect builds a layer value once per graph (Layer Memoization guide), not
  * once per equal config, so the CLI names one `authorLayer(home)` per runtime: AuthorHistory over
- * AuthorWorkspace, DeviceSettings and HomeLock, each built once. Every operation in
+ * AuthorWorkspace, built once. Every operation in
  * that runtime uses that instance; separate processes rely on the workspace lock and the home lock
  * (t3code names and reuses its shared subgraphs: runtimeLayer.ts#L60-L103).
  */
@@ -670,15 +670,13 @@ export declare namespace Services {
   interface AuthorHistory {
     readonly _contract: "skit/author/AuthorHistory";
   }
-  /** D3: the owner of machine.json. AuthorHistory needs only its write-once identity. */
-  interface DeviceSettings {
-    readonly _contract: "skit/DeviceSettings";
-  }
-  /** D3: the shared home-directory lock, a platform function every <home> writer takes. */
-  interface HomeLock {
-    readonly _contract: "skit/HomeLock";
-  }
 }
+// MachineSettings (D3, packages/skit/src/library/machine-settings.ts) and the home lock are plain
+// functions, not services, so they are not layer requirements: AuthorHistory calls
+// MachineSettings.read / ensureIdentity for the revision author device (history.ts:123-128) and
+// takes the home lock around the sync-bindings.json read-modify-write (A6). The home lock is a
+// plain Effect.fn as t3code's directory lock is (serverOwnership.ts#L183); today that is
+// withLibraryWriterLock (packages/skit/src/library/store/writer-lock.ts).
 
 /** What AuthorHistory.layer may require. Not Library, not Registry, not Sync.Remote, not History.Store. */
 export type AuthorHistoryRequires =
@@ -689,9 +687,7 @@ export type AuthorHistoryRequires =
   | AuthorIgnoreRepository // walkAuthorTree (packages/skit/src/artifact/tree.ts:258)
   | Digest.Digest // History.makeStore, treeHash (device-store.ts:25; history.ts:134)
   | SecureRandom.SecureRandom // journal workspace keys (history-journal.ts:84)
-  | Services.AuthorWorkspace // identity only (A10): history.ts:117; history-journal.ts:48
-  | Services.DeviceSettings // revision author device (history.ts:123-128)
-  | Services.HomeLock; // sync-bindings.json read-modify-write (A6)
+  | Services.AuthorWorkspace; // identity only (A10): history.ts:117; history-journal.ts:48
 
 export type AuthorHistoryLayer = (
   config: AuthorHistoryConfig,

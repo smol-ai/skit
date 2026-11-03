@@ -3,9 +3,9 @@
  * service rule). Anything not listed here stays OPEN. The declarations below follow them.
  * 1. Restore records its operation in state.json before moving folders (crash rule), so it does
  *    write state.json under the new model.
- * 2. Undo covers Library and folders; discovery folders are undone by DeviceSettings, called by
+ * 2. Undo covers Library and folders; discovery folders are undone by MachineSettings, called by
  *    the setup command (decided). UndoChange has no settingsChanged; that evidence is
- *    DeviceSettings' own (library.ts DeviceSettingsSetupRecord).
+ *    MachineSettings' own (library.ts MachineSettingsSetupRecord).
  * 3. planId stays as folder-evidence digest alongside baseRevision: revision covers state.json,
  *    planId covers the folders on disk. Apply rechecks both, and refuses with StalePlan.
  * 4. One stale error: Library's StalePlan, carrying the revision planned from and the one found.
@@ -124,7 +124,7 @@ export interface UndoChange {
   readonly files: readonly UndoFileAction[]; // setup-undo.ts:206
   readonly sourceSelections: readonly UndoSourceSelection[]; // setup-undo.ts:207-219
   readonly intentChanged: boolean; // setup-undo.ts:220
-  // settingsChanged (setup-undo.ts:221, :273-278) is not here: DeviceSettings undoes discovery
+  // settingsChanged (setup-undo.ts:221, :273-278) is not here: MachineSettings undoes discovery
   // from its own record keyed by the same operationId (resolution 2).
   /** The Library undo leaves. setup-undo.ts:171-180; saved at :272. */
   readonly next: LibraryState;

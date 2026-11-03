@@ -309,7 +309,7 @@ export interface VersionChoice {
  * (removals last), checks each folder is as recorded before moving it, and marks each step done.
  * After a crash the next run finishes steps that are safe to repeat; if anything differs from
  * what was recorded it stops and reports, and the user can undo. Never rolls back on its own.
- * Discovery folders are saved and undone by DeviceSettings; the setup command calls both owners.
+ * Discovery folders are saved and undone by MachineSettings; the setup command calls both owners.
  */
 export type SetupStep =
   | { readonly _tag: "Import"; readonly request: ImportRequest }
@@ -371,23 +371,23 @@ export interface StartupRecovery {
   readonly stopped: readonly Extract<OperationStatus, { _tag: "Stopped" }>[];
 }
 
-// ── DeviceSettings evidence (contract on another owner) ─────────────────────────────────────────
+// ── MachineSettings evidence (contract on another owner) ─────────────────────────────────────────
 /**
- * CONTRACT for DeviceSettings, the owner of discovery folders (app.ts owners). The setup command
- * calls Library.setup and DeviceSettings with the same operationId. Before saving settings,
- * DeviceSettings durably records its own before / expected-after discovery evidence keyed by that
+ * CONTRACT for MachineSettings, the owner of discovery folders (app.ts owners). The setup command
+ * calls Library.setup and MachineSettings with the same operationId. Before saving settings,
+ * MachineSettings durably records its own before / expected-after discovery evidence keyed by that
  * id (today SetupOperation.recordSettings then settingsSaved, setup-operation.ts:318-345; refused
  * when `before` is not what was expected, :322-326). Its undo refuses unless current settings equal
  * expectedAfter. Library never reads or writes this record.
  */
-export interface DeviceSettingsSetupRecord {
+export interface MachineSettingsSetupRecord {
   readonly operationId: OperationId;
   readonly before: DiscoveryEvidence;
   readonly expectedAfter: DiscoveryEvidence;
 }
 /** SetupDiscoverySettings (cli setup-undo-intent.ts:99-105) plus machineId (setup-operation.ts:311, :331). */
 export interface DiscoveryEvidence {
-  readonly settings: unknown; // OPEN: SetupDiscoverySettings moves to core with DeviceSettings
+  readonly settings: unknown; // OPEN: SetupDiscoverySettings moves to core with MachineSettings
   readonly machineId: Option.Option<MachineId>;
 }
 
