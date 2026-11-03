@@ -83,11 +83,12 @@ export type ReadError =
   | RevisionTooLarge;
 
 export interface SkitService {
-  /** Create an empty SKIT; its `current` stays null until a device moves it. */
+  /** Create an empty SKIT, or replay its saved creation request without changing it. */
   readonly create: (
     owner: string,
     slug: string,
     visibility: SkitCurrentResponse["visibility"],
+    requestId?: string,
   ) => Effect.Effect<void, SkitExists | DatabaseError>;
   readonly current: (
     owner: string,
@@ -238,15 +239,26 @@ export const layer = Layer.effect(
       owner: string,
       slug: string,
       visibility: SkitCurrentResponse["visibility"],
+      requestId?: string,
     ) {
       const now = new Date(yield* Clock.currentTimeMillis).toISOString();
       const created = yield* db(
         "create skit",
-        sql`INSERT INTO skits (owner_slug, skit_slug, visibility, current_revision_id, created_at, updated_at)
-            VALUES (${owner}, ${slug}, ${visibility}, NULL, ${now}, ${now})
+        sql`INSERT INTO skits (owner_slug, skit_slug, visibility, current_revision_id, created_at, updated_at, creation_request_id)
+            VALUES (${owner}, ${slug}, ${visibility}, NULL, ${now}, ${now}, ${requestId ?? null})
             ON CONFLICT (owner_slug, skit_slug) DO NOTHING RETURNING owner_slug`,
       );
-      if (created.length === 0) return yield* new SkitExists();
+      if (created.length > 0) return;
+      if (requestId !== undefined) {
+        const replay = yield* db(
+          "check skit creation request",
+          sql`SELECT owner_slug FROM skits
+              WHERE owner_slug = ${owner} AND skit_slug = ${slug}
+                AND creation_request_id = ${requestId} AND visibility = ${visibility}`,
+        );
+        if (replay.length > 0) return;
+      }
+      return yield* new SkitExists();
     });
 
     const current = Effect.fn("SKIT.current")(function* (owner: string, slug: string) {

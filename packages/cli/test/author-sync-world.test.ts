@@ -23,6 +23,82 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
 import { makeAuthorSyncServer } from "./helpers/author-sync-server.js";
 
+it.effect.each(["before-create", "after-create", "after-post", "after-move"] as const)(
+  "first connection recovers a lost response and restart at %s without destination flags",
+  (boundary) =>
+    Effect.gen(function* () {
+      const world = yield* makeAuthorSyncWorld();
+      const fs = yield* FileSystem.FileSystem;
+      yield* world.server.dropNextResponse("a", boundary);
+      expect(yield* Effect.result(world.a.sync(true))).toMatchObject({ _tag: "Failure" });
+      yield* world.a.restart();
+      const before = yield* world.a.files();
+      yield* world.a.sync();
+      expect(yield* world.a.files()).toEqual(before);
+      expect(yield* fs.exists(join(world.a.workspace, "skit.remote.json"))).toBe(true);
+      expect(yield* fs.exists(join(world.a.workspace, ".skit/connection.json"))).toBe(false);
+      expect(yield* world.server.current()).not.toBeNull();
+      expect(yield* world.server.revisions()).toHaveLength(1);
+      expect((yield* world.a.sync()).status).toBe("up_to_date");
+    }).pipe(Effect.provide(testPlatformLayer)),
+);
+
+it.effect(
+  "a competing first connection cannot claim another creation and releases its pending intent",
+  () =>
+    Effect.gen(function* () {
+      const world = yield* makeAuthorSyncWorld();
+      const fs = yield* FileSystem.FileSystem;
+      const gate = yield* world.server.gate("a", "before-create");
+      const first = yield* world.a.startSync(true);
+      yield* gate.reached();
+      expect((yield* world.b.sync(true)).status).toBe("created");
+      yield* gate.release();
+      expect(yield* Effect.flip(Fiber.join(first))).toMatchObject({
+        _tag: "DestinationExistsWithoutHistory",
+      });
+      expect(yield* fs.exists(join(world.a.workspace, ".skit/connection.json"))).toBe(false);
+      expect(yield* fs.exists(join(world.a.workspace, "skit.remote.json"))).toBe(false);
+      expect(yield* world.server.revisions()).toHaveLength(1);
+    }).pipe(Effect.provide(testPlatformLayer)),
+);
+
+it.effect(
+  "pending connection previews keep the receipt and existing destinations remain protected",
+  () =>
+    Effect.gen(function* () {
+      const world = yield* makeAuthorSyncWorld();
+      const fs = yield* FileSystem.FileSystem;
+      yield* world.server.dropNextResponse("a", "after-create");
+      yield* Effect.result(world.a.sync(true));
+      const path = join(world.a.workspace, ".skit/connection.json");
+      const receipt = yield* fs.readFileString(path);
+      expect((yield* world.a.preview()).status).toBe("first_sync_ready");
+      expect(yield* fs.readFileString(path)).toBe(receipt);
+      expect(yield* world.server.revisions()).toHaveLength(0);
+      expect(yield* Effect.flip(world.b.sync(true))).toMatchObject({
+        _tag: "DestinationExistsWithoutHistory",
+      });
+      expect(yield* fs.exists(join(world.b.workspace, ".skit/connection.json"))).toBe(false);
+      // The same original invocation can also be repeated after a restart.
+      yield* world.a.restart();
+      expect((yield* world.a.sync(true)).status).toBe("created");
+    }).pipe(Effect.provide(testPlatformLayer)),
+);
+
+it.effect("a restart while creation is awaiting its response resumes the saved request", () =>
+  Effect.gen(function* () {
+    const world = yield* makeAuthorSyncWorld();
+    const gate = yield* world.server.gate("a", "after-create");
+    yield* world.a.startSync(true);
+    yield* gate.reached();
+    yield* world.a.restart();
+    yield* world.a.sync();
+    expect(yield* world.server.revisions()).toHaveLength(1);
+    expect((yield* world.a.sync()).status).toBe("up_to_date");
+  }).pipe(Effect.provide(testPlatformLayer)),
+);
+
 it.effect.each([
   "{unfinished",
   JSON.stringify({
@@ -53,6 +129,27 @@ it.effect.each([
       yield* fs.writeFileString(path, saved);
       expect((yield* world.a.sync()).status).toBe("up_to_date");
     }).pipe(Effect.provide(testPlatformLayer)),
+);
+
+it.effect("first connection recovers when saving the portable remote home fails", () =>
+  Effect.gen(function* () {
+    const world = yield* makeAuthorSyncWorld();
+    const fs = yield* FileSystem.FileSystem;
+    const gate = yield* world.server.gate("a", "after-create");
+    const running = yield* world.a.startSync(true);
+    yield* gate.reached();
+    const remote = join(world.a.workspace, "skit.remote.json");
+    // Inject a native rename failure after remote creation, before the local commit point.
+    yield* fs.makeDirectory(remote);
+    yield* gate.release();
+    expect(Exit.isFailure(yield* Fiber.await(running))).toBe(true);
+    expect(yield* fs.exists(join(world.a.workspace, ".skit/connection.json"))).toBe(true);
+    expect(yield* world.server.revisions()).toHaveLength(0);
+    yield* fs.remove(remote, { recursive: true });
+    yield* world.a.restart();
+    expect((yield* world.a.sync()).status).toBe("created");
+    expect(yield* world.server.revisions()).toHaveLength(1);
+  }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect.each(["Idle", "Sending", "Writing"] as const)(

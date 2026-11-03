@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { configurationForHome } from "../../configuration/skit-configuration.js";
 import {
   AuthoringAuthenticatedApi,
@@ -45,6 +46,9 @@ import {
   SkitContractError,
   Sync,
   TreeEntry,
+  writeJsonExclusive,
+  writeRawAtomic,
+  syncPaths,
 } from "@smolai/skit-core";
 import { MissingRequirement } from "../failures.js";
 import {
@@ -106,23 +110,16 @@ const SyncStatesDocument = Schema.fromJsonString(
   Schema.Union([SavedSyncStates, LegacySyncStates, PreReleaseBindings]),
 );
 
-export type AuthorRemoteHome = {
-  schema: "skit.remote.v1";
-  origin: string;
-  namespace: string;
-  skit: string;
-};
-
 /** Excess properties are an error: this document is exhaustive, and the previous reader
  * rejected any key set but these four. */
-const AuthorRemoteDocument = Schema.fromJsonString(
-  Schema.Struct({
-    schema: Schema.Literal("skit.remote.v1"),
-    origin: Schema.String,
-    namespace: Schema.String,
-    skit: Schema.String,
-  }),
-);
+const AuthorRemoteHome = Schema.Struct({
+  schema: Schema.Literal("skit.remote.v1"),
+  origin: Schema.String,
+  namespace: Schema.String,
+  skit: Schema.String,
+});
+export type AuthorRemoteHome = typeof AuthorRemoteHome.Type;
+const AuthorRemoteDocument = Schema.fromJsonString(AuthorRemoteHome);
 
 const decodeAuthorRemote = Schema.decodeUnknownEffect(AuthorRemoteDocument, {
   onExcessProperty: "error",
@@ -235,17 +232,82 @@ export function loadAuthorRemote(
   });
 }
 
+/** First connection is recoverable independently of revision transfer. */
+const SyncDestination = Schema.TaggedUnion({
+  NewRemote: {
+    remote: AuthorRemoteHome,
+    visibility: Schema.Literals(["private", "unlisted", "public"]),
+  },
+  Connecting: {
+    remote: AuthorRemoteHome,
+    visibility: Schema.Literals(["private", "unlisted", "public"]),
+    requestId: Schema.String.check(Schema.isMinLength(1)),
+  },
+  ConnectedRemote: { remote: AuthorRemoteHome },
+});
+type SyncDestination = typeof SyncDestination.Type;
+const Connecting = SyncDestination.cases.Connecting;
+type Connecting = typeof Connecting.Type;
+const connectionPath = (root: string) => join(root, ".skit", "connection.json");
+
+const loadAuthorConnection = Effect.fn("Sync.loadConnection")(function* (root: string) {
+  const remote = yield* loadAuthorRemote(root);
+  if (remote !== undefined) return SyncDestination.cases.ConnectedRemote.make({ remote });
+  const fs = yield* FileSystem.FileSystem;
+  const path = connectionPath(root);
+  const text = yield* fs
+    .readFileString(path)
+    .pipe(
+      Effect.catchTag("PlatformError", (error) =>
+        isErrno(error, "ENOENT") ? Effect.succeed(undefined) : Effect.fail(error),
+      ),
+    );
+  if (text === undefined) return undefined;
+  const pending = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Connecting), {
+    onExcessProperty: "error",
+  })(text).pipe(
+    Effect.mapError((error) => new AuthorSyncStateInvalid({ path, reason: String(error) })),
+  );
+  const normalized = yield* normalizeRemote(pending.remote).pipe(
+    Effect.mapError((error) => new AuthorSyncStateInvalid({ path, reason: String(error) })),
+  );
+  if (
+    normalized.origin !== pending.remote.origin ||
+    normalized.namespace !== pending.remote.namespace ||
+    normalized.skit !== pending.remote.skit
+  )
+    return yield* new AuthorSyncStateInvalid({ path, reason: "Noncanonical destination" });
+  return pending;
+});
+
+/** The credential origin for both a pending and a completed connection. */
+export const loadAuthorSyncRemote = Effect.fn("Sync.loadRemote")(function* (root: string) {
+  return (yield* loadAuthorConnection(resolve(root)))?.remote;
+});
+
+const saveAuthorConnection = Effect.fn("Sync.saveConnection")(function* (
+  root: string,
+  connection: Connecting,
+) {
+  const path = connectionPath(root);
+  yield* writeJsonExclusive(path, connection);
+  // Flush the new checkpoint and both directory entries before any network mutation.
+  yield* syncPaths([path, dirname(path), root]);
+});
+
+const removeAuthorConnection = Effect.fn("Sync.removeConnection")(function* (root: string) {
+  const fs = yield* FileSystem.FileSystem;
+  yield* fs.remove(connectionPath(root));
+  yield* syncPaths([dirname(connectionPath(root))]);
+});
+
 const writeRemote = Effect.fn("Sync.writeRemote")(function* (
   root: string,
   remote: AuthorRemoteHome,
 ) {
-  const fs = yield* FileSystem.FileSystem;
   const path = remotePath(root);
-  const temporary = `${path}.tmp-${process.pid}`;
-  yield* fs.writeFileString(temporary, `${JSON.stringify(remote, null, 2)}\n`, {
-    mode: 0o644,
-  });
-  yield* fs.rename(temporary, path);
+  yield* writeRawAtomic(path, `${JSON.stringify(remote, null, 2)}\n`, false, 0o644);
+  yield* syncPaths([path, root]);
 });
 
 /**
@@ -386,13 +448,6 @@ const writeAuthorTree = Effect.fn("Sync.writeTree")(function* (
   for (const folder of folders) yield* links.removeEmptyDirectory(join(root, ...folder.split("/")));
 });
 
-/** Whether this invocation connects a new SKIT or syncs a saved remote home. */
-type SyncDestination = Data.TaggedEnum<{
-  NewRemote: { readonly remote: AuthorRemoteHome; readonly visibility: AuthorVisibility };
-  ConnectedRemote: { readonly remote: AuthorRemoteHome };
-}>;
-const SyncDestination = Data.taggedEnum<SyncDestination>();
-
 export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
   rootInput: string,
   options: {
@@ -407,7 +462,8 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
 ) {
   const root = resolve(rootInput);
   const configuredBase = options.baseUrl;
-  const storedRemote = yield* loadAuthorRemote(root);
+  const connection = yield* loadAuthorConnection(root);
+  const storedRemote = connection?._tag === "ConnectedRemote" ? connection.remote : undefined;
   if (storedRemote && options.to)
     return yield* new AuthorRemoteAlreadyExists({
       locator: skitLocator(storedRemote),
@@ -415,8 +471,8 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
   if (storedRemote && options.visibility)
     return yield* new VisibilityNotAccepted({ reason: "already-synced" });
   // A first sync names its destination and visibility; a synced workspace has its remote home.
-  const destination = storedRemote
-    ? SyncDestination.ConnectedRemote({ remote: storedRemote })
+  const destination: SyncDestination = connection
+    ? connection
     : options.to === undefined
       ? yield* new MissingRequirement({
           command: "First author sync",
@@ -424,10 +480,19 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
         })
       : options.visibility === undefined
         ? yield* new VisibilityNotAccepted({ reason: "required" })
-        : SyncDestination.NewRemote({
+        : SyncDestination.cases.NewRemote.make({
             remote: yield* parseAuthorDestination(options.to, configuredBase),
             visibility: options.visibility,
           });
+  if (destination._tag === "Connecting") {
+    if (options.to !== undefined) {
+      const requested = yield* parseAuthorDestination(options.to, configuredBase);
+      if (skitLocator(requested) !== skitLocator(destination.remote))
+        return yield* new AuthorRemoteAlreadyExists({ locator: skitLocator(destination.remote) });
+    }
+    if (options.visibility !== undefined && options.visibility !== destination.visibility)
+      return yield* new VisibilityNotAccepted({ reason: "already-synced" });
+  }
   const { remote } = destination;
   const base = remote.origin;
   const owner = remote.namespace;
@@ -523,12 +588,16 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
         ),
       ),
   });
-  if (destination._tag === "NewRemote") {
-    const existing = yield* client.skits.current({ params }).pipe(Effect.result);
-    if (Result.isSuccess(existing))
-      return yield* new DestinationExistsWithoutHistory({ identity: locator });
-    if (!Schema.is(SkitNotFoundResponse)(existing.failure))
-      return yield* Effect.fail(failure("skit current", 200)(existing.failure));
+  // Decode all saved checkpoints before creating anything or replacing a base.
+  const states = yield* loadSyncStates(options.home);
+  if (destination._tag !== "ConnectedRemote") {
+    if (destination._tag === "NewRemote") {
+      const existing = yield* client.skits.current({ params }).pipe(Effect.result);
+      if (Result.isSuccess(existing))
+        return yield* new DestinationExistsWithoutHistory({ identity: locator });
+      if (!Schema.is(SkitNotFoundResponse)(existing.failure))
+        return yield* Effect.fail(failure("skit current", 200)(existing.failure));
+    }
     if (!options.apply)
       return {
         status: "first_sync_ready",
@@ -538,22 +607,35 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
         file_count: local.tree.length,
         effects: ["create_skit", "save_revision", "record_remote_home"],
       } satisfies AuthorSyncResult;
+    const pending =
+      destination._tag === "Connecting"
+        ? destination
+        : Connecting.make({ remote, visibility: destination.visibility, requestId: randomUUID() });
+    if (destination._tag === "NewRemote") yield* saveAuthorConnection(root, pending);
     yield* client.skits
-      .create({ payload: { owner, slug, visibility: destination.visibility } })
+      .create({
+        payload: { owner, slug, visibility: pending.visibility, request_id: pending.requestId },
+      })
       .pipe(
         Effect.mapError((error) =>
           Schema.is(SkitExistsResponse)(error)
             ? new DestinationExistsWithoutHistory({ identity: locator })
             : failure("skit create", 201)(error),
         ),
+        // A definitive receipt mismatch proves this request did not create the destination.
+        Effect.catchTag("DestinationExistsWithoutHistory", (error) =>
+          removeAuthorConnection(root).pipe(Effect.andThen(Effect.fail(error))),
+        ),
       );
+    // No revision writes precede this commit point. A pending retry can safely start at no base.
+    yield* saveSyncState(options.home, locator, Sync.Idle.make({ base: null }));
+    yield* writeRemote(root, remote);
+    yield* removeAuthorConnection(root);
   }
 
-  // A SKIT this sync just created starts from no base, whatever an earlier binding said.
   const state =
-    (destination._tag === "ConnectedRemote"
-      ? (yield* loadSyncStates(options.home))[locator]
-      : undefined) ?? Sync.Idle.make({ base: null });
+    (destination._tag === "ConnectedRemote" ? states[locator] : undefined) ??
+    Sync.Idle.make({ base: null });
   const planned = yield* Sync.loadPlanInput(state, localHash).pipe(
     Effect.map((view) => Sync.plan(view)),
     Effect.provideService(Sync.Remote, registry),
@@ -598,10 +680,9 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
   }).pipe(Effect.provideService(Sync.Remote, registry), withDeviceStore(directory));
   if (outcome.status === "blocked")
     return { status: "blocked", changed: false, ...outcome.removal } satisfies AuthorSyncResult;
-  if (destination._tag === "NewRemote") yield* writeRemote(root, remote);
   // Record what sync wrote as this workspace's latest observation.
   yield* refreshAuthorHistory(root, options.home);
-  if (destination._tag === "NewRemote")
+  if (destination._tag !== "ConnectedRemote")
     return {
       status: "created",
       changed: true,

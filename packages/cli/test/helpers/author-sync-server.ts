@@ -12,7 +12,14 @@ import {
 import type { TestHttpHandler } from "./http-test-client.js";
 
 export type AuthorDevice = "a" | "b" | "c";
-type Boundary = "before-current" | "before-post" | "after-post" | "before-move" | "after-move";
+type Boundary =
+  | "before-create"
+  | "after-create"
+  | "before-current"
+  | "before-post"
+  | "after-post"
+  | "before-move"
+  | "after-move";
 type Fault = {
   readonly device: AuthorDevice;
   readonly boundary: Boundary;
@@ -42,6 +49,8 @@ const decode = <S extends Schema.Top>(schema: S, request: HttpClientRequest.Http
 
 interface SkitState {
   readonly created: boolean;
+  readonly requestId?: string;
+  readonly visibility?: string;
   readonly current: History.RevisionId | null;
   readonly revisions: ReadonlyArray<StoredRevision>;
 }
@@ -107,14 +116,25 @@ export const makeAuthorSyncServer = Effect.fn("Test.makeAuthorSyncServer")(funct
       if ((yield* Ref.get(offline)).has(device)) return yield* Effect.fail(transportError(request));
       const state = yield* Ref.get(skit);
       if (request.method === "POST" && url.pathname === "/api/skits") {
-        yield* decode(SkitCreateRequest, request);
-        const created = yield* Ref.modify(skit, (current) => [
-          !current.created,
-          { ...current, created: true },
+        const input = yield* decode(SkitCreateRequest, request);
+        yield* checkpoint(device, "before-create", request);
+        const accepted = yield* Ref.modify(skit, (current) => [
+          !current.created ||
+            (input.request_id !== undefined &&
+              current.requestId === input.request_id &&
+              current.visibility === input.visibility),
+          current.created
+            ? current
+            : {
+                ...current,
+                created: true,
+                requestId: input.request_id,
+                visibility: input.visibility,
+              },
         ]);
-        return created
-          ? Response.json({ skit_id: "swyx/tools" }, { status: 201 })
-          : Response.json({ error: "skit_exists" }, { status: 409 });
+        if (!accepted) return Response.json({ error: "skit_exists" }, { status: 409 });
+        yield* checkpoint(device, "after-create", request);
+        return Response.json({ skit_id: "swyx/tools" }, { status: 201 });
       }
       if (!state.created) return notFound();
       if (request.method === "GET" && url.pathname === `${prefix}/current`) {

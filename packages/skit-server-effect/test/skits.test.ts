@@ -100,6 +100,33 @@ const archiveOf = (tree: History.Tree) =>
     ),
   );
 
+it.effect("creation replays only its saved request and never resets a current revision", () =>
+  withRegistry(({ skits }) =>
+    Effect.gen(function* () {
+      const payload = {
+        ...params,
+        visibility: "private" as const,
+        request_id: "device-creation-request",
+      };
+      yield* skits.create({ payload });
+      const request = yield* revisionRequest(skillTree);
+      yield* skits.post({ params, payload: request });
+      yield* skits.move({ params, payload: { expected: null, id: request.id } });
+      expect(yield* skits.create({ payload })).toEqual({ skit_id: "skit-author/tools" });
+      expect((yield* skits.current({ params })).current).toBe(request.id);
+      for (const other of [
+        { ...params, visibility: "private" as const },
+        { ...payload, request_id: "other-device" },
+        { ...payload, visibility: "public" as const },
+      ])
+        expect(yield* Effect.flip(skits.create({ payload: other }))).toMatchObject({
+          error: "skit_exists",
+        });
+      expect(yield* countRows("skits")).toBe(1);
+    }),
+  ),
+);
+
 it.effect("creates an empty SKIT whose current is null, once", () =>
   withRegistry(({ skits }) =>
     Effect.gen(function* () {

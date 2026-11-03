@@ -26,6 +26,8 @@ export const SkitCreateRequest = Schema.Struct({
   owner: slug,
   slug,
   visibility: skitVisibilitySchema,
+  /** A saved creation request may be replayed after its response is lost. */
+  request_id: Schema.optionalKey(nonEmpty),
 });
 export type SkitCreateRequest = typeof SkitCreateRequest.Type;
 export const SkitCreateResponse = Schema.Struct({ skit_id: nonEmpty });

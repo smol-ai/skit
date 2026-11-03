@@ -10,7 +10,7 @@ import { AuthenticationRequired } from "../../registry/failures.js";
 import { Renderer } from "../../presentation/renderer.js";
 import {
   parseAuthorDestination,
-  loadAuthorRemote,
+  loadAuthorSyncRemote,
   syncAuthorWorkspace,
   type AuthorVisibility,
 } from "../../workflows/author/sync.js";
@@ -30,7 +30,7 @@ export const authorSyncCommand = Effect.fn("CLI.authorSync")(function* <AuthErro
   readonly visibility?: AuthorVisibility;
   readonly authState: Result.Result<ResolvedAuth, AuthError>;
 }) {
-  const storedRemote = yield* loadAuthorRemote(options.root ?? ".");
+  const storedRemote = yield* loadAuthorSyncRemote(options.root ?? ".");
   let credentials = storedRemote
     ? yield* resolveAuthForOrigin(storedRemote.origin, options.home)
     : undefined;

@@ -74,65 +74,78 @@ it.effect("Library sync preserves credential configuration failures", () =>
   ),
 );
 
-it.effect("author sync never sends an environment token to another Registry's remote", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const root = yield* scratch("skit-sync-environment-token-");
-    const home = yield* scratch("skit-sync-environment-home-");
-    yield* fs.makeDirectory(join(root, "skills", "review"), { recursive: true });
-    yield* fs.writeFileString(
-      join(root, "skit.json"),
-      JSON.stringify({
-        slug: "tools",
-        skills: [{ name: "review", path: "skills/review", invocation: "explicit" }],
-      }),
-    );
-    yield* fs.writeFileString(
-      join(root, "skills", "review", "SKILL.md"),
-      "---\nname: review\ndescription: Review code.\n---\n# Review\n",
-    );
-    yield* fs.writeFileString(
-      join(root, "skit.remote.json"),
-      JSON.stringify({
+it.effect.each(["connected", "connecting"] as const)(
+  "author sync never sends an environment token to another Registry's %s remote",
+  (state) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* scratch("skit-sync-environment-token-");
+      const home = yield* scratch("skit-sync-environment-home-");
+      yield* fs.makeDirectory(join(root, "skills", "review"), { recursive: true });
+      yield* fs.writeFileString(
+        join(root, "skit.json"),
+        JSON.stringify({
+          slug: "tools",
+          skills: [{ name: "review", path: "skills/review", invocation: "explicit" }],
+        }),
+      );
+      yield* fs.writeFileString(
+        join(root, "skills", "review", "SKILL.md"),
+        "---\nname: review\ndescription: Review code.\n---\n# Review\n",
+      );
+      const remote = {
         schema: "skit.remote.v1",
         origin: "https://stored.example",
         namespace: "tim",
         skit: "tools",
-      }),
-    );
-    const authorizations: Array<string | undefined> = [];
-    yield* authorSyncCommand({
-      root,
-      apply: false,
-      home,
-      authState: Result.succeed({ source: "none" as const }),
-    }).pipe(
-      Effect.exit,
-      Effect.provide(rendererTestLayer()),
-      Effect.provide(
-        registryHttpLayer(
-          testHttpClientLayer((request) =>
-            Effect.sync(() => {
-              authorizations.push(request.headers.authorization);
-              return Response.json({ error: "skit_not_found" }, { status: 404 });
-            }),
-          ),
+      };
+      yield* fs.makeDirectory(join(root, ".skit"), { recursive: true });
+      yield* fs.writeFileString(
+        join(root, state === "connected" ? "skit.remote.json" : ".skit/connection.json"),
+        JSON.stringify(
+          state === "connected"
+            ? remote
+            : {
+                _tag: "Connecting",
+                remote,
+                visibility: "private",
+                requestId: "saved-request",
+              },
         ),
-      ),
-      Effect.provide(
-        skitConfigurationLayer().pipe(
-          Layer.provide(
-            ConfigProvider.layer(
-              ConfigProvider.fromUnknown({
-                SKIT_SERVER_URL: "https://environment.example",
-                SKIT_TOKEN: "skit_pat_environment",
+      );
+      const authorizations: Array<string | undefined> = [];
+      yield* authorSyncCommand({
+        root,
+        apply: state === "connecting",
+        home,
+        authState: Result.succeed({ source: "none" as const }),
+      }).pipe(
+        Effect.exit,
+        Effect.provide(rendererTestLayer()),
+        Effect.provide(
+          registryHttpLayer(
+            testHttpClientLayer((request) =>
+              Effect.sync(() => {
+                authorizations.push(request.headers.authorization);
+                return Response.json({ error: "skit_not_found" }, { status: 404 });
               }),
             ),
           ),
         ),
-      ),
-    );
-    assert.isNotEmpty(authorizations);
-    assert.isFalse(authorizations.some((header) => header?.includes("skit_pat_environment")));
-  }).pipe(Effect.provide(testPlatformLayer)),
+        Effect.provide(
+          skitConfigurationLayer().pipe(
+            Layer.provide(
+              ConfigProvider.layer(
+                ConfigProvider.fromUnknown({
+                  SKIT_SERVER_URL: "https://environment.example",
+                  SKIT_TOKEN: "skit_pat_environment",
+                }),
+              ),
+            ),
+          ),
+        ),
+      );
+      assert.isNotEmpty(authorizations);
+      assert.isFalse(authorizations.some((header) => header?.includes("skit_pat_environment")));
+    }).pipe(Effect.provide(testPlatformLayer)),
 );

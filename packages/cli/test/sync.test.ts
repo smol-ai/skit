@@ -100,6 +100,7 @@ it.effect("first sync previews then records one remote home without publishing i
     });
     expect(writes).toEqual([]);
     expect(yield* exists(join(root, "skit.remote.json"))).toBe(false);
+    expect(yield* exists(join(root, ".skit/connection.json"))).toBe(false);
 
     expect(yield* runAuthorSync(root, { ...options, apply: true }, transport)).toMatchObject({
       status: "created",
@@ -127,6 +128,46 @@ it.effect("first sync previews then records one remote home without publishing i
       namespace: "swyx",
       skit: "tools",
     });
+  }).pipe(Effect.provide(testPlatformLayer)),
+);
+
+it.effect("a pending first connection cannot be redirected or change visibility", () =>
+  Effect.gen(function* () {
+    const root = yield* scratch("skit-pending-sync-test-");
+    const home = yield* scratch("skit-pending-sync-home-");
+    yield* copySkitFixtureEffect("authored", root);
+    const server = yield* makeAuthorSyncServer();
+    const transport = server.transport("a");
+    const options = {
+      apply: true,
+      home,
+      baseUrl: "https://registry.example",
+      to: "swyx/tools",
+      visibility: "private" as const,
+    };
+    yield* server.dropNextResponse("a", "after-create");
+    yield* Effect.result(runAuthorSync(root, options, transport));
+    const path = join(root, ".skit/connection.json");
+    const pending = yield* readText(path);
+    const events = yield* server.events();
+    expect(
+      yield* Effect.flip(runAuthorSync(root, { ...options, to: "swyx/other" }, transport)),
+    ).toMatchObject({ _tag: "AuthorRemoteAlreadyExists" });
+    expect(
+      yield* Effect.flip(runAuthorSync(root, { ...options, visibility: "public" }, transport)),
+    ).toMatchObject({ _tag: "VisibilityNotAccepted" });
+    expect(yield* readText(path)).toBe(pending);
+    expect(yield* server.events()).toEqual(events);
+    expect(yield* server.revisions()).toHaveLength(0);
+    // A damaged receipt must fail closed, with its bytes available for repair.
+    yield* writeText(path, "{unfinished");
+    expect(yield* Effect.flip(runAuthorSync(root, { apply: true, home }, transport))).toMatchObject(
+      { _tag: "AuthorSyncStateInvalid", path },
+    );
+    expect(yield* readText(path)).toBe("{unfinished");
+    expect(yield* server.events()).toEqual(events);
+    yield* writeText(path, pending);
+    expect((yield* runAuthorSync(root, { apply: true, home }, transport)).status).toBe("created");
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 

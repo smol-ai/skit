@@ -88,12 +88,14 @@ export const skitAuthoringHandlers = HttpApiBuilder.group(
             const principal = yield* requireWriter;
             if (!(yield* authorize(authorization.ownsNamespace(principal, payload.owner))))
               return yield* Effect.fail(forbiddenResponse);
-            yield* skits.create(payload.owner, payload.slug, payload.visibility).pipe(
-              Effect.catchTags({
-                "SKIT.Exists": () => Effect.fail(skitExistsResponse),
-                "Cloudflare.DatabaseError": storageFailure("skit storage failed"),
-              }),
-            );
+            yield* skits
+              .create(payload.owner, payload.slug, payload.visibility, payload.request_id)
+              .pipe(
+                Effect.catchTags({
+                  "SKIT.Exists": () => Effect.fail(skitExistsResponse),
+                  "Cloudflare.DatabaseError": storageFailure("skit storage failed"),
+                }),
+              );
             yield* noStore;
             return { skit_id: `${payload.owner}/${payload.slug}` };
           }),
