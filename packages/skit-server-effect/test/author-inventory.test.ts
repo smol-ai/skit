@@ -4,12 +4,11 @@ import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { AuthorInventory, layer as authorInventoryLayer } from "../src/author-inventory/service.js";
 import { layer as authorizationLayer } from "../src/authorization/service.js";
-import { Bindings, databaseLayer } from "../src/platform/cloudflare.js";
+import { databaseLayer } from "../src/platform/cloudflare.js";
 
-const bindings = { database: env.DB, blobs: env.SKIT_BLOBS };
-const bindingsLayer = Layer.merge(Layer.succeed(Bindings, bindings), databaseLayer(env.DB));
+const platformLayer = databaseLayer(env.DB);
 const testLayer = authorInventoryLayer.pipe(
-  Layer.provideMerge(authorizationLayer.pipe(Layer.provideMerge(bindingsLayer))),
+  Layer.provideMerge(authorizationLayer.pipe(Layer.provideMerge(platformLayer))),
 );
 const principal = {
   id: "principal_test",

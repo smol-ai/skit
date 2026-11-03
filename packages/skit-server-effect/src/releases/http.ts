@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import {
   Authentication,
@@ -88,18 +88,18 @@ export const download = Effect.fn("ReleaseHttp.download")(function* (
       onSuccess: (release) => {
         if (release === authenticationFailure) return errorResponse("storage_failure", 500);
         if (release === null) return errorResponse("release_not_found", 404);
-        return store.readArchive(release.archive_object_key).pipe(
+        return store.streamArchive(release.archive_object_key).pipe(
           Effect.matchEffect({
             onFailure: (error) =>
               Effect.logError("release archive read failed", error).pipe(
                 Effect.andThen(errorResponse("storage_failure", 500)),
               ),
             onSuccess: (archive) =>
-              archive === null
+              Option.isNone(archive)
                 ? errorResponse("archive_not_found", 404)
                 : Effect.succeed(
                     HttpServerResponse.fromWeb(
-                      new Response(archive.body, {
+                      new Response(archive.value, {
                         headers: {
                           "content-type": "application/zip",
                           "skit-release-version": release.version,

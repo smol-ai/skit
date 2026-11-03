@@ -1,7 +1,6 @@
 import { sha256Hash } from "@smolai/skit-core/universal/consumer";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
-import { r2Body } from "../platform/cloudflare.js";
 import { agentSkillsIndex, discoverableSkills, skillArtifact } from "./agent-skills.js";
 import { ReleaseStore } from "./store.js";
 
@@ -15,9 +14,8 @@ const loadSkills = Effect.fn("AgentSkillsHttp.loadSkills")(function* (owner: str
   const release = yield* store.findLatestPublic({ owner, slug });
   if (release === null) return yield* Effect.fail("not_found" as const);
   const archive = yield* store.readArchive(release.archive_object_key);
-  if (archive === null) return yield* Effect.fail("not_found" as const);
-  const bytes = yield* r2Body("read Agent Skills release archive", () => archive.arrayBuffer());
-  return yield* discoverableSkills(new Uint8Array(bytes));
+  if (Option.isNone(archive)) return yield* Effect.fail("not_found" as const);
+  return yield* discoverableSkills(archive.value);
 });
 
 const routeParams = Effect.map(HttpRouter.RouteContext, ({ params }) => ({

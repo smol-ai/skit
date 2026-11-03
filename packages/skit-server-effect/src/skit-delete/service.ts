@@ -1,11 +1,9 @@
 import { D1Client } from "@effect/sql-d1";
 import { Context, Effect, Layer, Schema } from "effect";
 import {
-  Bindings,
+  BlobStore,
   DatabaseError,
-  blobStorageEffectFrom,
   databaseError,
-  type CloudflareBindings,
   type DatabaseSqlClient,
 } from "../platform/cloudflare.js";
 import { AuthorSkitDeleteResponse } from "@smolai/skit-core/universal/api";
@@ -55,12 +53,10 @@ export class SkitDeletion extends Context.Service<SkitDeletion, SkitDeletionServ
 export const layer = Layer.effect(
   SkitDeletion,
   Effect.gen(function* () {
-    const bindings: CloudflareBindings = yield* Bindings;
+    const blobs = yield* BlobStore;
     const sql: DatabaseSqlClient = yield* D1Client.D1Client;
     const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
       effect.pipe(databaseError(operation));
-    const blob = <A>(operation: string, run: (bucket: R2Bucket) => Promise<A>) =>
-      blobStorageEffectFrom(bindings.blobs, operation, run);
 
     const plan = Effect.fn("SkitDeletion.plan")(function* (owner: string, slug: string) {
       const skitRows = yield* db(
@@ -196,21 +192,15 @@ export const layer = Layer.effect(
                 : 0,
       );
       const archiveKeys = sortedReleases.map(({ archive_object_key }) => archive_object_key);
-      let archiveCleanup: "complete" | "deferred" = "complete";
-      for (let index = 0; index < archiveKeys.length; index += 1_000) {
-        const deleted = yield* blob("delete release archives", (bucket) =>
-          bucket.delete(archiveKeys.slice(index, index + 1_000)),
-        ).pipe(Effect.result);
-        if (deleted._tag === "Failure") {
-          archiveCleanup = "deferred";
-          yield* Effect.logError("deleted SKIT archive cleanup failed", deleted.failure);
-          break;
-        }
-      }
+      const deleted = yield* blobs
+        .delete("delete release archives", archiveKeys)
+        .pipe(Effect.result);
+      if (deleted._tag === "Failure")
+        yield* Effect.logError("deleted SKIT archive cleanup failed", deleted.failure);
       return {
         status: "deleted" as const,
         changed: true,
-        archive_cleanup: archiveCleanup,
+        archive_cleanup: deleted._tag === "Failure" ? ("deferred" as const) : ("complete" as const),
         skit_id: `${owner}/${slug}`,
         revisions: revisions.length,
         releases: sortedReleases.length,

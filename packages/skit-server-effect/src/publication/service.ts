@@ -6,11 +6,9 @@ import { verifyReleaseArchive } from "./archive.js";
 import { type Hash, sha256Hash } from "@smolai/skit-core/universal/consumer";
 import { IntegrityError, ValidationDiagnostic } from "../integrity/contracts.js";
 import {
-  Bindings,
+  BlobStore,
   type BlobStorageError,
-  type CloudflareBindings,
   DatabaseError,
-  blobStorageEffectFrom,
   databaseError,
   type DatabaseSqlClient,
 } from "../platform/cloudflare.js";
@@ -75,15 +73,13 @@ export class Publication extends Context.Service<Publication, PublicationService
 export const layer = Layer.effect(
   Publication,
   Effect.gen(function* () {
-    const bindings: CloudflareBindings = yield* Bindings;
+    const blobs = yield* BlobStore;
     const sql: DatabaseSqlClient = yield* D1Client.D1Client;
     const digests = yield* Digest.Digest;
     const random = yield* SecureRandom.SecureRandom;
     const skits = yield* Skits;
     const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
       effect.pipe(databaseError(operation));
-    const blobs = <A>(operation: string, run: (bucket: R2Bucket) => Promise<A>) =>
-      blobStorageEffectFrom(bindings.blobs, operation, run);
     const findRelease = Effect.fn("Publication.findRelease")(function* (
       owner: string,
       slug: string,
@@ -114,7 +110,6 @@ export const layer = Layer.effect(
         current,
         input.archive,
       ).pipe(
-        Effect.provideService(Bindings, bindings),
         Effect.provideService(D1Client.D1Client, sql),
         Effect.provideService(Digest.Digest, digests),
       );
@@ -129,11 +124,9 @@ export const layer = Layer.effect(
       );
       const releaseId = `rel_${yield* random.uuidV4()}`;
       const objectKey = `releases/${input.owner}/${input.slug}/${input.version}/${releaseId}.zip`;
-      yield* blobs("write release archive", (bucket) =>
-        bucket.put(objectKey, input.archive, {
-          httpMetadata: { contentType: "application/zip" },
-        }),
-      );
+      yield* blobs.put("write release archive", objectKey, input.archive, {
+        contentType: "application/zip",
+      });
       const publishedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
       const insert = db(
         "insert release",
@@ -147,13 +140,13 @@ export const layer = Layer.effect(
       yield* insert.pipe(
         Effect.catchTag("Cloudflare.DatabaseError", (insertError) =>
           Effect.gen(function* () {
-            yield* blobs("delete uncommitted release archive", (bucket) =>
-              bucket.delete(objectKey),
-            ).pipe(
-              Effect.catch((cleanupError) =>
-                Effect.logError("release archive cleanup failed", cleanupError),
-              ),
-            );
+            yield* blobs
+              .delete("delete uncommitted release archive", [objectKey])
+              .pipe(
+                Effect.catch((cleanupError) =>
+                  Effect.logError("release archive cleanup failed", cleanupError),
+                ),
+              );
             const raced = yield* findRelease(input.owner, input.slug, input.version).pipe(
               Effect.catch((lookupError) =>
                 Effect.logError("release conflict lookup failed", lookupError).pipe(

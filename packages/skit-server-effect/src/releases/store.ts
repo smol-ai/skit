@@ -1,11 +1,9 @@
 import { D1Client } from "@effect/sql-d1";
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, type Option, Schema } from "effect";
 import {
-  Bindings,
-  type CloudflareBindings,
+  BlobStore,
   type BlobStorageError,
   type DatabaseError,
-  blobStorageEffectFrom,
   databaseError,
   type DatabaseSqlClient,
 } from "../platform/cloudflare.js";
@@ -45,7 +43,12 @@ export interface ReleaseStoreService {
     readonly owner: string;
     readonly slug: string;
   }) => Effect.Effect<ReadonlyArray<DownloadableRelease>, DatabaseError | StoredReleaseInvalid>;
-  readonly readArchive: (objectKey: string) => Effect.Effect<R2ObjectBody | null, BlobStorageError>;
+  readonly readArchive: (
+    objectKey: string,
+  ) => Effect.Effect<Option.Option<Uint8Array>, BlobStorageError>;
+  readonly streamArchive: (
+    objectKey: string,
+  ) => Effect.Effect<Option.Option<ReadableStream<Uint8Array>>, BlobStorageError>;
 }
 
 export class ReleaseStore extends Context.Service<ReleaseStore, ReleaseStoreService>()(
@@ -55,12 +58,10 @@ export class ReleaseStore extends Context.Service<ReleaseStore, ReleaseStoreServ
 export const layer = Layer.effect(
   ReleaseStore,
   Effect.gen(function* () {
-    const bindings: CloudflareBindings = yield* Bindings;
+    const blobs = yield* BlobStore;
     const sql: DatabaseSqlClient = yield* D1Client.D1Client;
     const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
       effect.pipe(databaseError(operation));
-    const blobs = <A>(operation: string, run: (bucket: R2Bucket) => Promise<A>) =>
-      blobStorageEffectFrom(bindings.blobs, operation, run);
     const decodeRelease = (row: unknown) =>
       Schema.decodeUnknownEffect(DownloadableRelease)(row).pipe(
         Effect.mapError((cause) => new StoredReleaseInvalid({ cause })),
@@ -123,7 +124,10 @@ export const layer = Layer.effect(
     });
 
     const readArchive = Effect.fn("ReleaseStore.readArchive")((objectKey: string) =>
-      blobs("read release archive", (bucket) => bucket.get(objectKey)),
+      blobs.get("read release archive", objectKey),
+    );
+    const streamArchive = Effect.fn("ReleaseStore.streamArchive")((objectKey: string) =>
+      blobs.stream("read release archive", objectKey),
     );
 
     return ReleaseStore.of({
@@ -132,6 +136,7 @@ export const layer = Layer.effect(
       findExactDownload,
       listLatestDownloads,
       readArchive,
+      streamArchive,
     });
   }),
 );

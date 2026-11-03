@@ -3,12 +3,9 @@ import { D1Client } from "@effect/sql-d1";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { makeWebHandler } from "../src/http.js";
-import { Bindings, blobStorage, databaseLayer } from "../src/platform/cloudflare.js";
+import { BlobStore, blobStoreLayer, databaseLayer } from "../src/platform/cloudflare.js";
 
-const bindingsLayer = Layer.merge(
-  Layer.succeed(Bindings, { database: env.DB, blobs: env.SKIT_BLOBS }),
-  databaseLayer(env.DB),
-);
+const platformLayer = Layer.merge(blobStoreLayer(env.SKIT_BLOBS), databaseLayer(env.DB));
 
 const web = makeWebHandler(env);
 
@@ -100,8 +97,12 @@ describe("anonymous Release downloads", () => {
         publishedAt: "2026-09-11T00:00:00.000Z",
         visibility: "public",
       });
-      yield* blobStorage("write release fixture", (blobs) =>
-        blobs.put("releases/public.zip", "public archive"),
+      yield* Effect.flatMap(BlobStore, (blobs) =>
+        blobs.put(
+          "write release fixture",
+          "releases/public.zip",
+          new TextEncoder().encode("public archive"),
+        ),
       );
       const token = "skit_pat_public_download";
       const tokenHash = yield* sha256(token);
@@ -133,7 +134,7 @@ describe("anonymous Release downloads", () => {
       expect(response.headers.get("skit-release-version")).toBe("1.0.0");
       expect(response.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
       expect(yield* responseText(response)).toBe("public archive");
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("selects the newest anonymously visible Release for latest", () =>
@@ -160,8 +161,12 @@ describe("anonymous Release downloads", () => {
         publishedAt: "2026-09-11T02:00:00.000Z",
         visibility: "private",
       });
-      yield* blobStorage("write release fixture", (blobs) =>
-        blobs.put("releases/unlisted-latest.zip", "unlisted archive"),
+      yield* Effect.flatMap(BlobStore, (blobs) =>
+        blobs.put(
+          "write release fixture",
+          "releases/unlisted-latest.zip",
+          new TextEncoder().encode("unlisted archive"),
+        ),
       );
 
       const response = yield* request("/api/skits/tim/tools/releases/latest/download");
@@ -170,7 +175,7 @@ describe("anonymous Release downloads", () => {
       expect(response.headers.get("skit-release-version")).toBe("1.1.0");
       expect(response.headers.get("cache-control")).toBe("private, no-store");
       expect(yield* responseText(response)).toBe("unlisted archive");
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("conceals private Releases and distinguishes missing archives", () =>
@@ -202,7 +207,7 @@ describe("anonymous Release downloads", () => {
       expect(yield* webPromise(() => missingArchive.json())).toEqual({
         error: "archive_not_found",
       });
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("serves granted private Releases and selects the latest accessible candidate", () =>
@@ -239,8 +244,12 @@ describe("anonymous Release downloads", () => {
         publishedAt: "2026-09-11T02:00:00.000Z",
         visibility: "private",
       });
-      yield* blobStorage("write private release fixture", (blobs) =>
-        blobs.put("releases/private-accessible.zip", "private archive"),
+      yield* Effect.flatMap(BlobStore, (blobs) =>
+        blobs.put(
+          "write private release fixture",
+          "releases/private-accessible.zip",
+          new TextEncoder().encode("private archive"),
+        ),
       );
 
       const anonymous = yield* request("/api/skits/tim/tools/releases/1.0.0/download");
@@ -258,7 +267,7 @@ describe("anonymous Release downloads", () => {
         expect(response.headers.get("cache-control")).toBe("private, no-store");
         expect(yield* responseText(response)).toBe("private archive");
       }
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("rejects unsupported download methods", () =>

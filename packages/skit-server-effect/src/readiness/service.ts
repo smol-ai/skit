@@ -2,11 +2,9 @@ import { D1Client } from "@effect/sql-d1";
 import { Context, Effect, Layer, Schema } from "effect";
 import type { Principal } from "../auth/authentication.js";
 import {
-  Bindings,
+  BlobStore,
   DatabaseError,
-  blobStorageEffectFrom,
   databaseError,
-  type CloudflareBindings,
   type DatabaseSqlClient,
   type RuntimeEnv,
 } from "../platform/cloudflare.js";
@@ -28,12 +26,10 @@ export const layer = (env: RuntimeEnv) =>
   Layer.effect(
     ReadinessInspector,
     Effect.gen(function* () {
-      const bindings: CloudflareBindings = yield* Bindings;
+      const blobs = yield* BlobStore;
       const sql: DatabaseSqlClient = yield* D1Client.D1Client;
       const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
         effect.pipe(databaseError(operation));
-      const blob = <A>(operation: string, run: (bucket: R2Bucket) => Promise<A>) =>
-        blobStorageEffectFrom(bindings.blobs, operation, run);
 
       const isServerOperator = Effect.fn("Readiness.isServerOperator")(function* (
         principal: Principal,
@@ -117,7 +113,7 @@ export const layer = (env: RuntimeEnv) =>
                 };
               }),
             ),
-            blob("list readiness sentinel", (bucket) => bucket.list({ limit: 1 })).pipe(
+            blobs.probe().pipe(
               Effect.result,
               Effect.map((result): ReadinessCheck => ({
                 name: "r2",

@@ -1,10 +1,10 @@
 import { applyD1Migrations, env, reset } from "cloudflare:test";
 import { D1Client } from "@effect/sql-d1";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { vi } from "vitest";
 import { makeWebHandler } from "../src/http.js";
-import { Bindings, databaseLayer } from "../src/platform/cloudflare.js";
+import { databaseLayer } from "../src/platform/cloudflare.js";
 import { expectedMigrations } from "../src/readiness/migrations.generated.js";
 import {
   makeImportId,
@@ -15,10 +15,7 @@ import {
   makeSkillVersionId,
 } from "@smolai/skit-core/universal/consumer";
 
-const bindingsLayer = Layer.merge(
-  Layer.succeed(Bindings, { database: env.DB, blobs: env.SKIT_BLOBS }),
-  databaseLayer(env.DB),
-);
+const platformLayer = databaseLayer(env.DB);
 const web = makeWebHandler(env);
 
 const webPromise = <A>(evaluate: () => Promise<A>) =>
@@ -117,7 +114,7 @@ describe("Better Auth adapter", () => {
         { emailVerified: 1, providerId: "github" },
       ]);
       yield* webPromise(() => github.dispose());
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("keeps GitHub out of an unverified registrant's password account", () =>
@@ -162,7 +159,7 @@ describe("Better Auth adapter", () => {
       ]);
       expect((yield* passwordSignIn("/api/auth/sign-in/email", credentials)).status).toBe(403);
       yield* webPromise(() => github.dispose());
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("advertises only configured optional authentication services", () =>
@@ -371,7 +368,7 @@ describe("Better Auth adapter", () => {
         namespace_slug: "mail-user",
       });
       yield* webPromise(() => emailWeb.dispose());
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("rejects an expired email verification link", () =>
@@ -427,7 +424,7 @@ describe("Better Auth adapter", () => {
       );
       expect(identity[0]).toEqual({ emailVerified: 0, username: null });
       yield* webPromise(() => emailWeb.dispose());
-    }).pipe(Effect.ensuring(Effect.sync(() => vi.useRealTimers())), Effect.provide(bindingsLayer)),
+    }).pipe(Effect.ensuring(Effect.sync(() => vi.useRealTimers())), Effect.provide(platformLayer)),
   );
 
   it.effect("rate limits unauthenticated verification resends", () =>
@@ -472,7 +469,7 @@ describe("Better Auth adapter", () => {
         Array.from({ length: 6 }, () => [{ key: "/api/auth/send-verification-email:192.0.2.200" }]),
       );
       yield* webPromise(() => emailWeb.dispose());
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("starts GitHub OAuth when the provider is configured", () =>
@@ -501,7 +498,7 @@ describe("Better Auth adapter", () => {
       expect(body.url).toContain("github.com/login/oauth/authorize");
       expect(body.url).toContain("client_id=github-client");
       yield* webPromise(() => github.dispose());
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("emails the initial operator and blocks password sign-in until verification", () =>
@@ -560,7 +557,7 @@ describe("Better Auth adapter", () => {
       );
       expect(signIn.status).toBe(403);
       yield* webPromise(() => emailWeb.dispose());
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("reports bootstrap email failure without rearming the claim", () =>
@@ -596,7 +593,7 @@ describe("Better Auth adapter", () => {
       const replay = yield* webPromise(create);
       expect(replay.status).toBe(409);
       yield* webPromise(() => emailWeb.dispose());
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("lets a signed-in browser approve a CLI device code that then mints a token", () =>
@@ -1248,7 +1245,7 @@ describe("Better Auth adapter", () => {
         skit_id: "operator/tools",
         changed: true,
       });
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("lets an authenticated user atomically claim a Registry username", () =>
@@ -1311,7 +1308,7 @@ describe("Better Auth adapter", () => {
         (sql) => sql`SELECT namespace_slug FROM namespaces WHERE namespace_slug = 'octocat'`,
       );
       expect(namespace[0]).toEqual({ namespace_slug: "octocat" });
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("accepts the configured origin for username claims despite a trailing slash", () =>
@@ -1332,7 +1329,7 @@ describe("Better Auth adapter", () => {
       expect((yield* claim("https://registry.test")).status).toBe(401);
       expect((yield* claim("https://elsewhere.test")).status).toBe(403);
       yield* webPromise(() => slashed.dispose());
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("keeps account registration closed by default", () =>
@@ -1360,7 +1357,7 @@ describe("Better Auth adapter", () => {
         (sql) => sql`SELECT COUNT(*) count FROM user`,
       );
       expect(users[0]).toEqual({ count: 0 });
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("provisions a principal and namespace when registration is open", () =>
@@ -1407,7 +1404,7 @@ describe("Better Auth adapter", () => {
         namespace_slug: "new-author",
         subject_kind: "principal",
       });
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect(
@@ -1504,7 +1501,7 @@ describe("Better Auth adapter", () => {
         )(yield* webPromise(() => bobUpload.json()));
         expect(bobSnapshot.library_id).not.toBe(winner.library.library_id);
         expect(bobSnapshot.reused).toBe(false);
-      }).pipe(Effect.provide(bindingsLayer)),
+      }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("creates a team and manages member lifecycle through a session", () =>
@@ -1597,7 +1594,7 @@ describe("Better Auth adapter", () => {
           headers: sessionHeaders,
         })).status,
       ).toBe(404);
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 });
 
@@ -1679,7 +1676,7 @@ describe("Principal provisioning", () => {
 
       expect(yield* libraryStatus(cookie)).toBe(404);
       expect(yield* provisionedRows).toEqual([provisioned("author")]);
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("lets a username claim repair a user that sign-in could not provision", () =>
@@ -1701,7 +1698,7 @@ describe("Principal provisioning", () => {
       expect(yield* webPromise(() => claimed.json())).toEqual({ username: "author" });
       expect(yield* libraryStatus(cookie)).toBe(404);
       expect(yield* provisionedRows).toEqual([provisioned("author")]);
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("reports a username to onboarding only once it is provisioned", () =>
@@ -1729,7 +1726,7 @@ describe("Principal provisioning", () => {
       });
       expect(claimed.status).toBe(201);
       expect(yield* onboarding(cookie)).toEqual({ status: 200, body: { username: "author" } });
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("refuses a signup whose username is another subject's Namespace", () =>
@@ -1751,7 +1748,7 @@ describe("Principal provisioning", () => {
         code: "USERNAME_UNAVAILABLE",
       });
       expect(yield* provisionedRows).toEqual([provisioned("owner")]);
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("provisions the same rows through bootstrap, signup, and username claim", () =>
@@ -1792,7 +1789,7 @@ describe("Principal provisioning", () => {
         provisioned("claimer"),
         provisioned("operator"),
       ]);
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("never demotes a team owner while adding a member", () =>
@@ -1838,6 +1835,6 @@ describe("Principal provisioning", () => {
         { username: "member", role: "owner" },
         { username: "owner", role: "owner" },
       ]);
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 });

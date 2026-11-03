@@ -5,15 +5,14 @@ import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { zipSync } from "fflate";
 import { sha256Hash } from "@smolai/skit-core/universal/consumer";
-import { Bindings, blobStorage, databaseLayer } from "../src/platform/cloudflare.js";
+import { BlobStore, blobStoreLayer, databaseLayer } from "../src/platform/cloudflare.js";
 import { layer as skitsLayer } from "../src/skits/service.js";
 import { Publication, layer as publicationLayer } from "../src/publication/service.js";
 
-const bindings = { database: env.DB, blobs: env.SKIT_BLOBS };
 const testLayer = publicationLayer.pipe(
   Layer.provide(skitsLayer),
   Layer.provideMerge(
-    Layer.mergeAll(Layer.succeed(Bindings, bindings), databaseLayer(env.DB), BrowserCrypto.layer),
+    Layer.mergeAll(blobStoreLayer(env.SKIT_BLOBS), databaseLayer(env.DB), BrowserCrypto.layer),
   ),
 );
 const bytes = (value: string) => new TextEncoder().encode(value);
@@ -114,10 +113,10 @@ describe("Publication", () => {
       expect(stored).toBeDefined();
       if (stored !== undefined)
         expect(
-          yield* blobStorage("find published archive", (bucket) =>
-            bucket.head(stored.archive_object_key),
+          yield* Effect.flatMap(BlobStore, (blobs) =>
+            blobs.exists("find published archive", stored.archive_object_key),
           ),
-        ).not.toBeNull();
+        ).toBe(true);
     }).pipe(Effect.provide(testLayer)),
   );
 

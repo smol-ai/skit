@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
 import { HttpServerRequest } from "effect/http";
-import { Authentication, type Principal } from "./authentication.js";
+import { Authentication } from "./authentication.js";
 
 export class RequestConversionError extends Schema.TaggedError<RequestConversionError>()(
   "Authentication.RequestConversionError",

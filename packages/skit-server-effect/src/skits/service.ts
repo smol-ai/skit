@@ -12,7 +12,7 @@ import {
   skitValidationDiagnosticsSchema,
 } from "@smolai/skit-core/universal/authoring";
 import { Hash, safePathSchema, sha256Hash } from "@smolai/skit-core/universal/consumer";
-import { Clock, Context, Effect, Layer, Schema } from "effect";
+import { Clock, Context, Effect, Layer, Option, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import { IntegrityError } from "../integrity/contracts.js";
 import {
@@ -22,14 +22,11 @@ import {
   validateArtifactFiles,
 } from "../integrity/validate.js";
 import {
-  Bindings,
+  BlobStore,
   type BlobStorageError,
-  blobStorageEffectFrom,
-  type CloudflareBindings,
   DatabaseError,
   databaseError,
   type DatabaseSqlClient,
-  r2Body,
 } from "../platform/cloudflare.js";
 
 export class SkitExists extends Schema.TaggedError<SkitExists>()("SKIT.Exists", {}) {}
@@ -163,13 +160,11 @@ const blobKey = (hash: string) => `draft-blobs/${hash.slice(7, 9)}/${hash.slice(
 export const layer = Layer.effect(
   Skits,
   Effect.gen(function* () {
-    const bindings: CloudflareBindings = yield* Bindings;
+    const blobs = yield* BlobStore;
     const sql: DatabaseSqlClient = yield* D1Client.D1Client;
     const digests = yield* Digest.Digest;
     const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
       effect.pipe(databaseError(operation));
-    const blobs = <A>(operation: string, run: (bucket: R2Bucket) => Promise<A>) =>
-      blobStorageEffectFrom(bindings.blobs, operation, run);
 
     const findSkit = Effect.fn("SKIT.findSkit")(function* (owner: string, slug: string) {
       const rows = yield* db(
@@ -333,9 +328,8 @@ export const layer = Layer.effect(
           )).length > 0;
         if (!treeStored)
           for (const [hash, bytes] of new Map(files.map((file) => [file.digest, file.bytes]))) {
-            const existing = yield* blobs("find skit blob", (bucket) => bucket.head(blobKey(hash)));
-            if (existing === null)
-              yield* blobs("write skit blob", (bucket) => bucket.put(blobKey(hash), bytes));
+            if (!(yield* blobs.exists("find skit blob", blobKey(hash))))
+              yield* blobs.put("write skit blob", blobKey(hash), bytes);
           }
 
         const descriptorResult = yield* readArtifactDescriptor(owner, slug, files).pipe(
@@ -462,15 +456,9 @@ export const layer = Layer.effect(
         const tree = yield* Effect.forEach(entries, (entry) =>
           Effect.gen(function* () {
             if (entry.kind !== "file") return entry;
-            const object = yield* blobs("read skit blob", (bucket) =>
-              bucket.get(blobKey(entry.blob_hash)),
-            );
-            if (object === null) return yield* new RevisionBlobMissing({ path: entry.path });
-            if (object.size !== entry.byte_length)
-              return yield* new RevisionBlobCorrupt({ path: entry.path });
-            const bytes = new Uint8Array(
-              yield* r2Body("read skit blob body", () => object.arrayBuffer()),
-            );
+            const object = yield* blobs.get("read skit blob", blobKey(entry.blob_hash));
+            if (Option.isNone(object)) return yield* new RevisionBlobMissing({ path: entry.path });
+            const bytes = object.value;
             if (
               bytes.byteLength !== entry.byte_length ||
               (yield* sha256Hash(bytes)) !== entry.blob_hash

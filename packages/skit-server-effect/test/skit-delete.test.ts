@@ -2,12 +2,11 @@ import { env } from "cloudflare:test";
 import { D1Client } from "@effect/sql-d1";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
-import { Bindings, blobStorage, databaseLayer } from "../src/platform/cloudflare.js";
+import { BlobStore, blobStoreLayer, databaseLayer } from "../src/platform/cloudflare.js";
 import { SkitDeletion, layer as skitDeletionLayer } from "../src/skit-delete/service.js";
 
-const bindings = { database: env.DB, blobs: env.SKIT_BLOBS };
-const bindingsLayer = Layer.merge(Layer.succeed(Bindings, bindings), databaseLayer(env.DB));
-const testLayer = skitDeletionLayer.pipe(Layer.provideMerge(bindingsLayer));
+const platformLayer = Layer.merge(blobStoreLayer(env.SKIT_BLOBS), databaseLayer(env.DB));
+const testLayer = skitDeletionLayer.pipe(Layer.provideMerge(platformLayer));
 
 const prepareDatabase = Effect.flatMap(D1Client.D1Client, (sql) =>
   sql.batch([
@@ -73,8 +72,11 @@ describe("private SKIT deletion", () => {
           sql.unsafe("INSERT INTO resource_grants VALUES ('grant_skit', 'skit', 'tim/tools')"),
         ]),
       );
-      yield* blobStorage("insert deletion archive", (bucket) =>
-        bucket.put("releases/one.zip", "private archive"),
+      const blobs = yield* BlobStore;
+      yield* blobs.put(
+        "insert deletion archive",
+        "releases/one.zip",
+        new TextEncoder().encode("private archive"),
       );
 
       expect(yield* deletion.plan("tim", "tools")).toEqual({
@@ -110,9 +112,7 @@ describe("private SKIT deletion", () => {
         const rows = yield* remaining(`SELECT COUNT(*) count FROM ${table}`);
         expect(rows[0]).toEqual({ count: 0 });
       }
-      expect(
-        yield* blobStorage("check deleted archive", (bucket) => bucket.head("releases/one.zip")),
-      ).toBeNull();
+      expect(yield* blobs.exists("check deleted archive", "releases/one.zip")).toBe(false);
       expect(yield* deletion.delete("tim", "tools")).toMatchObject({
         status: "absent",
         changed: false,

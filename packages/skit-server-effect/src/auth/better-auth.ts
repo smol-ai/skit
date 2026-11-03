@@ -7,12 +7,7 @@ import { Context, Effect, Layer, Option, Schema } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { schemaBodyJsonLimited } from "../api/request-body.js";
 import { normalizeNamespace } from "../domain/identifiers.js";
-import {
-  Bindings,
-  rateLimit,
-  type DatabaseSqlClient,
-  type RuntimeEnv,
-} from "../platform/cloudflare.js";
+import { rateLimit, type DatabaseSqlClient, type RuntimeEnv } from "../platform/cloudflare.js";
 import { NativeClock } from "../platform/native-clock.js";
 import { ServerConfiguration } from "../configuration.js";
 import { NativeCrypto } from "../platform/native-crypto.js";
@@ -81,6 +76,8 @@ export class BetterAuth extends Context.Service<BetterAuth, BetterAuthService>()
 ) {}
 
 export interface BetterAuthConfiguration {
+  /** Better Auth's own adapter and its database hooks query D1 directly. */
+  readonly database: D1Database;
   readonly publicAppOrigin: string;
   readonly secret: string;
   readonly registrationMode: string | undefined;
@@ -108,7 +105,6 @@ export const layer = (configuration: BetterAuthConfiguration) =>
   Layer.effect(
     BetterAuth,
     Effect.gen(function* () {
-      const bindings = yield* Bindings;
       const sql: DatabaseSqlClient = yield* D1Client.D1Client;
       const crypto = yield* NativeCrypto;
       const { now } = yield* NativeClock;
@@ -153,7 +149,7 @@ export const layer = (configuration: BetterAuthConfiguration) =>
         baseURL: configuration.publicAppOrigin,
         basePath: AUTH_BASE_PATH,
         secret: configuration.secret,
-        database: bindings.database,
+        database: configuration.database,
         trustedOrigins: [configuration.publicAppOrigin],
         telemetry: { enabled: false },
         plugins: [
@@ -263,7 +259,7 @@ export const layer = (configuration: BetterAuthConfiguration) =>
                 if (account.providerId === "credential") return { data: account };
                 // Anyone could have registered an unverified email with a password of their
                 // choosing, so a provider proving that email must not inherit that password.
-                const unverifiedPassword = await bindings.database
+                const unverifiedPassword = await configuration.database
                   .prepare(
                     `SELECT 1 FROM user u
                JOIN account a ON a.userId = u.id AND a.providerId = 'credential'
@@ -285,7 +281,7 @@ export const layer = (configuration: BetterAuthConfiguration) =>
                   return { data: { ...user, username: null } };
                 // Better Auth cannot create the user and its Namespace atomically, so refuse a
                 // username that provisioning could never reserve.
-                const taken = await bindings.database
+                const taken = await configuration.database
                   .prepare("SELECT 1 taken FROM namespaces WHERE namespace_slug = ?")
                   .bind(user.username ?? null)
                   .first();
@@ -334,7 +330,7 @@ export const layer = (configuration: BetterAuthConfiguration) =>
                     Effect.catch((error) => Effect.logError("Principal repair failed", error)),
                   ),
                 );
-                const principal = await bindings.database
+                const principal = await configuration.database
                   .prepare(
                     `SELECT state, authorization_generation
                FROM principals WHERE better_auth_user_id = ?`,

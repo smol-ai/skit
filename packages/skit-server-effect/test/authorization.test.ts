@@ -3,11 +3,10 @@ import { D1Client } from "@effect/sql-d1";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { Authorization, layer as authorizationLayer } from "../src/authorization/service.js";
-import { Bindings, databaseLayer } from "../src/platform/cloudflare.js";
+import { databaseLayer } from "../src/platform/cloudflare.js";
 
-const bindings = { database: env.DB, blobs: env.SKIT_BLOBS };
-const bindingsLayer = Layer.merge(Layer.succeed(Bindings, bindings), databaseLayer(env.DB));
-const testLayer = authorizationLayer.pipe(Layer.provideMerge(bindingsLayer));
+const platformLayer = databaseLayer(env.DB);
+const testLayer = authorizationLayer.pipe(Layer.provideMerge(platformLayer));
 const principal = {
   id: "principal_test",
   credential: "session" as const,

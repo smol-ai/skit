@@ -6,14 +6,11 @@ import { Effect, Layer } from "effect";
 import { zipSync } from "fflate";
 import { readArchive, verifyReleaseArchive } from "../src/publication/archive.js";
 import { sha256Hash } from "@smolai/skit-core/universal/consumer";
-import { Bindings, databaseLayer } from "../src/platform/cloudflare.js";
+import { databaseLayer } from "../src/platform/cloudflare.js";
 
 const bytes = (value: string) => new TextEncoder().encode(value);
-const bindingsLayer = Layer.merge(
-  Layer.succeed(Bindings, { database: env.DB, blobs: env.SKIT_BLOBS }),
-  databaseLayer(env.DB),
-);
-const testLayer = Layer.merge(bindingsLayer, BrowserCrypto.layer);
+const platformLayer = databaseLayer(env.DB);
+const testLayer = Layer.merge(platformLayer, BrowserCrypto.layer);
 
 /**
  * One validated `a.txt`, plus a second `a.txt` record the end record hides: it counts one entry for

@@ -1,4 +1,4 @@
-import { Clock, Context, Effect, Layer, PlatformError, Schema } from "effect";
+import { Clock, Context, Effect, Layer, Option, PlatformError, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import { D1Client } from "@effect/sql-d1";
 import {
@@ -9,12 +9,10 @@ import {
 import type { Principal } from "../auth/authentication.js";
 import { Authorization } from "../authorization/service.js";
 import {
+  BlobStore,
   BlobStorageError,
   DatabaseError,
-  blobStorageEffectFrom,
   databaseError,
-  r2Body,
-  Bindings,
 } from "../platform/cloudflare.js";
 import { NativeCrypto } from "../platform/native-crypto.js";
 import { decodeOwnedLibrary, findOwnedLibrary } from "./owner.js";
@@ -65,7 +63,7 @@ export class LibrarySnapshots extends Context.Service<LibrarySnapshots, Snapshot
 export const layer = Layer.effect(
   LibrarySnapshots,
   Effect.gen(function* () {
-    const bindings = yield* Bindings;
+    const blobs = yield* BlobStore;
     const sql = yield* D1Client.D1Client;
     const authorization = yield* Authorization;
     const digests = yield* Digest.Digest;
@@ -73,8 +71,6 @@ export const layer = Layer.effect(
     const nativeCrypto = yield* NativeCrypto;
     const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
       effect.pipe(databaseError(operation));
-    const blob = <A>(operation: string, run: (bucket: R2Bucket) => Promise<A>) =>
-      blobStorageEffectFrom(bindings.blobs, operation, run);
     const snapshotRow = Effect.fn("LibrarySnapshots.row")(function* (
       libraryId: string,
       digest: string,
@@ -93,9 +89,9 @@ export const layer = Layer.effect(
           );
     });
     const readObject = Effect.fn("LibrarySnapshots.readObject")(function* (key: string) {
-      const object = yield* blob("read snapshot object", (bucket) => bucket.get(key));
-      if (object === null || !("body" in object)) return yield* new SnapshotStoreInvalid();
-      const json = yield* r2Body("read snapshot body", () => object.text());
+      const object = yield* blobs.get("read snapshot object", key);
+      if (Option.isNone(object)) return yield* new SnapshotStoreInvalid();
+      const json = new TextDecoder().decode(object.value);
       const value = yield* Schema.decodeUnknownEffect(JsonUnknown)(json).pipe(
         Effect.mapError(() => new SnapshotStoreInvalid()),
       );
@@ -135,12 +131,10 @@ export const layer = Layer.effect(
               VALUES (${library.library_id}, ${digest}, 'pending', ${key}, ${now})`,
       );
       const bytes = new TextEncoder().encode(JSON.stringify(verified.archive));
-      const put = yield* blob("write immutable snapshot", (bucket) =>
-        bucket.put(key, bytes, {
-          onlyIf: new Headers({ "If-None-Match": "*" }),
-          httpMetadata: { contentType: "application/json" },
-        }),
-      );
+      const written = yield* blobs.put("write immutable snapshot", key, bytes, {
+        contentType: "application/json",
+        onlyIfAbsent: true,
+      });
       const imported = yield* readObject(key);
       if (imported.archive.digest !== digest) return yield* new SnapshotStoreInvalid();
       yield* db(
@@ -150,7 +144,7 @@ export const layer = Layer.effect(
                 AND snapshot_digest = ${digest}
                 AND status = 'pending'`,
       );
-      return { library_id: library.library_id, snapshot_digest: digest, reused: put === null };
+      return { library_id: library.library_id, snapshot_digest: digest, reused: !written };
     });
     const download = Effect.fn("LibrarySnapshots.download")(function* (
       principal: Principal,

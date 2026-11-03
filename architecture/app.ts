@@ -141,7 +141,15 @@ export const owners = {
       "identity(root) (workspace.json only; for AuthorHistory, A10)",
       "acquire(root): scoped WorkspaceLease { register, transition, writeTree, releasedFor } (A8)",
     ],
-    requires: ["FileSystem", "Path", "LinkStat", "SourceProcess", "AuthorIgnoreRepository", "Digest", "SecureRandom"],
+    requires: [
+      "FileSystem",
+      "Path",
+      "LinkStat",
+      "SourceProcess",
+      "AuthorIgnoreRepository",
+      "Digest",
+      "SecureRandom",
+    ],
     invariants: [
       "every workspace write happens under the lease; lease before home lock before Library writer (A8)",
       "writeTree needs a PreparedWrite from AuthorHistory and fsyncs before success (A13)",
@@ -168,7 +176,13 @@ export const owners = {
     ],
     // Runs no sync: the plain sync workflow drives Sync.run with engineStore and syncState (A7).
     requires: [
-      "FileSystem", "Path", "LinkStat", "SourceProcess", "AuthorIgnoreRepository", "Digest", "SecureRandom",
+      "FileSystem",
+      "Path",
+      "LinkStat",
+      "SourceProcess",
+      "AuthorIgnoreRepository",
+      "Digest",
+      "SecureRandom",
       "HomeLock",
       "DeviceSettings (device identity)",
       "AuthorWorkspace (identity only; A10)",
@@ -264,7 +278,7 @@ export const owners = {
       "Publication service + ReleaseStore service as separate owners of releases",
       "AuthorInventory service (cross-owner join → Skits.list)",
       "publication/archive.ts reading Skits' tables directly",
-      "ReleaseStore.readArchive leaking R2ObjectBody",
+      "ReleaseStore.readArchive leaking R2ObjectBody (done: BlobStore returns bytes or a stream)",
       "releases.adopted_content_digest (no reader or writer)",
     ],
   },
@@ -319,7 +333,6 @@ export const workflows = {
       "exists()+load() race: compares revisions from single reads",
     ],
   },
-
 } as const;
 
 /** Platform services, each kept under the service rule above (not every entry is re-checked yet). */
@@ -337,7 +350,7 @@ export const platform = [
   "SourceProcess",
   "History.Store",
   "CurrentPrincipal",
-  "Bindings",
+  "BlobStore (R2 port: get, stream, put, exists, delete, probe)",
   "D1Client",
 ] as const;
 

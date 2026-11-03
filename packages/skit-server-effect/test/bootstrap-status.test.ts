@@ -4,15 +4,12 @@ import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { makeWebHandler } from "../src/http.js";
 import { PasswordHasher, layer as passwordHasherLayer } from "../src/auth/password.js";
-import { Bindings, databaseLayer } from "../src/platform/cloudflare.js";
+import { databaseLayer } from "../src/platform/cloudflare.js";
 import { layer as nativeCryptoLayer } from "../src/platform/native-crypto.js";
 
-const bindingsLayer = Layer.merge(
-  Layer.succeed(Bindings, { database: env.DB, blobs: env.SKIT_BLOBS }),
-  databaseLayer(env.DB),
-);
+const platformLayer = databaseLayer(env.DB);
 const testLayer = Layer.merge(
-  bindingsLayer,
+  platformLayer,
   passwordHasherLayer.pipe(Layer.provide(nativeCryptoLayer)),
 );
 
@@ -82,7 +79,7 @@ describe("bootstrap status", () => {
       expect(response.status).toBe(200);
       expect(response.headers.get("cache-control")).toBe("no-store");
       expect(yield* webPromise(() => response.json())).toEqual({ needed: true });
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("reports that a claimed server does not need bootstrap", () =>
@@ -99,7 +96,7 @@ describe("bootstrap status", () => {
 
       expect(response.status).toBe(200);
       expect(yield* webPromise(() => response.json())).toEqual({ needed: false });
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("conceals bootstrap without its secret and reports invalid configuration", () =>
@@ -297,7 +294,7 @@ describe("bootstrap status", () => {
         (sql) => sql`SELECT COUNT(*) count FROM user`,
       );
       expect(users[0]).toEqual({ count: 0 });
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("keeps database failures opaque", () =>
@@ -310,6 +307,6 @@ describe("bootstrap status", () => {
       expect(yield* webPromise(() => response.json())).toEqual({
         error: "storage_failure",
       });
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 });

@@ -14,7 +14,7 @@ import { layer as skitsLayer } from "./skits/service.js";
 import { layer as feedbackServiceLayer } from "./feedback/service.js";
 import { layer as librarySyncLayer } from "./library/library-sync.js";
 import { layer as librarySnapshotsLayer } from "./library/snapshots.js";
-import { databaseLayer, layer as bindingsLayer, type RuntimeEnv } from "./platform/cloudflare.js";
+import { blobStoreLayer, databaseLayer, type RuntimeEnv } from "./platform/cloudflare.js";
 import { layer as nativeClockLayer } from "./platform/native-clock.js";
 import { layer as nativeCryptoLayer } from "./platform/native-crypto.js";
 import {
@@ -78,7 +78,7 @@ export const applicationLayers = (
   supportedScopes: ReadonlySet<AuthenticationScope>,
 ) => {
   const platform = Layer.mergeAll(
-    bindingsLayer(env),
+    blobStoreLayer(env.SKIT_BLOBS),
     databaseLayer(env.DB),
     BrowserCrypto.layer,
     nativeCryptoLayer,
@@ -113,6 +113,7 @@ export const applicationLayers = (
   ).pipe(
     Layer.provideMerge(
       betterAuthLayer({
+        database: env.DB,
         publicAppOrigin: configured.publicAppOrigin,
         secret: configured.betterAuthSecret,
         registrationMode: env.ACCOUNT_REGISTRATION_MODE,

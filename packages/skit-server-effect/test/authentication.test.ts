@@ -6,11 +6,10 @@ import { Effect, Layer } from "effect";
 import * as TestClock from "effect/testing/TestClock";
 import { Authentication, layer as authenticationLayer } from "../src/auth/authentication.js";
 import { BetterAuth, type BetterAuthService } from "../src/auth/better-auth.js";
-import { Bindings, databaseLayer } from "../src/platform/cloudflare.js";
+import { databaseLayer } from "../src/platform/cloudflare.js";
 
-const bindings = { database: env.DB, blobs: env.SKIT_BLOBS };
-const bindingsLayer = Layer.merge(Layer.succeed(Bindings, bindings), databaseLayer(env.DB));
-const testLayer = Layer.merge(bindingsLayer, BrowserCrypto.layer);
+const platformLayer = databaseLayer(env.DB);
+const testLayer = Layer.merge(platformLayer, BrowserCrypto.layer);
 const betterAuthTestLayer = (
   getSession: BetterAuthService["getSession"] = () => Effect.succeed(undefined),
 ) =>
