@@ -142,19 +142,27 @@ export const owners = {
     owns: [
       "<root>/.skit/workspace.json, .skit/.gitignore",
       "<root>/.skit/connection.json (device checkpoint, git-ignored) + <root>/skit.remote.json (committed, portable; ADR-0010, ADR-0011) — two files stay, one logical state", // D6
+      "<root>/.skit/lock (workspace lease; A8), <root>/.skit/stage-* (writeTree staging; A13)",
       "workspace tree writes during sync",
     ],
     ops: [
-      "read: { workspace, connection: NewRemote | Connecting | Connected }",
-      "transition(next)",
-      "register (identity-only registration allowed; ADR-0026:36-37)",
+      "root(input): WorkspaceRoot (canonical; A1)",
+      "read: { identity, connection: Unconnected | Connecting | Connected { leftover } } (never writes)",
+      "identity(root) (workspace.json only; for AuthorHistory, A10)",
+      "acquire(root): scoped WorkspaceLease { register, transition, writeTree, releasedFor } (A8)",
     ],
-    requires: ["Library", "FileSystem", "Path"],
+    requires: ["FileSystem", "Path", "LinkStat", "SourceProcess", "AuthorIgnoreRepository", "Digest", "SecureRandom"],
+    invariants: [
+      "every workspace write happens under the lease; lease before home lock before Library writer (A8)",
+      "writeTree needs a PreparedWrite from AuthorHistory and fsyncs before success (A13)",
+    ],
     removes: [
       "saveAuthorConnection / removeAuthorConnection / writeRemote as three APIs for one state",
       "loadAuthorRemote / loadAuthorConnection / loadAuthorSyncRemote as three loaders",
       "workflows/author/workspace-identity.ts as a separate module (its identity-only registration moves into register)",
       "LinkStat.removeEmptyDirectory (a delete on a stat service; 1 caller)",
+      "Library as a requirement (A3: the workflow reads Library and passes adopt)",
+      "writeAuthorTree's global-temp staging and unflushed renames (workflows/author/sync.ts:417-434)",
     ],
   },
 
@@ -162,10 +170,25 @@ export const owners = {
     status: "RESHAPE",
     module: "packages/cli/src/workflows/author/{history,history-journal,device-store,sync}.ts",
     owns: ["<home>/history/**", "<home>/sync-bindings.json"],
-    ops: ["refresh(workspace)", "sync(remote)"],
-    requires: ["History.Store", "Sync.Remote", "Library (device identity)"],
+    ops: [
+      "observe(root): { id, revision, treeHash }",
+      "retain(tree)",
+      "engineStore: History.Store adapter (immutable, content-addressed, idempotent writes; A7)",
+      "syncState.{read, transition} keyed by { workspaceId, locator } (A5, A6)",
+    ],
+    // Runs no sync: the plain sync workflow drives Sync.run with engineStore and syncState (A7).
+    requires: [
+      "FileSystem", "Path", "LinkStat", "SourceProcess", "AuthorIgnoreRepository", "Digest", "SecureRandom",
+      "HomeLock",
+      "DeviceSettings (device identity)",
+      "AuthorWorkspace (identity only; A10)",
+    ],
     removes: [
       "LegacySyncStates v2 'drafts' and PreReleaseBindings in the workflow (sync.ts:99-110)",
+      "skit.sync-bindings.v3 locator-only keys: rejected as invalid, no migration (author commands never shipped; A5)",
+      "historyDirectory / withDeviceStore exports (replaced by observe, retain, engineStore; A7)",
+      "Sync.Remote as a Context.Service (packages/skit/src/sync/sync.ts:95-124) → plain engine input built per command from the Registry client (A7)",
+      "module-global journal semaphore (history-journal.ts:29) → per layer, one layer per home (A9)",
     ],
   },
 
