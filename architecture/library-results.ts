@@ -21,7 +21,7 @@
  * 10. Setup Stopped is new behaviour (decided crash rule); no current code produces it.
  */
 /**
- * DRAFT: per-intent plan previews, outcomes and errors for architecture/library.ts's NEW intents.
+ * Approved: per-intent plan previews, outcomes and errors for architecture/library.ts's NEW intents.
  * Types only. Every field cites where today's code produces it. Paths are relative to packages/.
  * `// OPEN:` marks anything no current code settles.
  *

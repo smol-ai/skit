@@ -1,5 +1,6 @@
 /**
- * DRAFT architecture contract: the Library slice, target API. Not yet approved, not yet enforced.
+ * Architecture contract: the Library slice, target API. Approved; enforced by
+ * architecture/conformance/library.ts and lint.
  *
  * Declares, independently of the implementation:
  *   1. each service's public surface,

@@ -1,5 +1,6 @@
 /**
- * DRAFT whole-app ownership model. Not approved, not enforced.
+ * Whole-app ownership model. Approved; enforced by lint (architecture/boundaries.mjs) and
+ * conformance types (architecture/conformance/).
  *
  * Every piece of persisted state has exactly one owner. Nothing outside an owner may import that
  * owner's private modules. `removes` lists what stops existing when the owner exists: the subtraction
@@ -8,6 +9,11 @@
  * carries a recommendation with references.
  *
  * Status: EXISTS (today's boundary, keep), RESHAPE (exists, ownership changes), NEW.
+ *
+ * Service rule: a Context.Service exists only if it owns state, holds a resource, is a platform
+ * boundary that a real second implementation replaces, or is a key the framework requires
+ * (HttpApi middleware, command annotations). Test substitution is never the reason. Everything
+ * else is a plain function. Workflows coordinate owners and are plain functions, never services.
  */
 
 export const owners = {
@@ -96,22 +102,6 @@ export const owners = {
     ],
     requires: ["FileSystem", "HomeLock"],
     removes: ["withLibraryStateReplacement borrowed from the Library store"],
-  },
-
-  LibrarySync: {
-    status: "RESHAPE",
-    module: "packages/cli/src/workflows/library/library-sync*.ts",
-    owns: [], // D5: owns no state; local writes are Library.apply(Sync)
-    ops: ["sync(origin)"],
-    requires: ["Library", "Registry", "RegistryHttp", "HomeLock"],
-    invariants: [
-      "holds the home lock for the whole applying sync, reentrantly, as documented (library-sync-outcomes.md:111)",
-    ],
-    removes: [
-      "3 direct LibraryStore.save sites (library-sync.ts:132,238; library-sync-installed-skills.ts:434)",
-      "its own InstalledSkills construction (library-sync-installed-skills.ts:323)",
-      "exists()+load() race: compares revisions from single reads",
-    ],
   },
 
   Registry: {
@@ -308,7 +298,27 @@ export const owners = {
   Feedback: { status: "EXISTS", owns: ["feedback"], ops: ["record"], removes: [] },
 } as const;
 
-/** Platform seams: kept because something substitutes them, or they are the process boundary. */
+/** Workflows: plain functions that coordinate owners. They own no state and are not services. */
+export const workflows = {
+  LibrarySync: {
+    status: "RESHAPE",
+    module: "packages/cli/src/workflows/library/library-sync*.ts",
+    owns: [], // D5: owns no state; local writes are Library.apply(Sync)
+    ops: ["sync(origin)"],
+    requires: ["Library", "Registry", "RegistryHttp", "HomeLock"],
+    invariants: [
+      "holds the home lock for the whole applying sync, reentrantly, as documented (library-sync-outcomes.md:111)",
+    ],
+    removes: [
+      "3 direct LibraryStore.save sites (library-sync.ts:132,238; library-sync-installed-skills.ts:434)",
+      "its own InstalledSkills construction (library-sync-installed-skills.ts:323)",
+      "exists()+load() race: compares revisions from single reads",
+    ],
+  },
+
+} as const;
+
+/** Platform services, each kept under the service rule above (not every entry is re-checked yet). */
 export const platform = [
   "HomeLock (one exclusive lock per <home>, reentrant with leases as WriterAuthority is today: writer-lock.ts:9-13,133-135)", // D3
   "AuthorIgnoreRepository (runtime-scoped resource; author-sync-testing.md:1117-1135)",
@@ -322,7 +332,6 @@ export const platform = [
   "LinkStat",
   "SourceProcess",
   "History.Store",
-  "Sync.Remote",
   "BootstrapOperations",
   "CurrentPrincipal",
   "CurrentRequest",

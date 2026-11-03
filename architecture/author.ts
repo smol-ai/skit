@@ -1,6 +1,6 @@
 /**
- * DRAFT architecture contract: the two device-side author owners, AuthorWorkspace and AuthorHistory.
- * Target API, types only. Not yet approved, not yet enforced. Same shape as library.ts.
+ * Architecture contract: the two device-side author owners, AuthorWorkspace and AuthorHistory.
+ * Target API, types only. Approved; not yet enforced by conformance. Same shape as library.ts.
  *
  * Markers: FROM CODE = today's behaviour, cited at its file:line. NEW = not in today's code.
  * OPEN: = a choice the code does not settle; each names its entry in decisions.md "Author owners" (A1…).

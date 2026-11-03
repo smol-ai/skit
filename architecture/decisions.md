@@ -1,4 +1,4 @@
-# Architecture decisions: draft for review
+# Architecture decisions
 
 Each entry gives the problem, what I recommend, the corpus evidence, and whose call it is. **Revised** marks a recommendation the evidence changed. **No corpus evidence** means none was found, and the recommendation rests on SKIT's own code alone.
 
