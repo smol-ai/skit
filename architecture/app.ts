@@ -325,7 +325,7 @@ export const platform = [
 
   "Renderer",
   "Prompter",
-  "LibraryProgress",
+  "LibraryProgress (Context.Reference, silent by default; front ends provide a reporter)",
   "RegistryHttp",
   "SkitConfiguration",
   "CommandMetadata",

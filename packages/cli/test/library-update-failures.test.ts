@@ -11,7 +11,6 @@ import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { writingTo } from "./helpers/library-home.js";
 import { importSource } from "../src/library-application/import-source.js";
 import { updateSubjects, updateExitCode } from "../src/library-application/update.js";
-import { silentLibraryProgressLayer } from "../src/library-application/progress.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 import { defaultTerminalEnvironment, renderResultFrame } from "../src/presentation/output-frame.js";
 import { result } from "../src/handlers/contracts.js";
@@ -84,7 +83,7 @@ it.effect("stops the batch when shared machine settings cannot be read", () =>
     yield* f.fs.writeFileString(join(f.home, "machine.json"), "invalid machine settings");
     const before = yield* f.fs.readFileString(join(f.home, "state.json"));
     const error = yield* f
-      .run(updateSubjects(f.options).pipe(Effect.provide(silentLibraryProgressLayer)))
+      .run(updateSubjects(f.options))
       .pipe(Effect.flip);
     assert.strictEqual(error._tag, "MachineSettingsUnusable");
     assert.deepStrictEqual(f.requests, [f.urls[0]]);

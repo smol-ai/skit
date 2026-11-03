@@ -2,10 +2,6 @@ import {
   SkitConfiguration,
   skitConfigurationLayer,
 } from "../../src/configuration/skit-configuration.js";
-import {
-  LibraryProgress,
-  silentLibraryProgressLayer,
-} from "../../src/library-application/progress.js";
 import { Effect, FileSystem, Layer, Result } from "effect";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -111,7 +107,6 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
       Effect.provide(
         Layer.mergeAll(
           skitConfigurationLayer(home),
-          silentLibraryProgressLayer,
           libraryStoreLayer({ home }),
           libraryAuditLogLayer({ home }),
           transport,
@@ -131,7 +126,6 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
           | HttpClient.HttpClient
           | RegistryHttp
           | TreeHasher
-          | LibraryProgress
         >
       | FileSystem.FileSystem
     >;

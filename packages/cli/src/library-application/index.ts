@@ -23,7 +23,7 @@ export { planUpdates, updateSubjects, updateExitCode } from "./update.js";
 export {
   LibraryProgress,
   libraryProgressLayer,
-  silentLibraryProgressLayer,
+  type LibraryProgressReporter,
   type LibraryProgressEvent,
   type LibraryProgressStage,
   type LibraryProgressCompletion,

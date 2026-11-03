@@ -22,17 +22,21 @@ export type LibraryProgressEvent =
     }
   | { readonly kind: "failed"; readonly stage: LibraryProgressStage };
 
-/** Front ends own display and event delivery; workflows describe domain progress only. */
-export class LibraryProgress extends Context.Service<
-  LibraryProgress,
-  {
-    readonly around: <A, E, R>(
-      stage: LibraryProgressStage,
-      operation: Effect.Effect<A, E, R>,
-      completed: (value: A) => LibraryProgressCompletion,
-    ) => Effect.Effect<A, E, R>;
-  }
->()("skit/library/Progress") {}
+export interface LibraryProgressReporter {
+  readonly around: <A, E, R>(
+    stage: LibraryProgressStage,
+    operation: Effect.Effect<A, E, R>,
+    completed: (value: A) => LibraryProgressCompletion,
+  ) => Effect.Effect<A, E, R>;
+}
+
+/**
+ * Front ends own display and event delivery; workflows describe domain progress only.
+ * Silent unless a front end provides a reporter.
+ */
+export const LibraryProgress = Context.Reference<LibraryProgressReporter>("skit/library/Progress", {
+  defaultValue: () => ({ around: (_stage, operation) => operation }),
+});
 
 /** An explicit event adapter, including failure/interruption after the stage has closed. */
 export const libraryProgressLayer = (emit: (event: LibraryProgressEvent) => Effect.Effect<void>) =>
@@ -52,5 +56,3 @@ export const libraryProgressLayer = (emit: (event: LibraryProgressEvent) => Effe
         ),
       ),
   });
-
-export const silentLibraryProgressLayer = libraryProgressLayer(() => Effect.void);

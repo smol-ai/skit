@@ -2,6 +2,7 @@ import { Effect, Layer } from "effect";
 import {
   LibraryProgress,
   type LibraryProgressCompletion,
+  type LibraryProgressReporter,
   type LibraryProgressStage,
 } from "../library-application/progress.js";
 import { Renderer } from "./renderer.js";
@@ -26,7 +27,7 @@ export const terminalLibraryProgressLayer = Layer.effect(
   LibraryProgress,
   Effect.gen(function* () {
     const renderer = yield* Renderer;
-    return LibraryProgress.of({
+    return {
       around: (stage, operation, completed) =>
         renderer.withStatus(
           {
@@ -36,6 +37,6 @@ export const terminalLibraryProgressLayer = Layer.effect(
           },
           operation,
         ),
-    });
+    } satisfies LibraryProgressReporter;
   }),
 );
