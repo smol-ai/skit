@@ -516,15 +516,17 @@ export type TargetPlan =
   | RemoteSyncPlan
   | PlanBase<"Manage", ManageChange>;
 
+/** `_tag` is the intent applied; `result` is that intent's result (Match.tag / Schema.TaggedUnion ready). */
 export type TargetOutcome =
-  | (ExistingOutcome & { readonly intent: ExistingIntentTag })
-  | { readonly intent: "Undo"; readonly result: UndoResult }
-  | { readonly intent: "Restore"; readonly result: RestoreResult }
-  | { readonly intent: "AcceptFinding"; readonly result: AcceptFindingResult }
-  | { readonly intent: "RefreshInventory"; readonly result: RefreshInventoryResult }
-  | { readonly intent: "Sync"; readonly result: SyncResult }
-  | { readonly intent: "Manage"; readonly result: ManageResult };
-// OPEN: ExistingOutcome already uses `_tag` (Applied | Incomplete), hence `intent` as the discriminant here.
+  | {
+      [Tag in ExistingIntentTag]: { readonly _tag: Tag; readonly result: ExistingOutcome };
+    }[ExistingIntentTag]
+  | { readonly _tag: "Undo"; readonly result: UndoResult }
+  | { readonly _tag: "Restore"; readonly result: RestoreResult }
+  | { readonly _tag: "AcceptFinding"; readonly result: AcceptFindingResult }
+  | { readonly _tag: "RefreshInventory"; readonly result: RefreshInventoryResult }
+  | { readonly _tag: "Sync"; readonly result: SyncResult }
+  | { readonly _tag: "Manage"; readonly result: ManageResult };
 
 export type TargetPlanError =
   | ExistingPlanError

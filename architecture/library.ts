@@ -443,7 +443,7 @@ export interface Library {
     readonly inspect: (
       snapshot: Snapshot,
     ) => Effect.Effect<
-      "Intact" | { readonly _tag: "Changed"; readonly hash: Hash },
+      { readonly _tag: "Intact" } | { readonly _tag: "Changed"; readonly hash: Hash },
       LibraryStateReadError
     >;
     readonly pack: (
