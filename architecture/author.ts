@@ -464,7 +464,7 @@ export interface AuthorWorkspace {
    * Checks realPath(root) === root, creates .skit/ (0700) and .skit/.gitignore (`*`) if absent,
    * refuses a .skit that is not a real directory, checks .skit/lock.sqlite is absent or a regular
    * file (no-follow), then holds an exclusive SQLite transaction on it (`PRAGMA busy_timeout = 0;
-   * BEGIN EXCLUSIVE`; busy → AuthorWorkspaceBusy) through the ProcessLock port. The file never holds
+   * BEGIN EXCLUSIVE`; busy → AuthorWorkspaceBusy) through acquireWorkspaceLock. The file never holds
    * data and is never unlinked; the OS releases the lock when the process exits, even on SIGKILL
    * (t3code serverOwnership.ts#L177-L208). Only applying commands acquire it; previews and reads
    * never create .skit or the lock.
@@ -490,8 +490,10 @@ export type AuthorWorkspaceRequires =
   | SourceProcess // scanAuthorTree (packages/skit/src/platform/tree-requirements.ts:5)
   | AuthorIgnoreRepository // scanAuthorTree (packages/skit/src/artifact/tree.ts:258)
   | Digest.Digest // History.treeHash (sync.ts:390)
-  | SecureRandom.SecureRandom // workspace id and request id (NEW, replaces node:crypto)
-  | Services.ProcessLock; // the cross-process lease lock (A8)
+  | SecureRandom.SecureRandom; // workspace id and request id (NEW, replaces node:crypto)
+// The lease lock is the plain function acquireWorkspaceLock (packages/skit/src/platform/
+// workspace-lock.ts), not a service: like t3code's acquireServerOwnership it owns no state and
+// has one implementation. WorkspaceLockBusy maps to AuthorWorkspaceBusy.
 
 export type AuthorWorkspaceLayer = Layer.Layer<
   Services.AuthorWorkspace,
@@ -660,8 +662,8 @@ export interface AuthorHistory {
  *
  * Composition (NEW): Effect builds a layer value once per graph (Layer Memoization guide), not
  * once per equal config, so the CLI names one `authorLayer(home)` per runtime: AuthorHistory over
- * AuthorWorkspace, DeviceSettings, HomeLock and ProcessLock, each built once. Every operation in
- * that runtime uses that instance; separate processes rely on ProcessLock and the home lock
+ * AuthorWorkspace, DeviceSettings and HomeLock, each built once. Every operation in
+ * that runtime uses that instance; separate processes rely on the workspace lock and the home lock
  * (t3code names and reuses its shared subgraphs: runtimeLayer.ts#L60-L103).
  */
 export interface AuthorHistoryConfig {
@@ -680,14 +682,6 @@ export declare namespace Services {
   /** D3: the owner of machine.json. AuthorHistory needs only its write-once identity. */
   interface DeviceSettings {
     readonly _contract: "skit/DeviceSettings";
-  }
-  /**
-   * NEW platform port (A8): an exclusive, crash-released lock on a file, held until the scope
-   * closes. Implemented over node:sqlite (already used by history-journal.ts:26) as t3code does.
-   * Lock policy (which file, safety checks, busy) stays in AuthorWorkspace.
-   */
-  interface ProcessLock {
-    readonly _contract: "skit/ProcessLock";
   }
   /** D3: the shared home-directory lock, a platform function every <home> writer takes. */
   interface HomeLock {

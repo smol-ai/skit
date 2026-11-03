@@ -28,6 +28,7 @@ export * from "./library/security/review.js";
 export * from "./authoring/archive.js";
 export * from "./authoring/scaffold.js";
 export * from "./platform/link-stat.js";
+export * from "./platform/workspace-lock.js";
 export * from "./platform/source-process.js";
 export * from "./platform/layer.js";
 export * from "./platform/path-identity.js";

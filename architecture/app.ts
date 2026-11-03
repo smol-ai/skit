@@ -149,7 +149,6 @@ export const owners = {
       "AuthorIgnoreRepository",
       "Digest",
       "SecureRandom",
-      "ProcessLock",
     ],
     invariants: [
       "every workspace write happens under the lease; lease before home lock before Library writer (A8)",
@@ -339,7 +338,6 @@ export const workflows = {
 /** Platform services, each kept under the service rule above (not every entry is re-checked yet). */
 export const platform = [
   "HomeLock (one exclusive lock per <home>, reentrant with leases as WriterAuthority is today: writer-lock.ts:9-13,133-135)", // D3
-  "ProcessLock (crash-released exclusive lock over node:sqlite, for the workspace lease; A8)",
   "AuthorIgnoreRepository (runtime-scoped resource; author-sync-testing.md:1117-1135)",
 
   "Renderer",
