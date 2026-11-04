@@ -40,7 +40,7 @@ it.effect.each(["prepare", "apply"] as const)(
       const failure = yield* Effect.flip(
         prepared ? prepared.apply() : prepareRecoveryMoves(root, [request]),
       );
-      expect(failure._tag).toBe("PlanIsStale");
+      expect(failure._tag).toBe("Library.StalePlan");
       expect(yield* fs.readLink(alias)).toBe(other);
       expect(yield* fs.readLink(`${alias}-approved`)).toBe(source);
       for (const path of [source, other])
@@ -205,7 +205,7 @@ it.effect.each(["content", "control", "identity", "destination", "parent"] as co
         yield* f.fs.rename(f.parent, `${f.parent}-original`);
         yield* f.fs.makeDirectory(f.parent);
       }
-      expect((yield* Effect.flip(preview.apply()))._tag).toBe("PlanIsStale");
+      expect((yield* Effect.flip(preview.apply()))._tag).toBe("Library.StalePlan");
       const inspection = yield* inspectRecoveryOperation(f.home, f.operationId);
       expect(inspection.entries[0].status).toBe("conflict");
       expect(yield* f.fs.readFileString(join(saved, "SKILL.md"))).toBe(
@@ -238,7 +238,7 @@ it.effect("a later entry edited during restoration is never silently approved", 
         }),
       ),
     );
-    expect(failure._tag).toBe("PlanIsStale");
+    expect(failure._tag).toBe("Library.StalePlan");
     expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe("original skill");
     expect(yield* f.fs.readLink(savedAlias)).toBe("other");
     expect(yield* f.fs.readLink(`${savedAlias}-original`)).toBe("review");

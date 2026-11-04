@@ -6,7 +6,7 @@ import { Effect, FileSystem } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
-import { currentCollectionSkills, LibraryStore, libraryStoreLayer } from "@smolai/skit-core";
+import { currentCollectionSkills, emptyLibraryState } from "@smolai/skit-core";
 import { importSource } from "../src/library-application/import-source.js";
 import { planUpdates, updateSubjects } from "../src/library-application/update.js";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
@@ -51,11 +51,17 @@ it.effect(
       const run = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         effect.pipe(
           Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
-          Effect.provide(libraryStoreLayer({ home })),
           Effect.provide(skitConfigurationLayer(home)),
           Effect.provideService(HttpClient.HttpClient, client),
           Effect.provide(rendererTestLayer()),
         );
+      const load = run(
+        Effect.flatMap(Library.Service, (library) => library.read).pipe(
+          Effect.map((snapshot) =>
+            snapshot._tag === "Present" ? snapshot.state : emptyLibraryState(),
+          ),
+        ),
+      );
       const added = yield* run(
         importSource({ type: "archive", url: "https://fixtures.test/plugins.tar" }),
       );
@@ -82,7 +88,7 @@ it.effect(
           }),
         ),
       );
-      const before = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
+      const before = yield* load;
       yield* write("plugins/tools/.claude-plugin/plugin.json", '{"name":"tools"}');
       yield* skill("skills/review", "review", "After");
       yield* skill("plugins/tools/skills/review", "review", "After");
@@ -95,7 +101,7 @@ it.effect(
       const outcomes = yield* run(updateSubjects({ roots }));
       assert.strictEqual(outcomes.length, 1);
       assert.isFalse("status" in outcomes[0]!);
-      const after = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
+      const after = yield* load;
       assert.deepStrictEqual(after.collections, before.collections);
       assert.deepStrictEqual(after.enabled, before.enabled);
       assert.deepStrictEqual(
@@ -119,7 +125,7 @@ it.effect(
       assert.isFalse(yield* fs.exists(join(root, "codex/deleted")));
       const retry = yield* run(updateSubjects({ roots }));
       assert.isTrue("changed" in retry[0]! && retry[0].changed === false);
-      const beforeConflict = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
+      const beforeConflict = yield* load;
       yield* skill("plugins/tools/skills/review", "review", "A different variant");
       bytes = yield* archive();
       const conflicted = yield* run(updateSubjects({ roots }));
@@ -129,9 +135,6 @@ it.effect(
         assert.strictEqual(conflicted[0].diagnostics?.[0]?.code, "plugin-member-held");
         assert.strictEqual(conflicted[0].diagnostics?.[0]?.path, "plugins/tools/skills/review");
       }
-      assert.deepStrictEqual(
-        yield* run(Effect.flatMap(LibraryStore, (store) => store.load)),
-        beforeConflict,
-      );
+      assert.deepStrictEqual(yield* load, beforeConflict);
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

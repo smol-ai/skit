@@ -3,12 +3,7 @@ import { basename, join, relative } from "node:path";
 import { Effect, Exit, FileSystem, Option, Schema } from "effect";
 import { PlatformError, systemError } from "effect/PlatformError";
 import { assert, it } from "@effect/vitest";
-import {
-  InvalidLibraryState,
-  LibraryStore,
-  SkillsDirectoryNotWritable,
-  skitLayer,
-} from "@smolai/skit-core";
+import { SkillsDirectoryNotWritable, StalePlan, skitLayer } from "@smolai/skit-core";
 import { withSandboxDenying } from "./helpers/sandbox.js";
 import { SetupResult } from "@smolai/skit-core/library/setup";
 import { setupCommand } from "../src/library/setup/command.js";
@@ -19,7 +14,6 @@ import {
 import { Prompter } from "../src/presentation/prompter.js";
 import { setupPrompts } from "../src/library/setup/setup-steps.js";
 import { inspectRecoveryOperation, listRecoveryOperations } from "@smolai/skit-core";
-import { PlanIsStale } from "../src/library/failures.js";
 import { SetupPlanStale } from "@smolai/skit-core/library/setup";
 import { SetupStopped } from "@smolai/skit-core/library/setup";
 import { captureDisk, diskChanges, noDiskChanges, type DiskDiff } from "./helpers/disk-snapshot.js";
@@ -42,9 +36,9 @@ const skillBytes = (name: string, body = `${name} body`) =>
 interface Gates {
   /** Runs once the confirmation prompt has approved the plan. */
   readonly approved?: Effect.Effect<void, unknown>;
-  /** Runs once the first Library state has been saved. */
+  /** Runs once the first Library state has replaced state.json. */
   readonly published?: Effect.Effect<void, unknown>;
-  /** Refuses the nth Library state save. */
+  /** Refuses the nth replacement of the Library's state.json. */
   readonly failPublish?: number;
   /** Runs before every rename; a failure refuses that rename. */
   readonly rename?: (from: string, to: string) => Effect.Effect<void, PlatformError>;
@@ -110,23 +104,6 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
               })),
             ),
             Effect.provideServiceEffect(
-              LibraryStore,
-              Effect.map(LibraryStore, (store) => ({
-                ...store,
-                save: (next: Parameters<typeof store.save>[0], base: typeof next) =>
-                  Effect.gen(function* () {
-                    publishes++;
-                    if (publishes === gates.failPublish)
-                      return yield* new InvalidLibraryState({
-                        path: home.statePath,
-                        detail: "Test refusal of a Library save",
-                      });
-                    yield* store.save(next, base);
-                    if (publishes === 1) yield* Effect.orDie(gates.published ?? Effect.void);
-                  }),
-              })),
-            ),
-            Effect.provideServiceEffect(
               FileSystem.FileSystem,
               Effect.map(FileSystem.FileSystem, (files) => ({
                 ...files,
@@ -137,7 +114,14 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
                     return files.readFileString(...args);
                   }),
                 rename: (from: string, to: string) =>
-                  Effect.andThen(gates.rename?.(from, to) ?? Effect.void, files.rename(from, to)),
+                  Effect.gen(function* () {
+                    yield* gates.rename?.(from, to) ?? Effect.void;
+                    if (to !== home.statePath) return yield* files.rename(from, to);
+                    publishes++;
+                    if (publishes === gates.failPublish) return yield* refuseRename(to);
+                    yield* files.rename(from, to);
+                    if (publishes === 1) yield* Effect.orDie(gates.published ?? Effect.void);
+                  }),
               })),
             ),
             Effect.provide(interaction.layer),
@@ -339,7 +323,7 @@ it.effect("bytes changed between the apply-time scan and a later stage fail stal
           ? f.fs.writeFileString(join(f.path("alpha"), "SKILL.md"), changed)
           : Effect.void,
     });
-    assert.instanceOf(failure(exit), PlanIsStale);
+    assert.instanceOf(failure(exit), StalePlan);
     assert.deepStrictEqual((yield* f.home.durable).skills, []);
     const changes = yield* diskChanges(before);
     assert.isFalse(holds(changes, changed));
@@ -378,7 +362,7 @@ it.effect("a setup whose record is refused writes nothing to the Library", () =>
     const f = yield* fixture({ machine: false });
     const before = yield* captureDisk(f.disk);
     const { exit } = yield* f.setup([["alpha", "remove\0gamma"], true], { failPublish: 1 });
-    assert.instanceOf(failure(exit), InvalidLibraryState);
+    assert.instanceOf(failure(exit), PlatformError);
     assert.deepStrictEqual(changedPaths(f.root, yield* diskChanges(before)), {
       created: ["library/machine.json"],
       deleted: [],

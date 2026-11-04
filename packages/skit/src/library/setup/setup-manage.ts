@@ -5,7 +5,7 @@ import { type Hash } from "../../vocabulary.js";
 import { type Library } from "../library.js";
 import { type MachineId } from "../entity-ids.js";
 import { localImportRequest } from "./local-import.js";
-import { PlanIsStale } from "../internal/recovery/evidence.js";
+import { StalePlan } from "../library-plan.js";
 import { checkManageSelection } from "./manage-existing.js";
 import {
   SetupCopySelection,
@@ -59,7 +59,7 @@ const reviewedFolder = Effect.fn("Setup.reviewedFolder")(function* (
     (identity !== undefined &&
       (observed.value.dev !== identity.dev || observed.value.ino !== identity.ino))
   )
-    return yield* new PlanIsStale();
+    return yield* new StalePlan({ message: "The Library changed since this was previewed" });
   return observed.value;
 });
 
@@ -73,7 +73,7 @@ const approvedLink = Effect.fn("Setup.approvedLink")(function* (link: ApprovedSy
     observed.value.ino !== link.ino ||
     observed.value.linkTarget !== link.linkTarget
   )
-    return yield* new PlanIsStale();
+    return yield* new StalePlan({ message: "The Library changed since this was previewed" });
   return observed.value;
 });
 

@@ -4,7 +4,7 @@ import { Effect, Fiber, FileSystem, Layer, Result, Schedule, Schema } from "effe
 import {
   InstalledSkillStatus,
   SourceProcess,
-  LibraryStore,
+  emptyLibraryState,
   libraryDoctorReport,
 } from "@smolai/skit-core";
 import { ChildProcessSpawner } from "effect/process";
@@ -47,8 +47,7 @@ it.effect.each([false, true])(
       }
       const loop = join(f.root, "claude", "loop");
       if (unreadable) yield* fs.symlink(loop, loop);
-      const store = yield* LibraryStore;
-      const inventory = yield* store.load;
+      const inventory = emptyLibraryState();
       const before = yield* captureDisk([f.root]);
       const report = yield* inspectNativeDiscovery(inventory, {
         cwd,

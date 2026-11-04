@@ -4,7 +4,6 @@ import { join } from "node:path";
 import {
   COLLECTION_CONTROL_DIRECTORY,
   AUTHOR_WORKSPACE_METADATA_FILE,
-  LibraryStore,
   collectionVersionPath,
   skitLayer,
 } from "@smolai/skit-core";
@@ -37,7 +36,7 @@ it.effect(
         first.entry.collection?.upstream?.source_identity.kind,
         "authored-workspace",
       );
-      const firstState = yield* home.owned(Effect.flatMap(LibraryStore, (store) => store.load));
+      const firstState = yield* home.durable;
       assert.strictEqual(firstState.collection_versions.length, 1);
       const firstTree = firstState.collection_versions[0];
       assert.ok(firstTree);
@@ -54,7 +53,7 @@ it.effect(
         refreshed.entry.collection?.collection_id,
         first.entry.collection?.collection_id,
       );
-      const state = yield* home.owned(Effect.flatMap(LibraryStore, (store) => store.load));
+      const state = yield* home.durable;
       assert.strictEqual(state.collections.length, 1);
       // The refreshed tree is retained alongside the first.
       assert.deepStrictEqual(

@@ -8,7 +8,6 @@
 import type { Effect } from "effect";
 import type { Library as Implementation } from "../../packages/skit/src/library/library.js";
 import type { Library, LibraryRequires } from "../library.js";
-import type { LibraryStore } from "../../packages/skit/src/library/store/library-store.js";
 import type { InstalledSkills } from "../../packages/skit/src/library/installed-skills.js";
 
 /** Exactly equal, including literal unions; `never` equals only `never`. */
@@ -41,14 +40,17 @@ type ExtraDebt = never;
 // preserves restore progress and offers a passive availability plan for sync's preview count.
 // Those signature differences require explicit target review, not casts or a relaxed assertion.
 type ChangedDebt = "plan" | "apply" | "setup" | "history" | "content";
-// LibraryStore folds into Library; InstalledSkills is built inside Library.layer from routing.
-type RequirementDebt = LibraryStore | InstalledSkills.Service;
+// InstalledSkills is built inside Library.layer from routing; `make` still takes it from context.
+type RequirementDebt = InstalledSkills.Service;
 
 export type Checks = [
   Assert<Equal<MissingMethods<Library, Implementation.Interface>, MissingDebt>>,
   Assert<Equal<ExtraMethods<Library, Implementation.Interface>, ExtraDebt>>,
   Assert<Equal<ChangedMethods<Library, Implementation.Interface>, ChangedDebt>>,
   Assert<
-    Equal<UndeclaredRequirements<typeof Implementation.make, LibraryRequires>, RequirementDebt>
+    Equal<
+      UndeclaredRequirements<ReturnType<typeof Implementation.make>, LibraryRequires>,
+      RequirementDebt
+    >
   >,
 ];

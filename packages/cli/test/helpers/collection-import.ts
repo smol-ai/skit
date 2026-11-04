@@ -2,7 +2,7 @@ import { assert } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { LibraryStore, libraryStoreLayer, collectionVersionPath } from "@smolai/skit-core";
+import { collectionVersionPath, Library } from "@smolai/skit-core";
 import { importSource, previewLibrarySource } from "../../src/library-application/import-source.js";
 import { writingTo } from "./library-home.js";
 
@@ -22,9 +22,11 @@ export const assertCollectionImport = Effect.fn("Test.assertCollectionImport")(f
   );
   const added = yield* writingTo(home, importSource(source));
   assert.deepStrictEqual(added.skills, preview.skills);
-  const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
-    Effect.provide(libraryStoreLayer({ home })),
+  const snapshot = yield* Effect.flatMap(Library.Service, (library) => library.read).pipe(
+    Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
   );
+  assert.strictEqual(snapshot._tag, "Present");
+  const state = snapshot._tag === "Present" ? snapshot.state : assert.fail("no Library state");
   assert.strictEqual(state.collections.length, 1);
   assert.strictEqual(state.skills.length, expectedPaths.length);
   assert.strictEqual(new Set(state.skills.map((skill) => skill.name)).size, state.skills.length);

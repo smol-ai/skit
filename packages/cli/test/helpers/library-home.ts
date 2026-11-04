@@ -8,18 +8,16 @@ import {
   deterministicTreeHash,
   initSkit,
   InstalledSkills,
-  libraryStoreLayer,
   treeHasherLayer,
   TreeHasher,
-  LibraryStore,
   readSkitDescriptor,
   validateSkitDirectory,
   type HarnessName,
   type SkillsDirectoryOverrides,
   type LibraryState,
   makeMachineId,
-  importCollection,
-  withLibraryWriter,
+  emptyLibraryState,
+  type ImportRequest,
 } from "@smolai/skit-core";
 import type { InstalledSkillOptions } from "../../src/workflows/library/installed-skill-options.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./http-test-client.js";
@@ -105,9 +103,8 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
       Effect.provide(
         Layer.mergeAll(
           skitConfigurationLayer(home),
-          Layer.effect(Library.Service, Library.make).pipe(
+          Layer.effect(Library.Service, Library.make(home)).pipe(
             Layer.provide(InstalledSkills.layer()),
-            Layer.provideMerge(libraryStoreLayer({ home })),
           ),
           transport,
           registryHttpLayer(transport),
@@ -120,16 +117,17 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
       E,
       | Exclude<
           R,
-          | SkitConfiguration
-          | LibraryStore
-          | Library.Service
-          | HttpClient.HttpClient
-          | RegistryHttp
-          | TreeHasher
+          SkitConfiguration | Library.Service | HttpClient.HttpClient | RegistryHttp | TreeHasher
         >
       | FileSystem.FileSystem
     >;
-  const durable = owned(Effect.flatMap(LibraryStore, (store) => store.load));
+  const durable = owned(
+    Effect.flatMap(Library.Service, (library) => library.read).pipe(
+      Effect.map((snapshot) =>
+        snapshot._tag === "Present" ? snapshot.state : emptyLibraryState(),
+      ),
+    ),
+  );
   const writeDurable = (state: LibraryState) =>
     fs.writeFileString(statePath, `${JSON.stringify(state, null, 2)}\n`);
   return {
@@ -206,15 +204,15 @@ export const archiveBytes = Effect.fn("Test.archiveBytes")(function* (
 
 export { deterministicTreeHash };
 
-/** Retain observed bytes into the Library at `home`, through the store production consumes. */
-export const importCollectionIn =
-  (home: string) => (request: Parameters<typeof importCollection>[0]) =>
-    importCollection(request).pipe(Effect.provide(libraryStoreLayer({ home })));
-
-/** Mutate the Library at `home` the way a front end does: under the recording writer lock. */
-export const writingTo = <A, E, R>(home: string, effect: Effect.Effect<A, E, R>) =>
-  withLibraryWriter(effect).pipe(
+/** Retain observed bytes into the Library at `home`, through the owner production consumes. */
+export const importCollectionIn = (home: string) => (request: ImportRequest) =>
+  Effect.flatMap(Library.Service, (library) => library.import.collection(request)).pipe(
     Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
-    Effect.provide(libraryStoreLayer({ home })),
+  );
+
+/** Change the Library at `home` the way a front end does: through its owner. */
+export const writingTo = <A, E, R>(home: string, effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(
+    Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
     Effect.provide(skitConfigurationLayer(home)),
   );

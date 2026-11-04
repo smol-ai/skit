@@ -10,7 +10,6 @@ import { Hash as HashSchema, HarnessName, InstallScope } from "../vocabulary.js"
 import type { SkitSource } from "./library-contracts.js";
 import { libraryStateRevision, type LibraryState } from "./library-state.js";
 import { inspectResolvedSource, leaveResolvedPnpmSkills } from "./source-inspection.js";
-import { LibraryStore } from "./store/library-store.js";
 
 // Whether an existing copy can be managed exactly as it is: its folder holds one Skill whose
 // bytes SKIT can retain losslessly, and each target either takes it or already is it.
@@ -118,11 +117,11 @@ export const manageBlockers = Effect.fn("Library.manageBlockers")(function* (roo
 /** Plan exact-content managing without retaining, projecting, or saving state. */
 export const planManage = Effect.fn("Library.planManage")(function* (
   selected: readonly ManageTarget[],
-  nominatedSourcePath?: string,
-  options?: { readonly base: LibraryState },
+  nominatedSourcePath: string | undefined,
+  options: { readonly base: LibraryState },
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const state = options?.base ?? (yield* (yield* LibraryStore).load);
+  const state = options.base;
   const revision = libraryStateRevision(state);
   if (!selected.length) {
     const plan: ManagePlan = {

@@ -50,10 +50,10 @@ describe("skit/owner-boundaries", () => {
     }
   });
 
-  test("a handler cannot open the Library's store or writer", async () => {
-    expect(
-      await reported(`import { LibraryStore, withLibraryWriter } from "@smolai/skit-core";`),
-    ).toEqual(["LibraryStore", "withLibraryWriter"]);
+  test("a handler cannot take the Library's home lock", async () => {
+    expect(await reported(`import { withHomeLock } from "@smolai/skit-core";`)).toEqual([
+      "withHomeLock",
+    ]);
   });
 
   test("new recovery callers must use Library instead of opening a move or restore writer", async () => {
@@ -65,8 +65,8 @@ describe("skit/owner-boundaries", () => {
   });
 
   test("re-exporting a private name is the same bypass", async () => {
-    expect(await reported(`export { libraryStoreLayer } from "@smolai/skit-core";`)).toEqual([
-      "libraryStoreLayer",
+    expect(await reported(`export { withHomeLock } from "@smolai/skit-core";`)).toEqual([
+      "withHomeLock",
     ]);
   });
 

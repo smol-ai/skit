@@ -1,6 +1,6 @@
 import { it } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem } from "effect";
-import { LibraryStore } from "../src/index.js";
+import { loadLibrary } from "../src/library/store/library-store.js";
 import { join } from "node:path";
 import { expect } from "vitest";
 import { readClaudeListingSnapshot } from "../src/harnesses/skill-listing/claude.js";
@@ -12,7 +12,7 @@ it.effect(
     Effect.gen(function* () {
       const f = yield* NativeLibraryFixture;
       const fs = yield* FileSystem.FileSystem;
-      const state = yield* (yield* LibraryStore).load;
+      const state = yield* loadLibrary(f.home);
       const root = join(f.home, ".claude");
       const project = join(f.root, "project");
       yield* fs.makeDirectory(join(root, "skills", "visible"), { recursive: true });
@@ -124,7 +124,7 @@ it.effect("nested discovery uses root shared settings, then local settings and a
   Effect.gen(function* () {
     const f = yield* NativeLibraryFixture;
     const fs = yield* FileSystem.FileSystem;
-    const state = yield* (yield* LibraryStore).load;
+    const state = yield* loadLibrary(f.home);
     const project = join(f.root, "project");
     const nested = join(project, "nested");
     yield* fs.makeDirectory(join(project, ".git"), { recursive: true });

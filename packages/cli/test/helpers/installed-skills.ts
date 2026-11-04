@@ -3,14 +3,24 @@ import {
   canonicalJson,
   InstalledSkills,
   Library,
-  LibraryStore,
+  SkitConfiguration,
   type Hash,
   type InstallDestination,
   type InstallScope,
   type LibraryState,
   type ManageApproval,
   type OwnershipMarker,
+  emptyLibraryState,
 } from "@smolai/skit-core";
+
+/** The configured Library's state, read through an owner that routes nothing. */
+const currentState = Effect.gen(function* () {
+  const { skitHome } = yield* SkitConfiguration;
+  const snapshot = yield* (yield* Library.make(skitHome).pipe(
+    Effect.provideServiceEffect(InstalledSkills.Service, InstalledSkills.make()),
+  )).read;
+  return snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
+});
 
 /** A Library owner routed where this device already has copies, or to `add` for its scope. */
 const library = (
@@ -18,6 +28,7 @@ const library = (
   add?: InstalledSkills.Destination & { readonly scope: InstallScope },
 ) =>
   Effect.gen(function* () {
+    const { skitHome } = yield* SkitConfiguration;
     const recorded = yield* InstalledSkills.recordedRouting(state);
     const files = yield* InstalledSkills.make({
       ...recorded,
@@ -32,7 +43,9 @@ const library = (
             : targets,
         ),
     });
-    return yield* Library.make.pipe(Effect.provideService(InstalledSkills.Service, files));
+    return yield* Library.make(skitHome).pipe(
+      Effect.provideService(InstalledSkills.Service, files),
+    );
   });
 
 const count = (
@@ -54,7 +67,7 @@ export const installEnabledSkills = (options: {
   >;
 }) =>
   Effect.gen(function* () {
-    const state = yield* (yield* LibraryStore).load;
+    const state = yield* currentState;
     const owner = yield* library(state, {
       scope: options.scope ?? { kind: "global" },
       destination: options.target,
@@ -90,7 +103,7 @@ export const installEnabledSkills = (options: {
 /** Update every installed copy where it is recorded. */
 export const updateInstalledSkills = (_options: { readonly variantsPath?: string }) =>
   Effect.gen(function* () {
-    const state = yield* (yield* LibraryStore).load;
+    const state = yield* currentState;
     const owner = yield* library(state);
     const outcome = (yield* owner.apply(
       yield* owner.plan({ _tag: "Update" }, { base: yield* owner.read }),

@@ -2,8 +2,8 @@ import { Effect } from "effect";
 import { Library } from "../../src/library/library.js";
 import { InstalledSkills } from "../../src/library/installed-skills.js";
 import { CollectionRemovalMissing } from "../../src/library/installation/remove.js";
-import { LibraryStore } from "../../src/library/store/library-store.js";
 import { emptyLibraryState } from "../../src/library/library-state.js";
+import { inspectLocalLibraryState, LibraryWriter } from "../../src/library/store/library-store.js";
 import { snapshotOf } from "../../src/library/snapshot.js";
 import type { LibraryState, InstalledSkill } from "../../src/library/library-state.js";
 import type { ManageApproval } from "../../src/install/files.js";
@@ -16,6 +16,7 @@ import { canonicalJson } from "../../src/shared/json.js";
  * and scope; only `active` destinations count when given.
  */
 const library = (
+  home: string,
   state: LibraryState,
   options: {
     readonly active?: readonly InstallDestination[];
@@ -39,7 +40,7 @@ const library = (
           ),
         ),
     });
-    return yield* Library.make.pipe(Effect.provideService(InstalledSkills.Service, files));
+    return yield* Library.make(home).pipe(Effect.provideService(InstalledSkills.Service, files));
   });
 
 const applied = (
@@ -53,7 +54,7 @@ export const removeCollection = (state: LibraryState, collectionId: string) =>
     const id = state.collections.find((item) => item.collection_id === collectionId)?.collection_id;
     if (id === undefined)
       return yield* new CollectionRemovalMissing({ collection_id: collectionId });
-    const owner = yield* library(state);
+    const owner = yield* library((yield* LibraryWriter).home, state);
     return (yield* owner.apply(
       yield* owner.plan(
         { _tag: "Remove", collectionId: id },
@@ -76,9 +77,10 @@ export const installEnabledSkills = (options: {
   >;
 }) =>
   Effect.gen(function* () {
-    const snapshot = snapshotOf(yield* (yield* LibraryStore).inspect);
+    const { home } = yield* LibraryWriter;
+    const snapshot = snapshotOf(yield* inspectLocalLibraryState(home));
     const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
-    const owner = yield* library(state, {
+    const owner = yield* library(home, state, {
       add: {
         scope: options.scope ?? { kind: "global" },
         destination: options.target,
@@ -122,9 +124,10 @@ export const planUpdate = (options: {
   readonly approvals: readonly Library.Approval[];
 }) =>
   Effect.gen(function* () {
-    const snapshot = snapshotOf(yield* (yield* LibraryStore).inspect);
+    const { home } = yield* LibraryWriter;
+    const snapshot = snapshotOf(yield* inspectLocalLibraryState(home));
     const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
-    const owner = yield* library(state, {
+    const owner = yield* library(home, state, {
       add: { scope: { kind: "global" }, destination: options.target, root: options.root },
     });
     const plan = yield* owner.plan(
@@ -140,9 +143,10 @@ export const uninstallLeftovers = (options: {
   readonly variantsPath?: string;
 }) =>
   Effect.gen(function* () {
-    const snapshot = snapshotOf(yield* (yield* LibraryStore).inspect);
+    const { home } = yield* LibraryWriter;
+    const snapshot = snapshotOf(yield* inspectLocalLibraryState(home));
     const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
-    const owner = yield* library(state, { active: options.activeTargets });
+    const owner = yield* library(home, state, { active: options.activeTargets });
     const outcome = (yield* owner.apply(yield* owner.plan({ _tag: "Update" }, { base: snapshot })))
       .result;
     return applied(outcome, "Uninstalled");
@@ -151,7 +155,7 @@ export const uninstallLeftovers = (options: {
 /** Keep the known-present, deliberately stale state supplied by backup safety tests. */
 export const uninstallCopies = (state: LibraryState, copies: readonly InstalledSkill[]) =>
   Effect.gen(function* () {
-    const owner = yield* library(state);
+    const owner = yield* library((yield* LibraryWriter).home, state);
     return (yield* owner.apply(
       yield* owner.plan(
         {

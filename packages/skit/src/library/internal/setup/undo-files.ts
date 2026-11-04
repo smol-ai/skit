@@ -6,7 +6,7 @@ import { deterministicTreeHash } from "../../../artifact/skit.js";
 import { globalEnabled } from "../../enabled.js";
 import { inspectOwnershipMarker, prepareInstalledSkillRebuild } from "../../../install/files.js";
 import { inspectInstalledSkillBackups } from "../../../install/backups.js";
-import { LibraryStore } from "../../store/library-store.js";
+import { libraryOriginalsPath } from "../../store/library-store.js";
 import { LinkStat } from "../../../platform/link-stat.js";
 import { pathIsWithin } from "../../../platform/path-identity.js";
 import { collectionVersionPath } from "../../collection-version.js";
@@ -14,7 +14,7 @@ import { versionBacking } from "../../library-contracts.js";
 import { writeRawAtomic } from "../../../platform/atomic-write.js";
 import { type LibraryState } from "../../library-state.js";
 import { type InstalledSkill } from "../../device-state.js";
-import { PlanIsStale } from "../recovery/evidence.js";
+import { StalePlan } from "../../library-plan.js";
 import { readSkillPathDetails } from "./journal.js";
 import { inspectRecoveryOperation, prepareOwnedRecoveryMoves } from "../recovery/moves.js";
 import { checkSetupGlobalContent } from "./protection.js";
@@ -148,6 +148,7 @@ const restoreMarker = Effect.fn("SetupUndo.restoreMarker")(function* (
 
 /** File effects are prepared from immutable before evidence, never inferred from desired bindings. */
 export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(function* (
+  home: string,
   operationId: string,
   setup: SetupChanges,
   state: LibraryState,
@@ -155,16 +156,13 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
   priorBackups: readonly string[],
   restoredState: LibraryState,
 ) {
-  const store = yield* LibraryStore;
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
   // A setup that moved nothing aside and was never undone has no recovery folder.
-  const recovery = (yield* fs.exists(join(store.home, "removed", operationId)))
-    ? yield* inspectRecoveryOperation(store.home, operationId)
+  const recovery = (yield* fs.exists(join(home, "removed", operationId)))
+    ? yield* inspectRecoveryOperation(home, operationId)
     : { entries: [] };
-  const backups = yield* Effect.forEach(priorBackups, (id) =>
-    inspectRecoveryOperation(store.home, id),
-  );
+  const backups = yield* Effect.forEach(priorBackups, (id) => inspectRecoveryOperation(home, id));
   const conflicts: string[] = [];
   const pathDetails: SkillPathDetails[] = [];
   const actions: {
@@ -180,7 +178,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
   >();
   const affected = new Set<string>();
   const physicalPaths: string[] = [];
-  const physicalHome = yield* links.realPathNative(store.home);
+  const physicalHome = yield* links.realPathNative(home);
   for (const file of setup.files) {
     const prior = setup.installedSkillsBefore.find((item) => resolve(item.path) === file.path);
     const after = setup.installedSkillsAfter.find((item) => resolve(item.path) === file.path);
@@ -344,7 +342,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
         for (const version of skill.versions) {
           const backing = versionBacking(state, skill, version);
           if (!backing) continue;
-          const root = collectionVersionPath(store.originalsPath, backing.copy.hash);
+          const root = collectionVersionPath(libraryOriginalsPath(home), backing.copy.hash);
           const path =
             backing.member.source_path === "." ? root : join(root, backing.member.source_path);
           const evidence = yield* Effect.result(unmarkedAt(path, file.entry.unmarked.by));
@@ -357,7 +355,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
       const rebuilt = yield* Effect.result(
         prepareInstalledSkillRebuild(
           restoredState,
-          store.originalsPath,
+          libraryOriginalsPath(home),
           prior,
           policy === undefined ? { source: "declared" } : { source: "override", policy },
         ),
@@ -390,7 +388,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
     }
     actions.push({ path: file.path, kind: "restore", source, transfer });
   }
-  const backup = yield* prepareOwnedRecoveryMoves(moves, backupDirectory);
+  const backup = yield* prepareOwnedRecoveryMoves(home, moves, backupDirectory);
   const sourceEvidence = yield* Effect.forEach(
     actions.filter((action) => action.source !== undefined),
     (action) => readSkillPathDetails(action.source!),
@@ -435,11 +433,15 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
             if (action.kind === "release-ownership") {
               const before = pathDetails.find((item) => item.path === file.path)!;
               if (!equal(yield* readSkillPathDetails(file.path), before))
-                return yield* new PlanIsStale();
+                return yield* new StalePlan({
+                  message: "The Library changed since this was previewed",
+                });
               yield* restoreMarker(file.path, file.entry!);
             } else if (action.kind === "restore") {
               if ((yield* readSkillPathDetails(file.path)).entry !== null)
-                return yield* new PlanIsStale();
+                return yield* new StalePlan({
+                  message: "The Library changed since this was previewed",
+                });
               if (
                 action.transfer === "move" &&
                 !equal(
@@ -447,7 +449,9 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
                   sourceEvidence.find((entry) => entry.path === action.source),
                 )
               )
-                return yield* new PlanIsStale();
+                return yield* new StalePlan({
+                  message: "The Library changed since this was previewed",
+                });
               yield* fs
                 .rename(
                   action.transfer === "move" ? action.source! : staged.get(file.path)!,

@@ -158,11 +158,7 @@ export class LibrarySnapshotsApi extends HttpApiGroup.make("librarySnapshots")
     HttpApiEndpoint.post("upload", "/api/library/snapshots", {
       payload: SnapshotArchive,
       success: SnapshotUploadResponse,
-      error: [
-        InvalidRequestResponse,
-        InsufficientScopeResponse,
-        StorageFailureResponse,
-      ],
+      error: [InvalidRequestResponse, InsufficientScopeResponse, StorageFailureResponse],
     }),
     HttpApiEndpoint.get("download", "/api/libraries/:library_id/snapshots/:digest", {
       params: { library_id: Schema.String, digest: Schema.String },

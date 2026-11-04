@@ -5,7 +5,8 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
-import { libraryStoreLayer, LibraryStore, skitLayer, type LibraryState } from "@smolai/skit-core";
+import { skitLayer, type LibraryState } from "@smolai/skit-core";
+import { Library } from "@smolai/skit-core/library";
 import { runSetup } from "@smolai/skit-core/library/setup";
 import { applySetupSelections } from "./helpers/setup-apply.js";
 import { libraryView } from "@smolai/skit-core/library/session";
@@ -80,11 +81,9 @@ it.effect("checks skills.sh status against real Git history without saving Libra
         }),
       ),
     );
-    const saved = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
-      Effect.provide(libraryStoreLayer({ home: home.home })),
-    );
-    expect(saved.present).toBe(true);
-    if (!saved.present) return;
+    const saved = yield* home.owned(Effect.flatMap(Library.Service, (library) => library.read));
+    expect(saved._tag).toBe("Present");
+    if (saved._tag !== "Present") return;
     const member = saved.state.skills[0]!;
     const collection = {
       ...saved.state.collections[0]!,

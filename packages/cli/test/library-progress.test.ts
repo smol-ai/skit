@@ -2,7 +2,7 @@ import { Library } from "@smolai/skit-core/library";
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem } from "effect";
 import { join } from "node:path";
-import { createSkitArchive, LibraryActor, LibraryStore, skitLayer } from "@smolai/skit-core";
+import { createSkitArchive, LibraryActor, skitLayer } from "@smolai/skit-core";
 import {
   LibraryProgress,
   libraryProgressLayer,
@@ -73,7 +73,7 @@ it.effect("a headless update emits domain progress and records one attributed tr
         ["completed", "install"],
       ],
     );
-    const after = yield* home.owned(LibraryStore.use((store) => store.load));
+    const after = yield* home.durable;
     assert.notStrictEqual(
       after.collection_versions.at(-1)?.hash,
       before.collection_versions.at(-1)?.hash,

@@ -39,9 +39,6 @@ export interface SetEnabledPlan {
   })[];
 }
 
-export const SetEnabledStale = Library.StalePlan;
-export type SetEnabledStale = Library.StalePlan;
-
 /** Accepted intent survives a later failure; callers must not mistake this for rejection. */
 export class SetEnabledIncomplete
   extends Schema.TaggedError<SetEnabledIncomplete>()("Library.SetEnabledIncomplete", {
@@ -65,7 +62,7 @@ export class SetEnabledIncomplete
 /** Text and displayed names are resolved here; Library accepts only stable identities. */
 export type SelectionError =
   | Library.PlanError
-  | import("../../store/library-store.js").LibraryStoreLayerError
+  | import("../../store/library-store.js").LibraryLayerError
   | import("../../subject-resolution.js").LibrarySubjectNotFound
   | import("../../subject-resolution.js").LibrarySubjectAmbiguous
   | import("../../../shared/input-failures.js").OptionCombinationInvalid;

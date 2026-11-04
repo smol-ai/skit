@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { Library } from "../../library.js";
 import { ownerLayer } from "../runtime.js";
 import { emptyLibraryState, type LibraryState } from "../../library-state.js";
-import { LibraryStore, withLibraryWriter } from "../../store/library-store.js";
+import { loadLibrary, writeLibrary } from "../../store/library-store.js";
 import { latestSourceImport, type LibrarySubject } from "../../subject-resolution.js";
 import { sourceLocator } from "../../../sources/resolve.js";
 import { isSkitFailure } from "../../../shared/failure.js";
@@ -67,11 +67,15 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <
   E,
   R,
   F extends { readonly remediation: string },
->(state: LibraryState, before: LibrarySubject, adapters: SourceUpdateAdapters<E, R, F>) {
+>(
+  home: string,
+  state: LibraryState,
+  before: LibrarySubject,
+  adapters: SourceUpdateAdapters<E, R, F>,
+) {
   const progress = adapters.progress;
   const library = yield* Library.Service;
-  const store = yield* LibraryStore;
-  const storeHome = yield* canonicalStoragePath(store.home);
+  const storeHome = yield* canonicalStoragePath(home);
   let phase: "source" | "install" = "source";
   let source = before.label;
   let sourceImported = false;
@@ -119,7 +123,7 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <
         );
         installed = installedSkillUpdate.installed;
       }
-      const after = yield* (yield* LibraryStore).load;
+      const after = yield* loadLibrary(home);
       const collectionVersion = after.collection_versions.find(
         (tree) => tree.collection_version_id === imported.collection_version_id,
       );
@@ -192,7 +196,7 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <
           // Source publication can succeed before its temporary checkout fails to close.
           // Inspect persisted evidence rather than claiming that such an update was rolled back.
           if (!sourceImported) {
-            const current = yield* store.load;
+            const current = yield* loadLibrary(home);
             const previous = latestSourceImport(state, before);
             const latest = latestSourceImport(current, before);
             sourceImported = latest !== undefined && latest.import_id !== previous?.import_id;
@@ -217,7 +221,7 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <
       }),
     ),
   );
-}, withLibraryWriter);
+});
 
 /** One owner and one batch action; Collection failures stay local, shared-storage failures stop it. */
 export const updateSources = Effect.fn("Library.updateSources")(
@@ -228,13 +232,14 @@ export const updateSources = Effect.fn("Library.updateSources")(
     adapters: SourceUpdateAdapters<E, R, F>,
   ) {
     const library = yield* Library.Service;
-    return yield* withLibraryWriter(
+    return yield* writeLibrary(
+      home,
       Effect.gen(function* () {
         const snapshot = yield* library.read;
         const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
         const selected = yield* selectSubjects(state, query);
         return yield* Effect.forEach(selected, (subject) =>
-          updateCollection(state, subject, adapters),
+          updateCollection(home, state, subject, adapters),
         );
       }),
     );

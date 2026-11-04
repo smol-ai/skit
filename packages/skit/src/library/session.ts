@@ -64,7 +64,6 @@ export {
 export {
   type SetEnabledConfiguration,
   type SetEnabledPlan,
-  SetEnabledStale,
   SetEnabledIncomplete,
   openSetEnabledSession,
   type SetEnabledSession,
@@ -81,12 +80,7 @@ export type { InstallScope as Scope } from "../vocabulary.js";
 
 export { openRemoveSession } from "./internal/session/remove.js";
 
-export {
-  openEditImport,
-  EditImportMissing,
-  EditImportAmbiguous,
-  EditImportStale,
-} from "./internal/session/edit.js";
+export { openEditImport, EditImportMissing, EditImportAmbiguous } from "./internal/session/edit.js";
 export { EditImportPlan, EditImportResult } from "./internal/session/edit-contract.js";
 
 export { sourceFromUpstream } from "./internal/session/upstream-source.js";

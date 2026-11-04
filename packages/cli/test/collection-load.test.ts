@@ -4,9 +4,8 @@ import { Effect, FileSystem, Option } from "effect";
 import { join } from "node:path";
 import {
   deterministicTreeHash,
-  LibraryStore,
-  libraryStoreLayer,
   collectionVersionPath,
+  emptyLibraryState,
   type ImportRequestSkill,
 } from "@smolai/skit-core";
 import { readDescriptionLoad } from "../src/workflows/library/collection-load.js";
@@ -149,10 +148,12 @@ effectIt.effect(
       );
       const first = yield* importSource(source).pipe(
         Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
-        Effect.provide(libraryStoreLayer({ home })),
       );
-      const firstState = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
-        Effect.provide(libraryStoreLayer({ home })),
+      const firstState = yield* Effect.flatMap(Library.Service, (library) => library.read).pipe(
+        Effect.map((snapshot) =>
+          snapshot._tag === "Present" ? snapshot.state : emptyLibraryState(),
+        ),
+        Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
       );
       const originalSkill = firstState.skills[0]!;
       yield* fs.writeFileString(
@@ -161,10 +162,12 @@ effectIt.effect(
       );
       yield* importSource(source).pipe(
         Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
-        Effect.provide(libraryStoreLayer({ home })),
       );
-      const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
-        Effect.provide(libraryStoreLayer({ home })),
+      const state = yield* Effect.flatMap(Library.Service, (library) => library.read).pipe(
+        Effect.map((snapshot) =>
+          snapshot._tag === "Present" ? snapshot.state : emptyLibraryState(),
+        ),
+        Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
       );
       const skill = {
         ...state.skills[0]!,

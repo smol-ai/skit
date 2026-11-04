@@ -3,13 +3,8 @@ import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { Effect, FileSystem, Schema } from "effect";
 import { join } from "node:path";
-import {
-  deterministicTreeHash,
-  LibraryStore,
-  skitLayer,
-  importAuthoredCollection,
-  type SkillsShLockFileEntry,
-} from "@smolai/skit-core";
+import { deterministicTreeHash, skitLayer, type SkillsShLockFileEntry } from "@smolai/skit-core";
+import { Library } from "@smolai/skit-core/library";
 import { readLibrarySkillMetadata, skillModificationTime } from "@smolai/skit-core/library/session";
 import { inventoryCommand } from "../src/handlers/library/inventory.js";
 import { renderMachineSkills } from "../src/presentation/inventory.js";
@@ -90,12 +85,7 @@ it.effect(
           lock_file_entries: [observation(index)],
         })),
       };
-      yield* home.owned(
-        writingTo(
-          home.home,
-          LibraryStore.use((store) => store.save(selected, state)),
-        ),
-      );
+      yield* home.writeDurable(selected);
       const view = yield* home.owned(openLibraryView());
       const interaction = yield* makeScriptedInteraction([]);
       yield* home.owned(presentListCommand().pipe(Effect.provide(interaction.layer)));
@@ -156,12 +146,7 @@ it.effect(
       expect(subjects[0]?.skills[0]?.versionId).toBe(rows[0]?.versionId);
       expect(rows[0]?.revision).toBe("1".repeat(40));
       // A held view keeps the displayed selection even when another action selects newer bytes.
-      yield* home.owned(
-        writingTo(
-          home.home,
-          LibraryStore.use((store) => store.save(state, selected)),
-        ),
-      );
+      yield* home.writeDurable(state);
       view.collections.length = 0;
       expect((yield* view.readSubjects())[0]?.skills[0]?.revision).toBe("1".repeat(40));
       expect((yield* view.readSkills())[0]?.revision).toBe("1".repeat(40));
@@ -256,12 +241,14 @@ skills:
       yield* home.owned(
         writingTo(
           home.home,
-          importAuthoredCollection({
-            root: source,
-            source: { type: "local", path: source },
-            input: source,
-            importedAt: "2026-09-29T00:00:00.000Z",
-          }),
+          Effect.flatMap(Library.Service, (library) =>
+            library.import.authored({
+              root: source,
+              source: { type: "local", path: source },
+              input: source,
+              importedAt: "2026-09-29T00:00:00.000Z",
+            }),
+          ),
         ),
       );
       const state = yield* home.durable;

@@ -1,16 +1,15 @@
 import { Clock, Effect, Schema } from "effect";
 import { Hash, HarnessName } from "../../../vocabulary.js";
-import { sha256Hash } from "../../../shared/hash.js";
-import { canonicalJson } from "../../../shared/json.js";
 import { InvalidLibraryState } from "../../../failures.js";
 import { OwnershipMarkerInspection } from "../../../install/files.js";
 import { InstalledSkills } from "../../installed-skills.js";
 import { emptyLibraryState, InstalledSkill, LibraryState } from "../../library-state.js";
 import { InventoryScanIssue, OwnershipIssue } from "../../store/state-schema.js";
-import { LibraryStore, withLibraryWriter } from "../../store/library-store.js";
+import { LibraryWriter, libraryStatePath } from "../../store/library-store.js";
 import { StalePlan } from "../../library-plan.js";
 import { InvalidIntent } from "../../enabled-plan.js";
-import { Revision, snapshotOf, type Snapshot } from "../../snapshot.js";
+import type { Snapshot } from "../../snapshot.js";
+import { applyReviewed, planIdOf, planningState } from "../../reviewed-plan.js";
 import { scanInventory, deduplicateInventoryRoots } from "../../inventory/refresh.js";
 
 const ScanRoot = Schema.Struct({ harness: HarnessName, root: Schema.String });
@@ -59,35 +58,16 @@ export interface RefreshInventoryOutcome {
   readonly result: RefreshInventoryResult;
 }
 
-const planHash = (plan: Omit<RefreshInventoryPlan, "planId">) =>
-  sha256Hash(new TextEncoder().encode(canonicalJson(plan)));
-
 export const planInventory = Effect.fn("Library.planInventory")(function* (
+  home: string,
   input: RefreshInventoryIntent,
   options: { readonly base: Snapshot; readonly observedAt?: string },
 ) {
-  const store = yield* LibraryStore;
   const files = yield* InstalledSkills.Service;
   const intent = yield* RefreshInventoryIntent.makeEffect(structuredClone(input)).pipe(
     Effect.mapError(() => new InvalidIntent({ detail: "invalid inventory intent" })),
   );
-  const base = structuredClone(options.base);
-  const loaded = base._tag === "Present" ? base.state : emptyLibraryState();
-  yield* LibraryState.makeEffect(loaded).pipe(
-    Effect.mapError(
-      () =>
-        new InvalidLibraryState({ path: store.statePath, detail: "invalid inventory snapshot" }),
-    ),
-  );
-  const actual = snapshotOf(
-    base._tag === "Present" ? { present: true, state: loaded } : { present: false },
-  ).revision;
-  if (base.revision !== actual)
-    return yield* new StalePlan({
-      message: "The displayed inventory snapshot changed",
-      expected: base.revision,
-      actual,
-    });
+  const loaded = yield* planningState(home, options.base);
   const roots = deduplicateInventoryRoots(intent.roots);
   const observedAt = options.observedAt ?? new Date(yield* Clock.currentTimeMillis).toISOString();
   const state = yield* scanInventory(loaded, roots, observedAt);
@@ -111,7 +91,7 @@ export const planInventory = Effect.fn("Library.planInventory")(function* (
   const reviewed = {
     _tag: "RefreshInventory" as const,
     intent: { ...intent, roots },
-    baseRevision: base.revision,
+    baseRevision: options.base.revision,
     observedAt,
     change: {
       roots,
@@ -123,60 +103,52 @@ export const planInventory = Effect.fn("Library.planInventory")(function* (
     },
     backups,
   };
-  const plan: RefreshInventoryPlan = { ...reviewed, planId: yield* planHash(reviewed) };
+  const plan: RefreshInventoryPlan = { ...reviewed, planId: yield* planIdOf(reviewed) };
   return plan;
 });
 
 /** Save observations first; only then settle the durably pending, verified backups. Never discard. */
 export const applyInventory = Effect.fn("Library.applyInventory")(function* (
+  home: string,
   input: RefreshInventoryPlan,
 ) {
-  const store = yield* LibraryStore;
   const files = yield* InstalledSkills.Service;
   const plan = structuredClone(input);
   // Validate without stripping unknown state fields; the store refuses anything it cannot save losslessly.
   yield* RefreshInventoryPlan.makeEffect(plan).pipe(
     Effect.mapError(
-      () => new InvalidLibraryState({ path: store.statePath, detail: "invalid inventory plan" }),
+      () =>
+        new InvalidLibraryState({ path: libraryStatePath(home), detail: "invalid inventory plan" }),
     ),
   );
-  return yield* withLibraryWriter(
-    Effect.gen(function* () {
-      const base = snapshotOf(yield* store.inspect);
-      if (base.revision !== plan.baseRevision)
-        return yield* new StalePlan({
-          message: "Library changed after inventory was previewed",
-          expected: Revision(plan.baseRevision),
-          actual: base.revision,
-        });
-      const again = yield* planInventory(plan.intent, { base, observedAt: plan.observedAt });
-      const { planId, ...reviewed } = plan;
-      if (planId !== (yield* planHash(reviewed)) || planId !== again.planId)
-        return yield* new StalePlan({
-          message: "Inventory folders changed after this scan was previewed",
-        });
-      const loaded = base._tag === "Present" ? base.state : emptyLibraryState();
-      yield* store.save(again.change.next, loaded);
-      const keptBackups: InstalledSkills.Backup[] = [];
-      for (const step of again.backups) {
-        yield* files
-          .check([step.copy, step.folder])
-          .pipe(
-            Effect.catchTag("Library.InstalledSkillsChanged", () =>
-              Effect.fail(
-                new StalePlan({ message: "An inventory backup changed before it could be kept" }),
+  return yield* applyReviewed(
+    home,
+    plan,
+    (base) => planInventory(home, plan.intent, { base, observedAt: plan.observedAt }),
+    (again, base) =>
+      Effect.gen(function* () {
+        const loaded = base._tag === "Present" ? base.state : emptyLibraryState();
+        yield* (yield* LibraryWriter).save(again.change.next, loaded);
+        const keptBackups: InstalledSkills.Backup[] = [];
+        for (const step of again.backups) {
+          yield* files
+            .check([step.copy, step.folder])
+            .pipe(
+              Effect.catchTag("Library.InstalledSkillsChanged", () =>
+                Effect.fail(
+                  new StalePlan({ message: "An inventory backup changed before it could be kept" }),
+                ),
               ),
-            ),
-          );
-        yield* files.backups.keep(step.backup);
-        keptBackups.push(step.backup);
-      }
-      const outcome: RefreshInventoryOutcome = {
-        _tag: "RefreshInventory",
-        result: { roots: again.change.roots, state: again.change.next, keptBackups },
-      };
-      return outcome;
-    }),
+            );
+          yield* files.backups.keep(step.backup);
+          keptBackups.push(step.backup);
+        }
+        const outcome: RefreshInventoryOutcome = {
+          _tag: "RefreshInventory",
+          result: { roots: again.change.roots, state: again.change.next, keptBackups },
+        };
+        return outcome;
+      }),
   );
 });
 export type RefreshInventoryPlanError = Effect.Error<ReturnType<typeof planInventory>>;

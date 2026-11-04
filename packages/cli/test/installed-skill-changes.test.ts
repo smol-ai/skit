@@ -6,7 +6,7 @@ import { Clock, Effect, FileSystem } from "effect";
 import { TestClock } from "effect/testing";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import { LibraryStore, libraryStateRevision, skitLayer } from "@smolai/skit-core";
+import { libraryStateRevision, skitLayer } from "@smolai/skit-core";
 import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply-command.js";
 import { renderContract } from "../src/presentation/contract-presenters.js";
 import { setupCommand } from "../src/library/setup/command.js";
@@ -123,25 +123,19 @@ it.effect(
           ],
         }),
       );
+      const state = yield* f.home.durable;
+      const other = state.skills.find((skill) => skill.name === "other")!;
+      yield* f.home.writeDurable({
+        ...state,
+        enabled: [...state.enabled, { skill: other.skill_id }],
+      });
       yield* f.home.owned(
         writingTo(
           f.home.home,
-          Effect.gen(function* () {
-            const store = yield* LibraryStore;
-            const state = yield* store.load;
-            const other = state.skills.find((skill) => skill.name === "other")!;
-            yield* store.save(
-              {
-                ...state,
-                enabled: [...state.enabled, { skill: other.skill_id }],
-              },
-              state,
-            );
-            yield* installEnabledSkills({
-              target: "agents",
-              root: f.agents,
-              variantsPath: store.variantsPath,
-            });
+          installEnabledSkills({
+            target: "agents",
+            root: f.agents,
+            variantsPath: f.home.variantsPath,
           }),
         ),
       );
@@ -875,22 +869,11 @@ it.effect("setup shows and applies the install of a copy the Library has no reco
     const f = yield* fixture();
     // The Library wants this copy, but has never installed it here.
     yield* f.fs.remove(f.copy, { recursive: true });
-    yield* f.home.owned(
-      writingTo(
-        f.home.home,
-        Effect.gen(function* () {
-          const store = yield* LibraryStore;
-          const state = yield* store.load;
-          yield* store.save(
-            {
-              ...state,
-              installed_skills: state.installed_skills.filter((copy) => copy.path !== f.copy),
-            },
-            state,
-          );
-        }),
-      ),
-    );
+    const state = yield* f.home.durable;
+    yield* f.home.writeDurable({
+      ...state,
+      installed_skills: state.installed_skills.filter((copy) => copy.path !== f.copy),
+    });
 
     const scan = yield* f.observe;
     const install = scan.changes?.find((fact) => fact.path === f.copy);

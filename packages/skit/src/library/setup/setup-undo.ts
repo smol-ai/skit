@@ -2,7 +2,8 @@ import { Effect } from "effect";
 import { canonicalJson } from "../../shared/json.js";
 import { hashParts } from "../../artifact/descriptor.js";
 import * as MachineSettings from "../machine-settings.js";
-import { PlanIsStale, RecoveryInvalid } from "../internal/recovery/evidence.js";
+import { RecoveryInvalid } from "../internal/recovery/evidence.js";
+import { StalePlan } from "../library-plan.js";
 import { Library } from "../library.js";
 
 /** A combined review of two independently durable owner operations. No store or writer is opened. */
@@ -42,12 +43,17 @@ export const prepareSetupUndo = Effect.fn("SetupUndo.prepare")(function* (
             operationId,
             plan.legacyDiscovery,
           );
-          if (canonicalJson(current) !== canonicalJson(settings)) return yield* new PlanIsStale();
+          if (canonicalJson(current) !== canonicalJson(settings))
+            return yield* new StalePlan({
+              message: "The Library changed since this was previewed",
+            });
         }
         const owner = yield* Library.Service;
         const undone = yield* owner.apply(plan).pipe(
           Effect.map((outcome) => outcome.result),
-          Effect.catchTag("Library.StalePlan", () => Effect.fail(new PlanIsStale())),
+          Effect.catchTag("Library.StalePlan", () =>
+            Effect.fail(new StalePlan({ message: "The Library changed since this was previewed" })),
+          ),
         );
         if (settings !== undefined) yield* MachineSettings.applyRestoreDiscovery(home, settings);
         if (undone._tag === "Undone")

@@ -6,7 +6,6 @@ import type { SkillId } from "@smolai/skit-core";
 import { join } from "node:path";
 import {
   LibraryState,
-  InvalidLibraryState,
   readSnapshotArchive,
   deterministicTreeHash,
   collectionVersionPath,
@@ -248,7 +247,7 @@ const cases: readonly {
         yield* a.importSource("first");
         const unchanged = yield* captureDisk(a.disk);
         inject({ _tag: "FailSave", anchoredOnly: false });
-        assert.instanceOf(yield* Effect.flip(a.sync()), InvalidLibraryState);
+        assert.strictEqual((yield* Effect.flip(a.sync()))._tag, "PlatformError");
         yield* assertDiskUnchanged(unchanged);
         assert.ok(server.remote);
         assert.strictEqual((yield* a.sync()).status, "clean");
@@ -285,7 +284,7 @@ const cases: readonly {
         const unchanged = yield* captureDisk(b.disk);
         const head = server.remote;
         inject({ _tag: "FailSave", anchoredOnly: false });
-        assert.instanceOf(yield* Effect.flip(b.sync()), InvalidLibraryState);
+        assert.strictEqual((yield* Effect.flip(b.sync()))._tag, "PlatformError");
         yield* onlyOrphanOriginals(unchanged, b.home);
         assert.deepStrictEqual(server.remote, head);
         assert.strictEqual((yield* b.sync()).status, "pulled");
@@ -446,7 +445,7 @@ const cases: readonly {
         yield* b.sync();
         const unchanged = yield* captureDisk(a.disk);
         inject({ _tag: "FailSave", anchoredOnly: false });
-        assert.instanceOf(yield* Effect.flip(a.sync()), InvalidLibraryState);
+        assert.strictEqual((yield* Effect.flip(a.sync()))._tag, "PlatformError");
         yield* onlyOrphanOriginals(unchanged, a.home);
         const committed = server.remote!;
         assert.strictEqual(committed.manifest.collections.length, 3);
@@ -642,9 +641,9 @@ const cases: readonly {
         yield* a.importSource("local-only");
         const unchanged = yield* captureDisk(a.disk);
         inject({ _tag: "FailSave", anchoredOnly: false });
-        assert.instanceOf(
-          yield* Effect.flip(a.sync({ takeRemote: [`collection:${id}`] })),
-          InvalidLibraryState,
+        assert.strictEqual(
+          (yield* Effect.flip(a.sync({ takeRemote: [`collection:${id}`] })))._tag,
+          "PlatformError",
         );
         yield* assertDiskUnchanged(unchanged);
         const committed = server.remote!;

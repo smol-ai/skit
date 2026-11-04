@@ -7,8 +7,6 @@
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 import { Data, Schema } from "effect";
 
-export { PlanIsStale } from "@smolai/skit-core";
-
 // -- Author Workspaces ---------------------------------------------------------------------------
 
 export class AuthorWorkspaceMetadataInvalid

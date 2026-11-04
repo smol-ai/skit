@@ -4,7 +4,7 @@ import { canonicalJson } from "../../../shared/json.js";
 import { deterministicTreeHash } from "../../../artifact/skit.js";
 import { inspectOwnershipMarker } from "../../../install/files.js";
 import type { OwnershipMarker } from "../../../contracts.js";
-import { LibraryStore, withLibraryWriter } from "../../store/library-store.js";
+import { libraryOriginalsPath, loadLibrary, writeLibrary } from "../../store/library-store.js";
 import {
   libraryStateRevision,
   emptyLibraryState,
@@ -18,6 +18,7 @@ import { collectionVersionPath } from "../../collection-version.js";
 import type { Hash, InstallScope } from "../../../vocabulary.js";
 import type { InstalledSkillId } from "../../entity-ids.js";
 import { Data, Clock, Effect } from "effect";
+import { StalePlan } from "../../library-plan.js";
 import { resolve } from "node:path";
 import type { EditImportPlan, EditImportResult } from "./edit-contract.js";
 import { FailureTypeId, type SkitFailure } from "../../../shared/failure.js";
@@ -40,17 +41,6 @@ export class EditImportAmbiguous
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
   readonly remediation = "Use an exact Projection ID or path with `--from-projection`.";
-}
-
-export class EditImportStale
-  extends Data.TaggedError("Library.EditImportStale")<{
-    message: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly remediation = "Preview retaining the installed skill's changes again.";
 }
 
 const matchingSkill = Effect.fn("Library.EditImport.matchSkill")(function* (
@@ -100,6 +90,7 @@ const matchingInstalledSkill = Effect.fn("Library.EditImport.matchInstalledSkill
 });
 
 const planEditImport = Effect.fn("Library.planEditImport")(function* (
+  home: string,
   state: LibraryState,
   query: string,
   selector: string,
@@ -153,7 +144,7 @@ const planEditImport = Effect.fn("Library.planEditImport")(function* (
     selected_installed_skill_id: selected.installed_skill_id,
     current_hash: currentHash,
     snapshot_digest: prepared.hash,
-    original_path: collectionVersionPath((yield* LibraryStore).originalsPath, prepared.hash),
+    original_path: collectionVersionPath(libraryOriginalsPath(home), prepared.hash),
     import_required: previousVersion.artifact_hash !== currentHash,
     installed_skills: installedSkills,
   } satisfies EditImportPlan;
@@ -173,24 +164,23 @@ const enablingScope = (
 /** Capture the Library and observations once; callers only render or apply this operation. */
 export const openEditImport = Effect.fn("Library.openEditImport")(
   function* (home: string, query: string, selector: string) {
-    const store = yield* LibraryStore;
     const library = yield* Library.Service;
     const snapshot = yield* library.read;
     const initial = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
     const context = yield* Effect.context<
-      LibraryStore | Library.Service | TreeRequirements | Digest.Digest | TreeHasher
+      Library.Service | TreeRequirements | Digest.Digest | TreeHasher
     >();
-    const preview = yield* planEditImport(initial, query, selector);
+    const preview = yield* planEditImport(home, initial, query, selector);
     return {
       preview: structuredClone(preview),
       apply: (currentHome: string) =>
         resolve(currentHome) !== resolve(home)
           ? Effect.fail(
-              new EditImportStale({
+              new StalePlan({
                 message: "This retention preview belongs to a different Library",
               }),
             )
-          : applyEditImport(store.home, preview, query, selector).pipe(Effect.provide(context)),
+          : applyEditImport(home, preview, query, selector).pipe(Effect.provide(context)),
     };
   },
   (effect, home) =>
@@ -203,21 +193,17 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
   query: string,
   selector: string,
 ) {
-  const store = yield* LibraryStore;
-  if (store.home !== home)
-    return yield* new EditImportStale({
-      message: "This retention preview belongs to a different Library",
-    });
-  return yield* withLibraryWriter(
+  return yield* writeLibrary(
+    home,
     Effect.gen(function* () {
-      const current = yield* store.load;
+      const current = yield* loadLibrary(home);
       if (libraryStateRevision(current) !== preview.revision)
-        return yield* new EditImportStale({
+        return yield* new StalePlan({
           message: "Library state changed after the retention was previewed",
         });
-      const revalidated = yield* planEditImport(current, query, selector);
+      const revalidated = yield* planEditImport(home, current, query, selector);
       if (canonicalJson(revalidated) !== canonicalJson(preview))
-        return yield* new EditImportStale({
+        return yield* new StalePlan({
           message: "The installed skill's bytes changed after the retention was previewed",
         });
       const selected = current.installed_skills.find(
@@ -225,7 +211,7 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
           installedSkill.installed_skill_id === preview.selected_installed_skill_id,
       );
       if (selected === undefined)
-        return yield* new EditImportStale({
+        return yield* new StalePlan({
           message: "The reviewed installed Skill is no longer recorded",
         });
       const library = yield* Library.Service;
@@ -247,7 +233,7 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
                 ? undefined
                 : versionBacking(current, skill, version)?.acquisition;
             if (version === undefined || sourceImport === undefined)
-              return yield* new EditImportStale({
+              return yield* new StalePlan({
                 message: "Selected retained Version is incomplete",
               });
             return {
@@ -285,7 +271,7 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
           ),
         );
       }
-      const settled = yield* store.load;
+      const settled = yield* loadLibrary(home);
       return {
         skill_id: preview.skill_id,
         skill_name: preview.skill_name,

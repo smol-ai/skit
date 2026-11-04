@@ -4,7 +4,7 @@ import { deterministicTreeHash } from "../../artifact/skit.js";
 import { LinkStat } from "../../platform/link-stat.js";
 import { type DuplicateCopy } from "../duplicates.js";
 import { checkSetupGlobalContent } from "../internal/setup/protection.js";
-import { PlanIsStale } from "../internal/recovery/evidence.js";
+import { StalePlan } from "../library-plan.js";
 import { SetupApprovedCopy } from "./setup-decisions.js";
 
 /** Only direct, equal global copies approved by review can enter automatic preservation. */
@@ -33,17 +33,20 @@ export const recordSetupCopies = Effect.fn("Setup.captureCopies")(function* (
       ),
     ),
   ].sort();
-  if (!paths.length || paths.includes("")) return yield* new PlanIsStale();
+  if (!paths.length || paths.includes(""))
+    return yield* new StalePlan({ message: "The Library changed since this was previewed" });
   const copies = yield* Effect.forEach(paths, (path) =>
     Effect.gen(function* () {
       yield* checkSetupGlobalContent(path);
       const info = yield* links.identity.lstat(path);
       if (info.type !== "Directory" || (yield* fs.realPath(path)) !== resolve(path))
-        return yield* new PlanIsStale();
+        return yield* new StalePlan({ message: "The Library changed since this was previewed" });
       for (const name of [".skit-ownership.json", "skit.remote.json", "skit.json", ".skit"])
-        if (yield* present(join(path, name))) return yield* new PlanIsStale();
+        if (yield* present(join(path, name)))
+          return yield* new StalePlan({ message: "The Library changed since this was previewed" });
       const currentHash = yield* deterministicTreeHash(path);
-      if (currentHash !== selectedHash) return yield* new PlanIsStale();
+      if (currentHash !== selectedHash)
+        return yield* new StalePlan({ message: "The Library changed since this was previewed" });
       return { path, currentHash, dev: info.dev, ino: info.ino };
     }),
   );
@@ -54,6 +57,6 @@ export const recordSetupCopies = Effect.fn("Setup.captureCopies")(function* (
       [...approved].sort((left, right) => left.path.localeCompare(right.path)),
     )
   )
-    return yield* new PlanIsStale();
+    return yield* new StalePlan({ message: "The Library changed since this was previewed" });
   return copies;
 });

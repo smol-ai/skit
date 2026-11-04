@@ -2,13 +2,12 @@ import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
+import { Library } from "@smolai/skit-core/library";
 import {
   deterministicTreeHash,
   HarnessName,
-  LibraryStore,
   collectionVersionPath,
   resolveDeclaredInvocation,
-  importAuthoredCollection,
   skitLayer,
 } from "@smolai/skit-core";
 import {
@@ -151,23 +150,13 @@ it.effect(
       yield* fs.writeFileString(join(source, "SKILL.md"), text(false));
       yield* importSource("2026-10-02T00:00:00.000Z");
       const state = yield* home.durable;
-      yield* home.owned(
-        writingTo(
-          home.home,
-          LibraryStore.use((store) =>
-            store.save(
-              {
-                ...state,
-                skills: state.skills.map((skill) => ({
-                  ...skill,
-                  local_version_id: skill.versions[0]!.skill_version_id,
-                })),
-              },
-              state,
-            ),
-          ),
-        ),
-      );
+      yield* home.writeDurable({
+        ...state,
+        skills: state.skills.map((skill) => ({
+          ...skill,
+          local_version_id: skill.versions[0]!.skill_version_id,
+        })),
+      });
       const selected = yield* home.durable;
       const session = yield* home.owned(openLibrarySession(home.installOptions));
       expect(Result.getOrThrow(session.skills[0]!.authorInvocation)["claude-code"].policy).toBe(
@@ -203,12 +192,14 @@ Tools
       yield* home.owned(
         writingTo(
           home.home,
-          importAuthoredCollection({
-            root: source,
-            source: { type: "local", path: source },
-            input: source,
-            importedAt: "2026-10-01T00:00:00.000Z",
-          }),
+          Effect.flatMap(Library.Service, (library) =>
+            library.import.authored({
+              root: source,
+              source: { type: "local", path: source },
+              input: source,
+              importedAt: "2026-10-01T00:00:00.000Z",
+            }),
+          ),
         ),
       );
       const session = yield* home.owned(openLibrarySession(home.installOptions));
@@ -257,12 +248,14 @@ Tools
     yield* home.owned(
       writingTo(
         home.home,
-        importAuthoredCollection({
-          root: source,
-          source: { type: "local", path: source },
-          input: source,
-          importedAt: "2026-10-01T00:00:00.000Z",
-        }),
+        Effect.flatMap(Library.Service, (library) =>
+          library.import.authored({
+            root: source,
+            source: { type: "local", path: source },
+            input: source,
+            importedAt: "2026-10-01T00:00:00.000Z",
+          }),
+        ),
       ),
     );
     const session = yield* home.owned(openLibrarySession(home.installOptions));
@@ -314,20 +307,10 @@ for (const problem of ["missing-skill", "malformed-metadata"] as const)
         ),
       );
       const state = yield* home.durable;
-      yield* home.owned(
-        writingTo(
-          home.home,
-          LibraryStore.use((store) =>
-            store.save(
-              {
-                ...state,
-                enabled: [{ skill: badState.skills[0]!.skill_id }],
-              },
-              state,
-            ),
-          ),
-        ),
-      );
+      yield* home.writeDurable({
+        ...state,
+        enabled: [{ skill: badState.skills[0]!.skill_id }],
+      });
       const session = yield* home.owned(openLibrarySession(home.installOptions));
       const bad = session.skills.find((row) => row.name === "review")!;
       const good = session.skills.find((row) => row.name === "healthy")!;
@@ -393,12 +376,14 @@ Tools
       yield* home.owned(
         writingTo(
           home.home,
-          importAuthoredCollection({
-            root: source,
-            source: { type: "local", path: source },
-            input: source,
-            importedAt: "2026-10-01T00:00:00.000Z",
-          }),
+          Effect.flatMap(Library.Service, (library) =>
+            library.import.authored({
+              root: source,
+              source: { type: "local", path: source },
+              input: source,
+              importedAt: "2026-10-01T00:00:00.000Z",
+            }),
+          ),
         ),
       );
       const state = yield* home.durable;

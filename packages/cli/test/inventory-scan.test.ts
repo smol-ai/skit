@@ -4,7 +4,7 @@ import { systemError } from "effect/PlatformError";
 import { join } from "node:path";
 import { expect } from "vitest";
 import {
-  LibraryStore,
+  emptyLibraryState,
   libraryDoctorReport,
   makeCollectionId,
   makeInstalledSkillId,
@@ -33,8 +33,7 @@ it.effect(
       const missing = join(f.root, "missing");
       const broken = join(root, "broken");
       yield* fs.symlink("../missing", broken);
-      const store = yield* LibraryStore;
-      const before = yield* store.load;
+      const before = emptyLibraryState();
       const observed = yield* scanInventory(before, [
         { harness: "codex", root },
         { harness: "claude-code", root: claude },
@@ -74,7 +73,7 @@ it.effect(
       expect(libraryDoctorReport(observed).issues).toEqual([
         expect.objectContaining({ code: "UNREADABLE_PATH", path: denied }),
       ]);
-      expect(yield* store.load).toEqual(before);
+      expect(yield* fs.exists(join(f.home, "state.json"))).toBe(false);
       expect(yield* fs.readFileString(join(skill, "SKILL.md"))).toBe("review");
     }).pipe(Effect.provide(nativeLibraryLayer)),
 );
@@ -106,7 +105,7 @@ it.effect.each([true, false])(
       yield* fs.writeFileString(join(target, ".skit-ownership.json"), marker);
       const path = join(root, "review");
       yield* fs.symlink(target, path);
-      const state = yield* (yield* LibraryStore).load;
+      const state = emptyLibraryState();
       const observed = yield* scanInventory(state, [{ harness: "codex", root }]);
       expect(observed.unmanaged).toEqual([]);
       expect(observed.ownershipIssues).toMatchObject([
@@ -124,7 +123,7 @@ it.effect(
       const fs = yield* FileSystem.FileSystem;
       const root = join(f.root, "codex");
       yield* fs.makeDirectory(root);
-      const state = yield* (yield* LibraryStore).load;
+      const state = emptyLibraryState();
       const outside = {
         path: join(f.root, "elsewhere"),
         harness: "opencode" as const,

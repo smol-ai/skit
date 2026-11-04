@@ -16,15 +16,17 @@ import {
   LibraryManifest,
   type SnapshotArchive,
 } from "../../library-contracts.js";
-import { emptyLibraryState, LibraryState } from "../../library-state.js";
+import type { LibraryState } from "../../library-state.js";
 import { normalizeLibraryManifest } from "../../manifest.js";
 import type { CollectionVersionId } from "../../entity-ids.js";
 import type { RestoreProgress } from "../../restore-progress.js";
-import { snapshotOf, type Snapshot } from "../../snapshot.js";
+import type { Snapshot } from "../../snapshot.js";
+import { planningState } from "../../reviewed-plan.js";
 import { readSnapshotArchive, verifySnapshotArchive } from "../../snapshot-archive.js";
 import {
-  LibraryStore,
-  withLibraryWriter,
+  libraryOriginalsPath,
+  libraryStatePath,
+  writeLibrary,
   type LibraryStateWriteError,
 } from "../../store/library-store.js";
 import {
@@ -52,53 +54,31 @@ export type ContentSource<E = never, R = never> = {
   | { readonly plan: CollectionVersionPlan; readonly localArchives?: never }
 );
 
-const snapshotState = Effect.fn("Library.content.snapshot")(function* (
-  snapshot: Snapshot,
-  statePath: string,
-) {
-  const state = snapshot._tag === "Present" ? structuredClone(snapshot.state) : emptyLibraryState();
-  // Validate known fields, retaining unknown fields in the revision and the caller's snapshot.
-  yield* LibraryState.makeEffect(state).pipe(
-    Effect.mapError(
-      () => new InvalidLibraryState({ path: statePath, detail: "invalid content snapshot" }),
-    ),
-  );
-  const expected = snapshotOf(
-    snapshot._tag === "Present" ? { present: true, state } : { present: false },
-  );
-  if (snapshot.revision !== expected.revision)
-    return yield* new InvalidLibraryState({
-      path: statePath,
-      detail: "content snapshot revision disagrees with its state",
-    });
-  return state;
-});
-
 export const planContent = Effect.fn("Library.content.plan")(function* (
+  home: string,
   target: LibraryManifest,
   localArchives: readonly SnapshotArchive[],
-  originalsPath: string,
-  statePath: string,
 ) {
   const manifest = yield* Schema.decodeUnknownEffect(LibraryManifest, {
     onExcessProperty: "error",
   })(structuredClone(target)).pipe(
     Effect.mapError(
-      () => new InvalidLibraryState({ path: statePath, detail: "invalid content target" }),
+      () =>
+        new InvalidLibraryState({ path: libraryStatePath(home), detail: "invalid content target" }),
     ),
   );
   return yield* planCollectionVersions(normalizeLibraryManifest(manifest), {
-    originalsPath,
+    originalsPath: libraryOriginalsPath(home),
     localArchives: structuredClone(localArchives),
   });
 });
 
 export const inspectContent = Effect.fn("Library.content.inspect")(function* (
+  home: string,
   snapshot: Snapshot,
-  originalsPath: string,
-  statePath: string,
 ) {
-  const state = yield* snapshotState(snapshot, statePath);
+  const state = yield* planningState(home, snapshot);
+  const originalsPath = libraryOriginalsPath(home);
   for (const tree of state.collection_versions) {
     const path = collectionVersionPath(originalsPath, tree.hash);
     const hash = yield* originalTreeHash(path).pipe(
@@ -112,11 +92,11 @@ export const inspectContent = Effect.fn("Library.content.inspect")(function* (
 });
 
 export const packContent = Effect.fn("Library.content.pack")(function* (
+  home: string,
   snapshot: Snapshot,
-  originalsPath: string,
-  statePath: string,
 ) {
-  const state = yield* snapshotState(snapshot, statePath);
+  const state = yield* planningState(home, snapshot);
+  const originalsPath = libraryOriginalsPath(home);
   const archives = new Map<Hash, SnapshotArchive>();
   // Check every reference, even when several Collections share the same retained bytes.
   for (const tree of state.collection_versions) {
@@ -143,14 +123,15 @@ export const packContent = Effect.fn("Library.content.pack")(function* (
 
 /** Resolve outside the writer; publish immutable content under Library's writer. Never saves state. */
 export const stageContent = Effect.fn("Library.content.stage")(function* <E = never, R = never>(
+  home: string,
   target: LibraryManifest,
   source: ContentSource<E, R>,
 ): Effect.fn.Return<
   StagedContent,
   ContentStageError | E,
-  R | LibraryStore | TreeRequirements | Digest.Digest | HttpClient.HttpClient
+  R | TreeRequirements | Digest.Digest | HttpClient.HttpClient
 > {
-  const store = yield* LibraryStore;
+  const originalsPath = libraryOriginalsPath(home);
   const fs = yield* FileSystem.FileSystem;
   const manifest = normalizeLibraryManifest(
     yield* Schema.decodeUnknownEffect(LibraryManifest, { onExcessProperty: "error" })(
@@ -161,7 +142,7 @@ export const stageContent = Effect.fn("Library.content.stage")(function* <E = ne
   const plan =
     source.plan === undefined
       ? yield* planCollectionVersions(manifest, {
-          originalsPath: store.originalsPath,
+          originalsPath,
           localArchives: structuredClone(source.localArchives),
         })
       : structuredClone(source.plan);
@@ -190,16 +171,17 @@ export const stageContent = Effect.fn("Library.content.stage")(function* <E = ne
   const hashes = [...new Set(manifest.collection_versions.map((tree) => tree.hash))];
   const existing = new Set<Hash>();
   for (const hash of hashes)
-    if (yield* fs.exists(collectionVersionPath(store.originalsPath, hash))) existing.add(hash);
+    if (yield* fs.exists(collectionVersionPath(originalsPath, hash))) existing.add(hash);
   const options = {
-    originalsPath: store.originalsPath,
+    originalsPath,
     registryBaseUrl: source.registry.origin,
     registryToken: Option.getOrUndefined(source.registry.token),
     ...(source.progress === undefined ? {} : { progress: source.progress }),
     ...(source.download === undefined ? {} : { download: source.download }),
   };
   const available = yield* completeRestoreArchives(manifest, plan, options);
-  const { state } = yield* withLibraryWriter(
+  const { state } = yield* writeLibrary(
+    home,
     Effect.scoped(retainRestoreArchives(manifest, available, options)),
   );
   return {

@@ -27,7 +27,7 @@ import {
   changesNeedingChoice,
   setupVersionAlternatives,
 } from "./setup-installed-skills.js";
-import { PlanIsStale } from "../internal/recovery/evidence.js";
+import { StalePlan } from "../library-plan.js";
 
 /** What the user reviewed and approved: the plan ID they saw and the selections they made. */
 export interface SetupApproval {
@@ -136,7 +136,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(function* (
       canonicalJson(fact) !==
         canonicalJson(revalidated.scan.changes?.find((item) => item.path === fact.path) ?? null)
     )
-      return yield* new PlanIsStale();
+      return yield* new StalePlan({ message: "The Library changed since this was previewed" });
     reviewedPaths.add(fact.path);
   }
   const reviewedSkills = new Set(installedSkillChanges.map((fact) => fact.skillId));
@@ -145,7 +145,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(function* (
       (fact) => reviewedSkills.has(fact.skillId) && !reviewedPaths.has(fact.path),
     )
   )
-    return yield* new PlanIsStale();
+    return yield* new StalePlan({ message: "The Library changed since this was previewed" });
   const versionChoices = approval.versionChoices ?? [];
   const alternatives = setupVersionAlternatives(installedSkillChanges);
   if (
@@ -155,7 +155,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(function* (
         !alternatives.some((alternative) => canonicalJson(choice) === canonicalJson(alternative)),
     )
   )
-    return yield* new PlanIsStale();
+    return yield* new StalePlan({ message: "The Library changed since this was previewed" });
   const unresolved = changesNeedingChoice(installedSkillChanges, versionChoices);
   if (unresolved.length) return yield* new ChangeChoiceRequired({ facts: unresolved });
   // Only enabled global copies install into this device's skills directories. Prove those roots

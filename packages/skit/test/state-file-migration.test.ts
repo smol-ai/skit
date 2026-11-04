@@ -19,8 +19,13 @@ import {
   type LibraryState,
 } from "../src/library/library-state.js";
 import { inspectLibrary, libraryLayer, saveLibrary } from "./helpers/library-store.js";
+import { migrateLocalLibraryState } from "../src/library/store/library-store.js";
 import { Library } from "../src/library/library.js";
 import { acquireFileLock } from "../src/platform/file-lock.js";
+
+/** The state a Library opened at `home` reads: a legacy state.json is migrated first. */
+const openedState = (home: string) =>
+  migrateLocalLibraryState(home).pipe(Effect.andThen(inspectLibrary(home)));
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "library-state");
 
@@ -132,7 +137,7 @@ it.effect("v8 state migrates to account-following without changing portable inte
       join(home, "state.json"),
       JSON.stringify({ ...asV9(emptyLibraryState()), schemaVersion: 8 }),
     );
-    const migrated = yield* inspectLibrary(home);
+    const migrated = yield* openedState(home);
     assert.isTrue(migrated.present);
     if (!migrated.present) return;
     assert.strictEqual(migrated.state.schemaVersion, 12);
@@ -153,7 +158,7 @@ it.effect(
       const fixture = yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json"));
       yield* fs.writeFileString(join(home, "state.json"), fixture);
 
-      const migrated = yield* inspectLibrary(home);
+      const migrated = yield* openedState(home);
       assert.strictEqual(migrated.present, true);
       if (!migrated.present) return;
       assert.strictEqual(migrated.state.schemaVersion, 12);
@@ -198,7 +203,7 @@ it.effect(
         (yield* fs.readDirectory(home)).some((name) => name.startsWith("state.json.v4.backup-")),
       );
 
-      const reopened = yield* inspectLibrary(home);
+      const reopened = yield* openedState(home);
       assert.strictEqual(reopened.present, true);
       if (!reopened.present) return;
       assert.deepStrictEqual(reopened.state, migrated.state);
@@ -258,7 +263,7 @@ it.effect("merges legacy well-known subsets from the same origin deterministical
     });
     yield* fs.writeFileString(join(home, "state.json"), JSON.stringify(fixture));
 
-    const migrated = yield* inspectLibrary(home);
+    const migrated = yield* openedState(home);
     assert.strictEqual(migrated.present, true);
     if (!migrated.present) return;
     assert.strictEqual(migrated.state.collections.length, 1);
@@ -452,7 +457,7 @@ it.effect("migrates v5 state: whole Sources, entries, retained edits, all histor
     };
     yield* fs.writeFileString(join(home, "state.json"), JSON.stringify(v5));
 
-    const migrated = yield* inspectLibrary(home);
+    const migrated = yield* openedState(home);
     assert.strictEqual(migrated.present, true);
     if (!migrated.present) return;
     const state = migrated.state;
@@ -508,7 +513,7 @@ for (const agreed of [true, false])
           join(home, "state.json"),
           yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
         );
-        const current = yield* inspectLibrary(home);
+        const current = yield* openedState(home);
         assert.strictEqual(current.present, true);
         if (!current.present) return;
         const { schemaVersion: _current, ...state } = asV9(current.state);
@@ -553,7 +558,7 @@ for (const agreed of [true, false])
           }),
         );
 
-        const migrated = yield* inspectLibrary(home);
+        const migrated = yield* openedState(home);
         assert.strictEqual(migrated.present, true);
         if (!migrated.present) return;
         assert.strictEqual(migrated.state.schemaVersion, 12);
@@ -579,7 +584,7 @@ it.effect("relabels v7 state as v8 without inventing sync ancestry", () =>
       join(home, "state.json"),
       yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
     );
-    const current = yield* inspectLibrary(home);
+    const current = yield* openedState(home);
     assert.strictEqual(current.present, true);
     if (!current.present) return;
     yield* fs.writeFileString(
@@ -587,7 +592,7 @@ it.effect("relabels v7 state as v8 without inventing sync ancestry", () =>
       JSON.stringify({ ...asV9(current.state), schemaVersion: 7 }),
     );
 
-    const migrated = yield* inspectLibrary(home);
+    const migrated = yield* openedState(home);
     assert.strictEqual(migrated.present, true);
     if (!migrated.present) return;
     assert.deepStrictEqual(migrated.state, current.state);
@@ -604,7 +609,7 @@ it.effect("state load and publication retain nested extensions without skipping 
       path,
       yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
     );
-    const current = yield* inspectLibrary(home);
+    const current = yield* openedState(home);
     assert.strictEqual(current.present, true);
     if (!current.present) return;
     const value = {
@@ -617,7 +622,7 @@ it.effect("state load and publication retain nested extensions without skipping 
     };
     const original = JSON.stringify(value);
     yield* fs.writeFileString(path, original);
-    const reopened = yield* inspectLibrary(home);
+    const reopened = yield* openedState(home);
     assert.deepStrictEqual(reopened, { present: true, state: value });
     assert.strictEqual(yield* fs.readFileString(path), original);
 
@@ -631,7 +636,7 @@ it.effect("state load and publication retain nested extensions without skipping 
         })),
       }),
     );
-    const failure = yield* Effect.flip(inspectLibrary(home));
+    const failure = yield* Effect.flip(openedState(home));
     assert.strictEqual(failure._tag, "InvalidLibraryState");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -644,7 +649,7 @@ it.effect("migrates v9 Bindings to enabled lists and renames stored records", ()
       join(home, "state.json"),
       yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
     );
-    const current = yield* inspectLibrary(home);
+    const current = yield* openedState(home);
     assert.strictEqual(current.present, true);
     if (!current.present) return;
     const v9 = asV9(current.state);
@@ -711,7 +716,7 @@ it.effect("migrates v9 Bindings to enabled lists and renames stored records", ()
       }),
     );
 
-    const migrated = yield* inspectLibrary(home);
+    const migrated = yield* openedState(home);
     assert.strictEqual(migrated.present, true);
     if (!migrated.present) return;
     const state = migrated.state;
@@ -778,7 +783,7 @@ it.effect(
         join(home, "state.json"),
         yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
       );
-      const current = yield* inspectLibrary(home);
+      const current = yield* openedState(home);
       assert.strictEqual(current.present, true);
       if (!current.present) return;
       const {
@@ -813,7 +818,7 @@ it.effect(
         JSON.stringify({ ...asV11(current.state), schemaVersion: 10, installed_skills: rows }),
       );
 
-      const migrated = yield* inspectLibrary(home);
+      const migrated = yield* openedState(home);
       assert.strictEqual(migrated.present, true);
       if (!migrated.present) return;
       assert.strictEqual(migrated.state.schemaVersion, 12);
@@ -872,12 +877,12 @@ it.effect("migrates v11 state to v12 with no operation records", () =>
       join(home, "state.json"),
       yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
     );
-    const current = yield* inspectLibrary(home);
+    const current = yield* openedState(home);
     assert.strictEqual(current.present, true);
     if (!current.present) return;
     yield* fs.writeFileString(join(home, "state.json"), JSON.stringify(asV11(current.state)));
 
-    const migrated = yield* inspectLibrary(home);
+    const migrated = yield* openedState(home);
     assert.strictEqual(migrated.present, true);
     if (!migrated.present) return;
     assert.deepStrictEqual(migrated.state, current.state);

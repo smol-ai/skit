@@ -5,7 +5,6 @@ import { join } from "node:path";
 import {
   deterministicTreeHash,
   inspectOwnershipMarker,
-  LibraryStore,
   libraryStateRevision,
   enabledAt,
   enabledSkillIds,
@@ -100,25 +99,15 @@ const fixture = Effect.gen(function* () {
 it.effect("global enablement changes the device choice without changing account bindings", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    yield* f.home.owned(
-      writingTo(
-        f.home.home,
-        LibraryStore.use((store) =>
-          Effect.flatMap(store.load, (state) =>
-            store.save(
-              {
-                ...state,
-                enabled: [{ skill: state.skills.find((skill) => skill.name === "beta")!.skill_id }],
-                device_skill_selection: {
-                  mode: "choose",
-                  enabled: [],
-                },
-              },
-              state,
-            ),
-          ),
-        ),
-      ),
+    yield* Effect.flatMap(f.home.durable, (state) =>
+      f.home.writeDurable({
+        ...state,
+        enabled: [{ skill: state.skills.find((skill) => skill.name === "beta")!.skill_id }],
+        device_skill_selection: {
+          mode: "choose",
+          enabled: [],
+        },
+      }),
     );
     const account = (yield* f.home.durable).enabled;
     const plan = yield* f.home.owned(planSetEnabled([f.request], f.home.installOptions));
@@ -138,28 +127,18 @@ it.effect.each(["follows-collection", "empty"] as const)(
       const f = yield* fixture;
       const collection = (yield* f.home.durable).collections[0];
       assert.ok(collection);
-      yield* f.home.owned(
-        writingTo(
-          f.home.home,
-          LibraryStore.use((store) =>
-            Effect.flatMap(store.load, (state) =>
-              store.save(
-                {
-                  ...state,
-                  enabled:
-                    accountBinding === "follows-collection"
-                      ? [{ collection: collection.collection_id }]
-                      : [],
-                  device_skill_selection: {
-                    mode: "choose",
-                    enabled: [],
-                  },
-                },
-                state,
-              ),
-            ),
-          ),
-        ),
+      yield* Effect.flatMap(f.home.durable, (state) =>
+        f.home.writeDurable({
+          ...state,
+          enabled:
+            accountBinding === "follows-collection"
+              ? [{ collection: collection.collection_id }]
+              : [],
+          device_skill_selection: {
+            mode: "choose",
+            enabled: [],
+          },
+        }),
       );
       const enabled = yield* f.home.owned(
         planSetEnabled(
@@ -202,26 +181,14 @@ it.effect.each(["follows-collection", "empty"] as const)(
 it.effect("retrying an already selected device Skill still checks unmanaged copies", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    yield* f.home.owned(
-      writingTo(
-        f.home.home,
-        LibraryStore.use((store) =>
-          Effect.flatMap(store.load, (state) =>
-            store.save(
-              {
-                ...state,
-                device_skill_selection: {
-                  mode: "choose",
-                  enabled: [
-                    { skill: state.skills.find((skill) => skill.name === "alpha")!.skill_id },
-                  ],
-                },
-              },
-              state,
-            ),
-          ),
-        ),
-      ),
+    yield* Effect.flatMap(f.home.durable, (state) =>
+      f.home.writeDurable({
+        ...state,
+        device_skill_selection: {
+          mode: "choose",
+          enabled: [{ skill: state.skills.find((skill) => skill.name === "alpha")!.skill_id }],
+        },
+      }),
     );
     const native = join(f.home.inventory.home, ".codex", "skills", "alpha");
     yield* f.fs.makeDirectory(native, { recursive: true });
@@ -272,15 +239,8 @@ it.effect("refuses a plan when the Library changed during interactive selection"
   Effect.gen(function* () {
     const f = yield* fixture;
     const selection = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
-    yield* f.home.owned(
-      writingTo(
-        f.home.home,
-        LibraryStore.use((store) =>
-          Effect.flatMap(store.load, (state) =>
-            store.save({ ...state, ownershipIssues: [] }, state),
-          ),
-        ),
-      ),
+    yield* Effect.flatMap(f.home.durable, (state) =>
+      f.home.writeDurable({ ...state, ownershipIssues: [] }),
     );
     const plan = yield* f.home.owned(
       selection.plan(
@@ -422,15 +382,8 @@ it.effect("a TUI proposal keeps the revision displayed before the proposal was m
   Effect.gen(function* () {
     const f = yield* fixture;
     const displayed = yield* f.home.owned(openLibrarySession(f.home.installOptions));
-    yield* f.home.owned(
-      writingTo(
-        f.home.home,
-        LibraryStore.use((store) =>
-          Effect.flatMap(store.load, (state) =>
-            store.save({ ...state, ownershipIssues: [] }, state),
-          ),
-        ),
-      ),
+    yield* Effect.flatMap(f.home.durable, (state) =>
+      f.home.writeDurable({ ...state, ownershipIssues: [] }),
     );
     const before = yield* f.fs.readFileString(f.home.statePath);
     const proposed = yield* f.home.owned(
@@ -1354,9 +1307,8 @@ for (const drift of ["create", "modify", "symlink", "source"] as const)
       );
       assert.ok(plan.owner);
       if (drift === "source") {
-        const store = yield* f.home.owned(LibraryStore);
         const source = plan.owner.plan.folders.find((e) =>
-          e.path.startsWith(store.originalsPath + "/"),
+          e.path.startsWith(f.home.originals + "/"),
         );
         assert.ok(source);
         yield* f.fs.writeFileString(

@@ -1,14 +1,14 @@
 import { installEnabledSkills } from "./helpers/installed-skills.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer } from "effect";
+import { Effect, FileSystem, Layer, Schema } from "effect";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import {
   readSnapshotArchive,
   libraryManifestFromLocalState,
-  LibraryStore,
-  libraryStoreLayer,
+  Library,
+  LibraryState,
   collectionVersionPath,
   SourceProcess,
   type SkitSource,
@@ -65,8 +65,13 @@ const fixture = Effect.gen(function* () {
   const home = join(workspace, "a");
   const freshHome = join(workspace, "b");
   const load = (home: string) =>
-    Effect.flatMap(LibraryStore, (store) => store.load).pipe(
-      Effect.provide(libraryStoreLayer({ home })),
+    writingTo(
+      home,
+      Effect.flatMap(Library.Service, (library) => library.read),
+    ).pipe(
+      Effect.flatMap((snapshot) =>
+        snapshot._tag === "Present" ? Effect.succeed(snapshot.state) : Effect.die("no Library"),
+      ),
     );
   const sync = () =>
     writingTo(freshHome, syncLibrary({ origin, apply: true })).pipe(
@@ -126,23 +131,20 @@ it.effect(
       for (const [path, bytes] of Object.entries(f.files))
         assert.strictEqual(yield* f.fs.readFileString(join(f.root(hash), path)), bytes);
       const targetRoot = join(f.workspace, "agent-skills");
+      const restored = yield* f.load(f.freshHome);
+      yield* f.fs.writeFileString(
+        join(f.freshHome, "state.json"),
+        yield* Schema.encodeEffect(Schema.fromJsonString(LibraryState))({
+          ...restored,
+          enabled: restored.skills.map((skill) => ({ skill: skill.skill_id })),
+        }),
+      );
       yield* writingTo(
         f.freshHome,
-        Effect.gen(function* () {
-          const store = yield* LibraryStore;
-          const restored = yield* store.load;
-          yield* store.save(
-            {
-              ...restored,
-              enabled: restored.skills.map((skill) => ({ skill: skill.skill_id })),
-            },
-            restored,
-          );
-          yield* installEnabledSkills({
-            target: "agents",
-            root: targetRoot,
-            variantsPath: join(f.freshHome, "variants"),
-          });
+        installEnabledSkills({
+          target: "agents",
+          root: targetRoot,
+          variantsPath: join(f.freshHome, "variants"),
         }),
       );
       const installed = join(targetRoot, "review");

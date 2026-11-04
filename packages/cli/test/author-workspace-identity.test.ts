@@ -1,8 +1,8 @@
 import { expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Deferred, Fiber, Layer, Option, Stream } from "effect";
+import { Effect, FileSystem, Option, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
-import { History, withLibraryWriter } from "@smolai/skit-core";
+import { History } from "@smolai/skit-core";
 import { AuthorHistory } from "../src/author/history.js";
 import { AuthorWorkspace, type Identity } from "../src/author/workspace.js";
 
@@ -209,60 +209,6 @@ it.effect("identity registration leaves Git bytes, index and status untouched", 
     expect(yield* git("--no-optional-locks", "status", "--porcelain")).toBe(status);
     yield* assertDiskUnchanged(before);
   }).pipe(Effect.provide(testPlatformLayer)),
-);
-
-it.effect(
-  "recording under a Library writer cannot deadlock with another recorder creating identity",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture;
-      const start = yield* Deferred.make<void>();
-      const readIdentity = yield* Deferred.make<void>();
-      const proceed = yield* Deferred.make<void>();
-      let firstRead = true;
-      // Both recorders run in one runtime, as the CLI does, so they share the journal permit. Only
-      // the history owner reads through the paused FileSystem; the Library writer does not.
-      const patched: FileSystem.FileSystem = {
-        ...f.fs,
-        readFileString: (path, options) =>
-          Effect.gen(function* () {
-            if (path.endsWith("/machine.json") && firstRead) {
-              firstRead = false;
-              const result = yield* Effect.result(f.fs.readFileString(path, options));
-              yield* Deferred.succeed(readIdentity, undefined);
-              yield* Deferred.await(proceed);
-              return yield* Effect.fromResult(result);
-            }
-            return yield* f.fs.readFileString(path, options);
-          }),
-      };
-      const [mine, theirs] = yield* f.home.owned(
-        Effect.gen(function* () {
-          // Fork before taking the writer, so this recorder inherits no writer lease.
-          const other = yield* Effect.forkChild(
-            Deferred.await(start).pipe(Effect.andThen(captureWorkspace(f.source))),
-          );
-          const mine = yield* withLibraryWriter(
-            Effect.gen(function* () {
-              yield* Deferred.succeed(start, undefined);
-              yield* Deferred.await(readIdentity);
-              yield* Deferred.succeed(proceed, undefined);
-              return yield* captureWorkspace(f.source);
-            }),
-          );
-          return [mine, yield* Fiber.join(other)] as const;
-        }).pipe(
-          Effect.provide(
-            authorLayer(f.home.home).pipe(
-              Layer.provide(Layer.succeed(FileSystem.FileSystem, patched)),
-            ),
-          ),
-        ),
-      );
-      // One revision: whichever recorder came second found the tree already recorded.
-      expect(theirs.id).toBe(mine.id);
-      expect(mine.revision.parents).toEqual([]);
-    }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect(

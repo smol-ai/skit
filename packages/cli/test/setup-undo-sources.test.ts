@@ -13,7 +13,6 @@ import {
   type LibraryState,
   currentSkillVersion,
   libraryManifestFromLocalState,
-  LibraryStore,
   MachineSettings,
   collectionVersionPath,
   sourceImports,
@@ -105,7 +104,7 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
         }))
       : initial.skills,
   };
-  yield* home.owned(Effect.flatMap(LibraryStore, (store) => store.save(before, initial)));
+  yield* home.writeDurable(before);
   if (projectExisting) {
     yield* home.owned(
       writingTo(
@@ -187,19 +186,19 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
         });
       }).pipe(
         Effect.provide(interaction.layer),
-        // The record is the first save and the import the second: dying there leaves it Pending.
+        // The record is the first state.json replacement and the import the second: dying there
+        // leaves it Pending.
         withLibraryOwner,
-        Effect.provideServiceEffect(
-          LibraryStore,
-          Effect.map(LibraryStore, (store) => ({
-            ...store,
-            save: (next: LibraryState, base: LibraryState) =>
-              Effect.andThen(
-                store.save(next, base),
-                interruptAfterImport && ++saves === 2 ? Effect.interrupt : Effect.void,
-              ),
-          })),
-        ),
+        Effect.provideService(FileSystem.FileSystem, {
+          ...fs,
+          rename: (from, to) =>
+            Effect.andThen(
+              fs.rename(from, to),
+              interruptAfterImport && to === home.statePath && ++saves === 2
+                ? Effect.interrupt
+                : Effect.void,
+            ),
+        }),
       ),
     ),
   );
@@ -406,7 +405,7 @@ it.effect(
       expect(failure._tag).toBe("PlatformError");
       const partial = yield* f.home.durable;
       expect(enabledSkillIds(partial, f.enabled)).toHaveLength(1);
-      expect((yield* Effect.flip(f.home.owned(inverse.apply())))._tag).toBe("PlanIsStale");
+      expect((yield* Effect.flip(f.home.owned(inverse.apply())))._tag).toBe("Library.StalePlan");
       const refreshed = yield* f.home.owned(prepareSetupUndo(f.operationId));
       expect(refreshed.summary.conflicts).toEqual([]);
       expect(refreshed.summary.sourceSelections).toEqual([]);

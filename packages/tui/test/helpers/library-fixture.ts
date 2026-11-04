@@ -1,15 +1,7 @@
 import { Library, LibraryActor, skitConfigurationLayer, skitLayer } from "@smolai/skit-core";
 import { join } from "node:path";
 import { Effect, FileSystem, Layer } from "effect";
-import {
-  deterministicTreeHash,
-  libraryStoreLayer,
-  LibraryStore,
-  LinkStat,
-  makeMachineId,
-  importCollection,
-  withLibraryWriter,
-} from "@smolai/skit-core";
+import { deterministicTreeHash, LinkStat, makeMachineId } from "@smolai/skit-core";
 import {
   confirmLibraryChange,
   openLibrarySession,
@@ -41,6 +33,8 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
       repositoryRoots: [],
     }),
   );
+  /** The Library as a second front end opens it: its own owner over the same home. */
+  const owner = Library.layer({ home: skitHome, routing: { _tag: "None" } });
   const importSource = (collection: string, skills: readonly string[]) =>
     Effect.gen(function* () {
       const source = join(root, "sources", collection);
@@ -48,22 +42,23 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
         yield* fs.makeDirectory(join(source, skill), { recursive: true });
         yield* fs.writeFileString(join(source, skill, "SKILL.md"), `${skill}\n`);
       }
-      return yield* withLibraryWriter(
-        importCollection({
+      const skillRequests = yield* Effect.forEach(skills, (skill) =>
+        Effect.map(deterministicTreeHash(join(source, skill)), (currentHash) => ({
+          name: skill,
+          sourcePath: join(source, skill),
+          relativePath: skill,
+          currentHash,
+        })),
+      );
+      return yield* Effect.flatMap(Library.Service, (library) =>
+        library.import.collection({
           source: { type: "local", path: source },
           input: source,
           importedAt: "2026-10-14T00:00:00.000Z",
-          skills: yield* Effect.forEach(skills, (skill) =>
-            Effect.map(deterministicTreeHash(join(source, skill)), (currentHash) => ({
-              name: skill,
-              sourcePath: join(source, skill),
-              relativePath: skill,
-              currentHash,
-            })),
-          ),
+          skills: skillRequests,
           lockFileEntries: [],
         }),
-      ).pipe(Effect.provide(libraryStoreLayer({ home: skitHome })));
+      ).pipe(Effect.provide(owner));
     });
   for (const [collection, skills] of Object.entries(collections))
     yield* importSource(collection, skills);
@@ -101,8 +96,14 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
           return yield* Effect.die(`binding ${label} was ${confirmed.outcome?.kind}`);
         return collectionId;
       }).pipe(Effect.provide(application)),
-    durable: Effect.flatMap(LibraryStore, (store) => store.load).pipe(
-      Effect.provide(libraryStoreLayer({ home: skitHome })),
+    /** The Library's saved state, read through its owner. */
+    durable: Effect.flatMap(Library.Service, (library) => library.read).pipe(
+      Effect.flatMap((snapshot) =>
+        snapshot._tag === "Present"
+          ? Effect.succeed(snapshot.state)
+          : Effect.die("the fixture Library has no state.json"),
+      ),
+      Effect.provide(owner),
     ),
     /** The host the TUI builds for this Library, over the production application layer. */
     host: () => createLibraryHost(application, openLibrarySession(skitHome, configuration)),

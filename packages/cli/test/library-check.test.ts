@@ -3,12 +3,7 @@ import { Library } from "@smolai/skit-core/library";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Ref } from "effect";
 import { join } from "node:path";
-import {
-  libraryStoreLayer,
-  LibraryStore,
-  collectionVersionPath,
-  skitLayer,
-} from "@smolai/skit-core";
+import { collectionVersionPath, skitLayer } from "@smolai/skit-core";
 import { checkSubjects } from "../src/workflows/library/check.js";
 import { importSource } from "../src/library-application/import-source.js";
 import { initializeLibraryMachine } from "./helpers/library-home.js";
@@ -24,13 +19,13 @@ it.effect("checks retained files without treating an observed local copy as an u
     yield* fs.writeFileString(join(source, "SKILL.md"), "observed raw Skill\n");
     const imported = yield* importSource(source).pipe(
       Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
-      Effect.provide(libraryStoreLayer({ home })),
     );
-    const loaded = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
-      Effect.provide(libraryStoreLayer({ home })),
+    const read = Effect.flatMap(Library.Service, (library) => library.read).pipe(
+      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
     );
-    assert.strictEqual(loaded.present, true);
-    if (!loaded.present) return;
+    const loaded = yield* read;
+    assert.strictEqual(loaded._tag, "Present");
+    if (loaded._tag !== "Present") return;
     const beforeState = yield* fs.readFileString(join(home, "state.json"));
     const checkedCollections = yield* Ref.make<ReadonlyArray<string>>([]);
     const current = yield* checkSubjects(imported.collection_id, (collection) =>
@@ -68,11 +63,9 @@ it.effect("checks retained files without treating an observed local copy as an u
     );
     assert.strictEqual(withoutCopy[0]?.available_snapshot_digest, undefined);
     assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), beforeState);
-    const reloaded = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
-      Effect.provide(libraryStoreLayer({ home })),
-    );
-    assert.strictEqual(reloaded.present, true);
-    if (!reloaded.present) return;
+    const reloaded = yield* read;
+    assert.strictEqual(reloaded._tag, "Present");
+    if (reloaded._tag !== "Present") return;
     assert.deepStrictEqual(
       reloaded.state.collection_versions[0]?.hash,
       loaded.state.collection_versions[0]?.hash,

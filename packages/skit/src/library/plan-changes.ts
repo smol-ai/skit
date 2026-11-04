@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { Effect, Schema, type Scope } from "effect";
 import { InstalledSkills } from "./installed-skills.js";
-import { LibraryStore } from "./store/library-store.js";
+import { libraryOriginalsPath } from "./store/library-store.js";
 import { libraryStateRevision, type LibraryState, type InstalledSkill } from "./library-state.js";
 import { skillsToCheckForDuplicates, deviceInstallationIntent } from "./enabled.js";
 import { edit } from "./library-edit.js";
@@ -200,11 +200,11 @@ const decide = Effect.fn("Library.decide")(function* (
  * and on disk. Builds bytes only to compare them, so they last as long as the Scope.
  */
 export const planChanges = Effect.fn("Library.planChanges")(function* (
+  home: string,
   base: LibraryState,
   intent: Intent,
   approvals: readonly Approval[],
 ) {
-  const store = yield* LibraryStore;
   const files = yield* InstalledSkills.Service;
   const { next, requests } = yield* edit(base, intent);
   const enabling = requests.filter(({ request }) => request.enabled);
@@ -281,7 +281,7 @@ export const planChanges = Effect.fn("Library.planChanges")(function* (
           folder,
           {
             next,
-            originalsPath: store.originalsPath,
+            originalsPath: libraryOriginalsPath(home),
             approvals,
             restore:
               enabled.has(skill.skill_id) ||
@@ -369,7 +369,7 @@ export const planChanges = Effect.fn("Library.planChanges")(function* (
             : versionBacking(next, skill, version);
         return backing === undefined
           ? []
-          : [collectionVersionPath(store.originalsPath, backing.copy.hash)];
+          : [collectionVersionPath(libraryOriginalsPath(home), backing.copy.hash)];
       }),
     ),
   ];
@@ -453,12 +453,16 @@ export const planChanges = Effect.fn("Library.planChanges")(function* (
  */
 export const planIntent = Effect.fn("Library.plan")(function* (
   intent: Intent,
-  options: { readonly base: LibraryState; readonly approvals?: readonly Approval[] },
+  options: {
+    readonly home: string;
+    readonly base: LibraryState;
+    readonly approvals?: readonly Approval[];
+  },
 ) {
   const base = structuredClone(options.base);
   const approvals = structuredClone(options.approvals ?? []);
   const reviewed = structuredClone(intent);
-  const planned = yield* Effect.scoped(planChanges(base, reviewed, approvals));
+  const planned = yield* Effect.scoped(planChanges(options.home, base, reviewed, approvals));
   const plan = {
     baseRevision: libraryStateRevision(base),
     approvals,

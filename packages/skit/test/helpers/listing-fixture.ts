@@ -1,5 +1,5 @@
 import { Context, Effect, FileSystem, Layer } from "effect";
-import { libraryStoreLayer, makeMachineId, skitLayer } from "../../src/index.js";
+import { makeMachineId, skitLayer } from "../../src/index.js";
 import { join } from "node:path";
 export class NativeLibraryFixture extends Context.Service<
   NativeLibraryFixture,
@@ -27,9 +27,4 @@ const fixtureLayer = Layer.effect(
     return { root, home };
   }),
 );
-export const nativeLibraryLayer = Layer.unwrap(
-  Effect.gen(function* () {
-    const fixture = yield* NativeLibraryFixture;
-    return libraryStoreLayer({ home: fixture.home });
-  }),
-).pipe(Layer.provideMerge(fixtureLayer), Layer.provideMerge(skitLayer));
+export const nativeLibraryLayer = fixtureLayer.pipe(Layer.provideMerge(skitLayer));

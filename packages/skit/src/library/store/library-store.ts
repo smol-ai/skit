@@ -1,41 +1,51 @@
-import { Context, DateTime, Effect, FileSystem } from "effect";
+import { Context, DateTime, Effect, FileSystem, Option } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { join, resolve } from "node:path";
 import type { InvalidLibraryState, LibraryBusy, LibraryChanged } from "../../failures.js";
 import { emptyLibraryState, type LibraryState } from "../library-state.js";
-import {
-  inspectLocalLibraryState,
-  migrateLocalLibraryState,
-  saveLibraryState,
-  type InspectedLibraryState,
-} from "./state-file.js";
+import { inspectLocalLibraryState, saveLibraryState } from "./state-file.js";
 import { appendLibraryAudit, type LibraryAuditChange } from "../audit/audit-log.js";
 import { classifyLibraryAuditEvent, diffLibraryState } from "../audit/state-diff.js";
 import { withHomeLock } from "./writer-lock.js";
-import type { StartupRecovery } from "../setup.js";
 
-export type { InspectedLibraryState };
+// Reads and the one-time migration go through here too: only this module touches state-file.
+export {
+  inspectLocalLibraryState,
+  migrateLocalLibraryState,
+  type InspectedLibraryState,
+} from "./state-file.js";
 
 export type LibraryStateReadError = PlatformError | InvalidLibraryState;
-/** Building the store migrates a legacy state.json under the home lock. */
-export type LibraryStoreLayerError = PlatformError | InvalidLibraryState | LibraryBusy;
+/** Opening a Library migrates a legacy state.json under the home lock: `LibraryBusy` if held elsewhere. */
+export type LibraryLayerError = PlatformError | InvalidLibraryState | LibraryBusy;
 export type LibraryStateWriteError =
   | PlatformError
   | InvalidLibraryState
   | LibraryBusy
   | LibraryChanged;
 
-export class LibraryStore extends Context.Service<
-  LibraryStore,
+export const libraryStatePath = (home: string) => join(resolve(home), "state.json");
+export const libraryOriginalsPath = (home: string) => join(resolve(home), "originals");
+export const libraryVariantsPath = (home: string) => join(resolve(home), "variants");
+
+/**
+ * The current state; a Library that has never been written reads as an empty one. A read never
+ * writes: the Library layer migrated a legacy file when it was built, and a read refuses any
+ * state.json that is not the current version.
+ */
+export const loadLibrary = Effect.fn("Library.load")(function* (home: string) {
+  const inspected = yield* inspectLocalLibraryState(home);
+  return inspected.present ? inspected.state : emptyLibraryState();
+});
+
+/**
+ * The one way to change `state.json`: present only inside `writeLibrary`, which holds the home
+ * lock. Code that saves requires it, so its type says it writes.
+ */
+export class LibraryWriter extends Context.Service<
+  LibraryWriter,
   {
-    /**
-     * The current state; a Library that has never been written reads as an empty one. Like every
-     * read, it never writes: the layer migrated a legacy file when it was built, and a read refuses
-     * any state.json that is not the current version.
-     */
-    readonly load: Effect.Effect<LibraryState, LibraryStateReadError>;
-    /** Like `load`, but tells a Library that has never been written apart from an empty one. */
-    readonly inspect: Effect.Effect<InspectedLibraryState, LibraryStateReadError>;
+    readonly home: string;
     /**
      * Replace `base`, a state this caller loaded, with `next`. Fails with `LibraryChanged` and
      * saves nothing when the Library is no longer `base`.
@@ -44,70 +54,19 @@ export class LibraryStore extends Context.Service<
       next: LibraryState,
       base: LibraryState,
     ) => Effect.Effect<void, LibraryStateWriteError>;
-    readonly home: string;
-    readonly originalsPath: string;
-    readonly statePath: string;
-    readonly variantsPath: string;
-    /** What startup recovery did when the layer was built. */
-    readonly startup: StartupRecovery;
   }
->()("skit/library/LibraryStore") {}
-
-/** What the writer in progress has saved so far; it records the changes as one event. */
-const CurrentLibraryAction = Context.Reference<
-  | {
-      readonly home: string;
-      readonly changes: LibraryAuditChange[];
-      saved?: LibraryState;
-      live: boolean;
-    }
-  | undefined
->("skit/library/CurrentLibraryAction", { defaultValue: () => undefined });
+>()("skit/library/LibraryWriter") {}
 
 /**
- * The store over `home`, once a legacy state.json has been migrated, under the home lock: fails
- * with `LibraryBusy` if the lock is held elsewhere, and creates nothing when state.json is absent.
- * Its layer, `libraryStoreLayer`, then runs startup recovery.
+ * Who is mutating the Library, for its history. A front end provides it once at its composition
+ * root; it is a diagnostic label and not an authority, so an unlabelled mutation is still recorded.
  */
-export const makeLibraryStore = (options: { home: string }) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const home = resolve(options.home);
-    yield* migrateLocalLibraryState(home);
-    const path = join(home, "state.json");
-    const inspect = inspectLocalLibraryState(home).pipe(
-      Effect.provideService(FileSystem.FileSystem, fs),
-    );
-    const load = Effect.map(inspect, (inspected) =>
-      inspected.present ? inspected.state : emptyLibraryState(),
-    );
-    const save = Effect.fn("LibraryStore.save")(function* (next: LibraryState, base: LibraryState) {
-      yield* saveLibraryState(home, next, base).pipe(
-        Effect.provideService(FileSystem.FileSystem, fs),
-      );
-      const changes = diffLibraryState(base, next);
-      const action = yield* CurrentLibraryAction;
-      if (action?.home === home && action.live) {
-        action.saved = next;
-        action.changes.push(...changes);
-      } else if (changes.length)
-        yield* recordLibraryHistory(home, changes).pipe(
-          Effect.provideService(FileSystem.FileSystem, fs),
-        );
-    });
-    return {
-      load,
-      inspect,
-      save,
-      home,
-      statePath: path,
-      originalsPath: join(home, "originals"),
-      variantsPath: join(home, "variants"),
-    };
-  });
+export const LibraryActor = Context.Reference<string>("skit/library/LibraryActor", {
+  defaultValue: () => "unattributed",
+});
 
 /** Append one event to a Library's history. Reported, never raised: the change is durable. */
-const recordLibraryHistory = Effect.fn("LibraryStore.recordHistory")(function* (
+const recordLibraryHistory = Effect.fn("Library.recordHistory")(function* (
   home: string,
   changes: readonly LibraryAuditChange[],
 ) {
@@ -127,48 +86,43 @@ const recordLibraryHistory = Effect.fn("LibraryStore.recordHistory")(function* (
 });
 
 /**
- * Who is mutating the Library, for its history. A front end provides it once at its composition
- * root; it is a diagnostic label and not an authority, so an unlabelled mutation is still recorded.
+ * Run `program` holding the home lock, with a `LibraryWriter` for `home`. Every change saved under
+ * it is recorded as one history event when it ends, on success and failure alike, because a
+ * workflow that commits in stages can fail after changing the Library. Inside another write to the
+ * same Library it joins that write, so one action is one event however many workflows it composes.
+ * A save from a fiber that outlives the write records its own event.
  */
-export const LibraryActor = Context.Reference<string>("skit/library/LibraryActor", {
-  defaultValue: () => "unattributed",
-});
-
-/** The state the writer in progress last saved to the current Library, if it has. */
-export const lastSavedLibraryState = Effect.gen(function* () {
-  const store = yield* LibraryStore;
-  const action = yield* CurrentLibraryAction;
-  return action?.home === store.home && action.live ? action.saved : undefined;
-});
-
-/**
- * Hold the writer lock of the Library the current `LibraryStore` addresses, and record what the
- * mutation saved.
- *
- * The outermost writer is the transaction: its history is every change saved under it, written
- * as one event on success and failure alike, because a workflow that commits in stages can fail
- * after changing the Library. The event is written once the lock has drained every fiber that
- * leased it, so it includes their changes. Nested writers record nothing of their own, so one action
- * is one event however many workflows it composes; a fiber that outlives its action starts its own.
- * Nesting only groups history: every writer still enters through the lock, and each save is
- * checked against the state it was planned from.
- */
-export const withLibraryWriter = <A, E, R>(program: Effect.Effect<A, E, R>) =>
+export const writeLibrary = <A, E, R>(
+  home: string,
+  program: Effect.Effect<A, E, R | LibraryWriter>,
+) =>
   Effect.gen(function* () {
-    const store = yield* LibraryStore;
-    const inherited = yield* CurrentLibraryAction;
-    if (inherited?.home === store.home && inherited.live)
-      return yield* withHomeLock(store.home, program);
-    const action = { home: store.home, changes: [] as LibraryAuditChange[], live: true };
+    const root = resolve(home);
+    const outer = yield* Effect.serviceOption(LibraryWriter);
+    if (Option.isSome(outer) && outer.value.home === root)
+      return yield* program.pipe(Effect.provideService(LibraryWriter, outer.value));
+    const fs = yield* FileSystem.FileSystem;
+    const changes: LibraryAuditChange[] = [];
+    let live = true;
+    const writer = LibraryWriter.of({
+      home: root,
+      save: Effect.fn("Library.save")(
+        function* (next: LibraryState, base: LibraryState) {
+          yield* saveLibraryState(root, next, base);
+          const saved = diffLibraryState(base, next);
+          if (live) changes.push(...saved);
+          else if (saved.length) yield* recordLibraryHistory(root, saved);
+        },
+        Effect.provideService(FileSystem.FileSystem, fs),
+      ),
+    });
     return yield* withHomeLock(
-      store.home,
-      program.pipe(Effect.provideService(CurrentLibraryAction, action)),
+      root,
+      program.pipe(Effect.provideService(LibraryWriter, writer)),
     ).pipe(
       Effect.onExit(() => {
-        action.live = false;
-        return action.changes.length === 0
-          ? Effect.void
-          : recordLibraryHistory(store.home, action.changes);
+        live = false;
+        return changes.length === 0 ? Effect.void : recordLibraryHistory(root, changes);
       }),
     );
   });

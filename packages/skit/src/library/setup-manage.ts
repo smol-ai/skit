@@ -30,7 +30,7 @@ import {
 import { incompleteManageWarning, planManage } from "./manage-plan.js";
 import { planIntent } from "./plan-changes.js";
 import { moveAside, recoveryDirectory } from "./setup-moves.js";
-import { LibraryStore } from "./store/library-store.js";
+import { LibraryWriter, loadLibrary } from "./store/library-store.js";
 import type {
   FolderEvidence,
   LinkEvidence,
@@ -126,7 +126,7 @@ const differs = (step: number, evidence: FolderEvidence | LinkEvidence): Managed
 const reviewedOrManaged = Effect.fn("Library.setup.reviewedOrManaged")(function* (
   evidence: FolderEvidence,
 ) {
-  const state = yield* (yield* LibraryStore).load;
+  const state = yield* loadLibrary((yield* LibraryWriter).home);
   if (!(yield* parentIsAsRecorded(evidence.path, evidence.parent))) return "differs" as const;
   if (yield* holdsEvidence(evidence, evidence.path)) return "reviewed" as const;
   const recorded = state.installed_skills.find(
@@ -183,6 +183,7 @@ export const installedPaths = (
 
 /** Enable the subject's `name` globally, managing the reviewed folder in place where it is one. */
 export const planManageEnable = Effect.fn("Library.planManageEnable")(function* (
+  home: string,
   selection: ManageExistingSelection | ManageNewSelection,
   subjectId: string,
   manage: {
@@ -229,6 +230,7 @@ export const planManageEnable = Effect.fn("Library.planManageEnable")(function* 
       ],
     },
     {
+      home,
       base: state,
       approvals: [
         {
@@ -254,8 +256,9 @@ const enable = Effect.fn("Library.setup.enable")(function* (
     readonly currentHash: string;
   },
 ) {
-  const state = yield* (yield* LibraryStore).load;
-  const plan = yield* planManageEnable(selection, subjectId, manage, state);
+  const { home } = yield* LibraryWriter;
+  const state = yield* loadLibrary(home);
+  const plan = yield* planManageEnable(home, selection, subjectId, manage, state);
   const outcome = yield* apply(plan);
   if (outcome._tag === "Applied") return { results: setEnabledResults(outcome), warnings: [] };
   // Setup keeps the managed copy while other differing copies stay where agents read them.
@@ -279,7 +282,7 @@ const replacementMissing = Effect.fn("Library.setup.replacementMissing")(functio
 ) {
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
-  const state = yield* (yield* LibraryStore).load;
+  const state = yield* loadLibrary((yield* LibraryWriter).home);
   const subject = yield* resolveLibrarySubject(state, subjectId);
   const skill = subject.skills.find((item) => item.name === name);
   const canonical = (path: string) =>
@@ -374,7 +377,7 @@ export const runManage = Effect.fn("Library.setup.manage")(function* (
   step: ManageStep,
   steps: readonly RecordedSetupStep[],
 ) {
-  const store = yield* LibraryStore;
+  const { home } = yield* LibraryWriter;
   const files = yield* routedInstalledSkills(step.routing);
   const results: SetEnabledResult[] = [];
   const warnings: { readonly name: string; readonly message: string }[] = [];
@@ -423,6 +426,7 @@ export const runManage = Effect.fn("Library.setup.manage")(function* (
             scope: global,
           })),
           selection.source.path,
+          { base: yield* loadLibrary(home) },
         );
         if (
           plan.targets.some((target) => target.status === "adoptable") &&
@@ -451,7 +455,7 @@ export const runManage = Effect.fn("Library.setup.manage")(function* (
     }
     const moved = yield* moveAside(
       operationId,
-      recoveryDirectory(store.home, operationId, index, at),
+      recoveryDirectory(home, operationId, index, at),
       moving,
     );
     if (moved._tag === "Differs") return differs(index, moved.folder);

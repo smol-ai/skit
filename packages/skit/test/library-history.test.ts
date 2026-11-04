@@ -9,10 +9,10 @@ import { migratedMachineId } from "../src/library/entity-ids.js";
 import { importCollection } from "../src/library/import-collection.js";
 import {
   LibraryActor,
-  LibraryStore,
-  withLibraryWriter,
+  LibraryWriter,
+  loadLibrary,
+  writeLibrary,
 } from "../src/library/store/library-store.js";
-import { libraryStoreLayer } from "../src/library/library-store-layer.js";
 import { withHomeLock } from "../src/library/store/writer-lock.js";
 import type { LibraryState } from "../src/library/library-state.js";
 import { skitLayer } from "../src/platform/layer.js";
@@ -57,8 +57,6 @@ const library = Effect.gen(function* () {
   const source = join(workspace, "source");
   yield* fs.makeDirectory(source, { recursive: true });
   yield* fs.writeFileString(join(source, "SKILL.md"), "raw Skill bytes\n");
-  const inLibrary = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    effect.pipe(Effect.provide(libraryStoreLayer({ home })));
   const importSource = importCollection({
     machineId,
     source: { type: "local", path: source },
@@ -77,7 +75,7 @@ const library = Effect.gen(function* () {
   const history = Effect.flatMap(Library.Service, (owner) =>
     Effect.map(owner.history, (history) => history.events),
   ).pipe(Effect.provide(libraryLayer(home)));
-  return { inLibrary, importSource, history, home };
+  return { importSource, history, home };
 });
 
 const globalEnabled = (state: LibraryState) =>
@@ -85,24 +83,15 @@ const globalEnabled = (state: LibraryState) =>
 
 it.effect("records one event for one action, however many writers it nests", () =>
   Effect.gen(function* () {
-    const { inLibrary, importSource, history } = yield* library;
-    yield* inLibrary(
-      withLibraryWriter(
-        Effect.gen(function* () {
-          yield* Effect.scoped(withLibraryWriter(importSource));
-          const store = yield* LibraryStore;
-          const state = yield* store.load;
-          yield* withLibraryWriter(
-            store.save(
-              {
-                ...state,
-                enabled: state.skills.map((skill) => ({ skill: skill.skill_id })),
-              },
-              state,
-            ),
-          );
-        }),
-      ),
+    const { importSource, history, home } = yield* library;
+    yield* writeLibrary(
+      home,
+      Effect.gen(function* () {
+        yield* Effect.scoped(writeLibrary(home, importSource));
+        const writer = yield* LibraryWriter;
+        const state = yield* loadLibrary(home);
+        yield* writeLibrary(home, writer.save({ ...state, enabled: globalEnabled(state) }, state));
+      }),
     ).pipe(Effect.provideService(LibraryActor, "test-front-end"));
 
     const events = yield* history;
@@ -118,20 +107,19 @@ it.effect("records one event for one action, however many writers it nests", () 
 
 it.effect("records nothing when a writer leaves the Library as it found it", () =>
   Effect.gen(function* () {
-    const { inLibrary, history } = yield* library;
-    yield* inLibrary(withLibraryWriter(Effect.flatMap(LibraryStore, (store) => store.load)));
+    const { history, home } = yield* library;
+    yield* writeLibrary(home, loadLibrary(home));
     assert.deepStrictEqual(yield* history, []);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("records what was committed before a mutation failed", () =>
   Effect.gen(function* () {
-    const { inLibrary, importSource, history } = yield* library;
-    const outcome = yield* inLibrary(
-      withLibraryWriter(
-        Effect.scoped(importSource).pipe(
-          Effect.andThen(Effect.fail("failed after committing" as const)),
-        ),
+    const { importSource, history, home } = yield* library;
+    const outcome = yield* writeLibrary(
+      home,
+      Effect.scoped(importSource).pipe(
+        Effect.andThen(Effect.fail("failed after committing" as const)),
       ),
     ).pipe(Effect.flip);
     assert.strictEqual(outcome, "failed after committing");
@@ -146,42 +134,41 @@ it.effect("records what was committed before a mutation failed", () =>
 it.effect("keeps a committed mutation successful when its history cannot be written", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const { inLibrary, importSource, home } = yield* library;
+    const { importSource, home } = yield* library;
     // A directory where the log should be makes every append fail.
     yield* fs.makeDirectory(join(home, "audit.jsonl"), { recursive: true });
-    const imported = yield* inLibrary(withLibraryWriter(Effect.scoped(importSource)));
-    const state = yield* inLibrary(Effect.flatMap(LibraryStore, (store) => store.load));
+    const imported = yield* writeLibrary(home, Effect.scoped(importSource));
+    const state = yield* loadLibrary(home);
     assert.strictEqual(state.collections[0]?.collection_id, imported.collection?.collection_id);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.live("records a forked save under way at release in its action's event", () =>
   Effect.gen(function* () {
-    const { inLibrary, importSource, history, home } = yield* library;
-    yield* inLibrary(withLibraryWriter(Effect.scoped(importSource)));
+    const { importSource, history, home } = yield* library;
+    yield* writeLibrary(home, Effect.scoped(importSource));
     const before = (yield* history).length;
-    const store = yield* inLibrary(Effect.service(LibraryStore));
     const entered = yield* Deferred.make<void>();
     const resume = yield* Deferred.make<void>();
     const forked = yield* Deferred.make<Fiber.Fiber<void, unknown>>();
-    const action = yield* inLibrary(
-      withLibraryWriter(
-        Effect.gen(function* () {
-          const state = yield* store.load;
-          const bound = { ...state, enabled: globalEnabled(state) };
-          yield* store.save(bound, state);
-          // The forked save takes its lease now and finishes only after the action's program.
-          const child = yield* withHomeLock(
-            home,
-            Deferred.succeed(entered, undefined).pipe(
-              Effect.andThen(Deferred.await(resume)),
-              Effect.andThen(store.save({ ...bound, enabled: [] }, bound)),
-            ),
-          ).pipe(Effect.forkDetach);
-          yield* Deferred.succeed(forked, child);
-          yield* Deferred.await(entered);
-        }),
-      ),
+    const action = yield* writeLibrary(
+      home,
+      Effect.gen(function* () {
+        const writer = yield* LibraryWriter;
+        const state = yield* loadLibrary(home);
+        const bound = { ...state, enabled: globalEnabled(state) };
+        yield* writer.save(bound, state);
+        // The forked save takes its lease now and finishes only after the action's program.
+        const child = yield* withHomeLock(
+          home,
+          Deferred.succeed(entered, undefined).pipe(
+            Effect.andThen(Deferred.await(resume)),
+            Effect.andThen(writer.save({ ...bound, enabled: [] }, bound)),
+          ),
+        ).pipe(Effect.forkDetach);
+        yield* Deferred.succeed(forked, child);
+        yield* Deferred.await(entered);
+      }),
     ).pipe(Effect.forkChild);
     const child = yield* Deferred.await(forked);
     yield* Deferred.await(entered);
@@ -201,29 +188,29 @@ it.live("records a forked save under way at release in its action's event", () =
 
 it.live("records a writer that outlives its action as an action of its own", () =>
   Effect.gen(function* () {
-    const { inLibrary, importSource, history } = yield* library;
-    yield* inLibrary(withLibraryWriter(Effect.scoped(importSource)));
+    const { importSource, history, home } = yield* library;
+    yield* writeLibrary(home, Effect.scoped(importSource));
     const before = (yield* history).length;
-    const store = yield* inLibrary(Effect.service(LibraryStore));
     const resume = yield* Deferred.make<void>();
-    const late = yield* inLibrary(
-      withLibraryWriter(
-        Effect.gen(function* () {
-          const state = yield* store.load;
-          yield* store.save({ ...state, enabled: globalEnabled(state) }, state);
-          return yield* Deferred.await(resume).pipe(
-            Effect.andThen(
-              withLibraryWriter(
-                Effect.gen(function* () {
-                  const bound = yield* store.load;
-                  yield* store.save({ ...bound, enabled: [] }, bound);
-                }),
-              ),
+    const late = yield* writeLibrary(
+      home,
+      Effect.gen(function* () {
+        const writer = yield* LibraryWriter;
+        const state = yield* loadLibrary(home);
+        yield* writer.save({ ...state, enabled: globalEnabled(state) }, state);
+        return yield* Deferred.await(resume).pipe(
+          Effect.andThen(
+            writeLibrary(
+              home,
+              Effect.gen(function* () {
+                const bound = yield* loadLibrary(home);
+                yield* (yield* LibraryWriter).save({ ...bound, enabled: [] }, bound);
+              }),
             ),
-            Effect.forkDetach,
-          );
-        }),
-      ),
+          ),
+          Effect.forkDetach,
+        );
+      }),
     );
     assert.strictEqual((yield* history).length, before + 1);
     yield* Deferred.succeed(resume, undefined);

@@ -3,13 +3,8 @@ import { join } from "node:path";
 import { Effect, FileSystem, Option } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import {
-  InvalidLibraryState,
-  LibraryStore,
-  MachineSettings,
-  skitLayer,
-  type LibraryState,
-} from "@smolai/skit-core";
+import { systemError, type PlatformError } from "effect/PlatformError";
+import { MachineSettings, skitLayer, type LibraryState } from "@smolai/skit-core";
 import { setupApplyCommand } from "../src/library/setup/apply-command.js";
 import { runSetup } from "@smolai/skit-core/library/setup";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
@@ -61,24 +56,28 @@ const operations = (state: LibraryState) =>
     })),
   }));
 
-/** Save the Library state as `onSave` decides, counting each save from one. */
-const watchingSaves = (
-  onSave: (save: number, next: LibraryState) => Effect.Effect<void, InvalidLibraryState>,
-) =>
-  Effect.provideServiceEffect(
-    LibraryStore,
-    Effect.map(LibraryStore, (store) => {
+/**
+ * The real filesystem, except each replacement of `state.json` first runs `onSave` with its count
+ * from one and the bytes about to land. Provided outside the owner, so its saves go through it.
+ */
+const watchingSaves =
+  (statePath: string, onSave: (save: number, next: string) => Effect.Effect<void, PlatformError>) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
       let saves = 0;
-      return {
-        ...store,
-        save: (next: LibraryState, base: LibraryState) =>
-          Effect.gen(function* () {
-            yield* onSave(++saves, next);
-            yield* store.save(next, base);
-          }),
-      };
-    }),
-  );
+      return yield* effect.pipe(
+        Effect.provideService(FileSystem.FileSystem, {
+          ...fs,
+          rename: (from, to) =>
+            to === statePath
+              ? Effect.flatMap(fs.readFileString(from), (next) =>
+                  Effect.andThen(onSave(++saves, next), fs.rename(from, to)),
+                )
+              : fs.rename(from, to),
+        }),
+      );
+    });
 
 it.effect(
   "setup records its steps in state.json before running any, and its discovery folders under the same operation",
@@ -88,10 +87,11 @@ it.effect(
       let recorded: ReturnType<typeof operations> | undefined;
       const applied = yield* f.home.owned(
         f.apply.pipe(
-          watchingSaves((save, next) =>
+          watchingSaves(f.home.statePath, (save, next) =>
             Effect.gen(function* () {
               if (save !== 1) return;
-              recorded = operations(next);
+              const saved: LibraryState = JSON.parse(next);
+              recorded = operations(saved);
               // Nothing has run yet: the copy setup manages is still the user's.
               expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(false);
             }).pipe(Effect.orDie),
@@ -129,15 +129,20 @@ it.effect("a refused setup record changes no skill and saves no discovery folder
     const failure = yield* Effect.flip(
       f.home.owned(
         f.apply.pipe(
-          watchingSaves(() =>
+          watchingSaves(f.home.statePath, () =>
             Effect.fail(
-              new InvalidLibraryState({ path: f.home.statePath, detail: "Test refusal" }),
+              systemError({
+                _tag: "PermissionDenied",
+                module: "FileSystem",
+                method: "rename",
+                pathOrDescriptor: f.home.statePath,
+              }),
             ),
           ),
         ),
       ),
     );
-    expect(failure._tag).toBe("InvalidLibraryState");
+    expect(failure._tag).toBe("PlatformError");
     expect(yield* f.fs.exists(join(f.home.home, "state.json"))).toBe(false);
     expect((yield* MachineSettings.read(f.home.home)).setups).toEqual([]);
     expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(false);
@@ -150,7 +155,9 @@ it.effect("a setup interrupted after its record is saved is finished by the next
     const f = yield* fixture();
     const exit = yield* Effect.exit(
       f.home.owned(
-        f.apply.pipe(watchingSaves((save) => (save === 2 ? Effect.interrupt : Effect.void))),
+        f.apply.pipe(
+          watchingSaves(f.home.statePath, (save) => (save === 2 ? Effect.interrupt : Effect.void)),
+        ),
       ),
     );
     expect(exit._tag).toBe("Failure");

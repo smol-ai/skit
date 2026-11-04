@@ -7,7 +7,7 @@ import { systemError } from "effect/PlatformError";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
-import { LibraryStore, libraryStoreLayer } from "@smolai/skit-core";
+import { emptyLibraryState } from "@smolai/skit-core";
 import { collectionVersionPath } from "@smolai/skit-core";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { writingTo } from "./helpers/library-home.js";
@@ -64,12 +64,18 @@ const fixture = Effect.gen(function* () {
   const run = <A, E, R>(operation: Effect.Effect<A, E, R>) =>
     operation.pipe(
       Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
-      Effect.provide(libraryStoreLayer({ home })),
       Effect.provide(skitConfigurationLayer(home)),
       Effect.provideService(HttpClient.HttpClient, client),
     );
+  const load = run(
+    Effect.flatMap(Library.Service, (library) => library.read).pipe(
+      Effect.map((snapshot) =>
+        snapshot._tag === "Present" ? snapshot.state : emptyLibraryState(),
+      ),
+    ),
+  );
   for (const url of urls) yield* run(importSource({ type: "archive", url }));
-  const before = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
+  const before = yield* load;
   bodies.set(urls[0]!, yield* archive("broken", true, "after"));
   bodies.set(urls[1]!, yield* archive("healthy", false, "after"));
   requests.length = 0;
@@ -77,7 +83,7 @@ const fixture = Effect.gen(function* () {
     roots: { home: root, configHome: join(root, "config"), overrides: {} },
     variantsPath: join(home, "variants"),
   };
-  return { fs, root, home, urls, bodies, requests, before, run, options, archive };
+  return { fs, root, home, urls, bodies, requests, before, run, load, options, archive };
 });
 
 it.effect("stops the batch when shared machine settings cannot be read", () =>
@@ -126,7 +132,7 @@ it.effect(
       assert.include(outcomes[0].error.message, "Additional failure: PermissionDenied");
       assert.strictEqual(outcomes[0].source, f.urls[0]);
       assert.isTrue("changed" in outcomes[1]! && outcomes[1].changed);
-      const after = yield* f.run(Effect.flatMap(LibraryStore, (store) => store.load));
+      const after = yield* f.load;
       assert.strictEqual(after.skills.find((s) => s.name === "broken")!.versions.length, 1);
       assert.strictEqual(after.skills.find((s) => s.name === "healthy")!.versions.length, 2);
       assert.strictEqual(updateExitCode(outcomes), 1);
@@ -225,14 +231,14 @@ for (const failurePhase of ["install", "source-cleanup"] as const) {
         assert.isTrue("changed" in outcomes[1]! && outcomes[1].changed);
         // The next Collection's update brings every installed copy up to date, this one too.
         assert.notStrictEqual(yield* f.fs.readFileString(installedSkillPath), original);
-        const imported = yield* f.run(Effect.flatMap(LibraryStore, (store) => store.load));
+        const imported = yield* f.load;
         const retry = yield* writingTo(
           f.home,
           f.run(updateSubjects(options).pipe(Effect.provide(rendererTestLayer()))),
         );
         assert.isTrue("changed" in retry[0]! && !retry[0].changed && retry[0].installed === 0);
         assert.include(yield* f.fs.readFileString(installedSkillPath), "after");
-        const after = yield* f.run(Effect.flatMap(LibraryStore, (store) => store.load));
+        const after = yield* f.load;
         assert.strictEqual(after.imports.length, imported.imports.length);
         const unchanged = yield* writingTo(
           f.home,
@@ -323,7 +329,7 @@ it.effect("keeps candidate manifest validation failures local to their Collectio
     assert.strictEqual(outcomes[0].error.code, "VALIDATION_FAILED");
     assert.include(outcomes[0].error.message, "portable manifest");
     assert.isTrue("changed" in outcomes[1]! && outcomes[1].changed);
-    const after = yield* f.run(Effect.flatMap(LibraryStore, (store) => store.load));
+    const after = yield* f.load;
     assert.strictEqual(after.skills.find((s) => s.name === "broken")!.versions.length, 1);
   }).pipe(Effect.provide(testPlatformLayer)),
 );

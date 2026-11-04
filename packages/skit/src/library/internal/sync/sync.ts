@@ -23,7 +23,7 @@ import {
 import { DeviceSkillSelection } from "../../device-state.js";
 import { makeOperationId, OperationId, CollectionVersionId } from "../../entity-ids.js";
 import { snapshotOf, type Snapshot } from "../../snapshot.js";
-import { LibraryStore, withLibraryWriter } from "../../store/library-store.js";
+import { applyReviewed } from "../../reviewed-plan.js";
 import {
   StepRouting,
   SyncFolder,
@@ -184,6 +184,7 @@ const routingFor = Effect.fn("Library.sync.routing")(function* (
 
 /** Plan only the local half; callers retain remote merge, upload and compare-and-swap. */
 export const planSync = Effect.fn("Library.planSync")(function* (
+  home: string,
   input: SyncIntent,
   options: {
     readonly base: Snapshot;
@@ -197,7 +198,6 @@ export const planSync = Effect.fn("Library.planSync")(function* (
     Effect.flatMap(Schema.decodeUnknownEffect(SyncIntent)),
     Effect.mapError(() => new InvalidIntent({ detail: "Invalid Sync intent" })),
   );
-  const store = yield* LibraryStore;
   if (intent.staged.missing.length)
     return yield* new RestoreInvalid({
       detail: `retained copies unavailable: ${intent.staged.missing.join(", ")}`,
@@ -299,7 +299,7 @@ export const planSync = Effect.fn("Library.planSync")(function* (
   const files = yield* routedInstalledSkills(routing);
   const paths = new Set(state.installed_skills.map((copy) => copy.path));
   const inspected = yield* Effect.result(
-    planIntent({ _tag: "Update" }, { base: next }).pipe(
+    planIntent({ _tag: "Update" }, { home, base: next }).pipe(
       Effect.provideService(InstalledSkills.Service, files),
     ),
   );
@@ -320,7 +320,7 @@ export const planSync = Effect.fn("Library.planSync")(function* (
     intent,
     baseRevision: options.base.revision,
     operationId: options.operationId ?? makeOperationId(),
-    home: store.home,
+    home,
     routing,
     folders,
     next: syncPublication(next),
@@ -355,12 +355,12 @@ export const planSync = Effect.fn("Library.planSync")(function* (
 
 /** Verify the receipt and exact review before recording a replayable local program. */
 export const applySync = Effect.fn("Library.applySync")(function* (
+  home: string,
   request: SyncApplyRequest,
   options: { readonly none?: boolean; readonly roots?: InventoryRootOptions },
 ) {
   const approved = request.plan;
-  const store = yield* LibraryStore;
-  if (approved.home !== store.home)
+  if (approved.home !== home)
     return yield* new StalePlan({ message: "The Sync plan belongs to another Library" });
   let ancestry = Option.getOrUndefined(approved.intent.acceptedBase);
   if (approved.change.remote._tag === "Expected") {
@@ -383,121 +383,114 @@ export const applySync = Effect.fn("Library.applySync")(function* (
     ancestry = receipt.ancestry;
   } else if (request._tag !== "Apply")
     return yield* new StalePlan({ message: "This local Sync plan cannot accept a remote receipt" });
-  return yield* withLibraryWriter(
-    Effect.gen(function* () {
-      const base = snapshotOf(yield* store.inspect);
-      if (base.revision !== approved.baseRevision)
-        return yield* new StalePlan({ message: "The Library changed while Sync was running" });
-      const fresh = yield* planSync(approved.intent, {
-        ...options,
-        base,
-        operationId: approved.operationId,
-      });
-      if (!same(fresh, approved))
-        return yield* new StalePlan({
-          message: "Sync state, routing or folder evidence changed after review",
-        });
-      if (
-        approved.change.collisions.length &&
-        approved.change.device.device_skill_selection?.mode !== "choose"
-      )
-        return yield* new InvalidIntent({
-          detail: approved.change.collisions.map((item) => item.message).join("; "),
-        });
-      const current = base._tag === "Present" ? base.state : emptyLibraryState();
-      const inspected = yield* inspectContent(
-        snapshotOf({ present: true, state: approved.intent.staged.state }),
-        store.originalsPath,
-        store.statePath,
-      );
-      if (inspected._tag === "Changed")
-        return yield* new RestoreInvalid({
-          detail: `Retained Sync content changed: ${inspected.hash}`,
-        });
-      const keepCurrent =
-        approved.change.clean &&
-        same(current.sync_ancestry ?? null, ancestry ?? null) &&
-        same(current.device_skill_selection ?? null, approved.next.device_skill_selection ?? null);
-      const next = {
-        ...(keepCurrent
-          ? { ...syncPublication(current), installed_skills: approved.next.installed_skills }
-          : approved.next),
-        ...(ancestry === undefined ? {} : { sync_ancestry: ancestry }),
-      };
-      const files = yield* routedInstalledSkills(approved.routing);
-      const update = yield* Effect.result(
-        planIntent({ _tag: "Update" }, { base: { ...next, operations: current.operations } }).pipe(
-          Effect.provideService(InstalledSkills.Service, files),
-        ),
-      );
-      const work =
-        update._tag === "Failure" ||
-        update.success.changes.some(
-          (change) => change._tag !== "Unchanged" && change._tag !== "Protected",
+  return yield* applyReviewed(
+    home,
+    approved,
+    (base) =>
+      planSync(home, approved.intent, { ...options, base, operationId: approved.operationId }),
+    (fresh, base) =>
+      Effect.gen(function* () {
+        if (
+          fresh.change.collisions.length &&
+          fresh.change.device.device_skill_selection?.mode !== "choose"
+        )
+          return yield* new InvalidIntent({
+            detail: fresh.change.collisions.map((item) => item.message).join("; "),
+          });
+        const current = base._tag === "Present" ? base.state : emptyLibraryState();
+        const inspected = yield* inspectContent(
+          home,
+          snapshotOf({ present: true, state: fresh.intent.staged.state }),
         );
-      const sameMetadata = same(
-        { ...syncPublication(current), installed_skills: [] },
-        { ...next, installed_skills: [] },
-      );
-      if (sameMetadata && !work)
+        if (inspected._tag === "Changed")
+          return yield* new RestoreInvalid({
+            detail: `Retained Sync content changed: ${inspected.hash}`,
+          });
+        const keepCurrent =
+          fresh.change.clean &&
+          same(current.sync_ancestry ?? null, ancestry ?? null) &&
+          same(current.device_skill_selection ?? null, fresh.next.device_skill_selection ?? null);
+        const next = {
+          ...(keepCurrent
+            ? { ...syncPublication(current), installed_skills: fresh.next.installed_skills }
+            : fresh.next),
+          ...(ancestry === undefined ? {} : { sync_ancestry: ancestry }),
+        };
+        const files = yield* routedInstalledSkills(fresh.routing);
+        const update = yield* Effect.result(
+          planIntent(
+            { _tag: "Update" },
+            { home, base: { ...next, operations: current.operations } },
+          ).pipe(Effect.provideService(InstalledSkills.Service, files)),
+        );
+        const work =
+          update._tag === "Failure" ||
+          update.success.changes.some(
+            (change) => change._tag !== "Unchanged" && change._tag !== "Protected",
+          );
+        const sameMetadata = same(
+          { ...syncPublication(current), installed_skills: [] },
+          { ...next, installed_skills: [] },
+        );
+        if (sameMetadata && !work)
+          return {
+            _tag: "Sync" as const,
+            result: {
+              installed: 0,
+              uninstalled: 0,
+              enablementIssues: fresh.installationIssues,
+              ancestry: Option.fromUndefinedOr(ancestry),
+            },
+          } satisfies SyncOutcome;
+        const preview = Option.getOrUndefined(fresh.change.installedSkills);
+        const program: SyncProgram = {
+          before: syncPublication(current),
+          after: next,
+          routing: fresh.routing,
+          retire: current.installed_skills.filter((copy) =>
+            preview?.retire.includes(copy.installed_skill_id),
+          ),
+          drop: preview?.remove ?? [],
+          manifestDigest: fresh.intent.staged.manifestDigest,
+          receipt:
+            request._tag === "ApplySynced" ? Option.some(request.receipt.ancestry) : Option.none(),
+          folders: fresh.folders,
+          issues: fresh.installationIssues,
+        };
+        const result = yield* setupOperation(
+          [
+            { _tag: "Sync", phase: "retire", program },
+            { _tag: "Sync", phase: "publish", sourceStep: 0 },
+            { _tag: "Sync", phase: "install", sourceStep: 0 },
+          ],
+          { base, operationId: fresh.operationId, replaceDone: false },
+        );
+        if (result._tag === "Stopped") {
+          if (result.reason._tag === "StepFailed") {
+            const error = result.reason.error;
+            if (
+              Schema.is(InvalidLibraryState)(error) ||
+              Schema.is(LibraryBusy)(error) ||
+              Schema.is(LibraryChanged)(error) ||
+              Schema.is(TreeError)(error) ||
+              isPlatformError(error)
+            )
+              return yield* Effect.fail(error);
+          }
+          return yield* new SyncStopped({ operationId: fresh.operationId, reason: result.reason });
+        }
+        const done = result.steps.filter((step) => step._tag === "Sync");
         return {
           _tag: "Sync" as const,
           result: {
-            installed: 0,
-            uninstalled: 0,
-            enablementIssues: approved.installationIssues,
+            installed: done.reduce((n, step) => n + step.installed, 0),
+            uninstalled: done.reduce((n, step) => n + step.uninstalled, 0),
+            enablementIssues:
+              done.find((step) => step.phase === "install")?.issues ?? fresh.installationIssues,
             ancestry: Option.fromUndefinedOr(ancestry),
           },
         } satisfies SyncOutcome;
-      const preview = Option.getOrUndefined(approved.change.installedSkills);
-      const program: SyncProgram = {
-        before: syncPublication(current),
-        after: next,
-        routing: approved.routing,
-        retire: current.installed_skills.filter((copy) =>
-          preview?.retire.includes(copy.installed_skill_id),
-        ),
-        drop: preview?.remove ?? [],
-        manifestDigest: approved.intent.staged.manifestDigest,
-        receipt:
-          request._tag === "ApplySynced" ? Option.some(request.receipt.ancestry) : Option.none(),
-        folders: approved.folders,
-        issues: approved.installationIssues,
-      };
-      const result = yield* setupOperation(
-        [
-          { _tag: "Sync", phase: "retire", program },
-          { _tag: "Sync", phase: "publish", sourceStep: 0 },
-          { _tag: "Sync", phase: "install", sourceStep: 0 },
-        ],
-        { base, operationId: approved.operationId, replaceDone: false },
-      );
-      if (result._tag === "Stopped") {
-        if (result.reason._tag === "StepFailed") {
-          const error = result.reason.error;
-          if (
-            Schema.is(InvalidLibraryState)(error) ||
-            Schema.is(LibraryBusy)(error) ||
-            Schema.is(LibraryChanged)(error) ||
-            Schema.is(TreeError)(error) ||
-            isPlatformError(error)
-          )
-            return yield* Effect.fail(error);
-        }
-        return yield* new SyncStopped({ operationId: approved.operationId, reason: result.reason });
-      }
-      const done = result.steps.filter((step) => step._tag === "Sync");
-      return {
-        _tag: "Sync" as const,
-        result: {
-          installed: done.reduce((n, step) => n + step.installed, 0),
-          uninstalled: done.reduce((n, step) => n + step.uninstalled, 0),
-          enablementIssues:
-            done.find((step) => step.phase === "install")?.issues ?? approved.installationIssues,
-          ancestry: Option.fromUndefinedOr(ancestry),
-        },
-      } satisfies SyncOutcome;
-    }),
+      }),
   );
 });
 export type SyncPlanError = Effect.Error<ReturnType<typeof planSync>>;

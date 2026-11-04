@@ -10,14 +10,14 @@ import {
   FileIdentityNumber,
   LegacyFileIdentityNumber,
 } from "../../../platform/link-stat.js";
-import { LibraryStore, type LibraryStateReadError } from "../../store/library-store.js";
+import { loadLibrary, type LibraryStateReadError } from "../../store/library-store.js";
 import { canonicalJson } from "../../../shared/json.js";
 import { inspectOwnershipMarker } from "../../../install/files.js";
 import { type InstalledSkill } from "../../device-state.js";
 import { pathIsWithin } from "../../../platform/path-identity.js";
 import { withHomeLock } from "../../store/writer-lock.js";
 import { writeJsonExclusive } from "../../../platform/atomic-write.js";
-import { PlanIsStale } from "./evidence.js";
+import { StalePlan } from "../../library-plan.js";
 import { leavePnpmSkill } from "../../../install/pnpm-skills.js";
 
 /** Entry shapes for one saved format of device and inode numbers. */
@@ -111,7 +111,7 @@ const prepareMoves = Effect.fn("RecoveryMoves.prepare")(function* (
   operationDirectory: string,
   owned: ReadonlyMap<
     string,
-    { marker: string; check: Effect.Effect<void, PlanIsStale | LibraryStateReadError> }
+    { marker: string; check: Effect.Effect<void, StalePlan | LibraryStateReadError> }
   > = new Map(),
 ) {
   if (dirname(operationDirectory) !== join(resolve(home), "removed"))
@@ -142,7 +142,8 @@ const prepareMoves = Effect.fn("RecoveryMoves.prepare")(function* (
     )
       return yield* new RecoveryInvalid({ detail: "Library storage cannot be displaced" });
     const info = yield* links.identity.lstat(path);
-    if (info.type !== "Directory" && info.type !== "SymbolicLink") return yield* new PlanIsStale();
+    if (info.type !== "Directory" && info.type !== "SymbolicLink")
+      return yield* new StalePlan({ message: "The Library changed since this was previewed" });
     const linkTarget = info.type === "SymbolicLink" ? yield* fs.readLink(path) : undefined;
     if (
       request.approvedLink &&
@@ -151,7 +152,7 @@ const prepareMoves = Effect.fn("RecoveryMoves.prepare")(function* (
         info.ino !== request.approvedLink.ino ||
         linkTarget !== request.approvedLink.linkTarget)
     )
-      return yield* new PlanIsStale();
+      return yield* new StalePlan({ message: "The Library changed since this was previewed" });
     const physicalHome = yield* links
       .realPathNative(home)
       .pipe(
@@ -205,27 +206,27 @@ export const prepareRecoveryMoves = (
 
 /** Preserve exactly reviewed, registered installed skills; marker text alone never grants ownership. */
 export const prepareOwnedRecoveryMoves = Effect.fn("RecoveryMoves.prepareOwned")(function* (
+  home: string,
   requests: readonly { name: string; installedSkill: InstalledSkill }[],
   operationDirectory?: string,
 ) {
-  const store = yield* LibraryStore;
   const fs = yield* FileSystem.FileSystem;
   const owned = new Map<
     string,
-    { marker: string; check: Effect.Effect<void, PlanIsStale | LibraryStateReadError> }
+    { marker: string; check: Effect.Effect<void, StalePlan | LibraryStateReadError> }
   >();
   const moves: RecoveryMoveRequest[] = [];
   for (const request of requests) {
     const expected = structuredClone(request.installedSkill);
     const path = resolve(expected.path);
     const check = Effect.gen(function* () {
-      const state = yield* store.load;
+      const state = yield* loadLibrary(home);
       const current = state.installed_skills.find(
         (installedSkill) => installedSkill.installed_skill_id === expected.installed_skill_id,
       );
       if (canonicalJson(current ?? null) !== canonicalJson(expected))
-        return yield* new PlanIsStale();
-    });
+        return yield* new StalePlan({ message: "The Library changed since this was previewed" });
+    }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
     yield* check;
     const observed = yield* inspectOwnershipMarker(path);
     if (
@@ -235,7 +236,7 @@ export const prepareOwnedRecoveryMoves = Effect.fn("RecoveryMoves.prepareOwned")
       observed.marker.skill_version_id !== expected.skill_version_id ||
       observed.marker.expected_hash !== expected.expected_hash
     )
-      return yield* new PlanIsStale();
+      return yield* new StalePlan({ message: "The Library changed since this was previewed" });
     const marker = yield* fs.readFileString(join(path, ".skit-ownership.json"));
     owned.set(path, { marker, check });
     moves.push({
@@ -245,9 +246,9 @@ export const prepareOwnedRecoveryMoves = Effect.fn("RecoveryMoves.prepareOwned")
     });
   }
   return yield* prepareMoves(
-    store.home,
+    home,
     moves,
-    operationDirectory ?? recoveryOperationDirectory(store.home),
+    operationDirectory ?? recoveryOperationDirectory(home),
     owned,
   );
 });
@@ -259,7 +260,7 @@ const applyRecoveryMoves = Effect.fn("RecoveryMoves.apply")(
     home: string,
     recoveryDirectory: string,
     entries: readonly RecoveryEntry[],
-    checkRegistered: Effect.Effect<void, PlanIsStale | LibraryStateReadError>,
+    checkRegistered: Effect.Effect<void, StalePlan | LibraryStateReadError>,
   ) {
     const fs = yield* FileSystem.FileSystem;
     const links = yield* LinkStat;
@@ -281,7 +282,7 @@ const applyRecoveryMoves = Effect.fn("RecoveryMoves.apply")(
         current.ino !== entry.ino ||
         (yield* fingerprint(entry.path)) !== entry.contentHash
       )
-        return yield* new PlanIsStale();
+        return yield* new StalePlan({ message: "The Library changed since this was previewed" });
       if (entry.type !== "Directory") return;
       const hash = yield* Effect.result(deterministicTreeHash(entry.path));
       const marker = yield* fs
@@ -290,7 +291,9 @@ const applyRecoveryMoves = Effect.fn("RecoveryMoves.apply")(
           Effect.catchTag("PlatformError", (error) =>
             error.reason._tag === "NotFound"
               ? Effect.succeed(undefined)
-              : Effect.fail(new PlanIsStale()),
+              : Effect.fail(
+                  new StalePlan({ message: "The Library changed since this was previewed" }),
+                ),
           ),
         );
       if (
@@ -298,7 +301,7 @@ const applyRecoveryMoves = Effect.fn("RecoveryMoves.apply")(
         hash.success !== entry.currentHash ||
         marker !== entry.approvedMarker
       )
-        return yield* new PlanIsStale();
+        return yield* new StalePlan({ message: "The Library changed since this was previewed" });
     });
     for (const entry of entries) yield* checkApproved(entry);
     if (!entries.length) return;
@@ -565,13 +568,16 @@ export const prepareRecoveryRestore = Effect.fn("Recovery.prepareRestore")(funct
       Effect.gen(function* () {
         const fs = yield* FileSystem.FileSystem;
         let current = yield* readRecoveryOperation(home, operationId);
-        if (current.inspection.planId !== approvedId) return yield* new PlanIsStale();
+        if (current.inspection.planId !== approvedId)
+          return yield* new StalePlan({ message: "The Library changed since this was previewed" });
         for (const [index, fact] of observed.inspection.entries.entries()) {
           if (fact.status !== "saved") continue;
           // Recheck the whole observed operation after each move. Never refresh consent for a changed entry.
           const refreshed = yield* readRecoveryOperation(home, operationId);
           if (refreshed.inspection.planId !== current.inspection.planId)
-            return yield* new PlanIsStale();
+            return yield* new StalePlan({
+              message: "The Library changed since this was previewed",
+            });
           yield* fs.rename(fact.recoveryPath, fact.path);
           const after = yield* readRecoveryOperation(home, operationId);
           if (
@@ -581,7 +587,9 @@ export const prepareRecoveryRestore = Effect.fn("Recovery.prepareRestore")(funct
             after.inspection.entries[index]?.status !== "at-original" ||
             after.content[index]?.original !== current.content[index]?.saved
           )
-            return yield* new PlanIsStale();
+            return yield* new StalePlan({
+              message: "The Library changed since this was previewed",
+            });
           current = after;
         }
         return current.inspection;

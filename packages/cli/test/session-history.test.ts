@@ -5,7 +5,6 @@ import { join } from "node:path";
 import {
   deterministicTreeHash,
   LibraryActor,
-  LibraryStore,
   skitLayer,
   type LibraryState,
 } from "@smolai/skit-core";
@@ -167,20 +166,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
 
     const withLeftover = yield* home.durable;
     const beta = withLeftover.skills.find((skill) => skill.name === "beta")!;
-    yield* home.owned(
-      writingTo(
-        home.home,
-        LibraryStore.use((store) =>
-          store.save(
-            {
-              ...withLeftover,
-              enabled: [{ skill: beta.skill_id }],
-            },
-            withLeftover,
-          ),
-        ),
-      ),
-    );
+    yield* home.writeDurable({ ...withLeftover, enabled: [{ skill: beta.skill_id }] });
     const alphaRow = repaired.skills.find((row) => row.name === "alpha")!;
     const cleanup = yield* home.owned(
       proposeLibraryDisable(

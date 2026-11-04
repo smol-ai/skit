@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import { LibraryStore, LinkStat, skitLayer } from "@smolai/skit-core";
+import { LinkStat, skitLayer, type LibraryState } from "@smolai/skit-core";
+import type { PlatformError } from "effect/PlatformError";
 import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply-command.js";
 import { runSetup } from "@smolai/skit-core/library/setup";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
@@ -53,6 +54,30 @@ const fixture = Effect.fn("Test.setupDuplicateCopies")(function* () {
   return { fs, root, home, source, duplicate, markdown, prepared, apply, input, interaction };
 });
 
+/**
+ * The real filesystem, except each replacement of `state.json` then runs `onSaved` with the state
+ * it saved. Provided outside the owner, so the owner's saves go through it.
+ */
+const afterSaves =
+  (statePath: string, onSaved: (next: LibraryState) => Effect.Effect<void, PlatformError>) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      return yield* effect.pipe(
+        Effect.provideService(FileSystem.FileSystem, {
+          ...fs,
+          rename: (from, to) =>
+            to === statePath
+              ? Effect.gen(function* () {
+                  const next: LibraryState = JSON.parse(yield* fs.readFileString(from));
+                  yield* fs.rename(from, to);
+                  yield* onSaved(next);
+                })
+              : fs.rename(from, to),
+        }),
+      );
+    });
+
 it.effect("a protected authored copy has an explicit choice and no automatic preservation", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
@@ -82,28 +107,14 @@ it.effect("a directory that becomes repository-owned before cleanup stays in pla
     const f = yield* fixture();
     const failed = yield* Effect.flip(
       f.home.owned(
-        Effect.gen(function* () {
-          const store = yield* LibraryStore;
-          return yield* f.apply.pipe(
-            withLibraryOwner,
-            Effect.provideService(LibraryStore, {
-              ...store,
-              save: (next, base) =>
-                Effect.gen(function* () {
-                  yield* store.save(next, base);
-                  if (
-                    next.installed_skills.some(
-                      (installedSkill) => installedSkill.status === "installed",
-                    )
-                  )
-                    yield* f.fs.writeFileString(
-                      join(f.duplicate, ".git"),
-                      "gitdir: newly-owned-checkout\n",
-                    );
-                }),
-            }),
-          );
-        }),
+        f.apply.pipe(
+          withLibraryOwner,
+          afterSaves(f.home.statePath, (next) =>
+            next.installed_skills.some((installedSkill) => installedSkill.status === "installed")
+              ? f.fs.writeFileString(join(f.duplicate, ".git"), "gitdir: newly-owned-checkout\n")
+              : Effect.void,
+          ),
+        ),
       ),
     );
     // The copy no longer matches what the step recorded, so setup stops before moving it.
@@ -171,25 +182,14 @@ it.effect(
     Effect.gen(function* () {
       const f = yield* fixture();
       const applied = yield* f.home.owned(
-        Effect.gen(function* () {
-          const store = yield* LibraryStore;
-          return yield* f.apply.pipe(
-            withLibraryOwner,
-            Effect.provideService(LibraryStore, {
-              ...store,
-              save: (next, base) =>
-                Effect.gen(function* () {
-                  yield* store.save(next, base);
-                  if (
-                    next.installed_skills.some(
-                      (installedSkill) => installedSkill.status === "installed",
-                    )
-                  )
-                    yield* f.fs.writeFileString(join(f.source, "SKILL.md"), "New user edits");
-                }),
-            }),
-          );
-        }),
+        f.apply.pipe(
+          withLibraryOwner,
+          afterSaves(f.home.statePath, (next) =>
+            next.installed_skills.some((installedSkill) => installedSkill.status === "installed")
+              ? f.fs.writeFileString(join(f.source, "SKILL.md"), "New user edits")
+              : Effect.void,
+          ),
+        ),
       );
       expect(yield* f.fs.exists(f.duplicate)).toBe(true);
       expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe("New user edits");

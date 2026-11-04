@@ -319,7 +319,7 @@ const reviewUpdate = (home: string, routing: StepRouting) =>
       if (!inspected.present) return yield* Effect.die("no Library");
       const files = yield* routedInstalledSkills(routing);
       return reviewInstalledSkillChanges(
-        yield* planIntent({ _tag: "Update" }, { base: inspected.state }).pipe(
+        yield* planIntent({ _tag: "Update" }, { home, base: inspected.state }).pipe(
           Effect.provideService(InstalledSkills.Service, files),
         ),
       );
@@ -613,7 +613,7 @@ it.effect(
         inLibrary(home)(
           Effect.gen(function* () {
             const files = yield* routedInstalledSkills(routing);
-            const library = yield* Library.make.pipe(
+            const library = yield* Library.make(home).pipe(
               Effect.provideService(InstalledSkills.Service, files),
             );
             const read = yield* library.read;
@@ -652,7 +652,7 @@ it.effect(
       yield* inLibrary(home)(
         Effect.gen(function* () {
           const files = yield* routedInstalledSkills(routing);
-          const library = yield* Library.make.pipe(
+          const library = yield* Library.make(home).pipe(
             Effect.provideService(InstalledSkills.Service, files),
           );
           const read = yield* library.read;

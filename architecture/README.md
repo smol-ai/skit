@@ -44,7 +44,9 @@ or an independent runner chooses the SHA and executes the pinned command.
 ## Private means private, regardless of the exported name
 
 Library's storage implementation (`library-store`, `state-file`, `writer-lock`)
-and `library/internal/` can be imported only inside Library. The compatibility
+and `library/internal/` can be imported only inside Library. Inside Library, only
+`library/store/` imports `state-file`: every change saves through the
+`LibraryWriter` that `writeLibrary` provides while it holds the home lock. The compatibility
 root barrel and package-local implementation tests have explicit access. Shared
 schema modules retain their existing vocabulary role.
 

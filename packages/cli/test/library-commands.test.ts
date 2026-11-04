@@ -1,9 +1,8 @@
 import { testPlatformLayer } from "./helpers/platform.js";
-import { SetEnabledStale } from "@smolai/skit-core/library/session";
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem, Option, Result, Schema } from "effect";
 import { join } from "node:path";
-import { deterministicTreeHash, LibraryStore, withLibraryWriter } from "@smolai/skit-core";
+import { deterministicTreeHash, StalePlan } from "@smolai/skit-core";
 import { presentListCommand } from "../src/handlers/library/list.js";
 import { browseLibrary } from "../src/presentation/interactive-list.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
@@ -91,32 +90,15 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
       proposeLibraryEnable(session, home.installOptions, row, { scope: { kind: "global" } }),
     );
     const beforeStaleChange = yield* home.durable;
-    yield* home.owned(
-      writingTo(
-        home.home,
-        LibraryStore.use((store) =>
-          store.save(
-            {
-              ...beforeStaleChange,
-              ownershipIssues: beforeStaleChange.ownershipIssues ?? [],
-            },
-            beforeStaleChange,
-          ),
-        ),
-      ),
-    );
+    yield* home.writeDurable({
+      ...beforeStaleChange,
+      ownershipIssues: beforeStaleChange.ownershipIssues ?? [],
+    });
     const stale = yield* home.owned(confirmLibraryChange(proposed));
     assert.strictEqual(stale.outcome?.kind, "failed");
     if (stale.outcome?.kind === "failed")
       assert.strictEqual(stale.outcome.failure.code, "CONFLICT");
-    yield* home.owned(
-      writingTo(
-        home.home,
-        LibraryStore.use((store) =>
-          Effect.flatMap(store.load, (base) => store.save(beforeStaleChange, base)),
-        ),
-      ),
-    );
+    yield* home.writeDurable(beforeStaleChange);
 
     const interaction = yield* makeScriptedInteraction(["Done"]);
     yield* home.owned(
@@ -170,21 +152,11 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     const state = yield* home.durable;
     const reviewId = state.skills.find((skill) => skill.name === "review")?.skill_id;
     assert.ok(reviewId);
-    yield* home.owned(
-      writingTo(
-        home.home,
-        LibraryStore.use((store) =>
-          store.save(
-            {
-              ...state,
-              enabled: [{ skill: reviewId }],
-              repositories: [{ root, enabled: [{ skill: reviewId }] }],
-            },
-            state,
-          ),
-        ),
-      ),
-    );
+    yield* home.writeDurable({
+      ...state,
+      enabled: [{ skill: reviewId }],
+      repositories: [{ root, enabled: [{ skill: reviewId }] }],
+    });
     const configuration = yield* libraryCommandConfiguration({
       home: Option.some(home.home),
       codexRoot: Option.none(),
@@ -424,7 +396,7 @@ it.effect("bare disable asks before changing a global Binding spanning Collectio
       ...imported,
       enabled: imported.skills.map((skill) => ({ skill: skill.skill_id })),
     };
-    yield* home.owned(LibraryStore.use((store) => store.save(state, imported)));
+    yield* home.writeDurable(state);
     const configuration = yield* libraryCommandConfiguration({
       home: Option.some(home.home),
       codexRoot: Option.none(),
@@ -526,21 +498,11 @@ it.effect("rejects a stale multi-destination disable before changing any Binding
     const state = yield* home.durable;
     const reviewId = state.skills.find((skill) => skill.name === "review")?.skill_id;
     assert.ok(reviewId);
-    yield* home.owned(
-      writingTo(
-        home.home,
-        LibraryStore.use((store) =>
-          store.save(
-            {
-              ...state,
-              enabled: [{ skill: reviewId }],
-              repositories: [{ root, enabled: [{ skill: reviewId }] }],
-            },
-            state,
-          ),
-        ),
-      ),
-    );
+    yield* home.writeDurable({
+      ...state,
+      enabled: [{ skill: reviewId }],
+      repositories: [{ root, enabled: [{ skill: reviewId }] }],
+    });
     const configuration = yield* libraryCommandConfiguration({
       home: Option.some(home.home),
       codexRoot: Option.none(),
@@ -591,13 +553,11 @@ it.effect("rejects a stale multi-destination disable before changing any Binding
     );
     const current = yield* home.durable;
     const concurrent = { ...current, enabled: [] };
-    yield* home.owned(
-      withLibraryWriter(LibraryStore.use((store) => store.save(concurrent, current))),
-    );
+    yield* home.writeDurable(concurrent);
     yield* Deferred.succeed(resume, undefined);
     const outcome = yield* Fiber.join(command);
     assert.isTrue(Result.isFailure(outcome));
-    if (Result.isFailure(outcome)) assert.instanceOf(outcome.failure, SetEnabledStale);
+    if (Result.isFailure(outcome)) assert.instanceOf(outcome.failure, StalePlan);
     assert.deepStrictEqual(yield* home.durable, concurrent);
     assert.deepStrictEqual(results, []);
     assert.isTrue(yield* homeLockIsFree(home.home));

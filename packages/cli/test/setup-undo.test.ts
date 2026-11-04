@@ -7,7 +7,6 @@ import { expect } from "vitest";
 import {
   deterministicTreeHash,
   hashParts,
-  LibraryStore,
   LinkStat,
   MachineSettings,
   prepareInstalledSkillRebuild,
@@ -91,12 +90,12 @@ it.effect(
       const f = yield* fixture();
       yield* f.home.owned(
         Effect.gen(function* () {
-          const store = yield* LibraryStore;
-          const state = yield* store.load;
+          const state = yield* f.home.durable;
           const prior = state.installed_skills.find(
             (installedSkill) => installedSkill.path === f.successor,
-          )!;
-          const rebuilt = yield* prepareInstalledSkillRebuild(state, store.originalsPath, prior, {
+          );
+          if (prior === undefined) return yield* Effect.die("Missing installed successor");
+          const rebuilt = yield* prepareInstalledSkillRebuild(state, f.home.originals, prior, {
             source: "declared",
           });
           const stage = join(f.root, "reconstructed");
@@ -238,16 +237,15 @@ it.effect(
       const f = yield* fixture();
       yield* f.home.owned(
         Effect.gen(function* () {
-          const store = yield* LibraryStore;
-          const installed = yield* store.load;
+          const installed = yield* f.home.durable;
           yield* (yield* prepareSetupUndo(f.operationId)).apply();
-          const undone = yield* store.load;
+          const undone = yield* f.home.durable;
           const later = { ...undone, enabled: installed.enabled };
-          yield* store.save(later, undone);
+          yield* f.home.writeDurable(later);
           const repeat = yield* prepareSetupUndo(f.operationId);
           expect(repeat.summary.status).toBe("already-undone");
           expect((yield* repeat.apply()).status).toBe("already-undone");
-          expect(yield* store.load).toEqual(later);
+          expect(yield* f.home.durable).toEqual(later);
         }),
       );
     }).pipe(Effect.provide(skitLayer)),
@@ -268,8 +266,7 @@ it.effect("an inverse record must save before any copy or intent changes", () =>
     const f = yield* fixture();
     yield* f.home.owned(
       Effect.gen(function* () {
-        const store = yield* LibraryStore;
-        const state = yield* store.load;
+        const state = yield* f.home.durable;
         const faultFs: typeof f.fs = {
           ...f.fs,
           link: (from, to) =>
@@ -285,7 +282,7 @@ it.effect("an inverse record must save before any copy or intent changes", () =>
               .pipe(withLibraryOwner, Effect.provideService(FileSystem.FileSystem, faultFs)),
           ))._tag,
         ).toBe("PlatformError");
-        expect(yield* store.load).toEqual(state);
+        expect(yield* f.home.durable).toEqual(state);
         expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(true);
         expect(yield* f.fs.exists(f.successor)).toBe(true);
       }),
@@ -320,27 +317,27 @@ it.effect(
       const f = yield* fixture();
       yield* f.home.owned(
         Effect.gen(function* () {
-          const store = yield* LibraryStore;
-          const before = yield* store.load;
+          const before = yield* f.home.durable;
           const interrupted = yield* prepareSetupUndo(f.operationId);
           const failure = yield* Effect.flip(
             interrupted.apply().pipe(
               withLibraryOwner,
-              Effect.provideService(LibraryStore, {
-                ...store,
-                save: () => refusedPublication(store.statePath),
+              Effect.provideService(FileSystem.FileSystem, {
+                ...f.fs,
+                rename: (from, to) =>
+                  to === f.home.statePath ? refusedPublication(to) : f.fs.rename(from, to),
               }),
             ),
           );
           expect(failure._tag).toBe("PlatformError");
-          expect(yield* store.load).toEqual(before);
+          expect(yield* f.home.durable).toEqual(before);
           expect(yield* f.fs.exists(f.successor)).toBe(false);
           expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(false);
-          expect((yield* Effect.flip(interrupted.apply()))._tag).toBe("PlanIsStale");
+          expect((yield* Effect.flip(interrupted.apply()))._tag).toBe("Library.StalePlan");
           const refreshed = yield* prepareSetupUndo(f.operationId);
           expect(refreshed.summary.conflicts).toEqual([]);
           expect((yield* refreshed.apply()).status).toBe("undone");
-          expect((yield* store.load).enabled).toEqual([]);
+          expect((yield* f.home.durable).enabled).toEqual([]);
           expect((yield* MachineSettings.read(f.home.home)).discoveryRoots).toEqual([]);
         }),
       );
@@ -367,7 +364,7 @@ it.effect(
             ),
           );
           expect(failure._tag).toBe("PlatformError");
-          expect((yield* (yield* LibraryStore).load).enabled).toEqual([]);
+          expect((yield* f.home.durable).enabled).toEqual([]);
           // Library completed independently. Retrying settings must preserve new file edits and
           // later repository choices, without creating another Library inverse attempt.
           const undoDirectory = join(f.home.home, "removed", f.operationId, "undo");
@@ -436,8 +433,7 @@ it.effect(
       const f = yield* fixture();
       yield* f.home.owned(
         Effect.gen(function* () {
-          const store = yield* LibraryStore;
-          const before = yield* store.load;
+          const before = yield* f.home.durable;
           expect(before.enabled.length).toBeGreaterThan(0);
           expect(yield* f.fs.exists(join(f.successor, ".skit-ownership.json"))).toBe(true);
           const plan = yield* prepareSetupUndo(f.operationId);
@@ -451,7 +447,7 @@ it.effect(
           );
           const undone = yield* plan.apply();
           expect(undone.status).toBe("undone");
-          const state = yield* store.load;
+          const state = yield* f.home.durable;
           expect(state.enabled).toEqual([]);
           expect(state.installed_skills).toEqual([]);
           expect(state.skills).toEqual(before.skills);
@@ -484,7 +480,7 @@ it.effect(
         Effect.gen(function* () {
           const plan = yield* prepareSetupUndo(f.operationId);
           yield* f.fs.writeFileString(join(f.successor, "notes.txt"), "Later user edits");
-          expect((yield* Effect.flip(plan.apply()))._tag).toBe("PlanIsStale");
+          expect((yield* Effect.flip(plan.apply()))._tag).toBe("Library.StalePlan");
           expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(true);
           const reviewed = yield* prepareSetupUndo(f.operationId);
           expect(reviewed.summary.conflicts).toEqual([]);
@@ -507,13 +503,12 @@ it.effect(
       const f = yield* fixture();
       yield* f.home.owned(
         Effect.gen(function* () {
-          const store = yield* LibraryStore;
-          const before = yield* store.load;
+          const before = yield* f.home.durable;
           yield* f.fs.writeFileString(join(f.source, "SKILL.md"), "Edited original");
           const plan = yield* prepareSetupUndo(f.operationId);
           expect(plan.summary.status).toBe("conflicted");
           expect((yield* Effect.flip(plan.apply()))._tag).toBe("RecoveryInvalid");
-          expect(yield* store.load).toEqual(before);
+          expect(yield* f.home.durable).toEqual(before);
           expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe("Edited original");
           expect(yield* f.fs.exists(f.successor)).toBe(true);
         }),

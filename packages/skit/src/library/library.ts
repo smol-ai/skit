@@ -17,7 +17,7 @@ export {
   type SyncPlanError,
   type SyncApplyError,
 } from "./internal/sync/sync.js";
-import { makeWithRouting, ownerLayer } from "./internal/runtime.js";
+import { ownerLayer } from "./internal/runtime.js";
 import {
   type ManageIntent,
   type ManagePlan,
@@ -80,7 +80,7 @@ import type { CollectionVersionPlan } from "./collection-version-plan.js";
 import type { Digest } from "effect/crypto";
 import { InstalledSkills } from "./installed-skills.js";
 import type { InventoryRootOptions } from "./routing/roots.js";
-import { type LibraryStateReadError } from "./store/library-store.js";
+import type { LibraryLayerError, LibraryStateReadError } from "./store/library-store.js";
 import { OperationStatus } from "./store/state-schema.js";
 import { type LibraryAuditEvent, type LibraryAuditInvalid } from "./audit/audit-log.js";
 import { type Snapshot } from "./snapshot.js";
@@ -100,6 +100,7 @@ import type { TreeRequirements } from "../platform/tree-requirements.js";
 import {
   type ApplyError,
   type Approval,
+  type StalePlan,
   type Intent,
   type Outcome as ExistingOutcome,
   type Plan,
@@ -258,11 +259,11 @@ export interface Interface {
     ) => Effect.Effect<
       | { readonly _tag: "Intact" }
       | { readonly _tag: "Changed"; readonly hash: import("../vocabulary.js").Hash },
-      LibraryStateReadError
+      LibraryStateReadError | StalePlan
     >;
     readonly pack: (
       snapshot: Snapshot,
-    ) => Effect.Effect<readonly SnapshotArchive[], LibraryStateReadError>;
+    ) => Effect.Effect<readonly SnapshotArchive[], LibraryStateReadError | StalePlan>;
     readonly stage: <E = never, R = never>(
       target: LibraryManifest,
       source: ContentSource<E, R>,
@@ -275,8 +276,7 @@ export interface Interface {
 }
 export class Service extends Context.Service<Service, Interface>()("skit/library/Library") {}
 
-/** Compatibility construction; callers migrate to the single public layer. */
-export const make = makeWithRouting();
+export { make } from "./internal/runtime.js";
 /** Routing is part of constructing this Library, never assembled by an operation's caller. */
 export type Routing =
   | { readonly _tag: "None" }
@@ -291,11 +291,5 @@ export interface Config {
 /** One public constructor owns migration, startup recovery, storage and installed-skill routing. */
 export const layer = (
   config: Config,
-): Layer.Layer<
-  Service,
-  import("./store/library-store.js").LibraryStoreLayerError,
-  TreeRequirements | Digest.Digest
-> => {
-  return Layer.effect(Service, Service).pipe(Layer.provide(ownerLayer(config)));
-};
+): Layer.Layer<Service, LibraryLayerError, TreeRequirements | Digest.Digest> => ownerLayer(config);
 export * as Library from "./library.js";

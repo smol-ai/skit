@@ -9,7 +9,7 @@ import { reviewInstalledSkillChanges } from "./installed-skill-review.js";
 import { emptyLibraryState } from "./library-state.js";
 import type { Approval } from "./library-plan.js";
 import { planIntent } from "./plan-changes.js";
-import { LibraryStore, withLibraryWriter } from "./store/library-store.js";
+import { LibraryWriter, loadLibrary, inspectLocalLibraryState } from "./store/library-store.js";
 
 /** A change to one installed copy, as reviewed: what updating every copy would do there. */
 export interface ReviewedChange {
@@ -92,7 +92,7 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
   choices: readonly UpdateChoice[],
   importedAt: string,
 ) {
-  const store = yield* LibraryStore;
+  const writer = yield* LibraryWriter;
   const chosen = new Set<string>(choices.map((choice) => choice.skillId));
   const local = reviewed.filter((fact) =>
     choices.some(
@@ -103,7 +103,7 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
   for (const fact of local) {
     if (fact.currentHash === undefined || fact.installedSkillId === undefined)
       return yield* new ReviewedChangeDiffers({ path: fact.path });
-    const before = yield* store.load;
+    const before = yield* loadLibrary(writer.home);
     if (
       before.imports.some(
         (sourceImport) =>
@@ -121,9 +121,9 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
       importedAt,
     });
   }
-  const inspected = yield* store.inspect;
+  const inspected = yield* inspectLocalLibraryState(writer.home);
   const state = inspected.present ? inspected.state : emptyLibraryState();
-  const planned = yield* planIntent({ _tag: "Update" }, { base: state });
+  const planned = yield* planIntent({ _tag: "Update" }, { home: writer.home, base: state });
   const marker = (path: string) => {
     const entry = planned.folders.find((folder) => folder.path === path)?.entry;
     return entry?._tag === "Present" && entry.facts?.marker.kind === "valid"
@@ -160,7 +160,7 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
       ? [...accept, { _tag: "ReplaceEdit", installedSkillId, currentHash: change.currentHash }]
       : accept;
   });
-  const plan = yield* planIntent({ _tag: "Update" }, { base: state, approvals });
+  const plan = yield* planIntent({ _tag: "Update" }, { home: writer.home, base: state, approvals });
   const facts = reviewInstalledSkillChanges(plan);
 
   // Outside the chosen Skills, each copy is as reviewed, or (after an earlier run) already the
@@ -222,4 +222,4 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
         };
     }
   });
-}, withLibraryWriter);
+});

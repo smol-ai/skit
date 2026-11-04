@@ -61,8 +61,12 @@ export {
   authorIgnoreRepositoryLayer,
 } from "./artifact/plain-author-ignore.js";
 
-export * from "./library/store/library-store.js";
-export { libraryStoreLayer } from "./library/library-store-layer.js";
+export {
+  LibraryActor,
+  type LibraryLayerError,
+  type LibraryStateReadError,
+  type LibraryStateWriteError,
+} from "./library/store/library-store.js";
 export { withHomeLock } from "./library/store/writer-lock.js";
 // Records written beside v9 state (setup and undo evidence) migrate through the same shapes.
 export {
@@ -179,7 +183,6 @@ export {
 } from "./library/internal/recovery/moves.js";
 export {
   RecoveryInvalid,
-  PlanIsStale,
   recoveryFingerprint as setupRecoveryFingerprint,
 } from "./library/internal/recovery/evidence.js";
 export { readSkillPathDetails } from "./library/internal/setup/journal.js";

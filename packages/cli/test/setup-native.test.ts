@@ -10,14 +10,13 @@ import {
   CURRENT_LIBRARY_STATE_VERSION,
   type Hash,
   deterministicTreeHash,
-  LibraryStore,
   LibraryState,
-  libraryStoreLayer,
   makeImportId,
   makeCollectionId,
   makeMachineId,
   MachineSettings,
   SourceProcess,
+  skitConfigurationLayer,
   makeInstalledSkillId,
   makeCollectionVersionId,
   makeSkillId,
@@ -94,7 +93,7 @@ const scanForSetup = (options: SetupOptions) =>
   runSetup(options).pipe(
     withLibraryOwner,
     Effect.provide(
-      libraryStoreLayer({ home: options.libraryHome }).pipe(Layer.provide(testPlatformLayer)),
+      skitConfigurationLayer(options.libraryHome).pipe(Layer.provide(testPlatformLayer)),
     ),
   );
 
@@ -102,7 +101,7 @@ const revalidateSetup = (options: SetupOptions, planId: Hash) =>
   revalidateSetupPlan(options, planId).pipe(
     withLibraryOwner,
     Effect.provide(
-      libraryStoreLayer({ home: options.libraryHome }).pipe(Layer.provide(testPlatformLayer)),
+      skitConfigurationLayer(options.libraryHome).pipe(Layer.provide(testPlatformLayer)),
     ),
   );
 
@@ -503,7 +502,7 @@ for (const failure of ["ls-files", "status"] as const) {
       yield* git(f.repository, "commit", "-qm", "repository copies");
       const evidence = yield* collectSetupEvidence(f.options).pipe(
         withLibraryOwner,
-        Effect.provide(libraryStoreLayer({ home: f.libraryHome })),
+        Effect.provide(skitConfigurationLayer(f.libraryHome)),
       );
       expect(evidence.hits.filter((hit) => hit.name === "local")).toHaveLength(1);
       const process = yield* SourceProcess;
@@ -516,7 +515,7 @@ for (const failure of ["ls-files", "status"] as const) {
               : process.output(command, args, options),
         }),
         withLibraryOwner,
-        Effect.provide(libraryStoreLayer({ home: f.libraryHome })),
+        Effect.provide(skitConfigurationLayer(f.libraryHome)),
       );
       expect(scan.scan.complete).toBe(false);
       expect(scan.instances.map((item) => item.name).sort()).toEqual(
@@ -1189,16 +1188,9 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
       operations: [],
       adoption_receipts: [],
     });
-    const scan = yield* Effect.gen(function* () {
-      const store = yield* LibraryStore;
-      yield* store.save(state, yield* store.load);
-      return yield* runSetup(f.options);
-    }).pipe(
-      withLibraryOwner,
-      Effect.provide(
-        libraryStoreLayer({ home: f.libraryHome }).pipe(Layer.provide(testPlatformLayer)),
-      ),
-    );
+    yield* f.fs.makeDirectory(f.libraryHome, { recursive: true });
+    yield* f.fs.writeFileString(join(f.libraryHome, "state.json"), JSON.stringify(state));
+    const scan = yield* scanForSetup(f.options);
     const authoredSkillRealPath = yield* f.fs.realPath(authoredSkill);
 
     expect(scan.authoredCollections).toEqual([
@@ -1479,16 +1471,9 @@ it.effect(
         operations: [],
         adoption_receipts: [],
       });
-      const scan = yield* Effect.gen(function* () {
-        const store = yield* LibraryStore;
-        yield* store.save(state, yield* store.load);
-        return yield* runSetup(f.options);
-      }).pipe(
-        withLibraryOwner,
-        Effect.provide(
-          libraryStoreLayer({ home: f.libraryHome }).pipe(Layer.provide(testPlatformLayer)),
-        ),
-      );
+      yield* f.fs.makeDirectory(f.libraryHome, { recursive: true });
+      yield* f.fs.writeFileString(join(f.libraryHome, "state.json"), JSON.stringify(state));
+      const scan = yield* scanForSetup(f.options);
 
       expect(scan.installedSkills).toEqual(
         expect.arrayContaining([

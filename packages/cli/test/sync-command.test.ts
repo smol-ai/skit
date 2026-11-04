@@ -1,6 +1,6 @@
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
-import { LibraryStore, Library, InstalledSkills } from "@smolai/skit-core";
+import { Library, InstalledSkills } from "@smolai/skit-core";
 import { libraryApplicationLayer } from "../src/application.js";
 import { join } from "node:path";
 import { ConfigProvider, Effect, FileSystem, Layer, Result } from "effect";
@@ -22,24 +22,13 @@ const services = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.provide(rendererTestLayer()),
     Effect.provide(
-      Layer.effect(Library.Service, Library.make).pipe(Layer.provide(InstalledSkills.layer())),
+      Layer.effect(Library.Service, Library.make("/unreachable")).pipe(
+        Layer.provide(InstalledSkills.layer()),
+      ),
     ),
     // Building the owner touches no disk; these commands fail before they capture anything.
     Effect.provide(authorLayer("/unreachable")),
     Effect.provide(testPlatformLayer),
-    Effect.provideService(
-      LibraryStore,
-      LibraryStore.of({
-        load: Effect.die("unreachable"),
-        inspect: Effect.die("unreachable"),
-        save: () => Effect.die("unreachable"),
-        home: "/unreachable",
-        originalsPath: "/unreachable/originals",
-        statePath: "/unreachable/state.json",
-        variantsPath: "/unreachable/variants",
-        startup: { finished: [], stopped: [] },
-      }),
-    ),
     Effect.provideService(
       RegistryHttp,
       RegistryHttp.of({

@@ -5,14 +5,7 @@ import { Effect, FileSystem, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
-import {
-  LibraryActor,
-  LibraryStore,
-  MachineSettings,
-  libraryStoreLayer,
-  collectionVersionPath,
-  skitLayer,
-} from "@smolai/skit-core";
+import { LibraryActor, MachineSettings, collectionVersionPath, skitLayer } from "@smolai/skit-core";
 import { setupCommand } from "../src/library/setup/command.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { setupPrompts } from "../src/library/setup/setup-steps.js";
@@ -152,11 +145,9 @@ for (const skillCount of [1, 12]) {
         expect(
           (yield* interaction.prompts).some((prompt) => prompt.message === setupPrompts.skills),
         ).toBe(false);
-        const state = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
-          Effect.provide(libraryStoreLayer({ home: home.home })),
-        );
-        expect(state.present).toBe(true);
-        if (!state.present) return;
+        const state = yield* home.owned(Effect.flatMap(Library.Service, (library) => library.read));
+        expect(state._tag).toBe("Present");
+        if (state._tag !== "Present") return;
         const saved = state.state.collections[0];
         expect(
           state.state.skills
@@ -260,11 +251,9 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
       "skill:added",
       "library:operation-Done",
     ]);
-    const persisted = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
-      Effect.provide(libraryStoreLayer({ home: home.home })),
-    );
-    expect(persisted.present).toBe(true);
-    if (!persisted.present) return;
+    const persisted = yield* home.owned(Effect.flatMap(Library.Service, (library) => library.read));
+    expect(persisted._tag).toBe("Present");
+    if (persisted._tag !== "Present") return;
     const sourceImport = persisted.state.imports[0]!;
     expect(sourceImport.input.value).toBe(`wellknown:${base}`);
     expect(sourceImport.kind).toBe("source");
@@ -288,11 +277,9 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
       ),
     ).toBe(false);
 
-    const reloaded = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
-      Effect.provide(libraryStoreLayer({ home: home.home })),
-    );
-    expect(reloaded.present).toBe(true);
-    if (!reloaded.present) return;
+    const reloaded = yield* home.owned(Effect.flatMap(Library.Service, (library) => library.read));
+    expect(reloaded._tag).toBe("Present");
+    if (reloaded._tag !== "Present") return;
     expect(reloaded.state.skills[0]?.versions).toHaveLength(1);
     expect(reloaded.state.imports[0]?.input.value).toContain(base);
   }).pipe(Effect.provide(skitLayer)),
@@ -469,11 +456,9 @@ it.effect("manages a selected member from a two-Skill GitHub lock collection", (
         }),
       ),
     );
-    const saved = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
-      Effect.provide(libraryStoreLayer({ home: home.home })),
-    );
-    expect(saved.present).toBe(true);
-    if (!saved.present) return;
+    const saved = yield* home.owned(Effect.flatMap(Library.Service, (library) => library.read));
+    expect(saved._tag).toBe("Present");
+    if (saved._tag !== "Present") return;
     expect(saved.state.collections).toHaveLength(1);
     const collectionId = saved.state.collections[0]?.collection_id;
     expect(

@@ -3,7 +3,6 @@ import { ConfigProvider, Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import {
-  LibraryStore,
   makeCollectionId,
   makeInstalledSkillId,
   makeSkillId,
@@ -21,6 +20,7 @@ import {
 } from "../src/harnesses/skill-listing/codex.js";
 import { ListingBudget } from "../src/harnesses/skill-listing/contracts.js";
 import { Schema } from "effect";
+import { loadLibrary } from "../src/library/store/library-store.js";
 import { NativeLibraryFixture, nativeLibraryLayer } from "./helpers/listing-fixture.js";
 
 const skill = (name: string, description = "Review code."): CodexListingSkill => ({
@@ -167,8 +167,7 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
         join(f.home, ".codex", "models_cache.json"),
         JSON.stringify({ models: [{ slug: "test-model", context_window: 100_000 }] }),
       );
-      const store = yield* LibraryStore;
-      const state = yield* store.load;
+      const state = yield* loadLibrary(f.home);
       const skillId = makeSkillId();
       const collectionId = makeCollectionId();
       const versionId = makeSkillVersionId();
@@ -315,8 +314,7 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
 it.effect("uses the model default unless configuration overrides the context window", () =>
   Effect.gen(function* () {
     const f = yield* NativeLibraryFixture;
-    const store = yield* LibraryStore;
-    const state = yield* store.load;
+    const state = yield* loadLibrary(f.home);
     // Codex lists within 2% of the context window: the model default is 500,000.
     for (const [configured, limit] of [
       [null, 10_000],

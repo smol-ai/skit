@@ -4,11 +4,7 @@ import type { InvocationOption } from "@smolai/skit-core/library/session";
 import { SkitConfiguration } from "@smolai/skit-core";
 import * as Selection from "@smolai/skit-core/library/session";
 import type { SetEnabledRequest } from "@smolai/skit-core/library/session";
-export {
-  SetEnabledIncomplete,
-  SetEnabledStale,
-  type SetEnabledRequest,
-} from "@smolai/skit-core/library/session";
+export { SetEnabledIncomplete, type SetEnabledRequest } from "@smolai/skit-core/library/session";
 
 /** Test fixtures supply paths as a service; production callers pass their resolved home directly. */
 export const openSetEnabledSession = (configuration: Selection.SetEnabledConfiguration) =>

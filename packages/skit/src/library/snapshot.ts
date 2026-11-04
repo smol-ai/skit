@@ -1,6 +1,6 @@
+import type { InspectedLibraryState } from "./store/library-store.js";
 import { Brand } from "effect";
 import { libraryStateRevision, type LibraryState } from "./library-state.js";
-import type { InspectedLibraryState } from "./store/state-file.js";
 
 /** What one read saw. "Absent" has its own revision, so a first sync can plan from it. */
 export type Snapshot =

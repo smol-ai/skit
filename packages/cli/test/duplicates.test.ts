@@ -12,7 +12,6 @@ import { it } from "@effect/vitest";
 import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
 import { expect } from "vitest";
-import { LibraryStore } from "@smolai/skit-core";
 import {
   findDuplicates,
   scanSkillsDirectory,
@@ -64,8 +63,7 @@ it.effect("enable refuses the extra copy before saving intent, and dry-run expla
         f.home.home,
         Effect.gen(function* () {
           const imported = yield* importSource(f.source);
-          const store = yield* LibraryStore;
-          const before = yield* store.load;
+          const before = yield* f.home.durable;
           if (imported.collection_id === undefined)
             return yield* Effect.die("Expected a retained collection");
           const options = {
@@ -94,7 +92,7 @@ it.effect("enable refuses the extra copy before saving intent, and dry-run expla
           expect(Result.isFailure(result) && result.failure._tag).toBe(
             "InstalledSkillWouldDuplicate",
           );
-          expect((yield* store.load).enabled).toEqual(before.enabled);
+          expect((yield* f.home.durable).enabled).toEqual(before.enabled);
           expect(yield* f.fs.exists(f.destination)).toBe(false);
           yield* setLibraryEnabled({ ...options, allowDuplicate: true });
           expect(yield* f.fs.readFileString(join(f.destination, "SKILL.md"))).toBe(
@@ -105,7 +103,7 @@ it.effect("enable refuses the extra copy before saving intent, and dry-run expla
             invocation: { ...options.invocation, invocation: "explicit" as const },
           });
           expect(policyChange.value.duplicates).toBeUndefined();
-          expect((yield* store.load).invocation_policies).toBeDefined();
+          expect((yield* f.home.durable).invocation_policies).toBeDefined();
         }),
       ),
     );
@@ -217,7 +215,7 @@ it.effect("setup requires a duplicate decision before retaining any selected sou
               result.failure._tag === "SetupManageSelectionInvalid" &&
               result.failure.reason,
           ).toBe("duplicate-action-required");
-          const state = yield* (yield* LibraryStore).load;
+          const state = yield* f.home.durable;
           expect(state.collections).toEqual([]);
           expect(state.enabled).toEqual([]);
           expect(yield* f.fs.readLink(f.alias)).toBe(f.source);
@@ -259,7 +257,7 @@ it.effect("a failed replacement keeps the original alias available", () =>
             }).pipe(withLibraryOwner, Effect.provideService(FileSystem.FileSystem, fs)),
           );
           expect(Result.isFailure(result) && result.failure._tag).toBe("SetupStopped");
-          expect((yield* (yield* LibraryStore).load).skills).toHaveLength(1);
+          expect((yield* f.home.durable).skills).toHaveLength(1);
           expect(yield* f.fs.readLink(f.alias)).toBe(f.source);
           expect(yield* f.fs.readFileString(join(f.alias, "SKILL.md"))).toContain("Review code.");
           expect(yield* f.fs.exists(join(f.home.home, "removed"))).toBe(false);
@@ -358,7 +356,7 @@ it.effect("setup's alias allowance does not permit an unapproved copy", () =>
           expect(Result.isFailure(result) && result.failure._tag).toBe(
             "InstalledSkillWouldDuplicate",
           );
-          expect((yield* (yield* LibraryStore).load).enabled).toEqual([]);
+          expect((yield* f.home.durable).enabled).toEqual([]);
           expect(yield* f.fs.readLink(f.alias)).toBe(f.source);
         }),
       ),
@@ -412,7 +410,7 @@ it.effect(
             expect(
               yield* f.fs.readFileString(join(f.root, ".agents", "skills", "later", "SKILL.md")),
             ).toContain("Later content.");
-            expect((yield* (yield* LibraryStore).load).skills).toHaveLength(2);
+            expect((yield* f.home.durable).skills).toHaveLength(2);
           }),
         ),
       );
@@ -564,7 +562,7 @@ for (const operation of ["add", "bind"] as const) {
             Effect.gen(function* () {
               if (operation === "bind") yield* importSource(f.source);
               const setup = { ...f.options, repositoryRoots: [], persistRoots: false };
-              const before = yield* (yield* LibraryStore).load;
+              const before = yield* f.home.durable;
               const scan = yield* runSetup(setup);
               const conflict = copyConflict(scan, { name: "review", sourcePath: f.source });
               if (conflict.kind !== "retirable")
@@ -609,8 +607,8 @@ for (const operation of ["add", "bind"] as const) {
                       Effect.asVoid,
                       Effect.result,
                     );
-              expect(result._tag === "Failure" && result.failure._tag).toBe("PlanIsStale");
-              expect(yield* (yield* LibraryStore).load).toEqual(before);
+              expect(result._tag === "Failure" && result.failure._tag).toBe("Library.StalePlan");
+              expect(yield* f.home.durable).toEqual(before);
               expect(yield* f.fs.exists(f.alias)).toBe(change !== "removed");
               expect(yield* f.fs.exists(f.destination)).toBe(false);
               expect(yield* f.fs.exists(join(f.home.home, "removed"))).toBe(false);

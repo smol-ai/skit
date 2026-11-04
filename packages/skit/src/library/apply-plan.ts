@@ -2,7 +2,13 @@ import { basename, join, resolve } from "node:path";
 import { DateTime, Effect, Option, Ref, Result, Schema } from "effect";
 import { InstalledSkills } from "./installed-skills.js";
 import * as InstalledSkillStatus from "./installed-skill-status.js";
-import { LibraryStore, withLibraryWriter } from "./store/library-store.js";
+import {
+  LibraryWriter,
+  libraryOriginalsPath,
+  libraryStatePath,
+  libraryVariantsPath,
+  inspectLocalLibraryState,
+} from "./store/library-store.js";
 import {
   emptyLibraryState,
   libraryStateRevision,
@@ -93,7 +99,7 @@ const install = Effect.fn("Library.install")(function* (
   /** The record already saved for a folder this change manages in place. */
   adopted?: InstalledSkill,
 ) {
-  const store = yield* LibraryStore;
+  const writer = yield* LibraryWriter;
   const files = yield* InstalledSkills.Service;
   const installedAt = DateTime.formatIso(yield* DateTime.now);
   if (change._tag === "KeepDeleted") {
@@ -128,7 +134,7 @@ const install = Effect.fn("Library.install")(function* (
         yield* files.backUp(
           change.path,
           installedSkillVariantPath(
-            store.variantsPath,
+            libraryVariantsPath(writer.home),
             change.destination,
             basename(change.path),
             change.currentHash,
@@ -146,7 +152,7 @@ const install = Effect.fn("Library.install")(function* (
     case "Install": {
       // A folder that was not there is built only now, once its root exists; apply created the
       // root since plan read the folder, so nothing may have appeared there.
-      const staged = yield* files.build(change, next, store.originalsPath);
+      const staged = yield* files.build(change, next, libraryOriginalsPath(writer.home));
       const [folder] =
         change._tag === "Install"
           ? [yield* files.inspect(change.path)]
@@ -253,12 +259,12 @@ const withRecords = (
 });
 
 /**
- * Carry out a reviewed plan under the Library writer: plan again from the loaded Library, refuse
+ * Carry out a reviewed plan, inside a Library write: plan again from the loaded Library, refuse
  * anything that differs from what was reviewed, then install, uninstall and record each Installed
  * Skill.
  */
 export const apply = Effect.fn("Library.apply")(function* (reviewed: Plan) {
-  const store = yield* LibraryStore;
+  const writer = yield* LibraryWriter;
   const files = yield* InstalledSkills.Service;
   // A plan is never a source of write coordinates or Library rows.
   const input = structuredClone(reviewed);
@@ -269,304 +275,298 @@ export const apply = Effect.fn("Library.apply")(function* (reviewed: Plan) {
   const changedSincePreview = () =>
     snapshotPlan || input.intent._tag === "Enabled"
       ? stale("Library changed after this change was previewed")
-      : new LibraryChanged({ path: store.statePath });
-  return yield* withLibraryWriter(
-    Effect.scoped(
-      Effect.gen(function* () {
-        const inspected = yield* store.inspect;
-        const base = inspected.present ? inspected.state : emptyLibraryState();
-        const actual = snapshotOf(inspected).revision;
-        if (snapshotPlan && actual !== input.baseRevision)
-          return yield* new StalePlan({
-            message: "Library changed after this change was previewed",
-            expected: Revision(input.baseRevision),
-            actual,
-          });
-        if (!snapshotPlan && libraryStateRevision(base) !== input.baseRevision)
-          return yield* changedSincePreview();
-        const again = yield* planChanges(base, input.intent, input.approvals);
-        const targetsAt = (scope: InstallScope) =>
-          again.routes.find((route) => Schema.toEquivalence(InstallScope)(route.scope, scope))
-            ?.destinations ?? [];
-        // A refusal by policy says more than "changed since preview", so it is checked first.
-        for (const change of again.changes)
-          if (change._tag === "Refuse")
-            return yield* new UninstallConflict({ detail: change.detail });
-        for (const { request, change } of again.enabled)
-          yield* refuseDuplicates(request, change, targetsAt(request.scope));
-        if (
-          !Schema.toEquivalence(Schema.Array(Route))(again.routes, input.routes) ||
-          !Schema.toEquivalence(Plan.cases.Update.fields.changes)(
-            [...again.enabled.map(({ change }) => change), ...again.changes],
-            input.changes,
-          )
+      : new LibraryChanged({ path: libraryStatePath(writer.home) });
+  return yield* Effect.scoped(
+    Effect.gen(function* () {
+      const inspected = yield* inspectLocalLibraryState(writer.home);
+      const base = inspected.present ? inspected.state : emptyLibraryState();
+      const actual = snapshotOf(inspected).revision;
+      if (snapshotPlan && actual !== input.baseRevision)
+        return yield* new StalePlan({
+          message: "Library changed after this change was previewed",
+          expected: Revision(input.baseRevision),
+          actual,
+        });
+      if (!snapshotPlan && libraryStateRevision(base) !== input.baseRevision)
+        return yield* changedSincePreview();
+      const again = yield* planChanges(writer.home, base, input.intent, input.approvals);
+      const targetsAt = (scope: InstallScope) =>
+        again.routes.find((route) => Schema.toEquivalence(InstallScope)(route.scope, scope))
+          ?.destinations ?? [];
+      // A refusal by policy says more than "changed since preview", so it is checked first.
+      for (const change of again.changes)
+        if (change._tag === "Refuse")
+          return yield* new UninstallConflict({ detail: change.detail });
+      for (const { request, change } of again.enabled)
+        yield* refuseDuplicates(request, change, targetsAt(request.scope));
+      if (
+        !Schema.toEquivalence(Schema.Array(Route))(again.routes, input.routes) ||
+        !Schema.toEquivalence(Plan.cases.Update.fields.changes)(
+          [...again.enabled.map(({ change }) => change), ...again.changes],
+          input.changes,
         )
-          return yield* stale("Installed agent targets or paths changed after preview");
-        yield* files
-          .check(input.folders)
-          .pipe(
-            Effect.catchTag("Library.InstalledSkillsChanged", (error) =>
-              Effect.fail(stale(error.message)),
-            ),
-          );
-
-        // Folders exist and are writable before the Library saves what is enabled.
-        yield* files.prepare([
-          ...new Set(
-            again.changes.flatMap((change) =>
-              "skillVersionId" in change &&
-              change._tag !== "KeepDeleted" &&
-              change._tag !== "Protected"
-                ? [change.root]
-                : [],
-            ),
+      )
+        return yield* stale("Installed agent targets or paths changed after preview");
+      yield* files
+        .check(input.folders)
+        .pipe(
+          Effect.catchTag("Library.InstalledSkillsChanged", (error) =>
+            Effect.fail(stale(error.message)),
           ),
-        ]);
-        // What is enabled is saved first. A removed Collection is saved only with its Installed
-        // Skills' uninstalls, since records may not name what the Library no longer has.
-        const intentSaved =
-          input.intent._tag === "Remove" ||
-          libraryStateRevision(again.next) === libraryStateRevision(base)
-            ? base
-            : yield* Effect.as(store.save(again.next, base), again.next);
-
-        // A folder taken over in place is recorded, as pending, before SKIT's marker is written
-        // into it. A crash between the two leaves a recorded copy whose folder holds exactly
-        // SKIT's bytes and no marker yet; the next change that plans it writes the marker.
-        const adoptedAt = DateTime.formatIso(yield* DateTime.now);
-        const adopted = new Map<string, InstalledSkill>();
-        for (const change of again.changes)
-          if (change._tag === "Manage" && change.verification === "manage")
-            adopted.set(change.path, {
-              installed_skill_id: change.recorded?.installed_skill_id ?? makeInstalledSkillId(),
-              skill_id: change.skillId,
-              skill_version_id: change.skillVersionId,
-              destination: change.destination,
-              root: change.root,
-              path: change.path,
-              expected_hash: change.hash,
-              status: "pending",
-              installed_at: adoptedAt,
-            });
-        const pendingRecords = new Map(
-          [...adopted.values()].map((copy) => [copy.installed_skill_id, copy] as const),
         );
-        const edited =
-          adopted.size === 0
-            ? intentSaved
+
+      // Folders exist and are writable before the Library saves what is enabled.
+      yield* files.prepare([
+        ...new Set(
+          again.changes.flatMap((change) =>
+            "skillVersionId" in change &&
+            change._tag !== "KeepDeleted" &&
+            change._tag !== "Protected"
+              ? [change.root]
+              : [],
+          ),
+        ),
+      ]);
+      // What is enabled is saved first. A removed Collection is saved only with its Installed
+      // Skills' uninstalls, since records may not name what the Library no longer has.
+      const intentSaved =
+        input.intent._tag === "Remove" ||
+        libraryStateRevision(again.next) === libraryStateRevision(base)
+          ? base
+          : yield* Effect.as(writer.save(again.next, base), again.next);
+
+      // A folder taken over in place is recorded, as pending, before SKIT's marker is written
+      // into it. A crash between the two leaves a recorded copy whose folder holds exactly
+      // SKIT's bytes and no marker yet; the next change that plans it writes the marker.
+      const adoptedAt = DateTime.formatIso(yield* DateTime.now);
+      const adopted = new Map<string, InstalledSkill>();
+      for (const change of again.changes)
+        if (change._tag === "Manage" && change.verification === "manage")
+          adopted.set(change.path, {
+            installed_skill_id: change.recorded?.installed_skill_id ?? makeInstalledSkillId(),
+            skill_id: change.skillId,
+            skill_version_id: change.skillVersionId,
+            destination: change.destination,
+            root: change.root,
+            path: change.path,
+            expected_hash: change.hash,
+            status: "pending",
+            installed_at: adoptedAt,
+          });
+      const pendingRecords = new Map(
+        [...adopted.values()].map((copy) => [copy.installed_skill_id, copy] as const),
+      );
+      const edited =
+        adopted.size === 0
+          ? intentSaved
+          : yield* Effect.as(
+              writer.save(withRecords(intentSaved, pendingRecords), intentSaved),
+              withRecords(intentSaved, pendingRecords),
+            );
+
+      // What changed for each record once everything succeeds (null once it is gone), and
+      // what a failure records instead: only what is really on disk.
+      const records = yield* Ref.make(new Map<InstalledSkillId, InstalledSkill | null>());
+      const onDisk = yield* Ref.make(new Map<InstalledSkillId, InstalledSkill>());
+      const copies = yield* Ref.make<readonly InstalledSkillResult[]>([]);
+      const record = (
+        copy: InstalledSkill,
+        changes: {
+          readonly final: InstalledSkill | null;
+          readonly onDisk?: InstalledSkill;
+          readonly result?: InstalledSkillResult;
+        },
+      ) => {
+        const { final, onDisk: written, result } = changes;
+        return Effect.all([
+          Ref.update(records, (all) => new Map(all).set(copy.installed_skill_id, final)),
+          written === undefined
+            ? Effect.void
+            : Ref.update(onDisk, (all) => new Map(all).set(copy.installed_skill_id, written)),
+          result === undefined ? Effect.void : Ref.update(copies, (all) => [...all, result]),
+        ]);
+      };
+      const kept = (copy: InstalledSkill) =>
+        input.intent._tag === "Uninstall" && !input.intent.drop.includes(copy.installed_skill_id)
+          ? copy.status === "suppressed"
+            ? copy
+            : InstalledSkillStatus.pending(copy)
+          : null;
+
+      // Install first; a Skill's old folder is uninstalled only after its new one is installed,
+      // and plan lists every install before any uninstall.
+      const run = Effect.gen(function* () {
+        const installedAt = new Set<string>();
+        for (const change of again.changes) {
+          if (change._tag === "Protected" || change._tag === "Refuse") continue;
+          if ("skillVersionId" in change) {
+            const result = yield* install(
+              change,
+              again.next,
+              again.folders,
+              adopted.get(change.path),
+            ).pipe(
+              Effect.tapError(() =>
+                Effect.gen(function* () {
+                  // An unverified successor stands where the original was: never call it pending.
+                  if (change.recorded === undefined) return;
+                  const now = yield* files.inspect(change.path).pipe(Effect.option);
+                  if (Option.isSome(now) && now.value.entry._tag === "Absent") {
+                    const pending = InstalledSkillStatus.pending(change.recorded);
+                    yield* record(change.recorded, { final: pending, onDisk: pending });
+                  }
+                }),
+              ),
+            );
+            yield* record(result.copy, {
+              final: result.copy,
+              ...(result._tag === "Installed" ? { onDisk: result.copy } : {}),
+              result,
+            });
+            if (result.copy.status === "installed")
+              installedAt.add(`${result.copy.skill_id}\0${result.copy.destination}`);
+            continue;
+          }
+          const { recorded } = change;
+          // Keep the last working folder where its successor is blocked, protected or locally
+          // modified: only a folder apply installed is a successor.
+          const succeeded = again.changes.some(
+            (other) =>
+              "skillVersionId" in other &&
+              other.skillId === recorded.skill_id &&
+              other.destination === recorded.destination,
+          );
+          if (succeeded && !installedAt.has(`${recorded.skill_id}\0${recorded.destination}`))
+            continue;
+          switch (change._tag) {
+            case "Forget":
+              yield* record(recorded, { final: kept(recorded) });
+              break;
+            case "Conflict": {
+              const conflicted = InstalledSkillStatus.conflicted(recorded, change.currentHash);
+              yield* record(recorded, {
+                final: conflicted,
+                result: { _tag: "Conflicted", copy: conflicted },
+              });
+              break;
+            }
+            case "Uninstall":
+              yield* files.uninstall(recorded.root, recorded.path, recorded.installed_skill_id);
+              // Moved to recovery: until the Library records why, it is pending, never deleted.
+              yield* record(recorded, {
+                final: kept(recorded),
+                onDisk:
+                  recorded.status === "suppressed"
+                    ? recorded
+                    : InstalledSkillStatus.pending(recorded),
+                result: { _tag: "Uninstalled", copy: recorded },
+              });
+              break;
+          }
+        }
+      });
+
+      const ran = yield* Effect.result(run);
+      if (Result.isFailure(ran)) {
+        // A failure saves only what is really on disk, onto what was already saved.
+        const written = yield* Ref.get(onDisk);
+        const saved =
+          written.size === 0
+            ? edited
             : yield* Effect.as(
-                store.save(withRecords(intentSaved, pendingRecords), intentSaved),
-                withRecords(intentSaved, pendingRecords),
-              );
-
-        // What changed for each record once everything succeeds (null once it is gone), and
-        // what a failure records instead: only what is really on disk.
-        const records = yield* Ref.make(new Map<InstalledSkillId, InstalledSkill | null>());
-        const onDisk = yield* Ref.make(new Map<InstalledSkillId, InstalledSkill>());
-        const copies = yield* Ref.make<readonly InstalledSkillResult[]>([]);
-        const record = (
-          copy: InstalledSkill,
-          changes: {
-            readonly final: InstalledSkill | null;
-            readonly onDisk?: InstalledSkill;
-            readonly result?: InstalledSkillResult;
-          },
-        ) => {
-          const { final, onDisk: written, result } = changes;
-          return Effect.all([
-            Ref.update(records, (all) => new Map(all).set(copy.installed_skill_id, final)),
-            written === undefined
-              ? Effect.void
-              : Ref.update(onDisk, (all) => new Map(all).set(copy.installed_skill_id, written)),
-            result === undefined ? Effect.void : Ref.update(copies, (all) => [...all, result]),
-          ]);
-        };
-        const kept = (copy: InstalledSkill) =>
-          input.intent._tag === "Uninstall" && !input.intent.drop.includes(copy.installed_skill_id)
-            ? copy.status === "suppressed"
-              ? copy
-              : InstalledSkillStatus.pending(copy)
-            : null;
-
-        // Install first; a Skill's old folder is uninstalled only after its new one is installed,
-        // and plan lists every install before any uninstall.
-        const run = Effect.gen(function* () {
-          const installedAt = new Set<string>();
-          for (const change of again.changes) {
-            if (change._tag === "Protected" || change._tag === "Refuse") continue;
-            if ("skillVersionId" in change) {
-              const result = yield* install(
-                change,
-                again.next,
-                again.folders,
-                adopted.get(change.path),
+                writer.save(withRecords(edited, written), edited),
+                withRecords(edited, written),
               ).pipe(
-                Effect.tapError(() =>
-                  Effect.gen(function* () {
-                    // An unverified successor stands where the original was: never call it pending.
-                    if (change.recorded === undefined) return;
-                    const now = yield* files.inspect(change.path).pipe(Effect.option);
-                    if (Option.isSome(now) && now.value.entry._tag === "Absent") {
-                      const pending = InstalledSkillStatus.pending(change.recorded);
-                      yield* record(change.recorded, { final: pending, onDisk: pending });
-                    }
-                  }),
+                Effect.catchCause((cause) =>
+                  Effect.as(
+                    Effect.logWarning(
+                      "Installed skills changed, but the Library could not record them",
+                      cause,
+                    ),
+                    edited,
+                  ),
                 ),
               );
-              yield* record(result.copy, {
-                final: result.copy,
-                ...(result._tag === "Installed" ? { onDisk: result.copy } : {}),
-                result,
-              });
-              if (result.copy.status === "installed")
-                installedAt.add(`${result.copy.skill_id}\0${result.copy.destination}`);
-              continue;
-            }
-            const { recorded } = change;
-            // Keep the last working folder where its successor is blocked, protected or locally
-            // modified: only a folder apply installed is a successor.
-            const succeeded = again.changes.some(
-              (other) =>
-                "skillVersionId" in other &&
-                other.skillId === recorded.skill_id &&
-                other.destination === recorded.destination,
-            );
-            if (succeeded && !installedAt.has(`${recorded.skill_id}\0${recorded.destination}`))
-              continue;
-            switch (change._tag) {
-              case "Forget":
-                yield* record(recorded, { final: kept(recorded) });
-                break;
-              case "Conflict": {
-                const conflicted = InstalledSkillStatus.conflicted(recorded, change.currentHash);
-                yield* record(recorded, {
-                  final: conflicted,
-                  result: { _tag: "Conflicted", copy: conflicted },
-                });
-                break;
-              }
-              case "Uninstall":
-                yield* files.uninstall(recorded.root, recorded.path, recorded.installed_skill_id);
-                // Moved to recovery: until the Library records why, it is pending, never deleted.
-                yield* record(recorded, {
-                  final: kept(recorded),
-                  onDisk:
-                    recorded.status === "suppressed"
-                      ? recorded
-                      : InstalledSkillStatus.pending(recorded),
-                  result: { _tag: "Uninstalled", copy: recorded },
-                });
-                break;
-            }
-          }
-        });
+        if (input.intent._tag !== "Enabled") return yield* Effect.fail(ran.failure);
+        return {
+          _tag: "Incomplete",
+          results: again.enabled.map(({ request, change, skillIds }) =>
+            finish(change, skillIds, targetsAt(request.scope), [], saved),
+          ),
+          reason: "update",
+          cause: ran.failure,
+        } satisfies Outcome;
+      }
 
-        const ran = yield* Effect.result(run);
-        if (Result.isFailure(ran)) {
-          // A failure saves only what is really on disk, onto what was already saved.
-          const written = yield* Ref.get(onDisk);
-          const saved =
-            written.size === 0
-              ? edited
-              : yield* Effect.as(
-                  store.save(withRecords(edited, written), edited),
-                  withRecords(edited, written),
-                ).pipe(
-                  Effect.catchCause((cause) =>
-                    Effect.as(
-                      Effect.logWarning(
-                        "Installed skills changed, but the Library could not record them",
-                        cause,
-                      ),
-                      edited,
-                    ),
-                  ),
-                );
-          if (input.intent._tag !== "Enabled") return yield* Effect.fail(ran.failure);
-          return {
-            _tag: "Incomplete",
-            results: again.enabled.map(({ request, change, skillIds }) =>
-              finish(change, skillIds, targetsAt(request.scope), [], saved),
-            ),
-            reason: "update",
-            cause: ran.failure,
-          } satisfies Outcome;
-        }
-
-        // Pending backups of every Installed Skill this apply touched are kept, or discarded when
-        // the Library proves them reproducible. The save proves the Library is still `edited`.
-        const changed = yield* Ref.get(records);
-        const pending = yield* Effect.forEach(
-          [...edited.installed_skills, ...[...changed.values()].filter((copy) => copy !== null)]
-            .filter((copy) => changed.has(copy.installed_skill_id))
-            .filter(
-              (copy, index, all) =>
-                all.findIndex(
-                  (other) =>
-                    other.installed_skill_id === copy.installed_skill_id &&
-                    other.root === copy.root,
-                ) === index,
-            ),
-          (copy) =>
-            Effect.map(files.backups.scan(copy.root, copy.installed_skill_id), (backups) =>
-              backups.map((backup) => ({ backup, copy })),
-            ),
-        ).pipe(
-          Effect.map((groups) => groups.flat()),
+      // Pending backups of every Installed Skill this apply touched are kept, or discarded when
+      // the Library proves them reproducible. The save proves the Library is still `edited`.
+      const changed = yield* Ref.get(records);
+      const pending = yield* Effect.forEach(
+        [...edited.installed_skills, ...[...changed.values()].filter((copy) => copy !== null)]
+          .filter((copy) => changed.has(copy.installed_skill_id))
+          .filter(
+            (copy, index, all) =>
+              all.findIndex(
+                (other) =>
+                  other.installed_skill_id === copy.installed_skill_id && other.root === copy.root,
+              ) === index,
+          ),
+        (copy) =>
+          Effect.map(files.backups.scan(copy.root, copy.installed_skill_id), (backups) =>
+            backups.map((backup) => ({ backup, copy })),
+          ),
+      ).pipe(
+        Effect.map((groups) => groups.flat()),
+        Effect.catchCause((cause) =>
+          Effect.as(Effect.logWarning("Installed-skill backups stayed pending", cause), []),
+        ),
+      );
+      const final = withRecords(input.intent._tag === "Remove" ? again.next : edited, changed);
+      const recorded = yield* Effect.result(
+        pending.length > 0 || libraryStateRevision(final) !== libraryStateRevision(edited)
+          ? Effect.as(writer.save(final, edited), final)
+          : Effect.succeed(edited),
+      );
+      // Folders are written but could not be recorded: what was saved stands, unrecorded.
+      if (Result.isFailure(recorded)) {
+        if (input.intent._tag !== "Enabled") return yield* Effect.fail(recorded.failure);
+        const touched = yield* Ref.get(copies);
+        return {
+          _tag: "Incomplete",
+          results: again.enabled.map(({ request, change, skillIds }) =>
+            finish(change, skillIds, targetsAt(request.scope), touched, edited),
+          ),
+          reason: "update",
+          cause: recorded.failure,
+        } satisfies Outcome;
+      }
+      const saved = recorded.success;
+      for (const { backup, copy } of pending)
+        yield* Effect.gen(function* () {
+          const reproducible = yield* files.backups
+            .check(backup, edited, libraryOriginalsPath(writer.home), copy.installed_skill_id)
+            .pipe(Effect.orElseSucceed(() => false));
+          yield* reproducible ? files.backups.discard(backup) : files.backups.keep(backup);
+        }).pipe(
           Effect.catchCause((cause) =>
-            Effect.as(Effect.logWarning("Installed-skill backups stayed pending", cause), []),
+            Effect.logWarning("Library changed, but installed-skill backups stayed pending", cause),
           ),
         );
-        const final = withRecords(input.intent._tag === "Remove" ? again.next : edited, changed);
-        const recorded = yield* Effect.result(
-          pending.length > 0 || libraryStateRevision(final) !== libraryStateRevision(edited)
-            ? Effect.as(store.save(final, edited), final)
-            : Effect.succeed(edited),
-        );
-        // Folders are written but could not be recorded: what was saved stands, unrecorded.
-        if (Result.isFailure(recorded)) {
-          if (input.intent._tag !== "Enabled") return yield* Effect.fail(recorded.failure);
-          const touched = yield* Ref.get(copies);
-          return {
-            _tag: "Incomplete",
-            results: again.enabled.map(({ request, change, skillIds }) =>
-              finish(change, skillIds, targetsAt(request.scope), touched, edited),
-            ),
-            reason: "update",
-            cause: recorded.failure,
-          } satisfies Outcome;
-        }
-        const saved = recorded.success;
-        for (const { backup, copy } of pending)
-          yield* Effect.gen(function* () {
-            const reproducible = yield* files.backups
-              .check(backup, edited, store.originalsPath, copy.installed_skill_id)
-              .pipe(Effect.orElseSucceed(() => false));
-            yield* reproducible ? files.backups.discard(backup) : files.backups.keep(backup);
-          }).pipe(
-            Effect.catchCause((cause) =>
-              Effect.logWarning(
-                "Library changed, but installed-skill backups stayed pending",
-                cause,
-              ),
-            ),
-          );
 
-        const touched = yield* Ref.get(copies);
-        const results = again.enabled.map(({ request, change, skillIds }) =>
-          finish(change, skillIds, targetsAt(request.scope), touched, saved),
-        );
-        const unresolved = results.flatMap((result) => result.unresolved);
-        if (unresolved.length)
-          return {
-            _tag: "Incomplete",
-            results,
-            reason: "destinations",
-            cause: new DestinationsIncomplete({ paths: unresolved }),
-          } satisfies Outcome;
-        return { _tag: "Applied", results, copies: touched } satisfies Outcome;
-      }),
-    ),
+      const touched = yield* Ref.get(copies);
+      const results = again.enabled.map(({ request, change, skillIds }) =>
+        finish(change, skillIds, targetsAt(request.scope), touched, saved),
+      );
+      const unresolved = results.flatMap((result) => result.unresolved);
+      if (unresolved.length)
+        return {
+          _tag: "Incomplete",
+          results,
+          reason: "destinations",
+          cause: new DestinationsIncomplete({ paths: unresolved }),
+        } satisfies Outcome;
+      return { _tag: "Applied", results, copies: touched } satisfies Outcome;
+    }),
   ).pipe(
     Effect.catchTag("LibraryChanged", (error) =>
       Effect.fail(snapshotPlan || input.intent._tag === "Enabled" ? changedSincePreview() : error),

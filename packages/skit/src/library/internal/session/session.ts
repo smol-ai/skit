@@ -18,7 +18,6 @@ import type { InventoryRootOptions as InstalledSkillOptions } from "../../routin
 import {
   applySetEnabledPlan,
   openSetEnabledSession,
-  SetEnabledStale,
   type SetEnabledIntent,
   type SetEnabledSession,
   type SetEnabledPlan,
@@ -195,7 +194,7 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
   const attempted = yield* Effect.result(
     Effect.gen(function* () {
       if (selection === undefined)
-        return yield* new SetEnabledStale({
+        return yield* new Library.StalePlan({
           message: "Open the Library before proposing a Binding change",
         });
       const plan = yield* selection.plan(intent, configuration);
@@ -345,7 +344,7 @@ export const confirmLibraryChange = Effect.fn("LibrarySession.confirm")(function
     return state.outcome?.kind === "unchanged" ? state : cancelLibraryChange(state);
   const selection = state[sessionSelection];
   if (selection === undefined)
-    return yield* new SetEnabledStale({ message: "Open the Library before confirming a change" });
+    return yield* new Library.StalePlan({ message: "Open the Library before confirming a change" });
   const applied = yield* Effect.result(applySetEnabledPlan(selection.home, pending.plan));
   const refreshed = yield* openLibrarySession(selection.home, selection.configuration);
   const outcome: LibraryActionOutcome = Result.isSuccess(applied)

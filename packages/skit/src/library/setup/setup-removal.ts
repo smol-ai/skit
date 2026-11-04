@@ -4,7 +4,7 @@ import { LinkStat } from "../../platform/link-stat.js";
 import { observePathEvidence } from "../folder-evidence.js";
 import { pathIsWithin } from "../../platform/path-identity.js";
 import { type Library } from "../library.js";
-import { PlanIsStale } from "../internal/recovery/evidence.js";
+import { StalePlan } from "../library-plan.js";
 import { collectSkillsDirectories, type SetupOptions } from "./setup.js";
 import type { SetupResult } from "./setup-contract.js";
 
@@ -79,13 +79,14 @@ export const planSetupRemovals = Effect.fn("Setup.planRemovals")(function* (
       for (const path of removablePaths.get(instance.path) ?? []) {
         if (folders.some((folder) => folder.path === path)) continue;
         const observed = yield* observePathEvidence(path);
-        if (Option.isNone(observed)) return yield* new PlanIsStale();
+        if (Option.isNone(observed))
+          return yield* new StalePlan({ message: "The Library changed since this was previewed" });
         const evidence = observed.value;
         if (
           evidence._tag === "Directory" &&
           evidence.treeHash !== instance.contentIdentity.currentHash
         )
-          return yield* new PlanIsStale();
+          return yield* new StalePlan({ message: "The Library changed since this was previewed" });
         entries.push({ name: selection.name, path, type: evidence._tag });
         folders.push(evidence);
       }

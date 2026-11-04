@@ -29,7 +29,13 @@ import {
   SourceTracking,
 } from "./library-contracts.js";
 import { decodeLibraryState, libraryManifestFromLocalState } from "./library-state.js";
-import { LibraryStore } from "./store/library-store.js";
+import {
+  LibraryWriter,
+  libraryOriginalsPath,
+  libraryStatePath,
+  loadLibrary,
+  inspectLocalLibraryState,
+} from "./store/library-store.js";
 import { originalTreeHash, writeCollectionVersion } from "./collection-version.js";
 import { installedSkillHash } from "./installed-skill-hash.js";
 import {
@@ -195,9 +201,9 @@ interface PersistPreparedRequest extends ImportRequest {
 const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function* (
   request: PersistPreparedRequest,
 ) {
-  const store = yield* LibraryStore;
-  const machineId = request.machineId ?? (yield* MachineSettings.ensureIdentity(store.home));
-  const base = yield* store.load;
+  const writer = yield* LibraryWriter;
+  const machineId = request.machineId ?? (yield* MachineSettings.ensureIdentity(writer.home));
+  const base = yield* loadLibrary(writer.home);
   const state = structuredClone(base);
   const source =
     request.sourceIdentity ??
@@ -361,7 +367,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     : versionsChanged
       ? ("updated" as const)
       : ("unchanged" as const);
-  yield* store.save(successor, base);
+  yield* writer.save(successor, base);
   return { action, collection, skills, ...imported } satisfies ImportedCollection;
 });
 
@@ -369,9 +375,14 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
 export const importCollection = Effect.fn("Library.importCollection")(function* (
   request: ImportRequest,
 ) {
-  const store = yield* LibraryStore;
+  const writer = yield* LibraryWriter;
   const prepared = yield* prepareImport(request.skills);
-  yield* writeCollectionVersion(prepared.staged, store.originalsPath, prepared.hash, true);
+  yield* writeCollectionVersion(
+    prepared.staged,
+    libraryOriginalsPath(writer.home),
+    prepared.hash,
+    true,
+  );
   return yield* persistPrepared({
     ...request,
     collectionVersionHash: prepared.hash,
@@ -398,11 +409,11 @@ export class InstalledSkillChanged
  * not alter the Collection's upstream or attribute the changed bytes to that upstream.
  */
 export const importEdit = Effect.fn("Library.importEdit")(function* (request: EditImport) {
-  const store = yield* LibraryStore;
-  const current = yield* store.inspect;
+  const writer = yield* LibraryWriter;
+  const current = yield* inspectLocalLibraryState(writer.home);
   if (!current.present)
     return yield* new InvalidLibraryState({
-      path: join(store.home, "state.json"),
+      path: libraryStatePath(writer.home),
       detail: "Retaining an installed skill's changes requires current Library state",
     });
   const state = structuredClone(current.state);
@@ -430,9 +441,14 @@ export const importEdit = Effect.fn("Library.importEdit")(function* (request: Ed
       Effect.fail(new InstalledSkillChanged({ path: request.path })),
     ),
   );
-  yield* writeCollectionVersion(prepared.staged, store.originalsPath, prepared.hash, true);
+  yield* writeCollectionVersion(
+    prepared.staged,
+    libraryOriginalsPath(writer.home),
+    prepared.hash,
+    true,
+  );
   const fact = prepared.facts[0]!;
-  const machineId = yield* MachineSettings.ensureIdentity(store.home);
+  const machineId = yield* MachineSettings.ensureIdentity(writer.home);
   const collectionVersion = state.collection_versions.find(
     (candidate) => candidate.hash === prepared.hash,
   );
@@ -481,12 +497,12 @@ export const importEdit = Effect.fn("Library.importEdit")(function* (request: Ed
     Effect.mapError(
       (error) =>
         new InvalidLibraryState({
-          path: join(store.home, "state.json"),
+          path: libraryStatePath(writer.home),
           detail: `Retaining an installed skill's changes produced invalid Library state: ${String(error)}`,
         }),
     ),
   );
-  yield* store.save(successor, current.state);
+  yield* writer.save(successor, current.state);
   return {
     skillVersionId: version.skill_version_id,
     collectionVersionId,
@@ -516,11 +532,11 @@ export const importAuthoredCollection = Effect.fn("Library.retainAuthoredCollect
       return yield* new ImportRequestInvalid({
         reason: "authored Descriptor or Skill content is invalid",
       });
-    const store = yield* LibraryStore;
+    const writer = yield* LibraryWriter;
     const collectionVersionHash = yield* originalTreeHash(request.root);
     const collectionVersionPath = yield* writeCollectionVersion(
       request.root,
-      store.originalsPath,
+      libraryOriginalsPath(writer.home),
       collectionVersionHash,
       true,
     );

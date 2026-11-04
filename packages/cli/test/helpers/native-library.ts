@@ -1,5 +1,5 @@
 import { Context, Effect, FileSystem, Layer } from "effect";
-import { libraryStoreLayer, makeMachineId, skitLayer, treeHasherLayer } from "@smolai/skit-core";
+import { makeMachineId, skitLayer, treeHasherLayer } from "@smolai/skit-core";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -41,7 +41,7 @@ const fixtureLayer = Layer.effect(
 export const nativeLibraryResources = Layer.unwrap(
   Effect.gen(function* () {
     const fixture = yield* NativeLibraryFixture;
-    return Layer.merge(libraryStoreLayer({ home: fixture.home }), treeHasherLayer);
+    return treeHasherLayer;
   }),
 ).pipe(Layer.provideMerge(fixtureLayer));
 

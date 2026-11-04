@@ -6,9 +6,7 @@ import { migratedMachineId } from "../src/library/entity-ids.js";
 import { installEnabledSkills, removeCollection } from "./helpers/library.js";
 import type { Enabled } from "../src/library/library-contracts.js";
 import { importCollection } from "../src/library/import-collection.js";
-import { LibraryStore } from "../src/library/store/library-store.js";
-import { libraryStoreLayer } from "../src/library/library-store-layer.js";
-import { withHomeLock } from "../src/library/store/writer-lock.js";
+import { LibraryWriter, loadLibrary, writeLibrary } from "../src/library/store/library-store.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 const machineId = migratedMachineId(
@@ -23,7 +21,6 @@ const upstream = Effect.gen(function* () {
   const home = join(workspace, "home");
   const checkout = join(workspace, "checkout");
   const root = join(workspace, "codex");
-  const storeLayer = libraryStoreLayer({ home });
   yield* fs.makeDirectory(root, { recursive: true });
   let refreshes = 0;
   const refresh = (names: readonly string[]) =>
@@ -42,7 +39,7 @@ const upstream = Effect.gen(function* () {
         });
       }
       return yield* Effect.scoped(
-        withHomeLock(
+        writeLibrary(
           home,
           importCollection({
             machineId,
@@ -52,39 +49,33 @@ const upstream = Effect.gen(function* () {
             importedAt: `2026-09-16T0${refreshes}:00:00.000Z`,
             skills,
             lockFileEntries: [],
-          }).pipe(Effect.provide(storeLayer)),
+          }),
         ),
       );
     });
-  const load = Effect.flatMap(LibraryStore, (store) => store.load).pipe(Effect.provide(storeLayer));
+  const load = loadLibrary(home);
   const enable = (enabled: readonly Enabled[]) =>
     Effect.gen(function* () {
       const state = yield* load;
-      yield* withHomeLock(
+      yield* writeLibrary(
         home,
-        Effect.flatMap(LibraryStore, (store) =>
-          store.save(
-            {
-              ...state,
-              enabled: [...enabled],
-            },
-            state,
-          ),
-        ).pipe(Effect.provide(storeLayer)),
+        Effect.flatMap(LibraryWriter, (writer) =>
+          writer.save({ ...state, enabled: [...enabled] }, state),
+        ),
       );
     });
-  const project = withHomeLock(
+  const project = writeLibrary(
     home,
     installEnabledSkills({
       target: "agents",
       root,
       variantsPath: join(home, "variants"),
-    }).pipe(Effect.provide(storeLayer)),
+    }),
   );
   const installed = Effect.gen(function* () {
     return (yield* fs.readDirectory(root)).sort();
   });
-  return { refresh, load, enable, project, installed, home, storeLayer };
+  return { refresh, load, enable, project, installed, home };
 });
 
 it.effect("a whole-Collection entry installs Skills added upstream and retires deleted ones", () =>
@@ -122,7 +113,7 @@ it.effect("an individually enabled Skill deleted upstream stays installed", () =
 
 it.effect("refuses to remove a Collection that gained a member after removal was planned", () =>
   Effect.gen(function* () {
-    const { refresh, load, enable, project, installed, home, storeLayer } = yield* upstream;
+    const { refresh, load, enable, project, installed, home } = yield* upstream;
     const first = yield* refresh(["alpha"]);
     assert.ok(first.collection);
     const collectionId = first.collection.collection_id;
@@ -132,8 +123,7 @@ it.effect("refuses to remove a Collection that gained a member after removal was
 
     yield* refresh(["alpha", "beta"]);
     yield* project;
-    const error = yield* withHomeLock(home, removeCollection(planned, collectionId)).pipe(
-      Effect.provide(storeLayer),
+    const error = yield* writeLibrary(home, removeCollection(planned, collectionId)).pipe(
       Effect.flip,
     );
 

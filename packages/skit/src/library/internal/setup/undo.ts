@@ -14,7 +14,13 @@ import { canonicalJson } from "../../../shared/json.js";
 import { Hash } from "../../../vocabulary.js";
 import { hashParts } from "../../../artifact/descriptor.js";
 import { emptyLibraryState, libraryStateRevision, type LibraryState } from "../../library-state.js";
-import { LibraryStore, withLibraryWriter } from "../../store/library-store.js";
+import {
+  LibraryWriter,
+  libraryOriginalsPath,
+  loadLibrary,
+  writeLibrary,
+  inspectLocalLibraryState,
+} from "../../store/library-store.js";
 import { LinkStat } from "../../../platform/link-stat.js";
 import { setupIntent, SetupIntent } from "../../setup-intent.js";
 import { sourceImports } from "../../library-contracts.js";
@@ -255,14 +261,14 @@ const journalSetup = Effect.fn("SetupUndo.journalSetup")(function* (
 });
 
 const readUndo = Effect.fn("SetupUndo.read")(function* (
+  home: string,
   operationId: string,
   backupDirectory: string,
   undoSourceImports: Map<CollectionId, UndoSourceImport>,
 ) {
-  const store = yield* LibraryStore;
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
-  const inspected = yield* store.inspect;
+  const inspected = yield* inspectLocalLibraryState(home);
   const baseRevision = snapshotOf(inspected).revision;
   const state = inspected.present ? inspected.state : emptyLibraryState();
   const operations = yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
@@ -274,15 +280,15 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
   // Only the latest finished setup keeps its record; older ones may have their journal.
   if (
     recorded === undefined &&
-    !(yield* fs.exists(join(store.home, "removed", operationId, "setup.json")))
+    !(yield* fs.exists(join(home, "removed", operationId, "setup.json")))
   )
     return yield* new RecoveryInvalid({
       detail: `Setup ${operationId} has no undo record: a later setup replaced it`,
     });
   const setup =
     recorded === undefined
-      ? yield* journalSetup(store.home, operationId, state)
-      : yield* recordedSetup(store.home, recorded);
+      ? yield* journalSetup(home, operationId, state)
+      : yield* recordedSetup(home, recorded);
   const undoDirectory = join(setup.directory, "undo");
   const undoInfo = yield* links.identity
     .lstat(undoDirectory)
@@ -330,7 +336,7 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
     }
   }
   // Only identity is needed for a new source-import observation. Settings undo stays with its owner.
-  const machineId = (yield* MachineSettings.read(store.home)).machineId;
+  const machineId = (yield* MachineSettings.read(home)).machineId;
   const conflicts: string[] = [...setup.conflicts];
   const sources = done
     ? { conflicts: [], evidence: [], restorations: [] }
@@ -338,7 +344,7 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
         state,
         setup.before,
         setup.after,
-        store.originalsPath,
+        libraryOriginalsPath(home),
         machineId,
         undoSourceImports,
       );
@@ -347,6 +353,7 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
   const files = done
     ? undefined
     : yield* prepareSetupUndoFiles(
+        home,
         operationId,
         setup,
         state,
@@ -438,33 +445,38 @@ const planOf = (
 
 /** Preview against exactly the Library the caller displayed. No writer is acquired. */
 export const planUndo = Effect.fn("Library.planUndo")(function* (
+  home: string,
   intent: UndoIntent,
   options: { readonly base: Snapshot },
 ) {
-  const store = yield* LibraryStore;
-  const backupDirectory = recoveryOperationDirectory(store.home);
+  const backupDirectory = recoveryOperationDirectory(home);
   const observations = new Map<CollectionId, UndoSourceImport>();
-  const current = yield* readUndo(intent.operationId, backupDirectory, observations);
+  const current = yield* readUndo(home, intent.operationId, backupDirectory, observations);
   if (current.baseRevision !== options.base.revision)
     return yield* new StalePlan({ message: "The Library changed after undo was reviewed" });
   return planOf(current, basename(backupDirectory), observations);
 }, Effect.scoped);
 
 /** Recompute the review under the writer, record the inverse, restore files, then publish it. */
-export const applyUndo = Effect.fn("Library.applyUndo")(function* (input: UndoPlan) {
+export const applyUndo = Effect.fn("Library.applyUndo")(function* (home: string, input: UndoPlan) {
   const approved = yield* Schema.decodeUnknownEffect(UndoPlan)(structuredClone(input)).pipe(
     Effect.mapError(() => new RecoveryInvalid({ detail: "Invalid undo plan" })),
   );
-  const store = yield* LibraryStore;
   const fs = yield* FileSystem.FileSystem;
-  const backupDirectory = join(store.home, "removed", approved.backupId);
+  const backupDirectory = join(home, "removed", approved.backupId);
   const observations = new Map<CollectionId, UndoSourceImport>(
     approved.observations.map(({ collectionId, ...value }) => [collectionId, value]),
   );
-  return yield* withLibraryWriter(
+  return yield* writeLibrary(
+    home,
     Effect.scoped(
       Effect.gen(function* () {
-        const current = yield* readUndo(approved.intent.operationId, backupDirectory, observations);
+        const current = yield* readUndo(
+          home,
+          approved.intent.operationId,
+          backupDirectory,
+          observations,
+        );
         if (!equal(planOf(current, approved.backupId, observations), approved))
           return yield* new StalePlan({ message: "Undo evidence changed after it was reviewed" });
         const change = { ...current.summary, next: current.next };
@@ -472,8 +484,8 @@ export const applyUndo = Effect.fn("Library.applyUndo")(function* (input: UndoPl
           return { _tag: "AlreadyUndone", change } satisfies UndoResult;
         if (current.summary.conflicts.length)
           return yield* new RecoveryInvalid({ detail: current.summary.conflicts.join("; ") });
-        yield* ensureRecoveryOperation(store.home, backupDirectory);
-        yield* ensureRecoveryOperation(store.home, current.setup.directory);
+        yield* ensureRecoveryOperation(home, backupDirectory);
+        yield* ensureRecoveryOperation(home, current.setup.directory);
         yield* fs
           .makeDirectory(current.undoDirectory, { mode: 0o700 })
           .pipe(
@@ -493,8 +505,9 @@ export const applyUndo = Effect.fn("Library.applyUndo")(function* (input: UndoPl
           after: setupIntent(current.next),
         } satisfies typeof Attempt.Type);
         yield* current.files!.apply();
-        if (!equal(current.state, current.next)) yield* store.save(current.next, current.state);
-        if (libraryStateRevision(yield* store.load) !== libraryStateRevision(current.next))
+        if (!equal(current.state, current.next))
+          yield* (yield* LibraryWriter).save(current.next, current.state);
+        if (libraryStateRevision(yield* loadLibrary(home)) !== libraryStateRevision(current.next))
           return yield* new RecoveryInvalid({
             detail: "Undo publication did not reach the reviewed final state",
           });

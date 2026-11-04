@@ -16,9 +16,12 @@ import { InvalidLibraryState, LibraryBusy, LibraryChanged } from "../src/failure
 import { TreeError } from "../src/shared/tree-error.js";
 import { badArgument, systemError } from "effect/PlatformError";
 import { importCollection } from "../src/library/import-collection.js";
-import { LibraryStore, withLibraryWriter } from "../src/library/store/library-store.js";
-import { libraryStoreLayer } from "../src/library/library-store-layer.js";
-import { withHomeLock } from "../src/library/store/writer-lock.js";
+import {
+  libraryOriginalsPath,
+  LibraryWriter,
+  loadLibrary,
+  writeLibrary,
+} from "../src/library/store/library-store.js";
 import { Hash } from "../src/vocabulary.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { acquireFileLock } from "../src/platform/file-lock.js";
@@ -32,10 +35,9 @@ const library = Effect.gen(function* () {
   const source = join(workspace, "source");
   yield* fs.makeDirectory(source, { recursive: true });
   yield* fs.writeFileString(join(source, "SKILL.md"), "raw Skill bytes\n");
-  const inLibrary = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    effect.pipe(Effect.provide(libraryStoreLayer({ home })));
-  yield* inLibrary(
-    Effect.scoped(
+  yield* Effect.scoped(
+    writeLibrary(
+      home,
       importCollection({
         machineId,
         source: { type: "local", path: source },
@@ -53,39 +55,44 @@ const library = Effect.gen(function* () {
       }),
     ),
   );
-  return { inLibrary, home, path: join(home, "state.json") };
+  /** Save `next` over `base` in a write of its own. */
+  const save = (next: LibraryState, base: LibraryState) =>
+    writeLibrary(
+      home,
+      Effect.flatMap(LibraryWriter, (writer) => writer.save(next, base)),
+    );
+  return { save, home, path: join(home, "state.json") };
 });
 
 it.effect("refuses to save a state its own loader would reject", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const { inLibrary, path } = yield* library;
+    const { save, home, path } = yield* library;
     const before = yield* fs.readFileString(path);
-    const store = yield* inLibrary(Effect.service(LibraryStore));
-    const state = yield* store.load;
+    const state = yield* loadLibrary(home);
 
     // Duplicate Collection IDs satisfy the state schema but not the portable manifest.
-    const error = yield* store
-      .save({ ...state, collections: [...state.collections, ...state.collections] }, state)
-      .pipe(Effect.flip);
+    const error = yield* save(
+      { ...state, collections: [...state.collections, ...state.collections] },
+      state,
+    ).pipe(Effect.flip);
 
     assert.strictEqual(error._tag, "InvalidLibraryState");
     assert.strictEqual(yield* fs.readFileString(path), before);
-    assert.deepStrictEqual(yield* store.load, state);
+    assert.deepStrictEqual(yield* loadLibrary(home), state);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("accepts exactly one of two saves planned from the same state", () =>
+it.effect("accepts exactly one of two writes planned from the same state", () =>
   Effect.gen(function* () {
-    const { inLibrary } = yield* library;
-    const store = yield* inLibrary(Effect.service(LibraryStore));
-    const base = yield* store.load;
+    const { save, home } = yield* library;
+    const base = yield* loadLibrary(home);
     const enabled = base.skills.map((skill) => ({ skill: skill.skill_id }));
     const global = { ...base, enabled };
     const local = { ...base, repositories: [{ root: "/workspace", enabled }] };
 
     const outcomes = yield* Effect.all(
-      [global, local].map((next) => Effect.result(store.save(next, base))),
+      [global, local].map((next) => Effect.result(save(next, base))),
       { concurrency: "unbounded" },
     );
 
@@ -95,26 +102,28 @@ it.effect("accepts exactly one of two saves planned from the same state", () =>
     );
     assert.strictEqual(winners.length, 1);
     assert.deepStrictEqual(losers, ["LibraryChanged"]);
-    assert.deepStrictEqual(yield* store.load, winners[0]);
+    assert.deepStrictEqual(yield* loadLibrary(home), winners[0]);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("accepts exactly one of two concurrent saves sharing one held writer lock", () =>
+it.effect("accepts exactly one of two concurrent saves sharing one write", () =>
   Effect.gen(function* () {
-    const { inLibrary } = yield* library;
-    const store = yield* inLibrary(Effect.service(LibraryStore));
-    const base = yield* store.load;
+    const { home } = yield* library;
+    const base = yield* loadLibrary(home);
     const enabled = base.skills.map((skill) => ({ skill: skill.skill_id }));
     const global = { ...base, enabled };
     const local = { ...base, repositories: [{ root: "/workspace", enabled }] };
 
-    // Both forks inherit the outer lock, so only the save mutex can serialize them.
-    const outcomes = yield* withHomeLock(
-      store.home,
-      Effect.all(
-        [global, local].map((next) => Effect.result(store.save(next, base))),
-        { concurrency: "unbounded" },
-      ),
+    // Both forks inherit the write's lock, so only the save mutex can serialize them.
+    const outcomes = yield* writeLibrary(
+      home,
+      Effect.gen(function* () {
+        const writer = yield* LibraryWriter;
+        return yield* Effect.all(
+          [global, local].map((next) => Effect.result(writer.save(next, base))),
+          { concurrency: "unbounded" },
+        );
+      }),
     );
 
     const winners = [global, local].filter((_, index) => Result.isSuccess(outcomes[index]!));
@@ -123,52 +132,49 @@ it.effect("accepts exactly one of two concurrent saves sharing one held writer l
     );
     assert.strictEqual(winners.length, 1);
     assert.deepStrictEqual(losers, ["LibraryChanged"]);
-    assert.deepStrictEqual(yield* store.load, winners[0]);
+    assert.deepStrictEqual(yield* loadLibrary(home), winners[0]);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("refuses to save while another holder has the lock", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const { inLibrary, path } = yield* library;
-    const store = yield* inLibrary(Effect.service(LibraryStore));
-    const state = yield* store.load;
+    const { save, home, path } = yield* library;
+    const state = yield* loadLibrary(home);
     const before = yield* fs.readFileString(path);
     // Another holder, as another process would be.
-    yield* acquireFileLock(join(store.home, "lock.sqlite"));
+    yield* acquireFileLock(join(home, "lock.sqlite"));
 
-    const error = yield* store.save({ ...state, enabled: [] }, state).pipe(Effect.flip);
+    const error = yield* save({ ...state, enabled: [] }, state).pipe(Effect.flip);
 
     assert.strictEqual(error._tag, "LibraryBusy");
     assert.strictEqual(yield* fs.readFileString(path), before);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("makes a writer that outlives its action acquire the lock again", () =>
+it.effect("makes a save that outlives its write acquire the lock again", () =>
   Effect.gen(function* () {
-    const { inLibrary, home } = yield* library;
+    const fs = yield* FileSystem.FileSystem;
+    const { home, path } = yield* library;
+    const base = yield* loadLibrary(home);
+    const before = yield* fs.readFileString(path);
     const resume = yield* Deferred.make<void>();
-    let ran = false;
-    const child = yield* inLibrary(
-      withLibraryWriter(
-        Deferred.await(resume).pipe(
-          Effect.andThen(
-            withLibraryWriter(
-              Effect.sync(() => {
-                ran = true;
-              }),
-            ),
-          ),
+    const child = yield* writeLibrary(
+      home,
+      Effect.gen(function* () {
+        const writer = yield* LibraryWriter;
+        return yield* Deferred.await(resume).pipe(
+          Effect.andThen(writer.save({ ...base, enabled: [] }, base)),
           Effect.forkDetach,
-        ),
-      ),
+        );
+      }),
     );
-    // Another holder takes the lock once the owner has released it.
+    // Another holder takes the lock once the write has released it.
     yield* acquireFileLock(join(home, "lock.sqlite"));
     yield* Deferred.succeed(resume, undefined);
 
     assert.strictEqual((yield* Effect.flip(Fiber.join(child)))._tag, "LibraryBusy");
-    assert.isFalse(ran);
+    assert.strictEqual(yield* fs.readFileString(path), before);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -197,21 +203,18 @@ it.live("keeps the lock until a save already under way in a forked fiber has fin
           ),
         ),
     };
-    const store = yield* Effect.service(LibraryStore).pipe(
-      Effect.provide(libraryStoreLayer({ home })),
-      Effect.provideService(FileSystem.FileSystem, gatedFs),
-    );
-    const base = yield* store.load;
+    const base = yield* loadLibrary(home);
     const next = { ...base, enabled: [] };
     let child: Fiber.Fiber<void, unknown> | undefined;
-    const owner = yield* withHomeLock(
+    const owner = yield* writeLibrary(
       home,
       Effect.gen(function* () {
+        const writer = yield* LibraryWriter;
         armed = true;
-        child = yield* store.save(next, base).pipe(Effect.forkDetach);
+        child = yield* writer.save(next, base).pipe(Effect.forkDetach);
         yield* Deferred.await(entered);
       }),
-    ).pipe(Effect.forkChild);
+    ).pipe(Effect.provideService(FileSystem.FileSystem, gatedFs), Effect.forkChild);
 
     yield* Deferred.await(entered);
     yield* Effect.sleep("50 millis");
@@ -223,7 +226,7 @@ it.live("keeps the lock until a save already under way in a forked fiber has fin
     yield* Fiber.join(child!);
     yield* Fiber.join(owner);
     assert.isTrue(yield* Effect.isSuccess(Effect.scoped(acquireFileLock(lock))));
-    assert.deepStrictEqual(yield* store.load, next);
+    assert.deepStrictEqual(yield* loadLibrary(home), next);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -238,9 +241,8 @@ const synced = (state: LibraryState, originalsPath: string) =>
 
 it.effect("keeps operation records on this device: saved and loaded, never synced", () =>
   Effect.gen(function* () {
-    const { inLibrary, home } = yield* library;
-    const store = yield* inLibrary(Effect.service(LibraryStore));
-    const base = yield* store.load;
+    const { save, home } = yield* library;
+    const base = yield* loadLibrary(home);
     const hash = Hash.make(`sha256:${"a".repeat(64)}`);
     const parent = { path: join(home, "skills"), dev: 1n, ino: 2n };
     const folder = {
@@ -291,8 +293,8 @@ it.effect("keeps operation records on this device: saved and loaded, never synce
       operations: yield* Schema.encodeEffect(Schema.Array(OperationStatus))(operations),
     };
 
-    yield* store.save(next, base);
-    const loaded = yield* store.load;
+    yield* save(next, base);
+    const loaded = yield* loadLibrary(home);
 
     assert.deepStrictEqual(loaded, next);
     assert.deepStrictEqual(
@@ -300,8 +302,8 @@ it.effect("keeps operation records on this device: saved and loaded, never synce
       operations,
     );
     assert.deepStrictEqual(
-      yield* synced(loaded, store.originalsPath),
-      yield* synced(base, store.originalsPath),
+      yield* synced(loaded, libraryOriginalsPath(home)),
+      yield* synced(base, libraryOriginalsPath(home)),
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -310,8 +312,7 @@ it.effect(
   "a stopped operation keeps its step's error through state.json, in each stored form",
   () =>
     Effect.gen(function* () {
-      const { inLibrary } = yield* library;
-      const store = yield* inLibrary(Effect.service(LibraryStore));
+      const { save, home } = yield* library;
       const errors: readonly StepError[] = [
         new TreeError({ reason: { _tag: "UnsupportedEntry", path: "/skills/review/socket" } }),
         new LibraryBusy({ path: "/home/lock.sqlite" }),
@@ -342,8 +343,8 @@ it.effect(
           after: recordedLibrary(emptyLibraryState()),
         }),
       );
-      const base = yield* store.load;
-      yield* store.save(
+      const base = yield* loadLibrary(home);
+      yield* save(
         {
           ...base,
           operations: yield* Schema.encodeEffect(Schema.Array(OperationStatus))(operations),
@@ -352,7 +353,7 @@ it.effect(
       );
 
       const loaded = yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
-        (yield* store.load).operations,
+        (yield* loadLibrary(home)).operations,
       );
 
       // Each error reads back as the same kind, with every stored field equal.

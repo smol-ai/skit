@@ -14,7 +14,7 @@ import {
   parentIsAsRecorded,
   recoveryEntryPath,
 } from "./folder-evidence.js";
-import { LibraryStore } from "./store/library-store.js";
+import { LibraryWriter } from "./store/library-store.js";
 import type { FolderEvidence, LinkEvidence } from "./store/state-schema.js";
 import { Hash } from "../vocabulary.js";
 
@@ -102,7 +102,7 @@ export const moveAside = Effect.fn("Library.setup.moveAside")(function* (
   directory: string,
   folders: readonly (FolderEvidence | LinkEvidence)[],
 ) {
-  const store = yield* LibraryStore;
+  const { home } = yield* LibraryWriter;
   const fs = yield* FileSystem.FileSystem;
   if (!folders.length) return { _tag: "Moved", directory } satisfies Moved;
   const entries = folders.map((folder, index) => ({
@@ -124,11 +124,7 @@ export const moveAside = Effect.fn("Library.setup.moveAside")(function* (
       (yield* holdsEvidence(entry.folder, entry.saved));
     if (!moved) return { _tag: "Differs", folder: entry.folder } satisfies Moved;
   }
-  for (const path of [
-    removedPath(store.home),
-    join(removedPath(store.home), operationId),
-    directory,
-  ])
+  for (const path of [removedPath(home), join(removedPath(home), operationId), directory])
     yield* recoveryContainer(path);
   const receipt = yield* Schema.encodeEffect(Receipt)({
     schemaVersion: 3,
