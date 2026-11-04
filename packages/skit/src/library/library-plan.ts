@@ -58,8 +58,13 @@ export const Approval = Schema.Union([
 export type Approval = typeof Approval.Type;
 
 // ── Errors ───────────────────────────────────────────────────────────────────────────────────────
+/** The Library moved on since the change was planned; a revision check names both revisions. */
 export class StalePlan
-  extends Schema.TaggedError<StalePlan>()("Library.StalePlan", { message: Schema.String })
+  extends Schema.TaggedError<StalePlan>()("Library.StalePlan", {
+    message: Schema.String,
+    expected: Schema.optionalKey(Schema.String.pipe(Schema.brand("Revision"))),
+    actual: Schema.optionalKey(Schema.String.pipe(Schema.brand("Revision"))),
+  })
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;

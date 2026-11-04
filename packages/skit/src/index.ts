@@ -133,6 +133,7 @@ export * as InstalledSkillBackups from "./install/backups.js";
 export { InstalledSkills } from "./library/installed-skills.js";
 export * as InstalledSkillStatus from "./library/installed-skill-status.js";
 export { Library } from "./library/library.js";
+export { recoveryFingerprint } from "./library/folder-evidence.js";
 export type {
   PlanError as LibraryPlanError,
   ApplyError as LibraryApplyError,

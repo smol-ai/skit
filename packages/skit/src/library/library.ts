@@ -1,4 +1,5 @@
-import { Brand, Context, Effect, FileSystem, Layer } from "effect";
+import { Context, Effect, FileSystem, Layer } from "effect";
+import type { Digest } from "effect/crypto";
 import { InstalledSkills } from "./installed-skills.js";
 import {
   LibraryStore,
@@ -6,6 +7,8 @@ import {
   type LibraryStateReadError,
 } from "./store/library-store.js";
 import { libraryStateRevision, type LibraryState } from "./library-state.js";
+import { snapshotOf, type Snapshot } from "./snapshot.js";
+import { setup, type SetupError, type SetupResult, type SupportedSetupStep } from "./setup.js";
 import {
   importCollection,
   importAuthoredCollection,
@@ -34,17 +37,8 @@ export {
 } from "./enabled-plan.js";
 export type { Subject, Invocation, EnabledCollection, SetupApproval } from "./enabled-plan.js";
 
-/** What one read saw. "Absent" has its own revision, so a first sync can plan from it. */
-export type Snapshot =
-  | { readonly _tag: "Absent"; readonly revision: Revision }
-  | { readonly _tag: "Present"; readonly revision: Revision; readonly state: LibraryState };
-/**
- * Covers presence and the whole decoded state, so any unfinished operation state.json records. A
- * Present revision is the state's canonical digest, the one a plan carries as its baseRevision;
- * "absent" is never such a digest.
- */
-export type Revision = Brand.Branded<string, "Revision">;
-export const Revision = Brand.nominal<Revision>();
+export { Revision, type Snapshot } from "./snapshot.js";
+export type { SetupError, SetupResult, SetupStepResult, SupportedSetupStep } from "./setup.js";
 
 export interface Interface {
   /**
@@ -75,6 +69,15 @@ export interface Interface {
     /** An edited copy, as a new Version of its Skill. */
     readonly edit: (request: EditImport) => Effect.Effect<ImportedEdit, ImportEditError>;
   };
+  /**
+   * Save the steps in state.json as one Pending operation, then run them in order, removals last,
+   * marking each Done. Failures before the steps are saved are SetupError and write nothing;
+   * after, every failure is a Stopped result with its operationId. Never rolls back on its own.
+   */
+  readonly setup: (
+    steps: readonly SupportedSetupStep[],
+    options: { readonly base: Snapshot },
+  ) => Effect.Effect<SetupResult, SetupError>;
 }
 export class Service extends Context.Service<Service, Interface>()("skit/library/Library") {}
 
@@ -82,7 +85,7 @@ export const make = Effect.gen(function* () {
   const store = yield* LibraryStore;
   const files = yield* InstalledSkills.Service;
   const writer = yield* Effect.context<FileSystem.FileSystem>();
-  const importing = yield* Effect.context<TreeRequirements>();
+  const importing = yield* Effect.context<TreeRequirements | Digest.Digest>();
   /** Every import holds the Library writer, and its staging ends with the import. */
   const owned = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     withLibraryWriter(Effect.scoped(effect)).pipe(
@@ -92,15 +95,7 @@ export const make = Effect.gen(function* () {
     );
 
   return Service.of({
-    read: Effect.map(store.inspect, (inspected): Snapshot =>
-      inspected.present
-        ? {
-            _tag: "Present",
-            revision: Revision(libraryStateRevision(inspected.state)),
-            state: inspected.state,
-          }
-        : { _tag: "Absent", revision: Revision("absent") },
-    ),
+    read: Effect.map(store.inspect, snapshotOf),
     plan: Effect.fn("Library.plan")(function* (intent, options) {
       const base = structuredClone(options.base);
       const approvals = structuredClone(options.approvals ?? []);
@@ -130,6 +125,12 @@ export const make = Effect.gen(function* () {
       authored: (request) => owned(importAuthoredCollection(request)),
       edit: (request) => owned(importEdit(request)),
     },
+    setup: (steps, options) =>
+      setup(steps, options).pipe(
+        Effect.provideService(LibraryStore, store),
+        Effect.provide(writer),
+        Effect.provide(importing),
+      ),
   });
 });
 export const layer = Layer.effect(Service, make);

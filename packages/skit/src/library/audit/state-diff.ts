@@ -213,5 +213,19 @@ export const diffLibraryState = (
     });
   }
 
+  // Setup's records: each operation recorded, settled, or replaced by a later setup.
+  const operations = compare(before.operations, after.operations, (item) => item.operationId);
+  for (const item of operations.added)
+    changes.push({ entity: "library", id: item.operationId, action: `operation-${item._tag}` });
+  for (const item of operations.removed)
+    changes.push({ entity: "library", id: item.operationId, action: "operation-replaced" });
+  for (const { previous, current } of operations.kept)
+    if (previous._tag !== current._tag)
+      changes.push({
+        entity: "library",
+        id: current.operationId,
+        action: `operation-${current._tag}`,
+      });
+
   return changes;
 };

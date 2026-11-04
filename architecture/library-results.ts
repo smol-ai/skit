@@ -80,9 +80,12 @@ type LibraryStateWriteError = Ref<"skit/src/library/store/library-store.ts:21-25
  */
 export interface StalePlan {
   readonly _tag: "Library.StalePlan";
-  readonly expected: Revision;
-  readonly actual: Revision;
+  // Present when a base revision moved; absent when folder evidence changed (apply-plan), where
+  // no revision applies (decided 2026-11-04, step 2 of setup).
+  readonly expected?: Revision;
+  readonly actual?: Revision;
 }
+type InvalidIntent = Ref<"skit/src/library/enabled-plan.ts:49">;
 type RecoveryInvalid = Ref<"cli/src/library-application/recovery-evidence.ts:6-7">;
 type RestoreInvalid = Ref<"skit/src/library/library-restore.ts:28">;
 type ContentAddressCollision = Ref<"skit/src/failures.ts:335">;
@@ -486,6 +489,7 @@ export type SetupError =
   | StalePlan // setup-apply.ts:84, :93, :103 (reviewed changes / version choices no longer match); base revision moved
   | ChangeChoiceRequired // :105
   | SetupManageSelectionInvalid // selections checked before any step (setup-manage.ts:48-56)
+  | InvalidIntent // steps out of order, or a removal inside or over the Library home (skit/src/library/setup.ts)
   | LibraryStateReadError
   | LibraryStateWriteError; // the write that persists the operation
 
