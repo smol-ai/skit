@@ -6,6 +6,7 @@ import {
   serviceDebt,
 } from "../architecture/boundaries.mjs";
 import { importDebt, layout, layoutDebt, undecided } from "../architecture/layout.mjs";
+import { libraryRules } from "./library-rules.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 
@@ -699,6 +700,7 @@ export default {
   meta: { name: "skit" },
   rules: {
     ...effectRules,
+    ...libraryRules,
     "no-direct-cli-output": {
       meta: {
         type: "problem",
