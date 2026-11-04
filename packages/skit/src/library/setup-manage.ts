@@ -22,7 +22,11 @@ import {
   updateInstalledSkills,
   type ReviewedChange,
 } from "./installed-update.js";
-import type { AppliedChange } from "./library-plan.js";
+import type { LibraryState } from "./library-state.js";
+import {
+  setEnabledResults,
+  type SetEnabledResult,
+} from "./internal/session/set-enabled-contract.js";
 import { incompleteManageWarning, planManage } from "./manage-plan.js";
 import { planIntent } from "./plan-changes.js";
 import { moveAside, recoveryDirectory } from "./setup-moves.js";
@@ -44,7 +48,7 @@ import { resolveLibrarySubject } from "./subject-resolution.js";
 /** What a Manage step did: each enable it applied, its warnings and where it moved duplicates. */
 export interface ManageResult {
   readonly _tag: "Manage";
-  readonly results: readonly AppliedChange[];
+  readonly results: readonly SetEnabledResult[];
   readonly warnings: readonly { readonly name: string; readonly message: string }[];
   readonly recoveryDirectories: readonly string[];
 }
@@ -178,7 +182,7 @@ export const installedPaths = (
         .map(({ root }) => join(root, selection.name));
 
 /** Enable the subject's `name` globally, managing the reviewed folder in place where it is one. */
-const enable = Effect.fn("Library.setup.enable")(function* (
+export const planManageEnable = Effect.fn("Library.planManageEnable")(function* (
   selection: ManageExistingSelection | ManageNewSelection,
   subjectId: string,
   manage: {
@@ -186,8 +190,8 @@ const enable = Effect.fn("Library.setup.enable")(function* (
     readonly equalPaths: readonly string[];
     readonly currentHash: string;
   },
+  state: LibraryState,
 ) {
-  const state = yield* (yield* LibraryStore).load;
   const resolved = yield* resolveLibrarySubject(state, subjectId);
   const subject =
     resolved.kind === "collection"
@@ -238,15 +242,29 @@ const enable = Effect.fn("Library.setup.enable")(function* (
       ],
     },
   );
+  return plan;
+});
+
+const enable = Effect.fn("Library.setup.enable")(function* (
+  selection: ManageExistingSelection | ManageNewSelection,
+  subjectId: string,
+  manage: {
+    readonly path: string;
+    readonly equalPaths: readonly string[];
+    readonly currentHash: string;
+  },
+) {
+  const state = yield* (yield* LibraryStore).load;
+  const plan = yield* planManageEnable(selection, subjectId, manage, state);
   const outcome = yield* apply(plan);
-  if (outcome._tag === "Applied") return { results: outcome.results, warnings: [] };
+  if (outcome._tag === "Applied") return { results: setEnabledResults(outcome), warnings: [] };
   // Setup keeps the managed copy while other differing copies stay where agents read them.
   const warning = incompleteManageWarning(selection.name, {
     reason: outcome.reason,
     message: outcome.cause.message,
   });
   if (Option.isNone(warning)) return yield* Effect.fail(outcome.cause);
-  return { results: outcome.results, warnings: [warning.value] };
+  return { results: setEnabledResults(outcome), warnings: [warning.value] };
 });
 
 /**
@@ -358,7 +376,7 @@ export const runManage = Effect.fn("Library.setup.manage")(function* (
 ) {
   const store = yield* LibraryStore;
   const files = yield* routedInstalledSkills(step.routing);
-  const results: AppliedChange[] = [];
+  const results: SetEnabledResult[] = [];
   const warnings: { readonly name: string; readonly message: string }[] = [];
   const recoveryDirectories: string[] = [];
   const after: StepEvidence[] = [];

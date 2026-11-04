@@ -172,7 +172,7 @@ const removedBy = (step: SetupStep): readonly (FolderEvidence | LinkEvidence)[] 
 };
 
 /** Refuse steps setup could not run safely, before anything is written. */
-const checkSteps = (home: string, steps: readonly SetupStep[]) => {
+export const checkSteps = (home: string, steps: readonly SetupStep[]) => {
   const firstRemove = steps.findIndex((step) => step._tag === "Remove");
   if (firstRemove >= 0 && steps.slice(firstRemove).some((step) => step._tag !== "Remove"))
     return Option.some("Setup removes folders only after every other step");
@@ -456,9 +456,13 @@ const runOperation = Effect.fn("Library.setup.run")(function* (operationId: Oper
  * Library is still `base`. A later setup replaces the records of earlier Done ones; Pending and
  * Stopped records stay until undone.
  */
-export const setup = Effect.fn("Library.setup")(function* (
+export const setupOperation = Effect.fn("Library.setupOperation")(function* (
   steps: readonly SetupStep[],
-  options: { readonly base: Snapshot },
+  options: {
+    readonly base: Snapshot;
+    readonly operationId: OperationId;
+    readonly replaceDone?: boolean;
+  },
 ) {
   const store = yield* LibraryStore;
   const invalid = checkSteps(store.home, steps);
@@ -474,7 +478,9 @@ export const setup = Effect.fn("Library.setup")(function* (
           actual,
         });
       const state = inspected.present ? inspected.state : emptyLibraryState();
-      const operationId = makeOperationId();
+      const operationId = options.operationId;
+      if (state.operations.some((operation) => operation.operationId === operationId))
+        return yield* new StalePlan({ message: "This operation is already recorded" });
       const pending = yield* encodeOperation(
         OperationStatus.cases.Pending.make({
           operationId,
@@ -494,7 +500,9 @@ export const setup = Effect.fn("Library.setup")(function* (
         {
           ...state,
           operations: [
-            ...state.operations.filter((operation) => operation._tag !== "Done"),
+            ...state.operations.filter(
+              (operation) => !options.replaceDone || operation._tag !== "Done",
+            ),
             pending,
           ],
         },
@@ -503,6 +511,18 @@ export const setup = Effect.fn("Library.setup")(function* (
       return yield* runOperation(operationId);
     }),
   );
+});
+
+/** Public setup allocates its operation; standalone plans allocate one before their preview. */
+export const setup = Effect.fn("Library.setup")(function* (
+  steps: readonly SetupStep[],
+  options: { readonly base: Snapshot },
+) {
+  return yield* setupOperation(steps, {
+    ...options,
+    operationId: makeOperationId(),
+    replaceDone: true,
+  });
 });
 
 /** What startup recovery did with the operations it found unfinished. */

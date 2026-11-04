@@ -1,4 +1,25 @@
 import {
+  planManaging,
+  applyManaging,
+  checkedManageIntent,
+  type ManageIntent,
+  type ManagePlan,
+  type ManageOutcome,
+  type ManagePlanError,
+  type ManageApplyError,
+} from "./internal/manage/manage.js";
+import { stepRouting } from "./routing/step.js";
+export {
+  ManageIntent,
+  ManagePlan,
+  ManageChange,
+  ManageStopped,
+  type ManageResult,
+  type ManageOutcome,
+  type ManagePlanError,
+  type ManageApplyError,
+} from "./internal/manage/manage.js";
+import {
   planAcceptance,
   applyAcceptance,
   type AcceptFindingIntent,
@@ -66,7 +87,7 @@ import {
 } from "./store/library-store.js";
 import { emptyLibraryState, type LibraryState } from "./library-state.js";
 import { InvalidLibraryState } from "../failures.js";
-import { OperationStatus } from "./store/state-schema.js";
+import { type StepRouting, OperationStatus } from "./store/state-schema.js";
 import {
   readLibraryAudit,
   type LibraryAuditEvent,
@@ -151,6 +172,10 @@ export interface Interface {
    */
   readonly plan: {
     (
+      intent: ManageIntent,
+      options: { readonly base: Snapshot },
+    ): Effect.Effect<ManagePlan, ManagePlanError | InstalledSkills.Cause>;
+    (
       intent: AcceptFindingIntent,
       options: { readonly base: Snapshot },
     ): Effect.Effect<AcceptFindingPlan, AcceptFindingPlanError>;
@@ -168,6 +193,7 @@ export interface Interface {
     ): Effect.Effect<Plan, PlanError>;
   };
   readonly apply: {
+    (plan: ManagePlan): Effect.Effect<ManageOutcome, ManageApplyError>;
     (plan: AcceptFindingPlan): Effect.Effect<AcceptFindingOutcome, AcceptFindingApplyError>;
     (
       plan: RefreshInventoryPlan,
@@ -226,7 +252,7 @@ export interface Interface {
 }
 export class Service extends Context.Service<Service, Interface>()("skit/library/Library") {}
 
-export const make = Effect.gen(function* () {
+const makeWithRouting = Effect.fn("Library.make")(function* (configuration?: Routing) {
   const store = yield* LibraryStore;
   const files = yield* InstalledSkills.Service;
   const writer = yield* Effect.context<FileSystem.FileSystem>();
@@ -266,6 +292,10 @@ export const make = Effect.gen(function* () {
   });
 
   function planFor(
+    intent: ManageIntent,
+    options: { readonly base: Snapshot },
+  ): Effect.Effect<ManagePlan, ManagePlanError | InstalledSkills.Cause>;
+  function planFor(
     intent: AcceptFindingIntent,
     options: { readonly base: Snapshot },
   ): Effect.Effect<AcceptFindingPlan, AcceptFindingPlanError>;
@@ -282,12 +312,53 @@ export const make = Effect.gen(function* () {
     options: { readonly base: Snapshot | LibraryState; readonly approvals?: readonly Approval[] },
   ): Effect.Effect<Plan, PlanError>;
   function planFor(
-    intent: AcceptFindingIntent | RefreshInventoryIntent | UndoIntent | Intent,
+    intent: ManageIntent | AcceptFindingIntent | RefreshInventoryIntent | UndoIntent | Intent,
     options: { readonly base: Snapshot | LibraryState; readonly approvals?: readonly Approval[] },
   ): Effect.Effect<
-    AcceptFindingPlan | RefreshInventoryPlan | UndoPlan | Plan,
-    AcceptFindingPlanError | RefreshInventoryPlanError | UndoPlanError | PlanError
+    ManagePlan | AcceptFindingPlan | RefreshInventoryPlan | UndoPlan | Plan,
+    ManagePlanError | AcceptFindingPlanError | RefreshInventoryPlanError | UndoPlanError | PlanError
   > {
+    if (intent._tag === "Manage") {
+      if (!("revision" in options.base))
+        return Effect.fail(
+          new StalePlan({ message: "Manage requires the displayed Library snapshot" }),
+        );
+      const base = options.base;
+      return Effect.gen(function* () {
+        const checked = yield* checkedManageIntent(intent);
+        const state = base._tag === "Present" ? base.state : emptyLibraryState();
+        const installs = checked.selections.some(
+          (selection) =>
+            Option.getOrUndefined(selection.duplicates) !== "retain-only" &&
+            (selection.mode === "existing" || Option.isSome(selection.ownership)),
+        );
+        let routing: StepRouting = { active: [], destinations: [], readable: [] };
+        if (installs) {
+          if (configuration?._tag === "Configured")
+            routing = yield* stepRouting(configuration, state);
+          else {
+            const scopes = [
+              { kind: "global" as const },
+              ...state.repositories.map(({ root }) => ({ kind: "repository" as const, root })),
+            ];
+            routing = {
+              active: yield* files.active,
+              readable: [],
+              destinations: (yield* Effect.forEach(scopes, (scope) =>
+                Effect.map(files.destinations(scope), (targets) =>
+                  targets.map((target) => ({ scope, ...target })),
+                ),
+              )).flat(),
+            };
+          }
+        }
+        return yield* planManaging(checked, { base, routing });
+      }).pipe(
+        Effect.provideService(LibraryStore, store),
+        Effect.provideService(InstalledSkills.Service, files),
+        Effect.provide(importing),
+      );
+    }
     if (intent._tag === "AcceptFinding") {
       if (!("revision" in options.base))
         return Effect.fail(
@@ -343,6 +414,7 @@ export const make = Effect.gen(function* () {
       Effect.provideService(InstalledSkills.Service, files),
     );
   }
+  function applyFor(plan: ManagePlan): Effect.Effect<ManageOutcome, ManageApplyError>;
   function applyFor(
     plan: AcceptFindingPlan,
   ): Effect.Effect<AcceptFindingOutcome, AcceptFindingApplyError>;
@@ -352,11 +424,22 @@ export const make = Effect.gen(function* () {
   function applyFor(plan: UndoPlan): Effect.Effect<UndoResult, UndoApplyError>;
   function applyFor(plan: Plan): Effect.Effect<Outcome, ApplyError>;
   function applyFor(
-    plan: AcceptFindingPlan | RefreshInventoryPlan | UndoPlan | Plan,
+    plan: ManagePlan | AcceptFindingPlan | RefreshInventoryPlan | UndoPlan | Plan,
   ): Effect.Effect<
-    AcceptFindingOutcome | RefreshInventoryOutcome | UndoResult | Outcome,
-    AcceptFindingApplyError | RefreshInventoryApplyError | UndoApplyError | ApplyError
+    ManageOutcome | AcceptFindingOutcome | RefreshInventoryOutcome | UndoResult | Outcome,
+    | ManageApplyError
+    | AcceptFindingApplyError
+    | RefreshInventoryApplyError
+    | UndoApplyError
+    | ApplyError
   > {
+    if ("_tag" in plan && plan._tag === "Manage")
+      return applyManaging(plan).pipe(
+        Effect.provideService(LibraryStore, store),
+        Effect.provideService(InstalledSkills.Service, files),
+        Effect.provide(writer),
+        Effect.provide(importing),
+      );
     if ("_tag" in plan && plan._tag === "AcceptFinding")
       return applyAcceptance(plan).pipe(
         Effect.provideService(LibraryStore, store),
@@ -430,6 +513,8 @@ export const make = Effect.gen(function* () {
       ),
   });
 });
+/** Compatibility construction; callers migrate to the single public layer. */
+export const make = makeWithRouting();
 /** Routing is part of constructing this Library, never assembled by an operation's caller. */
 export type Routing =
   | { readonly _tag: "None" }
@@ -459,6 +544,8 @@ export const layer = (
       return yield* InstalledSkills.make(yield* InstalledSkills.recordedRouting(yield* store.load));
     }),
   ).pipe(Layer.provide(storage), Layer.provide(treeHasherLayer));
-  return Layer.effect(Service, make).pipe(Layer.provide(Layer.merge(storage, files)));
+  return Layer.effect(Service, makeWithRouting(config.routing)).pipe(
+    Layer.provide(Layer.merge(storage, files)),
+  );
 };
 export * as Library from "./library.js";

@@ -3,15 +3,10 @@ import { canonicalJson } from "../../shared/json.js";
 import { currentSkillVersion } from "../library-contracts.js";
 import { ensureSkillsDirectoryWritable } from "../../install/writable.js";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
-import { type Hash, type InstallScope } from "../../vocabulary.js";
-import { type LibraryState } from "../library-state.js";
+import { type Hash } from "../../vocabulary.js";
 import * as MachineSettings from "../machine-settings.js";
-import { readableSkillsDirectories } from "../routing/duplicates.js";
-import {
-  activeInstallDestinations,
-  skillsDirectoryFor,
-  type InventoryRootOptions,
-} from "../routing/roots.js";
+import { stepRouting } from "../routing/step.js";
+import { activeInstallDestinations, skillsDirectoryFor } from "../routing/roots.js";
 import { Library } from "../library.js";
 import type { ManageOptions } from "./manage-existing.js";
 import { revalidateSetupPlan, saveSetupMachineConfig, type SetupOptions } from "./setup.js";
@@ -93,41 +88,6 @@ const stopDetail = (reason: Library.SetupStopReason) => {
         : reason.error._tag;
   }
 };
-
-/**
- * Where setup installs and which folders agents read, resolved from this machine's configuration
- * once, so a re-run of a step after a crash routes exactly as this one did.
- */
-const stepRouting = Effect.fn("Setup.stepRouting")(function* (
-  roots: InventoryRootOptions,
-  state: LibraryState,
-) {
-  const active = yield* activeInstallDestinations(roots);
-  const scopes: readonly InstallScope[] = [
-    { kind: "global" },
-    ...state.repositories.map((repository) => ({
-      kind: "repository" as const,
-      root: repository.root,
-    })),
-  ];
-  return {
-    active,
-    destinations: scopes.flatMap((scope) =>
-      active.map((destination) => ({
-        scope,
-        destination,
-        root: skillsDirectoryFor(destination, scope, roots),
-      })),
-    ),
-    readable: scopes.flatMap((scope) =>
-      readableSkillsDirectories(roots, scope).map(({ harness, root }) => ({
-        scope,
-        harness,
-        root,
-      })),
-    ),
-  } satisfies Library.StepRouting;
-});
 
 /** A reviewed change as a setup step records it. */
 const recordedChange = (change: InstalledSkillChange): Library.ReviewedInstalledSkillChange => ({

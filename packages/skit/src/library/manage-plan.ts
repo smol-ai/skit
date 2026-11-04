@@ -8,7 +8,7 @@ import { leavePnpmSkill } from "../install/pnpm-skills.js";
 import { resolveSkitSource } from "../sources/resolve.js";
 import { Hash as HashSchema, HarnessName, InstallScope } from "../vocabulary.js";
 import type { SkitSource } from "./library-contracts.js";
-import { libraryStateRevision } from "./library-state.js";
+import { libraryStateRevision, type LibraryState } from "./library-state.js";
 import { inspectResolvedSource, leaveResolvedPnpmSkills } from "./source-inspection.js";
 import { LibraryStore } from "./store/library-store.js";
 
@@ -119,9 +119,10 @@ export const manageBlockers = Effect.fn("Library.manageBlockers")(function* (roo
 export const planManage = Effect.fn("Library.planManage")(function* (
   selected: readonly ManageTarget[],
   nominatedSourcePath?: string,
+  options?: { readonly base: LibraryState },
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const state = yield* (yield* LibraryStore).load;
+  const state = options?.base ?? (yield* (yield* LibraryStore).load);
   const revision = libraryStateRevision(state);
   if (!selected.length) {
     const plan: ManagePlan = {

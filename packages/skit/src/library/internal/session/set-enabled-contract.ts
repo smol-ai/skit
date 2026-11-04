@@ -1,3 +1,5 @@
+import type { Outcome } from "../../library-plan.js";
+import { failureDetails } from "../../../shared/failure.js";
 import { Enabled } from "../../library-contracts.js";
 import { InstallScope, InvocationPolicy, InstallDestination } from "../../../vocabulary.js";
 import { Schema } from "effect";
@@ -61,3 +63,39 @@ export const SetEnabledResult = SetEnabledChange.pipe(
   }),
 );
 export type SetEnabledResult = typeof SetEnabledResult.Type;
+
+/** One shared result view preserves partial application details for every enable caller. */
+export const setEnabledResults = (outcome: Outcome): SetEnabledResult[] => {
+  return outcome.results.map((result, index): SetEnabledResult => {
+    const { _tag, ...change } = result.change;
+    // Incomplete where it left paths unresolved; else the last one carries the failure.
+    const failed =
+      outcome._tag === "Incomplete" &&
+      (result.unresolved.length > 0 ||
+        (index === outcome.results.length - 1 &&
+          outcome.results.every((other) => other.unresolved.length === 0)));
+    const failure = failed ? failureDetails(outcome.cause) : undefined;
+    return {
+      ...change,
+      installed_skills: result.installedSkills.map(({ destination, path, status }) => ({
+        destination,
+        path,
+        status,
+      })),
+      application: {
+        intent: result.intent,
+        revision: result.revision,
+        status: failed ? "incomplete" : "complete",
+        ...(failure === undefined
+          ? {}
+          : {
+              failure: {
+                code: failure.code,
+                message: failure.message,
+                remediation: failure.remediation,
+              },
+            }),
+      },
+    };
+  });
+};

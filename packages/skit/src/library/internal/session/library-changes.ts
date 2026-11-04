@@ -13,8 +13,7 @@ import {
   type SetEnabledConfiguration,
   type SetEnabledPlan,
 } from "./set-enabled.js";
-import type { SetEnabledResult } from "./set-enabled-contract.js";
-import { failureDetails } from "../../../shared/failure.js";
+import { setEnabledResults, type SetEnabledResult } from "./set-enabled-contract.js";
 
 /** Text and displayed names are resolved here; Library accepts only stable identities. */
 export type SelectionError =
@@ -145,38 +144,7 @@ export const applyLibraryChange = Effect.fn("LibrarySelection.apply")(function* 
       message: "This plan belongs to another Library selection",
     });
   const outcome = yield* prepared[planOwner].apply(prepared.owner.plan);
-  const results = outcome.results.map((result, index): SetEnabledResult => {
-    const { _tag, ...change } = result.change;
-    // Incomplete where it left paths unresolved; else the last one carries the failure.
-    const failed =
-      outcome._tag === "Incomplete" &&
-      (result.unresolved.length > 0 ||
-        (index === outcome.results.length - 1 &&
-          outcome.results.every((other) => other.unresolved.length === 0)));
-    const failure = failed ? failureDetails(outcome.cause) : undefined;
-    return {
-      ...change,
-      installed_skills: result.installedSkills.map(({ destination, path, status }) => ({
-        destination,
-        path,
-        status,
-      })),
-      application: {
-        intent: result.intent,
-        revision: result.revision,
-        status: failed ? "incomplete" : "complete",
-        ...(failure === undefined
-          ? {}
-          : {
-              failure: {
-                code: failure.code,
-                message: failure.message,
-                remediation: failure.remediation,
-              },
-            }),
-      },
-    };
-  });
+  const results = setEnabledResults(outcome);
   if (outcome._tag === "Incomplete")
     return yield* new SetEnabledIncomplete({
       results,
