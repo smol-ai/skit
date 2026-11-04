@@ -1,11 +1,6 @@
 import { Schema } from "effect";
-
-export const SyncConflictDetail = Schema.Struct({
-  key: Schema.String,
-  message: Schema.String,
-  resolution: Schema.Literals(["take-remote", "keep-enabled", "local"]),
-});
-export type SyncConflictDetail = typeof SyncConflictDetail.Type;
+import { SyncConflictDetail } from "@smolai/skit-core/library/session";
+export { SyncConflictDetail };
 
 export const SyncEnabledItem = Schema.Struct({
   kind: Schema.Literals(["collection", "skill"]),

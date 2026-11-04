@@ -106,3 +106,10 @@ export {
   type LibraryProgressReporter,
 } from "./internal/session/source-updates.js";
 export { updateSources, type SourceUpdateAdapters } from "./internal/session/update-sources.js";
+
+export { SyncConflictDetail } from "./internal/sync/conflict.js";
+export { resolveSyncInstalledSkillCollisions } from "./internal/sync/collisions.js";
+export {
+  previewSyncInstalledSkills,
+  type SyncInstalledSkillsPreview,
+} from "./internal/sync/installed-skills.js";

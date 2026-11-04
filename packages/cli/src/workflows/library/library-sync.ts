@@ -1,4 +1,5 @@
 import { Library } from "@smolai/skit-core/library";
+import { resolveSyncInstalledSkillCollisions } from "@smolai/skit-core/library/session";
 import { withLibraryWriter } from "@smolai/skit-core";
 import { Data, Effect, Result } from "effect";
 import {
@@ -24,7 +25,6 @@ import { planLibrarySync } from "./library-sync-plan.js";
 import type { SyncPlan } from "./library-sync-contract.js";
 import {
   prepareSyncDeviceTransition,
-  resolveSyncInstalledSkillCollisions,
   updateSyncInstalledSkills,
 } from "./library-sync-installed-skills.js";
 import { SyncConflictDetail } from "./library-sync-contract.js";
