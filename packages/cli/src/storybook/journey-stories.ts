@@ -103,6 +103,7 @@ const storyState = Schema.decodeUnknownSync(LibraryState)({
   repositories: [],
   installed_skills: [],
   unmanaged: [],
+  operations: [],
   adoption_receipts: [],
 });
 

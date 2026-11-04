@@ -359,7 +359,7 @@ describe("CLI contracts", () => {
             : JSON.parse(processResult.stderr).error;
         expect(failure.code).toBe("VALIDATION_FAILED");
         expect(failure.message).toContain("schema v2");
-        expect(failure.message).toContain("supports v4–v11");
+        expect(failure.message).toContain("supports v4–v12");
         expect(failure.remediation).toContain("Back up the state file");
         expect(failure.remediation).toContain("skit setup");
         expect(failure.remediation).not.toContain("author validate");

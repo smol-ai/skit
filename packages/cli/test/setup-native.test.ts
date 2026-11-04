@@ -924,6 +924,7 @@ it.effect("matches an unresolvable lock to a retained Collection by canonical re
       installed_skills: [],
       tombstones: [],
       unmanaged: [],
+      operations: [],
       adoption_receipts: [],
     });
     const instance = setupInstance("Bad_Name", "/repo/Bad_Name", {
@@ -1178,6 +1179,7 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
       ],
       tombstones: [],
       unmanaged: [],
+      operations: [],
       adoption_receipts: [],
     });
     const scan = yield* Effect.gen(function* () {
@@ -1466,6 +1468,7 @@ it.effect(
         ],
         tombstones: [],
         unmanaged: [],
+        operations: [],
         adoption_receipts: [],
       });
       const scan = yield* Effect.gen(function* () {
@@ -1581,6 +1584,7 @@ for (const kind of ["source", "edit"] as const) {
         installed_skills: [],
         tombstones: [],
         unmanaged: [],
+        operations: [],
         adoption_receipts: [],
       });
       expect(classifySetupOnboarding([instance], { library, machineId })).toEqual([]);

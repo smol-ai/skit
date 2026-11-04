@@ -397,6 +397,7 @@ export const prepareRestore = Effect.fn("Library.prepareRestore")(function* <E =
       repositories: [],
       installed_skills: [],
       unmanaged: [],
+      operations: [],
     }),
   ).pipe(
     Effect.mapError(

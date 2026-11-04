@@ -359,6 +359,7 @@ const collisionFixture = () => {
     enabled: [],
     repositories: [],
     unmanaged: [],
+    operations: [],
     installed_skills: (["agents", "claude"] as const).map((target) => ({
       installed_skill_id: makeInstalledSkillId(),
       skill_id: skillId,

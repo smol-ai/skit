@@ -1,8 +1,12 @@
 import { assert, it } from "@effect/vitest";
-import { Deferred, Effect, Fiber, FileSystem, Result } from "effect";
+import { Deferred, Effect, Fiber, FileSystem, Option, Result, Schema } from "effect";
 import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
-import { migratedMachineId } from "../src/library/entity-ids.js";
+import { makeOperationId, migratedMachineId } from "../src/library/entity-ids.js";
+import { collectionVersionPath } from "../src/library/collection-version.js";
+import { libraryManifestFromLocalState, type LibraryState } from "../src/library/library-state.js";
+import { readSnapshotArchive } from "../src/library/snapshot-archive.js";
+import { OperationStatus } from "../src/library/store/state-schema.js";
 import { importCollection } from "../src/library/import-collection.js";
 import {
   LibraryStore,
@@ -10,6 +14,7 @@ import {
   withLibraryWriter,
 } from "../src/library/store/library-store.js";
 import { withHomeLock } from "../src/library/store/writer-lock.js";
+import { Hash } from "../src/vocabulary.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { acquireFileLock } from "../src/platform/file-lock.js";
 
@@ -214,5 +219,75 @@ it.live("keeps the lock until a save already under way in a forked fiber has fin
     yield* Fiber.join(owner);
     assert.isTrue(yield* Effect.isSuccess(Effect.scoped(acquireFileLock(lock))));
     assert.deepStrictEqual(yield* store.load, next);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+/** What sync sends for a state: its portable manifest and the packed retained bytes. */
+const synced = (state: LibraryState, originalsPath: string) =>
+  Effect.all({
+    manifest: libraryManifestFromLocalState(state),
+    pack: Effect.forEach(state.collection_versions, (version) =>
+      readSnapshotArchive(collectionVersionPath(originalsPath, version.hash)),
+    ),
+  });
+
+it.effect("keeps operation records on this device: saved and loaded, never synced", () =>
+  Effect.gen(function* () {
+    const { inLibrary, home } = yield* library;
+    const store = yield* inLibrary(Effect.service(LibraryStore));
+    const base = yield* store.load;
+    const hash = Hash.make(`sha256:${"a".repeat(64)}`);
+    const parent = { path: join(home, "skills"), dev: 1n, ino: 2n };
+    const folder = {
+      _tag: "Directory" as const,
+      path: join(home, "skills", "review"),
+      dev: 1n,
+      ino: 18446744073709551615n,
+      parent,
+      contentHash: hash,
+      treeHash: hash,
+      marker: Option.none(),
+    };
+    const removed = { _tag: "Absent" as const, path: folder.path, parent };
+    const operations: OperationStatus[] = [
+      OperationStatus.cases.Pending.make({
+        operationId: makeOperationId(),
+        steps: [
+          {
+            step: { _tag: "Remove", folders: [folder] },
+            before: [folder],
+            after: [removed],
+            status: "Pending",
+          },
+        ],
+      }),
+      OperationStatus.cases.Stopped.make({
+        operationId: makeOperationId(),
+        reason: {
+          _tag: "EvidenceDiffers",
+          step: 0,
+          path: folder.path,
+          expected: { before: Option.some(folder), after: Option.none() },
+        },
+      }),
+      OperationStatus.cases.Done.make({ operationId: makeOperationId() }),
+    ];
+    const next = {
+      ...base,
+      operations: yield* Schema.encodeEffect(Schema.Array(OperationStatus))(operations),
+    };
+
+    yield* store.save(next, base);
+    const loaded = yield* store.load;
+
+    assert.deepStrictEqual(loaded, next);
+    assert.deepStrictEqual(
+      yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(loaded.operations),
+      operations,
+    );
+    assert.deepStrictEqual(
+      yield* synced(loaded, store.originalsPath),
+      yield* synced(base, store.originalsPath),
+    );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

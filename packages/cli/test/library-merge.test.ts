@@ -427,6 +427,7 @@ it.effect(
         enabled: [{ skill: skillId }],
         repositories: [],
         unmanaged: [],
+        operations: [],
         installed_skills: [
           {
             installed_skill_id: makeInstalledSkillId(),

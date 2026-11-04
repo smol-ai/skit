@@ -1,6 +1,15 @@
 import { Schema } from "effect";
-import { CollectionId, InstalledSkillId, SkillId, SkillVersionId } from "../entity-ids.js";
-import { Hash, HarnessName } from "../../vocabulary.js";
+import {
+  CollectionId,
+  InstalledSkillId,
+  MachineId,
+  OperationId,
+  SkillId,
+  SkillVersionId,
+} from "../entity-ids.js";
+import { SkillsShLockFileEntry, SkitSource } from "../library-contracts.js";
+import { FileIdentityNumber } from "../../platform/link-stat.js";
+import { Hash, HarnessName, InstallDestination } from "../../vocabulary.js";
 
 // Decoded state is readonly except where the transaction API revises a candidate in place.
 // Each Schema.mutableKey below marks one such field; every other field stays readonly, so
@@ -84,3 +93,220 @@ export const LibraryDeviceStateFields = {
     Schema.optional(Schema.mutable(Schema.Array(SkillAssessmentAcceptance))),
   ),
 } as const;
+
+// ── Operation records ───────────────────────────────────────────────────────────────────────────
+// Setup's record of each operation (architecture/library.ts OperationStatus, RecordedSetupStep).
+// Each codec decodes to the contract's shape; `state.json` holds its JSON encoding, so the state
+// document stays a plain JSON value: Options are optional keys and device and inode numbers text.
+
+/** A file's identity: exact device and inode, saved as decimal text. */
+export const FileIdentity = Schema.Struct({
+  path: Schema.String,
+  dev: FileIdentityNumber,
+  ino: FileIdentityNumber,
+});
+export type FileIdentity = typeof FileIdentity.Type;
+
+const FileIdentityFields = FileIdentity.fields;
+
+export const FolderEvidence = Schema.TaggedStruct("Directory", {
+  ...FileIdentityFields,
+  parent: FileIdentity,
+  contentHash: Hash,
+  treeHash: Hash,
+  marker: Schema.OptionFromOptionalKey(Schema.String),
+});
+export type FolderEvidence = typeof FolderEvidence.Type;
+
+export const LinkEvidence = Schema.TaggedStruct("SymbolicLink", {
+  ...FileIdentityFields,
+  parent: FileIdentity,
+  linkTarget: Schema.String,
+  canonicalPath: Schema.String,
+  contentHash: Hash,
+});
+export type LinkEvidence = typeof LinkEvidence.Type;
+
+/** Recorded "nothing here": the before of a created folder, the after of a moved one. */
+export const AbsentEvidence = Schema.TaggedStruct("Absent", {
+  path: Schema.String,
+  parent: FileIdentity,
+});
+export type AbsentEvidence = typeof AbsentEvidence.Type;
+
+/** A retained Collection Version in originals/: Import's only folder effect, additive. */
+export const RetainedEvidence = Schema.TaggedStruct("Retained", { hash: Hash });
+export type RetainedEvidence = typeof RetainedEvidence.Type;
+
+export const PathEvidence = Schema.Union([FolderEvidence, LinkEvidence, AbsentEvidence]);
+export type PathEvidence = typeof PathEvidence.Type;
+export const StepEvidence = Schema.Union([PathEvidence, RetainedEvidence]);
+export type StepEvidence = typeof StepEvidence.Type;
+
+/** An import of observed skills, exactly as `importCollection` takes it. */
+export const ImportRequest = Schema.Struct({
+  machineId: Schema.optionalKey(MachineId),
+  input: Schema.String,
+  source: SkitSource,
+  declaration: Schema.optionalKey(
+    Schema.Struct({
+      namespace: Schema.String,
+      slug: Schema.String,
+      authority: Schema.optionalKey(Schema.String),
+    }),
+  ),
+  revision: Schema.optionalKey(
+    Schema.Union([
+      Schema.Struct({ kind: Schema.Literal("commit"), commit: Schema.String }),
+      Schema.Struct({ kind: Schema.Literal("release"), version: Schema.String }),
+    ]),
+  ),
+  importedAt: Schema.String,
+  skills: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      sourcePath: Schema.String,
+      relativePath: Schema.String,
+      currentHash: Hash,
+    }),
+  ),
+  lockFileEntries: Schema.Array(SkillsShLockFileEntry),
+});
+export type ImportRequest = typeof ImportRequest.Type;
+
+export const DuplicatePolicy = Schema.Literals([
+  "keep-both",
+  "preserve-duplicates",
+  "retire-aliases",
+  "retain-only",
+]);
+export type DuplicatePolicy = typeof DuplicatePolicy.Type;
+
+const ManageSelectionFields = {
+  name: Schema.String,
+  source: FolderEvidence,
+  duplicates: Schema.OptionFromOptionalKey(DuplicatePolicy),
+  approvedSymlinks: Schema.Array(LinkEvidence),
+  approvedCopies: Schema.Array(FolderEvidence),
+} as const;
+
+export const ManageExistingSelection = Schema.Struct({
+  ...ManageSelectionFields,
+  mode: Schema.Literal("existing"),
+  subjectId: Schema.String,
+  currentHash: Hash,
+});
+export type ManageExistingSelection = typeof ManageExistingSelection.Type;
+
+/** Where a setup "new" copy's files come from: its own import, a Collection, or an earlier step. */
+export const ManageStepSource = Schema.TaggedUnion({
+  Import: { request: ImportRequest },
+  Collection: { collectionId: CollectionId },
+  Step: { step: Schema.Int },
+});
+export type ManageStepSource = typeof ManageStepSource.Type;
+
+/** A "new" selection as setup records it, its source being a `ManageStepSource`. */
+export const ManageNewSelection = Schema.Struct({
+  ...ManageSelectionFields,
+  mode: Schema.Literal("new"),
+  importFrom: ManageStepSource,
+  currentHash: Schema.OptionFromOptionalKey(Hash),
+  equalCopies: Schema.Array(FolderEvidence),
+  ownership: Schema.OptionFromOptionalKey(
+    Schema.Struct({
+      harnesses: Schema.Array(HarnessName),
+      machineId: Schema.OptionFromOptionalKey(MachineId),
+    }),
+  ),
+});
+export type ManageNewSelection = typeof ManageNewSelection.Type;
+
+/** A reviewed copy change, frozen at review. */
+export const ReviewedInstalledSkillChange = Schema.Struct({
+  installedSkillId: Schema.OptionFromOptionalKey(InstalledSkillId),
+  skillId: SkillId,
+  name: Schema.String,
+  path: Schema.String,
+  destination: InstallDestination,
+  baselineHash: Schema.OptionFromOptionalKey(Hash),
+  currentHash: Schema.OptionFromOptionalKey(Hash),
+  desiredHash: Schema.OptionFromOptionalKey(Hash),
+  desiredVersionId: Schema.OptionFromOptionalKey(SkillVersionId),
+  evidence: Hash,
+  status: Schema.Literals([
+    "unchanged",
+    "incoming-update",
+    "local-only",
+    "competing",
+    "protected",
+    "native-delete",
+    "uninstall",
+    "install",
+  ]),
+  metadataChanged: Schema.Boolean,
+});
+export type ReviewedInstalledSkillChange = typeof ReviewedInstalledSkillChange.Type;
+
+export const VersionChoice = Schema.Struct({
+  skillId: SkillId,
+  version: Schema.Literals(["retained", "local"]),
+  path: Schema.OptionFromOptionalKey(Schema.String),
+});
+export type VersionChoice = typeof VersionChoice.Type;
+
+export const SetupStep = Schema.Union([
+  Schema.TaggedStruct("Import", { request: ImportRequest }),
+  Schema.TaggedStruct("Manage", {
+    mode: Schema.Literal("existing"),
+    selections: Schema.Array(ManageExistingSelection),
+  }),
+  Schema.TaggedStruct("Manage", {
+    mode: Schema.Literal("new"),
+    selections: Schema.Array(ManageNewSelection),
+  }),
+  Schema.TaggedStruct("Update", {
+    changes: Schema.Array(ReviewedInstalledSkillChange),
+    versionChoices: Schema.Array(VersionChoice),
+  }),
+  Schema.TaggedStruct("Remove", {
+    folders: Schema.Array(Schema.Union([FolderEvidence, LinkEvidence])),
+  }),
+]);
+export type SetupStep = typeof SetupStep.Type;
+
+/** One step as saved before any step runs; Done once its effect is complete. */
+export const RecordedSetupStep = Schema.Struct({
+  step: SetupStep,
+  before: Schema.Array(StepEvidence),
+  after: Schema.Array(StepEvidence),
+  status: Schema.Literals(["Pending", "Done"]),
+});
+export type RecordedSetupStep = typeof RecordedSetupStep.Type;
+
+/** Why an operation stopped. A failed step's error is kept as JSON, as Effect saves defects. */
+export const SetupStopReason = Schema.TaggedUnion({
+  EvidenceDiffers: {
+    step: Schema.Int,
+    path: Schema.String,
+    expected: Schema.Struct({
+      before: Schema.OptionFromOptionalKey(Schema.Union([FolderEvidence, LinkEvidence])),
+      after: Schema.OptionFromOptionalKey(Schema.Union([FolderEvidence, LinkEvidence])),
+    }),
+  },
+  /** `revision` is a Library `Revision`. */
+  LibraryChanged: {
+    step: Schema.Int,
+    revision: Schema.NonEmptyString.pipe(Schema.brand("Revision")),
+  },
+  StepFailed: { step: Schema.Int, error: Schema.Defect() },
+});
+export type SetupStopReason = typeof SetupStopReason.Type;
+
+/** Status of one recorded operation (setup, restore, undo). */
+export const OperationStatus = Schema.TaggedUnion({
+  Pending: { operationId: OperationId, steps: Schema.Array(RecordedSetupStep) },
+  Done: { operationId: OperationId },
+  Stopped: { operationId: OperationId, reason: SetupStopReason },
+});
+export type OperationStatus = typeof OperationStatus.Type;

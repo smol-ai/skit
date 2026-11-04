@@ -1,14 +1,9 @@
 import { Schema, SchemaGetter } from "effect";
 import { InstalledSkillId, SkillId, SkillVersionId } from "../entity-ids.js";
-import {
-  AbsoluteDevicePath,
-  CURRENT_LIBRARY_STATE_VERSION,
-  LibraryState,
-  LibraryStateDocument,
-  type InstalledSkill,
-} from "../library-state.js";
+import { AbsoluteDevicePath, type InstalledSkill } from "../library-state.js";
 import { Hash } from "../../vocabulary.js";
 import { HarnessInstallStatus, RecordedInstallDestination } from "./state-schema.js";
+import { LibraryStateFromV11, LibraryStateV11 } from "./state-schema-v11.js";
 
 // Frozen v10 state. Every older state migrates through these shapes, so they stay as v10 defined
 // them while the current model moves on.
@@ -34,7 +29,7 @@ const {
   schemaVersion: _schemaVersion,
   installed_skills: _installedSkills,
   ...fields
-} = LibraryState.fields;
+} = LibraryStateV11.fields;
 export const LibraryStateV10 = Schema.Struct({
   ...fields,
   schemaVersion: Schema.Literal(10),
@@ -90,11 +85,11 @@ export const installedSkillFromV10 = ({
  */
 export const LibraryStateFromV10 = Schema.Unknown.pipe(
   Schema.refine(Schema.is(LibraryStateV10)),
-  Schema.decodeTo(LibraryStateDocument, {
+  Schema.decodeTo(LibraryStateFromV11, {
     decode: SchemaGetter.transform(
-      ({ installed_skills, ...state }: LibraryStateV10): LibraryState => ({
+      ({ installed_skills, ...state }: LibraryStateV10): LibraryStateV11 => ({
         ...state,
-        schemaVersion: CURRENT_LIBRARY_STATE_VERSION,
+        schemaVersion: 11,
         installed_skills: installed_skills.flatMap(installedSkillFromV10),
       }),
     ),

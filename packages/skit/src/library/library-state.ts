@@ -12,7 +12,7 @@ import {
   Skill,
   librarySnapshotDigests,
 } from "./library-contracts.js";
-import { LibraryDeviceStateFields } from "./store/state-schema.js";
+import { LibraryDeviceStateFields, OperationStatus } from "./store/state-schema.js";
 import { Hash, InstallDestination, InvocationPolicy } from "../vocabulary.js";
 import { canonicalJson } from "../shared/json.js";
 
@@ -118,7 +118,7 @@ export const DeviceSkillSelection = Schema.Union([
 ]);
 export type DeviceSkillSelection = typeof DeviceSkillSelection.Type;
 
-export const CURRENT_LIBRARY_STATE_VERSION = 11 as const;
+export const CURRENT_LIBRARY_STATE_VERSION = 12 as const;
 
 export const LibraryState = Schema.Struct({
   ...LibraryDeviceStateFields,
@@ -135,6 +135,8 @@ export const LibraryState = Schema.Struct({
   invocation_policies: Schema.optionalKey(InvocationPolicies),
   repositories: Schema.mutable(Schema.Array(Repository)),
   installed_skills: Schema.mutable(Schema.Array(InstalledSkill)),
+  /** Setup's operation records, as JSON. They stay on this device; sync and pack never send them. */
+  operations: Schema.Array(Schema.toEncoded(OperationStatus)),
 }).check(
   Schema.makeFilter(
     (state) => {
@@ -185,6 +187,7 @@ export const emptyLibraryState = (): LibraryState =>
     repositories: [],
     installed_skills: [],
     unmanaged: [],
+    operations: [],
   });
 
 /** Content identity of a state; a save is accepted only onto the revision it was planned from. */
@@ -204,6 +207,7 @@ export const LibraryInventory = LibraryState.mapFields(
     "enabled",
     "invocation_policies",
     "repositories",
+    "operations",
   ]),
 );
 export type LibraryInventory = typeof LibraryInventory.Type;

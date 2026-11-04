@@ -41,6 +41,7 @@ const asV9 = ({
   repositories,
   installed_skills,
   skills,
+  operations: _operations,
   ...fields
 }: LibraryState) => {
   assert.isUndefined(fields.sync_ancestry);
@@ -134,7 +135,7 @@ it.effect("v8 state migrates to account-following without changing portable inte
     const migrated = yield* inspectLibrary(home);
     assert.isTrue(migrated.present);
     if (!migrated.present) return;
-    assert.strictEqual(migrated.state.schemaVersion, 11);
+    assert.strictEqual(migrated.state.schemaVersion, 12);
     assert.isUndefined(migrated.state.device_skill_selection);
     assert.deepStrictEqual(globalEnabled(migrated.state), { enabled: migrated.state.enabled });
     assert.isTrue(
@@ -155,7 +156,7 @@ it.effect(
       const migrated = yield* inspectLibrary(home);
       assert.strictEqual(migrated.present, true);
       if (!migrated.present) return;
-      assert.strictEqual(migrated.state.schemaVersion, 11);
+      assert.strictEqual(migrated.state.schemaVersion, 12);
       assert.strictEqual(migrated.state.collections.length, 1);
       assert.strictEqual(migrated.state.imports[0]?.kind, "source");
       assert.strictEqual(
@@ -455,7 +456,7 @@ it.effect("migrates v5 state: whole Sources, entries, retained edits, all histor
     assert.strictEqual(migrated.present, true);
     if (!migrated.present) return;
     const state = migrated.state;
-    assert.strictEqual(state.schemaVersion, 11);
+    assert.strictEqual(state.schemaVersion, 12);
     assert.ok(
       (yield* fs.readDirectory(home)).some((name) => name.startsWith("state.json.v5.backup-")),
     );
@@ -555,7 +556,7 @@ for (const agreed of [true, false])
         const migrated = yield* inspectLibrary(home);
         assert.strictEqual(migrated.present, true);
         if (!migrated.present) return;
-        assert.strictEqual(migrated.state.schemaVersion, 11);
+        assert.strictEqual(migrated.state.schemaVersion, 12);
         assert.deepStrictEqual(migrated.state.enabled, enabled);
         // Harnesses that disagreed leave the Skill on its declared policy.
         assert.deepStrictEqual(
@@ -714,7 +715,7 @@ it.effect("migrates v9 Bindings to enabled lists and renames stored records", ()
     assert.strictEqual(migrated.present, true);
     if (!migrated.present) return;
     const state = migrated.state;
-    assert.strictEqual(state.schemaVersion, 11);
+    assert.strictEqual(state.schemaVersion, 12);
     assert.deepStrictEqual(state.enabled, []);
     assert.deepStrictEqual(state.invocation_policies, { [skill.skill_id]: "explicit" });
     assert.deepStrictEqual(state.device_skill_selection, {
@@ -751,6 +752,12 @@ it.effect("migrates v9 Bindings to enabled lists and renames stored records", ()
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+/** A current state written as the v11 document it migrates from: v11 recorded no operations. */
+const asV11 = ({ operations: _operations, ...state }: LibraryState) => ({
+  ...state,
+  schemaVersion: 11,
+});
 
 /** The status fields a v10 installed copy stored, written as raw JSON. */
 interface StoredStatusFields {
@@ -803,13 +810,13 @@ it.effect(
       ];
       yield* fs.writeFileString(
         join(home, "state.json"),
-        JSON.stringify({ ...current.state, schemaVersion: 10, installed_skills: rows }),
+        JSON.stringify({ ...asV11(current.state), schemaVersion: 10, installed_skills: rows }),
       );
 
       const migrated = yield* inspectLibrary(home);
       assert.strictEqual(migrated.present, true);
       if (!migrated.present) return;
-      assert.strictEqual(migrated.state.schemaVersion, 11);
+      assert.strictEqual(migrated.state.schemaVersion, 12);
       assert.deepStrictEqual(migrated.state.installed_skills, [
         {
           ...copy,
@@ -857,6 +864,30 @@ it.effect(
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
+it.effect("migrates v11 state to v12 with no operation records", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-v11-migration-" });
+    yield* fs.writeFileString(
+      join(home, "state.json"),
+      yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
+    );
+    const current = yield* inspectLibrary(home);
+    assert.strictEqual(current.present, true);
+    if (!current.present) return;
+    yield* fs.writeFileString(join(home, "state.json"), JSON.stringify(asV11(current.state)));
+
+    const migrated = yield* inspectLibrary(home);
+    assert.strictEqual(migrated.present, true);
+    if (!migrated.present) return;
+    assert.deepStrictEqual(migrated.state, current.state);
+    assert.deepStrictEqual(migrated.state.operations, []);
+    assert.isTrue(
+      (yield* fs.readDirectory(home)).some((name) => name.startsWith("state.json.v11.backup-")),
+    );
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
 const stateBackups = (home: string) =>
   Effect.map(
     Effect.flatMap(FileSystem.FileSystem, (fs) => fs.readDirectory(home)),
@@ -884,7 +915,7 @@ it.effect("migrates a legacy state.json exactly once, when the Library layer is 
     const library = Context.get(yield* Layer.build(libraryLayer(home)), Library.Service);
     assert.strictEqual((yield* stateBackups(home)).length, 1);
     const migrated = yield* stateFileEvidence(home);
-    assert.strictEqual(JSON.parse(migrated.bytes).schemaVersion, 11);
+    assert.strictEqual(JSON.parse(migrated.bytes).schemaVersion, 12);
 
     const first = yield* library.read;
     const second = yield* library.read;
