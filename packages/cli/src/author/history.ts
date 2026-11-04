@@ -5,7 +5,6 @@
  * <home>/sync-bindings.json. Callers save a workspace's files with `capture` and `retain`, run the
  * sync engine against `engineStore`, and step the sync checkpoint only through `syncState`.
  */
-import { SqliteClient } from "@effect/sql-sqlite-node";
 import {
   Clock,
   Context,
@@ -301,6 +300,9 @@ const writeHistoryEvent = Effect.fn("AuthorHistory.writeHistoryEvent")(function*
   save: (latest: History.RevisionId | undefined) => Effect.Effect<A, E, R>,
 ) {
   const fs = yield* FileSystem.FileSystem;
+  // Library frontends can load Author's API without opening its Node-only journal driver.
+  // Only a history write needs this adapter.
+  const { SqliteClient } = yield* Effect.promise(() => import("@effect/sql-sqlite-node"));
   return yield* writers
     .withPermit(
       Effect.scoped(
