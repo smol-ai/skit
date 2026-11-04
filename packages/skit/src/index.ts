@@ -194,3 +194,5 @@ export {
   skitConfigurationLayer,
   type ResolvedSkitConfiguration,
 } from "./platform/configuration.js";
+
+export { normalizeLibraryManifest } from "./library/manifest.js";
