@@ -1,7 +1,6 @@
 import { skitConfigurationLayer } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
-import { LibraryStore } from "@smolai/skit-core";
 import { Renderer } from "../../presentation/renderer.js";
 import { handleSourceCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
@@ -16,11 +15,9 @@ export const checkCliCommand = Command.make("check", { subject, ...localFlags },
   handleSourceCommand(
     Effect.gen(function* () {
       const renderer = yield* Renderer;
-      const store = yield* LibraryStore;
-      const state = yield* store.load;
       const value = yield* renderer.withStatus(
         "Checking retained Collections",
-        checkSubjects(state, Option.getOrUndefined(input.subject), (collection) =>
+        checkSubjects(Option.getOrUndefined(input.subject), (collection) =>
           renderer.updateStatus(`Checking ${collection.display_name}`),
         ),
       );

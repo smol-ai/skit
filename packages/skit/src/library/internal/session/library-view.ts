@@ -1,3 +1,6 @@
+import { checkLibrarySubjects } from "./check.js";
+import type { Hash } from "../../../vocabulary.js";
+import type { SkitSource } from "../../library-contracts.js";
 import { removalSummary } from "./remove.js";
 import { securityReview } from "../security/review.js";
 import { Library } from "../../library.js";
@@ -78,6 +81,25 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
     });
   });
   return {
+    checkSubjects: <E, R>(
+      query: string | undefined,
+      options: {
+        readonly inspectSource: (
+          source: SkitSource,
+        ) => Effect.Effect<{ readonly snapshot_digest: Hash }, E, R>;
+        readonly onCollection?: (collection: {
+          readonly collection_id: string;
+          readonly display_name: string;
+        }) => Effect.Effect<void>;
+      },
+    ) =>
+      checkLibrarySubjects(
+        state,
+        originalsPath,
+        query,
+        options.inspectSource,
+        options.onCollection,
+      ),
     removalSummary: (query: string) => removalSummary(state, query),
     securityReview: (query: string) => securityReview(state, originalsPath, query),
     collections: structuredClone(collections),

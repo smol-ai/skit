@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { Effect, FileSystem, Result, Schema } from "effect";
-import { SourceProcess, FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { SourceProcess } from "../../../platform/source-process.js";
+import { FailureTypeId, type SkitFailure } from "../../../shared/failure.js";
 
 export class GitInspectionFailed
   extends Schema.TaggedError<GitInspectionFailed>()("SkillsSh.GitInspectionFailed", {

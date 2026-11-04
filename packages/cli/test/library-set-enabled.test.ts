@@ -17,7 +17,6 @@ import { calculateSetEnabled } from "@smolai/skit-core/library/session";
 import { applySetEnabledPlan } from "../src/library-application/set-enabled.js";
 import { libraryView } from "@smolai/skit-core/library/session";
 import { planUpdates } from "../src/library-application/update.js";
-import { checkSubjects } from "../src/workflows/library/check.js";
 import { matchingLibrarySubjects } from "@smolai/skit-core";
 import { initializeLibraryMachine, importCollectionIn, writingTo } from "./helpers/library-home.js";
 
@@ -134,7 +133,11 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       "Library.SubjectAmbiguous",
     );
     assert.strictEqual(
-      (yield* checkSubjects(ambiguous, "review").pipe(Effect.provide(layer), Effect.flip))._tag,
+      (yield* libraryView(ambiguous, "unused")
+        .checkSubjects("review", {
+          inspectSource: () => Effect.die("ambiguous query must not fetch a Source"),
+        })
+        .pipe(Effect.provide(layer), Effect.flip))._tag,
       "Library.SubjectAmbiguous",
     );
     assert.strictEqual(

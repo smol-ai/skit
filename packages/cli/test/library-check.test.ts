@@ -1,3 +1,4 @@
+import { skitConfigurationLayer } from "@smolai/skit-core";
 import { Library } from "@smolai/skit-core/library";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Ref } from "effect";
@@ -30,20 +31,13 @@ it.effect("checks retained files without treating an observed local copy as an u
     );
     assert.strictEqual(loaded.present, true);
     if (!loaded.present) return;
+    const beforeState = yield* fs.readFileString(join(home, "state.json"));
     const checkedCollections = yield* Ref.make<ReadonlyArray<string>>([]);
-    const current = yield* checkSubjects(loaded.state, imported.collection_id, (collection) =>
+    const current = yield* checkSubjects(imported.collection_id, (collection) =>
       Ref.update(checkedCollections, (names) => [...names, collection.display_name]),
     ).pipe(
-      Effect.provideService(LibraryStore, {
-        load: Effect.succeed(loaded.state),
-        inspect: Effect.succeed(loaded),
-        save: () => Effect.void,
-        home,
-        originalsPath: join(home, "originals"),
-        statePath: join(home, "state.json"),
-        variantsPath: join(home, "variants"),
-        startup: { finished: [], stopped: [] },
-      }),
+      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provide(skitConfigurationLayer(home)),
     );
     assert.strictEqual(current[0]?.collection_versions[0]?.original_intact, true);
     assert.deepStrictEqual(yield* Ref.get(checkedCollections), []);
@@ -55,33 +49,17 @@ it.effect("checks retained files without treating an observed local copy as an u
       loaded.state.collection_versions[0]!.hash,
     );
     yield* fs.writeFileString(join(path, "SKILL.md"), "changed retained bytes\n");
-    const changed = yield* checkSubjects(loaded.state, imported.collection_id).pipe(
-      Effect.provideService(LibraryStore, {
-        load: Effect.succeed(loaded.state),
-        inspect: Effect.succeed(loaded),
-        save: () => Effect.void,
-        home,
-        originalsPath: join(home, "originals"),
-        statePath: join(home, "state.json"),
-        variantsPath: join(home, "variants"),
-        startup: { finished: [], stopped: [] },
-      }),
+    const changed = yield* checkSubjects(imported.collection_id).pipe(
+      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provide(skitConfigurationLayer(home)),
     );
     assert.strictEqual(changed[0]?.collection_versions[0]?.original_intact, false);
     assert.strictEqual(changed[0]?.source_status, "not-applicable");
     assert.strictEqual(changed[0]?.available_snapshot_digest, undefined);
     yield* fs.remove(source, { recursive: true });
-    const withoutCopy = yield* checkSubjects(loaded.state, imported.collection_id).pipe(
-      Effect.provideService(LibraryStore, {
-        load: Effect.succeed(loaded.state),
-        inspect: Effect.succeed(loaded),
-        save: () => Effect.void,
-        home,
-        originalsPath: join(home, "originals"),
-        statePath: join(home, "state.json"),
-        variantsPath: join(home, "variants"),
-        startup: { finished: [], stopped: [] },
-      }),
+    const withoutCopy = yield* checkSubjects(imported.collection_id).pipe(
+      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provide(skitConfigurationLayer(home)),
     );
     assert.strictEqual(withoutCopy[0]?.source_status, "not-applicable");
     assert.strictEqual(
@@ -89,6 +67,7 @@ it.effect("checks retained files without treating an observed local copy as an u
       loaded.state.collection_versions[0]!.hash,
     );
     assert.strictEqual(withoutCopy[0]?.available_snapshot_digest, undefined);
+    assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), beforeState);
     const reloaded = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );

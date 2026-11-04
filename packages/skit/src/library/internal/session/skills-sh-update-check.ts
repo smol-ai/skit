@@ -1,8 +1,9 @@
 import { dirname, join } from "node:path";
 import { Clock, Effect } from "effect";
-import { LibraryStore, collectionVersionPath, type LibraryState } from "@smolai/skit-core";
-import { computeSkillsShCompatibleHash } from "@smolai/skit-core/library/setup";
-import type { LibrarySubject } from "@smolai/skit-core";
+import { collectionVersionPath } from "../../collection-version.js";
+import type { LibraryState } from "../../library-state.js";
+import { computeSkillsShCompatibleHash } from "../../setup/skills-sh-compatible-hash.js";
+import type { LibrarySubject } from "../../subject-resolution.js";
 import { inspectSkillsShGitEvidence } from "./skills-sh-git-evidence.js";
 export { GitInspectionFailed } from "./skills-sh-git-evidence.js";
 
@@ -41,13 +42,14 @@ const sourceUrl = (
 };
 
 export const checkSkillsShSubject = Effect.fn("SkillsSh.checkSubject")(function* (
+  home: string,
+  originalsPath: string,
   subject: LibrarySubject,
   sourceImport: LibraryState["imports"][number] | undefined,
   collectionVersion: LibraryState["collection_versions"][number] | undefined,
 ) {
   if (!sourceImport || !collectionVersion) return undefined;
   const checkedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
-  const store = yield* LibraryStore;
   const lockFileEntries = [
     ...new Map(
       sourceImport.lock_file_entries.flatMap((lockFileEntry) =>
@@ -78,7 +80,7 @@ export const checkSkillsShSubject = Effect.fn("SkillsSh.checkSubject")(function*
       })),
     };
   const ref = lockFileEntries.find((lockFileEntry) => lockFileEntry.ref)?.ref ?? "HEAD";
-  const evidence = yield* inspectSkillsShGitEvidence(store.home, source, ref);
+  const evidence = yield* inspectSkillsShGitEvidence(home, source, ref);
   if (evidence._tag === "Unavailable")
     return {
       checked_at: checkedAt,
@@ -90,7 +92,7 @@ export const checkSkillsShSubject = Effect.fn("SkillsSh.checkSubject")(function*
       })),
     };
   const tip = evidence.commit;
-  const root = collectionVersionPath(store.originalsPath, collectionVersion.hash);
+  const root = collectionVersionPath(originalsPath, collectionVersion.hash);
   const members: SkillsShUpdateMember[] = [];
   for (const lockFileEntry of lockFileEntries) {
     const claimed = lockFileEntry.computed_hash ?? lockFileEntry.skill_folder_hash;

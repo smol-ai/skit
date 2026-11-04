@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { Effect, FileSystem, Ref } from "effect";
+import { Effect, FileSystem } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { expect } from "vitest";
@@ -8,9 +8,8 @@ import { it } from "@effect/vitest";
 import { libraryStoreLayer, LibraryStore, skitLayer, type LibraryState } from "@smolai/skit-core";
 import { runSetup } from "@smolai/skit-core/library/setup";
 import { applySetupSelections } from "./helpers/setup-apply.js";
-import { checkSkillsShSubject } from "../src/workflows/library/skills-sh-update-check.js";
-import { librarySubjects } from "@smolai/skit-core";
-import { checkSubjects } from "../src/workflows/library/check.js";
+import { libraryView } from "@smolai/skit-core/library/session";
+import { inspectLibrarySource } from "../src/library-application/import-source.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 const hash = (text: string) => createHash("sha256").update("SKILL.md").update(text).digest("hex");
@@ -112,7 +111,7 @@ it.effect("checks skills.sh status against real Git history without saving Libra
         })),
       })),
     };
-    const savedState = yield* Ref.make<LibraryState | undefined>(undefined);
+    const beforeState = yield* fs.readFileString(home.statePath);
     const discoveryClient = HttpClient.make((request) => {
       const digest = `sha256:${createHash("sha256").update(original).digest("hex")}`;
       const body = request.url.endsWith("/.well-known/agent-skills/index.json")
@@ -138,20 +137,11 @@ it.effect("checks skills.sh status against real Git history without saving Libra
         ),
       );
     });
-    const store = {
-      load: Effect.succeed(localState),
-      inspect: Effect.succeed({ present: true as const, state: localState }),
-      save: (next: LibraryState) => Ref.set(savedState, next),
-      home: home.home,
-      originalsPath: home.originals,
-      statePath: home.statePath,
-      variantsPath: home.variantsPath,
-      startup: { finished: [], stopped: [] },
-    };
-    const checked = yield* checkSubjects(localState, member.skill_id).pipe(
-      Effect.provideService(LibraryStore, store),
-      Effect.provideService(HttpClient.HttpClient, discoveryClient),
-    );
+    const checked = yield* libraryView(localState, home.originals)
+      .checkSubjects(member.skill_id, {
+        inspectSource: inspectLibrarySource,
+      })
+      .pipe(Effect.provideService(HttpClient.HttpClient, discoveryClient));
     expect(checked[0]?.skills_sh?.members).toEqual([
       expect.objectContaining({
         skill_name: "review",
@@ -163,22 +153,28 @@ it.effect("checks skills.sh status against real Git history without saving Libra
     expect(checked[0]?.skills_sh?.members[0]?.baseline_commit).not.toBe(
       checked[0]?.skills_sh?.members[0]?.upstream_commit,
     );
-    const subject = librarySubjects(localState)[0]!;
     const sourceImport = localState.imports[0]!;
     const collectionVersion = localState.collection_versions[0]!;
     type Observation = LibraryState["imports"][number]["lock_file_entries"][number];
-    const checkLockEntry = (change: Partial<Observation> = {}) =>
-      checkSkillsShSubject(
-        subject,
-        {
-          ...sourceImport,
-          lock_file_entries: sourceImport.lock_file_entries.map((lockFileEntry) => ({
-            ...lockFileEntry,
-            ...change,
-          })),
-        },
-        collectionVersion,
-      ).pipe(Effect.provideService(LibraryStore, store));
+    const checkLockEntry = (change: Partial<Observation> = {}) => {
+      const state = {
+        ...localState,
+        imports: [
+          {
+            ...sourceImport,
+            lock_file_entries: sourceImport.lock_file_entries.map((lockFileEntry) => ({
+              ...lockFileEntry,
+              ...change,
+            })),
+          },
+        ],
+      };
+      return libraryView(state, home.originals)
+        .checkSubjects(member.skill_id, {
+          inspectSource: () => Effect.succeed({ snapshot_digest: collectionVersion.hash }),
+        })
+        .pipe(Effect.map((rows) => rows[0]?.skills_sh));
+    };
     const originalCommit = checked[0]!.skills_sh!.members[0]!.baseline_commit!;
     const originalTree = checked[0]!.skills_sh!.members[0]!.baseline_tree!;
     expect((yield* checkLockEntry({ ref: originalCommit }))?.members[0]).toMatchObject({
@@ -231,6 +227,6 @@ it.effect("checks skills.sh status against real Git history without saving Libra
       reason: "could not reach Git source",
     });
     // Checking only reports: the Library it read is left exactly as it was.
-    expect(yield* Ref.get(savedState)).toBeUndefined();
+    expect(yield* fs.readFileString(home.statePath)).toBe(beforeState);
   }).pipe(Effect.provide(skitLayer)),
 );

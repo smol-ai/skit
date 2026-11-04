@@ -77,7 +77,6 @@ export const debt = {
   // The home lock is withHomeLock until the home-lock function exists (D3; A6).
   "packages/cli/src/author/history.ts": ["withHomeLock"],
   "packages/cli/src/configuration-writer.ts": ["withHomeLock"],
-  "packages/cli/src/handlers/library/check.ts": ["LibraryStore"],
   "packages/cli/src/handlers/library/recovery.ts": ["LibraryStore", "prepareRecoveryRestore"],
   "packages/cli/src/library-application/collection-update.ts": [
     "LibraryStore",
@@ -91,13 +90,11 @@ export const debt = {
     "libraryStoreLayer",
     "withLibraryWriter",
   ],
-  "packages/cli/src/workflows/library/check.ts": ["LibraryStore"],
   "packages/cli/src/workflows/library/library-sync-installed-skills.ts": [
     "LibraryStore",
     "withLibraryWriter",
   ],
   "packages/cli/src/workflows/library/library-sync.ts": ["LibraryStore", "withLibraryWriter"],
-  "packages/cli/src/workflows/library/skills-sh-update-check.ts": ["LibraryStore"],
   "packages/cli/test/application-boundaries.test.ts": ["LibraryStore", "withLibraryWriter"],
   "packages/cli/test/author-workspace-identity.test.ts": ["withLibraryWriter"],
   "packages/cli/test/collection-load.test.ts": ["LibraryStore", "libraryStoreLayer"],

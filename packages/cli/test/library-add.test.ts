@@ -349,7 +349,9 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     assert.deepStrictEqual(enabled.enabled, [{ skill: skill.skill_id }]);
     assert.strictEqual(yield* fs.exists(join(root, "codex", "review", "SKILL.md")), true);
     assert.strictEqual(
-      (yield* run(checkSubjects(enabled, skill.skill_id)))[0]?.source_status,
+      (yield* run(
+        checkSubjects(skill.skill_id).pipe(Effect.provide(skitConfigurationLayer(home))),
+      ))[0]?.source_status,
       "current",
     );
     artifact = updated;

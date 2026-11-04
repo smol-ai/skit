@@ -1,4 +1,5 @@
-import type { LibraryState, SkitSource } from "@smolai/skit-core";
+import type { LibraryState } from "../../library-state.js";
+import type { SkitSource } from "../../library-contracts.js";
 
 type Upstream = NonNullable<LibraryState["collections"][number]["upstream"]>;
 

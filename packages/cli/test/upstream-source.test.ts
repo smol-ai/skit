@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { makeMachineId } from "@smolai/skit-core";
-import { sourceFromUpstream } from "../src/workflows/library/upstream-source.js";
+import { sourceFromUpstream } from "@smolai/skit-core/library/session";
 
 it("refreshes the whole Git Source from its tracking and collection root", () => {
   assert.deepStrictEqual(

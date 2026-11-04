@@ -15,7 +15,7 @@ import { dirname, join, resolve } from "node:path";
 import { isPlatformError } from "effect/PlatformError";
 import { commandFailure } from "../failure-classification.js";
 import { sourceLocator, Library, InstalledSkills } from "@smolai/skit-core";
-import { sourceFromUpstream } from "../workflows/library/upstream-source.js";
+import { sourceFromUpstream } from "@smolai/skit-core/library/session";
 import { FailureTypeId, isSkitFailure, type SkitFailure } from "@smolai/skit-core";
 
 export class CollectionNotUpdatable

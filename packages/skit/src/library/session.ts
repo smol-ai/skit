@@ -88,3 +88,11 @@ export {
   EditImportStale,
 } from "./internal/session/edit.js";
 export { EditImportPlan, EditImportResult } from "./internal/session/edit-contract.js";
+
+export { sourceFromUpstream } from "./internal/session/upstream-source.js";
+
+export { GitInspectionFailed } from "./internal/session/skills-sh-git-evidence.js";
+export type {
+  SkillsShUpdateMember,
+  SkillsShUpdateStatus,
+} from "./internal/session/skills-sh-update-check.js";
