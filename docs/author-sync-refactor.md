@@ -28,8 +28,8 @@ Sync → mergeAuthorTree
   ├─ index the same TreeFile values by path
   ├─ rename alignment updates each file's own path
   └─ merge files → text/frontmatter policies → same TreeEntry[]
-workspace workflow → scanAuthorSyncTree / refreshAuthorHistory
-sync state file → loadSyncStates / saveSyncState
+workspace workflow → scanAuthorSyncTree / AuthorHistory.capture
+sync state file → AuthorHistory.syncState.read / save / prepareWrite
 ```
 
 `TreeEntry` owns the canonical file representation. The merger owns its temporary
@@ -41,7 +41,7 @@ information; they are not removed merely to reduce the number of type names.
 Names in the sync owner now identify `LoadedRevision`, `PlanInput`, and
 `LocalRevision` directly. Loading planner input is `loadPlanInput`; scans say
 `scan`, persisted metadata/history reads say `load`, and scanning and saving
-history is `refreshAuthorHistory`.
+history is `AuthorHistory.capture`.
 
 First-sync setup is `NewDraft { remote, visibility }` or `ConnectedDraft { remote }`,
 rather than an optional `firstSync` alongside a remote. Durable recovery remains

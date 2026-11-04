@@ -99,9 +99,11 @@ loadAuthorVersion → verify/read only the requested content
 loadAuthorVersions → existing access to unique trees, including pre-journal ones
 ```
 
-`history-journal.ts` owns ordering, workspace aliases and unchanged-scan
-suppression. `history.ts` owns stable scans and immutable content publication;
-persisted schemas and failures live in `history-contracts.ts`. Callers still
+All of this now belongs to the AuthorHistory owner in
+`packages/cli/src/author/history.ts`: it owns ordering, unchanged-scan
+suppression and stable scans, and callers record through its `capture`. Immutable
+trees and revisions are stored by `history-store.ts` beside it, and the owner's
+persisted schemas and failures are defined in `history.ts`. Callers still
 request a recording; they do not assign
 sequence numbers or coordinate events with content publication. Event sequence
 is a device-local observation order, not a global multi-device order. Timestamps
