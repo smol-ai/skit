@@ -1,11 +1,11 @@
 import { basename } from "node:path";
 import { Clock, Data, Effect } from "effect";
 import {
-  canonicalJson,
-  emptyLibraryState,
   hashParts,
   InstalledSkills,
   Library,
+  changeWrites,
+  updateInstalledSkills,
   FailureTypeId,
   type LibraryState,
   type SkitFailure,
@@ -50,11 +50,7 @@ export const changesNeedingChoice = (
   );
 
 /** Whether applying would write a copy or a record: what setup asks before touching any. */
-const writes = (fact: InstalledSkillChange) =>
-  fact.status === "incoming-update" ||
-  fact.status === "install" ||
-  fact.status === "uninstall" ||
-  fact.metadataChanged;
+const writes = changeWrites;
 
 export const hasChangesToApply = (
   facts: readonly InstalledSkillChange[],
@@ -150,123 +146,22 @@ export const planInstalledSkillChanges = Effect.fn("Setup.planInstalledSkillChan
 });
 
 /**
- * Apply reviewed changes to existing copies through the Library: each local choice becomes its
- * Skill's Version, then one update installs what was reviewed. `reviewed` is every change the
- * approved setup plan showed; anything the update would write must still be exactly that.
+ * Apply reviewed changes to existing copies through the Library, routed by this machine's
+ * configuration: each local choice becomes its Skill's Version, then one update installs what was
+ * reviewed.
  */
 export const applyInstalledSkillChanges = Effect.fn("Setup.applyInstalledSkillChanges")(function* (
   roots: InventoryRootOptions,
   reviewed: readonly InstalledSkillChange[],
   choices: readonly SetupVersionChoice[],
 ) {
-  const library = yield* setupLibrary(roots);
-  const chosen = new Set<string>(choices.map((choice) => choice.skillId));
-  const local = reviewed.filter((fact) =>
-    choices.some(
-      (choice) =>
-        choice.version === "local" && choice.skillId === fact.skillId && choice.path === fact.path,
-    ),
+  return yield* updateInstalledSkills(
+    reviewed,
+    choices,
+    new Date(yield* Clock.currentTimeMillis).toISOString(),
+  ).pipe(
+    Effect.provideService(InstalledSkills.Service, yield* makeInstalledSkills(roots)),
+    Effect.catchTag("Library.ReviewedChangeDiffers", () => Effect.fail(new PlanIsStale())),
+    Effect.map((copies): InstalledSkillChangeResult[] => [...copies]),
   );
-  for (const fact of local) {
-    if (fact.currentHash === undefined || fact.installedSkillId === undefined)
-      return yield* new PlanIsStale();
-    yield* library.import.edit({
-      skillId: fact.skillId,
-      installedSkillId: fact.installedSkillId,
-      path: fact.path,
-      currentHash: fact.currentHash,
-      importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
-    });
-  }
-  const snapshot = yield* library.read;
-  const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
-  const planned = yield* library.plan({ _tag: "Update" }, { base: state });
-  const marker = (path: string) => {
-    const entry = planned.folders.find((folder) => folder.path === path)?.entry;
-    return entry?._tag === "Present" && entry.facts?.marker.kind === "valid"
-      ? entry.facts.marker.marker
-      : undefined;
-  };
-  // An edit that already is the Version keeps its folder; a chosen Version replaces every other
-  // reviewed edit of its Skill, which goes to recovery and is kept there.
-  const approvals = planned.changes.flatMap((change): Library.Approval[] => {
-    if (
-      change._tag !== "Conflict" ||
-      !("edited" in change) ||
-      !change.edited ||
-      change.recorded === undefined
-    )
-      return [];
-    const installedSkillId = change.recorded.installed_skill_id;
-    if (reviewed.find((fact) => fact.path === change.path)?.currentHash !== change.currentHash)
-      return [];
-    const current = marker(change.path);
-    const accept: Library.Approval[] =
-      current === undefined ||
-      (change.currentHash !== change.hash && !local.some((fact) => fact.path === change.path))
-        ? []
-        : [
-            {
-              _tag: "AcceptEdit",
-              installedSkillId,
-              currentHash: change.currentHash,
-              marker: current,
-            },
-          ];
-    return chosen.has(change.skillId)
-      ? [...accept, { _tag: "ReplaceEdit", installedSkillId, currentHash: change.currentHash }]
-      : accept;
-  });
-  const plan = yield* library.plan({ _tag: "Update" }, { base: state, approvals });
-  const facts = Library.reviewInstalledSkillChanges(plan);
-
-  // Outside the chosen Skills, whatever the update writes is exactly what was reviewed.
-  for (const fact of facts)
-    if (
-      !chosen.has(fact.skillId) &&
-      writes(fact) &&
-      canonicalJson(fact) !== canonicalJson(reviewed.find((item) => item.path === fact.path))
-    )
-      return yield* new PlanIsStale();
-  // A chosen copy that the update would still leave edited was not the copy reviewed.
-  for (const fact of facts)
-    if (chosen.has(fact.skillId) && (fact.status === "competing" || fact.status === "local-only"))
-      return yield* new PlanIsStale();
-
-  const outcome = yield* library.apply(plan);
-  const copies = outcome._tag === "Applied" ? outcome.copies : [];
-  return facts.map((fact): InstalledSkillChangeResult => {
-    const result = copies.find((copy) => copy._tag !== "Failed" && copy.copy.path === fact.path);
-    const installedSkillId =
-      result === undefined || result._tag === "Failed"
-        ? fact.installedSkillId
-        : result.copy.installed_skill_id;
-    const at = {
-      ...(installedSkillId === undefined ? {} : { installedSkillId }),
-      name: fact.name,
-      path: fact.path,
-    };
-    switch (result?._tag) {
-      case "Installed":
-        return { ...at, status: fact.status === "install" ? "installed" : "updated" };
-      case "Conflicted":
-        return { ...at, status: fact.status === "protected" ? "unchanged" : "local-kept" };
-      case "Suppressed":
-        return { ...at, status: "native-delete" };
-      case "Uninstalled":
-        return { ...at, status: "uninstalled" };
-      case "Pending":
-        return { ...at, status: "pending" };
-      default:
-        return {
-          ...at,
-          status:
-            fact.status === "uninstall"
-              ? "uninstalled"
-              : fact.status === "install"
-                ? "pending"
-                : "unchanged",
-        };
-    }
-  });
 });

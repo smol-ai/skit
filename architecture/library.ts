@@ -304,6 +304,26 @@ export interface VersionChoice {
 }
 
 /**
+ * Routing for one setup step, resolved from this machine's configuration once, when the steps are
+ * built, and saved with the step. It is the Routing "Recorded" idea (InstalledSkills
+ * recordedRouting) taken at review: a re-run routes by this record, never by "Configured".
+ * `readable` is what the duplicate check scans, so a re-run still refuses unapproved duplicates.
+ */
+export interface StepRouting {
+  readonly active: readonly InstallDestination[];
+  readonly destinations: readonly {
+    readonly scope: InstallScope;
+    readonly destination: InstallDestination;
+    readonly root: string;
+  }[];
+  readonly readable: readonly {
+    readonly scope: InstallScope;
+    readonly harness: HarnessName;
+    readonly root: string;
+  }[];
+}
+
+/**
  * Setup (decided: crash behaviour follows humanlayer/t3code). Setup prepares the whole list of
  * steps as data; Library saves it in state.json before running any step, runs steps in order
  * (removals last), checks each folder is as recorded before moving it, and marks each step done.
@@ -317,16 +337,21 @@ export type SetupStep =
       readonly _tag: "Manage";
       readonly mode: "existing";
       readonly selections: readonly ManageExistingSelection[];
+      readonly routing: StepRouting;
     }
   | {
       readonly _tag: "Manage";
       readonly mode: "new";
       readonly selections: readonly ManageNewSelection<ManageStepSource>[];
+      readonly routing: StepRouting;
     }
   | {
       readonly _tag: "Update";
       readonly changes: readonly ReviewedInstalledSkillChange[]; // approval.changes, setup-apply.ts:76-89
       readonly versionChoices: readonly VersionChoice[]; // setup-apply.ts:94-105, applied :245-251
+      /** Stamps each local choice's import, so a re-run finds it and imports each edit once. */
+      readonly importedAt: string;
+      readonly routing: StepRouting;
     }
   | { readonly _tag: "Remove"; readonly folders: readonly (FolderEvidence | LinkEvidence)[] }; // arbitrary reviewed duplicates (recovery-moves.ts:92-101)
 

@@ -16,7 +16,7 @@ import { make as makeInstalledSkills } from "../../install/installed-skills.js";
 import { PlanIsStale } from "../../library/failures.js";
 import { recordSetupCopies } from "./setup-copy-backup.js";
 import { prepareRecoveryMoves } from "../../library-application/recovery-moves.js";
-import { resolveLibrarySubject } from "./subject-resolution.js";
+import { resolveLibrarySubject } from "@smolai/skit-core";
 import { leavePnpmSkill } from "@smolai/skit-core";
 import {
   duplicateSymlinksToBackUp,
@@ -25,12 +25,7 @@ import {
   type SetupCopyConflict,
 } from "./setup-decisions.js";
 import {
-  canonicalJson,
   deterministicTreeHash,
-  Hash as HashSchema,
-  HarnessName,
-  inspectNormalizedTree,
-  inspectOwnershipMarker,
   inspectInstalledSkill,
   LibraryStore,
   LinkStat,
@@ -41,211 +36,20 @@ import {
   type HarnessName as HarnessNameType,
   FailureTypeId,
   type SkitFailure,
-  InstallScope,
-  walkTree,
   Library,
   InstalledSkills,
+  incompleteManageWarning,
+  planManage,
 } from "@smolai/skit-core";
-import { Effect, FileSystem, Schema } from "effect";
-import { createHash } from "node:crypto";
-import { dirname, join, resolve } from "node:path";
-import { importSource, inspectLibrarySource } from "../../library-application/import-source.js";
+import { Effect, FileSystem, Option, Schema } from "effect";
+import { join, resolve } from "node:path";
+import { importSource } from "../../library-application/import-source.js";
 import type { InstalledSkillOptions } from "./installed-skill-options.js";
-
-const ManageTarget = Schema.Struct({
-  path: Schema.String,
-  harness: HarnessName,
-  scope: InstallScope,
-});
-interface ManageTarget extends Schema.Schema.Type<typeof ManageTarget> {}
-
-const ManageBlocker = Schema.Literals([
-  "empty-selection",
-  "multiple-skills",
-  "not-projection-target",
-  "content-mismatch",
-  "invalid-marker",
-  "managed-by-another-entry",
-  "would-discard-control-entry",
-  "would-normalize-path",
-]);
-type ManageBlocker = typeof ManageBlocker.Type;
-
-const PlannedManageTarget = Schema.Union([
-  Schema.Struct({
-    ...ManageTarget.fields,
-    status: Schema.Literal("adoptable"),
-    currentHash: HashSchema,
-  }),
-  Schema.Struct({
-    ...ManageTarget.fields,
-    status: Schema.Literal("already-managed"),
-    currentHash: HashSchema,
-  }),
-  Schema.Struct({
-    ...ManageTarget.fields,
-    status: Schema.Literal("blocked"),
-    currentHash: Schema.optionalKey(HashSchema),
-  }),
-]);
-type PlannedManageTarget = typeof PlannedManageTarget.Type;
-
-const ManagePlan = Schema.Struct({
-  revision: Schema.String,
-  sourcePath: Schema.optionalKey(Schema.String),
-  snapshotDigest: Schema.optionalKey(HashSchema),
-  skill: Schema.optionalKey(
-    Schema.Struct({
-      name: Schema.String,
-      validationHash: HashSchema,
-    }),
-  ),
-  targets: Schema.Array(PlannedManageTarget),
-  blockers: Schema.Array(Schema.Struct({ path: Schema.String, reason: ManageBlocker })),
-  applicable: Schema.Boolean,
-});
-interface ManagePlan extends Schema.Schema.Type<typeof ManagePlan> {}
 
 export interface ManageOptions {
   readonly installOptions: InstalledSkillOptions;
   readonly recoveryOperationDirectory?: string;
 }
-
-const manageBlockers = Effect.fn("Library.manageBlockers")(function* (root: string) {
-  const normalized = yield* inspectNormalizedTree(root);
-  const verbatim = yield* walkTree(root, "verbatim");
-  const blockers: Array<{ path: string; reason: ManageBlocker }> = normalized.excluded
-    .filter(
-      (entry) =>
-        entry.reason === "normalized-control-exclusion" &&
-        entry.path.split("/").at(-1) !== ".DS_Store",
-    )
-    .map((entry) => ({
-      path: join(root, entry.path),
-      reason: "would-discard-control-entry" as const,
-    }));
-
-  for (const entry of verbatim) {
-    if (entry.path !== entry.path.normalize("NFC"))
-      blockers.push({ path: join(root, entry.path), reason: "would-normalize-path" });
-  }
-
-  return { blockers, contentHash: yield* deterministicTreeHash(root) };
-});
-
-/** Plan exact-content managing without retaining, projecting, or saving state. */
-const planManage = Effect.fn("Library.planManage")(function* (
-  selected: readonly ManageTarget[],
-  nominatedSourcePath?: string,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const state = yield* (yield* LibraryStore).load;
-  const revision = createHash("sha256").update(canonicalJson(state)).digest("hex");
-  if (!selected.length) {
-    const plan: ManagePlan = {
-      revision,
-      targets: [],
-      blockers: [{ path: "", reason: "empty-selection" }],
-      applicable: false,
-    };
-    return plan;
-  }
-
-  const targets = [...selected].sort((left, right) =>
-    resolve(left.path).localeCompare(resolve(right.path)),
-  );
-  const sourcePath = resolve(nominatedSourcePath ?? selected[0]!.path);
-  const preview = yield* inspectLibrarySource(sourcePath);
-  const blockers: Array<{ path: string; reason: ManageBlocker }> = [];
-  const previewSkill = preview.skills.length === 1 ? preview.skills[0] : undefined;
-  const sourceContentHash = yield* deterministicTreeHash(sourcePath);
-  const existingImportIds = new Set(
-    state.imports
-      .filter(
-        (sourceImport) =>
-          sourceImport.source_identity.kind === "local" &&
-          resolve(sourceImport.source_identity.path.value) === sourcePath,
-      )
-      .map((sourceImport) => sourceImport.import_id),
-  );
-  const existingCollection = state.collections.find((collection) =>
-    state.imports.some(
-      (sourceImport) =>
-        sourceImport.collection_id === collection.collection_id &&
-        existingImportIds.has(sourceImport.import_id),
-    ),
-  );
-  const existingSkill = state.skills.find(
-    (candidate) =>
-      candidate.collection_id === existingCollection?.collection_id &&
-      candidate.name === previewSkill?.name,
-  );
-  const skill = previewSkill
-    ? {
-        name: previewSkill.name,
-        ...(existingSkill === undefined ? {} : { skillId: existingSkill.skill_id }),
-        validationHash: sourceContentHash,
-      }
-    : undefined;
-  if (!skill) blockers.push({ path: sourcePath, reason: "multiple-skills" });
-
-  const plannedTargets: PlannedManageTarget[] = [];
-  for (const target of targets) {
-    const path = resolve(target.path);
-    const expectedPath = resolve(join(dirname(path), previewSkill?.name ?? ""));
-    const physicalExpectedPath = expectedPath
-      ? yield* fs.realPath(expectedPath).pipe(Effect.orElseSucceed(() => expectedPath))
-      : undefined;
-    const physicalTargetPath = yield* fs.realPath(path).pipe(Effect.orElseSucceed(() => path));
-    if (!skill || !physicalExpectedPath || physicalExpectedPath !== physicalTargetPath) {
-      blockers.push({ path, reason: "not-projection-target" });
-      plannedTargets.push({ ...target, path, status: "blocked" });
-      continue;
-    }
-    const lossless = yield* manageBlockers(path);
-    const currentHash = lossless.contentHash;
-    let blocked = false;
-    if (currentHash !== skill.validationHash) {
-      blockers.push({ path, reason: "content-mismatch" });
-      blocked = true;
-    }
-    const marker = yield* inspectOwnershipMarker(path);
-    const alreadyManaged =
-      marker.kind === "valid" &&
-      skill.skillId !== undefined &&
-      marker.marker.skill_id === skill.skillId &&
-      marker.marker.expected_hash === currentHash;
-    if (!alreadyManaged && lossless.blockers.length > 0) {
-      blockers.push(...lossless.blockers);
-      blocked = true;
-    }
-    if (marker.kind === "invalid") {
-      blockers.push({ path, reason: "invalid-marker" });
-      blocked = true;
-    }
-    if (marker.kind === "valid" && !alreadyManaged) {
-      blockers.push({ path, reason: "managed-by-another-entry" });
-      blocked = true;
-    }
-    plannedTargets.push({
-      ...target,
-      path,
-      currentHash,
-      status: blocked ? "blocked" : alreadyManaged ? "already-managed" : "adoptable",
-    });
-  }
-
-  const plan: ManagePlan = {
-    revision,
-    sourcePath,
-    snapshotDigest: preview.snapshot_digest,
-    ...(skill ? { skill } : {}),
-    targets: plannedTargets,
-    blockers,
-    applicable: blockers.length === 0,
-  };
-  return plan;
-});
 
 export class ManageInvalid
   extends Schema.TaggedError<ManageInvalid>()("ManageInvalid", {
@@ -527,12 +331,14 @@ const installCopy = Effect.fn("Manage.installCopy")(function* (
     Effect.catchTag("Library.SetEnabledIncomplete", (failure) =>
       // Setup can retain the chosen source while other differing copies stay active.
       // Report the owner's incomplete destinations; actual reconciliation failures stop setup.
-      failure.reason === "destinations"
-        ? Effect.succeed({
+      Option.match(incompleteManageWarning(selection.name, failure), {
+        onNone: () => Effect.fail(failure),
+        onSome: (warning) =>
+          Effect.succeed({
             results: failure.results.map((value) => ({ kind: "applied" as const, value })),
-            warnings: [{ name: selection.name, message: failure.message }],
-          })
-        : Effect.fail(failure),
+            warnings: [warning],
+          }),
+      }),
     ),
   );
   const [result] = applied.results;

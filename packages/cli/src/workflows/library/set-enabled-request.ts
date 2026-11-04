@@ -9,7 +9,7 @@ import { Effect } from "effect";
 import { Library } from "@smolai/skit-core";
 import type { InvocationOption } from "../../invocation/policy.js";
 import { OptionCombinationInvalid } from "../failures.js";
-import { resolveLibrarySubject } from "./subject-resolution.js";
+import { resolveLibrarySubject } from "@smolai/skit-core";
 
 /** One enable or disable at one scope. */
 export interface SetEnabledRequest {

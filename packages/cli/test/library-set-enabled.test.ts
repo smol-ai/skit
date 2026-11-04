@@ -17,7 +17,7 @@ import { applySetEnabledPlan } from "../src/library-application/set-enabled.js";
 import { planRemove } from "../src/workflows/library/remove.js";
 import { planUpdates } from "../src/library-application/update.js";
 import { checkSubjects } from "../src/workflows/library/check.js";
-import { matchingLibrarySubjects } from "../src/workflows/library/subject-resolution.js";
+import { matchingLibrarySubjects } from "@smolai/skit-core";
 import { initializeLibraryMachine, importCollectionIn, writingTo } from "./helpers/library-home.js";
 
 it.effect("partially binds raw Skills and converges after enable and disable", () =>

@@ -7,7 +7,7 @@ import {
   type LibraryState,
 } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
-import { resolveLibrarySubject } from "./subject-resolution.js";
+import { resolveLibrarySubject } from "@smolai/skit-core";
 
 export interface RemoveOptions {
   readonly query: string;

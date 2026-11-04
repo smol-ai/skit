@@ -2,84 +2,20 @@ import { localLibrary } from "./library-owner.js";
 import { officialRegistryOrigin } from "../registry/accounts.js";
 import { withLibraryWriter } from "@smolai/skit-core";
 import {
-  deterministicTreeHash,
-  originalTreeHash,
-  validateSkitDirectory,
-  readSkitDescriptor,
-  parseSkillFrontmatter,
+  describeSourceSkills,
+  inspectResolvedSource,
+  leaveResolvedPnpmSkills,
   parseSkitSource,
   sourceLocator,
-  prepareImport,
   resolveSkitSource,
-  type SkitSource,
   type ResolvedSkitSource,
+  type SkitSource,
 } from "@smolai/skit-core";
-import { Data, Clock, Effect, FileSystem } from "effect";
-import { basename, dirname, join, relative } from "node:path";
+import { Clock, Effect } from "effect";
 import { RegistryAuth } from "../registry/auth-service.js";
 import { leavePnpmSkill } from "@smolai/skit-core";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
-export class AddNoSkills
-  extends Data.TaggedError("Library.AddNoSkills")<{ source: string }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Choose a source that contains a SKILL.md.";
-  get message(): string {
-    return `No Skills found in ${this.source}`;
-  }
-}
-/** Check every selected local member before retaining any bytes, including declared collections.
- * Preserve the caller's dependency view when resolution canonicalizes or stages directory links.
- */
-const leaveResolvedPnpmSkills = Effect.fn("Library.leaveResolvedPnpmSkills")(function* (
-  source: SkitSource,
-  resolved: ResolvedSkitSource,
-) {
-  if (source.type !== "local") return;
-  const inputRoot = basename(source.path) === "SKILL.md" ? dirname(source.path) : source.path;
-  if (resolved.descriptorKind === "declared") {
-    const descriptor = yield* readSkitDescriptor(resolved.root);
-    const memberRoot = join(inputRoot, relative(resolved.originalRoot, resolved.root));
-    for (const skill of descriptor.skills) {
-      yield* leavePnpmSkill(join(memberRoot, skill.path));
-      yield* leavePnpmSkill(join(resolved.root, skill.path));
-    }
-  } else {
-    for (const path of resolved.foundSkillPaths) {
-      yield* leavePnpmSkill(join(inputRoot, path));
-      yield* leavePnpmSkill(join(resolved.originalRoot, path));
-    }
-  }
-});
-
-/** Describe plain source members once, before retention verifies and stages those observations. */
-const describeSourceSkills = Effect.fn("Library.describeSourceSkills")(function* (
-  resolved: Extract<ResolvedSkitSource, { descriptorKind: "observed" }>,
-  sourceLabel: string,
-) {
-  if (resolved.foundSkillPaths.length === 0) return yield* new AddNoSkills({ source: sourceLabel });
-  const fs = yield* FileSystem.FileSystem;
-  return yield* Effect.forEach(resolved.foundSkillPaths, (relativePath) =>
-    Effect.gen(function* () {
-      const sourcePath =
-        relativePath === "." ? resolved.originalRoot : join(resolved.originalRoot, relativePath);
-      const text = yield* fs.readFileString(join(sourcePath, "SKILL.md"));
-      const frontmatter = parseSkillFrontmatter(text);
-      return {
-        name:
-          typeof frontmatter?.name === "string" && frontmatter.name.trim()
-            ? frontmatter.name.trim()
-            : basename(sourcePath),
-        sourcePath,
-        relativePath,
-        currentHash: yield* deterministicTreeHash(sourcePath),
-      };
-    }),
-  );
-});
+export { AddNoSkills } from "@smolai/skit-core";
 
 /** Resolve once inside the lifetime of the operation consuming the staged source. */
 const withResolvedSource = Effect.fn("SourceAcquisition.withResolvedSource")(function* <A, E, R>(
@@ -122,38 +58,7 @@ export const inspectLibrarySource = Effect.fn("Library.inspectSource")(function*
   previousSkillPaths?: readonly string[],
 ) {
   return yield* withResolvedSource(input, previousSkillPaths, ({ parsed, resolved }) =>
-    Effect.gen(function* () {
-      if (resolved.descriptorKind === "declared") {
-        const validated = yield* validateSkitDirectory(resolved.root, "retained", {
-          assessmentContext: "import",
-        });
-        return {
-          kind: "authored" as const,
-          snapshot_digest: yield* originalTreeHash(resolved.root),
-          skills: validated.descriptor.skills.map((skill) => ({
-            name: skill.name,
-            verbatim_path: skill.path,
-          })),
-        };
-      }
-      const skills = yield* describeSourceSkills(resolved, sourceLocator(parsed));
-      const diagnostics = resolved.diagnostics?.length ? { diagnostics: resolved.diagnostics } : {};
-      const prepared = yield* prepareImport(skills);
-      return {
-        kind: "plain" as const,
-        ...diagnostics,
-        snapshot_digest: prepared.hash,
-        skills: prepared.facts.map((skill) => ({
-          name: skill.name,
-          verbatim_path: skill.sourcePath,
-        })),
-        /** Per-Skill bytes, so a refresh preview can tell which Skills changed. */
-        members: prepared.facts.map((skill) => ({
-          source_path: skill.sourcePath,
-          artifact_hash: skill.artifactHash,
-        })),
-      };
-    }),
+    inspectResolvedSource(parsed, resolved),
   );
 });
 

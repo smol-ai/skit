@@ -19,6 +19,7 @@ import {
   describeInvocationConformanceIssue,
 } from "../invocation/conformance.js";
 import { walkTree } from "./tree.js";
+import { encodeHashParts, sha256Hash } from "../shared/hash.js";
 import type { TreeEntry } from "./tree-entry.js";
 import type { TreeRequirements } from "../platform/tree-requirements.js";
 import type { TreeError } from "../shared/tree-error.js";
@@ -57,13 +58,21 @@ export function deterministicTreeHash(
   return walkTree(root, "normalized").pipe(Effect.map(hashNormalizedEntries));
 }
 
-export function hashNormalizedEntries(entries: readonly TreeEntry[]): Hash {
-  return hashParts(
-    entries.flatMap((entry) =>
-      entry.kind === "file" ? [entry.path, String(entry.mode), entry.bytes] : [],
-    ),
+/** What a normalized tree's hash covers: each file's path, mode and bytes. */
+const normalizedHashParts = (entries: readonly TreeEntry[]) =>
+  entries.flatMap((entry) =>
+    entry.kind === "file" ? [entry.path, String(entry.mode), entry.bytes] : [],
   );
+
+export function hashNormalizedEntries(entries: readonly TreeEntry[]): Hash {
+  return hashParts(normalizedHashParts(entries));
 }
+
+/** `deterministicTreeHash`, computed through Effect's Digest service. The same hash. */
+export const digestTreeHash = (root: string) =>
+  walkTree(root, "normalized").pipe(
+    Effect.flatMap((entries) => sha256Hash(encodeHashParts(normalizedHashParts(entries)))),
+  );
 
 function releaseIdentityFromEntries(
   descriptor: SkitDescriptor,

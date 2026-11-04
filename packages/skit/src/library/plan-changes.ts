@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { Effect, Schema, type Scope } from "effect";
 import { InstalledSkills } from "./installed-skills.js";
 import { LibraryStore } from "./store/library-store.js";
-import type { LibraryState, InstalledSkill } from "./library-state.js";
+import { libraryStateRevision, type LibraryState, type InstalledSkill } from "./library-state.js";
 import { skillsToCheckForDuplicates, deviceInstallationIntent } from "./enabled.js";
 import { edit } from "./library-edit.js";
 import { currentSkillVersion, enabledSkillIds, versionBacking } from "./library-contracts.js";
@@ -18,6 +18,7 @@ import type {
   EnabledChange,
   InstalledSkillChange,
   Intent,
+  Plan,
   PlanError,
   Route,
 } from "./library-plan.js";
@@ -435,4 +436,27 @@ export const planChanges = Effect.fn("Library.planChanges")(function* (
     changes: [...installing, ...uninstalling].map(({ change }): InstalledSkillChange => change),
     enabled: shown,
   };
+});
+
+/**
+ * Plan against the Library the front end showed, never a fresh read: apply refuses the plan if the
+ * Library has changed since. Inputs are copied, so the plan never aliases its caller's values.
+ */
+export const planIntent = Effect.fn("Library.plan")(function* (
+  intent: Intent,
+  options: { readonly base: LibraryState; readonly approvals?: readonly Approval[] },
+) {
+  const base = structuredClone(options.base);
+  const approvals = structuredClone(options.approvals ?? []);
+  const reviewed = structuredClone(intent);
+  const planned = yield* Effect.scoped(planChanges(base, reviewed, approvals));
+  return {
+    baseRevision: libraryStateRevision(base),
+    intent: reviewed,
+    approvals,
+    routes: planned.routes,
+    folders: planned.folders,
+    next: planned.next,
+    changes: [...planned.enabled.map(({ change }) => change), ...planned.changes],
+  } satisfies Plan;
 });

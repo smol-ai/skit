@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { Library, InstalledSkills, type LibraryState } from "@smolai/skit-core";
 import { make as makeInstalledSkills } from "../install/installed-skills.js";
-import { resolveLibrarySubject } from "../workflows/library/subject-resolution.js";
+import { resolveLibrarySubject } from "@smolai/skit-core";
 import {
   expandSetEnabledIntent,
   type SetEnabledIntent,
@@ -18,8 +18,8 @@ import { classifyFailure } from "../failure-classification.js";
 /** Text and displayed names are resolved here; Library accepts only stable identities. */
 export type SelectionError =
   | Library.PlanError
-  | import("../workflows/library/subject-resolution.js").LibrarySubjectNotFound
-  | import("../workflows/library/subject-resolution.js").LibrarySubjectAmbiguous
+  | import("@smolai/skit-core").LibrarySubjectNotFound
+  | import("@smolai/skit-core").LibrarySubjectAmbiguous
   | import("../workflows/failures.js").OptionCombinationInvalid;
 export type SelectionRequirements =
   | import("@smolai/skit-core").TreeRequirements

@@ -2,10 +2,7 @@ import { LibraryStore, withLibraryWriter, type LibraryState } from "@smolai/skit
 import { Effect } from "effect";
 import type { InventoryRootOptions } from "../install/roots.js";
 import type { UpdateResult } from "../workflows/library/update-contract.js";
-import {
-  latestSourceImport,
-  resolveOwningLibrarySubjects,
-} from "../workflows/library/subject-resolution.js";
+import { latestSourceImport, resolveOwningLibrarySubjects } from "@smolai/skit-core";
 import { previewCollectionUpdate, updateCollection } from "./collection-update.js";
 export { CollectionNotUpdatable } from "./collection-update.js";
 

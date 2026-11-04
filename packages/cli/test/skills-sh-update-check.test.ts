@@ -9,7 +9,7 @@ import { libraryStoreLayer, LibraryStore, skitLayer, type LibraryState } from "@
 import { runSetup } from "../src/workflows/library/setup.js";
 import { importSetupCollections } from "../src/workflows/library/setup-import.js";
 import { checkSkillsShSubject } from "../src/workflows/library/skills-sh-update-check.js";
-import { librarySubjects } from "../src/workflows/library/subject-resolution.js";
+import { librarySubjects } from "@smolai/skit-core";
 import { checkSubjects } from "../src/workflows/library/check.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 

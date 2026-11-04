@@ -5,8 +5,8 @@ import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
 import { observePathEvidence } from "../src/library/folder-evidence.js";
 import { Library } from "../src/library/library.js";
-import { resumeSetup, type SupportedSetupStep } from "../src/library/setup.js";
-import { OperationStatus } from "../src/library/store/state-schema.js";
+import { resumeSetup } from "../src/library/setup.js";
+import { OperationStatus, type SetupStep } from "../src/library/store/state-schema.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { inLibrary, inspectLibrary, libraryLayer } from "./helpers/library-store.js";
 
@@ -53,7 +53,7 @@ const fixture = Effect.gen(function* () {
   const evidence = yield* observePathEvidence(folder);
   assert.isTrue(Option.isSome(evidence));
   if (Option.isNone(evidence)) return yield* Effect.die("no evidence");
-  const remove: SupportedSetupStep = { _tag: "Remove", folders: [evidence.value] };
+  const remove: SetupStep = { _tag: "Remove", folders: [evidence.value] };
   return { fs, workspace, home, folder, remove };
 });
 
@@ -104,7 +104,7 @@ const importFixture = Effect.gen(function* () {
   const source = join(workspace, "source");
   yield* fs.makeDirectory(source, { recursive: true });
   yield* fs.writeFileString(join(source, "SKILL.md"), "raw Skill bytes\n");
-  const imported: SupportedSetupStep = {
+  const imported: SetupStep = {
     _tag: "Import",
     request: {
       machineId,

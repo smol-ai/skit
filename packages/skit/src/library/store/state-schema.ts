@@ -9,7 +9,7 @@ import {
 } from "../entity-ids.js";
 import { SkillsShLockFileEntry, SkitSource } from "../library-contracts.js";
 import { FileIdentityNumber } from "../../platform/link-stat.js";
-import { Hash, HarnessName, InstallDestination } from "../../vocabulary.js";
+import { Hash, HarnessName, InstallDestination, InstallScope } from "../../vocabulary.js";
 
 // Decoded state is readonly except where the transaction API revises a candidate in place.
 // Each Schema.mutableKey below marks one such field; every other field stays readonly, so
@@ -255,19 +255,39 @@ export const VersionChoice = Schema.Struct({
 });
 export type VersionChoice = typeof VersionChoice.Type;
 
+/**
+ * Where a step installs and which folders agents read, resolved from this machine's configuration
+ * once, when the steps are built. A re-run routes by this record, never by the configuration.
+ */
+export const StepRouting = Schema.Struct({
+  active: Schema.Array(InstallDestination),
+  destinations: Schema.Array(
+    Schema.Struct({ scope: InstallScope, destination: InstallDestination, root: Schema.String }),
+  ),
+  readable: Schema.Array(
+    Schema.Struct({ scope: InstallScope, harness: HarnessName, root: Schema.String }),
+  ),
+});
+export type StepRouting = typeof StepRouting.Type;
+
 export const SetupStep = Schema.Union([
   Schema.TaggedStruct("Import", { request: ImportRequest }),
   Schema.TaggedStruct("Manage", {
     mode: Schema.Literal("existing"),
     selections: Schema.Array(ManageExistingSelection),
+    routing: StepRouting,
   }),
   Schema.TaggedStruct("Manage", {
     mode: Schema.Literal("new"),
     selections: Schema.Array(ManageNewSelection),
+    routing: StepRouting,
   }),
   Schema.TaggedStruct("Update", {
     changes: Schema.Array(ReviewedInstalledSkillChange),
     versionChoices: Schema.Array(VersionChoice),
+    /** When each local choice is imported: a re-run finds the edit it imported and skips it. */
+    importedAt: Schema.String,
+    routing: StepRouting,
   }),
   Schema.TaggedStruct("Remove", {
     folders: Schema.Array(Schema.Union([FolderEvidence, LinkEvidence])),

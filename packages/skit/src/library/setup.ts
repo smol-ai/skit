@@ -1,21 +1,15 @@
 // Setup: steps saved in state.json before any runs, run in order, each marked Done as it ends
 // (decisions.md D4, "Crash halfway" and "Setup records"). Never rolls back on its own.
 
-import { Effect, FileSystem, Option, Schema } from "effect";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { Effect, Option, Schema } from "effect";
+import { isAbsolute, resolve } from "node:path";
 import { InvalidLibraryState } from "../failures.js";
-import { writeJsonExclusive } from "../platform/atomic-write.js";
-import { FileIdentityNumber, LinkStat } from "../platform/link-stat.js";
 import { pathIsWithin } from "../platform/path-identity.js";
-import { leavePnpmSkill } from "../install/pnpm-skills.js";
 import { InvalidIntent } from "./enabled-plan.js";
 import { makeOperationId, type OperationId } from "./entity-ids.js";
-import {
-  absentUnder,
-  holdsEvidence,
-  parentIsAsRecorded,
-  recoveryEntryPath,
-} from "./folder-evidence.js";
+import type { UpdatedCopy } from "./installed-update.js";
+import { duplicatesToMove, runManage, runUpdate, type ManageResult } from "./setup-manage.js";
+import { moveAside, recoveryDirectory } from "./setup-moves.js";
 import { importCollection, type ImportedCollection } from "./import-collection.js";
 import { emptyLibraryState, type LibraryState } from "./library-state.js";
 import { StalePlan } from "./library-plan.js";
@@ -30,19 +24,19 @@ import {
   OperationStatus,
   type FolderEvidence,
   type LinkEvidence,
+  type ManageExistingSelection,
+  type ManageNewSelection,
   type RecordedSetupStep,
   type SetupStep,
   type SetupStopReason,
   type StepEvidence,
 } from "./store/state-schema.js";
-import { Hash } from "../vocabulary.js";
-
-/** The steps setup runs today. Manage and Update follow. */
-export type SupportedSetupStep = Extract<SetupStep, { readonly _tag: "Import" | "Remove" }>;
 
 /** One finished step, by step tag. */
 export type SetupStepResult =
   | { readonly _tag: "Import"; readonly imported: ImportedCollection }
+  | ManageResult
+  | { readonly _tag: "Update"; readonly changes: readonly UpdatedCopy[] }
   | {
       readonly _tag: "Remove";
       readonly recoveryDirectory: string;
@@ -72,94 +66,89 @@ export type SetupResult =
  */
 export type SetupError = StalePlan | InvalidIntent | LibraryStateReadError | LibraryStateWriteError;
 
-/** One entry of a step's move receipt, in the format recovery reads (`removed/<id>/<batch>/`). */
-const ReceiptEntry = Schema.Struct({
-  name: Schema.String,
-  path: Schema.String,
-  recoveryPath: Schema.String,
-  type: Schema.Literals(["Directory", "SymbolicLink"]),
-  dev: FileIdentityNumber,
-  ino: FileIdentityNumber,
-  linkTarget: Schema.optionalKey(Schema.String),
-  currentHash: Schema.optionalKey(Hash),
-  contentHash: Hash,
-  approvedMarker: Schema.optionalKey(Schema.String),
-  parent: Schema.Struct({ path: Schema.String, dev: FileIdentityNumber, ino: FileIdentityNumber }),
-});
-const Receipt = Schema.Struct({
-  schemaVersion: Schema.Literal(3),
-  entries: Schema.Array(ReceiptEntry),
-});
-
-const removedPath = (home: string) => join(resolve(home), "removed");
-/** A Remove step's recovery directory: fixed by the operation and step, so a re-run finds it. */
-const recoveryDirectory = (home: string, operationId: OperationId, step: number) =>
-  join(removedPath(home), operationId, `step-${step + 1}`);
-
-const receiptEntry = (
-  evidence: FolderEvidence | LinkEvidence,
-  recoveryPath: string,
-): typeof ReceiptEntry.Type => ({
-  name: basename(evidence.path),
-  path: evidence.path,
-  recoveryPath,
-  type: evidence._tag,
-  dev: evidence.dev,
-  ino: evidence.ino,
-  contentHash: evidence.contentHash,
-  parent: evidence.parent,
-  ...(evidence._tag === "SymbolicLink"
-    ? { linkTarget: evidence.linkTarget }
-    : {
-        currentHash: evidence.treeHash,
-        ...Option.match(evidence.marker, {
-          onNone: () => ({}),
-          onSome: (approvedMarker) => ({ approvedMarker }),
-        }),
-      }),
-});
-
 /** What a step expects at each path it touches, before it runs and once it has. */
-const recordedStep = (step: SupportedSetupStep): RecordedSetupStep => ({
-  step,
-  // Import's retained Collection Version is known only once it runs; its Done write saves it.
-  before: step._tag === "Import" ? [] : step.folders,
-  after:
-    step._tag === "Import"
-      ? []
-      : step.folders.map((folder) => ({
+const recordedStep = (step: SetupStep): RecordedSetupStep => {
+  switch (step._tag) {
+    // Import's retained Collection Version is known only once it runs; its Done write saves it,
+    // and saves it too in the `after` of each Manage step whose files it imports.
+    case "Import":
+    case "Update":
+      return { step, before: [], after: [], status: "Pending" };
+    case "Remove":
+      return {
+        step,
+        before: step.folders,
+        after: step.folders.map((folder) => ({
           _tag: "Absent",
           path: folder.path,
           parent: folder.parent,
         })),
-  status: "Pending",
-});
+        status: "Pending",
+      };
+    case "Manage": {
+      const selections: readonly (ManageExistingSelection | ManageNewSelection)[] = step.selections;
+      return {
+        step,
+        before: selections.flatMap((selection) => [
+          selection.source,
+          ...(selection.mode === "new" ? selection.equalCopies : []),
+          ...duplicatesToMove(step.routing, selection),
+        ]),
+        after: selections.flatMap((selection) =>
+          duplicatesToMove(step.routing, selection).map((folder) => ({
+            _tag: "Absent" as const,
+            path: folder.path,
+            parent: folder.parent,
+          })),
+        ),
+        status: "Pending",
+      };
+    }
+  }
+};
+
+/** The Import steps whose result a step's "new" selections take their files from. */
+const importsUsedBy = (step: SetupStep): readonly number[] =>
+  step._tag === "Manage" && step.mode === "new"
+    ? step.selections.flatMap((selection) =>
+        selection.importFrom._tag === "Step" ? [selection.importFrom.step] : [],
+      )
+    : [];
+
+/** Every folder a step may move aside. */
+const removedBy = (step: SetupStep): readonly (FolderEvidence | LinkEvidence)[] => {
+  if (step._tag === "Remove") return step.folders;
+  if (step._tag !== "Manage") return [];
+  const selections: readonly (ManageExistingSelection | ManageNewSelection)[] = step.selections;
+  return selections.flatMap((selection) => duplicatesToMove(step.routing, selection));
+};
 
 /** Refuse steps setup could not run safely, before anything is written. */
-const checkSteps = (home: string, steps: readonly SupportedSetupStep[]) => {
+const checkSteps = (home: string, steps: readonly SetupStep[]) => {
   const firstRemove = steps.findIndex((step) => step._tag === "Remove");
   if (firstRemove >= 0 && steps.slice(firstRemove).some((step) => step._tag !== "Remove"))
     return Option.some("Setup removes folders only after every other step");
+  for (const [index, step] of steps.entries())
+    for (const source of importsUsedBy(step))
+      if (source >= index || steps[source]?._tag !== "Import")
+        return Option.some(`Setup step ${index + 1} takes its files from a step that imports none`);
   const paths: string[] = [];
-  for (const step of steps) {
-    if (step._tag !== "Remove") continue;
-    for (const { path } of step.folders) {
-      if (!isAbsolute(path) || resolve(path) !== path)
-        return Option.some(`Setup removes only absolute, normalized paths: ${path}`);
-      if (
-        path === resolve(home) ||
-        pathIsWithin(path, resolve(home)) ||
-        pathIsWithin(resolve(home), path)
+  for (const { path } of steps.flatMap(removedBy)) {
+    if (!isAbsolute(path) || resolve(path) !== path)
+      return Option.some(`Setup removes only absolute, normalized paths: ${path}`);
+    if (
+      path === resolve(home) ||
+      pathIsWithin(path, resolve(home)) ||
+      pathIsWithin(resolve(home), path)
+    )
+      return Option.some(`Setup cannot remove the Library's own storage: ${path}`);
+    if (
+      paths.some(
+        (other) => other === path || pathIsWithin(other, path) || pathIsWithin(path, other),
       )
-        return Option.some(`Setup cannot remove the Library's own storage: ${path}`);
-      if (
-        paths.some(
-          (other) => other === path || pathIsWithin(other, path) || pathIsWithin(path, other),
-        )
-      )
-        return Option.some(`Setup removes each folder once, and never one inside another: ${path}`);
-      paths.push(path);
-    }
+    )
+      return Option.some(`Setup removes each folder once, and never one inside another: ${path}`);
+    paths.push(path);
   }
   return Option.none<string>();
 };
@@ -200,116 +189,59 @@ type StepOutcome =
     }
   | { readonly _tag: "Stop"; readonly reason: SetupStopReason };
 
-const differs = (step: number, evidence: FolderEvidence | LinkEvidence): StepOutcome => ({
-  _tag: "Stop",
-  reason: {
-    _tag: "EvidenceDiffers",
-    step,
-    path: evidence.path,
-    // A removed folder's after is "nothing here", which is neither a folder nor a link.
-    expected: { before: Option.some(evidence), after: Option.none() },
-  },
-});
-
-/** Create a recovery container, refusing one that is not a plain directory. */
-const recoveryContainer = Effect.fn("Library.setup.recoveryContainer")(function* (path: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const links = yield* LinkStat;
-  const exists = yield* fs.exists(path);
-  if (!exists) yield* fs.makeDirectory(path, { mode: 0o700 });
-  if ((yield* links.identity.lstat(path)).type !== "Directory")
-    return yield* new InvalidLibraryState({ path, detail: "recovery directory is redirected" });
-});
-
-/**
- * Move each folder aside into the step's recovery directory, writing the receipt first. Safe to
- * repeat: a folder already moved, its saved copy intact, is left as it is; the receipt, fixed by the
- * recorded evidence, may already exist exactly as written.
- */
-const removeFolders = Effect.fn("Library.setup.remove")(function* (
-  operationId: OperationId,
-  step: number,
-  folders: readonly (FolderEvidence | LinkEvidence)[],
-) {
-  const store = yield* LibraryStore;
-  const fs = yield* FileSystem.FileSystem;
-  const directory = recoveryDirectory(store.home, operationId, step);
-  const entries = folders.map((folder, index) => ({
-    folder,
-    saved: recoveryEntryPath(directory, index, folder.path),
-  }));
-  const pending: typeof entries = [];
-  for (const entry of entries) {
-    const atOriginal =
-      (yield* parentIsAsRecorded(entry.folder.path, entry.folder.parent)) &&
-      (yield* holdsEvidence(entry.folder, entry.folder.path)) &&
-      !(yield* fs.exists(entry.saved));
-    if (atOriginal) {
-      pending.push(entry);
-      continue;
-    }
-    const moved =
-      (yield* absentUnder(entry.folder.path, entry.folder.parent)) &&
-      (yield* holdsEvidence(entry.folder, entry.saved));
-    if (!moved) return differs(step, entry.folder);
-  }
-  for (const path of [
-    removedPath(store.home),
-    join(removedPath(store.home), operationId),
-    directory,
-  ])
-    yield* recoveryContainer(path);
-  const receipt = yield* Schema.encodeEffect(Receipt)({
-    schemaVersion: 3,
-    entries: entries.map(({ folder, saved }) => receiptEntry(folder, saved)),
-  });
-  const receiptPath = join(directory, "receipt.json");
-  yield* writeJsonExclusive(receiptPath, receipt).pipe(
-    Effect.catchTag("PlatformError", (error) =>
-      error.reason._tag === "AlreadyExists"
-        ? Effect.flatMap(fs.readFileString(receiptPath), (text) =>
-            text === `${JSON.stringify(receipt, null, 2)}\n` ? Effect.void : Effect.fail(error),
-          )
-        : Effect.fail(error),
-    ),
-  );
-  for (const { folder, saved } of pending) {
-    yield* leavePnpmSkill(folder.path);
-    // Recheck just before the move: the receipt write may have taken a while.
-    if (
-      !(yield* parentIsAsRecorded(folder.path, folder.parent)) ||
-      !(yield* holdsEvidence(folder, folder.path))
-    )
-      return differs(step, folder);
-    yield* fs.rename(folder.path, saved);
-  }
-  return {
-    _tag: "Ran",
-    result: {
-      _tag: "Remove",
-      recoveryDirectory: directory,
-      removed: folders.map(({ path }) => path),
-    },
-    after: folders.map((folder) => ({ _tag: "Absent", path: folder.path, parent: folder.parent })),
-  } satisfies StepOutcome;
-});
-
 const runStep = Effect.fn("Library.setup.step")(function* (
   operationId: OperationId,
   index: number,
-  step: SupportedSetupStep,
+  steps: readonly RecordedSetupStep[],
 ) {
-  if (step._tag === "Remove") return yield* removeFolders(operationId, index, step.folders);
-  const imported = yield* Effect.scoped(importCollection(step.request));
-  return {
-    _tag: "Ran",
-    result: { _tag: "Import", imported },
-    after: [{ _tag: "Retained", hash: imported.snapshotDigest }],
-  } satisfies StepOutcome;
+  const store = yield* LibraryStore;
+  const step = steps[index]!.step;
+  switch (step._tag) {
+    case "Import": {
+      const imported = yield* Effect.scoped(importCollection(step.request));
+      return {
+        _tag: "Ran",
+        result: { _tag: "Import", imported },
+        after: [{ _tag: "Retained", hash: imported.snapshotDigest }],
+      } satisfies StepOutcome;
+    }
+    case "Manage":
+      return yield* Effect.scoped(runManage(operationId, index, step, steps));
+    case "Update":
+      return yield* Effect.scoped(runUpdate(index, step));
+    case "Remove": {
+      const moved = yield* moveAside(
+        operationId,
+        recoveryDirectory(store.home, operationId, index),
+        step.folders,
+      );
+      if (moved._tag === "Differs")
+        return {
+          _tag: "Stop",
+          reason: {
+            _tag: "EvidenceDiffers",
+            step: index,
+            path: moved.folder.path,
+            // A removed folder's after is "nothing here", which is neither a folder nor a link.
+            expected: { before: Option.some(moved.folder), after: Option.none() },
+          },
+        } satisfies StepOutcome;
+      return {
+        _tag: "Ran",
+        result: {
+          _tag: "Remove",
+          recoveryDirectory: moved.directory,
+          removed: step.folders.map(({ path }) => path),
+        },
+        after: step.folders.map((folder) => ({
+          _tag: "Absent",
+          path: folder.path,
+          parent: folder.parent,
+        })),
+      } satisfies StepOutcome;
+    }
+  }
 });
-
-const isSupported = (step: SetupStep): step is SupportedSetupStep =>
-  step._tag === "Import" || step._tag === "Remove";
 
 /**
  * Run the Pending steps of the operation `operationId` records, under the writer that saved it.
@@ -346,13 +278,18 @@ const runOperation = Effect.fn("Library.setup.run")(function* (operationId: Oper
       ),
     });
   const recorded = loaded.success.value.steps;
-  for (const [index, { step, status }] of recorded.entries()) {
+  for (const [index, { status }] of recorded.entries()) {
     if (status === "Done") continue;
-    if (!isSupported(step))
-      return yield* failed(index)(
-        new InvalidIntent({ detail: `Setup cannot run ${step._tag} steps yet` }),
-      );
-    const outcome = yield* Effect.result(runStep(operationId, index, step));
+    // The record as saved now: an earlier step's Done write may have added this step's evidence.
+    const current = yield* Effect.result(
+      Effect.flatMap(store.load, (state) => operationIn(state, operationId)),
+    );
+    if (current._tag === "Failure") return yield* failed(index)(current.failure);
+    const steps =
+      Option.isSome(current.success) && current.success.value._tag === "Pending"
+        ? current.success.value.steps
+        : recorded;
+    const outcome = yield* Effect.result(runStep(operationId, index, steps));
     if (outcome._tag === "Failure") return yield* failed(index)(outcome.failure);
     if (outcome.success._tag === "Stop") return yield* stop(outcome.success.reason);
     const { result, after } = outcome.success;
@@ -367,8 +304,13 @@ const runOperation = Effect.fn("Library.setup.run")(function* (operationId: Oper
           current,
           OperationStatus.cases.Pending.make({
             operationId,
+            // A later step that takes its files from this one records what it retained.
             steps: operation.value.steps.map((saved, at) =>
-              at === index ? { ...saved, after, status: "Done" } : saved,
+              at === index
+                ? { ...saved, after, status: "Done" }
+                : importsUsedBy(saved.step).includes(index)
+                  ? { ...saved, after: [...saved.after, ...after] }
+                  : saved,
             ),
           }),
         );
@@ -390,9 +332,13 @@ const runOperation = Effect.fn("Library.setup.run")(function* (operationId: Oper
     _tag: "Done",
     operationId,
     steps: completed,
-    warnings: [],
+    warnings: completed.flatMap((step) => (step._tag === "Manage" ? step.warnings : [])),
     recoveryDirectories: completed.flatMap((step) =>
-      step._tag === "Remove" ? [step.recoveryDirectory] : [],
+      step._tag === "Remove"
+        ? [step.recoveryDirectory]
+        : step._tag === "Manage"
+          ? step.recoveryDirectories
+          : [],
     ),
   } satisfies SetupResult;
 });
@@ -403,7 +349,7 @@ const runOperation = Effect.fn("Library.setup.run")(function* (operationId: Oper
  * Stopped records stay until undone.
  */
 export const setup = Effect.fn("Library.setup")(function* (
-  steps: readonly SupportedSetupStep[],
+  steps: readonly SetupStep[],
   options: { readonly base: Snapshot },
 ) {
   const store = yield* LibraryStore;

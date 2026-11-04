@@ -12,7 +12,7 @@ import {
   latestSourceImport,
   resolveOwningLibrarySubjects,
   subjectImportIds,
-} from "./subject-resolution.js";
+} from "@smolai/skit-core";
 import { sourceFromUpstream } from "./upstream-source.js";
 
 export const checkSubjects = Effect.fn("Library.checkSubjects")(function* (

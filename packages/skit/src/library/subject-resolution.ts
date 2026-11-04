@@ -1,6 +1,7 @@
-import { sourceImports, type LibraryState } from "@smolai/skit-core";
 import { Data, Effect } from "effect";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
+import { sourceImports } from "./library-contracts.js";
+import type { LibraryState } from "./library-state.js";
 
 type Collection = LibraryState["collections"][number];
 type Skill = LibraryState["skills"][number];

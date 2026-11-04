@@ -30,7 +30,7 @@ export type UndeclaredRequirements<Make, Allowed> = Exclude<Effect.Services<Make
 // ── Debt: today's gaps, to be closed by migration ─────────────────────────────────────────────
 type MissingDebt = "content" | "history" | "startup";
 type ExtraDebt = never;
-// setup: runs Import and Remove steps only, with core result and error types.
+// setup: core result and error types (the contract's are Ref placeholders).
 type ChangedDebt = "plan" | "apply" | "setup";
 // LibraryStore folds into Library; InstalledSkills is built inside Library.layer from routing.
 type RequirementDebt = LibraryStore | InstalledSkills.Service;

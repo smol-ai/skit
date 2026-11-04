@@ -11,10 +11,7 @@ import { importSource, inspectLibrarySource } from "./import-source.js";
 import type { UpdateFailure } from "../workflows/library/update-contract.js";
 import { make as makeInstalledSkills } from "../install/installed-skills.js";
 import { LibraryProgress } from "./progress.js";
-import {
-  latestSourceImport,
-  type LibrarySubject,
-} from "../workflows/library/subject-resolution.js";
+import { latestSourceImport, type LibrarySubject } from "@smolai/skit-core";
 import { dirname, join, resolve } from "node:path";
 import { isPlatformError } from "effect/PlatformError";
 import { commandFailure } from "../failure-classification.js";

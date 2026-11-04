@@ -15,7 +15,7 @@ import {
   uniqueInstallScopes,
   type EnabledCollection,
 } from "../workflows/library/set-enabled-request.js";
-import { librarySubjects } from "../workflows/library/subject-resolution.js";
+import { librarySubjects } from "@smolai/skit-core";
 import { readDescriptionLoad } from "../workflows/library/collection-load.js";
 import { readLibrarySkillMetadata, sourceIdentityLabel } from "./skill-metadata.js";
 import { makeLibrarySkillInvocationReader } from "../invocation/library-source.js";

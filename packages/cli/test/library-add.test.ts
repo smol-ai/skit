@@ -18,7 +18,7 @@ import { checkSubjects } from "../src/workflows/library/check.js";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { planLibrarySync } from "../src/workflows/library/library-sync-plan.js";
 import { executeRemove } from "../src/workflows/library/remove.js";
-import { librarySubjects } from "../src/workflows/library/subject-resolution.js";
+import { librarySubjects } from "@smolai/skit-core";
 import {
   archiveBytes,
   boundSkit,

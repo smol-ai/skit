@@ -6,9 +6,10 @@ import {
   withLibraryWriter,
   type LibraryStateReadError,
 } from "./store/library-store.js";
-import { libraryStateRevision, type LibraryState } from "./library-state.js";
+import type { LibraryState } from "./library-state.js";
 import { snapshotOf, type Snapshot } from "./snapshot.js";
-import { setup, type SetupError, type SetupResult, type SupportedSetupStep } from "./setup.js";
+import { setup, type SetupError, type SetupResult } from "./setup.js";
+import type { SetupStep } from "./store/state-schema.js";
 import {
   importCollection,
   importAuthoredCollection,
@@ -24,7 +25,7 @@ import {
 } from "./import-collection.js";
 import type { TreeRequirements } from "../platform/tree-requirements.js";
 import type { ApplyError, Approval, Intent, Outcome, Plan, PlanError } from "./library-plan.js";
-import { planChanges } from "./plan-changes.js";
+import { planIntent } from "./plan-changes.js";
 import { apply } from "./apply-plan.js";
 export * from "./library-plan.js";
 export { reviewInstalledSkillChanges } from "./installed-skill-review.js";
@@ -38,7 +39,7 @@ export {
 export type { Subject, Invocation, EnabledCollection, SetupApproval } from "./enabled-plan.js";
 
 export { Revision, type Snapshot } from "./snapshot.js";
-export type { SetupError, SetupResult, SetupStepResult, SupportedSetupStep } from "./setup.js";
+export type { SetupError, SetupResult, SetupStepResult } from "./setup.js";
 
 export interface Interface {
   /**
@@ -75,7 +76,7 @@ export interface Interface {
    * after, every failure is a Stopped result with its operationId. Never rolls back on its own.
    */
   readonly setup: (
-    steps: readonly SupportedSetupStep[],
+    steps: readonly SetupStep[],
     options: { readonly base: Snapshot },
   ) => Effect.Effect<SetupResult, SetupError>;
 }
@@ -96,24 +97,11 @@ export const make = Effect.gen(function* () {
 
   return Service.of({
     read: Effect.map(store.inspect, snapshotOf),
-    plan: Effect.fn("Library.plan")(function* (intent, options) {
-      const base = structuredClone(options.base);
-      const approvals = structuredClone(options.approvals ?? []);
-      const reviewed = structuredClone(intent);
-      const planned = yield* Effect.scoped(planChanges(base, reviewed, approvals)).pipe(
+    plan: (intent, options) =>
+      planIntent(intent, options).pipe(
         Effect.provideService(LibraryStore, store),
         Effect.provideService(InstalledSkills.Service, files),
-      );
-      return {
-        baseRevision: libraryStateRevision(base),
-        intent: reviewed,
-        approvals,
-        routes: planned.routes,
-        folders: planned.folders,
-        next: planned.next,
-        changes: [...planned.enabled.map(({ change }) => change), ...planned.changes],
-      };
-    }),
+      ),
     apply: (plan) =>
       apply(plan).pipe(
         Effect.provideService(LibraryStore, store),

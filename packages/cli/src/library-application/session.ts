@@ -10,10 +10,7 @@ import {
 } from "@smolai/skit-core";
 import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
-import {
-  LibrarySubjectNotFound,
-  resolveLibrarySubject,
-} from "../workflows/library/subject-resolution.js";
+import { LibrarySubjectNotFound, resolveLibrarySubject } from "@smolai/skit-core";
 import type { InvocationOption } from "../invocation/policy.js";
 import { invocationReadModel, type InvocationReadModel } from "../invocation/read-model.js";
 import type { AuthorInvocationRead } from "../invocation/library-source.js";
