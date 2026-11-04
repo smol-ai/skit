@@ -1,5 +1,4 @@
 import { join } from "node:path";
-import { emptyLibraryState } from "../../library-state.js";
 import { Library } from "../../library.js";
 import { FailureTypeId, type SkitFailure } from "../../../shared/failure.js";
 import { Effect, Schema } from "effect";
@@ -58,9 +57,8 @@ export class SetEnabledIncomplete
 export const openSetEnabledSession = Effect.fn("Library.openSelection")(
   function* (home: string, configuration: SetEnabledConfiguration) {
     const snapshot = yield* (yield* Library.Service).read;
-    const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
     return libraryChangeSelection(
-      state,
+      snapshot,
       home,
       join(home, "originals"),
       yield* Library.Service,

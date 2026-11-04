@@ -16,7 +16,7 @@ import {
   withLibraryWriter,
   type LibraryStateReadError,
 } from "./store/library-store.js";
-import type { LibraryState } from "./library-state.js";
+import { emptyLibraryState, type LibraryState } from "./library-state.js";
 import { InvalidLibraryState } from "../failures.js";
 import { OperationStatus } from "./store/state-schema.js";
 import {
@@ -103,7 +103,7 @@ export interface Interface {
     ): Effect.Effect<UndoPlan, UndoPlanError>;
     (
       intent: Intent,
-      options: { readonly base: LibraryState; readonly approvals?: readonly Approval[] },
+      options: { readonly base: Snapshot | LibraryState; readonly approvals?: readonly Approval[] },
     ): Effect.Effect<Plan, PlanError>;
   };
   readonly apply: {
@@ -159,7 +159,7 @@ export const make = Effect.gen(function* () {
   ): Effect.Effect<UndoPlan, UndoPlanError>;
   function planFor(
     intent: Intent,
-    options: { readonly base: LibraryState; readonly approvals?: readonly Approval[] },
+    options: { readonly base: Snapshot | LibraryState; readonly approvals?: readonly Approval[] },
   ): Effect.Effect<Plan, PlanError>;
   function planFor(
     intent: UndoIntent | Intent,
@@ -176,11 +176,24 @@ export const make = Effect.gen(function* () {
         Effect.provide(importing),
       );
     }
-    if ("revision" in options.base)
-      return Effect.fail(
-        new StalePlan({ message: "This intent requires the displayed Library state" }),
-      );
-    return planIntent(intent, { base: options.base, approvals: options.approvals }).pipe(
+    const snapshot = "revision" in options.base ? options.base : undefined;
+    const state =
+      "revision" in options.base
+        ? options.base._tag === "Present"
+          ? options.base.state
+          : emptyLibraryState()
+        : options.base;
+    if (
+      snapshot !== undefined &&
+      snapshot.revision !==
+        snapshotOf(snapshot._tag === "Present" ? { present: true, state } : { present: false })
+          .revision
+    )
+      return Effect.fail(new StalePlan({ message: "The displayed Library snapshot was changed" }));
+    return planIntent(intent, { base: state, approvals: options.approvals }).pipe(
+      Effect.map((plan) =>
+        snapshot === undefined ? plan : { ...plan, baseRevision: snapshot.revision },
+      ),
       Effect.provideService(LibraryStore, store),
       Effect.provideService(InstalledSkills.Service, files),
     );

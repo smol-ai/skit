@@ -2,7 +2,8 @@ import { resolve } from "node:path";
 import { canonicalJson } from "../../../shared/json.js";
 import { Effect } from "effect";
 import { Library } from "../../library.js";
-import { type LibraryState } from "../../library-state.js";
+import { emptyLibraryState, type LibraryState } from "../../library-state.js";
+import type { Snapshot } from "../../snapshot.js";
 import { resolveLibrarySubject } from "../../subject-resolution.js";
 import { expandSetEnabledIntent, type SetEnabledIntent } from "./set-enabled-request.js";
 import { libraryView } from "./library-view.js";
@@ -38,13 +39,14 @@ export interface LibraryChangeSelection {
   ) => Effect.Effect<SetEnabledPlan, SelectionError, SelectionRequirements>;
 }
 export function libraryChangeSelection(
-  current: LibraryState,
+  current: Snapshot,
   home: string,
   originalsPath: string,
   library: Library.Interface,
   configuration: SetEnabledConfiguration,
 ): LibraryChangeSelection {
-  const state = structuredClone(current);
+  const snapshot = structuredClone(current);
+  const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
   const routing = {
     home: configuration.home,
     configHome: configuration.configHome,
@@ -102,7 +104,7 @@ export function libraryChangeSelection(
     const plan = yield* library.plan(
       { _tag: "Enabled", changes: [first, ...rest] },
       {
-        base: state,
+        base: snapshot,
         approvals: intents.flatMap((intent) =>
           intent.manage === undefined ? [] : [{ _tag: "Manage" as const, manage: intent.manage }],
         ),

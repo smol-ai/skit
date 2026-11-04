@@ -3,7 +3,13 @@ import { DateTime, Effect, Option, Ref, Result, Schema } from "effect";
 import { InstalledSkills } from "./installed-skills.js";
 import * as InstalledSkillStatus from "./installed-skill-status.js";
 import { LibraryStore, withLibraryWriter } from "./store/library-store.js";
-import { libraryStateRevision, type LibraryState, type InstalledSkill } from "./library-state.js";
+import {
+  emptyLibraryState,
+  libraryStateRevision,
+  type LibraryState,
+  type InstalledSkill,
+} from "./library-state.js";
+import { Revision, snapshotOf } from "./snapshot.js";
 import type { Request } from "./enabled-plan.js";
 import { InstalledSkillInvalid } from "./installation/install-enabled.js";
 import { makeInstalledSkillId, type InstalledSkillId, type SkillId } from "./entity-ids.js";
@@ -256,16 +262,26 @@ export const apply = Effect.fn("Library.apply")(function* (reviewed: Plan) {
   const files = yield* InstalledSkills.Service;
   // A plan is never a source of write coordinates or Library rows.
   const input = structuredClone(reviewed);
+  const snapshotPlan = input.baseRevision === "absent" || input.baseRevision.startsWith("present:");
   const stale = (message: string) => new StalePlan({ message });
   const changedSincePreview = () =>
-    input.intent._tag === "Enabled"
+    snapshotPlan || input.intent._tag === "Enabled"
       ? stale("Library changed after this change was previewed")
       : new LibraryChanged({ path: store.statePath });
   return yield* withLibraryWriter(
     Effect.scoped(
       Effect.gen(function* () {
-        const base = yield* store.load;
-        if (libraryStateRevision(base) !== input.baseRevision) return yield* changedSincePreview();
+        const inspected = yield* store.inspect;
+        const base = inspected.present ? inspected.state : emptyLibraryState();
+        const actual = snapshotOf(inspected).revision;
+        if (snapshotPlan && actual !== input.baseRevision)
+          return yield* new StalePlan({
+            message: "Library changed after this change was previewed",
+            expected: Revision(input.baseRevision),
+            actual,
+          });
+        if (!snapshotPlan && libraryStateRevision(base) !== input.baseRevision)
+          return yield* changedSincePreview();
         const again = yield* planChanges(base, input.intent, input.approvals);
         const targetsAt = (scope: InstallScope) =>
           again.routes.find((route) => Schema.toEquivalence(InstallScope)(route.scope, scope))
@@ -551,7 +567,7 @@ export const apply = Effect.fn("Library.apply")(function* (reviewed: Plan) {
     ),
   ).pipe(
     Effect.catchTag("LibraryChanged", (error) =>
-      Effect.fail(input.intent._tag === "Enabled" ? changedSincePreview() : error),
+      Effect.fail(snapshotPlan || input.intent._tag === "Enabled" ? changedSincePreview() : error),
     ),
   );
 });
