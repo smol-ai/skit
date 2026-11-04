@@ -3,25 +3,20 @@
 
 import { dirname, join, resolve } from "node:path";
 import { Effect, FileSystem, Schema } from "effect";
+import { AbsoluteDevicePath, InstalledSkill } from "../../device-state.js";
 import {
-  AbsoluteDevicePath,
   FileIdentityNumber,
   LegacyFileIdentityNumber,
-  canonicalJson,
-  Hash,
-  hashParts,
   LinkStat,
-  MachineId,
-  InstalledSkill,
-  InstallDestination,
-  SetupIntent,
-  MachineSettings,
-} from "@smolai/skit-core";
-import { recoveryOperationPath } from "../../library-application/recovery-moves.js";
-import {
-  RecoveryInvalid,
-  recoveryFingerprint,
-} from "../../library-application/recovery-evidence.js";
+} from "../../../platform/link-stat.js";
+import { canonicalJson } from "../../../shared/json.js";
+import { Hash, InstallDestination } from "../../../vocabulary.js";
+import { hashParts } from "../../../artifact/descriptor.js";
+import { MachineId } from "../../entity-ids.js";
+import { SetupIntent } from "../../setup-intent.js";
+import * as MachineSettings from "../../machine-settings.js";
+import { recoveryOperationPath } from "../recovery/moves.js";
+import { RecoveryInvalid, recoveryFingerprint } from "../recovery/evidence.js";
 const SetupDiscoverySettings = MachineSettings.SetupDiscoverySettings;
 
 const DevicePath = AbsoluteDevicePath.check(

@@ -1,9 +1,6 @@
-import { Effect, Schema } from "effect";
-import {
-  FailureTypeId,
-  recoveryFingerprint as libraryFingerprint,
-  type SkitFailure,
-} from "@smolai/skit-core";
+import { Data, Effect, Schema } from "effect";
+import { FailureTypeId, type SkitFailure } from "../../../shared/failure.js";
+import { recoveryFingerprint as libraryFingerprint } from "../../folder-evidence.js";
 
 export class RecoveryInvalid
   extends Schema.TaggedError<RecoveryInvalid>()("RecoveryInvalid", { detail: Schema.String })
@@ -25,3 +22,13 @@ export const recoveryFingerprint = (root: string, ownership: "include" | "exclud
       Effect.fail(new RecoveryInvalid({ detail: error.message })),
     ),
   );
+
+/** A preview the operator confirmed no longer describes the Library. */
+export class PlanIsStale extends Data.TaggedError("PlanIsStale")<{}> implements SkitFailure {
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "CONFLICT" as const;
+  readonly remediation = "Review the refreshed state, then confirm again.";
+  get message(): string {
+    return "The Library changed since this plan was previewed. Review the refreshed state and try again.";
+  }
+}

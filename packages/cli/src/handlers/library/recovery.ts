@@ -11,7 +11,7 @@ import {
   inspectRecoveryOperation,
   listRecoveryOperations,
   prepareRecoveryRestore,
-} from "../../library-application/recovery-moves.js";
+} from "@smolai/skit-core";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
 

@@ -1,4 +1,4 @@
-import { prepareRecoveryMoves } from "../src/library-application/recovery-moves.js";
+import { prepareRecoveryMoves } from "@smolai/skit-core";
 import { dirname, join } from "node:path";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";

@@ -17,6 +17,11 @@ export const owners = [
     // The barrel re-exports these today; that export is itself debt, removed as callers migrate.
     allow: ["packages/skit/src/index.ts"],
     private: [
+      "prepareRecoveryMoves",
+      "prepareOwnedRecoveryMoves",
+      "prepareRecoveryRestore",
+      "ensureRecoveryOperation",
+
       "LibraryStore",
       "libraryStoreLayer",
       "makeLibraryStore",
@@ -58,6 +63,9 @@ export const owners = [
 ];
 
 export const debt = {
+  "packages/cli/test/pnpm-skills.test.ts": ["prepareRecoveryMoves"],
+  "packages/cli/test/recovery-moves.test.ts": ["prepareRecoveryMoves", "prepareRecoveryRestore"],
+  "packages/cli/test/recovery-command.test.ts": ["prepareRecoveryMoves"],
   "packages/cli/src/audit/local.ts": ["LibraryStore", "libraryStoreLayer"],
   // The home lock is withHomeLock until the home-lock function exists (D3; A6).
   "packages/cli/src/author/history.ts": ["withHomeLock"],
@@ -70,7 +78,7 @@ export const debt = {
     "refreshLibraryInventory",
     "withLibraryWriter",
   ],
-  "packages/cli/src/handlers/library/recovery.ts": ["LibraryStore"],
+  "packages/cli/src/handlers/library/recovery.ts": ["LibraryStore", "prepareRecoveryRestore"],
   "packages/cli/src/handlers/library/remove.ts": ["LibraryStore"],
   "packages/cli/src/handlers/usage.ts": ["LibraryStore"],
   "packages/cli/src/library-application/collection-update.ts": [
@@ -81,11 +89,8 @@ export const debt = {
   "packages/cli/src/library-application/index.ts": ["libraryStoreLayer"],
   "packages/cli/src/library-application/layers.ts": ["libraryStoreLayer"],
   "packages/cli/src/library-application/library-view.ts": ["LibraryStore"],
-  "packages/cli/src/library-application/recovery-moves.ts": ["LibraryStore", "withHomeLock"],
   "packages/cli/src/library-application/session.ts": ["LibraryStore"],
   "packages/cli/src/library-application/set-enabled.ts": ["LibraryStore"],
-  "packages/cli/src/library/setup/setup-undo-files.ts": ["LibraryStore"],
-  "packages/cli/src/library/setup/setup-undo.ts": ["LibraryStore", "withLibraryWriter"],
   "packages/cli/src/library-application/update-installed-skills.ts": ["LibraryStore"],
   "packages/cli/src/library-application/update.ts": ["LibraryStore", "withLibraryWriter"],
   "packages/cli/src/library/security.ts": [
@@ -111,7 +116,6 @@ export const debt = {
   ],
   "packages/cli/src/workflows/library/library-sync-snapshots.ts": ["prepareRestore"],
   "packages/cli/src/workflows/library/library-sync.ts": ["LibraryStore", "withLibraryWriter"],
-  "packages/cli/src/library/setup/setup-discovery.ts": ["LibraryStore"],
   "packages/cli/src/workflows/library/skills-sh-update-check.ts": ["LibraryStore"],
   "packages/cli/test/application-boundaries.test.ts": ["LibraryStore", "withLibraryWriter"],
   "packages/cli/test/author-workspace-identity.test.ts": ["withLibraryWriter"],
@@ -168,7 +172,7 @@ export const debt = {
   "packages/cli/test/setup-native.test.ts": ["LibraryStore", "libraryStoreLayer"],
   "packages/cli/test/setup-operation.test.ts": ["LibraryStore"],
   "packages/cli/test/setup-undo-sources.test.ts": ["LibraryStore"],
-  "packages/cli/test/setup-undo.test.ts": ["LibraryStore"],
+  "packages/cli/test/setup-undo.test.ts": ["LibraryStore", "prepareRecoveryMoves"],
   "packages/cli/test/skill-metadata.test.ts": ["LibraryStore", "importAuthoredCollection"],
   "packages/cli/test/skills-sh-update-check.test.ts": ["LibraryStore", "libraryStoreLayer"],
   "packages/cli/test/sync-command.test.ts": ["LibraryStore"],

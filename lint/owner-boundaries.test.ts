@@ -42,6 +42,14 @@ describe("skit/owner-boundaries", () => {
     ).toEqual(["LibraryStore", "withLibraryWriter"]);
   });
 
+  test("new recovery callers must use Library instead of opening a move or restore writer", async () => {
+    expect(
+      await reported(
+        `import { prepareRecoveryMoves, prepareRecoveryRestore } from "@smolai/skit-core";`,
+      ),
+    ).toEqual(["prepareRecoveryMoves", "prepareRecoveryRestore"]);
+  });
+
   test("re-exporting a private name is the same bypass", async () => {
     expect(await reported(`export { libraryStoreLayer } from "@smolai/skit-core";`)).toEqual([
       "libraryStoreLayer",

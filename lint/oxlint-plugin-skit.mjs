@@ -645,7 +645,16 @@ const effectRules = {
         )
           context.report({ node: sourceNode, messageId: "frontend", data: { target } });
         const internal = /^(packages\/skit\/src\/[^/]+\/)internal(?:\/|$)/.exec(target);
-        if (internal && !file.startsWith(internal[1]))
+        // Package-local unit tests can exercise private implementation code. A compatibility
+        // barrel is allowed only when the owner already lists that exact entry point.
+        const packageTest = file.startsWith("packages/skit/test/");
+        const entry =
+          internal &&
+          boundaryOwners.some(
+            (owner) =>
+              [owner.owner].flat().includes(internal[1]) && (owner.allow ?? []).includes(file),
+          );
+        if (internal && !file.startsWith(internal[1]) && !packageTest && !entry)
           context.report({
             node: sourceNode,
             messageId: "internal",

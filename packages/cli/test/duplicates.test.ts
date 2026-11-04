@@ -1,10 +1,8 @@
+import { withLibraryOwner } from "./helpers/library-owner.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { LinkStat, MachineSettings } from "@smolai/skit-core";
 import { systemError } from "effect/PlatformError";
-import {
-  setupExistingSelections,
-  setupNewSelections,
-} from "../src/library/setup/setup-manage.js";
+import { setupExistingSelections, setupNewSelections } from "../src/library/setup/setup-manage.js";
 import { recordDuplicateSymlinks } from "../src/workflows/library/manage-existing.js";
 import { applySetupSelections } from "./helpers/setup-apply.js";
 import { copyConflict } from "../src/library/setup/setup-decisions.js";
@@ -26,10 +24,7 @@ import { runSetup, revalidateSetupPlan } from "../src/library/setup/setup.js";
 import { setupCommand } from "../src/library/setup/command.js";
 import { Renderer } from "../src/presentation/renderer.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
-import {
-  inspectRecoveryOperation,
-  listRecoveryOperations,
-} from "../src/library-application/recovery-moves.js";
+import { inspectRecoveryOperation, listRecoveryOperations } from "@smolai/skit-core";
 import {
   libraryHome,
   scratch,
@@ -261,7 +256,7 @@ it.effect("a failed replacement keeps the original alias available", () =>
               ownership: [
                 { name: "review", sourcePath: f.source, duplicateAction: "retire-aliases" },
               ],
-            }).pipe(Effect.provideService(FileSystem.FileSystem, fs)),
+            }).pipe(withLibraryOwner, Effect.provideService(FileSystem.FileSystem, fs)),
           );
           expect(Result.isFailure(result) && result.failure._tag).toBe("SetupStopped");
           expect((yield* (yield* LibraryStore).load).skills).toHaveLength(1);

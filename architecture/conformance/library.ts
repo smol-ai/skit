@@ -30,6 +30,8 @@ export type UndeclaredRequirements<Make, Allowed> = Exclude<Effect.Services<Make
 // ── Debt: today's gaps, to be closed by migration ─────────────────────────────────────────────
 type MissingDebt = "content";
 type ExtraDebt = never;
+// plan/apply now include Undo; their legacy plan shapes and recovery UUIDs still differ from the
+// target generic signatures. The journal's machine evidence is compatibility data, not an owner write.
 // setup: core result and error types (the contract's are Ref placeholders).
 // startup: a stopped reason's StepFailed error is saved as JSON (Schema.Defect), so it reads back
 // as unknown, not the contract's error union.

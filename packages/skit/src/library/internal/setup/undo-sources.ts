@@ -1,15 +1,9 @@
 import { Clock, Effect } from "effect";
-import {
-  makeImportId,
-  originalTreeHash,
-  collectionVersionPath,
-  sourceImports,
-  type Import,
-  type CollectionId,
-  type LibraryState,
-  type MachineId,
-  type SetupIntent,
-} from "@smolai/skit-core";
+import { makeImportId, type CollectionId, type MachineId } from "../../entity-ids.js";
+import { originalTreeHash, collectionVersionPath } from "../../collection-version.js";
+import { sourceImports, type Import } from "../../library-contracts.js";
+import { type LibraryState } from "../../library-state.js";
+import { type SetupIntent } from "../../setup-intent.js";
 
 export interface UndoSourceImport {
   readonly importId: Import["import_id"];
@@ -66,8 +60,13 @@ export const prepareSetupSourceUndo = Effect.fn("SetupUndo.prepareSources")(func
       };
       observations.set(prior.collectionId, sourceImport);
     }
+    if (state.imports.some((item) => item.import_id === sourceImport.importId)) {
+      conflicts.push(`Undo import identity is already recorded: ${prior.collectionId}`);
+      continue;
+    }
     const now = Date.parse(sourceImport.checkedAt);
     if (
+      !Number.isFinite(now) ||
       !Number.isFinite(Date.parse(current.imported_at)) ||
       now <= Date.parse(current.imported_at) ||
       sourceImport.checkedAt <= current.imported_at

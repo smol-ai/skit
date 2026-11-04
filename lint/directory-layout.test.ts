@@ -122,6 +122,26 @@ describe("skit/import-direction", () => {
     ).toEqual([]);
   });
 
+  test("package-local unit tests can exercise an owner's internal implementation", async () => {
+    expect(
+      await reported(
+        "packages/skit/test/PROBE.ts",
+        `import { inverse } from "../src/library/internal/undo";\nexport const probe = inverse;\n`,
+        "import-direction",
+      ),
+    ).toEqual([]);
+  });
+
+  test("another package's tests cannot reach the owner's internal implementation", async () => {
+    expect(
+      await reported(
+        "packages/cli/test/PROBE.ts",
+        `import { inverse } from "../../skit/src/library/internal/undo";\nexport const probe = inverse;\n`,
+        "import-direction",
+      ),
+    ).toEqual([1]);
+  });
+
   test("debt only shrinks: every listed import still exists", async () => {
     const stale: string[] = [];
     for (const [file, targets] of Object.entries(importDebt)) {

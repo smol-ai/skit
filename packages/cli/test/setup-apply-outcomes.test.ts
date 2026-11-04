@@ -18,10 +18,7 @@ import {
 } from "../src/presentation/interaction-recorder.js";
 import { Prompter } from "../src/presentation/prompter.js";
 import { setupPrompts } from "../src/library/setup/setup-steps.js";
-import {
-  inspectRecoveryOperation,
-  listRecoveryOperations,
-} from "../src/library-application/recovery-moves.js";
+import { inspectRecoveryOperation, listRecoveryOperations } from "@smolai/skit-core";
 import { PlanIsStale } from "../src/library/failures.js";
 import { SetupDiscovery, SetupPlanStale } from "../src/library/setup/setup.js";
 import { SetupStopped } from "../src/library/setup/setup-apply.js";

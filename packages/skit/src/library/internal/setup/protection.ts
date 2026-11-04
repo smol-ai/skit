@@ -1,8 +1,8 @@
 import { dirname, join, relative, resolve } from "node:path";
 import { Effect } from "effect";
-import { LinkStat } from "@smolai/skit-core";
-import { leavePnpmSkill } from "@smolai/skit-core";
-import { PlanIsStale } from "../failures.js";
+import { LinkStat } from "../../../platform/link-stat.js";
+import { leavePnpmSkill } from "../../../install/pnpm-skills.js";
+import { PlanIsStale } from "../recovery/evidence.js";
 
 /** A registered marker cannot override repository, authored or package-manager ownership. */
 export const checkSetupGlobalContent = Effect.fn("Setup.checkGlobalContent")(function* (

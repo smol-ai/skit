@@ -1,25 +1,24 @@
-import { RecoveryInvalid, recoveryFingerprint as fingerprint } from "./recovery-evidence.js";
-export { RecoveryInvalid } from "./recovery-evidence.js";
+import { RecoveryInvalid, recoveryFingerprint as fingerprint } from "./evidence.js";
+export { RecoveryInvalid } from "./evidence.js";
 import { createHash, randomUUID } from "node:crypto";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { Effect, FileSystem, Schema, SchemaGetter } from "effect";
+import { deterministicTreeHash } from "../../../artifact/skit.js";
+import { Hash } from "../../../vocabulary.js";
 import {
-  deterministicTreeHash,
-  Hash,
   LinkStat,
-  LibraryStore,
-  canonicalJson,
   FileIdentityNumber,
   LegacyFileIdentityNumber,
-  inspectOwnershipMarker,
-  type InstalledSkill,
-  type LibraryStateReadError,
-  pathIsWithin,
-  withHomeLock,
-  writeJsonExclusive,
-} from "@smolai/skit-core";
-import { PlanIsStale } from "../library/failures.js";
-import { leavePnpmSkill } from "@smolai/skit-core";
+} from "../../../platform/link-stat.js";
+import { LibraryStore, type LibraryStateReadError } from "../../store/library-store.js";
+import { canonicalJson } from "../../../shared/json.js";
+import { inspectOwnershipMarker } from "../../../install/files.js";
+import { type InstalledSkill } from "../../device-state.js";
+import { pathIsWithin } from "../../../platform/path-identity.js";
+import { withHomeLock } from "../../store/writer-lock.js";
+import { writeJsonExclusive } from "../../../platform/atomic-write.js";
+import { PlanIsStale } from "./evidence.js";
+import { leavePnpmSkill } from "../../../install/pnpm-skills.js";
 
 /** Entry shapes for one saved format of device and inode numbers. */
 const recordSchemas = <Number extends Schema.Codec<bigint, unknown>>(number: Number) => {

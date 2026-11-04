@@ -147,8 +147,6 @@ export const layoutDebt = [
   "packages/cli/src/library-application/local-usage.ts",
   "packages/cli/src/library-application/progress.ts",
   "packages/cli/src/library-application/read-model.ts",
-  "packages/cli/src/library-application/recovery-evidence.ts",
-  "packages/cli/src/library-application/recovery-moves.ts",
   "packages/cli/src/library-application/session.ts",
   "packages/cli/src/library-application/set-enabled.ts",
   "packages/cli/src/library-application/skill-metadata.ts",

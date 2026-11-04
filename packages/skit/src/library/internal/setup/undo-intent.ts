@@ -1,15 +1,14 @@
+import { canonicalJson } from "../../../shared/json.js";
 import {
-  canonicalJson,
   currentCollectionSkills,
   currentSkillVersion,
-  Enabled,
-  InvocationPolicies,
-  Repository,
-  SkillId,
-  type LibraryState,
   type Import,
-  type SetupIntent,
-} from "@smolai/skit-core";
+} from "../../library-contracts.js";
+import { Enabled } from "../../library-contracts.js";
+import { InvocationPolicies, Repository } from "../../device-state.js";
+import { SkillId } from "../../entity-ids.js";
+import { type LibraryState } from "../../library-state.js";
+import { type SetupIntent } from "../../setup-intent.js";
 
 const withPolicies = (invocation_policies: InvocationPolicies | undefined) =>
   invocation_policies === undefined ? {} : { invocation_policies };

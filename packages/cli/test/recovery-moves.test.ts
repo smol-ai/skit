@@ -9,7 +9,7 @@ import {
   prepareRecoveryRestore,
   inspectRecoveryOperation,
   prepareRecoveryMoves,
-} from "../src/library-application/recovery-moves.js";
+} from "@smolai/skit-core";
 import { scratch } from "./helpers/library-home.js";
 
 it.effect.each(["prepare", "apply"] as const)(

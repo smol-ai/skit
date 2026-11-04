@@ -7,15 +7,7 @@
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 import { Data, Schema } from "effect";
 
-/** A preview the operator confirmed no longer describes the Library. */
-export class PlanIsStale extends Data.TaggedError("PlanIsStale")<{}> implements SkitFailure {
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly remediation = "Review the refreshed state, then confirm again.";
-  get message(): string {
-    return "The Library changed since this plan was previewed. Review the refreshed state and try again.";
-  }
-}
+export { PlanIsStale } from "@smolai/skit-core";
 
 // -- Author Workspaces ---------------------------------------------------------------------------
 

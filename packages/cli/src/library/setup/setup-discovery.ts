@@ -1,8 +1,9 @@
+import { Library } from "@smolai/skit-core/library";
 import { basename, join, posix, relative, resolve, sep } from "node:path";
 import { Context, Effect, FileSystem, Result, Schema } from "effect";
 import {
   LinkStat,
-  LibraryStore,
+  emptyLibraryState,
   harnessProfile,
   inspectOwnershipMarker,
   scanInventory,
@@ -613,8 +614,9 @@ export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function*
       );
   const machineConfig = options.persistRoots ? yield* saveSetupMachineConfig(options) : prior;
   const harnessRoots = collectSkillsDirectories(options.inventory, walk.repositories);
-  const store = yield* LibraryStore;
-  const library = yield* store.load;
+  const owner = yield* Library.Service;
+  const snapshot = yield* owner.read;
+  const library = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
   const authoredCollections = yield* collectAuthoredCollections(walk.repositories, library);
   const libraryInventory = yield* scanInventory(
     library,

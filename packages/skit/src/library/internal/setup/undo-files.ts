@@ -1,33 +1,24 @@
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { Effect, FileSystem } from "effect";
-import {
-  canonicalJson,
-  copyLocalTree,
-  deterministicTreeHash,
-  globalEnabled,
-  inspectOwnershipMarker,
-  inspectInstalledSkillBackups,
-  LibraryStore,
-  LinkStat,
-  pathIsWithin,
-  prepareInstalledSkillRebuild,
-  collectionVersionPath,
-  versionBacking,
-  writeRawAtomic,
-  type LibraryState,
-  type InstalledSkill,
-} from "@smolai/skit-core";
-import { PlanIsStale } from "../failures.js";
-import { readSkillPathDetails } from "./setup-operation.js";
-import {
-  inspectRecoveryOperation,
-  prepareOwnedRecoveryMoves,
-} from "../../library-application/recovery-moves.js";
-import { checkSetupGlobalContent } from "./setup-external-ownership.js";
-import {
-  recoveryFingerprint,
-  RecoveryInvalid,
-} from "../../library-application/recovery-evidence.js";
+import { canonicalJson } from "../../../shared/json.js";
+import { copyLocalTree } from "../../../platform/copy-tree.js";
+import { deterministicTreeHash } from "../../../artifact/skit.js";
+import { globalEnabled } from "../../enabled.js";
+import { inspectOwnershipMarker, prepareInstalledSkillRebuild } from "../../../install/files.js";
+import { inspectInstalledSkillBackups } from "../../../install/backups.js";
+import { LibraryStore } from "../../store/library-store.js";
+import { LinkStat } from "../../../platform/link-stat.js";
+import { pathIsWithin } from "../../../platform/path-identity.js";
+import { collectionVersionPath } from "../../collection-version.js";
+import { versionBacking } from "../../library-contracts.js";
+import { writeRawAtomic } from "../../../platform/atomic-write.js";
+import { type LibraryState } from "../../library-state.js";
+import { type InstalledSkill } from "../../device-state.js";
+import { PlanIsStale } from "../recovery/evidence.js";
+import { readSkillPathDetails } from "./journal.js";
+import { inspectRecoveryOperation, prepareOwnedRecoveryMoves } from "../recovery/moves.js";
+import { checkSetupGlobalContent } from "./protection.js";
+import { recoveryFingerprint, RecoveryInvalid } from "../recovery/evidence.js";
 
 type SkillPathDetails = Effect.Success<ReturnType<typeof readSkillPathDetails>>;
 

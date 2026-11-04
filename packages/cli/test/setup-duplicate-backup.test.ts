@@ -7,7 +7,7 @@ import { LibraryStore, LinkStat, skitLayer } from "@smolai/skit-core";
 import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply-command.js";
 import { runSetup } from "../src/library/setup/setup.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
-import { inspectRecoveryOperation } from "../src/library-application/recovery-moves.js";
+import { inspectRecoveryOperation } from "@smolai/skit-core";
 import { prepareSetupUndo } from "../src/library/setup/setup-undo.js";
 import { libraryHome, scratch } from "./helpers/library-home.js";
 

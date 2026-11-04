@@ -7,7 +7,7 @@ import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import { renderContract } from "../src/presentation/contract-presenters.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
-import { prepareRecoveryMoves } from "../src/library-application/recovery-moves.js";
+import { prepareRecoveryMoves } from "@smolai/skit-core";
 import { deterministicTreeHash, scratch } from "./helpers/library-home.js";
 
 const invoke = Effect.fn("Test.recoveryCommand")(function* (argv: readonly string[]) {

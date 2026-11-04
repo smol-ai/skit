@@ -10,15 +10,33 @@ import {
   skitLayer,
   type LibraryState,
   type Hash,
-} from "@smolai/skit-core";
-import { reverseSetupIntent } from "../src/library/setup/setup-undo-intent.js";
+} from "../src/index.js";
+import { reverseSetupIntent } from "../src/library/internal/setup/undo-intent.js";
 import {
   deterministicTreeHash,
-  libraryHome,
-  importCollectionIn,
-  scratch,
-  writingTo,
-} from "./helpers/library-home.js";
+  emptyLibraryState,
+  makeMachineId,
+  Library,
+  type ImportRequest,
+} from "../src/index.js";
+import { libraryLayer } from "./helpers/library-store.js";
+
+const machineId = makeMachineId();
+const scratch = (prefix: string) =>
+  Effect.flatMap(FileSystem.FileSystem, (fs) => fs.makeTempDirectoryScoped({ prefix }));
+const libraryHome = ({ home }: { home: string }) =>
+  Effect.succeed({
+    home,
+    durable: Effect.flatMap(Library.Service, (library) =>
+      Effect.map(library.read, (snapshot) =>
+        snapshot._tag === "Present" ? snapshot.state : emptyLibraryState(),
+      ),
+    ).pipe(Effect.provide(libraryLayer(home))),
+  });
+const importCollectionIn = (home: string) => (request: Omit<ImportRequest, "machineId">) =>
+  Effect.flatMap(Library.Service, (library) =>
+    library.import.collection({ ...request, machineId }),
+  ).pipe(Effect.provide(libraryLayer(home)));
 
 const { setupDiscoverySettings, reverseSetupDiscovery } = MachineSettings;
 
@@ -33,23 +51,20 @@ const fixture = Effect.fn("Test.undoIntentFixture")(function* () {
       join(source, "SKILL.md"),
       `---\nname: ${name}\ndescription: ${name}\n---\n\nVersion 1\n`,
     );
-    yield* writingTo(
-      home.home,
-      importCollectionIn(home.home)({
-        source: { type: "local", path: source },
-        input: source,
-        importedAt: "2026-10-01T00:00:00.000Z",
-        skills: [
-          {
-            name,
-            sourcePath: source,
-            relativePath: ".",
-            currentHash: yield* deterministicTreeHash(source),
-          },
-        ],
-        lockFileEntries: [],
-      }),
-    );
+    yield* importCollectionIn(home.home)({
+      source: { type: "local", path: source },
+      input: source,
+      importedAt: "2026-10-01T00:00:00.000Z",
+      skills: [
+        {
+          name,
+          sourcePath: source,
+          relativePath: ".",
+          currentHash: yield* deterministicTreeHash(source),
+        },
+      ],
+      lockFileEntries: [],
+    });
   }
   const state = yield* home.durable;
   const skill = (name: string) => {
@@ -96,16 +111,13 @@ it.effect(
         });
       }
       const importSource = (selected: typeof skills, date: string) =>
-        writingTo(
-          home.home,
-          importCollectionIn(home.home)({
-            input: "https://github.com/test/membership",
-            source: { type: "github", owner: "test", repository: "membership" },
-            importedAt: date,
-            skills: selected,
-            lockFileEntries: [],
-          }),
-        );
+        importCollectionIn(home.home)({
+          input: "https://github.com/test/membership",
+          source: { type: "github", owner: "test", repository: "membership" },
+          importedAt: date,
+          skills: selected,
+          lockFileEntries: [],
+        });
       yield* importSource(skills.slice(0, 1), "2026-10-01T00:00:00.000Z");
       const imported = yield* home.durable;
       const enabled = [{ collection: imported.collections[0].collection_id }];
@@ -188,23 +200,20 @@ it.effect(
         join(source, "SKILL.md"),
         "---\nname: chosen\ndescription: chosen\n---\n\nVersion 2\n",
       );
-      yield* writingTo(
-        f.home.home,
-        importCollectionIn(f.home.home)({
-          source: { type: "local", path: source },
-          input: source,
-          importedAt: "2026-10-02T00:00:00.000Z",
-          skills: [
-            {
-              name: "chosen",
-              sourcePath: source,
-              relativePath: ".",
-              currentHash: yield* deterministicTreeHash(source),
-            },
-          ],
-          lockFileEntries: [],
-        }),
-      );
+      yield* importCollectionIn(f.home.home)({
+        source: { type: "local", path: source },
+        input: source,
+        importedAt: "2026-10-02T00:00:00.000Z",
+        skills: [
+          {
+            name: "chosen",
+            sourcePath: source,
+            relativePath: ".",
+            currentHash: yield* deterministicTreeHash(source),
+          },
+        ],
+        lockFileEntries: [],
+      });
       const after = yield* f.home.durable;
       const initialVersion = currentSkillVersion(before, f.chosen)?.skill_version_id;
       const inverse = reverseSetupIntent(after, setupIntent(before), setupIntent(after));
@@ -221,23 +230,20 @@ it.effect(
         join(source, "SKILL.md"),
         "---\nname: chosen\ndescription: chosen\n---\n\nVersion 3\n",
       );
-      yield* writingTo(
-        f.home.home,
-        importCollectionIn(f.home.home)({
-          source: { type: "local", path: source },
-          input: source,
-          importedAt: "2026-10-03T00:00:00.000Z",
-          skills: [
-            {
-              name: "chosen",
-              sourcePath: source,
-              relativePath: ".",
-              currentHash: yield* deterministicTreeHash(source),
-            },
-          ],
-          lockFileEntries: [],
-        }),
-      );
+      yield* importCollectionIn(f.home.home)({
+        source: { type: "local", path: source },
+        input: source,
+        importedAt: "2026-10-03T00:00:00.000Z",
+        skills: [
+          {
+            name: "chosen",
+            sourcePath: source,
+            relativePath: ".",
+            currentHash: yield* deterministicTreeHash(source),
+          },
+        ],
+        lockFileEntries: [],
+      });
       const current = yield* f.home.durable;
       const conflict = reverseSetupIntent(current, setupIntent(before), setupIntent(after));
       expect(conflict.conflicts).toContain(`selected Version ${f.chosen.skill_id}`);

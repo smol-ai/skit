@@ -167,3 +167,21 @@ export { InstalledSkillWouldReplaceLink, InstalledSkillWouldDuplicate } from "./
 
 export { DuplicateScanIncomplete } from "./library/installed-skills.js";
 export { InvalidIntent, StalePlan, DestinationsIncomplete } from "./library/library.js";
+
+// Existing recovery callers migrate to Library operations one at a time. These compatibility
+// exports keep the same behavior; setup undo itself calls only the owner.
+export {
+  RecoveryInspection,
+  recoveryOperationDirectory,
+  prepareRecoveryMoves,
+  inspectRecoveryOperation,
+  listRecoveryOperations,
+  prepareRecoveryRestore,
+} from "./library/internal/recovery/moves.js";
+export {
+  RecoveryInvalid,
+  PlanIsStale,
+  recoveryFingerprint as setupRecoveryFingerprint,
+} from "./library/internal/recovery/evidence.js";
+export { readSkillPathDetails } from "./library/internal/setup/journal.js";
+export { checkSetupGlobalContent } from "./library/internal/setup/protection.js";

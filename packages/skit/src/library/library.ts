@@ -1,3 +1,10 @@
+import {
+  planUndo,
+  applyUndo,
+  type UndoPlanError,
+  type UndoApplyError,
+} from "./internal/setup/undo.js";
+import type { UndoIntent, UndoPlan, UndoResult } from "./internal/setup/undo-plan.js";
 import { Context, Effect, FileSystem, Layer, Schema } from "effect";
 import type { Digest } from "effect/crypto";
 import { InstalledSkills } from "./installed-skills.js";
@@ -31,10 +38,20 @@ import {
   type ImportRequest,
 } from "./import-collection.js";
 import type { TreeRequirements } from "../platform/tree-requirements.js";
-import type { ApplyError, Approval, Intent, Outcome, Plan, PlanError } from "./library-plan.js";
+import {
+  StalePlan,
+  type ApplyError,
+  type Approval,
+  type Intent,
+  type Outcome,
+  type Plan,
+  type PlanError,
+} from "./library-plan.js";
 import { planIntent } from "./plan-changes.js";
 import { apply } from "./apply-plan.js";
 export * from "./library-plan.js";
+export { UndoIntent, UndoPlan, UndoChange, type UndoResult } from "./internal/setup/undo-plan.js";
+export type { UndoPlanError, UndoApplyError } from "./internal/setup/undo.js";
 export { reviewInstalledSkillChanges } from "./installed-skill-review.js";
 export {
   InvalidIntent,
@@ -76,11 +93,20 @@ export interface Interface {
    * Plan against the Library the front end showed, never a fresh read: apply refuses the plan if
    * the Library has changed since.
    */
-  readonly plan: (
-    intent: Intent,
-    options: { readonly base: LibraryState; readonly approvals?: readonly Approval[] },
-  ) => Effect.Effect<Plan, PlanError>;
-  readonly apply: (plan: Plan) => Effect.Effect<Outcome, ApplyError>;
+  readonly plan: {
+    (
+      intent: UndoIntent,
+      options: { readonly base: Snapshot },
+    ): Effect.Effect<UndoPlan, UndoPlanError>;
+    (
+      intent: Intent,
+      options: { readonly base: LibraryState; readonly approvals?: readonly Approval[] },
+    ): Effect.Effect<Plan, PlanError>;
+  };
+  readonly apply: {
+    (plan: UndoPlan): Effect.Effect<UndoResult, UndoApplyError>;
+    (plan: Plan): Effect.Effect<Outcome, ApplyError>;
+  };
   /**
    * Store a Source's files as a Collection Version and save it. Nothing to preview or recheck: it
    * touches no skill folders, and what it imports exists only while the fetched Source does.
@@ -124,6 +150,56 @@ export const make = Effect.gen(function* () {
       Effect.provide(importing),
     );
 
+  function planFor(
+    intent: UndoIntent,
+    options: { readonly base: Snapshot },
+  ): Effect.Effect<UndoPlan, UndoPlanError>;
+  function planFor(
+    intent: Intent,
+    options: { readonly base: LibraryState; readonly approvals?: readonly Approval[] },
+  ): Effect.Effect<Plan, PlanError>;
+  function planFor(
+    intent: UndoIntent | Intent,
+    options: { readonly base: Snapshot | LibraryState; readonly approvals?: readonly Approval[] },
+  ): Effect.Effect<UndoPlan | Plan, UndoPlanError | PlanError> {
+    if (intent._tag === "Undo") {
+      if (!("revision" in options.base))
+        return Effect.fail(
+          new StalePlan({ message: "Undo requires the displayed Library snapshot" }),
+        );
+      return planUndo(intent, { base: options.base }).pipe(
+        Effect.provideService(LibraryStore, store),
+        Effect.provide(writer),
+        Effect.provide(importing),
+      );
+    }
+    if ("revision" in options.base)
+      return Effect.fail(
+        new StalePlan({ message: "This intent requires the displayed Library state" }),
+      );
+    return planIntent(intent, { base: options.base, approvals: options.approvals }).pipe(
+      Effect.provideService(LibraryStore, store),
+      Effect.provideService(InstalledSkills.Service, files),
+    );
+  }
+  function applyFor(plan: UndoPlan): Effect.Effect<UndoResult, UndoApplyError>;
+  function applyFor(plan: Plan): Effect.Effect<Outcome, ApplyError>;
+  function applyFor(
+    plan: UndoPlan | Plan,
+  ): Effect.Effect<UndoResult | Outcome, UndoApplyError | ApplyError> {
+    if ("_tag" in plan)
+      return applyUndo(plan).pipe(
+        Effect.provideService(LibraryStore, store),
+        Effect.provide(writer),
+        Effect.provide(importing),
+      );
+    return apply(plan).pipe(
+      Effect.provideService(LibraryStore, store),
+      Effect.provideService(InstalledSkills.Service, files),
+      Effect.provide(writer),
+    );
+  }
+
   return Service.of({
     read: Effect.map(store.inspect, snapshotOf),
     history: Effect.gen(function* () {
@@ -142,17 +218,8 @@ export const make = Effect.gen(function* () {
       const events = yield* readLibraryAudit(store.home);
       return { events, operations } satisfies History;
     }).pipe(Effect.provide(writer)),
-    plan: (intent, options) =>
-      planIntent(intent, options).pipe(
-        Effect.provideService(LibraryStore, store),
-        Effect.provideService(InstalledSkills.Service, files),
-      ),
-    apply: (plan) =>
-      apply(plan).pipe(
-        Effect.provideService(LibraryStore, store),
-        Effect.provideService(InstalledSkills.Service, files),
-        Effect.provide(writer),
-      ),
+    plan: planFor,
+    apply: applyFor,
     import: {
       collection: (request) => owned(importCollection(request)),
       authored: (request) => owned(importAuthoredCollection(request)),

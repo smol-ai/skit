@@ -68,7 +68,7 @@ export const owners = {
       "library/security.ts (two 3-line pass-throughs)",
       "library-application/{update,update-installed-skills,set-enabled}.ts pass-throughs",
       "calculateSetEnabled in set-enabled-request.ts ('Legacy text/option compatibility'); the rest of the file stays",
-      "recovery-moves.ts / setup-operation.ts / setup-undo*.ts as separate writers",
+      "public recovery restore/move callbacks (compatibility exports; setup undo now uses Library.plan/apply)",
     ],
   },
 
@@ -85,7 +85,6 @@ export const owners = {
     removes: [
       "InstalledSkillFiles / InstalledSkillBackups namespace exports",
       "exported writeRawAtomic/writeJsonAtomic/writeJsonExclusive/copyLocalTree/ensureSkillsDirectoryWritable",
-      "CLI marker and folder writes (setup-undo-files.ts:95,101,376,406; recovery-moves.ts:315)",
       "inventory/refresh.ts calling keepInstalledSkillBackup directly → InstalledSkills.backups.keep after a verified successor (architecture.md:223)",
       "TreeHasher service (one impl; tests inject a failing hash — decisions.md: When something is a Context.Service)",
     ],

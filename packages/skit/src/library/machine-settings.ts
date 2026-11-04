@@ -7,7 +7,7 @@ import { Hash } from "../vocabulary.js";
 import { canonicalJson } from "../shared/json.js";
 import { LibraryChanged } from "../failures.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
-import { makeMachineId, type OperationId } from "./entity-ids.js";
+import { MachineId, makeMachineId, type OperationId } from "./entity-ids.js";
 import {
   currentMachineDocument,
   emptyMachineDocument,
@@ -384,16 +384,19 @@ export const reverseSetupDiscovery = (
 };
 
 /** Machine-owned evidence carried by a pre-state.json setup journal. */
-export interface LegacySetupDiscovery {
-  readonly before: SetupDiscoverySettings;
-  readonly machineId: Settings["machineId"] | null;
-  readonly changes: readonly {
-    readonly before: SetupDiscoverySettings;
-    readonly after: SetupDiscoverySettings;
-    readonly machineId: Settings["machineId"] | null;
-    readonly confirmed: boolean;
-  }[];
-}
+export const LegacySetupDiscovery = Schema.Struct({
+  before: SetupDiscoverySettings,
+  machineId: Schema.NullOr(MachineId),
+  changes: Schema.Array(
+    Schema.Struct({
+      before: SetupDiscoverySettings,
+      after: SetupDiscoverySettings,
+      machineId: Schema.NullOr(MachineId),
+      confirmed: Schema.Boolean,
+    }),
+  ),
+});
+export interface LegacySetupDiscovery extends Schema.Schema.Type<typeof LegacySetupDiscovery> {}
 
 /** Plain review data; apply recomputes it before saving anything. */
 export interface DiscoveryRestorePlan {

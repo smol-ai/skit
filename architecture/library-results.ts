@@ -92,7 +92,7 @@ export interface StalePlan {
   readonly actual?: Revision;
 }
 type InvalidIntent = Ref<"skit/src/library/enabled-plan.ts:49">;
-type RecoveryInvalid = Ref<"cli/src/library-application/recovery-evidence.ts:6-7">;
+type RecoveryInvalid = Ref<"skit/src/library/internal/recovery/evidence.ts">;
 type RestoreInvalid = Ref<"skit/src/library/library-restore.ts:28">;
 type ContentAddressCollision = Ref<"skit/src/failures.ts:335">;
 type AcceptanceIncomplete = Ref<"skit/src/failures.ts:457-460">;
@@ -105,7 +105,8 @@ type SetEnabledIncomplete = Ref<"cli/src/library-application/set-enabled.ts:41-4
 type ChangeChoiceRequired = Ref<"cli/src/library/setup/setup-installed-skills.ts:21">;
 
 // ── Undo ────────────────────────────────────────────────────────────────────────────────────────
-// Source: cli/src/library/setup/setup-undo.ts (+ setup-undo-files.ts).
+// Source: skit/src/library/internal/setup/{undo,undo-plan,undo-files}.ts.
+// CLI library/setup/setup-undo.ts composes this owner with MachineSettings; it opens no writer.
 
 /** One folder action undo would take. setup-undo-files.ts:126-131, pushed at :231, :253, :323, :345. */
 export interface UndoFileAction {

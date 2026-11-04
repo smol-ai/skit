@@ -1,3 +1,4 @@
+import { withLibraryOwner } from "./helpers/library-owner.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
@@ -91,6 +92,7 @@ const setupLock = (
 
 const scanForSetup = (options: SetupOptions) =>
   runSetup(options).pipe(
+    withLibraryOwner,
     Effect.provide(
       libraryStoreLayer({ home: options.libraryHome }).pipe(Layer.provide(testPlatformLayer)),
     ),
@@ -98,6 +100,7 @@ const scanForSetup = (options: SetupOptions) =>
 
 const revalidateSetup = (options: SetupOptions, planId: Hash) =>
   revalidateSetupPlan(options, planId).pipe(
+    withLibraryOwner,
     Effect.provide(
       libraryStoreLayer({ home: options.libraryHome }).pipe(Layer.provide(testPlatformLayer)),
     ),
@@ -499,6 +502,7 @@ for (const failure of ["ls-files", "status"] as const) {
       yield* git(f.repository, "add", ".");
       yield* git(f.repository, "commit", "-qm", "repository copies");
       const evidence = yield* collectSetupEvidence(f.options).pipe(
+        withLibraryOwner,
         Effect.provide(libraryStoreLayer({ home: f.libraryHome })),
       );
       expect(evidence.hits.filter((hit) => hit.name === "local")).toHaveLength(1);
@@ -511,6 +515,7 @@ for (const failure of ["ls-files", "status"] as const) {
               ? Effect.succeed({ exitCode: 1, stdout: new Uint8Array(), stderr: "fixture failure" })
               : process.output(command, args, options),
         }),
+        withLibraryOwner,
         Effect.provide(libraryStoreLayer({ home: f.libraryHome })),
       );
       expect(scan.scan.complete).toBe(false);
@@ -1189,6 +1194,7 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
       yield* store.save(state, yield* store.load);
       return yield* runSetup(f.options);
     }).pipe(
+      withLibraryOwner,
       Effect.provide(
         libraryStoreLayer({ home: f.libraryHome }).pipe(Layer.provide(testPlatformLayer)),
       ),
@@ -1478,6 +1484,7 @@ it.effect(
         yield* store.save(state, yield* store.load);
         return yield* runSetup(f.options);
       }).pipe(
+        withLibraryOwner,
         Effect.provide(
           libraryStoreLayer({ home: f.libraryHome }).pipe(Layer.provide(testPlatformLayer)),
         ),
