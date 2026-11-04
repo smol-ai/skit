@@ -221,9 +221,8 @@ export type Route = typeof Route.Type;
  * Plain data. Nothing in it is trusted at apply: apply plans again from the loaded Library, and
  * refuses a different revision, different changes or different folders.
  */
-export const Plan = Schema.Struct({
+const planFields = {
   baseRevision: Schema.String,
-  intent: Intent,
   approvals: Schema.Array(Approval),
   routes: Schema.Array(Route),
   /** Every folder the changes were decided on, and every original they are built from. */
@@ -231,6 +230,13 @@ export const Plan = Schema.Struct({
   /** The Library the intent leaves, before apply records its Installed Skills. */
   next: LibraryState,
   changes: Schema.Array(Schema.Union([EnabledChange, InstalledSkillChange])),
+};
+/** The top-level tag and intent always name the same operation. */
+export const Plan = Schema.TaggedUnion({
+  Enabled: { ...planFields, intent: Enabled },
+  Remove: { ...planFields, intent: Remove },
+  Update: { ...planFields, intent: Update },
+  Uninstall: { ...planFields, intent: Uninstall },
 });
 export type Plan = typeof Plan.Type;
 

@@ -262,6 +262,8 @@ export const apply = Effect.fn("Library.apply")(function* (reviewed: Plan) {
   const files = yield* InstalledSkills.Service;
   // A plan is never a source of write coordinates or Library rows.
   const input = structuredClone(reviewed);
+  if (input._tag !== input.intent._tag)
+    return yield* new StalePlan({ message: "The plan tag does not match its reviewed intent" });
   const snapshotPlan = input.baseRevision === "absent" || input.baseRevision.startsWith("present:");
   const stale = (message: string) => new StalePlan({ message });
   const changedSincePreview = () =>
@@ -294,7 +296,7 @@ export const apply = Effect.fn("Library.apply")(function* (reviewed: Plan) {
           yield* refuseDuplicates(request, change, targetsAt(request.scope));
         if (
           !Schema.toEquivalence(Schema.Array(Route))(again.routes, input.routes) ||
-          !Schema.toEquivalence(Plan.fields.changes)(
+          !Schema.toEquivalence(Plan.cases.Update.fields.changes)(
             [...again.enabled.map(({ change }) => change), ...again.changes],
             input.changes,
           )

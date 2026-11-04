@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { expectTypeOf } from "vitest";
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Schema } from "effect";
 import { join } from "node:path";
 import { Library } from "../src/library/library.js";
 import { emptyLibraryState } from "../src/library/library-state.js";
@@ -11,6 +11,43 @@ it("requires a Snapshot at the public planning type boundary", () => {
     Parameters<Library.Interface["plan"]>[1]["base"]
   >().toEqualTypeOf<Library.Snapshot>();
 });
+
+it.effect("a plan narrows by operation and a forged tag cannot redirect apply", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = join(yield* fs.makeTempDirectoryScoped({ prefix: "skit-plan-tag-" }), "library");
+    yield* Effect.gen(function* () {
+      const library = yield* Library.Service;
+      const plan = yield* library.plan({ _tag: "Update" }, { base: yield* library.read });
+      expectTypeOf(plan).toEqualTypeOf<Extract<Library.Plan, { readonly _tag: "Update" }>>();
+      expectTypeOf(plan.intent._tag).toEqualTypeOf<"Update">();
+      assert.strictEqual(plan._tag, "Update");
+      assert.isTrue(Schema.is(Library.Plan)(plan));
+      for (const _tag of ["Uninstall", "Undo"]) {
+        Object.assign(plan, { _tag });
+        assert.isFalse(Schema.is(Library.Plan)(plan));
+        const failure = yield* Effect.flip(library.apply(plan));
+        assert.strictEqual(failure._tag, "Library.StalePlan");
+        assert.isFalse(yield* fs.exists(home));
+      }
+      Object.assign(plan, { _tag: "Update" });
+      assert.strictEqual((yield* library.apply(plan))._tag, "Applied");
+      assert.isFalse(yield* fs.exists(join(home, "skills")));
+    }).pipe(
+      Effect.provide(
+        Library.layer({
+          home,
+          routing: {
+            _tag: "Configured",
+            home,
+            configHome: home,
+            overrides: { codex: [join(home, "skills")] },
+          },
+        }),
+      ),
+    );
+  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+);
 
 for (const initiallyPresent of [false, true])
   it.effect(

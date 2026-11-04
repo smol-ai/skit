@@ -120,10 +120,10 @@ export const makeWithRouting = Effect.fn("Library.make")(function* (configuratio
     intent: UndoIntent,
     options: { readonly base: Snapshot },
   ): Effect.Effect<UndoPlan, UndoPlanError>;
-  function planFor(
-    intent: Intent,
+  function planFor<I extends Intent>(
+    intent: I,
     options: { readonly base: Snapshot; readonly approvals?: readonly Approval[] },
-  ): Effect.Effect<Plan, PlanError>;
+  ): Effect.Effect<Extract<Plan, { readonly _tag: I["_tag"] }>, PlanError>;
   function planFor(
     intent: ManageIntent | AcceptFindingIntent | RefreshInventoryIntent | UndoIntent | Intent,
     options: { readonly base: Snapshot; readonly approvals?: readonly Approval[] },
@@ -224,27 +224,31 @@ export const makeWithRouting = Effect.fn("Library.make")(function* (configuratio
     | UndoApplyError
     | ApplyError
   > {
-    if ("_tag" in plan && plan._tag === "Manage")
+    if (plan._tag !== plan.intent._tag)
+      return Effect.fail(
+        new StalePlan({ message: "The plan tag does not match its reviewed intent" }),
+      );
+    if (plan._tag === "Manage")
       return applyManaging(plan).pipe(
         Effect.provideService(LibraryStore, store),
         Effect.provideService(InstalledSkills.Service, files),
         Effect.provide(writer),
         Effect.provide(importing),
       );
-    if ("_tag" in plan && plan._tag === "AcceptFinding")
+    if (plan._tag === "AcceptFinding")
       return applyAcceptance(plan).pipe(
         Effect.provideService(LibraryStore, store),
         Effect.provideService(InstalledSkills.Service, files),
         Effect.provide(writer),
         Effect.provide(importing),
       );
-    if ("_tag" in plan && plan._tag === "RefreshInventory")
+    if (plan._tag === "RefreshInventory")
       return applyInventory(plan).pipe(
         Effect.provideService(LibraryStore, store),
         Effect.provideService(InstalledSkills.Service, files),
         Effect.provide(importing),
       );
-    if ("_tag" in plan)
+    if (plan._tag === "Undo")
       return applyUndo(plan).pipe(
         Effect.provideService(LibraryStore, store),
         Effect.provide(writer),

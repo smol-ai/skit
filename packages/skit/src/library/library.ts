@@ -152,10 +152,10 @@ export interface Interface {
       intent: UndoIntent,
       options: { readonly base: Snapshot },
     ): Effect.Effect<UndoPlan, UndoPlanError>;
-    (
-      intent: Intent,
+    <I extends Intent>(
+      intent: I,
       options: { readonly base: Snapshot; readonly approvals?: readonly Approval[] },
-    ): Effect.Effect<Plan, PlanError>;
+    ): Effect.Effect<Extract<Plan, { readonly _tag: I["_tag"] }>, PlanError>;
   };
   readonly apply: {
     (plan: ManagePlan): Effect.Effect<ManageOutcome, ManageApplyError>;

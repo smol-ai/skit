@@ -459,13 +459,22 @@ export const planIntent = Effect.fn("Library.plan")(function* (
   const approvals = structuredClone(options.approvals ?? []);
   const reviewed = structuredClone(intent);
   const planned = yield* Effect.scoped(planChanges(base, reviewed, approvals));
-  return {
+  const plan = {
     baseRevision: libraryStateRevision(base),
-    intent: reviewed,
     approvals,
     routes: planned.routes,
     folders: planned.folders,
     next: planned.next,
     changes: [...planned.enabled.map(({ change }) => change), ...planned.changes],
-  } satisfies Plan;
+  };
+  switch (reviewed._tag) {
+    case "Enabled":
+      return { ...plan, _tag: "Enabled", intent: reviewed } satisfies Plan;
+    case "Remove":
+      return { ...plan, _tag: "Remove", intent: reviewed } satisfies Plan;
+    case "Update":
+      return { ...plan, _tag: "Update", intent: reviewed } satisfies Plan;
+    case "Uninstall":
+      return { ...plan, _tag: "Uninstall", intent: reviewed } satisfies Plan;
+  }
 });
