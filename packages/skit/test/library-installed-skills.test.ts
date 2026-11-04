@@ -26,7 +26,7 @@ import {
 import { libraryStoreLayer } from "../src/library/library-store-layer.js";
 import { withHomeLock } from "../src/library/store/writer-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
-import { refreshLibraryInventory } from "../src/library/inventory/refresh.js";
+import { Library } from "../src/library/library.js";
 import {
   backUpInstalledSkill,
   losslessTree,
@@ -653,14 +653,15 @@ const installedSkillFixture = (second = false, emptyDirectories: readonly string
           Effect.provide(storeLayer),
         ),
       );
-    const refresh = withHomeLock(
-      home,
-      LibraryStore.use((store) =>
-        Effect.flatMap(store.load, (loaded) =>
-          refreshLibraryInventory(loaded, () => [{ harness: "codex", root: targetRoot }]),
-        ),
-      ).pipe(Effect.provide(storeLayer)),
-    );
+    const refresh = Effect.gen(function* () {
+      const library = yield* Library.Service;
+      const plan = yield* library.plan(
+        { _tag: "RefreshInventory", roots: [{ harness: "codex", root: targetRoot }] },
+        { base: yield* library.read },
+      );
+      return (yield* library.apply(plan)).result;
+    }).pipe(Effect.provide(Library.layer({ home, routing: { _tag: "None" } })));
+
     return { ...bound, variantsPath, load, edit, project, retire, remove, refresh };
   });
 

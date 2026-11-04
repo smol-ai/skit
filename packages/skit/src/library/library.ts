@@ -1,4 +1,22 @@
 import {
+  planInventory,
+  applyInventory,
+  type RefreshInventoryIntent,
+  type RefreshInventoryPlan,
+  type RefreshInventoryOutcome,
+  type RefreshInventoryPlanError,
+  type RefreshInventoryApplyError,
+} from "./internal/inventory/refresh.js";
+export {
+  RefreshInventoryIntent,
+  RefreshInventoryPlan,
+  RefreshInventoryChange,
+  type RefreshInventoryResult,
+  type RefreshInventoryOutcome,
+  type RefreshInventoryPlanError,
+  type RefreshInventoryApplyError,
+} from "./internal/inventory/refresh.js";
+import {
   planUndo,
   applyUndo,
   type UndoPlanError,
@@ -115,6 +133,10 @@ export interface Interface {
    */
   readonly plan: {
     (
+      intent: RefreshInventoryIntent,
+      options: { readonly base: Snapshot },
+    ): Effect.Effect<RefreshInventoryPlan, RefreshInventoryPlanError>;
+    (
       intent: UndoIntent,
       options: { readonly base: Snapshot },
     ): Effect.Effect<UndoPlan, UndoPlanError>;
@@ -124,6 +146,9 @@ export interface Interface {
     ): Effect.Effect<Plan, PlanError>;
   };
   readonly apply: {
+    (
+      plan: RefreshInventoryPlan,
+    ): Effect.Effect<RefreshInventoryOutcome, RefreshInventoryApplyError>;
     (plan: UndoPlan): Effect.Effect<UndoResult, UndoApplyError>;
     (plan: Plan): Effect.Effect<Outcome, ApplyError>;
   };
@@ -218,6 +243,10 @@ export const make = Effect.gen(function* () {
   });
 
   function planFor(
+    intent: RefreshInventoryIntent,
+    options: { readonly base: Snapshot },
+  ): Effect.Effect<RefreshInventoryPlan, RefreshInventoryPlanError>;
+  function planFor(
     intent: UndoIntent,
     options: { readonly base: Snapshot },
   ): Effect.Effect<UndoPlan, UndoPlanError>;
@@ -226,9 +255,23 @@ export const make = Effect.gen(function* () {
     options: { readonly base: Snapshot | LibraryState; readonly approvals?: readonly Approval[] },
   ): Effect.Effect<Plan, PlanError>;
   function planFor(
-    intent: UndoIntent | Intent,
+    intent: RefreshInventoryIntent | UndoIntent | Intent,
     options: { readonly base: Snapshot | LibraryState; readonly approvals?: readonly Approval[] },
-  ): Effect.Effect<UndoPlan | Plan, UndoPlanError | PlanError> {
+  ): Effect.Effect<
+    RefreshInventoryPlan | UndoPlan | Plan,
+    RefreshInventoryPlanError | UndoPlanError | PlanError
+  > {
+    if (intent._tag === "RefreshInventory") {
+      if (!("revision" in options.base))
+        return Effect.fail(
+          new StalePlan({ message: "Inventory requires the displayed Library snapshot" }),
+        );
+      return planInventory(intent, { base: options.base }).pipe(
+        Effect.provideService(LibraryStore, store),
+        Effect.provideService(InstalledSkills.Service, files),
+        Effect.provide(importing),
+      );
+    }
     if (intent._tag === "Undo") {
       if (!("revision" in options.base))
         return Effect.fail(
@@ -262,11 +305,23 @@ export const make = Effect.gen(function* () {
       Effect.provideService(InstalledSkills.Service, files),
     );
   }
+  function applyFor(
+    plan: RefreshInventoryPlan,
+  ): Effect.Effect<RefreshInventoryOutcome, RefreshInventoryApplyError>;
   function applyFor(plan: UndoPlan): Effect.Effect<UndoResult, UndoApplyError>;
   function applyFor(plan: Plan): Effect.Effect<Outcome, ApplyError>;
   function applyFor(
-    plan: UndoPlan | Plan,
-  ): Effect.Effect<UndoResult | Outcome, UndoApplyError | ApplyError> {
+    plan: RefreshInventoryPlan | UndoPlan | Plan,
+  ): Effect.Effect<
+    RefreshInventoryOutcome | UndoResult | Outcome,
+    RefreshInventoryApplyError | UndoApplyError | ApplyError
+  > {
+    if ("_tag" in plan && plan._tag === "RefreshInventory")
+      return applyInventory(plan).pipe(
+        Effect.provideService(LibraryStore, store),
+        Effect.provideService(InstalledSkills.Service, files),
+        Effect.provide(importing),
+      );
     if ("_tag" in plan)
       return applyUndo(plan).pipe(
         Effect.provideService(LibraryStore, store),

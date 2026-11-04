@@ -78,11 +78,6 @@ export const debt = {
   "packages/cli/src/author/history.ts": ["withHomeLock"],
   "packages/cli/src/configuration-writer.ts": ["withHomeLock"],
   "packages/cli/src/handlers/library/check.ts": ["LibraryStore"],
-  "packages/cli/src/handlers/library/inventory.ts": [
-    "LibraryStore",
-    "refreshLibraryInventory",
-    "withLibraryWriter",
-  ],
   "packages/cli/src/handlers/library/recovery.ts": ["LibraryStore", "prepareRecoveryRestore"],
   "packages/cli/src/handlers/library/remove.ts": ["LibraryStore"],
   "packages/cli/src/library-application/collection-update.ts": [
@@ -141,7 +136,6 @@ export const debt = {
   "packages/cli/test/installed-skill-version-advance.test.ts": [
     "LibraryStore",
     "libraryStoreLayer",
-    "refreshLibraryInventory",
   ],
   "packages/cli/test/inventory-scan.test.ts": ["LibraryStore"],
   "packages/cli/test/library-add.test.ts": ["LibraryStore", "libraryStoreLayer"],
@@ -206,7 +200,6 @@ export const debt = {
     "importEdit",
     "lastSavedLibraryState",
     "libraryStoreLayer",
-    "refreshLibraryInventory",
     "withLibraryWriter",
     "withHomeLock",
   ],

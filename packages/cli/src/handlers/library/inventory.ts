@@ -1,5 +1,5 @@
 import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
-import { skillUsageLayer, withLibraryWriter } from "@smolai/skit-core";
+import { skillUsageLayer } from "@smolai/skit-core";
 import { skillModificationTime } from "@smolai/skit-core/library/session";
 import { Option, Effect } from "effect";
 import { Command, Flag } from "effect/cli";
@@ -7,8 +7,9 @@ import { terminalPrompterLayer } from "../../presentation/prompter.js";
 import { presentDoctorCleanup } from "../../workflows/library/doctor-cleanup.js";
 import {
   libraryDoctorReport,
-  LibraryStore,
-  refreshLibraryInventory,
+  Library,
+  emptyLibraryState,
+  type InventoryScanRoot,
   pathIsWithin,
   type LibraryState,
 } from "@smolai/skit-core";
@@ -25,13 +26,8 @@ import { promptsAllowed } from "../../presentation/interactivity.js";
 
 export type CliInventoryOptions = InventoryRootOptions & { readonly libraryHome: string };
 
-export const refreshLibraryInventoryForCli = Effect.fn("CLI.refreshLibraryInventory")(function* (
-  options: CliInventoryOptions,
-  loaded: LibraryState,
-) {
-  const { state, roots } = yield* refreshLibraryInventory(loaded, (state) =>
-    selectInventoryRoots(state, options),
-  );
+/** The selected roots narrow presentation only; Library saves the complete observation. */
+const inventoryForRoots = (state: LibraryState, roots: readonly InventoryScanRoot[]) => {
   return {
     ...state,
     unmanaged: state.unmanaged.filter((item) =>
@@ -48,7 +44,7 @@ export const refreshLibraryInventoryForCli = Effect.fn("CLI.refreshLibraryInvent
         }
       : {}),
   };
-});
+};
 
 /**
  * The reference CLI workflow: application services enter through the environment, the complete
@@ -58,14 +54,21 @@ const refreshLibraryInventoryCommand = Effect.fn("CLI.refreshLibraryInventory")(
   options: CliInventoryOptions,
 ) {
   const renderer = yield* Renderer;
-  const store = yield* LibraryStore;
-  const before = yield* store.load;
-  const after = yield* renderer.withStatus(
-    "Scanning harness installations",
-    refreshLibraryInventoryForCli(options, before),
+  const library = yield* Library.Service;
+  const before = yield* library.read;
+  const roots = selectInventoryRoots(
+    before._tag === "Present" ? before.state : emptyLibraryState(),
+    options,
   );
-  return after;
-}, withLibraryWriter);
+  const outcome = yield* renderer.withStatus(
+    "Scanning harness installations",
+    Effect.gen(function* () {
+      const plan = yield* library.plan({ _tag: "RefreshInventory", roots }, { base: before });
+      return yield* library.apply(plan);
+    }),
+  );
+  return inventoryForRoots(outcome.result.state, outcome.result.roots);
+});
 
 export const inventoryCommand = Effect.fn("CLI.inventory")(function* (
   options: CliInventoryOptions,

@@ -9,7 +9,7 @@ import {
   deterministicTreeHash,
   LibraryStore,
   libraryStoreLayer,
-  refreshLibraryInventory,
+  Library,
 } from "@smolai/skit-core";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { isolatedRoots } from "./helpers/isolated-library.js";
@@ -253,10 +253,16 @@ for (const followedCollection of [false, true])
         yield* project;
         yield* fs.remove(join(roots.codexRoot, "other"), { recursive: true });
         yield* fs.remove(join(roots.codexRoot, "raw-review"), { recursive: true });
-        const installed = yield* load;
         yield* writingTo(
           home,
-          refreshLibraryInventory(installed, () => []).pipe(Effect.provide(layer)),
+          Effect.gen(function* () {
+            const library = yield* Library.Service;
+            const plan = yield* library.plan(
+              { _tag: "RefreshInventory", roots: [] },
+              { base: yield* library.read },
+            );
+            return yield* library.apply(plan);
+          }).pipe(Effect.provide(layer)),
         );
         const suppressed = yield* load;
         const suppressedRow = suppressed.installed_skills.find(
