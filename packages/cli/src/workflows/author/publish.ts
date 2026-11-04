@@ -1,6 +1,7 @@
 import type { PlatformError } from "effect/PlatformError";
-import { parseOrigin } from "../../registry/auth.js";
-import { Data, Effect, FileSystem, Predicate, Schema, Scope } from "effect";
+import { resolveAuthForOrigin } from "../../registry/auth.js";
+import { type Config, Data, Effect, FileSystem, Predicate, Schema, Scope } from "effect";
+import type { ChildProcessSpawner } from "effect/process";
 import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import { join, resolve } from "node:path";
@@ -47,10 +48,12 @@ import type { AuthorWorkspaceMetadataInvalid } from "../../library/failures.js";
 import {
   AuthorRemoteMetadataInvalid,
   AuthorSyncRequired,
+  type CredentialsUnusable,
   NoRemoteHome,
-  RegistryMismatch,
   RegistryRejectedWrite,
+  type RegistryOriginInvalid,
 } from "../../registry/failures.js";
+import type { SkitConfiguration } from "../../configuration/skit-configuration.js";
 import {
   AuthenticationRequired,
   CredentialLacksScope,
@@ -79,7 +82,9 @@ export type PublicationFailure =
   | AuthorSyncStateInvalid
   | AuthorWorkspaceRootInvalid
   | NoRemoteHome
-  | RegistryMismatch
+  | RegistryOriginInvalid
+  | CredentialsUnusable
+  | Config.ConfigError
   | PublicationBlocked
   | AuthenticationRequired
   | CredentialLacksScope
@@ -91,7 +96,8 @@ export type PublicationFailure =
   | SkitContractError
   | TypeError;
 
-type PublishOptions = { baseUrl?: string; token?: string };
+/** The SKIT home whose Registry credentials publish uses. */
+type PublishOptions = { readonly home?: string };
 
 function discoveryUrl(template: string, base: string): Effect.Effect<string, TypeError> {
   const url = URL.parse(template, base);
@@ -112,27 +118,32 @@ export const publish = Effect.fn("publish")(function* (
 ): Effect.fn.Return<
   ReleasePublishResponse,
   PublicationFailure,
-  TreeRequirements | FileSystem.FileSystem | RegistryHttp | AuthorWorkspace | Scope.Scope
+  | TreeRequirements
+  | FileSystem.FileSystem
+  | RegistryHttp
+  | AuthorWorkspace
+  | SkitConfiguration
+  | ChildProcessSpawner.ChildProcessSpawner
+  | Scope.Scope
 > {
   const absolute = resolve(root);
   const commandPath = /^[A-Za-z0-9_./-]+$/.test(root) ? root : `'${root.replaceAll("'", `'\\''`)}'`;
   yield* readSkitDescriptor(absolute);
   const workspaces = yield* AuthorWorkspace;
+  // One read: the portable remote is the authority; a leftover checkpoint beside it does not matter.
   const { connection } = yield* workspaces.read(yield* workspaces.resolveRoot(absolute));
-  // The portable remote is the authority; a leftover checkpoint beside it does not matter.
-  if (connection._tag !== "Connected") return yield* Effect.fail(new NoRemoteHome());
+  if (connection._tag !== "Connected") return yield* new NoRemoteHome();
   const remote = connection.remote;
   const owner = remote.namespace;
   const slug = remote.skit;
-  const configuredBase = options.baseUrl;
   const base = remote.origin.replace(/\/$/, "");
-  if (configuredBase) {
-    const active = yield* parseOrigin(configuredBase);
-    if (active !== remote.origin)
-      return yield* Effect.fail(
-        new RegistryMismatch({ active, expected: remote.origin, subject: "remote home" }),
-      );
-  }
+  // Only this remote's credential: an environment token for another Registry is never sent.
+  const credentials = yield* resolveAuthForOrigin(remote.origin, options.home);
+  if (!credentials.token)
+    return yield* new AuthenticationRequired({
+      origin: remote.origin,
+      scopes: "library:sync,authoring:write,publication:write",
+    });
   // Reject drift locally, before an archive exists: a published Skill's own contents must already
   // satisfy its Descriptor, so a consumer installing it directly honours the author's declaration.
   const validation = yield* validateSkitDirectory(absolute, version, {
@@ -155,7 +166,7 @@ export const publish = Effect.fn("publish")(function* (
   const archive = join(temporary, "release.zip");
   yield* createSkitArchive(absolute, archive);
   const http = yield* (yield* RegistryHttp).client;
-  const token = options.token;
+  const token = credentials.token;
   const bytes = yield* fs.readFile(archive);
   const body = yield* parseContract("publish request", releasePublishRequestSchema, {
     version,

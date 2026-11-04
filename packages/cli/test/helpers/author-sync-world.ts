@@ -5,6 +5,7 @@ import { syncAuthorWorkspace } from "../../src/workflows/author/sync.js";
 import { authorLayer, storedTreesAt } from "./author-history.js";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
 import { testHttpClientLayer } from "./http-test-client.js";
+import { registryCredentialLayer } from "./registry-credential.js";
 import { makeAuthorSyncServer, type AuthorDevice } from "./author-sync-server.js";
 import { missingAuthorVersions, type AuthorCopy, type AuthorEdit } from "./author-sync-oracle.js";
 
@@ -84,12 +85,14 @@ export const makeAuthorSyncWorld = Effect.fn("Test.makeAuthorSyncWorld")(functio
           syncAuthorWorkspace(workspace, {
             apply,
             allowLargeDeletion,
-            baseUrl: remote.origin,
+            home,
             ...(first ? { to: "swyx/tools", visibility: "private" as const } : {}),
           }).pipe(
             Effect.provide(registryHttpLayer(testHttpClientLayer(server.transport(name)))),
             // Fresh, so the author owners write through a FileSystem a test provides here.
             Effect.provide(authorLayer(home)),
+            // The environment's token is for the test Registry only.
+            Effect.provide(registryCredentialLayer(remote.origin)),
           ),
         ),
         yield* Ref.get(runtime),

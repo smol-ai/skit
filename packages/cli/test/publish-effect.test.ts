@@ -7,6 +7,7 @@ import { it } from "@effect/vitest";
 import { HttpClientError } from "effect/http";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
+import { registryCredentialLayer } from "./helpers/registry-credential.js";
 import { publish } from "../src/workflows/author/publish.js";
 import { AuthorWorkspace } from "../src/author/workspace.js";
 import { copySkitFixtureEffect, scratch } from "./helpers/library-home.js";
@@ -114,6 +115,7 @@ it.effect.each([
       return yield* publish(root, "1.0.0", undefined).pipe(
         Effect.provide(registryHttpLayer(testHttpClientLayer(fetcher))),
         Effect.provide(AuthorWorkspace.layer),
+        Effect.provide(registryCredentialLayer("https://registry.test")),
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
           makeTempDirectory: (options) =>
@@ -215,6 +217,7 @@ it.effect.each([
           ),
         ),
         Effect.provide(AuthorWorkspace.layer),
+        Effect.provide(registryCredentialLayer("https://registry.test")),
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
           makeTempDirectory: (options) =>

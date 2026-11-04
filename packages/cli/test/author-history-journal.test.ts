@@ -22,10 +22,7 @@ const capture = (workspace: string, home: string) =>
 const lineage = (id: History.RevisionId, home: string) =>
   Effect.gen(function* () {
     const history = yield* AuthorHistory;
-    const reached = yield* History.ancestors(id).pipe(
-      Stream.runCollect,
-      Effect.provideService(History.Store, history.engineStore),
-    );
+    const reached = yield* Stream.runCollect(History.ancestors(history.engineStore, id));
     return Array.from(reached, (entry) => entry.id);
   }).pipe(Effect.provide(authorLayer(home)));
 

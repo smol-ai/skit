@@ -283,18 +283,17 @@ export class AuthorWriteNotPrepared
   readonly remediation = "Sync again; it saves a new checkpoint before writing.";
 }
 
-/** A lease handle used while released, after close, or released twice. */
+/** A lease handle used after its scope closed. */
 export class AuthorLeaseNotHeld
   extends Schema.TaggedError<AuthorLeaseNotHeld>()("AuthorLeaseNotHeld", {
     root: WorkspaceRoot,
-    state: Schema.Literals(["released", "closed"]),
   })
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "OPERATION_FAILED" as const;
   get message() {
-    return `The author workspace lease for ${this.root} is ${this.state}`;
+    return `The author workspace lease for ${this.root} is closed`;
   }
   readonly remediation = "Run the command again.";
 }
@@ -326,7 +325,7 @@ export interface WorkspaceLease {
   readonly root: WorkspaceRoot;
   /** A fresh random id per hold of the lease. */
   readonly ownerId: string;
-  /** Changes on every checkpoint step (advance) and on every retake after withLeaseReleased. */
+  /** Changes on every checkpoint step (advance). */
   readonly revision: Effect.Effect<number, AuthorLeaseNotHeld>;
   /** For AuthorHistory only: record a checkpoint step under this hold; returns the new revision. */
   readonly advance: Effect.Effect<number, AuthorLeaseNotHeld>;
@@ -347,21 +346,6 @@ export interface WorkspaceLease {
     readonly from: History.Tree;
     readonly to: History.Tree;
   }) => Effect.Effect<void, WriteTreeError | AuthorLeaseNotHeld>;
-  /**
-   * Run `effect` (a network retry sleep) with the lease released, then take it back. A failed
-   * retake closes the handle: `effect`'s own failure or interruption wins, else the retake's.
-   */
-  readonly withLeaseReleased: <A, E, R>(
-    effect: Effect.Effect<A, E, R>,
-  ) => Effect.Effect<
-    A,
-    | E
-    | AuthorLeaseNotHeld
-    | AuthorWorkspaceBusy
-    | AuthorWorkspaceUnsafe
-    | PlatformError.PlatformError,
-    R
-  >;
 }
 
 export interface AuthorWorkspaceShape {
@@ -401,7 +385,7 @@ type Requires =
 /** A lease hold: the lock's own scope while held. */
 type Hold =
   | { readonly state: "held"; readonly lock: Scope.Closeable }
-  | { readonly state: "released" | "closed" };
+  | { readonly state: "closed" };
 
 const make = Effect.gen(function* () {
   // Only the services: the whole context would carry the layer's own Scope into every call.
@@ -613,9 +597,7 @@ const make = Effect.gen(function* () {
     const permit = yield* Semaphore.make(1);
     const held = Ref.get(hold).pipe(
       Effect.flatMap((current) =>
-        current.state === "held"
-          ? Effect.void
-          : Effect.fail(new AuthorLeaseNotHeld({ root, state: current.state })),
+        current.state === "held" ? Effect.void : Effect.fail(new AuthorLeaseNotHeld({ root })),
       ),
     );
 
@@ -741,41 +723,6 @@ const make = Effect.gen(function* () {
       yield* writeWorkspaceTree(root, change.from, change.to);
     });
 
-    const withLeaseReleased = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-      Effect.uninterruptibleMask((restore) =>
-        Effect.gen(function* () {
-          yield* permit.withPermit(
-            Effect.gen(function* () {
-              const current = yield* Ref.get(hold);
-              if (current.state !== "held")
-                return yield* new AuthorLeaseNotHeld({ root, state: current.state });
-              yield* Ref.set(hold, { state: "released" });
-              yield* Scope.close(current.lock, Exit.void);
-            }),
-          );
-          const exit = yield* Effect.exit(restore(effect));
-          // Retake whatever the effect did: interruption stays in `exit`, reported below.
-          const retaken = yield* Effect.exit(take(root).pipe(Effect.provide(context)));
-          if (Exit.isFailure(retaken)) {
-            yield* Ref.set(hold, { state: "closed" });
-            return yield* Exit.isFailure(exit)
-              ? Effect.failCause(exit.cause)
-              : Effect.failCause(retaken.cause);
-          }
-          const before = yield* Ref.getAndUpdate(hold, (current): Hold =>
-            current.state === "released" ? { state: "held", lock: retaken.value } : current,
-          );
-          if (before.state !== "released") {
-            // The scope closed while released: nothing may hold the lock now.
-            yield* Scope.close(retaken.value, Exit.void);
-            return yield* new AuthorLeaseNotHeld({ root, state: "closed" });
-          }
-          // Every PreparedWrite made before the release is now stale.
-          yield* Ref.update(revision, (value) => value + 1);
-          return yield* exit;
-        }),
-      );
-
     const lease: WorkspaceLease = {
       root,
       ownerId,
@@ -786,7 +733,6 @@ const make = Effect.gen(function* () {
       register: (change) => permit.withPermit(register(change)).pipe(Effect.provide(context)),
       transition: (change) => permit.withPermit(transition(change)).pipe(Effect.provide(context)),
       writeTree: (change) => permit.withPermit(writeTree(change)).pipe(Effect.provide(context)),
-      withLeaseReleased,
     };
     return lease;
   });

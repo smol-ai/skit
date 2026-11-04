@@ -144,9 +144,10 @@ export interface HomeBusy {
 /**
  * NEW (core change): the Registry side of one SKIT, a plain value passed to Sync.loadPlanInput and
  * Sync.run instead of the Sync.Remote Context.Service (packages/skit/src/sync/sync.ts:95-124). Same
- * methods. Built by the sync workflow from the authoring client (workflows/author/sync.ts:517-590).
+ * methods; Sync.Remote is now that interface. Built by the sync workflow from the authoring client
+ * (workflows/author/sync.ts:517-590).
  */
-export type SyncRemote = Sync.Remote["Service"];
+export type SyncRemote = Sync.Remote;
 
 // ── AuthorWorkspace: state ─────────────────────────────────────────────────────────────────────
 
@@ -351,15 +352,15 @@ export interface SyncScan {
  * Valid only inside the scope that acquired it; not reentrant (a second acquire of the same root,
  * in this process or another, fails AuthorWorkspaceBusy rather than deadlocking).
  * Lock order: workspace lease, then the short home lock (syncState.save), then the Library
- * writer. Never the reverse; only the lease may span a network wait.
+ * writer. Never the reverse; only the lease is held across network calls.
  */
 export interface WorkspaceLease {
   readonly root: WorkspaceRoot;
   /**
    * NEW: `ownerId` is a fresh random id per hold of the lease (t3code serverOwnership.ts#L188
    * `ownerId`). `revision` changes on every checkpoint step for this workspace (AuthorHistory's
-   * syncState.save / prepareWrite call `advance` with this handle) and on every retake after
-   * withLeaseReleased, so every outstanding PreparedWrite goes stale ("Reject unless the captured
+   * syncState.save / prepareWrite call `advance` with this handle), so every outstanding
+   * PreparedWrite goes stale ("Reject unless the captured
    * revision is still current", yielded-auth AuthenticationAuthority.ts#L33). AuthorWorkspace never
    * reads the checkpoint.
    */
@@ -400,37 +401,12 @@ export interface WorkspaceLease {
     readonly from: History.Tree;
     readonly to: History.Tree;
   }) => Effect.Effect<void, WriteTreeError | AuthorLeaseNotHeld>;
-  /**
-   * NEW (ADR-0026:233-236): run `effect` (a network retry sleep) with the lease released, then take
-   * it back. States: held → released → held | closed. Every transition re-checks `from`
-   * afterwards, so a change made meanwhile surfaces as a conflict, never as a lost write.
-   * - Any handle method called while released or closed fails AuthorLeaseNotHeld (typed, not a defect).
-   *   One release at a time; a nested or concurrent release is AuthorLeaseNotHeld.
-   * - Retaking changes the revision (outstanding PreparedWrites go stale).
-   * - `effect` succeeds, retake fails → that failure; the handle is closed.
-   * - `effect` fails or is interrupted, retake fails → `effect`'s cause, interruption preserved; the
-   *   handle is closed. Retake is attempted either way.
-   * - Scope close releases only what is still held.
-   * Callers do not call it at retry sites: the per-operation SyncRemote built with this lease runs
-   * every Schedule delay through it, and no home or Library lock is held across it.
-   * No corpus precedent for release-and-retake; Effect guarantees only scope cleanup with the Exit
-   * (Effect.ts#L6796-L6861).
-   */
-  readonly withLeaseReleased: <A, E, R>(
-    effect: Effect.Effect<A, E, R>,
-  ) => Effect.Effect<
-    A,
-    | E
-    | AuthorLeaseNotHeld
-    | AuthorWorkspaceBusy
-    | AuthorWorkspaceUnsafe
-    | PlatformError.PlatformError,
-    R
-  >;
+  // REMOVED (Tim, 2026-11-04): withLeaseReleased. Sync never retries, so nothing would call it;
+  // the lease is held for the whole command. Re-add it, with ADR-0026:233-236's release during
+  // retry sleeps, only when a retry schedule exists.
 }
 
-// NEW: AuthorLeaseNotHeld { root: WorkspaceRoot; state: "released" | "closed" }: a lease handle
-//   used while released, after close, or released twice.
+// NEW: AuthorLeaseNotHeld { root: WorkspaceRoot }: a lease handle used after its scope closed.
 
 /**
  * One service per process; every method takes the root (A1). Holds state (four files) and a
@@ -574,13 +550,14 @@ export interface AuthorHistory {
   /** NEW (A7): store a tree (immutable, content-addressed, idempotent). Replaces withStore(putTree) at sync.ts:511-515. */
   readonly retain: (tree: History.Tree) => Effect.Effect<History.TreeHash, AuthorHistoryInvalid>;
   /**
-   * NEW (A7): the History.Store adapter the sync engine runs against, over <home>/history. History.Store
-   * stays the platform seam Sync and the Registry share (packages/skit/src/history/history.ts:95-107).
-   * Approved storage port: its only writes (putTree, commit) are immutable, content-addressed and
-   * idempotent (device-store.ts:32-66); it never touches the journal or sync-bindings.json. The
-   * workflow maps its StoreError to AuthorHistoryInvalid as device-store.ts:95-105 does today.
+   * NEW (A7): the History.Store adapter the sync engine runs against, over <home>/history: a plain
+   * value the sync workflow passes to Sync.loadPlanInput and Sync.run (History.Store is an interface,
+   * not a Context.Service; packages/skit/src/history/history.ts). Approved storage port: its only
+   * writes (putTree, commit) are immutable, content-addressed and idempotent (device-store.ts:32-66);
+   * it never touches the journal or sync-bindings.json. The workflow maps its StoreError to
+   * AuthorHistoryInvalid as device-store.ts:95-105 does today.
    */
-  readonly engineStore: History.Store["Service"];
+  readonly engineStore: History.Store;
   /** The sync checkpoint, Idle | Sending | Writing (packages/skit/src/sync/sync.ts:26-39). One read, one transition. */
   readonly syncState: {
     /** FROM CODE: absent reads as Idle { base: null } (sync.ts:636-638). Never writes. */
@@ -672,7 +649,7 @@ export declare namespace Services {
 // plain Effect.fn as t3code's directory lock is (serverOwnership.ts#L183); today that is
 // withLibraryWriterLock (packages/skit/src/library/store/writer-lock.ts).
 
-/** What AuthorHistory.layer may require. Not Library, not Registry, not Sync.Remote, not History.Store. */
+/** What AuthorHistory.layer may require. Not Library, not Registry. */
 export type AuthorHistoryRequires =
   | FileSystem.FileSystem
   | Path.Path
@@ -713,7 +690,8 @@ export type WritingRecovery = "merge";
  *   2. Preview (no --apply): no lease, no .skit, no lock. ws = read(root).
  *      Identity None → plans from Idle { base: null } over scanAuthorSyncTree(root) alone, reports
  *      that sync would create an identity, and calls neither capture nor retain: it creates no
- *      identity, device record, journal key or connection.
+ *      identity, device record, journal key or connection. (Sync.loadPlanInput may still cache the Registry's current
+ *      revision in the content-addressed history store; accepted, decisions.md step 3 follow-ups.)
  *      Identity Some → steps 5-8, whose only write is history: capture and retain back up the
  *      files, as today (workflows/author/sync.ts:510, before the apply check at :601).
  *   3. Apply: lease = acquire(root) for the whole command (A8). ws = read(root).
@@ -725,7 +703,8 @@ export type WritingRecovery = "merge";
  *      checks as sync.ts:466-495 (pure). Connected with Leftover Matching → lease.transition
  *      { Connected(Matching) → Connected }; Mismatched or Invalid → stop and report, change nothing (A4).
  *   6. creds = Registry.credentials(destination.remote.origin); remote: SyncRemote over the authoring
- *      client (sync.ts:517-590). Every retry schedule's sleep runs inside lease.withLeaseReleased.
+ *      client (sync.ts:517-590). Until a Registry owner exists, the workflow resolves the
+ *      credential for destination.remote.origin itself, so a token is only ever sent to that server.
  *   7. obs = AuthorHistory.capture(root): every tree saved before talking to the Registry (sync.ts:509-510).
  *      local = scanAuthorSyncTree(root); local.verbatimHash must equal obs.treeHash, else capture and
  *      scan again (bounded; then LocalFilesChangedDuringSync) (A14). localHash = retain(local.tree).
@@ -735,19 +714,20 @@ export type WritingRecovery = "merge";
  *      syncState.save(lease, key, { from: read, reset: receipt }) → lease.transition
  *      { Connecting → Connected, receipt }. A crash anywhere replays from Connecting.
  *   9. Connected: key = { workspaceId, locator }; state = syncState.read(key). Registry has no such
- *      SKIT → report remote_missing and stop (A16). Preview = Sync.loadPlanInput + Sync.plan with
- *      remote and engineStore. Apply = Sync.run({ remote, save: next → next is Writing
- *      ? syncState.prepareWrite(lease, key, { from: last, to: next }), keeping the PreparedWrite
- *      : syncState.save(lease, key, { from: last, to: next }), write: (from, to) →
- *      capture(root) *> lease.writeTree({ prepared, from, to }) }) (sync.ts:636-680); an
- *      interrupted Writing follows WritingRecovery. Then capture(root) once more (sync.ts:684).
- * `skit author publish` → read once; require Connected, else NoRemoteHome (OPEN: today two errors,
- *   NotBoundToRegistry handlers/author/publish.ts:24 and NoRemoteHome publish.ts:113, for one fact);
+ *      SKIT → fail RemoteSkitUnavailable and stop, changing nothing (A16). Preview = Sync.loadPlanInput + Sync.plan with
+ *      remote and engineStore. Apply = Sync.run({ store: engineStore, remote,
+ *      save: next → syncState.save(lease, key, { from: last, to: next }),
+ *      prepareWrite: next (a Writing) → syncState.prepareWrite(lease, key, { from: last, to: next }),
+ *      whose PreparedWrite the engine hands to that Writing's one write,
+ *      write: (prepared, from, to) → capture(root) *> lease.writeTree({ prepared, from, to }) })
+ *      (sync.ts:636-680); an interrupted Writing follows WritingRecovery. Then capture(root) once more (sync.ts:684).
+ * `skit author publish` → read once, in the workflow; require Connected, else NoRemoteHome (decided,
+ *   Tim, 2026-11-04: NotBoundToRegistry and the handler's own read are removed);
  *   ignores any Leftover (the portable remote is the authority); Registry.credentials; HTTP publish.
  *   Writes no owner state, takes no lease.
  * `skit author list` → Registry.credentials; HTTP; skitLocator. Touches no owner.
  * `skit author delete` → parseAuthorDestination; Registry.credentials; HTTP. Touches no owner. The
- *   local binding and history stay as they were; the next sync reports remote_missing, and
+ *   local binding and history stay as they were; the next sync fails RemoteSkitUnavailable, and
  *   reconnecting is an explicit user action, never an automatic reset (A16, product behaviour).
  * `skit author init` → root; lease = acquire(root); initSkit scaffold(lease) (plain; A11).
  *   Identity None → register { None → Registered, adopt } (adopt from Library.read, A3);

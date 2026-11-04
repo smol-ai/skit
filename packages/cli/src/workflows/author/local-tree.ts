@@ -1,5 +1,6 @@
 import { Effect, Equal, FileSystem, Option, Path, Stream } from "effect";
 import {
+  History,
   LinkStat,
   isCanonicalRelativePath,
   isNormalizedTreeControlPath,
@@ -20,6 +21,8 @@ import {
 /**
  * The workspace's files as author sync sees them: normalized paths, files only, with their
  * modes. Owns the pairing of those bytes with the native entries authorized for this pass.
+ * `verbatimHash` is the hash of the snapshot before normalization, as AuthorHistory.capture
+ * hashes it, so sync can check that both saw the same files (A14).
  */
 export const scanAuthorSyncTree = Effect.fn("Sync.scanLocalTree")(function* (root: string) {
   const fs = yield* FileSystem.FileSystem;
@@ -178,5 +181,5 @@ export const scanAuthorSyncTree = Effect.fn("Sync.scanLocalTree")(function* (roo
     }
     return root;
   });
-  return { tree, checkTarget };
+  return { tree, verbatimHash: yield* History.treeHash(snapshot.entries), checkTarget };
 });

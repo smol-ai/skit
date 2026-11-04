@@ -1,31 +1,14 @@
 import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
-import { readSkitDescriptor } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { resolve } from "node:path";
-import { resolveAuthForOrigin } from "../../registry/auth.js";
 import { MissingRequirement } from "../../workflows/failures.js";
 import { publish } from "../../workflows/author/publish.js";
-import { AuthenticationRequired } from "../../registry/failures.js";
 import { Renderer } from "../../presentation/renderer.js";
-import { AuthorWorkspace } from "../../author/workspace.js";
-import { NotBoundToRegistry } from "../../registry/failures.js";
 import { handleRegistryCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { jsonFlag, optionalString } from "../../commands/parameters.js";
 import { result } from "../contracts.js";
-
-const requireRegistryBinding = Effect.fn("Publish.requireRegistryBinding")(function* (
-  path: string,
-) {
-  yield* readSkitDescriptor(resolve(path));
-  const workspaces = yield* AuthorWorkspace;
-  const { connection } = yield* workspaces.read(yield* workspaces.resolveRoot(path));
-  // The portable remote is the authority; a leftover checkpoint beside it does not matter.
-  if (connection._tag !== "Connected") return yield* new NotBoundToRegistry();
-  return connection.remote;
-});
 
 export const publishCommand = Effect.fn("CLI.publish")(function* (options: {
   readonly root?: string;
@@ -36,22 +19,10 @@ export const publishCommand = Effect.fn("CLI.publish")(function* (options: {
   if (!options.version)
     return yield* new MissingRequirement({ command: "publish", requires: "--version" });
 
-  const root = options.root ?? ".";
-  const remote = yield* requireRegistryBinding(root);
-  const credentials = yield* resolveAuthForOrigin(remote.origin, options.home);
-  if (!credentials.token)
-    return yield* new AuthenticationRequired({
-      origin: remote.origin,
-      scopes: "library:sync,authoring:write,publication:write",
-    });
-
   const renderer = yield* Renderer;
   return yield* renderer.withStatus(
     "Packaging and publishing release",
-    publish(root, options.version, options.revision, {
-      baseUrl: credentials.origin,
-      token: credentials.token,
-    }),
+    publish(options.root ?? ".", options.version, options.revision, { home: options.home }),
   );
 });
 

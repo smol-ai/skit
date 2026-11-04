@@ -8,19 +8,6 @@
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 import { Data } from "effect";
 
-export class NotBoundToRegistry
-  extends Data.TaggedError("NotBoundToRegistry")<{}>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "INVALID_ARGUMENT" as const;
-  readonly remediation =
-    "Run `skit author sync --to <namespace/skit>` to give this SKIT a remote home.";
-  get message(): string {
-    return "This SKIT is not bound to a Registry";
-  }
-}
-
 /** The Registry could not be reached at all; nothing it would have said is known. */
 export class RegistryUnreachable
   extends Data.TaggedError("RegistryUnreachable")<{

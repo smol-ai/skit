@@ -390,10 +390,11 @@ export interface AuthorHistoryShape {
   /** Store a tree (immutable, content-addressed, idempotent). */
   readonly retain: (tree: History.Tree) => Effect.Effect<History.TreeHash, AuthorHistoryInvalid>;
   /**
-   * The History.Store the sync engine runs against, over <home>/history. Its only writes are
-   * immutable, content-addressed and idempotent; it never touches the journal or sync-bindings.
+   * The History.Store the sync engine runs against, over <home>/history: a plain value the sync
+   * workflow passes to the engine. Its only writes are immutable, content-addressed and
+   * idempotent; it never touches the journal or sync-bindings.
    */
-  readonly engineStore: History.Store["Service"];
+  readonly engineStore: History.Store;
   /** The sync checkpoint, Idle | Sending | Writing. */
   readonly syncState: {
     /** Absent reads as Idle { base: null }. Never writes. */
@@ -571,10 +572,10 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
           yield* engineStore.putTree(tree);
           if (previous && unchanged) return { ...previous, treeHash };
         }
-        const recorded = yield* History.record(tree, previous ? [previous.id] : [], {
+        const recorded = yield* History.record(engineStore, tree, previous ? [previous.id] : [], {
           device: yield* Effect.fromResult(identity),
           at: yield* Clock.currentTimeMillis,
-        }).pipe(Effect.provideService(History.Store, engineStore));
+        });
         return { ...recorded, treeHash };
       }).pipe(Effect.catchIf(Schema.is(History.StoreError), storeFailure));
 

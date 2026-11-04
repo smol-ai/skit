@@ -7,6 +7,7 @@ import { Cause, Deferred, Effect, Exit, Fiber, FileSystem } from "effect";
 import { parseAuthorDestination, syncAuthorWorkspace } from "../src/workflows/author/sync.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
+import { registryCredentialLayer } from "./helpers/registry-credential.js";
 import { copySkitFixtureEffect, scratch } from "./helpers/library-home.js";
 import { SkitConfiguration } from "../src/configuration/skit-configuration.js";
 import { authorLayer, storedTreesAt } from "./helpers/author-history.js";
@@ -22,15 +23,17 @@ import { makeAuthorSyncServer } from "./helpers/author-sync-server.js";
  */
 const runAuthorSync = (
   root: string,
-  { home, ...options }: Parameters<typeof syncAuthorWorkspace>[1] & { readonly home?: string },
+  options: Parameters<typeof syncAuthorWorkspace>[1],
   transport: TestHttpHandler,
 ) =>
   Effect.gen(function* () {
-    const historyHome = home ?? (yield* SkitConfiguration).skitHome;
+    const historyHome = options.home ?? (yield* SkitConfiguration).skitHome;
     return yield* Effect.scoped(
       syncAuthorWorkspace(root, options).pipe(
         Effect.provide(registryHttpLayer(testHttpClientLayer(transport))),
         Effect.provide(authorLayer(historyHome)),
+        // The environment's token is for the test Registry only.
+        Effect.provide(registryCredentialLayer("https://registry.example")),
       ),
     );
   });
@@ -93,7 +96,6 @@ it.effect("first sync previews then records one remote home without publishing i
     };
     const options = {
       home,
-      baseUrl: "https://registry.example",
       to: "swyx/tools",
       visibility: "private" as const,
     };
@@ -147,7 +149,6 @@ it.effect("a pending first connection cannot be redirected or change visibility"
     const options = {
       apply: true,
       home,
-      baseUrl: "https://registry.example",
       to: "swyx/tools",
       visibility: "private" as const,
     };
@@ -201,7 +202,6 @@ it.effect("first sync distinguishes credential scope from Namespace authority", 
             root,
             {
               apply: true,
-              baseUrl: "https://registry.example",
               to: "tim/tools",
               visibility: "private",
             },
@@ -222,7 +222,6 @@ it.effect("first sync distinguishes credential scope from Namespace authority", 
           root,
           {
             apply: true,
-            baseUrl: "https://registry.example",
             to: "tim/tools",
             visibility: "private",
           },
@@ -282,7 +281,7 @@ it.effect("sync sends the whole tree, skit.json included, and leaves human-owned
       "---\nname: review\ndescription: Review code.\n---\n# Review\n",
     );
     const server = yield* makeAuthorSyncServer();
-    const options = { apply: true, home, baseUrl: "https://registry.example" };
+    const options = { apply: true, home };
 
     expect(
       yield* runAuthorSync(
@@ -332,7 +331,6 @@ it.effect("an interrupted sync aborts its SKIT request without recording a bindi
         {
           apply: true,
           home,
-          baseUrl: "https://registry.example",
           to: "tim/tools",
           visibility: "private",
         },

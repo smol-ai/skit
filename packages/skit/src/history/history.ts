@@ -12,7 +12,7 @@
  * A store may hold a shallow history: a device keeps the revisions it pulled without their
  * parents, which stay on the Registry. The Registry's store holds every parent.
  */
-import { Array, Context, Effect, Layer, Option, Order, Schema, Stream } from "effect";
+import { Array, Effect, Option, Order, Schema, Stream } from "effect";
 import { Digest } from "effect/crypto";
 import { TreeEntry } from "../artifact/tree-entry.js";
 import { MachineId } from "../library/entity-ids.js";
@@ -91,20 +91,20 @@ export type StoreError = typeof StoreError.Type;
  *
  * `commit` requires the revision's tree but not its parents, so a store can hold a shallow
  * history. Whoever needs every parent present, like the Registry, checks them itself.
+ *
+ * A plain value, passed to whatever reads or writes history: each store has one owner, which
+ * builds it over its own storage.
  */
-export class Store extends Context.Service<
-  Store,
-  {
-    readonly putTree: (tree: Tree) => Effect.Effect<TreeHash, StoreError>;
-    readonly tree: (hash: TreeHash) => Effect.Effect<Tree, StoreError>;
-    /** Whether a tree is stored, without reading or verifying it. */
-    readonly hasTree: (hash: TreeHash) => Effect.Effect<boolean, StoreError>;
-    /** Every stored tree's hash, in hash order. Reading one verifies it. */
-    readonly trees: Effect.Effect<ReadonlyArray<TreeHash>, StoreError>;
-    readonly commit: (revision: Revision) => Effect.Effect<RevisionId, StoreError>;
-    readonly revision: (id: RevisionId) => Effect.Effect<Revision, StoreError>;
-  }
->()("@smolai/skit-core/History/Store") {}
+export interface Store {
+  readonly putTree: (tree: Tree) => Effect.Effect<TreeHash, StoreError>;
+  readonly tree: (hash: TreeHash) => Effect.Effect<Tree, StoreError>;
+  /** Whether a tree is stored, without reading or verifying it. */
+  readonly hasTree: (hash: TreeHash) => Effect.Effect<boolean, StoreError>;
+  /** Every stored tree's hash, in hash order. Reading one verifies it. */
+  readonly trees: Effect.Effect<ReadonlyArray<TreeHash>, StoreError>;
+  readonly commit: (revision: Revision) => Effect.Effect<RevisionId, StoreError>;
+  readonly revision: (id: RevisionId) => Effect.Effect<Revision, StoreError>;
+}
 
 /**
  * The storage under a {@link Store}: one text document per kind and hash. It knows nothing of
@@ -128,7 +128,9 @@ const RevisionDocument = Schema.fromJsonString(Schema.toCodecJson(Revision));
  * earlier write left, so a corrupt document is never treated as a saved copy; every read checks
  * the document's hash against the identity it is stored under.
  */
-export const makeStore = Effect.fn("History.makeStore")(function* (backend: Backend) {
+export const makeStore = Effect.fn("History.makeStore")(function* (
+  backend: Backend,
+): Effect.fn.Return<Store, never, Digest.Digest> {
   const digests = yield* Digest.Digest;
   const read = <A, H extends Hash>(
     kind: Kind,
@@ -159,7 +161,7 @@ export const makeStore = Effect.fn("History.makeStore")(function* (backend: Back
       yield* read(kind, hash, document, identity);
       return hash;
     }).pipe(Effect.provideService(Digest.Digest, digests));
-  return Store.of({
+  return {
     putTree: (tree) => put("tree", sortTree(tree), TreeDocument, treeHash),
     tree: (hash) => read("tree", hash, TreeDocument, treeHash),
     hasTree: (hash) => backend.has("tree", hash),
@@ -171,16 +173,16 @@ export const makeStore = Effect.fn("History.makeStore")(function* (backend: Back
         return yield* put("revision", revision, RevisionDocument, revisionId);
       }),
     revision: (id) => read("revision", id, RevisionDocument, revisionId),
-  });
+  };
 });
 
-/** Record `tree` as a new revision on top of `parents`. */
+/** Record `tree` in `store` as a new revision on top of `parents`. */
 export const record = Effect.fn("History.record")(function* (
+  store: Store,
   tree: Tree,
   parents: ReadonlyArray<RevisionId>,
   author: Author,
 ) {
-  const store = yield* Store;
   const hash = yield* store.putTree(tree);
   const revision: Revision = { tree: hash, parents, author };
   return { id: yield* store.commit(revision), revision };
@@ -192,8 +194,9 @@ export const record = Effect.fn("History.record")(function* (
  * the stream fails with {@link StoreMissing} where the stored history ends.
  */
 export const ancestors = (
+  store: Store,
   id: RevisionId,
-): Stream.Stream<{ readonly id: RevisionId; readonly revision: Revision }, StoreError, Store> => {
+): Stream.Stream<{ readonly id: RevisionId; readonly revision: Revision }, StoreError> => {
   const start: {
     readonly queue: ReadonlyArray<RevisionId>;
     readonly seen: ReadonlySet<RevisionId>;
@@ -202,7 +205,7 @@ export const ancestors = (
     Effect.gen(function* () {
       const [next, ...rest] = queue.filter((candidate) => !seen.has(candidate));
       if (next === undefined) return undefined;
-      const revision = yield* (yield* Store).revision(next);
+      const revision = yield* store.revision(next);
       return [
         { id: next, revision },
         { queue: [...rest, ...revision.parents], seen: new Set(seen).add(next) },
@@ -210,20 +213,3 @@ export const ancestors = (
     }),
   );
 };
-
-/** A store held in memory, for tests and short-lived work. It verifies like a durable store. */
-export const layerMemory = Layer.effect(
-  Store,
-  Effect.gen(function* () {
-    const documents = { tree: new Map<Hash, string>(), revision: new Map<Hash, string>() };
-    return yield* makeStore({
-      read: (kind, hash) => Effect.sync(() => Option.fromUndefinedOr(documents[kind].get(hash))),
-      write: (kind, hash, text) =>
-        Effect.sync(() => {
-          if (!documents[kind].has(hash)) documents[kind].set(hash, text);
-        }),
-      has: (kind, hash) => Effect.sync(() => documents[kind].has(hash)),
-      list: (kind) => Effect.sync(() => Array.sort(documents[kind].keys(), Order.String)),
-    });
-  }),
-);

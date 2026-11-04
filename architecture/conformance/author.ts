@@ -34,7 +34,7 @@ type HistoryLayered = ReturnType<typeof HistoryImplementation.layer>;
 /**
  * engineStore is checked on its own: the CLI compiles against the built core (dist) and the
  * contract names its source, and TypeScript treats their error classes as different types. Each
- * side is checked to be exactly History.Store["Service"] of what it imports.
+ * side is checked to be exactly the History.Store of what it imports.
  */
 type HistoryMethods = Omit<AuthorHistory, "engineStore">;
 type ImplementationMethods = Omit<AuthorHistoryShape, "engineStore">;
@@ -73,7 +73,7 @@ export type Checks = [
   Assert<Equal<MissingMethods<AuthorHistory, AuthorHistoryShape>, never>>,
   Assert<Equal<ExtraMethods<AuthorHistory, AuthorHistoryShape>, never>>,
   Assert<Equal<ChangedMethods<HistoryMethods, ImplementationMethods>, HistoryChangedDebt>>,
-  Assert<Equal<AuthorHistoryShape["engineStore"], BuiltHistory.Store["Service"]>>,
+  Assert<Equal<AuthorHistoryShape["engineStore"], BuiltHistory.Store>>,
   // syncState is checked method by method, so the debt names the steps rather than syncState.
   Assert<Equal<MissingMethods<HistorySyncState, ImplementationSyncState>, never>>,
   Assert<Equal<ExtraMethods<HistorySyncState, ImplementationSyncState>, never>>,

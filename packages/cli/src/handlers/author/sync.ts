@@ -2,58 +2,24 @@ import {
   SkitConfiguration,
   skitConfigurationLayer,
 } from "../../configuration/skit-configuration.js";
-import { Effect, Option, Result } from "effect";
+import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import type { ResolvedAuth } from "../../registry/auth.js";
-import { resolveAuthForOrigin } from "../../registry/auth.js";
-import { AuthenticationRequired } from "../../registry/failures.js";
 import { Renderer } from "../../presentation/renderer.js";
-import {
-  parseAuthorDestination,
-  syncAuthorWorkspace,
-  type AuthorVisibility,
-} from "../../workflows/author/sync.js";
-import { AuthorWorkspace } from "../../author/workspace.js";
+import { syncAuthorWorkspace, type AuthorVisibility } from "../../workflows/author/sync.js";
 import { handleRegistryCommand } from "../../application.js";
-import { resolveAuth } from "../../registry/auth.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homeFlag, jsonFlag, optionalString } from "../../commands/parameters.js";
 import { result } from "../contracts.js";
 
-export const authorSyncCommand = Effect.fn("CLI.authorSync")(function* <AuthError>(options: {
+export const authorSyncCommand = Effect.fn("CLI.authorSync")(function* (options: {
   readonly root?: string;
   readonly apply: boolean;
   readonly allowLargeDeletion?: boolean;
   readonly home?: string;
   readonly to?: string;
   readonly visibility?: AuthorVisibility;
-  readonly authState: Result.Result<ResolvedAuth, AuthError>;
 }) {
-  // The credential origin for both a pending and a completed connection.
-  const workspaces = yield* AuthorWorkspace;
-  const { connection } = yield* workspaces.read(yield* workspaces.resolveRoot(options.root ?? "."));
-  const storedRemote = connection._tag === "Unconnected" ? undefined : connection.remote;
-  let credentials = storedRemote
-    ? yield* resolveAuthForOrigin(storedRemote.origin, options.home)
-    : undefined;
-  if (options.to) {
-    const concrete = /^(?:skit:\/\/|https?:\/\/)/.test(options.to);
-    const startup = concrete ? undefined : yield* Effect.fromResult(options.authState);
-    const destination = yield* parseAuthorDestination(options.to, startup?.origin);
-    credentials = yield* resolveAuthForOrigin(destination.origin, options.home);
-    if (!credentials.token)
-      return yield* new AuthenticationRequired({
-        origin: destination.origin,
-        scopes: "library:sync,authoring:write",
-      });
-  }
-  if (!credentials)
-    credentials =
-      !storedRemote && !options.to
-        ? { source: "none" as const }
-        : yield* Effect.fromResult(options.authState);
-
   const renderer = yield* Renderer;
   return yield* renderer.withStatus(
     "Synchronizing skit",
@@ -61,8 +27,7 @@ export const authorSyncCommand = Effect.fn("CLI.authorSync")(function* <AuthErro
       syncAuthorWorkspace(options.root ?? ".", {
         apply: options.apply,
         allowLargeDeletion: options.allowLargeDeletion,
-        baseUrl: credentials.origin,
-        token: credentials.token,
+        home: options.home,
         to: options.to,
         visibility: options.visibility,
       }),
@@ -97,7 +62,6 @@ export const authorSyncCliCommand = Command.make(
       return yield* handleRegistryCommand(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
-          const authState = yield* resolveAuth(selectedHome).pipe(Effect.result);
           const value = yield* authorSyncCommand({
             root: Option.getOrUndefined(path),
             apply,
@@ -105,7 +69,6 @@ export const authorSyncCliCommand = Command.make(
             home: selectedHome,
             to: Option.getOrUndefined(to),
             visibility: Option.getOrUndefined(visibility),
-            authState,
           });
           yield* renderer.result(
             result("sync", value, value.status === "blocked" ? 12 : undefined),

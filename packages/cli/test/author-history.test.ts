@@ -255,8 +255,8 @@ it.effect(
         const tree = yield* capturedTree(version);
         expect(tree.some((entry) => entry.path === "notes/a.txt")).toBe(true);
         expect(tree.some((entry) => entry.path.startsWith(".skit/"))).toBe(false);
-        const history = yield* Stream.runCollect(History.ancestors(version.id)).pipe(
-          Effect.provideService(History.Store, (yield* AuthorHistory).engineStore),
+        const history = yield* Stream.runCollect(
+          History.ancestors((yield* AuthorHistory).engineStore, version.id),
         );
         expect(history.map((entry) => entry.id)).toEqual([version.id, first.id]);
       }).pipe(Effect.provide(authorLayer(world.a.home)));

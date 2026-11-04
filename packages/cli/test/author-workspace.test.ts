@@ -98,54 +98,12 @@ it.effect("acquire removes the stage folders an interrupted write left", () =>
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect("a released lease lets another hold in, and comes back with a new revision", () =>
+it.effect("a lease handle used after its scope closed is refused", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    const lease = yield* f.workspaces.acquire(f.root);
-    const before = yield* lease.revision;
-    const during = yield* lease.withLeaseReleased(
-      Effect.gen(function* () {
-        // Another hold can take the lease meanwhile; this handle cannot be used.
-        yield* Effect.scoped(f.workspaces.acquire(f.root));
-        return yield* Effect.flip(lease.advance);
-      }),
-    );
-    expect(during).toMatchObject({ _tag: "AuthorLeaseNotHeld", state: "released" });
-    expect(yield* lease.revision).toBe(before + 1);
-    // Releasing while released is refused.
-    const nested = yield* lease.withLeaseReleased(
-      Effect.flip(lease.withLeaseReleased(Effect.void)),
-    );
-    expect(nested).toMatchObject({ _tag: "AuthorLeaseNotHeld", state: "released" });
-  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-);
-
-it.effect("a retake that fails closes the handle, and the effect's own failure wins", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    const lease = yield* f.workspaces.acquire(f.root);
-    const other = yield* Scope.make();
-    const busy = yield* Effect.flip(
-      lease.withLeaseReleased(f.workspaces.acquire(f.root).pipe(Scope.provide(other))),
-    );
-    expect(busy).toMatchObject({ _tag: "AuthorWorkspaceBusy" });
-    expect(yield* Effect.flip(lease.revision)).toMatchObject({
-      _tag: "AuthorLeaseNotHeld",
-      state: "closed",
-    });
-    yield* Scope.close(other, Exit.void);
-    const second = yield* f.workspaces.acquire(f.root);
-    const held = yield* Scope.make();
-    const failed = yield* Effect.flip(
-      second.withLeaseReleased(
-        f.workspaces
-          .acquire(f.root)
-          .pipe(Scope.provide(held), Effect.andThen(Effect.fail("sleep failed" as const))),
-      ),
-    );
-    expect(failed).toBe("sleep failed");
-    yield* Scope.close(held, Exit.void);
-  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+    const lease = yield* Effect.scoped(f.workspaces.acquire(f.root));
+    expect(yield* Effect.flip(lease.advance)).toMatchObject({ _tag: "AuthorLeaseNotHeld" });
+  }).pipe(Effect.provide(testPlatformLayer)),
 );
 
 it.effect("the first connection: checkpoint, a receipt that must match, then the remote", () =>

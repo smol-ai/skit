@@ -284,7 +284,6 @@ export const approvedServices = [
   "skit/SkitConfiguration",
   "skit/LinkStat",
   "skit/SourceProcess",
-  "@smolai/skit-core/History/Store",
   "@smolai/skit-core/CurrentPrincipal",
   "@skit-server-effect/BlobStore",
   "@skit-server-effect/Skits",
@@ -298,7 +297,6 @@ export const approvedServices = [
 
 export const serviceDebt = {
   "skit/library/LibraryStore": "folds into Library",
-  "@smolai/skit-core/Sync/Remote": "plain engine input built per command (decisions.md A7)",
   "skit/library/CurrentLibraryAction": "private to Library's store",
   "@smolai/skit/CurrentLibraryWriter": "becomes HomeLock",
   "skit/library/LibraryActor": "OPEN: history attribution; not in the model yet",

@@ -108,9 +108,7 @@ it.effect("identity-only workspaces detect copies and retain identity when moved
     expect((yield* f.identify()).workspaceId).not.toBe(first.workspaceId);
     const history = yield* Effect.gen(function* () {
       const store = (yield* AuthorHistory).engineStore;
-      return yield* Stream.runCollect(History.ancestors(second.id)).pipe(
-        Effect.provideService(History.Store, store),
-      );
+      return yield* Stream.runCollect(History.ancestors(store, second.id));
     }).pipe(Effect.provide(authorLayer(f.home.home)));
     expect(history.map((entry) => entry.id)).toEqual([second.id, firstCapture.id]);
   }).pipe(Effect.provide(testPlatformLayer)),

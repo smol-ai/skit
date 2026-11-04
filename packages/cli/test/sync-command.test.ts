@@ -43,13 +43,8 @@ const services = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     ),
   );
 
-it.effect("author sync reports missing first-sync arguments before ambient authentication", () =>
-  services(
-    authorSyncCommand({
-      apply: false,
-      authState: Result.fail(failure),
-    }),
-  ).pipe(
+it.effect("author sync reports missing first-sync arguments before reading any credential", () =>
+  services(authorSyncCommand({ apply: false })).pipe(
     Effect.flip,
     Effect.map((actual) =>
       assert.deepStrictEqual(
@@ -121,7 +116,6 @@ it.effect.each(["connected", "connecting"] as const)(
         root,
         apply: state === "connecting",
         home,
-        authState: Result.succeed({ source: "none" as const }),
       }).pipe(
         Effect.exit,
         Effect.provide(rendererTestLayer()),

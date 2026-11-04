@@ -40,9 +40,8 @@ const eventsFrom = (
 const latest = (workspace: string, home: string) =>
   Effect.gen(function* () {
     const saved = yield* captureWorkspace(workspace);
-    const reached = yield* History.ancestors(saved.id).pipe(
-      Stream.runCollect,
-      Effect.provideService(History.Store, (yield* AuthorHistory).engineStore),
+    const reached = yield* Stream.runCollect(
+      History.ancestors((yield* AuthorHistory).engineStore, saved.id),
     );
     return { ...saved, recorded: Array.from(reached).length };
   }).pipe(Effect.provide(authorLayer(home)));

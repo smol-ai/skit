@@ -139,7 +139,7 @@ export const owners = {
       "resolveRoot(input): WorkspaceRoot (canonical; A1)",
       "read: { identity, connection: Unconnected | Connecting | Connected { leftover } } (never writes)",
       "readIdentity(root) (workspace.json only; for AuthorHistory, A10)",
-      "acquire(root): scoped WorkspaceLease { register, transition, writeTree, withLeaseReleased } (A8)",
+      "acquire(root): scoped WorkspaceLease { register, transition, writeTree } (A8)",
     ],
     requires: [
       "FileSystem",
@@ -191,7 +191,6 @@ export const owners = {
       "LegacySyncStates v2 'drafts' and PreReleaseBindings in the workflow (sync.ts:99-110)",
       "skit.sync-bindings.v3 locator-only keys: rejected as invalid, no migration (author commands never shipped; A5)",
       "historyDirectory / withDeviceStore exports (replaced by capture, retain, engineStore; A7)",
-      "Sync.Remote as a Context.Service (packages/skit/src/sync/sync.ts:95-124) → plain engine input built per command from the Registry client (A7)",
       "module-global journal semaphore (history-journal.ts:29) → per layer, one layer per home (A9)",
     ],
   },
@@ -352,7 +351,6 @@ export const platform = [
   "CommandMetadata",
   "LinkStat",
   "SourceProcess",
-  "History.Store",
   "CurrentPrincipal",
   "BlobStore (R2 port: get, stream, put, exists, delete, probe)",
   "D1Client",
@@ -360,6 +358,8 @@ export const platform = [
 
 /** Removed outright or demoted to plain functions: no owner, no state, no resource. */
 export const removedServices = [
+  "Sync.Remote → plain engine input to Sync.loadPlanInput / Sync.run, built per command from the Registry client (A7)",
+  "History.Store → plain engine input to Sync and History.record; one implementation, the CLI device store (AuthorHistory.engineStore)",
   "SkillUsage → scanUsage()",
   "SetupDiscovery → plain function (the scan-once requirement is proven another way)",
   "PasswordHasher → plain function shared by Better Auth and bootstrap (same format: self-hosting.md:267)",

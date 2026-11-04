@@ -1,6 +1,6 @@
 import { NodeCrypto } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Data, DateTime, Effect, Layer, Stream } from "effect";
+import { Data, DateTime, Effect, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { describe as group, expect as check, test } from "vitest";
 import {
@@ -12,6 +12,7 @@ import {
   type SkitFailure,
   type TreeEntry,
 } from "../src/index.js";
+import { memoryStore } from "./helpers/memory-store.js";
 
 const file = (path: string, text: string): TreeEntry => ({
   path,
@@ -253,7 +254,7 @@ const makeRegistry = () => {
       post: (): Effect.Effect<void, SkitFailure> => Effect.void,
     },
   };
-  const remote = Sync.Remote.of({
+  const remote: Sync.Remote = {
     current: Effect.sync(() => registry.current),
     revision: (id) => {
       const found = revisions.get(id);
@@ -290,7 +291,7 @@ const makeRegistry = () => {
         registry.current = id;
         yield* registry.after.move();
       }),
-  });
+  };
   return { registry, remote };
 };
 type Registry = ReturnType<typeof makeRegistry>;
@@ -300,9 +301,7 @@ const makeDevice = Effect.fn("Test.makeDevice")(function* (
   { remote }: Registry,
   initial: History.Tree,
 ) {
-  const store = yield* History.Store.pipe(
-    Effect.provide(History.layerMemory.pipe(Layer.provide(NodeCrypto.layerDigest))),
-  );
+  const store = yield* memoryStore;
   const device = makeMachineId();
   const saved: Array<Sync.SyncState> = [];
   const held: { files: History.Tree; state: Sync.SyncState } = {
@@ -316,6 +315,8 @@ const makeDevice = Effect.fn("Test.makeDevice")(function* (
       Effect.gen(function* () {
         const local = yield* store.putTree(self.files);
         const result = yield* Sync.run({
+          store,
+          remote,
           state: self.state,
           local,
           author: { device, at: options.at },
@@ -329,7 +330,12 @@ const makeDevice = Effect.fn("Test.makeDevice")(function* (
               self.state = state;
               saved.push(state);
             }),
-          write: (from, to) =>
+          prepareWrite: (state) =>
+            Effect.sync(() => {
+              self.state = state;
+              saved.push(state);
+            }),
+          write: (_prepared, from, to) =>
             Effect.sync(() => {
               expect(from).toEqual(History.sortTree(self.files));
               self.files = to;
@@ -337,10 +343,7 @@ const makeDevice = Effect.fn("Test.makeDevice")(function* (
         });
         expect(result.state).toEqual(self.state);
         return result.outcome;
-      }).pipe(
-        Effect.provideService(History.Store, store),
-        Effect.provideService(Sync.Remote, remote),
-      ),
+      }),
   });
   return self;
 });
@@ -392,26 +395,30 @@ describe("run", () => {
         const b = yield* makeDevice(registry, []);
         yield* a.sync({ at: 1 });
         const failed = yield* Sync.run({
+          store: b.store,
+          remote: registry.remote,
           state: b.state,
           local: yield* b.store.putTree(b.files),
           author: { device: makeMachineId(), at: 1 },
           merger: mergeAuthorTree,
           decide: () => () => "ours",
           save: (state) =>
-            (boundary === "before-write" ? state._tag === "Writing" : state._tag === "Idle")
+            boundary === "after-write" && state._tag === "Idle"
               ? Effect.fail(new RemoteDown({ step: "save" }))
               : Effect.sync(() => {
                   b.state = state;
                 }),
-          write: (_from, to) =>
+          prepareWrite: (state) =>
+            boundary === "before-write"
+              ? Effect.fail(new RemoteDown({ step: "save" }))
+              : Effect.sync(() => {
+                  b.state = state;
+                }),
+          write: (_prepared, _from, to) =>
             Effect.sync(() => {
               b.files = to;
             }),
-        }).pipe(
-          Effect.provideService(History.Store, b.store),
-          Effect.provideService(Sync.Remote, registry.remote),
-          Effect.flip,
-        );
+        }).pipe(Effect.flip);
         expect(failed).toMatchObject({ _tag: "RemoteDown", step: "save" });
         expect(b.state._tag).toBe(boundary === "before-write" ? "Idle" : "Writing");
         expect(text(b.files)).toEqual(boundary === "before-write" ? {} : { "a.md": "first" });
