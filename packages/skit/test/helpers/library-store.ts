@@ -1,4 +1,6 @@
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
+import { InstalledSkills } from "../../src/library/installed-skills.js";
+import { Library } from "../../src/library/library.js";
 import { LibraryStore, libraryStoreLayer } from "../../src/library/store/library-store.js";
 import type { LibraryState } from "../../src/library/library-state.js";
 
@@ -15,3 +17,9 @@ export const saveLibrary = (home: string, state: LibraryState) =>
   Effect.flatMap(LibraryStore, (store) =>
     Effect.flatMap(store.load, (base) => store.save(state, base)),
   ).pipe(inLibrary(home));
+
+/** The Library rooted at `home`, routing nothing; building it migrates a legacy state.json. */
+export const libraryLayer = (home: string) =>
+  Library.layer.pipe(
+    Layer.provide(Layer.merge(libraryStoreLayer({ home }), InstalledSkills.layer())),
+  );

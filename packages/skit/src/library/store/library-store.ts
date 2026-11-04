@@ -5,6 +5,7 @@ import type { InvalidLibraryState, LibraryBusy, LibraryChanged } from "../../fai
 import { emptyLibraryState, type LibraryState } from "../library-state.js";
 import {
   inspectLocalLibraryState,
+  migrateLocalLibraryState,
   saveLibraryState,
   type InspectedLibraryState,
 } from "./state-file.js";
@@ -14,7 +15,9 @@ import { withLibraryWriterLock } from "./writer-lock.js";
 
 export type { InspectedLibraryState };
 
-export type LibraryStateReadError = PlatformError | InvalidLibraryState | LibraryBusy;
+export type LibraryStateReadError = PlatformError | InvalidLibraryState;
+/** Building the store migrates a legacy state.json under the home lock. */
+export type LibraryStoreLayerError = PlatformError | InvalidLibraryState | LibraryBusy;
 export type LibraryStateWriteError =
   | PlatformError
   | InvalidLibraryState
@@ -24,7 +27,11 @@ export type LibraryStateWriteError =
 export class LibraryStore extends Context.Service<
   LibraryStore,
   {
-    /** The current state; a Library that has never been written reads as an empty one. */
+    /**
+     * The current state; a Library that has never been written reads as an empty one. Like every
+     * read, it never writes: the layer migrated a legacy file when it was built, and a read refuses
+     * any state.json that is not the current version.
+     */
     readonly load: Effect.Effect<LibraryState, LibraryStateReadError>;
     /** Like `load`, but tells a Library that has never been written apart from an empty one. */
     readonly inspect: Effect.Effect<InspectedLibraryState, LibraryStateReadError>;
@@ -54,12 +61,17 @@ const CurrentLibraryAction = Context.Reference<
   | undefined
 >("skit/library/CurrentLibraryAction", { defaultValue: () => undefined });
 
+/**
+ * Building the layer migrates a legacy state.json once, under the home lock, and fails with
+ * `LibraryBusy` if the lock is held elsewhere. It creates nothing when state.json is absent.
+ */
 export function libraryStoreLayer(options: { home: string }) {
   return Layer.effect(
     LibraryStore,
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const home = resolve(options.home);
+      yield* migrateLocalLibraryState(home);
       const path = join(home, "state.json");
       const inspect = inspectLocalLibraryState(home).pipe(
         Effect.provideService(FileSystem.FileSystem, fs),

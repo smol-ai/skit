@@ -31,7 +31,7 @@ E  = https://github.com/Effect-TS/effect/blob/3b28bf686bf26e9700edd39c025aff2744
 
 ## D2. Migrations run once, when the Library layer is built (Revised)
 
-**Problem:** today any `load` can migrate `state.json` under the lock (`packages/skit/src/library/store/state-file.ts:104-143`).
+**Problem (before 2026-11-04):** any `load` could migrate `state.json` under the lock. **Done:** `libraryStoreLayer` migrates once at build (`migrateLocalLibraryState`, `packages/skit/src/library/store/state-file.ts`); reads never write. Read-only commands build the same layer, so they also migrate a legacy file once, with its backup.
 
 **Recommend:**
 - `Library.layer` migrates once while it is being constructed, under the lock.

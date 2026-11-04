@@ -499,8 +499,10 @@ export interface LibraryConfig {
 }
 
 /**
- * Library.layer's error. Migration failure is InvalidLibraryState (state-file.ts:89-100); LibraryBusy
- * when the home lock is held; writes of the migrated state or recovery marks are LibraryStateWriteError.
+ * Library.layer's error. Migration failure is InvalidLibraryState (state-file.ts:116-158, run by
+ * libraryStoreLayer today); LibraryBusy when the home lock is held; writes of the migrated state or
+ * recovery marks are LibraryStateWriteError. Reads never take the lock, so LibraryStateReadError has
+ * no LibraryBusy, and a read refuses any state.json that is not the current version.
  */
 export type LibraryLayerError =
   | InvalidLibraryState

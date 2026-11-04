@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Context, Effect, FileSystem, Layer } from "effect";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { skitLayer } from "../src/platform/layer.js";
@@ -18,7 +18,9 @@ import {
   globalEnabled,
   type LibraryState,
 } from "../src/library/library-state.js";
-import { inspectLibrary } from "./helpers/library-store.js";
+import { inspectLibrary, libraryLayer, saveLibrary } from "./helpers/library-store.js";
+import { Library } from "../src/library/library.js";
+import { acquireWorkspaceLock } from "../src/platform/workspace-lock.js";
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "library-state");
 
@@ -853,4 +855,104 @@ it.effect(
         (yield* fs.readDirectory(home)).some((name) => name.startsWith("state.json.v10.backup-")),
       );
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+const stateBackups = (home: string) =>
+  Effect.map(
+    Effect.flatMap(FileSystem.FileSystem, (fs) => fs.readDirectory(home)),
+    (names) => names.filter((name) => name.startsWith("state.json.v")),
+  );
+
+/** What a write to state.json would change: its bytes, its file (atomic writes replace it), its mtime. */
+const stateFileEvidence = (home: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = join(home, "state.json");
+    const info = yield* fs.stat(path);
+    return { bytes: yield* fs.readFileString(path), ino: info.ino, mtime: info.mtime };
+  });
+
+it.effect("migrates a legacy state.json exactly once, when the Library layer is built", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-layer-migration-" });
+    yield* fs.writeFileString(
+      join(home, "state.json"),
+      yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
+    );
+
+    const library = Context.get(yield* Layer.build(libraryLayer(home)), Library.Service);
+    assert.strictEqual((yield* stateBackups(home)).length, 1);
+    const migrated = yield* stateFileEvidence(home);
+    assert.strictEqual(JSON.parse(migrated.bytes).schemaVersion, 11);
+
+    const first = yield* library.read;
+    const second = yield* library.read;
+    assert.strictEqual(first._tag, "Present");
+    assert.deepStrictEqual(second, first);
+    // A second layer finds nothing to migrate.
+    const rebuilt = Context.get(yield* Layer.build(libraryLayer(home)), Library.Service);
+    assert.deepStrictEqual(yield* rebuilt.read, first);
+    assert.strictEqual((yield* stateBackups(home)).length, 1);
+    assert.deepStrictEqual(yield* stateFileEvidence(home), migrated);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("reading a current state.json leaves the file untouched", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-read-only-" });
+    yield* saveLibrary(home, emptyLibraryState());
+    const before = yield* stateFileEvidence(home);
+
+    const library = Context.get(yield* Layer.build(libraryLayer(home)), Library.Service);
+    yield* library.read;
+    yield* library.read;
+
+    assert.deepStrictEqual(yield* stateFileEvidence(home), before);
+    assert.deepStrictEqual(yield* stateBackups(home), []);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("a read refuses a legacy state.json that appeared after the layer was built", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-read-legacy-" });
+    const library = Context.get(yield* Layer.build(libraryLayer(home)), Library.Service);
+    const legacy = yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json"));
+    yield* fs.writeFileString(join(home, "state.json"), legacy);
+
+    const error = yield* Effect.flip(library.read);
+
+    assert.strictEqual(error._tag, "InvalidLibraryState");
+    assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), legacy);
+    assert.deepStrictEqual(yield* stateBackups(home), []);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("building the layer over an absent Library creates nothing", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-layer-absent-" });
+    const library = Context.get(yield* Layer.build(libraryLayer(home)), Library.Service);
+    assert.strictEqual((yield* library.read)._tag, "Absent");
+    assert.deepStrictEqual(yield* fs.readDirectory(home), []);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("building the layer fails LibraryBusy, migrating nothing, while the lock is held", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-layer-busy-" });
+    const legacy = yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json"));
+    yield* fs.writeFileString(join(home, "state.json"), legacy);
+    // Another holder, as another process would be.
+    yield* acquireWorkspaceLock(join(home, "lock.sqlite"));
+
+    const error = yield* Effect.flip(Layer.build(libraryLayer(home)));
+
+    assert.strictEqual(error._tag, "LibraryBusy");
+    assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), legacy);
+    assert.deepStrictEqual(yield* stateBackups(home), []);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

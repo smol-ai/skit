@@ -22,6 +22,7 @@ import {
   LibraryStore,
   lastSavedLibraryState,
   libraryStoreLayer,
+  type LibraryStoreLayerError,
   withLibraryWriter,
 } from "../src/library/store/library-store.js";
 import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
@@ -1021,7 +1022,9 @@ for (const stale of ["observed-successor", "settle-failure"] as const)
   );
 
 /** The fixture's store, counting every publication a workflow attempts through it. */
-const countingStore = (storeLayer: Layer.Layer<LibraryStore, never, FileSystem.FileSystem>) => {
+const countingStore = (
+  storeLayer: Layer.Layer<LibraryStore, LibraryStoreLayerError, FileSystem.FileSystem>,
+) => {
   const counter = { saves: 0 };
   const layer = Layer.effect(
     LibraryStore,

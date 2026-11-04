@@ -47,7 +47,10 @@ export type Revision = Brand.Branded<string, "Revision">;
 export const Revision = Brand.nominal<Revision>();
 
 export interface Interface {
-  /** One read. Like every read of state.json, it rewrites only a legacy file it migrates. */
+  /**
+   * One read. Never writes: a legacy state.json was migrated when the layer was built, and a read
+   * refuses any state.json that is not the current version.
+   */
   readonly read: Effect.Effect<Snapshot, LibraryStateReadError>;
   /**
    * Plan against the Library the front end showed, never a fresh read: apply refuses the plan if

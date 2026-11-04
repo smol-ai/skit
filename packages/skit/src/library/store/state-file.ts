@@ -79,49 +79,62 @@ const LegacyLibraryState = Schema.Union([
   LibraryStateFromV4,
 ]);
 
-const openPresentState = Effect.fn("Library.openPresentState")(function* (
-  home: string,
-  path: string,
-  value: unknown,
-) {
-  const version = yield* Schema.decodeUnknownEffect(StateVersion)(value).pipe(
+const readStateVersion = (path: string, value: unknown) =>
+  Schema.decodeUnknownEffect(StateVersion)(value).pipe(
+    Effect.map(({ schemaVersion }) => schemaVersion),
     Effect.mapError(
       () => new InvalidLibraryState({ path, detail: "Library state has no schema version" }),
     ),
   );
-  if (version.schemaVersion === CURRENT_LIBRARY_STATE_VERSION)
-    return yield* decodeCurrentState(path, value);
-  if (version.schemaVersion > CURRENT_LIBRARY_STATE_VERSION)
+
+const isLegacyVersion = (version: number) =>
+  version >= OLDEST_LIBRARY_STATE_VERSION && version < CURRENT_LIBRARY_STATE_VERSION;
+
+/** Decode a stored state of the current version. Any other version is refused, never migrated. */
+const decodeStoredState = Effect.fn("Library.decodeStoredState")(function* (
+  path: string,
+  value: unknown,
+) {
+  const version = yield* readStateVersion(path, value);
+  if (version === CURRENT_LIBRARY_STATE_VERSION) return yield* decodeCurrentState(path, value);
+  if (version > CURRENT_LIBRARY_STATE_VERSION)
     return yield* new InvalidLibraryState({
       path,
-      detail: `Library state schema v${version.schemaVersion} was written by a newer SKIT; this CLI supports v${OLDEST_LIBRARY_STATE_VERSION}–v${CURRENT_LIBRARY_STATE_VERSION}`,
+      detail: `Library state schema v${version} was written by a newer SKIT; this CLI supports v${OLDEST_LIBRARY_STATE_VERSION}–v${CURRENT_LIBRARY_STATE_VERSION}`,
     });
-  if (version.schemaVersion < OLDEST_LIBRARY_STATE_VERSION)
+  if (isLegacyVersion(version))
     return yield* new InvalidLibraryState({
       path,
-      detail: `unsupported Library state schema v${version.schemaVersion}; this CLI supports v${OLDEST_LIBRARY_STATE_VERSION}–v${CURRENT_LIBRARY_STATE_VERSION}`,
+      detail: `Library state schema v${version} has not been migrated to v${CURRENT_LIBRARY_STATE_VERSION}; run SKIT again to migrate it`,
     });
-  return yield* withLibraryStateReplacement(
+  return yield* new InvalidLibraryState({
+    path,
+    detail: `unsupported Library state schema v${version}; this CLI supports v${OLDEST_LIBRARY_STATE_VERSION}–v${CURRENT_LIBRARY_STATE_VERSION}`,
+  });
+});
+
+/**
+ * Migrate a legacy `state.json` to the current version, once, under the home lock, keeping the
+ * pre-migration file as a backup. An absent file stays absent, and a file of any other version is
+ * left for reads to accept or refuse. Fails with `LibraryBusy` when the lock is held elsewhere.
+ */
+export const migrateLocalLibraryState = Effect.fn("Library.migrateState")(function* (
+  home: string,
+): Effect.fn.Return<
+  void,
+  PlatformError | InvalidLibraryState | LibraryBusy,
+  FileSystem.FileSystem
+> {
+  const path = join(resolve(home), "state.json");
+  const value = yield* readStateValue(path);
+  if (value === undefined || !isLegacyVersion(yield* readStateVersion(path, value))) return;
+  yield* withLibraryStateReplacement(
     home,
     Effect.gen(function* () {
       const lockedValue = yield* readStateValue(path);
-      if (lockedValue === undefined)
-        return yield* new InvalidLibraryState({ path, detail: "Library state disappeared" });
-      const lockedVersion = yield* Schema.decodeUnknownEffect(StateVersion)(lockedValue).pipe(
-        Effect.mapError(
-          () => new InvalidLibraryState({ path, detail: "Library state has no schema version" }),
-        ),
-      );
-      if (lockedVersion.schemaVersion === CURRENT_LIBRARY_STATE_VERSION)
-        return yield* decodeCurrentState(path, lockedValue);
-      if (
-        lockedVersion.schemaVersion < OLDEST_LIBRARY_STATE_VERSION ||
-        lockedVersion.schemaVersion > CURRENT_LIBRARY_STATE_VERSION
-      )
-        return yield* new InvalidLibraryState({
-          path,
-          detail: "Library state changed while opening",
-        });
+      if (lockedValue === undefined) return;
+      const lockedVersion = yield* readStateVersion(path, lockedValue);
+      if (!isLegacyVersion(lockedVersion)) return;
       const migrated = yield* decodeCurrentState(
         path,
         yield* Schema.decodeUnknownEffect(LegacyLibraryState)(lockedValue).pipe(
@@ -129,33 +142,33 @@ const openPresentState = Effect.fn("Library.openPresentState")(function* (
             () =>
               new InvalidLibraryState({
                 path,
-                detail: `invalid v${lockedVersion.schemaVersion} Library state`,
+                detail: `invalid v${lockedVersion} Library state`,
               }),
           ),
         ),
       );
       // Keep the pre-migration file: migration drops history it can no longer represent.
       yield* writeJsonAtomic(
-        `${path}.v${lockedVersion.schemaVersion}.backup-${new Date(yield* Clock.currentTimeMillis).toISOString().replaceAll(":", "")}`,
+        `${path}.v${lockedVersion}.backup-${new Date(yield* Clock.currentTimeMillis).toISOString().replaceAll(":", "")}`,
         lockedValue,
       );
       yield* writeJsonAtomic(path, migrated);
-      return migrated;
     }),
   );
 });
 
+/** Read `state.json`. Never writes and never takes the lock. */
 export const inspectLocalLibraryState = Effect.fn("Library.inspectState")(function* (
   home: string,
 ): Effect.fn.Return<
   InspectedLibraryState,
-  PlatformError | InvalidLibraryState | LibraryBusy,
+  PlatformError | InvalidLibraryState,
   FileSystem.FileSystem
 > {
   const path = join(resolve(home), "state.json");
   const value = yield* readStateValue(path);
   if (value === undefined) return { present: false as const };
-  return { present: true as const, state: yield* openPresentState(home, path, value) };
+  return { present: true as const, state: yield* decodeStoredState(path, value) };
 });
 
 /**
@@ -180,7 +193,7 @@ export const saveLibraryState = Effect.fn("Library.saveState")(function* (
     Effect.gen(function* () {
       const value = yield* readStateValue(path);
       const current =
-        value === undefined ? emptyLibraryState() : yield* decodeCurrentState(path, value);
+        value === undefined ? emptyLibraryState() : yield* decodeStoredState(path, value);
       if (libraryStateRevision(current) !== libraryStateRevision(base))
         return yield* new LibraryChanged({ path });
       yield* writeRawAtomic(path, `${text}\n`);

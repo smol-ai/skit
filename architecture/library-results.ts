@@ -70,8 +70,8 @@ type IntentOf<Tag extends Intent["_tag"]> = Extract<Intent, { readonly _tag: Tag
 
 // Errors that exist today (Data/Schema tagged errors), referenced by name.
 type PlatformError = Ref<"effect PlatformError">;
-type LibraryStateReadError = Ref<"skit/src/library/store/library-store.ts:17">;
-type LibraryStateWriteError = Ref<"skit/src/library/store/library-store.ts:18-22">; // minus LibraryChanged, which becomes StalePlan
+type LibraryStateReadError = Ref<"skit/src/library/store/library-store.ts:18">;
+type LibraryStateWriteError = Ref<"skit/src/library/store/library-store.ts:21-25">; // minus LibraryChanged, which becomes StalePlan
 /**
  * RESHAPE of skit/src/library/library-plan.ts:61-62, which carries only a message. The single
  * "the Library moved on" error: replaces PlanIsStale (cli/src/library/failures.ts:11),

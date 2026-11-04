@@ -54,9 +54,13 @@ export function handlePlatformCommand<E, R>(program: Effect.Effect<void, E, R>) 
   );
 }
 
+/**
+ * Building the Library layer can fail (it migrates a legacy state.json under the home lock), so it
+ * is built inside the failure renderer.
+ */
 export function handleLibraryCommand<E, R>(program: Effect.Effect<void, E, R>) {
-  return renderCommandFailures(Effect.scoped(program)).pipe(
-    Effect.provide(libraryApplicationLayer),
+  return renderCommandFailures(
+    Effect.scoped(program).pipe(Effect.provide(libraryApplicationLayer)),
   );
 }
 
@@ -67,7 +71,7 @@ export function handleRegistryCommand<E, R>(program: Effect.Effect<void, E, R>) 
 }
 
 export function handleSourceCommand<E, R>(program: Effect.Effect<void, E, R>) {
-  return renderCommandFailures(Effect.scoped(program)).pipe(Effect.provide(sourceApplicationLayer));
+  return renderCommandFailures(Effect.scoped(program).pipe(Effect.provide(sourceApplicationLayer)));
 }
 
 export { commandFailure } from "./failure-classification.js";
