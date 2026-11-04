@@ -1,4 +1,5 @@
-import { skitConfigurationLayer } from "../configuration/skit-configuration.js";
+import { Library } from "@smolai/skit-core/library";
+import { skitConfigurationLayer } from "@smolai/skit-core";
 import { presentDoctorCleanup } from "../workflows/library/doctor-cleanup.js";
 import { syncJourney } from "./sync-journey.js";
 import { join } from "node:path";
@@ -131,8 +132,12 @@ const previewEnable = Effect.scoped(
         interactive: true,
         configuration,
       });
-      return yield* openLibrarySession();
-    }).pipe(Effect.provide(libraryStoreLayer({ home })));
+      return yield* openLibrarySession(configuration.pull.installOptions);
+    }).pipe(
+      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provide(libraryStoreLayer({ home })),
+      Effect.provide(skitConfigurationLayer(home)),
+    );
   }),
 ).pipe(Effect.provide(skitLayer), Effect.provide(skitConfigurationLayer()));
 
@@ -198,7 +203,9 @@ const previewDoctorCleanup = Effect.scoped(
       );
       return "Preview only · 1 Skill remains enabled";
     }).pipe(
+      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
       Effect.provide(libraryStoreLayer({ home })),
+      Effect.provide(skitConfigurationLayer(home)),
       Effect.provide(
         ConfigProvider.layer(
           ConfigProvider.fromUnknown({

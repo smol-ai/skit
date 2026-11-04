@@ -8,7 +8,7 @@ import {
   invocationRowSummary,
   type LibrarySkillRow,
   type PendingLibraryChange,
-} from "../../cli/src/library-application/index";
+} from "@smolai/skit-core/library/session";
 import type { ListingBudget } from "@smolai/skit-core";
 import { groupSkills, groupKindLabel, groupLocation, type SkillGroup } from "./skill-groups";
 

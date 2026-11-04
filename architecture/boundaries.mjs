@@ -96,9 +96,6 @@ export const debt = {
   "packages/cli/src/library-application/import-source.ts": ["withLibraryWriter"],
   "packages/cli/src/library-application/index.ts": ["libraryStoreLayer"],
   "packages/cli/src/library-application/layers.ts": ["libraryStoreLayer"],
-  "packages/cli/src/library-application/library-view.ts": ["LibraryStore"],
-  "packages/cli/src/library-application/session.ts": ["LibraryStore"],
-  "packages/cli/src/library-application/set-enabled.ts": ["LibraryStore"],
   "packages/cli/src/library-application/update-installed-skills.ts": ["LibraryStore"],
   "packages/cli/src/library-application/update.ts": ["LibraryStore", "withLibraryWriter"],
   "packages/cli/src/library/security.ts": [
@@ -246,7 +243,6 @@ export const debt = {
   "packages/skit/test/local-retention.test.ts": ["writeCollectionVersion"],
   "packages/skit/test/machine-settings.test.ts": ["withHomeLock"],
   "packages/skit/test/sources.test.ts": ["prepareImport"],
-  "packages/tui/src/index.ts": ["LibraryStore"],
   "packages/tui/test/helpers/library-fixture.ts": [
     "LibraryStore",
     "importCollection",

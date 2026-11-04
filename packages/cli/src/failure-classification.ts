@@ -1,5 +1,7 @@
+import { errorMessage } from "@smolai/skit-core";
+export { errorMessage } from "@smolai/skit-core";
 import { isSkitFailure, type FailureCode } from "@smolai/skit-core";
-import { Cause, Predicate } from "effect";
+import { Cause } from "effect";
 
 /**
  * The exit status each failure code ends a command with. Command metadata separately publishes
@@ -22,20 +24,6 @@ export interface ClassifiedFailure {
   exitCode: number;
   message: string;
   remediation: string;
-}
-
-/** The message of any failed or thrown value, without assuming its prototype. */
-export function errorMessage(error: unknown): string {
-  if (
-    Predicate.hasProperty(error, "message") &&
-    typeof error.message === "string" &&
-    error.message.length > 0
-  )
-    return error.message;
-  if (Predicate.hasProperty(error, "detail") && typeof error.detail === "string")
-    return error.detail;
-  if (Predicate.hasProperty(error, "_tag") && typeof error._tag === "string") return error._tag;
-  return String(error);
 }
 
 /** One failure classification shared by every executable front end. */

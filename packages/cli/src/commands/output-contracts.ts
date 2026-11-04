@@ -32,7 +32,7 @@ import { AddPreview, AddResult } from "../workflows/library/add-contract.js";
 import { UpdatePlan, UpdateResult } from "../workflows/library/update-contract.js";
 import { SyncResult } from "../workflows/library/library-sync-contract.js";
 import { ListResult } from "../workflows/library/list-contract.js";
-import { SetEnabledChange, SetEnabledResult } from "../workflows/library/set-enabled-contract.js";
+import { SetEnabledChange, SetEnabledResult } from "@smolai/skit-core/library/session";
 import { RepositoryPolicyResult } from "@smolai/skit-core/library/setup";
 import { EditImportPlan, EditImportResult } from "../workflows/library/import-edit-contract.js";
 import { MachineInventoryResult } from "../workflows/library/machine-inventory-contract.js";

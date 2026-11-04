@@ -7,7 +7,7 @@ import {
 import { terminalColors } from "./terminal-style.js";
 import { Effect } from "effect";
 import { resolve } from "node:path";
-import type { InvocationOption } from "../invocation/policy.js";
+import type { InvocationOption } from "@smolai/skit-core/library/session";
 import {
   DESTINATION_QUESTION,
   destinationLabel,
@@ -15,7 +15,7 @@ import {
   invocationEligibleScopes,
   invocationBriefing,
   invocationRowSummary,
-} from "../library-application/read-model.js";
+} from "@smolai/skit-core/library/session";
 import type { InstalledSkillOptions } from "../workflows/library/installed-skill-options.js";
 import {
   cancelLibraryChange,

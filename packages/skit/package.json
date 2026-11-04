@@ -37,6 +37,10 @@
     "./library/setup": {
       "types": "./dist/library/setup/index.d.ts",
       "import": "./dist/library/setup/index.js"
+    },
+    "./library/session": {
+      "types": "./dist/library/session.d.ts",
+      "import": "./dist/library/session.js"
     }
   },
   "scripts": {

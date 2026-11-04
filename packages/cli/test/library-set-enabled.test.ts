@@ -1,9 +1,10 @@
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Layer } from "effect";
 import { join } from "node:path";
 import {
   deterministicTreeHash,
+  skitConfigurationLayer,
   LibraryStore,
   libraryStoreLayer,
   makeCollectionId,
@@ -12,7 +13,7 @@ import {
 } from "@smolai/skit-core";
 import { isolatedRoots } from "./helpers/isolated-library.js";
 import { setLibraryEnabled, planLibraryEnabled } from "./helpers/set-enabled.js";
-import { calculateSetEnabled } from "../src/workflows/library/set-enabled-request.js";
+import { calculateSetEnabled } from "@smolai/skit-core/library/session";
 import { applySetEnabledPlan } from "../src/library-application/set-enabled.js";
 import { planRemove } from "../src/workflows/library/remove.js";
 import { planUpdates } from "../src/library-application/update.js";
@@ -58,7 +59,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
         }),
       ),
     );
-    const layer = libraryStoreLayer({ home });
+    const layer = Layer.merge(libraryStoreLayer({ home }), skitConfigurationLayer(home));
     const state = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
     assert.ok(state);
     const base = {
@@ -248,7 +249,7 @@ it.effect("enables a whole Collection and converts it to Skills when one is disa
     const collectionId = imported.collection!.collection_id;
     const skillId = (name: string) =>
       imported.skills.find((skill) => skill.name === name)!.skill_id;
-    const layer = libraryStoreLayer({ home });
+    const layer = Layer.merge(libraryStoreLayer({ home }), skitConfigurationLayer(home));
     const set = (query: string, enabled: boolean, all: boolean) =>
       Effect.gen(function* () {
         yield* writingTo(

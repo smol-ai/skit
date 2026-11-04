@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { probeHarness, type HarnessProbeResult } from "@smolai/skit-core/harnesses";
 
 // PROTOTYPE: five audit inventory projections plus a command palette.
@@ -19,10 +20,6 @@ import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import { resolve } from "node:path";
 import { Effect, FileSystem, Layer, Schema } from "effect";
 import {
-  SkitConfiguration,
-  skitConfigurationLayer,
-  LibraryActor,
-  libraryApplicationLayer,
   openLibrarySession,
   readLibrarySkillContent,
   proposeLibraryEnable,
@@ -44,11 +41,16 @@ import {
   type LibrarySkillRow,
   type Scope,
   type InvocationOption,
-} from "../../cli/src/library-application/index";
+} from "@smolai/skit-core/library/session";
 import { errorMessage, auditLocalCapabilitiesV1Alpha4 } from "../../cli/src/front-end";
 import {
   HarnessName,
-  LibraryStore,
+  Library,
+  SkitConfiguration,
+  skitConfigurationLayer,
+  LibraryActor,
+  skitLayer,
+  emptyLibraryState,
   readListingBudgets,
   type ListingBudget,
 } from "@smolai/skit-core";
@@ -95,23 +97,29 @@ const flag = (name: string): string | undefined => {
 
 // One host runtime and serialized state transitions for the writable Library view.
 const libraryHost = createLibraryHost(
-  libraryApplicationLayer.pipe(
+  Layer.unwrap(
+    Effect.map(SkitConfiguration, (paths) =>
+      Library.layer({ home: paths.skitHome, routing: { _tag: "None" } }),
+    ),
+  ).pipe(
+    Layer.provideMerge(skitLayer),
     Layer.provideMerge(skitConfigurationLayer(flag("--skit-home"))),
     Layer.provideMerge(Layer.succeed(LibraryActor)("tui")),
   ),
-  openLibrarySession(),
+  Effect.flatMap(SkitConfiguration, (paths) =>
+    openLibrarySession(paths.skitHome, libraryConfiguration),
+  ),
 );
 const paths = await libraryHost.run(SkitConfiguration);
 const codexRoot = flag("--codex-root");
 const claudeRoot = flag("--claude-root");
-const libraryConfiguration = {
+const libraryConfiguration: InventoryRootOptions = {
   home: paths.userHome,
   configHome: paths.configHome,
   overrides: {
     ...(codexRoot === undefined ? {} : { codex: [codexRoot] }),
     ...(claudeRoot === undefined ? {} : { "claude-code": [claudeRoot] }),
   },
-  now: () => new Date().toISOString(),
 };
 let libraryOpenError: string | undefined;
 // Every workflow the TUI runs enters the runtime through the host, the audit included.
@@ -126,7 +134,8 @@ let listingBudgets: readonly ListingBudget[] = [];
 async function refreshListingBudgets(): Promise<void> {
   listingBudgets = await libraryHost.run(
     Effect.gen(function* () {
-      const state = yield* (yield* LibraryStore).load;
+      const snapshot = yield* (yield* Library.Service).read;
+      const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
       return yield* readListingBudgets(state, {
         cwd: flag("--cwd") ?? process.cwd(),
         home: libraryConfiguration.home,
@@ -524,15 +533,17 @@ function populateDetails(details: ScrollBoxRenderable, item: InventoryItem): voi
       );
     const content = text("library-skill-content", "Loading…", { width: "100%" });
     details.add(content);
-    pendingSkillPreview = libraryHost.run(readLibrarySkillContent(item.row.skillVersionId)).then(
-      (value) => {
-        if (detailsScroll === details && revision === detailRevision) content.content = value;
-      },
-      (error: unknown) => {
-        if (detailsScroll === details && revision === detailRevision)
-          content.content = `Unable to read retained Skill\n${errorMessage(error)}`;
-      },
-    );
+    pendingSkillPreview = libraryHost
+      .run(readLibrarySkillContent(paths.skitHome, item.row.skillVersionId))
+      .then(
+        (value) => {
+          if (detailsScroll === details && revision === detailRevision) content.content = value;
+        },
+        (error: unknown) => {
+          if (detailsScroll === details && revision === detailRevision)
+            content.content = `Unable to read retained Skill\n${errorMessage(error)}`;
+        },
+      );
     return;
   }
   const model = detailPresentation(item, section.key === "library", listingBudgets);
@@ -1182,7 +1193,7 @@ async function cancelPending(): Promise<void> {
 async function refreshLibrary(): Promise<void> {
   if (!libraryHost.state) return;
   await transitionLibrary((state) =>
-    Effect.map(openLibrarySession(), (session) => ({
+    Effect.map(openLibrarySession(paths.skitHome, libraryConfiguration), (session) => ({
       ...session,
       ...(state.outcome === undefined ? {} : { outcome: state.outcome }),
     })),

@@ -5,8 +5,8 @@ import {
   invocationRowSummary,
   type InvocationPolicyChoice,
   type InvocationReadModel,
-} from "../invocation/read-model.js";
-import type { InstallScope as Scope } from "@smolai/skit-core";
+} from "./invocation.js";
+import { type InstallScope as Scope } from "../../../vocabulary.js";
 
 export interface ScopeChoice {
   value: "global" | "repository";
@@ -59,4 +59,4 @@ export function scopeRowLabel(scopeRow: InvocationScopeRow): string {
 
 export { destinationLabel, invocationBriefing, invocationRowSummary };
 
-export type { InstallScope as Scope } from "@smolai/skit-core";
+export { type InstallScope as Scope } from "../../../vocabulary.js";

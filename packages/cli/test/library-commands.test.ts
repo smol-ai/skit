@@ -84,7 +84,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
     assert.deepStrictEqual(listing.enabled, []);
     assert.strictEqual(JSON.stringify(listing).includes("release"), false);
 
-    const session = yield* home.owned(openLibrarySession());
+    const session = yield* home.owned(openLibrarySession(home.installOptions));
     const row = session.skills[0];
     assert.ok(row);
     const proposed = yield* home.owned(
@@ -120,9 +120,10 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
 
     const interaction = yield* makeScriptedInteraction(["Done"]);
     yield* home.owned(
-      browseLibrary(yield* home.owned(openLibrarySession()), home.installOptions).pipe(
-        Effect.provide(interaction.layer),
-      ),
+      browseLibrary(
+        yield* home.owned(openLibrarySession(home.installOptions)),
+        home.installOptions,
+      ).pipe(Effect.provide(interaction.layer)),
     );
     assert.strictEqual((yield* interaction.prompts)[0]?.message, "Select a collection");
     assert.strictEqual(yield* interaction.remaining, 0);
@@ -252,10 +253,12 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
       "Done",
     ]);
     yield* home.owned(
-      browseLibrary(yield* home.owned(openLibrarySession()), {
-        ...home.installOptions,
-        ...configuration.inventory,
-      }).pipe(Effect.provide(unchangedBrowse.layer)),
+      browseLibrary(
+        yield* home.owned(
+          openLibrarySession({ ...home.installOptions, ...configuration.inventory }),
+        ),
+        { ...home.installOptions, ...configuration.inventory },
+      ).pipe(Effect.provide(unchangedBrowse.layer)),
     );
     assert.ok(!(yield* unchangedBrowse.prompts).some((prompt) => prompt.kind === "confirm"));
     assert.ok((yield* unchangedBrowse.notes).some((note) => note.title === "No change"));
@@ -283,9 +286,10 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
       "Done",
     ]);
     yield* home.owned(
-      browseLibrary(yield* home.owned(openLibrarySession()), home.installOptions).pipe(
-        Effect.provide(browseCancel.layer),
-      ),
+      browseLibrary(
+        yield* home.owned(openLibrarySession(home.installOptions)),
+        home.installOptions,
+      ).pipe(Effect.provide(browseCancel.layer)),
     );
     assert.deepStrictEqual(yield* home.durable, beforeCancel);
     const browseDisable = yield* makeScriptedInteraction([
@@ -296,9 +300,10 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
       "Done",
     ]);
     yield* home.owned(
-      browseLibrary(yield* home.owned(openLibrarySession()), home.installOptions).pipe(
-        Effect.provide(browseDisable.layer),
-      ),
+      browseLibrary(
+        yield* home.owned(openLibrarySession(home.installOptions)),
+        home.installOptions,
+      ).pipe(Effect.provide(browseDisable.layer)),
     );
     assert.deepStrictEqual((yield* home.durable).enabled, []);
     yield* home.owned(

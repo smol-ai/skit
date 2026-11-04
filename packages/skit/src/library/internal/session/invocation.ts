@@ -5,17 +5,16 @@ import {
   DeclaredInvocation,
   DeclaredPolicySource,
   DeclaredInvocationResolution,
-  HarnessName,
   InvocationConformance,
-  InvocationPolicy,
-  invocationMetadataAdapters,
-  LibraryInvocationOption,
   ResolvedDeclaredPolicy,
-} from "@smolai/skit-core";
+} from "../../../invocation/conformance.js";
+import { HarnessName, InvocationPolicy } from "../../../vocabulary.js";
+import { invocationMetadataAdapters } from "../../../harnesses/invocation-metadata.js";
+import { LibraryInvocationOption } from "../../../contracts.js";
 import { Record, Schema } from "effect";
-import { harnessLabel } from "@smolai/skit-core/harnesses";
-import type { InvocationOption } from "./policy.js";
-import type { InstallScope as Scope } from "@smolai/skit-core";
+import { harnessLabel } from "../../../harnesses/discovery.js";
+import type { InvocationOption } from "./invocation-option.js";
+import { type InstallScope as Scope } from "../../../vocabulary.js";
 
 export type { ResolvedDeclaredPolicy };
 

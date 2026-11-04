@@ -1,7 +1,4 @@
-import type {
-  SetEnabledChange,
-  SetEnabledResult,
-} from "../workflows/library/set-enabled-contract.js";
+import type { SetEnabledChange, SetEnabledResult } from "@smolai/skit-core/library/session";
 
 export function renderSetEnabled(
   data: SetEnabledChange | SetEnabledResult,

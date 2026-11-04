@@ -1,7 +1,4 @@
-import {
-  SkitConfiguration,
-  skitConfigurationLayer,
-} from "../../src/configuration/skit-configuration.js";
+import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
 import { Effect, FileSystem, Layer, Result } from "effect";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -216,4 +213,8 @@ export const importCollectionIn =
 
 /** Mutate the Library at `home` the way a front end does: under the recording writer lock. */
 export const writingTo = <A, E, R>(home: string, effect: Effect.Effect<A, E, R>) =>
-  withLibraryWriter(effect).pipe(Effect.provide(libraryStoreLayer({ home })));
+  withLibraryWriter(effect).pipe(
+    Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+    Effect.provide(libraryStoreLayer({ home })),
+    Effect.provide(skitConfigurationLayer(home)),
+  );

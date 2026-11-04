@@ -1,32 +1,31 @@
+import { resolve } from "node:path";
+import { canonicalJson } from "../../../shared/json.js";
 import { Effect } from "effect";
-import { Library, InstalledSkills, type LibraryState } from "@smolai/skit-core";
-import { resolveLibrarySubject } from "@smolai/skit-core";
-import {
-  expandSetEnabledIntent,
-  type SetEnabledIntent,
-} from "../workflows/library/set-enabled-request.js";
+import { Library } from "../../library.js";
+import { type LibraryState } from "../../library-state.js";
+import { resolveLibrarySubject } from "../../subject-resolution.js";
+import { expandSetEnabledIntent, type SetEnabledIntent } from "./set-enabled-request.js";
 import { libraryView } from "./library-view.js";
 import {
   SetEnabledIncomplete,
+  planOwner,
   type SetEnabledConfiguration,
   type SetEnabledPlan,
 } from "./set-enabled.js";
-import type { SetEnabledResult } from "../workflows/library/set-enabled-contract.js";
-import { classifyFailure } from "../failure-classification.js";
+import type { SetEnabledResult } from "./set-enabled-contract.js";
+import { failureDetails } from "../../../shared/failure.js";
 
 /** Text and displayed names are resolved here; Library accepts only stable identities. */
 export type SelectionError =
   | Library.PlanError
-  | import("@smolai/skit-core").LibrarySubjectNotFound
-  | import("@smolai/skit-core").LibrarySubjectAmbiguous
-  | import("../workflows/failures.js").OptionCombinationInvalid;
-export type SelectionRequirements =
-  | import("@smolai/skit-core").TreeRequirements
-  | import("@smolai/skit-core").TreeHasher
-  | import("@smolai/skit-core").LibraryStore
-  | import("../configuration/skit-configuration.js").SkitConfiguration
-  | import("effect/crypto").Digest.Digest;
+  | import("../../store/library-store.js").LibraryStoreLayerError
+  | import("../../subject-resolution.js").LibrarySubjectNotFound
+  | import("../../subject-resolution.js").LibrarySubjectAmbiguous
+  | import("../../../shared/input-failures.js").OptionCombinationInvalid;
+export type SelectionRequirements = never;
 export interface LibraryChangeSelection {
+  readonly configuration: SetEnabledConfiguration;
+  readonly home: string;
   readonly state: LibraryState;
   readonly view: ReturnType<typeof libraryView>;
   readonly planMany: (
@@ -42,8 +41,15 @@ export function libraryChangeSelection(
   current: LibraryState,
   home: string,
   originalsPath: string,
+  library: Library.Interface,
+  configuration: SetEnabledConfiguration,
 ): LibraryChangeSelection {
   const state = structuredClone(current);
+  const routing = {
+    home: configuration.home,
+    configHome: configuration.configHome,
+    overrides: structuredClone(configuration.overrides),
+  };
   const planMany = Effect.fn("LibrarySelection.plan")(function* (
     intents: readonly SetEnabledIntent[],
     configuration: SetEnabledConfiguration,
@@ -77,18 +83,22 @@ export function libraryChangeSelection(
         ...(intent.setup === undefined ? {} : { setup: intent.setup }),
       });
     }
-    const routing = {
-      home: configuration.home,
-      configHome: configuration.configHome,
-      overrides: structuredClone(configuration.overrides),
-    };
-    const installation = yield* InstalledSkills.make(routing);
-    const library = yield* Library.make.pipe(
-      Effect.provideService(InstalledSkills.Service, installation),
-    );
+    if (
+      canonicalJson(routing) !==
+      canonicalJson({
+        home: configuration.home,
+        configHome: configuration.configHome,
+        overrides: configuration.overrides,
+      })
+    )
+      return yield* new Library.StalePlan({
+        message: "The install configuration changed; open a new Library selection",
+      });
     const [first, ...rest] = selected;
     if (first === undefined)
-      return yield* new Library.InvalidIntent({ detail: "Choose something to enable or disable" });
+      return yield* new Library.InvalidIntent({
+        detail: "Choose something to enable or disable",
+      });
     const plan = yield* library.plan(
       { _tag: "Enabled", changes: [first, ...rest] },
       {
@@ -98,15 +108,19 @@ export function libraryChangeSelection(
         ),
       },
     );
-    return {
+    const prepared: SetEnabledPlan = {
+      [planOwner]: library,
       changes: plan.changes.filter(
         (change): change is Library.EnabledChange =>
           change._tag === "Enable" || change._tag === "Disable",
       ),
-      owner: { plan, configuration: routing },
+      owner: { home, plan, configuration: routing },
     };
+    return prepared;
   });
   return {
+    configuration: routing,
+    home,
     state,
     view: libraryView(state, originalsPath),
     planMany,
@@ -117,17 +131,18 @@ export function libraryChangeSelection(
 
 /** Published CLI output/error compatibility ends here; owner partial outcomes are values. */
 export const applyLibraryChange = Effect.fn("LibrarySelection.apply")(function* (
-  owner: NonNullable<SetEnabledPlan["owner"]>,
+  home: string,
+  prepared: SetEnabledPlan,
 ): Effect.fn.Return<
   Array<{ kind: "applied"; value: SetEnabledResult }>,
   Library.ApplyError | SetEnabledIncomplete,
-  SelectionRequirements
+  never
 > {
-  const installation = yield* InstalledSkills.make(owner.configuration);
-  const library = yield* Library.make.pipe(
-    Effect.provideService(InstalledSkills.Service, installation),
-  );
-  const outcome = yield* library.apply(owner.plan);
+  if (resolve(home) !== resolve(prepared.owner.home) || prepared[planOwner] === undefined)
+    return yield* new Library.StalePlan({
+      message: "This plan belongs to another Library selection",
+    });
+  const outcome = yield* prepared[planOwner].apply(prepared.owner.plan);
   const results = outcome.results.map((result, index): SetEnabledResult => {
     const { _tag, ...change } = result.change;
     // Incomplete where it left paths unresolved; else the last one carries the failure.
@@ -136,7 +151,7 @@ export const applyLibraryChange = Effect.fn("LibrarySelection.apply")(function* 
       (result.unresolved.length > 0 ||
         (index === outcome.results.length - 1 &&
           outcome.results.every((other) => other.unresolved.length === 0)));
-    const failure = failed ? classifyFailure(outcome.cause) : undefined;
+    const failure = failed ? failureDetails(outcome.cause) : undefined;
     return {
       ...change,
       installed_skills: result.installedSkills.map(({ destination, path, status }) => ({

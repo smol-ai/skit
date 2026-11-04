@@ -1,9 +1,6 @@
-import {
-  SkitConfiguration,
-  skitConfigurationLayer,
-} from "../../configuration/skit-configuration.js";
+import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
 import { skillUsageLayer, withLibraryWriter } from "@smolai/skit-core";
-import { skillModificationTime } from "../../library-application/skill-metadata.js";
+import { skillModificationTime } from "@smolai/skit-core/library/session";
 import { Option, Effect } from "effect";
 import { Command, Flag } from "effect/cli";
 import { terminalPrompterLayer } from "../../presentation/prompter.js";

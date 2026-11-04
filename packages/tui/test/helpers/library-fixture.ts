@@ -1,3 +1,4 @@
+import { Library, LibraryActor, skitConfigurationLayer, skitLayer } from "@smolai/skit-core";
 import { join } from "node:path";
 import { Effect, FileSystem, Layer } from "effect";
 import {
@@ -11,13 +12,10 @@ import {
 } from "@smolai/skit-core";
 import {
   confirmLibraryChange,
-  LibraryActor,
-  libraryApplicationLayer,
   openLibrarySession,
   proposeLibraryCollectionChange,
-  skitConfigurationLayer,
   type Scope,
-} from "../../../cli/src/front-end";
+} from "@smolai/skit-core/library/session";
 import { createLibraryHost } from "../../src/library-host";
 
 /**
@@ -77,7 +75,8 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
     overrides: {},
     now: () => "2026-10-14T00:00:00.000Z",
   };
-  const application = libraryApplicationLayer.pipe(
+  const application = Library.layer({ home: skitHome, routing: { _tag: "None" } }).pipe(
+    Layer.provideMerge(skitLayer),
     Layer.provideMerge(skitConfigurationLayer(skitHome)),
     Layer.provideMerge(Layer.succeed(LibraryActor)("tui")),
   );
@@ -93,7 +92,7 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
     /** Enable a whole Collection in `scopes` through the session workflows the TUI confirms. */
     bind: (label: string, scopes: readonly Scope[]) =>
       Effect.gen(function* () {
-        const session = yield* openLibrarySession();
+        const session = yield* openLibrarySession(skitHome, configuration);
         const collectionId = session.skills.find((row) => row.heading === label)!.collectionId;
         const confirmed = yield* confirmLibraryChange(
           yield* proposeLibraryCollectionChange(session, configuration, collectionId, true, scopes),
@@ -106,7 +105,7 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
       Effect.provide(libraryStoreLayer({ home: skitHome })),
     ),
     /** The host the TUI builds for this Library, over the production application layer. */
-    host: () => createLibraryHost(application, openLibrarySession()),
+    host: () => createLibraryHost(application, openLibrarySession(skitHome, configuration)),
     /** Every path under the fixture, by lstat: its type, mode, link target and bytes. */
     tree: Effect.gen(function* () {
       const links = yield* LinkStat;

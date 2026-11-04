@@ -1,10 +1,7 @@
 import { openSetupCommandReview, prepareSetupCommand, setupApplyCommand } from "./apply-command.js";
 export { setupApplyCommand } from "./apply-command.js";
-import {
-  SkitConfiguration,
-  skitConfigurationLayer,
-} from "../../configuration/skit-configuration.js";
-import { skillModificationTime } from "../../library-application/skill-metadata.js";
+import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
+import { skillModificationTime } from "@smolai/skit-core/library/session";
 import { Cause, Effect, FileSystem, Option } from "effect";
 import { Command, Flag } from "effect/cli";
 import { join, resolve } from "node:path";

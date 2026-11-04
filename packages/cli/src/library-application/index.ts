@@ -38,15 +38,15 @@ export {
   scopeChoices,
   scopeKey,
   type Scope,
-} from "./read-model.js";
-export type { InvocationOption } from "../invocation/policy.js";
+} from "@smolai/skit-core/library/session";
+export type { InvocationOption } from "@smolai/skit-core/library/session";
 
 export {
   SkitConfiguration,
   resolveSkitConfiguration,
   skitConfigurationLayer,
   type ResolvedSkitConfiguration,
-} from "../configuration/skit-configuration.js";
+} from "@smolai/skit-core";
 
 export {
   applySetEnabledPlan,

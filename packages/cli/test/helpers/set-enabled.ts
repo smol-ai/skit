@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import type { InstallScope } from "@smolai/skit-core";
-import type { InvocationOption } from "../../src/invocation/policy.js";
+import type { InvocationOption } from "@smolai/skit-core/library/session";
 import {
   planSetEnabled,
   applySetEnabledPlan,

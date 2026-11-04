@@ -1,13 +1,10 @@
-import { sourceIdentityLabel } from "@smolai/skit-core";
-export { sourceIdentityLabel } from "@smolai/skit-core";
-import {
-  currentSkillVersion,
-  readSkitDescriptor,
-  collectionVersionPath,
-  versionBacking,
-  type LibraryState,
-  type SkitDescriptor,
-} from "@smolai/skit-core";
+import { sourceIdentityLabel } from "../../source-identity.js";
+export { sourceIdentityLabel } from "../../source-identity.js";
+import { currentSkillVersion, versionBacking } from "../../library-contracts.js";
+import { readSkitDescriptor } from "../../../artifact/skit.js";
+import { collectionVersionPath } from "../../collection-version.js";
+import { type LibraryState } from "../../library-state.js";
+import { type SkitDescriptor } from "../../../schemas.js";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { join } from "node:path";
 

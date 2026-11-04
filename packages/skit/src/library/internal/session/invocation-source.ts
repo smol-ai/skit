@@ -1,19 +1,14 @@
-import {
-  currentSkillVersion,
-  invocationMetadataAdapters,
-  readSkitDescriptor,
-  originalTreeHash,
-  ImportContentInvalid,
-  resolveDeclaredInvocation,
-  collectionVersionPath,
-  versionBacking,
-  type LibraryState,
-  type Skill,
-} from "@smolai/skit-core";
+import { currentSkillVersion, versionBacking, type Skill } from "../../library-contracts.js";
+import { invocationMetadataAdapters } from "../../../harnesses/invocation-metadata.js";
+import { readSkitDescriptor } from "../../../artifact/skit.js";
+import { originalTreeHash, collectionVersionPath } from "../../collection-version.js";
+import { ImportContentInvalid } from "../../../failures.js";
+import { resolveDeclaredInvocation } from "../../../invocation/conformance.js";
+import { type LibraryState } from "../../library-state.js";
 import { Cache, Effect, FileSystem, Result } from "effect";
 import { join, posix } from "node:path";
-import type { AuthorInvocation } from "./read-model.js";
-import { errorMessage } from "../failure-classification.js";
+import type { AuthorInvocation } from "./invocation.js";
+import { errorMessage } from "../../../shared/failure.js";
 
 export type AuthorInvocationRead = Result.Result<AuthorInvocation, string>;
 

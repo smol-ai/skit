@@ -1,6 +1,7 @@
-import { Enabled, InstallScope, InvocationPolicy, InstallDestination } from "@smolai/skit-core";
+import { Enabled } from "../../library-contracts.js";
+import { InstallScope, InvocationPolicy, InstallDestination } from "../../../vocabulary.js";
 import { Schema } from "effect";
-import { DuplicateCopy, DuplicateScanError } from "@smolai/skit-core/library/routing";
+import { DuplicateCopy, DuplicateScanError } from "../../duplicates.js";
 
 // The published output contract constrains every map value. Use string keys for this
 // wire view: Effect 4's JSON Schema exporter otherwise opens records whose custom

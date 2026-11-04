@@ -7,7 +7,7 @@ import {
 import { Array, Effect } from "effect";
 import { resolve } from "node:path";
 import { openSetEnabledSession, type SetEnabledIntent } from "./set-enabled.js";
-import { enabledCollections } from "../workflows/library/set-enabled-request.js";
+import { enabledCollections } from "@smolai/skit-core/library/session";
 import {
   skillsDirectoryFor,
   existingRepositorySkillsDirectory,
@@ -128,7 +128,7 @@ export const openDoctorCleanupSelection = Effect.fn("Doctor.openCleanupSelection
   days: number,
   progress: (completed: number, total: number) => Effect.Effect<void>,
 ) {
-  const selection = yield* openSetEnabledSession();
+  const selection = yield* openSetEnabledSession(configuration);
   const state = selection.state;
   const usage = yield* scanLocalUsage(state, { userHome: configuration.home, days, progress });
   const candidates = suggestDoctorCleanup(state, budgets, usage, configuration);

@@ -19,7 +19,7 @@ import {
   proposeLibraryEnable,
   proposeLibraryInvocation,
 } from "../src/library-application/session.js";
-import { invocationBriefing, invocationRowSummary } from "../src/invocation/read-model.js";
+import { invocationBriefing, invocationRowSummary } from "@smolai/skit-core/library/session";
 import {
   initializeLibraryMachine,
   libraryHome,
@@ -86,7 +86,7 @@ it.effect(
       // The working source is not the authority for a Library row.
       yield* fs.writeFileString(join(source, "SKILL.md"), text(false));
       const before = yield* home.durable;
-      const session = yield* home.owned(openLibrarySession());
+      const session = yield* home.owned(openLibrarySession(home.installOptions));
       const row = session.skills[0]!;
       expect(row.skillId).toBe(before.skills[0]?.skill_id);
       expect(Result.getOrThrow(row.authorInvocation)["claude-code"].policy).toBe("explicit");
@@ -169,7 +169,7 @@ it.effect(
         ),
       );
       const selected = yield* home.durable;
-      const session = yield* home.owned(openLibrarySession());
+      const session = yield* home.owned(openLibrarySession(home.installOptions));
       expect(Result.getOrThrow(session.skills[0]!.authorInvocation)["claude-code"].policy).toBe(
         "explicit",
       );
@@ -211,7 +211,7 @@ Tools
           }),
         ),
       );
-      const session = yield* home.owned(openLibrarySession());
+      const session = yield* home.owned(openLibrarySession(home.installOptions));
       expect(
         Object.values(Result.getOrThrow(session.skills[0]!.authorInvocation)).every(
           (agent) => agent.source.kind === "skit-declaration",
@@ -225,7 +225,7 @@ Tools
       const state = yield* home.durable;
       const imported = collectionVersionPath(home.originals, state.collection_versions[0]!.hash);
       yield* fs.writeFileString(join(imported, "agents", "openai.yaml"), "policy: [\n");
-      const broken = yield* home.owned(openLibrarySession());
+      const broken = yield* home.owned(openLibrarySession(home.installOptions));
       expect(Result.isFailure(broken.skills[0]!.authorInvocation)).toBe(true);
       expect(broken.skills[0]?.invocationWarning).toContain("Retained copy for review changed");
       expect(yield* home.durable).toEqual(state);
@@ -265,7 +265,7 @@ Tools
         }),
       ),
     );
-    const session = yield* home.owned(openLibrarySession());
+    const session = yield* home.owned(openLibrarySession(home.installOptions));
     expect(Result.getOrThrow(session.skills[0]!.authorInvocation).codex.policy).toBe("implicit");
     expect(Result.getOrThrow(session.skills[0]!.authorInvocation)["claude-code"].policy).toBe(
       "explicit",
@@ -328,7 +328,7 @@ for (const problem of ["missing-skill", "malformed-metadata"] as const)
           ),
         ),
       );
-      const session = yield* home.owned(openLibrarySession());
+      const session = yield* home.owned(openLibrarySession(home.installOptions));
       const bad = session.skills.find((row) => row.name === "review")!;
       const good = session.skills.find((row) => row.name === "healthy")!;
       expect(Result.isFailure(bad.authorInvocation)).toBe(true);

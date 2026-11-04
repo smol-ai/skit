@@ -10,10 +10,7 @@ import {
   importAuthoredCollection,
   type SkillsShLockFileEntry,
 } from "@smolai/skit-core";
-import {
-  readLibrarySkillMetadata,
-  skillModificationTime,
-} from "../src/library-application/skill-metadata.js";
+import { readLibrarySkillMetadata, skillModificationTime } from "@smolai/skit-core/library/session";
 import { inventoryCommand } from "../src/handlers/library/inventory.js";
 import { renderMachineSkills } from "../src/presentation/inventory.js";
 import { renderLibraryList } from "../src/presentation/library-list.js";
@@ -119,7 +116,7 @@ it.effect(
           },
         ],
       });
-      const session = yield* home.owned(openLibrarySession());
+      const session = yield* home.owned(openLibrarySession(home.installOptions));
       expect(session.skills[0]).toMatchObject({
         revision: "1".repeat(40),
         source_updated_at: "2026-04-20T00:00:00.000Z",

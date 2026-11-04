@@ -1,6 +1,6 @@
 import { OptionCombinationInvalid } from "../../workflows/failures.js";
 import { promptsAllowed } from "../../presentation/interactivity.js";
-import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
+import { skitConfigurationLayer } from "@smolai/skit-core";
 import type { InstallScope as Scope } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
@@ -12,8 +12,8 @@ import { libraryCommandConfiguration } from "../../commands/library-configuratio
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags, optionalString } from "../../commands/parameters.js";
-import { invocationOptions, type InvocationOption } from "../../invocation/policy.js";
-import { scopeChoices } from "../../library-application/read-model.js";
+import { invocationOptions, type InvocationOption } from "@smolai/skit-core/library/session";
+import { scopeChoices } from "@smolai/skit-core/library/session";
 import { Prompter, terminalPrompterLayer } from "../../presentation/prompter.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { promptForScope } from "../../presentation/scope-prompt.js";
@@ -160,7 +160,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
       requires: "a skill or collection",
       hint: "`skit list --json` lists them. Add `--global` or `--repo <path>` to choose the scope, and `--all` for a whole collection.",
     });
-  const selection = yield* openSetEnabledSession();
+  const selection = yield* openSetEnabledSession(input.configuration.pull.installOptions);
   const view = selection.view;
   const prompter = yield* Prompter;
   const renderer = yield* Renderer;

@@ -1,15 +1,13 @@
-import {
-  enabledAt,
-  enabledSkillIds,
-  type LibraryState,
-  type InstallScope,
-  type ManageApproval,
-} from "@smolai/skit-core";
+import { enabledAt } from "../../enabled.js";
+import { enabledSkillIds } from "../../library-contracts.js";
+import { type LibraryState } from "../../library-state.js";
+import { type InstallScope } from "../../../vocabulary.js";
+import { type ManageApproval } from "../../../install/files.js";
 import { Effect } from "effect";
-import { Library } from "@smolai/skit-core";
-import type { InvocationOption } from "../../invocation/policy.js";
-import { OptionCombinationInvalid } from "../failures.js";
-import { resolveLibrarySubject } from "@smolai/skit-core";
+import { Library } from "../../library.js";
+import type { InvocationOption } from "./invocation-option.js";
+import { OptionCombinationInvalid } from "../../../shared/input-failures.js";
+import { resolveLibrarySubject } from "../../subject-resolution.js";
 
 /** One enable or disable at one scope. */
 export interface SetEnabledRequest {
@@ -63,7 +61,7 @@ export interface SetEnabledIntent {
   readonly invocation?: InvocationOption;
   readonly allowDuplicate?: boolean;
   /** What a setup review approved, and nothing else. */
-  readonly setup?: import("@smolai/skit-core").Library.SetupApproval;
+  readonly setup?: Library.SetupApproval;
   /** The folder the user approved managing, as previewed. */
   readonly manage?: ManageApproval;
 }

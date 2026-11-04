@@ -1,4 +1,4 @@
-import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
+import { skitConfigurationLayer } from "@smolai/skit-core";
 import { openLibraryView } from "../../library-application/library-view.js";
 import { Option, Effect } from "effect";
 import { Command } from "effect/cli";
@@ -47,13 +47,14 @@ export const listCliCommand = Command.make("list", localFlags, (input) =>
   Effect.gen(function* () {
     const interactive = promptsAllowed({ json: input.json, needsStdout: true });
     return yield* handleLibraryCommand(
-      interactive
-        ? Effect.gen(function* () {
-            const configuration = yield* libraryCommandConfiguration(input);
-            const session = yield* openLibrarySession();
-            yield* browseLibrary(session, configuration.pull.installOptions);
-          }).pipe(Effect.provide(terminalPrompterLayer))
-        : presentListCommand(),
+      Effect.gen(function* () {
+        if (!interactive) return yield* presentListCommand();
+        const configuration = yield* libraryCommandConfiguration(input);
+        const session = yield* openLibrarySession(configuration.pull.installOptions);
+        yield* browseLibrary(session, configuration.pull.installOptions).pipe(
+          Effect.provide(terminalPrompterLayer),
+        );
+      }),
     );
   }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(

@@ -1,6 +1,6 @@
 import { Effect } from "effect";
-import type { ScopeChoice } from "../library-application/read-model.js";
-import { DESTINATION_QUESTION, scopeChoices } from "../library-application/read-model.js";
+import type { ScopeChoice } from "@smolai/skit-core/library/session";
+import { DESTINATION_QUESTION, scopeChoices } from "@smolai/skit-core/library/session";
 import { Prompter } from "./prompter.js";
 
 export const promptForScope = Effect.fn("CLI.promptForScope")(function* (
