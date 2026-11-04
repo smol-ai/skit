@@ -14,7 +14,7 @@ import {
 import { isolatedRoots } from "./helpers/isolated-library.js";
 import { setLibraryEnabled, planLibraryEnabled } from "./helpers/set-enabled.js";
 import { calculateSetEnabled } from "@smolai/skit-core/library/session";
-import { applySetEnabledPlan } from "../src/library-application/set-enabled.js";
+import { applySetEnabledPlan } from "./helpers/set-enabled.js";
 import { libraryView } from "@smolai/skit-core/library/session";
 import { matchingLibrarySubjects } from "@smolai/skit-core";
 import { initializeLibraryMachine, importCollectionIn, writingTo } from "./helpers/library-home.js";

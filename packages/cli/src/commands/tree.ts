@@ -10,7 +10,7 @@ import { addCliCommand } from "../handlers/library/add.js";
 import { removeCliCommand } from "../handlers/library/remove.js";
 import { updateCliCommand } from "../handlers/library/update.js";
 import { librarySyncCliCommand } from "../handlers/library/sync.js";
-import { disableCliCommand, enableCliCommand } from "../handlers/library/set-enabled.js";
+import { disableCliCommand, enableCliCommand } from "../library/enable/command.js";
 import { securityAcceptCliCommand } from "../handlers/security/accept.js";
 import { securityReviewCliCommand } from "../handlers/security/review.js";
 import { setupCliCommand } from "../library/setup/command.js";

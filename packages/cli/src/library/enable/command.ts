@@ -18,14 +18,14 @@ import { Prompter, terminalPrompterLayer } from "../../presentation/prompter.js"
 import { Renderer } from "../../presentation/renderer.js";
 import { promptForScope } from "../../presentation/scope-prompt.js";
 import { failureExitCodes } from "../../failure-classification.js";
-import { result } from "../contracts.js";
+import { result } from "../../handlers/contracts.js";
 import {
   applySetEnabledPlan,
   SetEnabledIncomplete,
   openSetEnabledSession,
   type SetEnabledIntent,
   type EnabledCollection,
-} from "../../library-application/set-enabled.js";
+} from "@smolai/skit-core/library/session";
 import {
   largeCollectionWarning,
   descriptionLoadMessage,
@@ -160,7 +160,10 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
       requires: "a skill or collection",
       hint: "`skit list --json` lists them. Add `--global` or `--repo <path>` to choose the scope, and `--all` for a whole collection.",
     });
-  const selection = yield* openSetEnabledSession(input.configuration.pull.installOptions);
+  const selection = yield* openSetEnabledSession(
+    input.configuration.libraryHome,
+    input.configuration.pull.installOptions,
+  );
   const view = selection.view;
   const prompter = yield* Prompter;
   const renderer = yield* Renderer;
@@ -364,7 +367,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
       const plan = yield* selection.plan(intent, input.configuration.inventory);
       return input.dryRun
         ? plan.changes.map((value) => ({ kind: "plan" as const, value }))
-        : yield* applySetEnabledPlan(plan).pipe(
+        : yield* applySetEnabledPlan(input.configuration.libraryHome, plan).pipe(
             Effect.catchTag("Library.SetEnabledIncomplete", (failure) => Effect.succeed(failure)),
           );
     }),

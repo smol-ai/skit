@@ -11,7 +11,7 @@ import {
   skillUsageLayer,
 } from "@smolai/skit-core";
 import { libraryCommandConfiguration } from "../commands/library-configuration.js";
-import { presentSetEnabled } from "../handlers/library/set-enabled.js";
+import { presentSetEnabled } from "../library/enable/command.js";
 import type { Prompter } from "../presentation/prompter.js";
 import type { Renderer } from "../presentation/renderer.js";
 import type { ScriptedAnswer } from "../presentation/interaction-recorder.js";

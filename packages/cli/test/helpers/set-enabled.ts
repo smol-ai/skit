@@ -1,11 +1,30 @@
 import { Effect } from "effect";
 import type { InstallScope } from "@smolai/skit-core";
 import type { InvocationOption } from "@smolai/skit-core/library/session";
-import {
-  planSetEnabled,
-  applySetEnabledPlan,
+import { SkitConfiguration } from "@smolai/skit-core";
+import * as Selection from "@smolai/skit-core/library/session";
+import type { SetEnabledRequest } from "@smolai/skit-core/library/session";
+export {
+  SetEnabledIncomplete,
+  SetEnabledStale,
   type SetEnabledRequest,
-} from "../../src/library-application/set-enabled.js";
+} from "@smolai/skit-core/library/session";
+
+/** Test fixtures supply paths as a service; production callers pass their resolved home directly. */
+export const openSetEnabledSession = (configuration: Selection.SetEnabledConfiguration) =>
+  Effect.flatMap(SkitConfiguration, (paths) =>
+    Selection.openSetEnabledSession(paths.skitHome, configuration),
+  );
+export const planSetEnabled = (
+  requests: readonly SetEnabledRequest[],
+  configuration: Selection.SetEnabledConfiguration,
+) =>
+  Effect.flatMap(SkitConfiguration, (paths) =>
+    Selection.planSetEnabled(paths.skitHome, requests, configuration),
+  );
+export const applySetEnabledPlan = (plan: Selection.SetEnabledPlan) =>
+  Effect.flatMap(SkitConfiguration, (paths) => Selection.applySetEnabledPlan(paths.skitHome, plan));
+
 import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 
 interface SetEnabledOptions {

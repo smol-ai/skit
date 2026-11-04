@@ -10,7 +10,7 @@ import { basename, dirname, relative, sep } from "node:path";
 import { compactHomePath } from "./home-path.js";
 import { harnessLabel } from "@smolai/skit-core/harnesses";
 import { renderInventory } from "./inventory.js";
-import { renderSetEnabled } from "./set-enabled.js";
+import { renderSetEnabled } from "../library/enable/present.js";
 import { renderRemove, renderRemovePlan } from "./remove.js";
 import { renderCheck } from "./check.js";
 import { renderLibrarySync } from "./library-sync.js";

@@ -1,6 +1,6 @@
-import { type ListingBudget } from "@smolai/skit-core";
+import { SkitConfiguration, type ListingBudget } from "@smolai/skit-core";
 import { Effect } from "effect";
-import { applySetEnabledPlan } from "../../library-application/set-enabled.js";
+import { applySetEnabledPlan } from "@smolai/skit-core/library/session";
 import {
   openDoctorCleanupSelection,
   overBudget,
@@ -97,7 +97,7 @@ export const presentDoctorCleanup = Effect.fn("Doctor.cleanup")(function* (
     return false;
   const outcomes = yield* renderer.withStatus(
     "Disabling selected skills",
-    applySetEnabledPlan(plan),
+    applySetEnabledPlan((yield* SkitConfiguration).skitHome, plan),
   );
   for (const outcome of outcomes) yield* renderer.result(result("disable", outcome.value));
   return true;

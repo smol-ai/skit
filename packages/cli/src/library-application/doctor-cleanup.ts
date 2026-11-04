@@ -4,9 +4,10 @@ import {
   type UsageReport,
   type InstallScope,
 } from "@smolai/skit-core";
+import { SkitConfiguration } from "@smolai/skit-core";
 import { Array, Effect } from "effect";
 import { resolve } from "node:path";
-import { openSetEnabledSession, type SetEnabledIntent } from "./set-enabled.js";
+import { openSetEnabledSession, type SetEnabledIntent } from "@smolai/skit-core/library/session";
 import { enabledCollections } from "@smolai/skit-core/library/session";
 import {
   skillsDirectoryFor,
@@ -128,7 +129,10 @@ export const openDoctorCleanupSelection = Effect.fn("Doctor.openCleanupSelection
   days: number,
   progress: (completed: number, total: number) => Effect.Effect<void>,
 ) {
-  const selection = yield* openSetEnabledSession(configuration);
+  const selection = yield* openSetEnabledSession(
+    (yield* SkitConfiguration).skitHome,
+    configuration,
+  );
   const state = selection.state;
   const usage = yield* scanLocalUsage(state, { userHome: configuration.home, days, progress });
   const candidates = suggestDoctorCleanup(state, budgets, usage, configuration);

@@ -18,7 +18,7 @@ import {
   importCollectionIn,
   writingTo,
 } from "./helpers/library-home.js";
-import { presentSetEnabled } from "../src/handlers/library/set-enabled.js";
+import { presentSetEnabled } from "../src/library/enable/command.js";
 import { libraryCommandConfiguration } from "../src/commands/library-configuration.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { testPlatformLayer } from "./helpers/platform.js";

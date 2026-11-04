@@ -1,5 +1,5 @@
 import { testPlatformLayer } from "./helpers/platform.js";
-import { SetEnabledStale } from "../src/library-application/set-enabled.js";
+import { SetEnabledStale } from "@smolai/skit-core/library/session";
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem, Option, Result, Schema } from "effect";
 import { join } from "node:path";
@@ -24,7 +24,7 @@ import {
 } from "./helpers/library-home.js";
 import type { CommandResult } from "../src/commands/types.js";
 import { libraryCommandConfiguration } from "../src/commands/library-configuration.js";
-import { presentSetEnabled } from "../src/handlers/library/set-enabled.js";
+import { presentSetEnabled } from "../src/library/enable/command.js";
 
 it.effect("lists a retained Collection without Release-shaped fields", () =>
   Effect.gen(function* () {
