@@ -1,9 +1,14 @@
 import { hostname } from "node:os";
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Option } from "effect";
 import { join } from "node:path";
 import * as MachineSettings from "../src/library/machine-settings.js";
-import { LegacyMachineId, makeMachineId, migratedMachineId } from "../src/library/entity-ids.js";
+import {
+  LegacyMachineId,
+  makeMachineId,
+  makeOperationId,
+  migratedMachineId,
+} from "../src/library/entity-ids.js";
 import { withHomeLock } from "../src/library/store/writer-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { acquireFileLock } from "../src/platform/file-lock.js";
@@ -59,7 +64,7 @@ for (const version of [1, 2, 3] as const) {
       assert.deepStrictEqual(identified.repositories, []);
       yield* MachineSettings.setRepositoryDecision(home, "/repo", "watched");
       const updated = yield* MachineSettings.read(home);
-      assert.strictEqual(JSON.parse(yield* fs.readFileString(path)).schemaVersion, 5);
+      assert.strictEqual(JSON.parse(yield* fs.readFileString(path)).schemaVersion, 6);
       assert.strictEqual(updated.machineId, identity);
       assert.strictEqual(updated.displayName, version === 1 ? hostname() : "Existing name");
       assert.deepStrictEqual(updated.discoveryRoots, ["/saved"]);
@@ -279,4 +284,106 @@ it.effect(
       assert.strictEqual(stale._tag, "LibraryChanged");
       assert.deepStrictEqual((yield* MachineSettings.read(home)).discoveryRoots, ["/newer"]);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("a setup's discovery save records what it replaced, keyed by the setup", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-setup-record-" });
+    const machineId = yield* MachineSettings.ensureIdentity(home);
+    yield* MachineSettings.updateDiscovery(home, { discoveryRoots: ["/before"] });
+    const operationId = makeOperationId();
+
+    const saved = yield* MachineSettings.updateDiscovery(
+      home,
+      { discoveryRoots: ["/after"] },
+      undefined,
+      operationId,
+    );
+
+    assert.deepStrictEqual(saved.discoveryRoots, ["/after"]);
+    assert.deepStrictEqual(
+      yield* MachineSettings.setupRecord(home, operationId),
+      Option.some({
+        operationId,
+        before: { discoveryRoots: ["/before"], machineId },
+        expectedAfter: { discoveryRoots: ["/after"], machineId },
+      }),
+    );
+    assert.isTrue(Option.isNone(yield* MachineSettings.setupRecord(home, makeOperationId())));
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("restoring a setup's discovery folders keeps the identity, name and repositories", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-setup-restore-" });
+    yield* MachineSettings.updateDiscovery(home, { discoveryRoots: ["/before"] });
+    const operationId = makeOperationId();
+    yield* MachineSettings.updateDiscovery(
+      home,
+      {
+        discoveryRoots: ["/after"],
+        repositories: [{ path: "/after/repo", status: "watched" }],
+        displayName: "Renamed by setup",
+      },
+      undefined,
+      operationId,
+    );
+    const after = yield* MachineSettings.read(home);
+
+    assert.strictEqual(yield* MachineSettings.restoreSetupDiscovery(home, operationId), "restored");
+    const restored = yield* MachineSettings.read(home);
+    assert.deepStrictEqual(restored, { ...after, discoveryRoots: ["/before"] });
+    // Restoring again finds it already restored and writes nothing.
+    const bytes = yield* fs.readFileString(join(home, "machine.json"));
+    assert.strictEqual(
+      yield* MachineSettings.restoreSetupDiscovery(home, operationId),
+      "unchanged",
+    );
+    assert.strictEqual(yield* fs.readFileString(join(home, "machine.json")), bytes);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("restoring refuses discovery folders changed since the setup, and a later setup's", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-setup-refuse-" });
+    const first = makeOperationId();
+    yield* MachineSettings.updateDiscovery(home, { discoveryRoots: ["/first"] }, undefined, first);
+    yield* MachineSettings.updateDiscovery(home, { discoveryRoots: ["/edited"] });
+
+    const changed = yield* Effect.flip(MachineSettings.restoreSetupDiscovery(home, first));
+    assert.strictEqual(changed._tag, "LibraryChanged");
+    assert.deepStrictEqual((yield* MachineSettings.read(home)).discoveryRoots, ["/edited"]);
+
+    const second = makeOperationId();
+    yield* MachineSettings.updateDiscovery(
+      home,
+      { discoveryRoots: ["/second"] },
+      undefined,
+      second,
+    );
+    const replaced = yield* Effect.flip(MachineSettings.restoreSetupDiscovery(home, first));
+    assert.strictEqual(replaced._tag, "MachineSettings.SetupNotRecorded");
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("v5 settings read without writing and with no setup records", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-v5-" });
+    const text = JSON.stringify({
+      schemaVersion: 5,
+      machineId: makeMachineId(),
+      displayName: "Current machine",
+      discoveryRoots: ["/projects"],
+      repositories: [],
+      repositoryDecisionsInitialized: true,
+    });
+    yield* fs.writeFileString(join(home, "machine.json"), text);
+
+    assert.deepStrictEqual((yield* MachineSettings.read(home)).setups, []);
+    assert.strictEqual(yield* fs.readFileString(join(home, "machine.json")), text);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

@@ -411,10 +411,14 @@ export interface MachineSettingsSetupRecord {
   readonly before: DiscoveryEvidence;
   readonly expectedAfter: DiscoveryEvidence;
 }
-/** SetupDiscoverySettings (cli setup-undo-intent.ts:99-105) plus machineId (setup-operation.ts:311, :331). */
+/**
+ * The discovery folders at one moment of a setup, and the identity they were saved under. Undo
+ * restores only the folders; it never touches the machine id, the name or repository decisions.
+ * Stored in machine.json (machine-document.ts DiscoveryEvidence).
+ */
 export interface DiscoveryEvidence {
-  readonly settings: unknown; // OPEN: SetupDiscoverySettings moves to core with MachineSettings
-  readonly machineId: Option.Option<MachineId>;
+  readonly discoveryRoots: readonly string[];
+  readonly machineId?: MachineId;
 }
 
 // ── Surface ─────────────────────────────────────────────────────────────────────────────────────

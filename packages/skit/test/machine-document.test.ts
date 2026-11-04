@@ -15,10 +15,11 @@ const decode = (document: unknown) =>
 it.effect("normalizes every persisted machine document version to one current shape", () =>
   Effect.gen(function* () {
     assert.deepStrictEqual(yield* decode({ schemaVersion: 1, repositoryRoots: ["/v1"] }), {
-      schemaVersion: 5,
+      schemaVersion: 6,
       discoveryRoots: ["/v1"],
       repositories: [],
       repositoryDecisionsInitialized: false,
+      setups: [],
     });
 
     assert.deepStrictEqual(
@@ -29,13 +30,14 @@ it.effect("normalizes every persisted machine document version to one current sh
         repositoryRoots: ["/v2"],
       }),
       {
-        schemaVersion: 5,
+        schemaVersion: 6,
         machineId: migratedMachineId(legacyMachineId, legacyMachineId),
         legacyMachineId,
         displayName: "legacy",
         discoveryRoots: ["/v2"],
         repositories: [],
         repositoryDecisionsInitialized: false,
+        setups: [],
       },
     );
 
@@ -48,12 +50,13 @@ it.effect("normalizes every persisted machine document version to one current sh
         repositoryRoots: ["/v3"],
       }),
       {
-        schemaVersion: 5,
+        schemaVersion: 6,
         machineId,
         displayName: "prior",
         discoveryRoots: ["/v3"],
         repositories: [],
         repositoryDecisionsInitialized: false,
+        setups: [],
       },
     );
 
@@ -66,8 +69,9 @@ it.effect("normalizes every persisted machine document version to one current sh
     } as const;
     assert.deepStrictEqual(yield* decode(current), {
       ...current,
-      schemaVersion: 5,
+      schemaVersion: 6,
       repositoryDecisionsInitialized: true,
+      setups: [],
     });
   }),
 );
@@ -83,7 +87,11 @@ for (const initialized of [false, true]) {
         repositories: [],
         repositoryDecisionsInitialized: initialized,
       } as const;
-      assert.deepStrictEqual(yield* decode(document), document);
+      assert.deepStrictEqual(yield* decode(document), {
+        ...document,
+        schemaVersion: 6,
+        setups: [],
+      });
     }),
   );
 }
