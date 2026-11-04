@@ -606,8 +606,7 @@ it.effect(
           lockFileEntries: [],
         }),
       );
-      // Enable the Collection, managing the matching copy in place, through Library's plan and
-      // apply, routed as `routing` says. Its commits: the intent, the copy's record, its marker.
+      // Interrupt at the marker boundary, independent of how many journal checkpoints precede it.
       const change = (
         fileSystem: Layer.Layer<FileSystem.FileSystem, never, FileSystem.FileSystem>,
       ) =>
@@ -639,7 +638,17 @@ it.effect(
             );
           }),
         ).pipe(Effect.provide(fileSystem));
-      assert.isTrue(Exit.isFailure(yield* Effect.exit(change(crashingAfter(2)))));
+      const beforeMarker = Layer.effect(
+        FileSystem.FileSystem,
+        Effect.map(FileSystem.FileSystem, (fs) => ({
+          ...fs,
+          rename: (from: string, to: string) =>
+            to === join(copy, ".skit-ownership.json")
+              ? Effect.die("Interrupted before the marker was written")
+              : fs.rename(from, to),
+        })),
+      );
+      assert.isTrue(Exit.isFailure(yield* Effect.exit(change(beforeMarker))));
       const crashed = yield* inspectLocalLibraryState(home);
       assert.deepStrictEqual(
         crashed.present

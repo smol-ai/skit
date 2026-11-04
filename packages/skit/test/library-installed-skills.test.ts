@@ -1,10 +1,10 @@
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Result, Schema } from "effect";
+import { Effect, FileSystem, Layer, Result } from "effect";
 import { systemError } from "effect/PlatformError";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
-import { TreeHasher, treeHasherLayer } from "../src/artifact/tree-hasher.js";
+import { treeHasherLayer } from "../src/artifact/tree-hasher.js";
 import { makeSkillVersionId, migratedMachineId } from "../src/library/entity-ids.js";
 import { currentSkillVersion, versionBacking } from "../src/library/library-contracts.js";
 import { collectionVersionPath } from "../src/library/collection-version.js";
@@ -17,7 +17,6 @@ import {
 } from "./helpers/library.js";
 import { importEdit, importCollection } from "../src/library/import-collection.js";
 import type { LibraryState } from "../src/library/library-state.js";
-import { Hash } from "../src/vocabulary.js";
 import { LibraryWriter, loadLibrary } from "../src/library/store/library-store.js";
 import { inLibrary } from "./helpers/library-store.js";
 import { skitLayer } from "../src/platform/layer.js";
@@ -156,27 +155,23 @@ it.effect(
     }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect(
-  "saves nothing when the written installed skill does not hash to the retained bytes",
-  () =>
-    Effect.gen(function* () {
-      const { home, targetRoot } = yield* boundCollection;
-      const diverged = Layer.succeed(TreeHasher)({
-        hash: () => Effect.succeed(Schema.decodeUnknownSync(Hash)(`sha256:${"0".repeat(64)}`)),
-      });
-      const installed = yield* inLibrary(home)(
-        installEnabledSkills({
-          target: "agents",
-          root: targetRoot,
-          variantsPath: join(home, "variants"),
-        }).pipe(Effect.provide(diverged)),
-      ).pipe(Effect.result);
-      assert.strictEqual(Result.isFailure(installed), true);
-      if (Result.isFailure(installed))
-        assert.strictEqual(installed.failure._tag, "InstalledSkillFailure");
-      const after = yield* loadLibrary(home);
-      assert.deepStrictEqual(after.installed_skills, []);
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+it.effect("records no installed copy when its written bytes fail verification", () =>
+  Effect.gen(function* () {
+    const { home, targetRoot } = yield* boundCollection;
+    const diverged = divergingOn(join(targetRoot, "review"));
+    const installed = yield* inLibrary(home)(
+      installEnabledSkills({
+        target: "agents",
+        root: targetRoot,
+        variantsPath: join(home, "variants"),
+      }).pipe(Effect.provide(diverged)),
+    ).pipe(Effect.result);
+    assert.strictEqual(Result.isFailure(installed), true);
+    if (Result.isFailure(installed))
+      assert.strictEqual(installed.failure._tag, "InstalledSkillFailure");
+    const after = yield* loadLibrary(home);
+    assert.deepStrictEqual(after.installed_skills, []);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("refreshes an equivalent Version handle only on an intact owned installed skill", () =>
@@ -441,7 +436,7 @@ it.effect("treats symlink aliases of the same root as one target without retirin
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("keeps every former copy when a later Skill fails relocation", () =>
+it.effect("checks every retained input before relocating any installed copy", () =>
   Effect.gen(function* () {
     const { fs, home, targetRoot } = yield* boundCollectionWith(true);
     const project = (root: string) =>
@@ -478,15 +473,11 @@ it.effect("keeps every former copy when a later Skill fails relocation", () =>
       "second Skill bytes\n",
     );
     const after = yield* loadLibrary(home);
-    // The copy already written at the new root is recorded, so a retry keeps its ownership.
-    assert.deepStrictEqual(after.installed_skills.slice(0, 2), before.installed_skills);
-    assert.deepStrictEqual(
-      after.installed_skills
-        .slice(2)
-        .map((installedSkill) => [installedSkill.path, installedSkill.status]),
-      [[join(newRoot, "review"), "installed"]],
-    );
-    assert.deepStrictEqual({ ...after, installed_skills: [] }, { ...before, installed_skills: [] });
+    // The complete input set is checked before relocation starts. The prior copies stay live.
+    assert.deepStrictEqual(after.installed_skills, before.installed_skills);
+    assert.isFalse(yield* fs.exists(join(newRoot, "review")));
+    assert.deepStrictEqual(withoutOperations(after), withoutOperations(before));
+    assert.strictEqual(after.operations.at(-1)?._tag, "Stopped");
   }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -613,16 +604,22 @@ const explicitPolicies = (state: LibraryState): LibraryState => ({
 
 const unbound = (state: LibraryState): LibraryState => ({ ...state, enabled: [] });
 
-/** A hasher that misreports the `nth` hash of one path, as a write diverging under SKIT would. */
-const divergingOn = (path: string, nth: number) => {
-  let calls = 0;
-  return Layer.succeed(TreeHasher)({
-    hash: (candidate) =>
-      candidate === path && ++calls === nth
-        ? Effect.succeed(Schema.decodeUnknownSync(Hash)(`sha256:${"0".repeat(64)}`))
-        : deterministicTreeHash(candidate),
-  });
-};
+/** Corrupt the real successor immediately after its rename, before installer verification. */
+const divergingOn = (path: string) =>
+  Layer.effect(
+    FileSystem.FileSystem,
+    Effect.map(FileSystem.FileSystem, (fs) => ({
+      ...fs,
+      rename: (from, to) =>
+        Effect.gen(function* () {
+          yield* fs.rename(from, to);
+          if (to === path)
+            yield* fs.writeFileString(join(path, "SKILL.md"), "Divergent successor bytes\n");
+        }),
+    })),
+  );
+
+const withoutOperations = ({ operations: _operations, ...state }: LibraryState) => state;
 
 it.effect(
   "manages equal content in place, keeping its excluded entries and empty directories",
@@ -1003,17 +1000,18 @@ it.effect("a backup is never settled against a state the Library has moved on fr
   }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("saves nothing for a replacement whose successor fails verification", () =>
+it.effect("keeps Library rows and records a stop when a replacement fails verification", () =>
   Effect.gen(function* () {
     const { fs, targetRoot, load, edit, project } = yield* installedSkillFixture();
     const target = join(targetRoot, "review");
     yield* project();
     yield* edit(explicitPolicies);
     const before = yield* load;
-    const failed = yield* project().pipe(Effect.provide(divergingOn(target, 1)), Effect.result);
+    const failed = yield* project().pipe(Effect.provide(divergingOn(target)), Effect.result);
     assert.strictEqual(Result.isFailure(failed), true);
     assert.strictEqual(yield* fs.exists(target), true);
-    assert.deepStrictEqual(yield* load, before);
+    assert.deepStrictEqual(withoutOperations(yield* load), withoutOperations(before));
+    assert.strictEqual((yield* load).operations.at(-1)?._tag, "Stopped");
     assert.deepStrictEqual(
       (yield* backupsBeside(targetRoot)).map((backup) => backup.disposition),
       ["pending"],
@@ -1028,7 +1026,7 @@ it.effect("records an earlier verified write when a later item's successor diver
     yield* edit(explicitPolicies);
     const before = yield* load;
     const second = join(targetRoot, "second");
-    const failed = yield* project().pipe(Effect.provide(divergingOn(second, 1)), Effect.result);
+    const failed = yield* project().pipe(Effect.provide(divergingOn(second)), Effect.result);
     assert.strictEqual(Result.isFailure(failed), true);
     assert.strictEqual(yield* fs.exists(second), true);
     const after = yield* load;

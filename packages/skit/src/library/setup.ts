@@ -16,6 +16,7 @@ import {
   installedPaths,
   runManage,
   runUpdate,
+  runApply,
   type ManageResult,
 } from "./setup-manage.js";
 import { absentEvidence, observePathEvidence } from "./folder-evidence.js";
@@ -25,7 +26,10 @@ import { moveAside, recoveryDirectory } from "./setup-moves.js";
 import { runSyncStep, type SyncStepResult } from "./internal/sync/operation.js";
 import { importCollection, type ImportedCollection } from "./import-collection.js";
 import { emptyLibraryState, type LibraryState } from "./library-state.js";
-import { StalePlan } from "./library-plan.js";
+import { StalePlan, type Plan, type Outcome, type InstalledSkillResult } from "./library-plan.js";
+import { InstalledSkillInvalid } from "./installation/install-enabled.js";
+import { prepareApply, reviewedApply, applyOutcome } from "./internal/apply/recorded.js";
+import type { Routing } from "./library.js";
 import { snapshotOf, type Snapshot } from "./snapshot.js";
 import {
   LibraryWriter,
@@ -51,6 +55,7 @@ import {
 
 /** One finished step, by step tag. */
 export type SetupStepResult =
+  | { readonly _tag: "Apply"; readonly outcome: Outcome }
   | SyncStepResult
   | { readonly _tag: "Import"; readonly imported: ImportedCollection }
   | ManageResult
@@ -99,6 +104,8 @@ const observed = (paths: readonly string[]) =>
  */
 const recordedStep = Effect.fn("Library.setup.recordedStep")(function* (step: SetupStep) {
   switch (step._tag) {
+    case "Apply":
+      return { step, before: [], after: [], status: "Pending" } satisfies RecordedSetupStep;
     case "Sync":
       return { step, before: [], after: [], status: "Pending" } satisfies RecordedSetupStep;
     // Import's retained Collection Version is known only once it runs; its Done write saves it,
@@ -256,7 +263,7 @@ type StepOutcome =
       readonly result: SetupStepResult;
       readonly after: readonly StepEvidence[];
     }
-  | { readonly _tag: "Stop"; readonly reason: SetupStopReason };
+  | { readonly _tag: "Stop"; readonly reason: SetupStopReason; readonly result?: SetupStepResult };
 
 const runStep = Effect.fn("Library.setup.step")(function* (
   operationId: OperationId,
@@ -266,6 +273,17 @@ const runStep = Effect.fn("Library.setup.step")(function* (
   const { home } = yield* LibraryWriter;
   const step = steps[index]!.step;
   switch (step._tag) {
+    case "Apply": {
+      const outcome = yield* runApply(operationId, index, step);
+      const result: SetupStepResult = { _tag: "Apply", outcome };
+      if (outcome._tag === "Incomplete")
+        return {
+          _tag: "Stop",
+          reason: { _tag: "StepFailed", step: index, error: stepError(outcome.cause) },
+          result,
+        } satisfies StepOutcome;
+      return { _tag: "Ran", result, after: [] } satisfies StepOutcome;
+    }
     case "Sync":
       return yield* runSyncStep(operationId, index, steps);
     case "Import": {
@@ -403,7 +421,11 @@ const runOperation = Effect.fn("Library.setup.run")(function* (operationId: Oper
         : recorded;
     const outcome = yield* Effect.result(runStep(operationId, index, steps));
     if (outcome._tag === "Failure") return yield* failed(index)(outcome.failure);
-    if (outcome.success._tag === "Stop") return yield* stop(outcome.success.reason);
+    if (outcome.success._tag === "Stop") {
+      if ("result" in outcome.success && outcome.success.result)
+        completed.push(outcome.success.result);
+      return yield* stop(outcome.success.reason);
+    }
     const { result, after } = outcome.success;
     // Mark the step Done in the state as it is now: the step itself may have saved it.
     const marked = yield* Effect.result(
@@ -539,6 +561,43 @@ export const setup = Effect.fn("Library.setup")(function* (
     replaceDone: true,
   });
 });
+
+/** Keep the ordinary apply surface while the existing runner owns its durable lifecycle. */
+export const applyRecorded = Effect.fn("Library.applyRecorded")(function* (
+  plan: Plan,
+  routing: Routing,
+) {
+  const { home } = yield* LibraryWriter;
+  const prepared = yield* prepareApply(home, plan, routing);
+  const reviewed = yield* reviewedApply(prepared.step);
+  if (prepared.noop) {
+    const copies = reviewed.changes.flatMap((change): InstalledSkillResult[] =>
+      change._tag === "Unchanged" && change.recorded
+        ? [{ _tag: "Unchanged", copy: change.recorded }]
+        : change._tag === "KeepDeleted"
+          ? [{ _tag: "Suppressed", copy: change.recorded }]
+          : [],
+    );
+    return applyOutcome(
+      reviewed,
+      prepared.snapshot._tag === "Present" ? prepared.snapshot.state : emptyLibraryState(),
+      { _tag: "Applied", results: [], copies },
+    );
+  }
+  const result = yield* setupOperation([prepared.step], {
+    base: prepared.snapshot,
+    operationId: makeOperationId(),
+  });
+  const steps = result._tag === "Done" ? result.steps : result.completed;
+  const applied = steps.find((step) => step._tag === "Apply");
+  if (applied?._tag !== "Apply")
+    return yield* new InstalledSkillInvalid({
+      detail: "Library apply stopped before its outcome could be recorded",
+    });
+  if (plan.intent._tag !== "Enabled" && applied.outcome._tag === "Incomplete")
+    return yield* Effect.fail(applied.outcome.cause);
+  return applyOutcome(reviewed, yield* loadLibrary(home), applied.outcome);
+}, Effect.scoped);
 
 /** What startup recovery did with the operations it found unfinished. */
 export interface StartupRecovery {

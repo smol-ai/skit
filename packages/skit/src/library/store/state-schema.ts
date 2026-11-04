@@ -361,6 +361,23 @@ export interface StoredSyncProgram extends Schema.Codec.Encoded<typeof syncProgr
 export const SyncProgram: Schema.Codec<SyncProgram, StoredSyncProgram> = syncProgram;
 
 export const SetupStep = Schema.Union([
+  Schema.TaggedStruct("Apply", {
+    /** A Plan codec document, decoded by the executor. Its next state never embeds operations. */
+    reviewed: Schema.Json,
+    before: SyncPublication,
+    routing: StepRouting,
+    installedAt: Schema.String,
+    ids: Schema.Array(Schema.Struct({ path: Schema.String, id: InstalledSkillId })),
+    /** Expected installed rows, recorded after root preparation and before any skill changes. */
+    expected: Schema.Array(InstalledSkill),
+    prepared: Schema.Boolean,
+    completed: Schema.OptionFromOptionalKey(
+      Schema.Struct({
+        state: SyncPublication,
+        folders: Schema.Array(SyncFolder),
+      }),
+    ),
+  }),
   Schema.TaggedStruct("Sync", { phase: Schema.Literal("retire"), program: SyncProgram }),
   Schema.TaggedStruct("Sync", {
     phase: Schema.Literals(["publish", "install"]),

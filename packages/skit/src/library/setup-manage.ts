@@ -10,8 +10,16 @@ import { TreeHasher } from "../artifact/tree-hasher.js";
 import { hasHarnessProfile } from "../harnesses/catalog.js";
 import { inspectInstalledSkill } from "../install/files.js";
 import { LinkStat } from "../platform/link-stat.js";
+import { canonicalJson } from "../shared/json.js";
 import { InstallScope } from "../vocabulary.js";
 import { apply } from "./apply-plan.js";
+import {
+  resumeApply,
+  reviewedApply,
+  applyOutcome,
+  type ApplyStep,
+} from "./internal/apply/recorded.js";
+import { StalePlan, type Outcome } from "./library-plan.js";
 import { findDuplicates, type DuplicateScanError } from "./duplicates.js";
 import { InvalidIntent } from "./enabled-plan.js";
 import type { CollectionId, OperationId } from "./entity-ids.js";
@@ -45,6 +53,72 @@ import type {
   StepRouting,
 } from "./store/state-schema.js";
 import { resolveLibrarySubject } from "./subject-resolution.js";
+
+/** The recorded runner is the only entry to ordinary folder execution. */
+export const runApply = Effect.fn("Library.recordedApplyStep")(function* (
+  operationId: OperationId,
+  index: number,
+  step: ApplyStep,
+) {
+  const files = yield* routedInstalledSkills(step.routing);
+  return yield* Effect.scoped(
+    Effect.gen(function* () {
+      const original = yield* reviewedApply(step);
+      const intent = original.intent;
+      const attempt = yield* Effect.result(
+        Effect.gen(function* () {
+          const resumed = yield* resumeApply(operationId, index, step);
+          if (
+            resumed.completed ||
+            (intent._tag === "Remove" &&
+              !resumed.state.collections.some((item) => item.collection_id === intent.collectionId))
+          )
+            return { _tag: "Applied", results: [], copies: [] } satisfies Outcome;
+          const plan = yield* planIntent(original.intent, {
+            home: (yield* LibraryWriter).home,
+            base: resumed.base,
+            approvals: original.approvals,
+          });
+          if (
+            canonicalJson(plan.routes) !== canonicalJson(original.routes) ||
+            plan.changes.some((change) => {
+              if ("subject_id" in change) return false;
+              const path = "path" in change ? change.path : change.recorded.path;
+              return !original.changes.some((saved) => {
+                if ("subject_id" in saved) return false;
+                return (
+                  ("path" in saved ? saved.path : saved.recorded.path) === path &&
+                  (!("skillVersionId" in change) ||
+                    ("skillVersionId" in saved &&
+                      saved.skillId === change.skillId &&
+                      saved.skillVersionId === change.skillVersionId))
+                );
+              });
+            })
+          )
+            return yield* new StalePlan({
+              message: "Recorded routing or installed-skill choices changed",
+            });
+          return yield* apply(plan, {
+            installedAt: step.installedAt,
+            ids: resumed.ids,
+            operationId,
+            step: index,
+          });
+        }).pipe(
+          Effect.catchTag("Library.InstalledSkillsChanged", (error) =>
+            Effect.fail(new StalePlan({ message: error.message })),
+          ),
+        ),
+      );
+      const outcome: Outcome =
+        attempt._tag === "Success"
+          ? attempt.success
+          : { _tag: "Incomplete", results: [], reason: "update", cause: attempt.failure };
+      return applyOutcome(original, yield* loadLibrary((yield* LibraryWriter).home), outcome);
+    }).pipe(Effect.provideService(InstalledSkills.Service, files)),
+  );
+});
 
 /** What a Manage step did: each enable it applied, its warnings and where it moved duplicates. */
 export interface ManageResult {

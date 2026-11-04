@@ -65,7 +65,7 @@ import { InvalidLibraryState } from "../../failures.js";
 import { type StepRouting, OperationStatus } from "../store/state-schema.js";
 import { readLibraryAudit } from "../audit/audit-log.js";
 import { snapshotOf, type Snapshot } from "../snapshot.js";
-import { recover, setup } from "../setup.js";
+import { recover, setup, applyRecorded } from "../setup.js";
 import { planningState } from "../reviewed-plan.js";
 import { importCollection, importAuthoredCollection, importEdit } from "../import-collection.js";
 import type { TreeRequirements } from "../../platform/tree-requirements.js";
@@ -78,7 +78,6 @@ import {
   type PlanError,
 } from "../library-plan.js";
 import { planIntent } from "../plan-changes.js";
-import { apply } from "../apply-plan.js";
 import {
   Service,
   type Config,
@@ -287,7 +286,7 @@ export const make = Effect.fn("Library.make")(function* (
         Effect.map((result) => ({ _tag: "Undo" as const, result })),
         applying,
       );
-    return writeLibrary(home, apply(plan)).pipe(
+    return writeLibrary(home, applyRecorded(plan, configuration)).pipe(
       Effect.map((result) => ({ _tag: plan._tag, result })),
       applying,
     );

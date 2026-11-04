@@ -17,11 +17,17 @@ import {
 import { Revision, snapshotOf } from "./snapshot.js";
 import type { Request } from "./enabled-plan.js";
 import { InstalledSkillInvalid } from "./installation/install-enabled.js";
-import { makeInstalledSkillId, type InstalledSkillId, type SkillId } from "./entity-ids.js";
+import {
+  makeInstalledSkillId,
+  type InstalledSkillId,
+  type SkillId,
+  type OperationId,
+} from "./entity-ids.js";
+import { OperationStatus } from "./store/state-schema.js";
 import { installedSkillVariantPath } from "../install/files.js";
 import type { OwnershipMarker } from "../contracts.js";
 import { InstallScope } from "../vocabulary.js";
-import { UninstallConflict, LibraryChanged } from "../failures.js";
+import { UninstallConflict } from "../failures.js";
 import {
   DestinationsIncomplete,
   InstalledSkillWouldDuplicate,
@@ -97,10 +103,11 @@ const install = Effect.fn("Library.install")(function* (
   folders: readonly InstalledSkills.Folder[],
   /** The record already saved for a folder this change manages in place. */
   adopted?: InstalledSkill,
+  recorded?: { readonly installedAt: string; readonly ids: ReadonlyMap<string, InstalledSkillId> },
 ) {
   const writer = yield* LibraryWriter;
   const files = yield* InstalledSkills.Service;
-  const installedAt = DateTime.formatIso(yield* DateTime.now);
+  const installedAt = recorded?.installedAt ?? DateTime.formatIso(yield* DateTime.now);
   if (change._tag === "KeepDeleted") {
     const copy =
       change.recorded.status === "suppressed"
@@ -111,7 +118,10 @@ const install = Effect.fn("Library.install")(function* (
   if (change._tag === "Unreadable")
     return yield* new InstalledSkillInvalid({ detail: change.reason });
   const installedSkillId =
-    adopted?.installed_skill_id ?? change.recorded?.installed_skill_id ?? makeInstalledSkillId();
+    adopted?.installed_skill_id ??
+    change.recorded?.installed_skill_id ??
+    recorded?.ids.get(change.path) ??
+    makeInstalledSkillId();
   const pending = (expected_hash: InstalledSkill["expected_hash"]): InstalledSkill => ({
     installed_skill_id: installedSkillId,
     skill_id: change.skillId,
@@ -180,7 +190,7 @@ const install = Effect.fn("Library.install")(function* (
 });
 
 /** The public result of one enabled change, derived only from what the Library recorded. */
-const finish = (
+export const finishChange = (
   change: EnabledChange,
   skillIds: readonly SkillId[],
   targets: readonly InstalledSkills.Destination[],
@@ -257,55 +267,71 @@ const withRecords = (
   ],
 });
 
-/**
- * Carry out a reviewed plan, inside a Library write: plan again from the loaded Library, refuse
- * anything that differs from what was reviewed, then install, uninstall and record each Installed
- * Skill.
- */
-export const apply = Effect.fn("Library.apply")(function* (reviewed: Plan) {
-  const writer = yield* LibraryWriter;
+/** Revalidate the reviewed intent and folders without creating roots or changing state. */
+export const reviewApply = Effect.fn("Library.reviewApply")(function* (
+  home: string,
+  reviewed: Plan,
+) {
   const files = yield* InstalledSkills.Service;
-  // A plan is never a source of write coordinates or Library rows.
   const input = structuredClone(reviewed);
   if (input._tag !== input.intent._tag)
     return yield* new StalePlan({ message: "The plan tag does not match its reviewed intent" });
   const stale = (message: string) => new StalePlan({ message });
+  const inspected = yield* inspectLocalLibraryState(home);
+  const base = inspected.present ? inspected.state : emptyLibraryState();
+  const actual = snapshotOf(inspected).revision;
+  if (actual !== input.baseRevision)
+    return yield* new StalePlan({
+      message: "Library changed after this change was previewed",
+      expected: Revision(input.baseRevision),
+      actual,
+    });
+  const again = yield* planChanges(home, base, input.intent, input.approvals);
+  const targetsAt = (scope: InstallScope) =>
+    again.routes.find((route) => Schema.toEquivalence(InstallScope)(route.scope, scope))
+      ?.destinations ?? [];
+  // A refusal by policy says more than "changed since preview", so it is checked first.
+  for (const change of again.changes)
+    if (change._tag === "Refuse") return yield* new UninstallConflict({ detail: change.detail });
+  for (const { request, change } of again.enabled)
+    yield* refuseDuplicates(request, change, targetsAt(request.scope));
+  if (
+    !Schema.toEquivalence(Schema.Array(Route))(again.routes, input.routes) ||
+    !Schema.toEquivalence(Plan.cases.Update.fields.changes)(
+      [...again.enabled.map(({ change }) => change), ...again.changes],
+      input.changes,
+    )
+  )
+    return yield* stale("Installed agent targets or paths changed after preview");
+  yield* files
+    .check(input.folders)
+    .pipe(
+      Effect.catchTag("Library.InstalledSkillsChanged", (error) =>
+        Effect.fail(stale(error.message)),
+      ),
+    );
+
+  return { input, base, again, snapshot: snapshotOf(inspected) };
+});
+
+/** Execute inside an existing recorded step, keeping the folder and publication policies here. */
+export const apply = Effect.fn("Library.apply")(function* (
+  reviewed: Plan,
+  execution?: {
+    readonly installedAt: string;
+    readonly ids: ReadonlyMap<string, InstalledSkillId>;
+    readonly operationId: OperationId;
+    readonly step: number;
+  },
+) {
+  const writer = yield* LibraryWriter;
+  const files = yield* InstalledSkills.Service;
   return yield* Effect.scoped(
     Effect.gen(function* () {
-      const inspected = yield* inspectLocalLibraryState(writer.home);
-      const base = inspected.present ? inspected.state : emptyLibraryState();
-      const actual = snapshotOf(inspected).revision;
-      if (actual !== input.baseRevision)
-        return yield* new StalePlan({
-          message: "Library changed after this change was previewed",
-          expected: Revision(input.baseRevision),
-          actual,
-        });
-      const again = yield* planChanges(writer.home, base, input.intent, input.approvals);
+      const { input, base, again } = yield* reviewApply(writer.home, reviewed);
       const targetsAt = (scope: InstallScope) =>
         again.routes.find((route) => Schema.toEquivalence(InstallScope)(route.scope, scope))
           ?.destinations ?? [];
-      // A refusal by policy says more than "changed since preview", so it is checked first.
-      for (const change of again.changes)
-        if (change._tag === "Refuse")
-          return yield* new UninstallConflict({ detail: change.detail });
-      for (const { request, change } of again.enabled)
-        yield* refuseDuplicates(request, change, targetsAt(request.scope));
-      if (
-        !Schema.toEquivalence(Schema.Array(Route))(again.routes, input.routes) ||
-        !Schema.toEquivalence(Plan.cases.Update.fields.changes)(
-          [...again.enabled.map(({ change }) => change), ...again.changes],
-          input.changes,
-        )
-      )
-        return yield* stale("Installed agent targets or paths changed after preview");
-      yield* files
-        .check(input.folders)
-        .pipe(
-          Effect.catchTag("Library.InstalledSkillsChanged", (error) =>
-            Effect.fail(stale(error.message)),
-          ),
-        );
 
       // Folders exist and are writable before the Library saves what is enabled.
       yield* files.prepare([
@@ -330,12 +356,15 @@ export const apply = Effect.fn("Library.apply")(function* (reviewed: Plan) {
       // A folder taken over in place is recorded, as pending, before SKIT's marker is written
       // into it. A crash between the two leaves a recorded copy whose folder holds exactly
       // SKIT's bytes and no marker yet; the next change that plans it writes the marker.
-      const adoptedAt = DateTime.formatIso(yield* DateTime.now);
+      const adoptedAt = execution?.installedAt ?? DateTime.formatIso(yield* DateTime.now);
       const adopted = new Map<string, InstalledSkill>();
       for (const change of again.changes)
         if (change._tag === "Manage" && change.verification === "manage")
           adopted.set(change.path, {
-            installed_skill_id: change.recorded?.installed_skill_id ?? makeInstalledSkillId(),
+            installed_skill_id:
+              change.recorded?.installed_skill_id ??
+              execution?.ids.get(change.path) ??
+              makeInstalledSkillId(),
             skill_id: change.skillId,
             skill_version_id: change.skillVersionId,
             destination: change.destination,
@@ -397,6 +426,7 @@ export const apply = Effect.fn("Library.apply")(function* (reviewed: Plan) {
               again.next,
               again.folders,
               adopted.get(change.path),
+              execution,
             ).pipe(
               Effect.tapError(() =>
                 Effect.gen(function* () {
@@ -483,7 +513,7 @@ export const apply = Effect.fn("Library.apply")(function* (reviewed: Plan) {
         return {
           _tag: "Incomplete",
           results: again.enabled.map(({ request, change, skillIds }) =>
-            finish(change, skillIds, targetsAt(request.scope), [], saved),
+            finishChange(change, skillIds, targetsAt(request.scope), [], saved),
           ),
           reason: "update",
           cause: ran.failure,
@@ -513,9 +543,63 @@ export const apply = Effect.fn("Library.apply")(function* (reviewed: Plan) {
           Effect.as(Effect.logWarning("Installed-skill backups stayed pending", cause), []),
         ),
       );
-      const final = withRecords(input.intent._tag === "Remove" ? again.next : edited, changed);
+      let final = withRecords(input.intent._tag === "Remove" ? again.next : edited, changed);
+      if (execution) {
+        const operations = yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
+          final.operations,
+        ).pipe(
+          Effect.mapError(
+            () => new StalePlan({ message: "The recorded apply operation is invalid" }),
+          ),
+        );
+        const operation = operations.find((item) => item.operationId === execution.operationId);
+        const saved = operation?.steps[execution.step];
+        if (operation?._tag !== "Pending" || saved?.step._tag !== "Apply")
+          return yield* new StalePlan({
+            message: "The recorded apply operation is no longer Pending",
+          });
+        const folders = yield* Effect.forEach(input.folders, (folder) =>
+          files.inspect(folder.path),
+        );
+        const { operations: _history, ...publication } = final;
+        const encoded = yield* Schema.encodeEffect(OperationStatus)({
+          ...operation,
+          steps: operation.steps.map((item, index) =>
+            index === execution.step
+              ? {
+                  ...item,
+                  step: {
+                    ...saved.step,
+                    completed: Option.some({
+                      state: publication,
+                      folders: folders.map((folder) => ({
+                        path: folder.path,
+                        evidence: folder.evidence,
+                        ancestors: folder.ancestors,
+                        entry:
+                          folder.entry._tag === "Absent" ? ("Absent" as const) : folder.entry.kind,
+                      })),
+                    }),
+                  },
+                }
+              : item,
+          ),
+        }).pipe(
+          Effect.mapError(
+            () => new StalePlan({ message: "The completed apply operation is invalid" }),
+          ),
+        );
+        final = {
+          ...final,
+          operations: final.operations.map((item) =>
+            item.operationId === execution.operationId ? encoded : item,
+          ),
+        };
+      }
       const recorded = yield* Effect.result(
-        pending.length > 0 || libraryStateRevision(final) !== libraryStateRevision(edited)
+        execution ||
+          pending.length > 0 ||
+          libraryStateRevision(final) !== libraryStateRevision(edited)
           ? Effect.as(writer.save(final, edited), final)
           : Effect.succeed(edited),
       );
@@ -526,7 +610,7 @@ export const apply = Effect.fn("Library.apply")(function* (reviewed: Plan) {
         return {
           _tag: "Incomplete",
           results: again.enabled.map(({ request, change, skillIds }) =>
-            finish(change, skillIds, targetsAt(request.scope), touched, edited),
+            finishChange(change, skillIds, targetsAt(request.scope), touched, edited),
           ),
           reason: "update",
           cause: recorded.failure,
@@ -547,7 +631,7 @@ export const apply = Effect.fn("Library.apply")(function* (reviewed: Plan) {
 
       const touched = yield* Ref.get(copies);
       const results = again.enabled.map(({ request, change, skillIds }) =>
-        finish(change, skillIds, targetsAt(request.scope), touched, saved),
+        finishChange(change, skillIds, targetsAt(request.scope), touched, saved),
       );
       const unresolved = results.flatMap((result) => result.unresolved);
       if (unresolved.length)

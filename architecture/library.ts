@@ -14,7 +14,7 @@
  * Markers: APPROVE marks today's boundary, unchanged, for approval as-is. PROPOSED marks a change
  * from today's code. DEBT marks today's code that breaks the contract and is not approved.
  */
-import type { Brand, Effect, FileSystem, Option, Path, Scope } from "effect";
+import type { Brand, Effect, FileSystem, Option, Path, Scope, Schema } from "effect";
 import type { Digest } from "effect/crypto";
 import type { InstalledSkill, LibraryState } from "../packages/skit/src/library/library-state.js";
 import type { SetupIntent } from "../packages/skit/src/library/setup-intent.js";
@@ -355,6 +355,27 @@ export interface SyncProgram {
  * Discovery folders are saved and undone by MachineSettings; the setup command calls both owners.
  */
 export type SetupStep =
+  // Ordinary apply uses the same recorded-before-effects invariant as setup and local Sync.
+  // The executor decodes the Plan document; embedded publications never contain operation history.
+  | {
+      readonly _tag: "Apply";
+      readonly reviewed: Schema.Json;
+      readonly before: Omit<LibraryState, "operations">;
+      readonly routing: StepRouting;
+      readonly installedAt: string;
+      readonly ids: readonly { readonly path: string; readonly id: InstalledSkillId }[];
+      readonly expected: readonly InstalledSkill[];
+      readonly prepared: boolean;
+      readonly completed: Option.Option<{
+        readonly state: Omit<LibraryState, "operations">;
+        readonly folders: readonly {
+          readonly path: string;
+          readonly entry: "Absent" | "Directory" | "SymbolicLink" | "File" | "Other";
+          readonly evidence: string;
+          readonly ancestors: readonly { readonly path: string; readonly evidence: string }[];
+        }[];
+      }>;
+    }
   // APPROVED by Tim, 2026-11-05: record the local Sync work in this existing operation mechanism.
   | { readonly _tag: "Sync"; readonly phase: "retire"; readonly program: SyncProgram }
   | { readonly _tag: "Sync"; readonly phase: "publish" | "install"; readonly sourceStep: number }
