@@ -328,6 +328,24 @@ export interface StepRouting {
   }[];
 }
 
+/** Data-only local Sync program. Operation history is never nested inside its publications. */
+export interface SyncProgram {
+  readonly before: Omit<LibraryState, "operations">;
+  readonly after: Omit<LibraryState, "operations">;
+  readonly routing: StepRouting;
+  readonly retire: readonly InstalledSkill[];
+  readonly drop: readonly InstalledSkillId[];
+  readonly manifestDigest: Hash;
+  readonly receipt: Option.Option<SyncAncestry>;
+  readonly folders: readonly {
+    readonly path: string;
+    readonly entry: "Absent" | "Directory" | "SymbolicLink" | "File" | "Other";
+    readonly evidence: string;
+    readonly ancestors: readonly { readonly path: string; readonly evidence: string }[];
+  }[];
+  readonly issues: readonly string[];
+}
+
 /**
  * Setup (decided: crash behaviour follows humanlayer/t3code). Setup prepares the whole list of
  * steps as data; Library saves it in state.json before running any step, runs steps in order
@@ -337,6 +355,9 @@ export interface StepRouting {
  * Discovery folders are saved and undone by MachineSettings; the setup command calls both owners.
  */
 export type SetupStep =
+  // APPROVED by Tim, 2026-11-05: record the local Sync work in this existing operation mechanism.
+  | { readonly _tag: "Sync"; readonly phase: "retire"; readonly program: SyncProgram }
+  | { readonly _tag: "Sync"; readonly phase: "publish" | "install"; readonly sourceStep: number }
   | { readonly _tag: "Import"; readonly request: ImportRequest }
   | {
       readonly _tag: "Manage";

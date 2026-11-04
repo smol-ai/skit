@@ -101,6 +101,12 @@ E  = https://github.com/Effect-TS/effect/blob/3b28bf686bf26e9700edd39c025aff2744
 - maple `mutate(transform)` re-reads, re-applies and then writes only if the version is unchanged, with a bounded number of retries (DashboardPersistenceService.ts L573-L579).
 - t3code takes single-writer ownership before it writes: "never write behind it" (D3 link).
 
+**Decided (Tim, 2026-11-05): record Sync's local program in Library's operation journal.**
+- `Sync` records retire, publish and install phases before local copy changes. Later phases reference the first phase's captured program; they do not embed earlier operation history.
+- The program binds the target manifest, verified remote receipt, device references, frozen global/repository routing and folder evidence. Remote reads, transfers and compare-and-swap remain outside Library and are never replayed by startup.
+- Startup uses the same recorded phases, skips completed phases, and accepts only captured before-evidence or verified effects of that program. A changed Library, folder or parent stops the operation and is reported. It never rolls back automatically.
+- The approved record amendment is separate from baseline acceptance. Keep the pinned checker and checkpoint unchanged until independently accepted.
+
 ## The author connection is one state with one way to change it
 
 **Problem:** today the connection is spread over `connection.json` and `skit.remote.json`, with three save APIs (`workflows/author/sync.ts:288-309`). `SyncDestination` already models NewRemote, Connecting and Connected (`:238`).
