@@ -1,12 +1,15 @@
 import { assert, it } from "@effect/vitest";
-import { Deferred, Effect, Fiber, FileSystem, Option, Result, Schema } from "effect";
+import { Deferred, Effect, Fiber, FileSystem, Option, Predicate, Result, Schema } from "effect";
 import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { makeOperationId, migratedMachineId } from "../src/library/entity-ids.js";
 import { collectionVersionPath } from "../src/library/collection-version.js";
 import { libraryManifestFromLocalState, type LibraryState } from "../src/library/library-state.js";
 import { readSnapshotArchive } from "../src/library/snapshot-archive.js";
-import { OperationStatus } from "../src/library/store/state-schema.js";
+import { OperationStatus, type StepError } from "../src/library/store/state-schema.js";
+import { InvalidLibraryState, LibraryBusy, LibraryChanged } from "../src/failures.js";
+import { TreeError } from "../src/shared/tree-error.js";
+import { badArgument, systemError } from "effect/PlatformError";
 import { importCollection } from "../src/library/import-collection.js";
 import { LibraryStore, withLibraryWriter } from "../src/library/store/library-store.js";
 import { libraryStoreLayer } from "../src/library/library-store-layer.js";
@@ -260,6 +263,7 @@ it.effect("keeps operation records on this device: saved and loaded, never synce
       }),
       OperationStatus.cases.Stopped.make({
         operationId: makeOperationId(),
+        steps: [],
         reason: {
           _tag: "EvidenceDiffers",
           step: 0,
@@ -267,7 +271,7 @@ it.effect("keeps operation records on this device: saved and loaded, never synce
           expected: { before: Option.some(folder), after: Option.none() },
         },
       }),
-      OperationStatus.cases.Done.make({ operationId: makeOperationId() }),
+      OperationStatus.cases.Done.make({ operationId: makeOperationId(), steps: [] }),
     ];
     const next = {
       ...base,
@@ -287,4 +291,71 @@ it.effect("keeps operation records on this device: saved and loaded, never synce
       yield* synced(base, store.originalsPath),
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect(
+  "a stopped operation keeps its step's error through state.json, in each stored form",
+  () =>
+    Effect.gen(function* () {
+      const { inLibrary } = yield* library;
+      const store = yield* inLibrary(Effect.service(LibraryStore));
+      const errors: readonly StepError[] = [
+        new TreeError({ reason: { _tag: "UnsupportedEntry", path: "/skills/review/socket" } }),
+        new LibraryBusy({ path: "/home/lock.sqlite" }),
+        new LibraryChanged({ path: "/home/state.json" }),
+        new InvalidLibraryState({ path: "/home/state.json", detail: "invalid setup record" }),
+        systemError({
+          _tag: "PermissionDenied",
+          module: "FileSystem",
+          method: "rename",
+          description: "operation not permitted",
+          syscall: "rename",
+          pathOrDescriptor: "/skills/review",
+        }),
+        badArgument({ module: "FileSystem", method: "open", description: "bad flag" }),
+        {
+          _tag: "PnpmSkillManaged",
+          code: "CONFLICT",
+          message: "/skills/review is managed by pnpm (a-package); SKIT leaves it in place.",
+          remediation: "Manage this Skill through pnpm's dependency and permission settings.",
+        },
+      ];
+      const operations = errors.map((error, step) =>
+        OperationStatus.cases.Stopped.make({
+          operationId: makeOperationId(),
+          steps: [],
+          reason: { _tag: "StepFailed", step, error },
+        }),
+      );
+      const base = yield* store.load;
+      yield* store.save(
+        {
+          ...base,
+          operations: yield* Schema.encodeEffect(Schema.Array(OperationStatus))(operations),
+        },
+        base,
+      );
+
+      const loaded = yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
+        (yield* store.load).operations,
+      );
+
+      // Each error reads back as the same kind, with every stored field equal.
+      const fields = (error: unknown) =>
+        Predicate.isError(error)
+          ? {
+              kind: error.constructor.name,
+              message: error.message,
+              ...Object.fromEntries(Object.entries(error)),
+            }
+          : error;
+      assert.deepStrictEqual(
+        loaded.map((operation) =>
+          operation._tag === "Stopped" && operation.reason._tag === "StepFailed"
+            ? fields(operation.reason.error)
+            : undefined,
+        ),
+        errors.map(fields),
+      );
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

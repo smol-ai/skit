@@ -30,8 +30,14 @@
  * `import type` in the real contract. Vocabulary this contract itself declares comes from
  * ./library.js, so the two files share one Intent, evidence and Revision.
  */
-import type { Option } from "effect";
+import type { Option, PlatformError as PlatformErrors } from "effect";
 import type { FolderEvidence, Intent, LinkEvidence, OperationId, Revision } from "./library.js";
+import type {
+  InvalidLibraryState as StoredInvalidLibraryState,
+  LibraryBusy as StoredLibraryBusy,
+  LibraryChanged as StoredLibraryChanged,
+} from "../packages/skit/src/failures.js";
+import type { TreeError as StoredTreeError } from "../packages/skit/src/shared/tree-error.js";
 
 interface Ref<Where extends string> {
   readonly __ref: Where;
@@ -460,8 +466,31 @@ export type SetupStopReason =
       /** The step failed after the operation was persisted (ManageError, PlatformError, write errors). */
       readonly _tag: "StepFailed";
       readonly step: number;
-      readonly error: unknown; // saved with Schema.Defect: name and message only (decided 2026-11-04, step 1)
+      readonly error: StepError;
     };
+
+/**
+ * A failed step's error as state.json keeps it. These are stored in full (PlatformError without its
+ * `cause`, which can be any value); any other SKIT failure is stored as a StoredFailure, so a
+ * stopped operation can always be recorded. Errors gain full detail as their modules move to
+ * Schema-backed errors.
+ */
+type StoredPlatformError = PlatformErrors.PlatformError;
+export type StepError =
+  | StoredTreeError
+  | StoredLibraryBusy
+  | StoredLibraryChanged
+  | StoredInvalidLibraryState
+  | StoredPlatformError
+  | StoredFailure;
+
+/** What every SKIT failure says about itself. */
+export interface StoredFailure {
+  readonly _tag: string;
+  readonly code: string;
+  readonly message: string;
+  readonly remediation: string;
+}
 
 export type SetupResult =
   | {

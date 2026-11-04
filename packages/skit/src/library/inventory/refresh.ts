@@ -59,6 +59,14 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
       }
       const currentHash = yield* deterministicTreeHash(installedSkill.path);
       const marker = yield* readOwnershipMarker(installedSkill.path);
+      // Recorded before its marker was written, and the folder is still exactly SKIT's bytes:
+      // the marker is pending, and the next change that plans this copy writes it.
+      if (
+        installedSkill.status === "pending" &&
+        marker === null &&
+        currentHash === installedSkill.expected_hash
+      )
+        return installedSkill;
       const expected = expectedInstalledSkillHashResult(installedSkill, marker);
       return marker && Result.isSuccess(expected) && currentHash === expected.success
         ? InstalledSkillStatus.installed(installedSkill)

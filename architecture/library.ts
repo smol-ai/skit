@@ -138,10 +138,14 @@ export interface AbsentEvidence {
   readonly parent: FileIdentity;
 }
 
-/** A retained Collection Version in originals/: Import's only folder effect, additive. */
+/**
+ * A retained Collection Version in originals/, Import's only folder effect (additive), and the
+ * Collection the import saved it to: Collections with identical bytes share a Version.
+ */
 export interface RetainedEvidence {
   readonly _tag: "Retained";
   readonly hash: Hash;
+  readonly collectionId: CollectionId;
 }
 
 export type PathEvidence = FolderEvidence | LinkEvidence | AbsentEvidence;
@@ -379,10 +383,15 @@ export type OperationStatus =
       readonly operationId: OperationId;
       readonly steps: readonly RecordedSetupStep[];
     } // recorded, not finished
-  | { readonly _tag: "Done"; readonly operationId: OperationId }
+  | {
+      readonly _tag: "Done";
+      readonly operationId: OperationId;
+      readonly steps: readonly RecordedSetupStep[]; // kept: undo needs the evidence
+    }
   | {
       readonly _tag: "Stopped";
       readonly operationId: OperationId;
+      readonly steps: readonly RecordedSetupStep[];
       readonly reason: SetupStopReason;
     }; // user may undo
 

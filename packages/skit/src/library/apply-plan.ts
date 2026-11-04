@@ -84,6 +84,8 @@ const install = Effect.fn("Library.install")(function* (
   >,
   next: LibraryState,
   folders: readonly InstalledSkills.Folder[],
+  /** The record already saved for a folder this change manages in place. */
+  adopted?: InstalledSkill,
 ) {
   const store = yield* LibraryStore;
   const files = yield* InstalledSkills.Service;
@@ -97,7 +99,8 @@ const install = Effect.fn("Library.install")(function* (
   }
   if (change._tag === "Unreadable")
     return yield* new InstalledSkillInvalid({ detail: change.reason });
-  const installedSkillId = change.recorded?.installed_skill_id ?? makeInstalledSkillId();
+  const installedSkillId =
+    adopted?.installed_skill_id ?? change.recorded?.installed_skill_id ?? makeInstalledSkillId();
   const pending = (expected_hash: InstalledSkill["expected_hash"]): InstalledSkill => ({
     installed_skill_id: installedSkillId,
     skill_id: change.skillId,
@@ -303,11 +306,40 @@ export const apply = Effect.fn("Library.apply")(function* (reviewed: Plan) {
         ]);
         // What is enabled is saved first. A removed Collection is saved only with its Installed
         // Skills' uninstalls, since records may not name what the Library no longer has.
-        const edited =
+        const intentSaved =
           input.intent._tag === "Remove" ||
           libraryStateRevision(again.next) === libraryStateRevision(base)
             ? base
             : yield* Effect.as(store.save(again.next, base), again.next);
+
+        // A folder taken over in place is recorded, as pending, before SKIT's marker is written
+        // into it. A crash between the two leaves a recorded copy whose folder holds exactly
+        // SKIT's bytes and no marker yet; the next change that plans it writes the marker.
+        const adoptedAt = DateTime.formatIso(yield* DateTime.now);
+        const adopted = new Map<string, InstalledSkill>();
+        for (const change of again.changes)
+          if (change._tag === "Manage" && change.verification === "manage")
+            adopted.set(change.path, {
+              installed_skill_id: change.recorded?.installed_skill_id ?? makeInstalledSkillId(),
+              skill_id: change.skillId,
+              skill_version_id: change.skillVersionId,
+              destination: change.destination,
+              root: change.root,
+              path: change.path,
+              expected_hash: change.hash,
+              status: "pending",
+              installed_at: adoptedAt,
+            });
+        const pendingRecords = new Map(
+          [...adopted.values()].map((copy) => [copy.installed_skill_id, copy] as const),
+        );
+        const edited =
+          adopted.size === 0
+            ? intentSaved
+            : yield* Effect.as(
+                store.save(withRecords(intentSaved, pendingRecords), intentSaved),
+                withRecords(intentSaved, pendingRecords),
+              );
 
         // What changed for each record once everything succeeds (null once it is gone), and
         // what a failure records instead: only what is really on disk.
@@ -345,7 +377,12 @@ export const apply = Effect.fn("Library.apply")(function* (reviewed: Plan) {
           for (const change of again.changes) {
             if (change._tag === "Protected" || change._tag === "Refuse") continue;
             if ("skillVersionId" in change) {
-              const result = yield* install(change, again.next, again.folders).pipe(
+              const result = yield* install(
+                change,
+                again.next,
+                again.folders,
+                adopted.get(change.path),
+              ).pipe(
                 Effect.tapError(() =>
                   Effect.gen(function* () {
                     // An unverified successor stands where the original was: never call it pending.

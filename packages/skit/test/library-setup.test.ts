@@ -95,8 +95,26 @@ it.effect("removes a reviewed folder into removed/<operationId>/ and records it 
     assert.deepStrictEqual(result.recoveryDirectories, [
       join(home, "removed", result.operationId, "step-1"),
     ]);
+    // The Done record keeps every step with its evidence, for undo.
     assert.deepStrictEqual(yield* recordedOperations(home), [
-      OperationStatus.cases.Done.make({ operationId: result.operationId }),
+      OperationStatus.cases.Done.make({
+        operationId: result.operationId,
+        steps: [
+          {
+            step: remove,
+            before: remove._tag === "Remove" ? remove.folders : [],
+            after:
+              remove._tag === "Remove"
+                ? remove.folders.map((folder) => ({
+                    _tag: "Absent" as const,
+                    path: folder.path,
+                    parent: folder.parent,
+                  }))
+                : [],
+            status: "Done",
+          },
+        ],
+      }),
     ]);
     assert.strictEqual(yield* auditLines(home), 1);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -177,7 +195,13 @@ it.effect("the import's Done mark saves the Collection Version it retained", () 
       [
         {
           status: "Done",
-          after: [{ _tag: "Retained", hash: inspected.state.collection_versions[0]!.hash }],
+          after: [
+            {
+              _tag: "Retained",
+              hash: inspected.state.collection_versions[0]!.hash,
+              collectionId: inspected.state.collections[0]!.collection_id,
+            },
+          ],
         },
         { status: "Pending", after: interrupted.steps[1]!.after },
       ],
@@ -222,7 +246,10 @@ for (const [commits, after] of [
         "---\nname: review\n---\nReview.\n",
       );
       assert.deepStrictEqual(yield* recordedOperations(home), [
-        OperationStatus.cases.Done.make({ operationId: operation.operationId }),
+        OperationStatus.cases.Done.make({
+          operationId: operation.operationId,
+          steps: operation.steps.map((step) => ({ ...step, status: "Done" as const })),
+        }),
       ]);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
@@ -248,11 +275,13 @@ it.effect("a re-run stops, moving nothing, when the folder changed after the rec
     if (result === undefined) return assert.fail("not stopped");
     assert.strictEqual(result.reason._tag, "EvidenceDiffers");
     assert.strictEqual(yield* fs.readFileString(join(folder, "notes.md")), "the user's edit\n");
+    // The Stopped record keeps every step with its evidence, as recorded before the stop.
     const [stopped] = yield* recordedOperations(home);
     assert.deepStrictEqual(
       stopped,
       OperationStatus.cases.Stopped.make({
         operationId: operation.operationId,
+        steps: operation.steps,
         reason: result.reason,
       }),
     );

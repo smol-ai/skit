@@ -109,21 +109,46 @@ const differs = (step: number, evidence: FolderEvidence | LinkEvidence): Managed
   },
 });
 
-/** Whether a folder a step manages is still as reviewed, or already SKIT's installed copy. */
+/**
+ * What an earlier run of this step left at a folder it manages, checked on the folder itself:
+ * - "reviewed": as reviewed, with no marker. Also what is left when the Library recorded the
+ *   copy but stopped before writing SKIT's marker; enabling again writes it.
+ * - "recording": the reviewed folder holds SKIT's marker for a copy the Library still records as
+ *   pending; enabling again records it installed.
+ * - "managed": the reviewed folder is SKIT's installed copy.
+ * - "differs": anything else.
+ * "The reviewed folder" means the same parent and file, and the reviewed bytes.
+ */
 const reviewedOrManaged = Effect.fn("Library.setup.reviewedOrManaged")(function* (
   evidence: FolderEvidence,
 ) {
   const state = yield* (yield* LibraryStore).load;
+  if (!(yield* parentIsAsRecorded(evidence.path, evidence.parent))) return "differs" as const;
+  if (yield* holdsEvidence(evidence, evidence.path)) return "reviewed" as const;
+  const recorded = state.installed_skills.find(
+    (copy) =>
+      copy.path === evidence.path && (copy.status === "installed" || copy.status === "pending"),
+  );
+  if (recorded === undefined) return "differs" as const;
+  const links = yield* LinkStat;
+  const info = yield* links.identity.lstat(evidence.path).pipe(Effect.option);
   if (
-    state.installed_skills.some(
-      (copy) => copy.path === evidence.path && copy.status === "installed",
-    )
+    Option.isNone(info) ||
+    info.value.type !== "Directory" ||
+    info.value.dev !== evidence.dev ||
+    info.value.ino !== evidence.ino
   )
-    return "managed" as const;
-  return (yield* parentIsAsRecorded(evidence.path, evidence.parent)) &&
-    (yield* holdsEvidence(evidence, evidence.path))
-    ? ("reviewed" as const)
-    : ("differs" as const);
+    return "differs" as const;
+  const ownership = yield* inspectInstalledSkill(recorded).pipe(
+    Effect.provideService(TreeHasher, yield* digestTreeHasher),
+  );
+  if (
+    ownership.kind !== "intact" ||
+    ownership.marker.installed_skill_id !== recorded.installed_skill_id ||
+    ownership.currentHash !== evidence.treeHash
+  )
+    return "differs" as const;
+  return recorded.status === "installed" ? ("managed" as const) : ("recording" as const);
 });
 
 /** The duplicates a policy moves aside: approved links not at a destination, or approved copies. */
@@ -279,21 +304,14 @@ const replacementMissing = Effect.fn("Library.setup.replacementMissing")(functio
   return Option.none<string>();
 });
 
-/** The Collection that the Import step `step` retained, from that step's recorded evidence. */
+/** The Collection that the Import step `step` saved, as its Done write recorded it. */
 const importedCollection = Effect.fn("Library.setup.importedCollection")(function* (
   steps: readonly RecordedSetupStep[],
   step: number,
 ) {
-  const state = yield* (yield* LibraryStore).load;
-  const hashes = (steps[step]?.after ?? []).flatMap((evidence) =>
-    evidence._tag === "Retained" ? [evidence.hash] : [],
+  const [collectionId] = (steps[step]?.after ?? []).flatMap((evidence) =>
+    evidence._tag === "Retained" ? [evidence.collectionId] : [],
   );
-  const versions = state.collection_versions
-    .filter((version) => hashes.includes(version.hash))
-    .map((version) => version.collection_version_id);
-  const collectionId = state.imports.find((sourceImport) =>
-    versions.includes(sourceImport.collection_version_id),
-  )?.collection_id;
   if (collectionId === undefined)
     return yield* new InvalidIntent({ detail: `Setup step ${step + 1} imported no Collection` });
   return collectionId;
@@ -365,8 +383,8 @@ export const runManage = Effect.fn("Library.setup.manage")(function* (
         )
       )
         return differs(index, folder);
-    if (source === "reviewed") {
-      if (selection.mode === "new" && Option.isSome(selection.ownership)) {
+    if (source !== "managed") {
+      if (source === "reviewed" && selection.mode === "new" && Option.isSome(selection.ownership)) {
         const ownership = selection.ownership.value;
         const plan = yield* planManage(
           ownership.harnesses.map((harness) => ({

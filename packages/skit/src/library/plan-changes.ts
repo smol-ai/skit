@@ -120,6 +120,15 @@ const decide = Effect.fn("Library.decide")(function* (
     marker.skill_id !== install.skillId
   ) {
     if (facts.marker.kind === "absent") {
+      // SKIT recorded this copy before writing its marker into the folder, and stopped between
+      // the two: the folder still holds exactly SKIT's bytes, so only the marker is left to write.
+      if (
+        recorded?.status === "pending" &&
+        recorded.path === path &&
+        recorded.expected_hash === current &&
+        current === hash
+      )
+        return { ...install, _tag: "Manage", hash, verification: "manage" };
       const manage = yield* approvedForManage(rules.approvals, path);
       if (manage !== undefined) {
         if (current !== manage.currentHash)

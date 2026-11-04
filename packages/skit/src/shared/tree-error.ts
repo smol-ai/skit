@@ -1,4 +1,4 @@
-import { Data, Schema } from "effect";
+import { Schema } from "effect";
 import { FailureTypeId, type SkitFailure } from "./failure.js";
 
 export const TreeErrorReason = Schema.Union([
@@ -53,7 +53,7 @@ const renderReason = (reason: TreeErrorReason): string => {
 
 /** Content that cannot be published as a SKIT tree. */
 export class TreeError
-  extends Data.TaggedError("TreeError")<{ reason: TreeErrorReason }>
+  extends Schema.TaggedError<TreeError>()("TreeError", { reason: TreeErrorReason })
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;

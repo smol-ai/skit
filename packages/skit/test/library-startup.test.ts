@@ -115,9 +115,10 @@ for (const [commits, after] of [
       assert.isTrue(
         yield* fs.exists(join(home, "removed", operation.operationId, "step-1", "1-review")),
       );
-      assert.deepStrictEqual(yield* recordedOperations(home), [
-        OperationStatus.cases.Done.make({ operationId: operation.operationId }),
-      ]);
+      assert.deepStrictEqual(
+        (yield* recordedOperations(home)).map(({ _tag, operationId }) => ({ _tag, operationId })),
+        [{ _tag: "Done", operationId: operation.operationId }],
+      );
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
 

@@ -1,9 +1,12 @@
 // Setup: steps saved in state.json before any runs, run in order, each marked Done as it ends
 // (decisions.md D4, "Crash halfway" and "Setup records"). Never rolls back on its own.
 
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Predicate, Schema } from "effect";
+import { isPlatformError } from "effect/PlatformError";
+import { TreeError } from "../shared/tree-error.js";
+import { isSkitFailure } from "../shared/failure.js";
 import { isAbsolute, resolve } from "node:path";
-import { InvalidLibraryState } from "../failures.js";
+import { InvalidLibraryState, LibraryBusy, LibraryChanged } from "../failures.js";
 import { pathIsWithin } from "../platform/path-identity.js";
 import { InvalidIntent } from "./enabled-plan.js";
 import { makeOperationId, type OperationId } from "./entity-ids.js";
@@ -29,6 +32,7 @@ import {
   type RecordedSetupStep,
   type SetupStep,
   type SetupStopReason,
+  type StepError,
   type StepEvidence,
 } from "./store/state-schema.js";
 
@@ -167,6 +171,10 @@ const operationIn = Effect.fn("Library.setup.operationIn")(function* (
   );
 });
 
+/** The steps an operation records, whatever its status, so undo keeps their evidence. */
+const stepsOf = (operation: Option.Option<OperationStatus>) =>
+  Option.match(operation, { onNone: () => [], onSome: ({ steps }) => steps });
+
 /** Save `operation` in place of the record of the same id, or after the others. */
 const saveOperation = Effect.fn("Library.setup.saveOperation")(function* (
   base: LibraryState,
@@ -202,7 +210,13 @@ const runStep = Effect.fn("Library.setup.step")(function* (
       return {
         _tag: "Ran",
         result: { _tag: "Import", imported },
-        after: [{ _tag: "Retained", hash: imported.snapshotDigest }],
+        after: [
+          {
+            _tag: "Retained",
+            hash: imported.snapshotDigest,
+            collectionId: imported.collection.collection_id,
+          },
+        ],
       } satisfies StepOutcome;
     }
     case "Manage":
@@ -243,6 +257,30 @@ const runStep = Effect.fn("Library.setup.step")(function* (
   }
 });
 
+const storedInFull = Schema.is(
+  Schema.Union([TreeError, LibraryBusy, LibraryChanged, InvalidLibraryState]),
+);
+
+/** The error a failed step stores: in full where it can be, otherwise what it says about itself. */
+const stepError = (error: unknown): StepError => {
+  if (storedInFull(error) || isPlatformError(error)) return error;
+  const tag =
+    Predicate.hasProperty(error, "_tag") && Predicate.isString(error._tag)
+      ? error._tag
+      : "UnknownFailure";
+  if (isSkitFailure(error))
+    return { _tag: tag, code: error.code, message: error.message, remediation: error.remediation };
+  return {
+    _tag: tag,
+    code: "OPERATION_FAILED",
+    message:
+      Predicate.hasProperty(error, "message") && Predicate.isString(error.message)
+        ? error.message
+        : String(error),
+    remediation: "Undo this setup, or run setup again once the cause is fixed.",
+  };
+};
+
 /**
  * Run the Pending steps of the operation `operationId` records, under the writer that saved it.
  * A step that differs from its record, fails, or finds the operation gone stops the operation;
@@ -254,7 +292,14 @@ const runOperation = Effect.fn("Library.setup.run")(function* (operationId: Oper
   const stop = (reason: SetupStopReason) =>
     Effect.gen(function* () {
       const current = yield* store.load;
-      yield* saveOperation(current, OperationStatus.cases.Stopped.make({ operationId, reason }));
+      yield* saveOperation(
+        current,
+        OperationStatus.cases.Stopped.make({
+          operationId,
+          steps: stepsOf(yield* operationIn(current, operationId)),
+          reason,
+        }),
+      );
     }).pipe(
       // Unsaved, the record stays Pending and the next run finds it.
       Effect.catchCause((cause) =>
@@ -262,7 +307,8 @@ const runOperation = Effect.fn("Library.setup.run")(function* (operationId: Oper
       ),
       Effect.map((): SetupResult => ({ _tag: "Stopped", operationId, completed, reason })),
     );
-  const failed = (step: number) => (error: unknown) => stop({ _tag: "StepFailed", step, error });
+  const failed = (step: number) => (error: unknown) =>
+    stop({ _tag: "StepFailed", step, error: stepError(error) });
 
   const loaded = yield* Effect.result(
     Effect.flatMap(store.load, (state) => operationIn(state, operationId)),
@@ -323,9 +369,16 @@ const runOperation = Effect.fn("Library.setup.run")(function* (operationId: Oper
     completed.push(result);
   }
   const finished = yield* Effect.result(
-    Effect.flatMap(store.load, (current) =>
-      saveOperation(current, OperationStatus.cases.Done.make({ operationId })),
-    ),
+    Effect.gen(function* () {
+      const current = yield* store.load;
+      yield* saveOperation(
+        current,
+        OperationStatus.cases.Done.make({
+          operationId,
+          steps: stepsOf(yield* operationIn(current, operationId)),
+        }),
+      );
+    }),
   );
   if (finished._tag === "Failure") return yield* failed(recorded.length - 1)(finished.failure);
   return {
@@ -428,14 +481,23 @@ export const recover = Effect.fn("Library.recover")(function* () {
       for (const operation of yield* operations) {
         if (operation._tag !== "Pending") continue;
         const result = yield* runOperation(operation.operationId);
-        if (result._tag === "Done") finished.push(operation.operationId);
-        else
-          stopped.push(
-            OperationStatus.cases.Stopped.make({
-              operationId: operation.operationId,
-              reason: result.reason,
-            }),
-          );
+        if (result._tag === "Done") {
+          finished.push(operation.operationId);
+          continue;
+        }
+        // As recorded; a stop that could not be saved still reports its steps and reason.
+        const saved = yield* Effect.flatMap(store.load, (state) =>
+          operationIn(state, operation.operationId),
+        ).pipe(Effect.orElseSucceed(() => Option.none<OperationStatus>()));
+        stopped.push(
+          Option.isSome(saved) && saved.value._tag === "Stopped"
+            ? saved.value
+            : OperationStatus.cases.Stopped.make({
+                operationId: operation.operationId,
+                steps: operation.steps,
+                reason: result.reason,
+              }),
+        );
       }
       return { finished, stopped } satisfies StartupRecovery;
     }),

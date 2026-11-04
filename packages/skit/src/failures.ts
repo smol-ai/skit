@@ -9,7 +9,7 @@
 // once, rather than the failure's entire identity repeated at every site.
 
 import { FailureTypeId, type SkitFailure } from "./shared/failure.js";
-import { Data } from "effect";
+import { Data, Schema } from "effect";
 
 // -- Descriptor declarations ------------------------------------------------------------------
 
@@ -576,10 +576,10 @@ export class UninstallConflict
 }
 
 export class InvalidLibraryState
-  extends Data.TaggedError("InvalidLibraryState")<{
-    path: string;
-    detail: string;
-  }>
+  extends Schema.TaggedError<InvalidLibraryState>()("InvalidLibraryState", {
+    path: Schema.String,
+    detail: Schema.String,
+  })
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -593,7 +593,7 @@ export class InvalidLibraryState
 
 /** Another running SKIT process holds the home lock; the OS frees it when that process exits. */
 export class LibraryBusy
-  extends Data.TaggedError("LibraryBusy")<{ path: string }>
+  extends Schema.TaggedError<LibraryBusy>()("LibraryBusy", { path: Schema.String })
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -606,7 +606,7 @@ export class LibraryBusy
 
 /** The Library moved on since the state a change was planned from; nothing was saved. */
 export class LibraryChanged
-  extends Data.TaggedError("LibraryChanged")<{ path: string }>
+  extends Schema.TaggedError<LibraryChanged>()("LibraryChanged", { path: Schema.String })
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;

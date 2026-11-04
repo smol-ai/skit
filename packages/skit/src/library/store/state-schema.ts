@@ -1,4 +1,12 @@
-import { Schema } from "effect";
+import { Schema, SchemaGetter } from "effect";
+import {
+  badArgument,
+  isPlatformError,
+  systemError,
+  type PlatformError,
+} from "effect/PlatformError";
+import { InvalidLibraryState, LibraryBusy, LibraryChanged } from "../../failures.js";
+import { TreeError } from "../../shared/tree-error.js";
 import {
   CollectionId,
   InstalledSkillId,
@@ -134,8 +142,15 @@ export const AbsentEvidence = Schema.TaggedStruct("Absent", {
 });
 export type AbsentEvidence = typeof AbsentEvidence.Type;
 
-/** A retained Collection Version in originals/: Import's only folder effect, additive. */
-export const RetainedEvidence = Schema.TaggedStruct("Retained", { hash: Hash });
+/**
+ * A retained Collection Version in originals/, Import's only folder effect, and the Collection
+ * the import saved it to. Collections with identical bytes share a Version, so the hash alone does
+ * not say which Collection an import made.
+ */
+export const RetainedEvidence = Schema.TaggedStruct("Retained", {
+  hash: Hash,
+  collectionId: CollectionId,
+});
 export type RetainedEvidence = typeof RetainedEvidence.Type;
 
 export const PathEvidence = Schema.Union([FolderEvidence, LinkEvidence, AbsentEvidence]);
@@ -304,7 +319,91 @@ export const RecordedSetupStep = Schema.Struct({
 });
 export type RecordedSetupStep = typeof RecordedSetupStep.Type;
 
-/** Why an operation stopped. A failed step's error is kept as JSON, as Effect saves defects. */
+const SystemErrorTags = Schema.Literals([
+  "AlreadyExists",
+  "BadResource",
+  "Busy",
+  "InvalidData",
+  "NotFound",
+  "PermissionDenied",
+  "TimedOut",
+  "UnexpectedEof",
+  "Unknown",
+  "WouldBlock",
+  "WriteZero",
+]);
+
+/**
+ * Effect's PlatformError, stored as the fields it exposes. Its `cause` can be any value, so it is
+ * not stored; a read-back error has none.
+ */
+export const StoredPlatformError = Schema.Struct({
+  _tag: Schema.Literal("PlatformError"),
+  reason: Schema.Struct({
+    _tag: Schema.Union([SystemErrorTags, Schema.Literal("BadArgument")]),
+    module: Schema.String,
+    method: Schema.String,
+    description: Schema.optionalKey(Schema.String),
+    syscall: Schema.optionalKey(Schema.String),
+    pathOrDescriptor: Schema.optionalKey(Schema.Union([Schema.String, Schema.Number])),
+  }),
+}).pipe(
+  Schema.decodeTo(Schema.declare(isPlatformError), {
+    decode: SchemaGetter.transform(({ reason }) => {
+      const { _tag, module, method, description, syscall, pathOrDescriptor } = reason;
+      return _tag === "BadArgument"
+        ? badArgument({ module, method, ...(description === undefined ? {} : { description }) })
+        : systemError({
+            _tag,
+            module,
+            method,
+            ...(description === undefined ? {} : { description }),
+            ...(syscall === undefined ? {} : { syscall }),
+            ...(pathOrDescriptor === undefined ? {} : { pathOrDescriptor }),
+          });
+    }),
+    encode: SchemaGetter.transform(({ reason }: PlatformError) => ({
+      _tag: "PlatformError" as const,
+      reason: {
+        _tag: reason._tag,
+        module: reason.module,
+        method: reason.method,
+        ...(reason.description === undefined ? {} : { description: reason.description }),
+        ...(reason._tag === "BadArgument" || reason.syscall === undefined
+          ? {}
+          : { syscall: reason.syscall }),
+        ...(reason._tag === "BadArgument" || reason.pathOrDescriptor === undefined
+          ? {}
+          : { pathOrDescriptor: reason.pathOrDescriptor }),
+      },
+    })),
+  }),
+);
+
+/** Any other SKIT failure, stored as what every SKIT failure says about itself. */
+export const StoredFailure = Schema.Struct({
+  _tag: Schema.String,
+  code: Schema.String,
+  message: Schema.String,
+  remediation: Schema.String,
+});
+export type StoredFailure = typeof StoredFailure.Type;
+
+/**
+ * A failed step's error. These errors are stored in full; any other is stored as a
+ * `StoredFailure`, so a stopped operation can always be recorded.
+ */
+export const StepError = Schema.Union([
+  TreeError,
+  LibraryBusy,
+  LibraryChanged,
+  InvalidLibraryState,
+  StoredPlatformError,
+  StoredFailure,
+]);
+export type StepError = typeof StepError.Type;
+
+/** Why an operation stopped. */
 export const SetupStopReason = Schema.TaggedUnion({
   EvidenceDiffers: {
     step: Schema.Int,
@@ -319,14 +418,22 @@ export const SetupStopReason = Schema.TaggedUnion({
     step: Schema.Int,
     revision: Schema.NonEmptyString.pipe(Schema.brand("Revision")),
   },
-  StepFailed: { step: Schema.Int, error: Schema.Defect() },
+  StepFailed: { step: Schema.Int, error: StepError },
 });
 export type SetupStopReason = typeof SetupStopReason.Type;
 
 /** Status of one recorded operation (setup, restore, undo). */
+/**
+ * Every status keeps its steps and their evidence: undo needs a Done or Stopped operation's
+ * evidence as much as resuming needs a Pending one's.
+ */
 export const OperationStatus = Schema.TaggedUnion({
   Pending: { operationId: OperationId, steps: Schema.Array(RecordedSetupStep) },
-  Done: { operationId: OperationId },
-  Stopped: { operationId: OperationId, reason: SetupStopReason },
+  Done: { operationId: OperationId, steps: Schema.Array(RecordedSetupStep) },
+  Stopped: {
+    operationId: OperationId,
+    steps: Schema.Array(RecordedSetupStep),
+    reason: SetupStopReason,
+  },
 });
 export type OperationStatus = typeof OperationStatus.Type;
