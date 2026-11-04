@@ -104,12 +104,12 @@ const interrupt = Effect.fn("test.applyRecovery.interrupt")(function* (
           const operation = next.operations.at(-1);
           const step = operation?.steps[0];
           if (operation?._tag === "Pending" && step?.step._tag === "Apply") {
-            if (boundary === "recorded" && !step.step.prepared) {
+            if (boundary === "recorded" && step.step.phase._tag === "Pending") {
               yield* f.fs.rename(from, to);
               crashed = true;
               return yield* Effect.die("Process exited after recording apply");
             }
-            if (boundary === "settlement" && step.step.completed !== undefined) {
+            if (boundary === "settlement" && step.step.phase._tag === "Done") {
               yield* f.fs.rename(from, to);
               crashed = true;
               return yield* Effect.die(
@@ -158,10 +158,8 @@ for (const operation of ["enable", "disable", "update", "remove", "uninstall"] a
         const interrupted = yield* interrupt(f, boundary);
         const saved = interrupted.steps[0]?.step;
         if (saved?._tag !== "Apply") return yield* Effect.die("Missing recorded review");
-        assert.deepStrictEqual(
-          (yield* Schema.decodeUnknownEffect(Library.Plan)(saved.reviewed)).next.operations,
-          [],
-        );
+        assert.isFalse(Object.hasOwn(saved.next, "operations"));
+        assert.isFalse(Object.hasOwn(saved.next, "installed_skills"));
         const recovered = yield* Effect.gen(function* () {
           const library = yield* Library.Service;
           assert.deepStrictEqual(library.startup.finished, [interrupted.operationId]);
@@ -178,7 +176,8 @@ for (const operation of ["enable", "disable", "update", "remove", "uninstall"] a
           );
           assert.strictEqual(
             recovered.state.installed_skills[0]?.installed_skill_id,
-            saved.ids[0]?.id,
+            saved.changes.find((change) => change._tag === "Install" || change._tag === "Save")?.row
+              .installed_skill_id,
           );
         }
         if (operation === "remove") assert.deepStrictEqual(recovered.state.collections, []);
@@ -277,7 +276,11 @@ it.effect(
         for (const copy of snapshot.state.installed_skills)
           assert.strictEqual(
             copy.installed_skill_id,
-            step.ids.find((item) => item.path === copy.path)?.id,
+            step.changes
+              .flatMap((change) =>
+                change._tag === "Install" || change._tag === "Save" ? [change.row] : [],
+              )
+              .find((row) => row.path === copy.path)?.installed_skill_id,
           );
       }).pipe(Effect.provide(Library.layer({ home: f.home, routing: { _tag: "None" } })));
       assert.strictEqual(
@@ -357,3 +360,77 @@ it.effect("recovery settles predecessor backups after the completed state was co
     assert.strictEqual(yield* f.fs.readFileString(join(f.installed, "SKILL.md")), bytes("Updated"));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+for (const [operation, boundary] of [
+  ["enable", "folder"],
+  ["update", "folder"],
+  ["update", "successor"],
+  ["update", "settlement"],
+] as const)
+  it.effect(`v12 ${operation} resumes after ${boundary} from its recorded choices`, () =>
+    Effect.gen(function* () {
+      const f = yield* fixture(operation);
+      const interrupted = yield* interrupt(f, boundary);
+      const step = interrupted.steps[0]?.step;
+      if (step?._tag !== "Apply") return assert.fail("Missing Apply");
+      const state = yield* f.read(yield* f.fs.readFileString(join(f.home, "state.json")));
+      const raw = state.operations.find((item) => item.operationId === interrupted.operationId);
+      if (!raw) return assert.fail("Missing operation");
+      const reviewed = yield* Schema.encodeEffect(Library.Plan)({
+        ...f.plan,
+        next: { ...f.plan.next, operations: [] },
+      });
+      const rows = step.changes.flatMap((change) =>
+        change._tag === "Install" || change._tag === "Save" ? [change.row] : [],
+      );
+      const { operations: _operations, ...completed } = state;
+      const legacy = {
+        _tag: "Apply",
+        reviewed: { ...reviewed, next: { ...reviewed.next, schemaVersion: 12 } },
+        before: { ...step.before, schemaVersion: 12 },
+        routing: step.routing,
+        installedAt: rows[0]?.installed_at,
+        ids: rows.map((row) => ({ path: row.path, id: row.installed_skill_id })),
+        expected: rows,
+        prepared: true,
+        ...(step.phase._tag === "Done"
+          ? {
+              completed: {
+                state: { ...completed, schemaVersion: 12 },
+                folders: step.phase.folders,
+              },
+            }
+          : {}),
+      };
+      yield* f.fs.writeFileString(
+        join(f.home, "state.json"),
+        JSON.stringify({
+          ...state,
+          schemaVersion: 12,
+          operations: [
+            {
+              ...raw,
+              steps: raw.steps.map((recorded, index) =>
+                index === 0 ? { ...recorded, step: legacy } : recorded,
+              ),
+            },
+          ],
+        }),
+      );
+      yield* Effect.gen(function* () {
+        const library = yield* Library.Service;
+        assert.deepStrictEqual(library.startup.finished, [interrupted.operationId]);
+        assert.deepStrictEqual(library.startup.stopped, []);
+        const snapshot = yield* library.read;
+        if (snapshot._tag !== "Present") return assert.fail("Missing Library");
+        assert.strictEqual(
+          snapshot.state.installed_skills[0]?.installed_skill_id,
+          rows[0]?.installed_skill_id,
+        );
+        assert.strictEqual(
+          yield* f.fs.readFileString(join(f.installed, "SKILL.md")),
+          bytes(operation === "update" ? "Updated" : "Original"),
+        );
+      }).pipe(Effect.provide(Library.layer({ home: f.home, routing: { _tag: "None" } })));
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  );

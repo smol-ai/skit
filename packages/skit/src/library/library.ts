@@ -134,6 +134,7 @@ export type {
   ManageNewSelection,
   ReviewedInstalledSkillChange,
   SetupStep,
+  StoredInstalledApply,
   SetupStopReason,
   StepRouting,
   VersionChoice,

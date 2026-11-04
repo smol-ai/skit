@@ -106,8 +106,8 @@ export interface Installed {
   /** The predecessor this install moved to recovery, if there was one. */
   readonly replaced: Option.Option<Backup>;
 }
-export const Warning = Schema.Struct({ path: Schema.String, message: Schema.String });
-export type Warning = typeof Warning.Type;
+import { Warning } from "./installed-skill-facts.js";
+export { Warning } from "./installed-skill-facts.js";
 
 export type Cause =
   | InstalledSkillMutationError

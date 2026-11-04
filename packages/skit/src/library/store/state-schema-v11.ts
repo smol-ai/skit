@@ -12,7 +12,7 @@ const { schemaVersion: _schemaVersion, operations: _operations, ...fields } = Li
 export const LibraryStateV11 = Schema.Struct({ ...fields, schemaVersion: Schema.Literal(11) });
 export type LibraryStateV11 = typeof LibraryStateV11.Type;
 
-/** v11 → v12: state records setup operations; a v11 Library has none. */
+/** v11 → current: a v11 Library has no operation records to translate. */
 export const LibraryStateFromV11 = Schema.Unknown.pipe(
   Schema.refine(Schema.is(LibraryStateV11)),
   Schema.decodeTo(LibraryStateDocument, {

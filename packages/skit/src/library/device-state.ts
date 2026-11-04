@@ -96,3 +96,6 @@ export const DeviceSkillSelection = Schema.Union([
   }),
 ]);
 export type DeviceSkillSelection = typeof DeviceSkillSelection.Type;
+
+export const Invocation = Schema.Union([Schema.Literal("declared"), InvocationPolicy]);
+export type Invocation = typeof Invocation.Type;

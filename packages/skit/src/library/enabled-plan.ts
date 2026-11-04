@@ -2,7 +2,7 @@ import { Effect, Schema, Data } from "effect";
 import { currentCollectionSkills, enabledSkillIds, Enabled } from "./library-contracts.js";
 import { enabledAt, globalEnabled, type LibraryState } from "./library-state.js";
 import { CollectionId, SkillId } from "./entity-ids.js";
-import { InstallScope, InvocationPolicy } from "../vocabulary.js";
+import { InstallScope } from "../vocabulary.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 import { resolve } from "node:path";
 export const Subject = Schema.Union([
@@ -10,8 +10,8 @@ export const Subject = Schema.Union([
   Schema.Struct({ _tag: Schema.Literal("Collection"), id: CollectionId }),
 ]);
 export type Subject = typeof Subject.Type;
-export const Invocation = Schema.Union([Schema.Literal("declared"), InvocationPolicy]);
-export type Invocation = typeof Invocation.Type;
+import { Invocation } from "./device-state.js";
+export { Invocation } from "./device-state.js";
 /** What a setup review approved for one enable, and nothing else. */
 export const SetupApproval = Schema.Struct({
   /** The exact links the user approved keeping beside SKIT's copy, as previewed. */

@@ -30,9 +30,13 @@ import {
 import {
   DeviceSkillSelection,
   InstalledSkill,
+  InstalledSkillInstalled,
+  Invocation,
   InvocationPolicies,
   Repository,
 } from "../device-state.js";
+import { EnabledChange } from "../enabled-change.js";
+import { Destination } from "../installed-skill-facts.js";
 import { Hash, HarnessName, InstallDestination, InstallScope } from "../../vocabulary.js";
 
 // Decoded state is readonly except where the transaction API revises a candidate in place.
@@ -126,7 +130,7 @@ export const SyncAncestry = Schema.Struct({
   base_manifest: LibraryManifest,
 });
 export interface SyncAncestry extends Schema.Schema.Type<typeof SyncAncestry> {}
-export const CURRENT_LIBRARY_STATE_VERSION = 12 as const;
+export const CURRENT_LIBRARY_STATE_VERSION = 13 as const;
 
 /** State fields a publication replaces; operation history is deliberately separate. */
 export const LibraryStateFields = {
@@ -360,26 +364,64 @@ export interface SyncProgram extends Schema.Schema.Type<typeof syncProgram> {}
 export interface StoredSyncProgram extends Schema.Codec.Encoded<typeof syncProgram> {}
 export const SyncProgram: Schema.Codec<SyncProgram, StoredSyncProgram> = syncProgram;
 
-export const InstalledApply = Schema.TaggedStruct("Apply", {
-  /** A Plan codec document, decoded by the operation owner. Its next state never embeds operations. */
-  reviewed: Schema.Json,
+/** Exact installed changes, compiled once from a revalidated review. */
+export const RecordedInstalledChange = Schema.Union([
+  Schema.TaggedStruct("Install", {
+    row: InstalledSkillInstalled,
+    invocation: Invocation,
+    verification: Schema.Literals(["write", "replacement", "manage", "marker"]),
+  }),
+  Schema.TaggedStruct("Save", {
+    row: InstalledSkill,
+    result: Schema.Literals(["Unchanged", "Suppressed", "Conflicted"]),
+    /** A reviewed edit is copied to variants before its conflict row is saved. */
+    backUp: Schema.Boolean,
+  }),
+  Schema.TaggedStruct("Uninstall", { id: InstalledSkillId, keep: Schema.Boolean }),
+  Schema.TaggedStruct("Forget", { id: InstalledSkillId, keep: Schema.Boolean }),
+  Schema.TaggedStruct("Fail", { path: Schema.String, reason: Schema.String }),
+]).check(
+  Schema.makeFilter(
+    (change) =>
+      change._tag !== "Save" ||
+      (change.result === "Unchanged"
+        ? change.row.status === "installed" && !change.backUp
+        : change.result === "Suppressed"
+          ? change.row.status === "suppressed" && !change.backUp
+          : change.row.status === "conflicted"),
+    { message: "Recorded result and installed row status must agree" },
+  ),
+);
+export type RecordedInstalledChange = typeof RecordedInstalledChange.Type;
+const { installed_skills: _installed, ...applyPublication } = LibraryStateFields;
+const installedApply = Schema.TaggedStruct("Apply", {
   before: SyncPublication,
+  next: Schema.Struct(applyPublication),
   routing: StepRouting,
-  installedAt: Schema.String,
-  ids: Schema.Array(Schema.Struct({ path: Schema.String, id: InstalledSkillId })),
-  /** Expected installed rows, recorded after root preparation and before any skill changes. */
-  expected: Schema.Array(InstalledSkill),
-  prepared: Schema.Boolean,
-  completed: Schema.OptionFromOptionalKey(
+  /** Removal keeps the old Collection until its installed folders have been handled. */
+  save: Schema.Literals(["before", "after"]),
+  enabled: Schema.Array(
     Schema.Struct({
-      state: SyncPublication,
-      folders: Schema.Array(SyncFolder),
+      change: EnabledChange,
+      skillIds: Schema.Array(SkillId),
+      targets: Schema.Array(Destination),
     }),
   ),
+  folders: Schema.Array(SyncFolder),
+  changes: Schema.Array(RecordedInstalledChange),
+  phase: Schema.Union([
+    Schema.TaggedStruct("Pending", {}),
+    Schema.TaggedStruct("Done", { folders: Schema.Array(SyncFolder) }),
+  ]),
 });
+
+export interface InstalledApply extends Schema.Schema.Type<typeof installedApply> {}
+export interface StoredInstalledApply extends Schema.Codec.Encoded<typeof installedApply> {}
+export const InstalledApply: Schema.Codec<InstalledApply, StoredInstalledApply> = installedApply;
 
 export const SetupStep = Schema.Union([
   InstalledApply,
+  Schema.TaggedStruct("LegacyApply", { detail: Schema.String, document: Schema.Json }),
   Schema.TaggedStruct("Sync", { phase: Schema.Literal("retire"), program: SyncProgram }),
   Schema.TaggedStruct("Sync", {
     phase: Schema.Literals(["publish", "install"]),

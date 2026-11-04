@@ -25,9 +25,10 @@ import { moveAside, recoveryDirectory } from "./setup-moves.js";
 import { runSyncStep, type SyncStepResult } from "./internal/sync/operation.js";
 import { importCollection, type ImportedCollection } from "./import-collection.js";
 import { emptyLibraryState, type LibraryState } from "./library-state.js";
-import { StalePlan, type Plan, type Outcome, type InstalledSkillResult } from "./library-plan.js";
+import { StalePlan, type Plan, type Outcome } from "./library-plan.js";
 import { InstalledSkillInvalid } from "./installation/install-enabled.js";
-import { prepareApply, reviewedApply } from "./internal/operations/recorded.js";
+import { prepareApply } from "./internal/operations/recorded.js";
+import { copiesOf } from "./internal/operations/program.js";
 import { applyOutcome } from "./internal/operations/result.js";
 import { runApply, operationScope } from "./internal/operations/operations.js";
 import type { Routing } from "./library.js";
@@ -105,6 +106,7 @@ const observed = (paths: readonly string[]) =>
  */
 const recordedStep = Effect.fn("Library.setup.recordedStep")(function* (step: SetupStep) {
   switch (step._tag) {
+    case "LegacyApply":
     case "Apply":
       return { step, before: [], after: [], status: "Pending" } satisfies RecordedSetupStep;
     case "Sync":
@@ -274,6 +276,20 @@ const runStep = Effect.fn("Library.setup.step")(function* (
   const { home } = yield* LibraryWriter;
   const step = steps[index]!.step;
   switch (step._tag) {
+    case "LegacyApply":
+      return {
+        _tag: "Stop",
+        reason: {
+          _tag: "StepFailed",
+          step: index,
+          error: {
+            _tag: "Library.ApplyMigrationStopped",
+            code: "CONFLICT",
+            message: step.detail,
+            remediation: "Review and apply the change again.",
+          },
+        },
+      } satisfies StepOutcome;
     case "Apply": {
       const outcome = yield* runApply(operationId, index, step);
       const result: SetupStepResult = { _tag: "Apply", outcome };
@@ -596,17 +612,10 @@ export const applyRecorded = Effect.fn("Library.applyRecorded")(function* (
 ) {
   const { home } = yield* LibraryWriter;
   const prepared = yield* prepareApply(home, plan, routing);
-  const reviewed = yield* reviewedApply(prepared.step);
   if (prepared.noop) {
-    const copies = reviewed.changes.flatMap((change): InstalledSkillResult[] =>
-      change._tag === "Unchanged" && change.recorded
-        ? [{ _tag: "Unchanged", copy: change.recorded }]
-        : change._tag === "KeepDeleted"
-          ? [{ _tag: "Suppressed", copy: change.recorded }]
-          : [],
-    );
+    const copies = copiesOf(prepared.step);
     return applyOutcome(
-      reviewed,
+      prepared.step,
       prepared.snapshot._tag === "Present" ? prepared.snapshot.state : emptyLibraryState(),
       { _tag: "Applied", results: [], copies },
     );
@@ -623,7 +632,7 @@ export const applyRecorded = Effect.fn("Library.applyRecorded")(function* (
     });
   if (plan.intent._tag !== "Enabled" && applied.outcome._tag === "Incomplete")
     return yield* Effect.fail(applied.outcome.cause);
-  return applyOutcome(reviewed, yield* loadLibrary(home), applied.outcome);
+  return applyOutcome(prepared.step, yield* loadLibrary(home), applied.outcome);
 }, Effect.scoped);
 
 type StoppedOperation = Extract<OperationStatus, { readonly _tag: "Stopped" }>;
@@ -666,13 +675,23 @@ export const recover = Effect.fn("Library.recover")(function* (home: string) {
   const found = yield* operations.pipe(
     Effect.catchTag("InvalidLibraryState", () => Effect.succeed([])),
   );
+  const migrationStopped = found.flatMap((operation) =>
+    operation._tag === "Stopped" && operation.steps.some((item) => item.step._tag === "LegacyApply")
+      ? [operation]
+      : [],
+  );
+  const reportStopped = (stopped: readonly StoppedOperation[]) =>
+    stopped.map(({ steps, ...operation }) => ({
+      ...operation,
+      steps: steps.map(({ applies: _applies, ...step }) => step),
+    }));
   if (!found.some((operation) => operation._tag === "Pending"))
-    return { finished: [], stopped: [] } satisfies StartupRecovery;
+    return { finished: [], stopped: reportStopped(migrationStopped) } satisfies StartupRecovery;
   return yield* writeLibrary(
     home,
     Effect.gen(function* () {
       const finished: OperationId[] = [];
-      const stopped: Extract<OperationStatus, { readonly _tag: "Stopped" }>[] = [];
+      const stopped: StoppedOperation[] = [...migrationStopped];
       for (const operation of yield* operations) {
         if (operation._tag !== "Pending") continue;
         const result = yield* runOperation(operation.operationId);
@@ -698,10 +717,7 @@ export const recover = Effect.fn("Library.recover")(function* (home: string) {
       }
       return {
         finished,
-        stopped: stopped.map(({ steps, ...operation }) => ({
-          ...operation,
-          steps: steps.map(({ applies: _applies, ...step }) => step),
-        })),
+        stopped: reportStopped(stopped),
       } satisfies StartupRecovery;
     }),
   );

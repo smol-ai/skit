@@ -19,7 +19,19 @@ export const installedSkillStagingDirectory = Effect.fn("Install.stagingDirector
   root: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
-  const realRoot = yield* fs.realPath(root);
+  let ancestor = root;
+  let realRoot: string | undefined;
+  while (realRoot === undefined) {
+    realRoot = yield* fs
+      .realPath(ancestor)
+      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
+    if (realRoot === undefined) {
+      const parent = dirname(ancestor);
+      if (parent === ancestor) return yield* fs.realPath(ancestor);
+      ancestor = parent;
+    }
+  }
+  if (ancestor !== root) return realRoot;
   const rootDevice = (yield* fs.stat(realRoot)).dev;
   const parentDevice = (yield* fs.stat(dirname(realRoot))).dev;
   return rootDevice === parentDevice ? dirname(realRoot) : realRoot;

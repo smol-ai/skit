@@ -1,18 +1,17 @@
 import { Effect, Schema } from "effect";
 import { canonicalJson } from "../../../shared/json.js";
 import { InstalledSkills } from "../../installed-skills.js";
-import { StalePlan, type Outcome, type Plan } from "../../library-plan.js";
+import { StalePlan, type Plan } from "../../library-plan.js";
 import { LibraryWriter, loadLibrary } from "../../store/library-store.js";
 import { OperationStatus, type StepRouting } from "../../store/state-schema.js";
 import type { OperationId } from "../../entity-ids.js";
-import { planIntent } from "../../plan-changes.js";
 import { LibraryState } from "../../library-state.js";
 import { routedInstalledSkills } from "../../routing/recorded.js";
-import { apply, settleBackups } from "./apply.js";
-import { prepareApply, resumeApply, reviewedApply, saveStep, type ApplyStep } from "./recorded.js";
+import { apply, checkApply } from "./apply.js";
+import { prepareApply, saveStep, type ApplyStep } from "./recorded.js";
 import { applyOutcome } from "./result.js";
 
-/** The recorded runner is the only entry to ordinary folder execution. */
+/** The only execution entry consumes the durable program, never a reviewed Plan. */
 export const runApply = Effect.fn("Library.recordedApplyStep")(function* (
   operationId: OperationId,
   index: number,
@@ -20,63 +19,24 @@ export const runApply = Effect.fn("Library.recordedApplyStep")(function* (
   batch?: string,
 ) {
   const files = yield* routedInstalledSkills(step.routing);
-  return yield* Effect.scoped(
-    Effect.gen(function* () {
-      const original = yield* reviewedApply(step);
-      const attempt = yield* Effect.result(
-        Effect.gen(function* () {
-          const resumed = yield* resumeApply(operationId, index, step, batch);
-          if (resumed.completed) {
-            yield* settleBackups({ ...step.before, operations: [] }, [
-              ...step.before.installed_skills,
-              ...step.expected,
-            ]);
-            return { _tag: "Applied", results: [], copies: [] } satisfies Outcome;
-          }
-          const plan = yield* planIntent(original.intent, {
-            home: (yield* LibraryWriter).home,
-            base: resumed.base,
-            approvals: original.approvals,
-          });
-          if (
-            canonicalJson(plan.routes) !== canonicalJson(original.routes) ||
-            plan.changes.some((change) => {
-              if ("subject_id" in change) return false;
-              const path = "path" in change ? change.path : change.recorded.path;
-              return !original.changes.some((saved) => {
-                if ("subject_id" in saved) return false;
-                return (
-                  ("path" in saved ? saved.path : saved.recorded.path) === path &&
-                  (!("skillVersionId" in change) ||
-                    ("skillVersionId" in saved &&
-                      saved.skillId === change.skillId &&
-                      saved.skillVersionId === change.skillVersionId))
-                );
-              });
-            })
-          )
-            return yield* new StalePlan({
-              message: "Recorded routing or installed-skill choices changed",
-            });
-          return yield* apply(plan, {
-            operationId,
-            step: index,
-            batch,
-            expected: resumed.expected,
-          });
-        }).pipe(
-          Effect.catchTag("Library.InstalledSkillsChanged", (error) =>
-            Effect.fail(new StalePlan({ message: error.message })),
-          ),
-        ),
-      );
-      const outcome: Outcome =
-        attempt._tag === "Success"
-          ? attempt.success
-          : { _tag: "Incomplete", results: [], reason: "update", cause: attempt.failure };
-      return applyOutcome(original, yield* loadLibrary((yield* LibraryWriter).home), outcome);
-    }).pipe(Effect.provideService(InstalledSkills.Service, files)),
+  // Divergence stays typed for setup/Sync to report EvidenceDiffers.
+  yield* checkApply(step).pipe(Effect.provideService(InstalledSkills.Service, files));
+  const attempt = yield* Effect.result(
+    apply(step, operationId, index, batch).pipe(
+      Effect.provideService(InstalledSkills.Service, files),
+      Effect.catchTag("Library.InstalledSkillsChanged", (error) =>
+        Effect.fail(new StalePlan({ message: error.message })),
+      ),
+    ),
   );
+  return attempt._tag === "Success"
+    ? attempt.success
+    : applyOutcome(step, yield* loadLibrary((yield* LibraryWriter).home), {
+        _tag: "Incomplete",
+        results: [],
+        reason: "update",
+        cause: attempt.failure,
+      });
 });
 
 /** A batch is named by domain identity, never by the number of calls reached on replay. */
@@ -94,10 +54,6 @@ export const operationScope = Effect.fn("Library.operationScope")(function* (
   const latest =
     savedOperation?._tag === "Pending" ? savedOperation.steps[index]?.applies?.at(-1) : undefined;
   if (latest) {
-    const files = yield* routedInstalledSkills(latest.apply.routing);
-    yield* resumeApply(operationId, index, latest.apply, latest.key).pipe(
-      Effect.provideService(InstalledSkills.Service, files),
-    );
     const outcome = yield* runApply(operationId, index, latest.apply, latest.key);
     if (outcome._tag === "Incomplete") return yield* Effect.fail(outcome.cause);
   }

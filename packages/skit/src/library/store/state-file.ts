@@ -23,6 +23,7 @@ import { LibraryStateFromV8 } from "./state-schema-v8.js";
 import { LibraryStateFromV9 } from "./state-schema-v9.js";
 import { LibraryStateFromV10 } from "./state-schema-v10.js";
 import { LibraryStateFromV11 } from "./state-schema-v11.js";
+import { migrateLibraryStateV12 } from "./state-schema-v12.js";
 import { withLibraryStateReplacement } from "./writer-lock.js";
 
 export type InspectedLibraryState =
@@ -67,7 +68,8 @@ const decodeCurrentState = Effect.fn("Library.decodeCurrentState")(function* (
 
 /**
  * v4 is what the first public SKIT wrote. Each legacy version steps through the linear
- * v4 → v5 → v6 → v7 → v9 → v10 → v11 → v12 chain, with v8 joining at v9.
+ * v4–v11 follow their historical chain into the current state. v12 also converts recorded
+ * installed changes to v13, retaining and stopping programs that cannot be translated safely.
  */
 const OLDEST_LIBRARY_STATE_VERSION = 4;
 const LegacyLibraryState = Schema.Union([
@@ -139,7 +141,11 @@ export const migrateLocalLibraryState = Effect.fn("Library.migrateState")(functi
       if (!isLegacyVersion(lockedVersion)) return;
       const migrated = yield* decodeCurrentState(
         path,
-        yield* Schema.decodeUnknownEffect(LegacyLibraryState)(lockedValue).pipe(
+        yield* (
+          lockedVersion === 12
+            ? migrateLibraryStateV12(lockedValue)
+            : Schema.decodeUnknownEffect(LegacyLibraryState)(lockedValue)
+        ).pipe(
           Effect.mapError(
             () =>
               new InvalidLibraryState({
@@ -149,7 +155,7 @@ export const migrateLocalLibraryState = Effect.fn("Library.migrateState")(functi
           ),
         ),
       );
-      // Keep the pre-migration file: migration drops history it can no longer represent.
+      // Keep the pre-migration file: migration retains legacy documents that cannot safely execute.
       yield* writeJsonAtomic(
         `${path}.v${lockedVersion}.backup-${new Date(yield* Clock.currentTimeMillis).toISOString().replaceAll(":", "")}`,
         lockedValue,

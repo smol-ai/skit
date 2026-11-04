@@ -402,3 +402,35 @@ describe("skit/library-operation-owner", () => {
     ).toEqual([]);
   });
 });
+
+describe("skit/library-apply-program", () => {
+  test.each([
+    `import type { Plan } from "../../library-plan.js";`,
+    `import { planIntent as again } from "../../plan-changes.js";`,
+    `import * as planning from "../../plan-changes.js";`,
+    `const planner = import("../../plan-changes.js");`,
+    `import { reviewApply } from "./review.js";`,
+  ])("execution cannot accept or reconstruct a Plan: %s", async (source) => {
+    expect(
+      await reported("library-apply-program", `${library}internal/operations/apply.ts`, source),
+    ).toHaveLength(1);
+  });
+  test("execution may use errors and typed recorded work", async () => {
+    expect(
+      await reported(
+        "library-apply-program",
+        `${library}internal/operations/apply.ts`,
+        `import { StalePlan } from "../../library-plan.js"; import type { InstalledApply } from "../../store/state-schema.js";`,
+      ),
+    ).toEqual([]);
+  });
+  test("legacy fields are forbidden in the live Apply codec", async () => {
+    expect(
+      await reported(
+        "library-apply-program",
+        `${library}store/state-schema.ts`,
+        `const installedApply = Schema.TaggedStruct("Apply", { reviewed: Schema.Json, ids: Schema.Array(Schema.String), prepared: Schema.Boolean });`,
+      ),
+    ).toHaveLength(3);
+  });
+});

@@ -82,7 +82,7 @@ const crashingAt = (
                 stop ||=
                   boundary === "pending" &&
                   state.installed_skills.some((row) => row.status === "pending");
-                stop ||= boundary === "installed" && !!batch && Option.isSome(batch.completed);
+                stop ||= boundary === "installed" && !!batch && batch.phase._tag === "Done";
                 stop ||= boundary === "step" && step?.status === "Done";
               }
             }
@@ -854,7 +854,11 @@ for (const boundary of ["backup", "successor"] as const)
       if (operation?._tag !== "Pending") return assert.fail("Missing Pending Update");
       const batch = operation.steps[0]?.applies?.[0]?.apply;
       if (!batch) return assert.fail("Missing recorded installed changes");
-      const expected = batch.expected.find((row) => row.path === copy);
+      const expected = batch.changes
+        .flatMap((change) =>
+          change._tag === "Install" || change._tag === "Save" ? [change.row] : [],
+        )
+        .find((row) => row.path === copy);
       assert.isDefined(expected);
       assert.deepStrictEqual(yield* restart(home), {
         finished: [operation.operationId],

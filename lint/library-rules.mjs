@@ -62,13 +62,16 @@ const executionEdges = [
   },
   {
     module: `${library}internal/operations/installed-changes`,
-    names: ["install"],
+    names: ["execute"],
     callers: [`${library}internal/operations/apply.ts`],
   },
   {
     module: `${library}internal/operations/recorded`,
-    names: ["saveStep", "resumeApply"],
-    callers: [`${library}internal/operations/operations.ts`],
+    names: ["saveStep"],
+    callers: [
+      `${library}internal/operations/operations.ts`,
+      `${library}internal/operations/apply.ts`,
+    ],
   },
   {
     module: `${library}installed-update`,
@@ -125,6 +128,66 @@ const storageModule = (target) =>
   ].some((module) => target === `${library}${module}`);
 
 export const libraryRules = {
+  "library-apply-program": {
+    meta: {
+      type: "problem",
+      docs: { description: "Recorded execution cannot accept or reconstruct a Plan" },
+      messages: {
+        plan: "Recorded execution consumes InstalledApply. Planning and review belong before recording; no Plan, planner or review imports are allowed here.",
+        field:
+          "{{name}} duplicates the recorded installed changes. Keep legacy Apply fields in the v12 migration codec only.",
+      },
+    },
+    create(context) {
+      const file = relative(root, context.filename);
+      const executor = [
+        "internal/operations/apply.ts",
+        "internal/operations/installed-changes.ts",
+      ].some((path) => file === library + path);
+      const schema = file === library + "store/state-schema.ts";
+      const banned = new Set(["Plan", "planIntent", "planChanges", "reviewApply", "prepareApply"]);
+      return {
+        ...declarations((node) => {
+          if (!executor) return;
+          const target = targetOf(context.filename, node.source?.value);
+          if (
+            ![
+              "library-plan",
+              "plan-changes",
+              "internal/operations/review",
+              "internal/operations/recorded",
+            ].some((path) => target === library + path)
+          )
+            return;
+          const whole =
+            node.type === "ImportExpression" ||
+            node.type === "ExportAllDeclaration" ||
+            node.specifiers?.some((specifier) =>
+              ["ImportNamespaceSpecifier", "ExportNamespaceSpecifier"].includes(specifier.type),
+            );
+          if (
+            whole ||
+            node.specifiers?.some((specifier) =>
+              banned.has(nameOf(specifier.imported ?? specifier.local)),
+            )
+          )
+            context.report({ node, messageId: "plan" });
+        }),
+        VariableDeclarator(node) {
+          if (!schema || !["installedApply", "InstalledApply"].includes(node.id.name)) return;
+          const fields = node.init?.arguments?.[1];
+          for (const property of fields?.properties ?? []) {
+            const name = nameOf(property.key);
+            if (
+              ["reviewed", "ids", "expected", "installedAt", "prepared", "completed"].includes(name)
+            )
+              context.report({ node: property, messageId: "field", data: { name } });
+          }
+        },
+      };
+    },
+  },
+
   "library-operation-owner": {
     meta: {
       type: "problem",

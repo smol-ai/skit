@@ -20,6 +20,7 @@ import type { InstalledSkill, LibraryState } from "../packages/skit/src/library/
 import type { SetupIntent } from "../packages/skit/src/library/setup-intent.js";
 import type {
   Approval,
+  EnabledChange,
   Intent as ExistingIntent,
 } from "../packages/skit/src/library/library-plan.js";
 import type {
@@ -354,28 +355,50 @@ export interface SyncProgram {
  * what was recorded it stops and reports, and the user can undo. Never rolls back on its own.
  * Discovery folders are saved and undone by MachineSettings; the setup command calls both owners.
  */
+export interface ApplyFolder {
+  readonly path: string;
+  readonly entry: "Absent" | "Directory" | "SymbolicLink" | "File" | "Other";
+  readonly evidence: string;
+  readonly ancestors: readonly { readonly path: string; readonly evidence: string }[];
+}
+export type RecordedInstalledChange =
+  | {
+      readonly _tag: "Install";
+      readonly row: Extract<InstalledSkill, { readonly status: "installed" }>;
+      readonly invocation: Invocation;
+      readonly verification: "write" | "replacement" | "manage" | "marker";
+    }
+  | {
+      readonly _tag: "Save";
+      readonly row: InstalledSkill;
+      readonly result: "Unchanged" | "Suppressed" | "Conflicted";
+      readonly backUp: boolean;
+    }
+  | { readonly _tag: "Uninstall"; readonly id: InstalledSkillId; readonly keep: boolean }
+  | { readonly _tag: "Forget"; readonly id: InstalledSkillId; readonly keep: boolean }
+  | { readonly _tag: "Fail"; readonly path: string; readonly reason: string };
+
 export type SetupStep =
-  // Ordinary apply uses the same recorded-before-effects invariant as setup and local Sync.
-  // The executor decodes the Plan document; embedded publications never contain operation history.
+  // Execution consumes fixed changes; no reviewed Plan or replay-time planning.
   | {
       readonly _tag: "Apply";
-      readonly reviewed: Schema.Json;
       readonly before: Omit<LibraryState, "operations">;
+      readonly next: Omit<LibraryState, "operations" | "installed_skills">;
       readonly routing: StepRouting;
-      readonly installedAt: string;
-      readonly ids: readonly { readonly path: string; readonly id: InstalledSkillId }[];
-      readonly expected: readonly InstalledSkill[];
-      readonly prepared: boolean;
-      readonly completed: Option.Option<{
-        readonly state: Omit<LibraryState, "operations">;
-        readonly folders: readonly {
-          readonly path: string;
-          readonly entry: "Absent" | "Directory" | "SymbolicLink" | "File" | "Other";
-          readonly evidence: string;
-          readonly ancestors: readonly { readonly path: string; readonly evidence: string }[];
-        }[];
-      }>;
+      readonly save: "before" | "after";
+      readonly enabled: readonly {
+        readonly change: EnabledChange;
+        readonly skillIds: readonly SkillId[];
+        readonly targets: readonly Destination[];
+      }[];
+      readonly folders: readonly ApplyFolder[];
+      readonly changes: readonly RecordedInstalledChange[];
+      readonly phase:
+        | { readonly _tag: "Pending" }
+        | { readonly _tag: "Done"; readonly folders: readonly ApplyFolder[] };
     }
+  // A v12 record without sufficient evidence remains visible and can never execute.
+  | { readonly _tag: "LegacyApply"; readonly detail: string; readonly document: Schema.Json }
   // APPROVED by Tim, 2026-11-05: record the local Sync work in this existing operation mechanism.
   | { readonly _tag: "Sync"; readonly phase: "retire"; readonly program: SyncProgram }
   | { readonly _tag: "Sync"; readonly phase: "publish" | "install"; readonly sourceStep: number }

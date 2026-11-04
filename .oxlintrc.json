@@ -8,7 +8,8 @@
     "skit/library-contract-complete": "error",
     "skit/library-private-api": "error",
     "skit/library-recorded-execution": "error",
-    "skit/library-operation-owner": "error"
+    "skit/library-operation-owner": "error",
+    "skit/library-apply-program": "error"
   },
   "overrides": [
     {

@@ -1,92 +1,79 @@
-import { basename, resolve } from "node:path";
+import { basename } from "node:path";
 import { Effect } from "effect";
 import { InstalledSkills } from "../../installed-skills.js";
 import { installedSkillVariantPath } from "../../../install/files.js";
-import type { OwnershipMarker } from "../../../contracts.js";
-import type { LibraryState, InstalledSkill } from "../../library-state.js";
 import { InstalledSkillInvalid } from "../../installation/install-enabled.js";
-import {
-  StalePlan,
-  type InstalledSkillChange,
-  type InstalledSkillResult,
-} from "../../library-plan.js";
+import { StalePlan } from "../../library-plan.js";
+import type { LibraryState } from "../../library-state.js";
+import type { RecordedInstalledChange } from "../../store/state-schema.js";
 
-/**
- * Carry out one change at a folder the next Library installs into, and what the Library records
- * for it. `next` is the Library just planned; `folders` are the folders that plan was decided on.
- */
-export const install = Effect.fn("Library.install")(function* (
-  change: Exclude<
-    Extract<InstalledSkillChange, { readonly skillVersionId: unknown }>,
-    { readonly _tag: "Protected" }
-  >,
-  next: LibraryState,
-  folders: readonly InstalledSkills.Folder[],
-  expected: InstalledSkill,
+/** Execute the fixed row and write policy, with no planner, clock, ID allocation or store. */
+export const execute = Effect.fn("Library.executeInstalledChange")(function* (
+  change: RecordedInstalledChange,
+  state: LibraryState,
+  folder: InstalledSkills.Folder | undefined,
   originalsPath: string,
   variantsPath: string,
 ) {
   const files = yield* InstalledSkills.Service;
-  if (change._tag === "KeepDeleted")
-    return { _tag: "Suppressed", copy: expected } satisfies InstalledSkillResult;
-  if (change._tag === "Unreadable")
-    return yield* new InstalledSkillInvalid({ detail: change.reason });
   switch (change._tag) {
-    case "Unchanged": {
-      const copy = expected;
-      return { _tag: "Unchanged", copy } satisfies InstalledSkillResult;
-    }
-    case "Conflict": {
-      if (change.edited)
-        yield* files.backUp(
-          change.path,
-          installedSkillVariantPath(
-            variantsPath,
-            change.destination,
-            basename(change.path),
-            change.currentHash,
-          ),
-        );
-      const copy = expected;
-      return { _tag: "Conflicted", copy } satisfies InstalledSkillResult;
-    }
-    case "Manage":
-    case "Update":
     case "Install": {
-      // A folder that was not there is built only now, once its root exists; apply created the
-      // root since plan read the folder, so nothing may have appeared there.
-      const staged = yield* files.build(change, next, originalsPath);
-      const [folder] =
-        change._tag === "Install"
-          ? [yield* files.inspect(change.path)]
-          : folders.filter((item) => item.path === resolve(change.path));
-      if (
-        folder === undefined ||
-        (change._tag === "Install" ? folder.entry._tag !== "Absent" : staged.hash !== change.hash)
-      )
-        return yield* new StalePlan({
-          message: `Installed skill evidence changed at ${change.path}`,
-        });
-      if (staged.hash !== expected.expected_hash)
-        return yield* new StalePlan({
-          message: `Recorded installed bytes changed at ${change.path}`,
-        });
-      const marker: OwnershipMarker = {
-        schemaVersion: 5,
-        installed_skill_id: expected.installed_skill_id,
-        skill_id: change.skillId,
-        skill_version_id: change.skillVersionId,
-        expected_hash: staged.hash,
+      const row = change.row;
+      if (!folder)
+        return yield* new StalePlan({ message: `Missing recorded folder at ${row.path}` });
+      const staged = yield* files.build(
+        {
+          skillId: row.skill_id,
+          skillVersionId: row.skill_version_id,
+          destination: row.destination,
+          root: row.root,
+          invocation: change.invocation,
+        },
+        state,
+        originalsPath,
+      );
+      if (staged.hash !== row.expected_hash)
+        return yield* new StalePlan({ message: `Recorded installed bytes changed at ${row.path}` });
+      const marker = {
+        schemaVersion: 5 as const,
+        installed_skill_id: row.installed_skill_id,
+        skill_id: row.skill_id,
+        skill_version_id: row.skill_version_id,
+        expected_hash: row.expected_hash,
       };
-      const installed = yield* change._tag === "Manage"
+      const installed = yield* change.verification !== "write" && folder.entry._tag !== "Absent"
         ? files.manage(staged, marker, folder, change.verification)
         : files.install(staged, marker, folder);
-      if (staged.hash !== expected.expected_hash || installed.hash !== expected.expected_hash)
-        return yield* new StalePlan({
-          message: `Recorded installed bytes changed at ${change.path}`,
-        });
-      const copy = expected;
-      return { _tag: "Installed", copy } satisfies InstalledSkillResult;
+      if (installed.hash !== row.expected_hash)
+        return yield* new StalePlan({ message: `Installed bytes differ at ${row.path}` });
+      return;
     }
+    case "Save":
+      if (change.backUp) {
+        if (change.row.status !== "conflicted")
+          return yield* new InstalledSkillInvalid({
+            detail: "Only a reviewed conflict can be backed up",
+          });
+        yield* files.backUp(
+          change.row.path,
+          installedSkillVariantPath(
+            variantsPath,
+            change.row.destination,
+            basename(change.row.path),
+            change.row.current_hash,
+          ),
+        );
+      }
+      return;
+    case "Uninstall": {
+      const row = state.installed_skills.find((row) => row.installed_skill_id === change.id);
+      if (!row) return yield* new StalePlan({ message: `Missing installed row ${change.id}` });
+      yield* files.uninstall(row.root, row.path, row.installed_skill_id);
+      return;
+    }
+    case "Forget":
+      return;
+    case "Fail":
+      return yield* new InstalledSkillInvalid({ detail: change.reason });
   }
 });

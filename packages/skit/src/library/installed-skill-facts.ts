@@ -32,3 +32,6 @@ export class DuplicateScanIncomplete
   readonly code = "CONFLICT" as const;
   readonly remediation = "Inspect the skills directory before enabling another copy.";
 }
+
+export const Warning = Schema.Struct({ path: Schema.String, message: Schema.String });
+export type Warning = typeof Warning.Type;
