@@ -20,7 +20,7 @@ import {
 } from "../src/library/library-state.js";
 import { inspectLibrary, libraryLayer, saveLibrary } from "./helpers/library-store.js";
 import { Library } from "../src/library/library.js";
-import { acquireWorkspaceLock } from "../src/platform/workspace-lock.js";
+import { acquireFileLock } from "../src/platform/file-lock.js";
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "library-state");
 
@@ -947,7 +947,7 @@ it.effect("building the layer fails LibraryBusy, migrating nothing, while the lo
     const legacy = yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json"));
     yield* fs.writeFileString(join(home, "state.json"), legacy);
     // Another holder, as another process would be.
-    yield* acquireWorkspaceLock(join(home, "lock.sqlite"));
+    yield* acquireFileLock(join(home, "lock.sqlite"));
 
     const error = yield* Effect.flip(Layer.build(libraryLayer(home)));
 

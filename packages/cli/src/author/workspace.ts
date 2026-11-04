@@ -32,7 +32,7 @@ import {
   type SkitFailure,
   SourceProcess,
   type TreeError,
-  acquireWorkspaceLock,
+  acquireFileLock,
   syncPaths,
   writeJsonAtomic,
   writeJsonExclusive,
@@ -561,11 +561,11 @@ const make = Effect.gen(function* () {
         reason: "the lock is not a regular file",
       });
     const lock = yield* Scope.make();
-    yield* acquireWorkspaceLock(lockPath).pipe(
+    yield* acquireFileLock(lockPath).pipe(
       Scope.provide(lock),
       Effect.catchTags({
-        WorkspaceLockBusy: () => Effect.fail(new AuthorWorkspaceBusy({ root })),
-        WorkspaceLockFailed: (error) =>
+        FileLockBusy: () => Effect.fail(new AuthorWorkspaceBusy({ root })),
+        FileLockFailed: (error) =>
           Effect.fail(new AuthorWorkspaceUnsafe({ path: lockPath, reason: String(error.cause) })),
       }),
       Effect.onError(() => Scope.close(lock, Exit.void)),

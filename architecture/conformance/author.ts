@@ -48,7 +48,7 @@ type ChangedDebt = never;
 type RequirementDebt = never;
 
 /**
- * The home lock is withLibraryWriterLock until the home-lock function exists (D3): capture
+ * The home lock is withHomeLock until the home-lock function exists (D3): capture
  * (through MachineSettings.ensureIdentity) and every checkpoint step fail LibraryBusy where the
  * contract has HomeBusy, or nothing for capture.
  */

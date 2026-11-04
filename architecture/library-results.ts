@@ -152,7 +152,7 @@ export type UndoError =
 // ── Restore ─────────────────────────────────────────────────────────────────────────────────────
 // Source: cli/src/library-application/recovery-moves.ts, cli/src/handlers/library/recovery.ts.
 // Resolution 1: apply's one atomic state.json write is the operation record itself; today the
-// renames run under withLibraryWriterLock only (recovery-moves.ts:557-591).
+// renames run under withHomeLock only (recovery-moves.ts:557-591).
 
 /** One saved entry. RecoveryFact, recovery-moves.ts:76-83; status :492-500, reason :501-511. */
 export interface RecoveryEntry {

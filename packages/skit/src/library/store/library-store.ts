@@ -11,7 +11,7 @@ import {
 } from "./state-file.js";
 import { appendLibraryAudit, type LibraryAuditChange } from "../audit/audit-log.js";
 import { classifyLibraryAuditEvent, diffLibraryState } from "../audit/state-diff.js";
-import { withLibraryWriterLock } from "./writer-lock.js";
+import { withHomeLock } from "./writer-lock.js";
 
 export type { InspectedLibraryState };
 
@@ -161,9 +161,9 @@ export const withLibraryWriter = <A, E, R>(program: Effect.Effect<A, E, R>) =>
     const store = yield* LibraryStore;
     const inherited = yield* CurrentLibraryAction;
     if (inherited?.home === store.home && inherited.live)
-      return yield* withLibraryWriterLock(store.home, program);
+      return yield* withHomeLock(store.home, program);
     const action = { home: store.home, changes: [] as LibraryAuditChange[], live: true };
-    return yield* withLibraryWriterLock(
+    return yield* withHomeLock(
       store.home,
       program.pipe(Effect.provideService(CurrentLibraryAction, action)),
     ).pipe(

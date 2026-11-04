@@ -14,7 +14,7 @@ import {
   collectionVersionPath,
   importCollection,
   SourceProcess,
-  withLibraryWriterLock,
+  withHomeLock,
   type SnapshotArchive,
 } from "../src/index.js";
 import { skitLayer } from "../src/platform/layer.js";
@@ -37,7 +37,7 @@ const fixture = Effect.gen(function* () {
   yield* fs.writeFileString(join(privatePath, "SKILL.md"), "Private notes\n");
   const machineId = makeMachineId();
   const source = yield* Effect.scoped(
-    withLibraryWriterLock(
+    withHomeLock(
       home,
       importCollection({
         machineId,
@@ -59,7 +59,7 @@ const fixture = Effect.gen(function* () {
     ),
   );
   const privateCopy = yield* Effect.scoped(
-    withLibraryWriterLock(
+    withHomeLock(
       home,
       importCollection({
         machineId,

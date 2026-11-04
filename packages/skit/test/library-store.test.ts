@@ -9,9 +9,9 @@ import {
   libraryStoreLayer,
   withLibraryWriter,
 } from "../src/library/store/library-store.js";
-import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
+import { withHomeLock } from "../src/library/store/writer-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
-import { acquireWorkspaceLock } from "../src/platform/workspace-lock.js";
+import { acquireFileLock } from "../src/platform/file-lock.js";
 
 const machineId = migratedMachineId("019950c0-4c00-7000-8000-000000000001", "library-store-test");
 
@@ -99,7 +99,7 @@ it.effect("accepts exactly one of two concurrent saves sharing one held writer l
     const local = { ...base, repositories: [{ root: "/workspace", enabled }] };
 
     // Both forks inherit the outer lock, so only the save mutex can serialize them.
-    const outcomes = yield* withLibraryWriterLock(
+    const outcomes = yield* withHomeLock(
       store.home,
       Effect.all(
         [global, local].map((next) => Effect.result(store.save(next, base))),
@@ -125,7 +125,7 @@ it.effect("refuses to save while another holder has the lock", () =>
     const state = yield* store.load;
     const before = yield* fs.readFileString(path);
     // Another holder, as another process would be.
-    yield* acquireWorkspaceLock(join(store.home, "lock.sqlite"));
+    yield* acquireFileLock(join(store.home, "lock.sqlite"));
 
     const error = yield* store.save({ ...state, enabled: [] }, state).pipe(Effect.flip);
 
@@ -154,7 +154,7 @@ it.effect("makes a writer that outlives its action acquire the lock again", () =
       ),
     );
     // Another holder takes the lock once the owner has released it.
-    yield* acquireWorkspaceLock(join(home, "lock.sqlite"));
+    yield* acquireFileLock(join(home, "lock.sqlite"));
     yield* Deferred.succeed(resume, undefined);
 
     assert.strictEqual((yield* Effect.flip(Fiber.join(child)))._tag, "LibraryBusy");
@@ -194,7 +194,7 @@ it.live("keeps the lock until a save already under way in a forked fiber has fin
     const base = yield* store.load;
     const next = { ...base, enabled: [] };
     let child: Fiber.Fiber<void, unknown> | undefined;
-    const owner = yield* withLibraryWriterLock(
+    const owner = yield* withHomeLock(
       home,
       Effect.gen(function* () {
         armed = true;
@@ -207,12 +207,12 @@ it.live("keeps the lock until a save already under way in a forked fiber has fin
     yield* Effect.sleep("50 millis");
     // The owner's program has returned, but its release waits for the save it lent the lock to.
     assert.isUndefined(owner.pollUnsafe());
-    assert.isFalse(yield* Effect.isSuccess(Effect.scoped(acquireWorkspaceLock(lock))));
+    assert.isFalse(yield* Effect.isSuccess(Effect.scoped(acquireFileLock(lock))));
 
     yield* Deferred.succeed(resume, undefined);
     yield* Fiber.join(child!);
     yield* Fiber.join(owner);
-    assert.isTrue(yield* Effect.isSuccess(Effect.scoped(acquireWorkspaceLock(lock))));
+    assert.isTrue(yield* Effect.isSuccess(Effect.scoped(acquireFileLock(lock))));
     assert.deepStrictEqual(yield* store.load, next);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

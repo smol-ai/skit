@@ -20,7 +20,7 @@ export const owners = [
       "LibraryStore",
       "libraryStoreLayer",
       "withLibraryWriter",
-      "withLibraryWriterLock",
+      "withHomeLock",
       "lastSavedLibraryState",
       "LibraryAuditLog",
       "libraryAuditLogLayer",
@@ -60,9 +60,9 @@ export const owners = [
 
 export const debt = {
   "packages/cli/src/audit/local.ts": ["LibraryStore", "libraryStoreLayer"],
-  // The home lock is withLibraryWriterLock until the home-lock function exists (D3; A6).
-  "packages/cli/src/author/history.ts": ["withLibraryWriterLock"],
-  "packages/cli/src/configuration-writer.ts": ["withLibraryWriterLock"],
+  // The home lock is withHomeLock until the home-lock function exists (D3; A6).
+  "packages/cli/src/author/history.ts": ["withHomeLock"],
+  "packages/cli/src/configuration-writer.ts": ["withHomeLock"],
   "packages/cli/src/front-end.ts": ["libraryStoreLayer"],
   "packages/cli/src/handlers/library/add.ts": ["LibraryStore"],
   "packages/cli/src/handlers/library/check.ts": ["LibraryStore"],
@@ -86,10 +86,7 @@ export const debt = {
   "packages/cli/src/library-application/index.ts": ["libraryStoreLayer"],
   "packages/cli/src/library-application/layers.ts": ["libraryAuditLogLayer", "libraryStoreLayer"],
   "packages/cli/src/library-application/library-view.ts": ["LibraryStore"],
-  "packages/cli/src/library-application/recovery-moves.ts": [
-    "LibraryStore",
-    "withLibraryWriterLock",
-  ],
+  "packages/cli/src/library-application/recovery-moves.ts": ["LibraryStore", "withHomeLock"],
   "packages/cli/src/library-application/session.ts": ["LibraryStore"],
   "packages/cli/src/library-application/set-enabled.ts": ["LibraryStore"],
   "packages/cli/src/library-application/setup-operation.ts": ["LibraryStore"],
@@ -212,7 +209,7 @@ export const debt = {
     "LibraryStore",
     "importCollection",
     "libraryStoreLayer",
-    "withLibraryWriterLock",
+    "withHomeLock",
   ],
   "packages/skit/test/library-history.test.ts": [
     "LibraryAuditLog",
@@ -221,7 +218,7 @@ export const debt = {
     "libraryAuditLogLayer",
     "libraryStoreLayer",
     "withLibraryWriter",
-    "withLibraryWriterLock",
+    "withHomeLock",
   ],
   "packages/skit/test/library-installed-skills.test.ts": [
     "LibraryStore",
@@ -232,12 +229,12 @@ export const debt = {
     "libraryStoreLayer",
     "refreshLibraryInventory",
     "withLibraryWriter",
-    "withLibraryWriterLock",
+    "withHomeLock",
   ],
   "packages/skit/test/library-local-journey.test.ts": [
     "importCollection",
     "prepareRestore",
-    "withLibraryWriterLock",
+    "withHomeLock",
   ],
   "packages/skit/test/library-moved-skill.test.ts": [
     "LibraryStore",
@@ -247,18 +244,18 @@ export const debt = {
   "packages/skit/test/library-restore-content.test.ts": [
     "importCollection",
     "prepareRestore",
-    "withLibraryWriterLock",
+    "withHomeLock",
   ],
   "packages/skit/test/library-store.test.ts": [
     "LibraryStore",
     "importCollection",
     "libraryStoreLayer",
     "withLibraryWriter",
-    "withLibraryWriterLock",
+    "withHomeLock",
   ],
-  "packages/skit/test/library-writer-lock.test.ts": ["withLibraryWriterLock"],
+  "packages/skit/test/library-writer-lock.test.ts": ["withHomeLock"],
   "packages/skit/test/local-retention.test.ts": ["writeCollectionVersion"],
-  "packages/skit/test/machine-settings.test.ts": ["withLibraryWriterLock"],
+  "packages/skit/test/machine-settings.test.ts": ["withHomeLock"],
   "packages/skit/test/sources.test.ts": ["prepareImport"],
   "packages/tui/src/index.ts": ["LibraryStore"],
   "packages/tui/test/helpers/library-fixture.ts": [

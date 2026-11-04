@@ -15,7 +15,7 @@ import {
   type InstalledSkill,
   type LibraryStateReadError,
   pathIsWithin,
-  withLibraryWriterLock,
+  withHomeLock,
   writeJsonExclusive,
 } from "@smolai/skit-core";
 import { PlanIsStale } from "../library/failures.js";
@@ -315,7 +315,7 @@ const applyRecoveryMoves = Effect.fn("RecoveryMoves.apply")(
       yield* fs.rename(entry.path, entry.recoveryPath);
     }
   },
-  (effect, home) => withLibraryWriterLock(home, effect),
+  (effect, home) => withHomeLock(home, effect),
 );
 
 const missingStat = Effect.fn("Recovery.stat")(function* (path: string) {
@@ -586,6 +586,6 @@ export const prepareRecoveryRestore = Effect.fn("Recovery.prepareRestore")(funct
           current = after;
         }
         return current.inspection;
-      }).pipe((effect) => withLibraryWriterLock(home, effect)),
+      }).pipe((effect) => withHomeLock(home, effect)),
   };
 });

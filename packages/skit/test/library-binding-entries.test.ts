@@ -7,7 +7,7 @@ import { installEnabledSkills, removeCollection } from "./helpers/library.js";
 import type { Enabled } from "../src/library/library-contracts.js";
 import { importCollection } from "../src/library/import-collection.js";
 import { LibraryStore, libraryStoreLayer } from "../src/library/store/library-store.js";
-import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
+import { withHomeLock } from "../src/library/store/writer-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 const machineId = migratedMachineId(
@@ -41,7 +41,7 @@ const upstream = Effect.gen(function* () {
         });
       }
       return yield* Effect.scoped(
-        withLibraryWriterLock(
+        withHomeLock(
           home,
           importCollection({
             machineId,
@@ -59,7 +59,7 @@ const upstream = Effect.gen(function* () {
   const enable = (enabled: readonly Enabled[]) =>
     Effect.gen(function* () {
       const state = yield* load;
-      yield* withLibraryWriterLock(
+      yield* withHomeLock(
         home,
         Effect.flatMap(LibraryStore, (store) =>
           store.save(
@@ -72,7 +72,7 @@ const upstream = Effect.gen(function* () {
         ).pipe(Effect.provide(storeLayer)),
       );
     });
-  const project = withLibraryWriterLock(
+  const project = withHomeLock(
     home,
     installEnabledSkills({
       target: "agents",
@@ -131,7 +131,7 @@ it.effect("refuses to remove a Collection that gained a member after removal was
 
     yield* refresh(["alpha", "beta"]);
     yield* project;
-    const error = yield* withLibraryWriterLock(home, removeCollection(planned, collectionId)).pipe(
+    const error = yield* withHomeLock(home, removeCollection(planned, collectionId)).pipe(
       Effect.provide(storeLayer),
       Effect.flip,
     );

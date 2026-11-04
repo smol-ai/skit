@@ -434,7 +434,7 @@ export interface AuthorWorkspace {
    * Checks realPath(root) === root, creates .skit/ (0700) and .skit/.gitignore (`*`) if absent,
    * refuses a .skit that is not a real directory, checks .skit/lock.sqlite is absent or a regular
    * file (no-follow), then holds an exclusive SQLite transaction on it (`PRAGMA busy_timeout = 0;
-   * BEGIN EXCLUSIVE`; busy → AuthorWorkspaceBusy) through acquireWorkspaceLock. The file never holds
+   * BEGIN EXCLUSIVE`; busy → AuthorWorkspaceBusy) through acquireFileLock. The file never holds
    * data and is never unlinked; the OS releases the lock when the process exits, even on SIGKILL
    * (t3code serverOwnership.ts#L177-L208). Only applying commands acquire it; previews and reads
    * never create .skit or the lock.
@@ -461,9 +461,9 @@ export type AuthorWorkspaceRequires =
   | AuthorIgnoreRepository // scanAuthorTree (packages/skit/src/artifact/tree.ts:258)
   | Digest.Digest // History.treeHash (sync.ts:390)
   | SecureRandom.SecureRandom; // workspace id and request id (NEW, replaces node:crypto)
-// The lease lock is the plain function acquireWorkspaceLock (packages/skit/src/platform/
-// workspace-lock.ts), not a service: like t3code's acquireServerOwnership it owns no state and
-// has one implementation. WorkspaceLockBusy maps to AuthorWorkspaceBusy.
+// The lease lock is the plain function acquireFileLock (packages/skit/src/platform/
+// file-lock.ts), not a service: like t3code's acquireServerOwnership it owns no state and
+// has one implementation. FileLockBusy maps to AuthorWorkspaceBusy.
 
 export type AuthorWorkspaceLayer = Layer.Layer<
   Services.AuthorWorkspace,
@@ -646,7 +646,7 @@ export declare namespace Services {
 // MachineSettings.read / ensureIdentity for the revision author device (history.ts:123-128) and
 // takes the home lock around the sync-bindings.json read-modify-write (A6). The home lock is a
 // plain Effect.fn as t3code's directory lock is (serverOwnership.ts#L183); today that is
-// withLibraryWriterLock (packages/skit/src/library/store/writer-lock.ts).
+// withHomeLock (packages/skit/src/library/store/writer-lock.ts).
 
 /** What AuthorHistory.layer may require. Not Library, not Registry. */
 export type AuthorHistoryRequires =

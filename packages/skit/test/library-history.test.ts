@@ -12,7 +12,7 @@ import {
   libraryStoreLayer,
   withLibraryWriter,
 } from "../src/library/store/library-store.js";
-import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
+import { withHomeLock } from "../src/library/store/writer-lock.js";
 import type { LibraryState } from "../src/library/library-state.js";
 import { skitLayer } from "../src/platform/layer.js";
 
@@ -170,7 +170,7 @@ it.live("records a forked save under way at release in its action's event", () =
           const bound = { ...state, enabled: globalEnabled(state) };
           yield* store.save(bound, state);
           // The forked save takes its lease now and finishes only after the action's program.
-          const child = yield* withLibraryWriterLock(
+          const child = yield* withHomeLock(
             home,
             Deferred.succeed(entered, undefined).pipe(
               Effect.andThen(Deferred.await(resume)),

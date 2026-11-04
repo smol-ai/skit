@@ -4,9 +4,9 @@ import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import * as MachineSettings from "../src/library/machine-settings.js";
 import { LegacyMachineId, makeMachineId, migratedMachineId } from "../src/library/entity-ids.js";
-import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
+import { withHomeLock } from "../src/library/store/writer-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
-import { acquireWorkspaceLock } from "../src/platform/workspace-lock.js";
+import { acquireFileLock } from "../src/platform/file-lock.js";
 
 it.effect("reading missing settings creates no files or directories", () =>
   Effect.gen(function* () {
@@ -78,7 +78,7 @@ it.effect(
       // Configuration remains usable even if Library metadata is corrupt.
       const corruptState = "not a Library document\n";
       yield* fs.writeFileString(join(home, "state.json"), corruptState);
-      const [identity, discovery, repository] = yield* withLibraryWriterLock(
+      const [identity, discovery, repository] = yield* withHomeLock(
         home,
         Effect.all(
           [
@@ -115,7 +115,7 @@ it.effect(
       assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), corruptState);
       assert.strictEqual(yield* fs.exists(join(home, "audit.jsonl")), false);
       assert.isTrue(
-        yield* Effect.isSuccess(Effect.scoped(acquireWorkspaceLock(join(home, "lock.sqlite")))),
+        yield* Effect.isSuccess(Effect.scoped(acquireFileLock(join(home, "lock.sqlite")))),
       );
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -128,7 +128,7 @@ it.effect("refuses an occupied root lock before replacing settings", () =>
     const path = join(home, "machine.json");
     const before = yield* fs.readFileString(path);
     // Another holder, as another process would be.
-    yield* acquireWorkspaceLock(join(home, "lock.sqlite"));
+    yield* acquireFileLock(join(home, "lock.sqlite"));
     const error = yield* MachineSettings.setRepositoryDecision(home, "/repo", "ignored").pipe(
       Effect.flip,
     );
@@ -244,7 +244,7 @@ it.effect("saves no settings when pre-save inverse evidence fails", () =>
     assert.strictEqual(failure, "inverse-refused");
     assert.strictEqual(yield* fs.readFileString(path), bytes);
     assert.isTrue(
-      yield* Effect.isSuccess(Effect.scoped(acquireWorkspaceLock(join(home, "lock.sqlite")))),
+      yield* Effect.isSuccess(Effect.scoped(acquireFileLock(join(home, "lock.sqlite")))),
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

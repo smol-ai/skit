@@ -1,5 +1,4 @@
 import { configurationForHome, SkitConfiguration } from "../configuration/skit-configuration.js";
-import { withConfigurationWriter } from "../configuration-writer.js";
 import {
   Clock,
   Config,
@@ -43,6 +42,7 @@ import {
 } from "./credential-store.js";
 import { Renderer } from "../presentation/renderer.js";
 import { serverDiscoverySchema } from "@smolai/skit-core";
+import { withConfigurationWriter } from "../configuration-writer.js";
 import {
   ApiErrorBody,
   ConsumerAuthenticatedApi,

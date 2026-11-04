@@ -28,7 +28,7 @@ export * from "./library/security/review.js";
 export * from "./authoring/archive.js";
 export * from "./authoring/scaffold.js";
 export * from "./platform/link-stat.js";
-export * from "./platform/workspace-lock.js";
+export * from "./platform/file-lock.js";
 export * from "./platform/source-process.js";
 export * from "./platform/layer.js";
 export * from "./platform/path-identity.js";
@@ -63,7 +63,7 @@ export {
 } from "./artifact/plain-author-ignore.js";
 
 export * from "./library/store/library-store.js";
-export { withLibraryWriterLock } from "./library/store/writer-lock.js";
+export { withHomeLock } from "./library/store/writer-lock.js";
 // Records written beside v9 state (setup and undo evidence) migrate through the same shapes.
 export {
   CollectionVersionV7,

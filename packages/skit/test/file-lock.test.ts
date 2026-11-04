@@ -3,7 +3,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
-import { acquireWorkspaceLock, WorkspaceLockBusy } from "../src/platform/workspace-lock.js";
+import { acquireFileLock, FileLockBusy } from "../src/platform/file-lock.js";
 
 const lockPath = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -15,12 +15,12 @@ it.effect("a second hold fails at once while the first is held, and succeeds aft
     const path = yield* lockPath;
     yield* Effect.scoped(
       Effect.gen(function* () {
-        yield* acquireWorkspaceLock(path);
-        const second = yield* Effect.scoped(acquireWorkspaceLock(path)).pipe(Effect.flip);
-        assert.instanceOf(second, WorkspaceLockBusy);
+        yield* acquireFileLock(path);
+        const second = yield* Effect.scoped(acquireFileLock(path)).pipe(Effect.flip);
+        assert.instanceOf(second, FileLockBusy);
       }),
     );
-    yield* Effect.scoped(acquireWorkspaceLock(path));
+    yield* Effect.scoped(acquireFileLock(path));
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
 
@@ -39,11 +39,11 @@ it.effect("a process killed while holding the lock does not leave it held", () =
       ]),
     );
     yield* holder.stdout.pipe(Stream.take(1), Stream.runDrain);
-    const busy = yield* Effect.scoped(acquireWorkspaceLock(path)).pipe(Effect.flip);
-    assert.instanceOf(busy, WorkspaceLockBusy);
+    const busy = yield* Effect.scoped(acquireFileLock(path)).pipe(Effect.flip);
+    assert.instanceOf(busy, FileLockBusy);
 
     yield* holder.kill({ killSignal: "SIGKILL" });
     yield* holder.exitCode.pipe(Effect.ignore);
-    yield* Effect.scoped(acquireWorkspaceLock(path));
+    yield* Effect.scoped(acquireFileLock(path));
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );

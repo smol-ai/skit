@@ -2,7 +2,7 @@ import { Context, Deferred, Effect, Exit, FileSystem, Scope, Semaphore } from "e
 import { systemError } from "effect/PlatformError";
 import { join, resolve } from "node:path";
 import { LibraryBusy } from "../../failures.js";
-import { acquireWorkspaceLock } from "../../platform/workspace-lock.js";
+import { acquireFileLock } from "../../platform/file-lock.js";
 
 /**
  * Authority over a held writer lock: the owner's, or a lease of it. Forked fibers inherit it, so
@@ -57,7 +57,7 @@ const semaphoreFor = (semaphores: Map<string, Semaphore.Semaphore>, root: string
  * SIGKILL. It never waits: a lock another process holds fails `LibraryBusy` at once. A `.lock` left
  * by an earlier SKIT means nothing and is ignored.
  */
-export const withLibraryWriterLock = Effect.fn("Library.withWriterLock")(function* <A, E, R>(
+export const withHomeLock = Effect.fn("HomeLock.with")(function* <A, E, R>(
   home: string,
   program: Effect.Effect<A, E, R>,
 ) {
@@ -67,11 +67,11 @@ export const withLibraryWriterLock = Effect.fn("Library.withWriterLock")(functio
   const acquire = Effect.gen(function* () {
     yield* fs.makeDirectory(root, { recursive: true, mode: 0o700 });
     const lock = yield* Scope.make();
-    yield* acquireWorkspaceLock(path).pipe(
+    yield* acquireFileLock(path).pipe(
       Scope.provide(lock),
       Effect.catchTags({
-        WorkspaceLockBusy: () => Effect.fail(new LibraryBusy({ path })),
-        WorkspaceLockFailed: (error) =>
+        FileLockBusy: () => Effect.fail(new LibraryBusy({ path })),
+        FileLockFailed: (error) =>
           Effect.fail(
             systemError({
               _tag: "Unknown",
@@ -130,4 +130,4 @@ export const withLibraryWriterLock = Effect.fn("Library.withWriterLock")(functio
 export const withLibraryStateReplacement = <A, E, R>(
   home: string,
   program: Effect.Effect<A, E, R>,
-) => withLibraryWriterLock(home, semaphoreFor(processSavers, resolve(home)).withPermit(program));
+) => withHomeLock(home, semaphoreFor(processSavers, resolve(home)).withPermit(program));

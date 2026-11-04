@@ -9,7 +9,7 @@ import { planCollectionVersions } from "../src/library/collection-version-plan.j
 import { prepareRestore } from "../src/library/library-restore.js";
 import { collectionVersionPath } from "../src/library/collection-version.js";
 import { readSnapshotArchive } from "../src/library/snapshot-archive.js";
-import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
+import { withHomeLock } from "../src/library/store/writer-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { inLibrary, inspectLibrary, saveLibrary } from "./helpers/library-store.js";
 
@@ -27,7 +27,7 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
     yield* fs.writeFileString(join(installed, "notes.txt"), "retained too\n");
 
     const imported = yield* Effect.scoped(
-      withLibraryWriterLock(
+      withHomeLock(
         firstHome,
         importCollection({
           machineId,
@@ -97,7 +97,7 @@ it.effect("reuses an unchanged Skill Version and keeps every import", () =>
 
     const importSource = Effect.fn("Test.retainPair")(function* (importedAt: string) {
       return yield* Effect.scoped(
-        withLibraryWriterLock(
+        withHomeLock(
           home,
           importCollection({
             machineId,

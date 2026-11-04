@@ -53,7 +53,7 @@ export const owners = {
     removes: [
       "LibraryStore service → private functions inside Library (tests that counted saves through it are rewritten)",
       "LibraryStore.inspect, .home/.originalsPath/.variantsPath/.statePath fields",
-      "withLibraryWriter, withLibraryWriterLock, lastSavedLibraryState exports",
+      "withLibraryWriter, withHomeLock, lastSavedLibraryState exports",
       "LibraryAuditLog service (append never called; list → Library.history)",
       "CurrentLibraryAction / CurrentLibraryWriter as cross-module references",
       "exported importCollection/importEdit/importAuthoredCollection/prepareImport",
@@ -62,7 +62,7 @@ export const owners = {
       "legacy v7/v9 schema exports (0 external users)",
       "localLibrary / recordedLibrary / 6 raw Library.make sites (routing modes move into Library.layer)",
       "setup-apply's LibraryStore substitution (setup-apply.ts:256)",
-      "configuration-writer.ts (withConfigurationWriter)",
+      "configuration-writer.ts (withConfigurationWriter: now over withHomeLock; still a second name for the home lock)",
       "library/security.ts (two 3-line pass-throughs)",
       "library-application/{update,update-installed-skills,set-enabled}.ts pass-throughs",
       "calculateSetEnabled in set-enabled-request.ts ('Legacy text/option compatibility'); the rest of the file stays",
@@ -120,7 +120,7 @@ export const owners = {
       "RegistryAuth Context.Reference with a 'no access' default (hides a missing layer)",
       "exported resolveAuth / resolveAuthForOrigin (7 bypassing callers)",
       "credential-store.ts as a public module (private to Registry)",
-      "borrowing the Library .lock via withConfigurationWriter (takes HomeLock instead)",
+      "borrowing the Library .lock via withConfigurationWriter (done: takes withHomeLock)",
       "unlocked savePendingLogin/clearPendingLogin, orchestrated in handlers/auth/login.ts",
       "CLI.* command functions living inside registry/auth.ts",
     ],
@@ -335,10 +335,10 @@ export const workflows = {
 } as const;
 
 /**
- * Plain platform functions (not services, under the service rule): acquireWorkspaceLock (A8) and
+ * Plain platform functions (not services, under the service rule): acquireFileLock (A8) and
  * the home lock, one exclusive lock per <home>, reentrant with leases as WriterAuthority is today
  * (writer-lock.ts:7-12,126-128; D3), a plain Effect.fn as t3code's directory lock is. Across processes
- * the home lock is acquireWorkspaceLock on <home>/lock.sqlite, which the OS releases on crash.
+ * the home lock is acquireFileLock on <home>/lock.sqlite, which the OS releases on crash.
  */
 /** Platform services, each kept under the service rule above (not every entry is re-checked yet). */
 export const platform = [
