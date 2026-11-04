@@ -1,5 +1,13 @@
-import { DatabaseSync } from "node:sqlite";
+import { createRequire } from "node:module";
 import { Effect, Schema } from "effect";
+
+// Bun 1.3 runs the TUI but does not implement node:sqlite. Both runtimes use the same
+// SQLite file locks; load only the native driver available in this process.
+const sqlite = createRequire(import.meta.url)(process.versions.bun ? "bun:sqlite" : "node:sqlite");
+const Database: new (path: string) => {
+  exec(sql: string): void;
+  close(): void;
+} = process.versions.bun ? sqlite.Database : sqlite.DatabaseSync;
 
 /** Another process, or another hold in this one, has the lock. */
 export class FileLockBusy extends Schema.TaggedError<FileLockBusy>()("FileLockBusy", {
@@ -12,8 +20,13 @@ export class FileLockFailed extends Schema.TaggedError<FileLockFailed>()("FileLo
   cause: Schema.Defect(),
 }) {}
 
-// node:sqlite reports a held lock as SQLITE_BUSY, error code 5.
-const isBusy = Schema.is(Schema.Struct({ errcode: Schema.Literal(5) }));
+// Node uses errcode; Bun uses errno. Both report SQLite's SQLITE_BUSY (5).
+const isBusy = Schema.is(
+  Schema.Union([
+    Schema.Struct({ errcode: Schema.Literal(5) }),
+    Schema.Struct({ errno: Schema.Literal(5) }),
+  ]),
+);
 
 /**
  * Hold an exclusive lock on `path` until the scope closes. Never waits: a held lock fails
@@ -26,7 +39,7 @@ const isBusy = Schema.is(Schema.Struct({ errcode: Schema.Literal(5) }));
 export const acquireFileLock = Effect.fn("FileLock.acquire")(function* (path: string) {
   yield* Effect.acquireRelease(
     Effect.try({
-      try: () => new DatabaseSync(path),
+      try: () => new Database(path),
       catch: (cause) => new FileLockFailed({ path, cause }),
     }).pipe(
       Effect.flatMap((database) =>
