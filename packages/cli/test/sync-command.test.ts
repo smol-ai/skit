@@ -1,6 +1,6 @@
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
-import { LibraryStore } from "@smolai/skit-core";
+import { LibraryStore, Library, InstalledSkills } from "@smolai/skit-core";
 import { libraryApplicationLayer } from "../src/application.js";
 import { join } from "node:path";
 import { ConfigProvider, Effect, FileSystem, Layer, Result } from "effect";
@@ -21,6 +21,9 @@ const failure = new CredentialsUnusable({ path: "/broken/auth.json", reason: "in
 const services = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.provide(rendererTestLayer()),
+    Effect.provide(
+      Layer.effect(Library.Service, Library.make).pipe(Layer.provide(InstalledSkills.layer())),
+    ),
     // Building the owner touches no disk; these commands fail before they capture anything.
     Effect.provide(authorLayer("/unreachable")),
     Effect.provide(testPlatformLayer),
@@ -121,6 +124,9 @@ it.effect.each(["connected", "connecting"] as const)(
       }).pipe(
         Effect.exit,
         Effect.provide(rendererTestLayer()),
+        Effect.provide(
+          Layer.effect(Library.Service, Library.make).pipe(Layer.provide(InstalledSkills.layer())),
+        ),
         Effect.provide(authorLayer(home)),
         Effect.provide(libraryApplicationLayer.pipe(Layer.provide(skitConfigurationLayer(home)))),
         Effect.provide(

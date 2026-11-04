@@ -1,31 +1,26 @@
-import {
-  readSnapshotArchive,
-  collectionVersionPath,
-  type SnapshotArchive,
-} from "@smolai/skit-core";
+import { Library } from "@smolai/skit-core/library";
 import { Effect } from "effect";
 import type { SyncProgress, SyncPhase } from "./library-sync-progress.js";
 
-/** Diagnose changed local bytes before reading remote state. Transfer planning lives in core. */
+/** Presentation brackets owner verification; Library alone knows retained paths and archive rules. */
 export const inspectSyncSnapshots = Effect.fn("Library.sync.inspectSnapshots")(function* (
-  copies: readonly { readonly hash: string }[],
-  originalsPath: string,
+  snapshot: Library.Snapshot,
   progress: SyncProgress,
 ) {
-  const phase: SyncPhase = { kind: "verify-copies", total: copies.length };
+  const library = yield* Library.Service;
+  const phase: SyncPhase = {
+    kind: "verify-copies",
+    total: snapshot._tag === "Present" ? snapshot.state.collection_versions.length : 0,
+  };
   return yield* progress.around(
     phase,
     Effect.gen(function* () {
-      const archives = new Map<string, SnapshotArchive>();
-      for (const [verified, tree] of copies.entries()) {
-        yield* progress.tick({ phase, completed: verified });
-        const archive = yield* readSnapshotArchive(collectionVersionPath(originalsPath, tree.hash));
-        if (archive.digest !== tree.hash) return { _tag: "Changed" as const, hash: tree.hash };
-        // Verify every reference, including copies sharing the same digest.
-        if (!archives.has(archive.digest)) archives.set(archive.digest, archive);
-        yield* progress.tick({ phase, completed: verified + 1 });
-      }
-      return { _tag: "Verified" as const, archives: [...archives.values()] };
+      yield* progress.tick({ phase, completed: 0 });
+      const inspected = yield* library.content.inspect(snapshot);
+      if (inspected._tag === "Changed") return inspected;
+      const archives = yield* library.content.pack(snapshot);
+      yield* progress.tick({ phase, completed: phase.total });
+      return { _tag: "Verified" as const, archives };
     }),
   );
 });

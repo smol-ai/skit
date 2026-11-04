@@ -1,11 +1,11 @@
+import { Library } from "@smolai/skit-core/library";
 import {
-  planCollectionVersions,
-  prepareRestore,
   type LibraryManifest,
   type SnapshotArchive,
   type RestoreProgress,
+  RestoreInvalid,
 } from "@smolai/skit-core";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import type { librarySyncApi } from "./library-sync-api.js";
 import { silentSyncProgress, type SyncProgress } from "./library-sync-progress.js";
 
@@ -19,7 +19,6 @@ export const prepareSyncTransfer = Effect.fn("Library.sync.prepareTransfer")(fun
   remote: RemoteSnapshots,
   api: SnapshotApi,
   options: {
-    readonly originalsPath: string;
     readonly origin: string;
     readonly token?: string;
     readonly progress?: SyncProgress;
@@ -27,10 +26,8 @@ export const prepareSyncTransfer = Effect.fn("Library.sync.prepareTransfer")(fun
   },
 ) {
   const progress = options.progress ?? silentSyncProgress;
-  const content = yield* planCollectionVersions(desired, {
-    originalsPath: options.originalsPath,
-    localArchives: archives,
-  });
+  const library = yield* Library.Service;
+  const content = yield* library.content.plan(desired, archives);
   const required = new Set(desired.collection_versions.map((tree) => tree.hash));
   const snapshotSet = new Set(desired.snapshot_digests);
   const uploads = archives.filter(
@@ -42,20 +39,21 @@ export const prepareSyncTransfer = Effect.fn("Library.sync.prepareTransfer")(fun
   return {
     snapshotCount: remote === null ? uploads.length : content.download.length,
     restore: Effect.fn("Library.sync.restoreSnapshots")(function* () {
-      return yield* Effect.scoped(
-        prepareRestore(desired, content, {
-          originalsPath: options.originalsPath,
-          ...(options.restoreProgress === undefined ? {} : { progress: options.restoreProgress }),
-          ...(remote === null
-            ? {}
-            : {
-                download: (hash: SnapshotArchive["digest"]) =>
-                  api.download(remote.library_id, hash),
-              }),
-          registryBaseUrl: options.origin,
-          ...(options.token === undefined ? {} : { registryToken: options.token }),
-        }),
-      );
+      const staged = yield* library.content.stage(desired, {
+        plan: content,
+        registry: { origin: options.origin, token: Option.fromNullishOr(options.token) },
+        ...(options.restoreProgress === undefined ? {} : { progress: options.restoreProgress }),
+        ...(remote === null
+          ? {}
+          : {
+              download: (hash: SnapshotArchive["digest"]) => api.download(remote.library_id, hash),
+            }),
+      });
+      if (staged.missing.length)
+        return yield* new RestoreInvalid({
+          detail: `retained copies unavailable: ${staged.missing.join(", ")}`,
+        });
+      return staged;
     }),
     upload: Effect.fn("Library.sync.uploadSnapshots")(function* () {
       if (uploads.length === 0) return;

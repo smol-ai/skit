@@ -5,7 +5,19 @@ import {
   type UndoApplyError,
 } from "./internal/setup/undo.js";
 import type { UndoIntent, UndoPlan, UndoResult } from "./internal/setup/undo-plan.js";
-import { Context, Effect, FileSystem, Layer, Schema } from "effect";
+import { Context, Effect, FileSystem, Layer, Option, Schema } from "effect";
+import { FetchHttpClient, HttpClient } from "effect/http";
+import {
+  inspectContent,
+  planContent,
+  packContent,
+  stageContent,
+  type StagedContent,
+  type ContentSource,
+  type ContentStageError,
+} from "./internal/content/content.js";
+import type { LibraryManifest, SnapshotArchive } from "./library-contracts.js";
+import type { CollectionVersionPlan } from "./collection-version-plan.js";
 import type { Digest } from "effect/crypto";
 import { InstalledSkills } from "./installed-skills.js";
 import { libraryStoreLayer } from "./library-store-layer.js";
@@ -67,6 +79,11 @@ export type { Subject, Invocation, EnabledCollection, SetupApproval } from "./en
 
 export { Revision, type Snapshot } from "./snapshot.js";
 export type { SetupError, SetupResult, SetupStepResult, StartupRecovery } from "./setup.js";
+export type {
+  StagedContent,
+  ContentSource,
+  ContentStageError,
+} from "./internal/content/content.js";
 export type {
   AbsentEvidence,
   FolderEvidence,
@@ -133,6 +150,27 @@ export interface Interface {
     steps: readonly SetupStep[],
     options: { readonly base: Snapshot },
   ) => Effect.Effect<SetupResult, SetupError>;
+  readonly content: {
+    /** Read-only availability for a passive sync preview; no paths escape the owner. */
+    readonly plan: (
+      target: LibraryManifest,
+      localArchives: readonly SnapshotArchive[],
+    ) => Effect.Effect<CollectionVersionPlan, LibraryStateReadError>;
+    readonly inspect: (
+      snapshot: Snapshot,
+    ) => Effect.Effect<
+      | { readonly _tag: "Intact" }
+      | { readonly _tag: "Changed"; readonly hash: import("../vocabulary.js").Hash },
+      LibraryStateReadError
+    >;
+    readonly pack: (
+      snapshot: Snapshot,
+    ) => Effect.Effect<readonly SnapshotArchive[], LibraryStateReadError>;
+    readonly stage: <E = never, R = never>(
+      target: LibraryManifest,
+      source: ContentSource<E, R>,
+    ) => Effect.Effect<StagedContent, ContentStageError | E, R>;
+  };
   /** Audit events and recorded operations, including Pending and Stopped setup. Never writes. */
   readonly history: Effect.Effect<History, LibraryStateReadError | LibraryAuditInvalid>;
   /** What startup recovery did when the layer was built. */
@@ -145,6 +183,10 @@ export const make = Effect.gen(function* () {
   const files = yield* InstalledSkills.Service;
   const writer = yield* Effect.context<FileSystem.FileSystem>();
   const importing = yield* Effect.context<TreeRequirements | Digest.Digest>();
+  const suppliedHttp = yield* Effect.serviceOption(HttpClient.HttpClient);
+  const contentHttp = Option.isSome(suppliedHttp)
+    ? Layer.succeed(HttpClient.HttpClient, suppliedHttp.value)
+    : FetchHttpClient.layer;
   /** Every import holds the Library writer, and its staging ends with the import. */
   const owned = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     withLibraryWriter(Effect.scoped(effect)).pipe(
@@ -152,6 +194,28 @@ export const make = Effect.gen(function* () {
       Effect.provide(writer),
       Effect.provide(importing),
     );
+
+  const stageFor = Effect.fn("Library.content.stageOwned")(function* <E = never, R = never>(
+    target: LibraryManifest,
+    source: ContentSource<E, R>,
+  ) {
+    // The owner's platform must never replace a download callback's own dependencies.
+    const caller = yield* Effect.context<R>();
+    const download = source.download;
+    return yield* stageContent(target, {
+      ...source,
+      ...(download === undefined
+        ? {}
+        : {
+            download: (hash: import("../vocabulary.js").Hash) =>
+              download(hash).pipe(Effect.provide(caller)),
+          }),
+    }).pipe(
+      Effect.provideService(LibraryStore, store),
+      Effect.provide(importing),
+      Effect.provide(contentHttp),
+    );
+  });
 
   function planFor(
     intent: UndoIntent,
@@ -242,6 +306,19 @@ export const make = Effect.gen(function* () {
       edit: (request) => owned(importEdit(request)),
     },
     startup: store.startup,
+    content: {
+      plan: (target, localArchives) =>
+        planContent(target, localArchives, store.originalsPath, store.statePath).pipe(
+          Effect.provide(importing),
+        ),
+      inspect: (snapshot) =>
+        inspectContent(snapshot, store.originalsPath, store.statePath).pipe(
+          Effect.provide(importing),
+        ),
+      pack: (snapshot) =>
+        packContent(snapshot, store.originalsPath, store.statePath).pipe(Effect.provide(importing)),
+      stage: stageFor,
+    },
     setup: (steps, options) =>
       setup(steps, options).pipe(
         Effect.provideService(LibraryStore, store),

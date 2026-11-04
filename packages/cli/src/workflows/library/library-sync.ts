@@ -1,3 +1,4 @@
+import { Library } from "@smolai/skit-core/library";
 import { withLibraryWriter } from "@smolai/skit-core";
 import { Data, Effect, Result } from "effect";
 import {
@@ -97,15 +98,16 @@ export const syncLibrary = Effect.fn("Library.sync")(
 
     const store = yield* LibraryStore;
     const api = yield* librarySyncApi({ origin: options.origin, token: options.token });
-    const local = yield* progress.around({ kind: "inspect-local" }, store.inspect);
+    const library = yield* Library.Service;
+    const snapshot = yield* progress.around({ kind: "inspect-local" }, library.read);
+    const local =
+      snapshot._tag === "Present"
+        ? { present: true as const, state: snapshot.state }
+        : { present: false as const };
     const manifest = local.present
       ? yield* libraryManifestFromLocalState(local.state)
       : emptyManifest;
-    const inventory = yield* inspectSyncSnapshots(
-      local.present ? local.state.collection_versions : [],
-      store.originalsPath,
-      progress,
-    );
+    const inventory = yield* inspectSyncSnapshots(snapshot, progress);
     if (inventory._tag === "Changed")
       return { status: "local_bytes_changed" as const, hash: inventory.hash };
 
@@ -259,7 +261,6 @@ export const syncLibrary = Effect.fn("Library.sync")(
     const plan = planLibrarySync(merge.alignedLocal, remoteManifest, desired);
     const transfer = yield* prepareSyncTransfer(inventory.archives, desired, remote, api, {
       ...options,
-      originalsPath: store.originalsPath,
     });
     const snapshots = transfer.snapshotCount;
     if (!options.apply)

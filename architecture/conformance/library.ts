@@ -28,7 +28,7 @@ export type ChangedMethods<Contract, Actual> = {
 export type UndeclaredRequirements<Make, Allowed> = Exclude<Effect.Services<Make>, Allowed>;
 
 // ── Debt: today's gaps, to be closed by migration ─────────────────────────────────────────────
-type MissingDebt = "content";
+type MissingDebt = never;
 type ExtraDebt = never;
 // plan/apply now include Undo; their legacy plan shapes and recovery UUIDs still differ from the
 // target generic signatures. The journal's machine evidence is compatibility data, not an owner write.
@@ -37,7 +37,10 @@ type ExtraDebt = never;
 // as unknown, not the contract's error union.
 // history retains the existing audit reader's LibraryAuditInvalid failure (path + line).
 // The target omits that failure; keep the mismatch explicit pending contract review.
-type ChangedDebt = "plan" | "apply" | "setup" | "history";
+// content is implemented: its concrete restoration errors replace Ref placeholders; it also
+// preserves restore progress and offers a passive availability plan for sync's preview count.
+// Those signature differences require explicit target review, not casts or a relaxed assertion.
+type ChangedDebt = "plan" | "apply" | "setup" | "history" | "content";
 // LibraryStore folds into Library; InstalledSkills is built inside Library.layer from routing.
 type RequirementDebt = LibraryStore | InstalledSkills.Service;
 

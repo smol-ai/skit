@@ -1,3 +1,4 @@
+import { Library } from "@smolai/skit-core/library";
 import { localLibrary } from "../library-application/library-owner.js";
 import { Effect, FileSystem, Layer, Result, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
@@ -121,6 +122,7 @@ export const syncJourney = (failDownload: boolean) =>
         },
       }).pipe(
         withLibraryWriter,
+        Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
         Effect.provide(libraryStoreLayer({ home })),
         Effect.provide(transport),
         Effect.catchCause((cause) =>

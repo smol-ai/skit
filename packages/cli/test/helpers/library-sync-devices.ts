@@ -246,7 +246,13 @@ export const devices = Effect.gen(function* () {
           installedSkill: {
             rootFor: options.rootFor ?? ((target) => (target === "agents" ? root : undefined)),
           },
-        }).pipe(withLibraryWriter, Effect.provide(layer), Effect.provide(http), Effect.scoped),
+        }).pipe(
+          withLibraryWriter,
+          Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+          Effect.provide(layer),
+          Effect.provide(http),
+          Effect.scoped,
+        ),
     };
   };
   return {

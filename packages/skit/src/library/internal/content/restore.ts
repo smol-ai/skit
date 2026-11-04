@@ -374,6 +374,10 @@ export const retainRestoreArchives = Effect.fn("Library.retainRestoreArchives")(
           yield* progress.tick({ phase, completed: index, subject: label });
           const archive = received.get(tree.hash);
           let path = verifiedPaths.get(tree.hash);
+          // Fetching may have taken time outside the writer. Repeat immutable verification
+          // before relying on a path resolved earlier, including non-Skill files in the tree.
+          if (path !== undefined && (yield* originalTreeHash(path)) !== tree.hash)
+            return yield* new ContentAddressCollision();
           if (path === undefined) {
             path = collectionVersionPath(options.originalsPath, tree.hash);
             if (yield* fs.exists(path)) {

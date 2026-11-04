@@ -113,7 +113,6 @@ export const debt = {
     "LibraryStore",
     "withLibraryWriter",
   ],
-  "packages/cli/src/workflows/library/library-sync-snapshots.ts": ["prepareRestore"],
   "packages/cli/src/workflows/library/library-sync.ts": ["LibraryStore", "withLibraryWriter"],
   "packages/cli/src/workflows/library/skills-sh-update-check.ts": ["LibraryStore"],
   "packages/cli/test/application-boundaries.test.ts": ["LibraryStore", "withLibraryWriter"],
