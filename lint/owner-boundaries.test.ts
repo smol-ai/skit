@@ -36,6 +36,20 @@ async function reported(
 }
 
 describe("skit/owner-boundaries", () => {
+  test("Library's private modules reject renamed helpers, namespace and side-effect imports", async () => {
+    const module = (directory: string) =>
+      relative(directory, join(root, "packages/skit/src/library/store/state-file.js"));
+    for (const statement of [
+      (source: string) => `import { arbitraryHelper as renamed } from "${source}";`,
+      (source: string) => `import * as storage from "${source}";`,
+      (source: string) => `import "${source}";`,
+      (source: string) => `export * from "${source}";`,
+      (source: string) => `const loading = import("${source}");`,
+    ]) {
+      expect(await reported((directory) => statement(module(directory)))).toHaveLength(1);
+    }
+  });
+
   test("a handler cannot open the Library's store or writer", async () => {
     expect(
       await reported(`import { LibraryStore, withLibraryWriter } from "@smolai/skit-core";`),

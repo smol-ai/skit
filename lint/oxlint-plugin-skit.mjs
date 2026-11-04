@@ -524,6 +524,24 @@ const effectRules = {
       const check = (node) => {
         const source = node.source?.value;
         if (typeof source !== "string") return;
+        // Whole modules can be private: renaming an exported helper must not open a new bypass.
+        const target = source.startsWith(".")
+          ? relative(repositoryRoot, resolve(fileDirectory, source))
+          : undefined;
+        const moduleOwner = owners.find(
+          (owner) =>
+            target !== undefined &&
+            !file.startsWith(owner.testOwner ?? "\0") &&
+            owner.privateModules?.some((prefix) => target.startsWith(prefix)),
+        );
+        if (moduleOwner) {
+          context.report({
+            node,
+            messageId: "forbidden",
+            data: { name: source, owner: moduleOwner.name },
+          });
+          return;
+        }
         const reachable = owners.filter((owner) => carries(owner, source));
         if (reachable.length === 0) return;
         for (const specifier of node.specifiers ?? []) {
@@ -539,7 +557,12 @@ const effectRules = {
             });
         }
       };
-      return { ImportDeclaration: check, ExportNamedDeclaration: check };
+      return {
+        ImportDeclaration: check,
+        ExportNamedDeclaration: check,
+        ExportAllDeclaration: check,
+        ImportExpression: check,
+      };
     },
   },
 

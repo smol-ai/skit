@@ -14,6 +14,14 @@ export const owners = [
   {
     name: "Library",
     owner: "packages/skit/src/library/",
+    // Storage and recovery implementation modules belong to Library, whatever they export.
+    privateModules: [
+      "packages/skit/src/library/store/library-store.",
+      "packages/skit/src/library/store/state-file.",
+      "packages/skit/src/library/store/writer-lock.",
+      "packages/skit/src/library/internal/",
+    ],
+    testOwner: "packages/skit/test/",
     // The barrel re-exports these today; that export is itself debt, removed as callers migrate.
     allow: ["packages/skit/src/index.ts"],
     private: [
