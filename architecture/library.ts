@@ -331,7 +331,8 @@ export type SetupStep =
   | { readonly _tag: "Remove"; readonly folders: readonly (FolderEvidence | LinkEvidence)[] }; // arbitrary reviewed duplicates (recovery-moves.ts:92-101)
 
 /**
- * One step as saved in state.json before any step runs. `before` and `after` are the evidence
+ * One step as saved in state.json before any step runs; `after` evidence that depends on an earlier
+ * step is saved in the write that marks that step Done (decisions.md D4, setup records). `before` and `after` are the evidence
  * the step expects at each path it touches. Resume, per path (modelled on recovery-moves.ts:568-585):
  * observed = after → its own completed effect, skip; observed = before → safe to repeat, run;
  * anything else → Stopped (EvidenceDiffers), nothing more runs. Import is additive

@@ -86,6 +86,13 @@ E  = https://github.com/Effect-TS/effect/blob/3b28bf686bf26e9700edd39c025aff2744
   - t3code re-runs only steps listed as safe to repeat and cancels the rest ([EffectOutbox.ts#L125-L144](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/orchestration-v2/EffectOutbox.ts#L125-L144), [#L492-L519](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/orchestration-v2/EffectOutbox.ts#L492-L519)).
   - Effect workflows replay after a crash and compensate only on failure ([Workflow.ts#L942-L961](https://github.com/Effect-TS/effect/blob/3b28bf686bf26e9700edd39c025aff2744dc5303/packages/effect/src/workflow/Workflow.ts#L942-L961)).
 
+- **Setup records (decided, Tim, 2026-11-04):**
+  - Pending and Stopped operation records stay in `state.json` until undone. Done records stay until a later setup replaces them, so undo always has the last setup's evidence. (t3code prunes settled jobs after 7 days, [T/…/EffectOutbox.ts#L155-L156](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/orchestration-v2/EffectOutbox.ts#L155-L156), but has nothing to undo.)
+  - Setups interrupted before this change are never resumed automatically: they show as Stopped, and undo reads their old `removed/<id>/` files through an old-format decoder (records upgraded where read: [O/packages/core/src/bus.ts#L74-L76](https://github.com/anomalyco/opencode/blob/68bc26b7da1990ce10ffecfbc1e09eb13aa5d824/packages/core/src/bus.ts#L74-L76)).
+  - A Stopped setup can be undone or replaced by a new setup, never resumed ([humanlayer setup.machine.ts#L232-L244](https://github.com/humanlayer/humanlayer/blob/0dbe4f58f0df9e337783defb2928e8ab18b88725/apps/riptide-daemon/src/effects/services/workspace-repository-setup/workspace-repository-setup.machine.ts#L232-L244)).
+  - Contract change: a step's `after` evidence that depends on an earlier step (a Manage step whose source an Import step creates) is saved in the same `state.json` write that marks that earlier step Done, not before any step runs (t3code records each outcome before publishing it, [EventSink.ts#L243-L457](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/orchestration-v2/EventSink.ts#L243-L457)).
+  - `state.json` goes to v12 for the new `operations` field, so an older SKIT refuses the file instead of dropping the records. `skit history --json` becomes `skit.library.history.v2`.
+
 ## Library sync owns no state
 
 **Recommend:** sync keeps its merge and transfer logic, but writes only through `Library.apply(Sync)` with the expected revision.
