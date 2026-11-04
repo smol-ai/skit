@@ -1,14 +1,11 @@
+import { makeWithRouting, ownerLayer } from "./internal/runtime.js";
 import {
-  planManaging,
-  applyManaging,
-  checkedManageIntent,
   type ManageIntent,
   type ManagePlan,
   type ManageOutcome,
   type ManagePlanError,
   type ManageApplyError,
 } from "./internal/manage/manage.js";
-import { stepRouting } from "./routing/step.js";
 export {
   ManageIntent,
   ManagePlan,
@@ -20,8 +17,6 @@ export {
   type ManageApplyError,
 } from "./internal/manage/manage.js";
 import {
-  planAcceptance,
-  applyAcceptance,
   type AcceptFindingIntent,
   type AcceptFindingPlan,
   type AcceptFindingOutcome,
@@ -38,8 +33,6 @@ export {
   type AcceptFindingApplyError,
 } from "./internal/security/accept.js";
 import {
-  planInventory,
-  applyInventory,
   type RefreshInventoryIntent,
   type RefreshInventoryPlan,
   type RefreshInventoryOutcome,
@@ -55,20 +48,10 @@ export {
   type RefreshInventoryPlanError,
   type RefreshInventoryApplyError,
 } from "./internal/inventory/refresh.js";
-import {
-  planUndo,
-  applyUndo,
-  type UndoPlanError,
-  type UndoApplyError,
-} from "./internal/setup/undo.js";
+import { type UndoPlanError, type UndoApplyError } from "./internal/setup/undo.js";
 import type { UndoIntent, UndoPlan, UndoResult } from "./internal/setup/undo-plan.js";
-import { Context, Effect, FileSystem, Layer, Option, Schema } from "effect";
-import { FetchHttpClient, HttpClient } from "effect/http";
+import { Context, Effect, Layer } from "effect";
 import {
-  inspectContent,
-  planContent,
-  packContent,
-  stageContent,
   type StagedContent,
   type ContentSource,
   type ContentStageError,
@@ -77,29 +60,15 @@ import type { LibraryManifest, SnapshotArchive } from "./library-contracts.js";
 import type { CollectionVersionPlan } from "./collection-version-plan.js";
 import type { Digest } from "effect/crypto";
 import { InstalledSkills } from "./installed-skills.js";
-import { libraryStoreLayer } from "./library-store-layer.js";
-import { treeHasherLayer } from "../artifact/tree-hasher.js";
 import type { InventoryRootOptions } from "./routing/roots.js";
-import {
-  LibraryStore,
-  withLibraryWriter,
-  type LibraryStateReadError,
-} from "./store/library-store.js";
-import { emptyLibraryState, type LibraryState } from "./library-state.js";
-import { InvalidLibraryState } from "../failures.js";
-import { type StepRouting, OperationStatus } from "./store/state-schema.js";
-import {
-  readLibraryAudit,
-  type LibraryAuditEvent,
-  type LibraryAuditInvalid,
-} from "./audit/audit-log.js";
-import { snapshotOf, type Snapshot } from "./snapshot.js";
-import { setup, type SetupError, type SetupResult, type StartupRecovery } from "./setup.js";
+import { type LibraryStateReadError } from "./store/library-store.js";
+import { type LibraryState } from "./library-state.js";
+import { OperationStatus } from "./store/state-schema.js";
+import { type LibraryAuditEvent, type LibraryAuditInvalid } from "./audit/audit-log.js";
+import { type Snapshot } from "./snapshot.js";
+import { type SetupError, type SetupResult, type StartupRecovery } from "./setup.js";
 import type { SetupStep } from "./store/state-schema.js";
 import {
-  importCollection,
-  importAuthoredCollection,
-  importEdit,
   type AuthoredImport,
   type EditImport,
   type ImportAuthoredCollectionError,
@@ -111,7 +80,6 @@ import {
 } from "./import-collection.js";
 import type { TreeRequirements } from "../platform/tree-requirements.js";
 import {
-  StalePlan,
   type ApplyError,
   type Approval,
   type Intent,
@@ -119,8 +87,6 @@ import {
   type Plan,
   type PlanError,
 } from "./library-plan.js";
-import { planIntent } from "./plan-changes.js";
-import { apply } from "./apply-plan.js";
 export * from "./library-plan.js";
 export { UndoIntent, UndoPlan, UndoChange, type UndoResult } from "./internal/setup/undo-plan.js";
 export type { UndoPlanError, UndoApplyError } from "./internal/setup/undo.js";
@@ -252,267 +218,6 @@ export interface Interface {
 }
 export class Service extends Context.Service<Service, Interface>()("skit/library/Library") {}
 
-const makeWithRouting = Effect.fn("Library.make")(function* (configuration?: Routing) {
-  const store = yield* LibraryStore;
-  const files = yield* InstalledSkills.Service;
-  const writer = yield* Effect.context<FileSystem.FileSystem>();
-  const importing = yield* Effect.context<TreeRequirements | Digest.Digest>();
-  const suppliedHttp = yield* Effect.serviceOption(HttpClient.HttpClient);
-  const contentHttp = Option.isSome(suppliedHttp)
-    ? Layer.succeed(HttpClient.HttpClient, suppliedHttp.value)
-    : FetchHttpClient.layer;
-  /** Every import holds the Library writer, and its staging ends with the import. */
-  const owned = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    withLibraryWriter(Effect.scoped(effect)).pipe(
-      Effect.provideService(LibraryStore, store),
-      Effect.provide(writer),
-      Effect.provide(importing),
-    );
-
-  const stageFor = Effect.fn("Library.content.stageOwned")(function* <E = never, R = never>(
-    target: LibraryManifest,
-    source: ContentSource<E, R>,
-  ) {
-    // The owner's platform must never replace a download callback's own dependencies.
-    const caller = yield* Effect.context<R>();
-    const download = source.download;
-    return yield* stageContent(target, {
-      ...source,
-      ...(download === undefined
-        ? {}
-        : {
-            download: (hash: import("../vocabulary.js").Hash) =>
-              download(hash).pipe(Effect.provide(caller)),
-          }),
-    }).pipe(
-      Effect.provideService(LibraryStore, store),
-      Effect.provide(importing),
-      Effect.provide(contentHttp),
-    );
-  });
-
-  function planFor(
-    intent: ManageIntent,
-    options: { readonly base: Snapshot },
-  ): Effect.Effect<ManagePlan, ManagePlanError | InstalledSkills.Cause>;
-  function planFor(
-    intent: AcceptFindingIntent,
-    options: { readonly base: Snapshot },
-  ): Effect.Effect<AcceptFindingPlan, AcceptFindingPlanError>;
-  function planFor(
-    intent: RefreshInventoryIntent,
-    options: { readonly base: Snapshot },
-  ): Effect.Effect<RefreshInventoryPlan, RefreshInventoryPlanError>;
-  function planFor(
-    intent: UndoIntent,
-    options: { readonly base: Snapshot },
-  ): Effect.Effect<UndoPlan, UndoPlanError>;
-  function planFor(
-    intent: Intent,
-    options: { readonly base: Snapshot | LibraryState; readonly approvals?: readonly Approval[] },
-  ): Effect.Effect<Plan, PlanError>;
-  function planFor(
-    intent: ManageIntent | AcceptFindingIntent | RefreshInventoryIntent | UndoIntent | Intent,
-    options: { readonly base: Snapshot | LibraryState; readonly approvals?: readonly Approval[] },
-  ): Effect.Effect<
-    ManagePlan | AcceptFindingPlan | RefreshInventoryPlan | UndoPlan | Plan,
-    ManagePlanError | AcceptFindingPlanError | RefreshInventoryPlanError | UndoPlanError | PlanError
-  > {
-    if (intent._tag === "Manage") {
-      if (!("revision" in options.base))
-        return Effect.fail(
-          new StalePlan({ message: "Manage requires the displayed Library snapshot" }),
-        );
-      const base = options.base;
-      return Effect.gen(function* () {
-        const checked = yield* checkedManageIntent(intent);
-        const state = base._tag === "Present" ? base.state : emptyLibraryState();
-        const installs = checked.selections.some(
-          (selection) =>
-            Option.getOrUndefined(selection.duplicates) !== "retain-only" &&
-            (selection.mode === "existing" || Option.isSome(selection.ownership)),
-        );
-        let routing: StepRouting = { active: [], destinations: [], readable: [] };
-        if (installs) {
-          if (configuration?._tag === "Configured")
-            routing = yield* stepRouting(configuration, state);
-          else {
-            const scopes = [
-              { kind: "global" as const },
-              ...state.repositories.map(({ root }) => ({ kind: "repository" as const, root })),
-            ];
-            routing = {
-              active: yield* files.active,
-              readable: [],
-              destinations: (yield* Effect.forEach(scopes, (scope) =>
-                Effect.map(files.destinations(scope), (targets) =>
-                  targets.map((target) => ({ scope, ...target })),
-                ),
-              )).flat(),
-            };
-          }
-        }
-        return yield* planManaging(checked, { base, routing });
-      }).pipe(
-        Effect.provideService(LibraryStore, store),
-        Effect.provideService(InstalledSkills.Service, files),
-        Effect.provide(importing),
-      );
-    }
-    if (intent._tag === "AcceptFinding") {
-      if (!("revision" in options.base))
-        return Effect.fail(
-          new StalePlan({ message: "Acceptance requires the displayed Library snapshot" }),
-        );
-      return planAcceptance(intent, { base: options.base }).pipe(
-        Effect.provideService(LibraryStore, store),
-        Effect.provideService(InstalledSkills.Service, files),
-        Effect.provide(importing),
-      );
-    }
-    if (intent._tag === "RefreshInventory") {
-      if (!("revision" in options.base))
-        return Effect.fail(
-          new StalePlan({ message: "Inventory requires the displayed Library snapshot" }),
-        );
-      return planInventory(intent, { base: options.base }).pipe(
-        Effect.provideService(LibraryStore, store),
-        Effect.provideService(InstalledSkills.Service, files),
-        Effect.provide(importing),
-      );
-    }
-    if (intent._tag === "Undo") {
-      if (!("revision" in options.base))
-        return Effect.fail(
-          new StalePlan({ message: "Undo requires the displayed Library snapshot" }),
-        );
-      return planUndo(intent, { base: options.base }).pipe(
-        Effect.provideService(LibraryStore, store),
-        Effect.provide(writer),
-        Effect.provide(importing),
-      );
-    }
-    const snapshot = "revision" in options.base ? options.base : undefined;
-    const state =
-      "revision" in options.base
-        ? options.base._tag === "Present"
-          ? options.base.state
-          : emptyLibraryState()
-        : options.base;
-    if (
-      snapshot !== undefined &&
-      snapshot.revision !==
-        snapshotOf(snapshot._tag === "Present" ? { present: true, state } : { present: false })
-          .revision
-    )
-      return Effect.fail(new StalePlan({ message: "The displayed Library snapshot was changed" }));
-    return planIntent(intent, { base: state, approvals: options.approvals }).pipe(
-      Effect.map((plan) =>
-        snapshot === undefined ? plan : { ...plan, baseRevision: snapshot.revision },
-      ),
-      Effect.provideService(LibraryStore, store),
-      Effect.provideService(InstalledSkills.Service, files),
-    );
-  }
-  function applyFor(plan: ManagePlan): Effect.Effect<ManageOutcome, ManageApplyError>;
-  function applyFor(
-    plan: AcceptFindingPlan,
-  ): Effect.Effect<AcceptFindingOutcome, AcceptFindingApplyError>;
-  function applyFor(
-    plan: RefreshInventoryPlan,
-  ): Effect.Effect<RefreshInventoryOutcome, RefreshInventoryApplyError>;
-  function applyFor(plan: UndoPlan): Effect.Effect<UndoResult, UndoApplyError>;
-  function applyFor(plan: Plan): Effect.Effect<Outcome, ApplyError>;
-  function applyFor(
-    plan: ManagePlan | AcceptFindingPlan | RefreshInventoryPlan | UndoPlan | Plan,
-  ): Effect.Effect<
-    ManageOutcome | AcceptFindingOutcome | RefreshInventoryOutcome | UndoResult | Outcome,
-    | ManageApplyError
-    | AcceptFindingApplyError
-    | RefreshInventoryApplyError
-    | UndoApplyError
-    | ApplyError
-  > {
-    if ("_tag" in plan && plan._tag === "Manage")
-      return applyManaging(plan).pipe(
-        Effect.provideService(LibraryStore, store),
-        Effect.provideService(InstalledSkills.Service, files),
-        Effect.provide(writer),
-        Effect.provide(importing),
-      );
-    if ("_tag" in plan && plan._tag === "AcceptFinding")
-      return applyAcceptance(plan).pipe(
-        Effect.provideService(LibraryStore, store),
-        Effect.provideService(InstalledSkills.Service, files),
-        Effect.provide(writer),
-        Effect.provide(importing),
-      );
-    if ("_tag" in plan && plan._tag === "RefreshInventory")
-      return applyInventory(plan).pipe(
-        Effect.provideService(LibraryStore, store),
-        Effect.provideService(InstalledSkills.Service, files),
-        Effect.provide(importing),
-      );
-    if ("_tag" in plan)
-      return applyUndo(plan).pipe(
-        Effect.provideService(LibraryStore, store),
-        Effect.provide(writer),
-        Effect.provide(importing),
-      );
-    return apply(plan).pipe(
-      Effect.provideService(LibraryStore, store),
-      Effect.provideService(InstalledSkills.Service, files),
-      Effect.provide(writer),
-    );
-  }
-
-  return Service.of({
-    read: Effect.map(store.inspect, snapshotOf),
-    history: Effect.gen(function* () {
-      const state = yield* store.load;
-      const operations = yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
-        state.operations,
-      ).pipe(
-        Effect.mapError(
-          () =>
-            new InvalidLibraryState({
-              path: store.statePath,
-              detail: "invalid operation history",
-            }),
-        ),
-      );
-      const events = yield* readLibraryAudit(store.home);
-      return { events, operations } satisfies History;
-    }).pipe(Effect.provide(writer)),
-    plan: planFor,
-    apply: applyFor,
-    import: {
-      collection: (request) => owned(importCollection(request)),
-      authored: (request) => owned(importAuthoredCollection(request)),
-      edit: (request) => owned(importEdit(request)),
-    },
-    startup: store.startup,
-    content: {
-      plan: (target, localArchives) =>
-        planContent(target, localArchives, store.originalsPath, store.statePath).pipe(
-          Effect.provide(importing),
-        ),
-      inspect: (snapshot) =>
-        inspectContent(snapshot, store.originalsPath, store.statePath).pipe(
-          Effect.provide(importing),
-        ),
-      pack: (snapshot) =>
-        packContent(snapshot, store.originalsPath, store.statePath).pipe(Effect.provide(importing)),
-      stage: stageFor,
-    },
-    setup: (steps, options) =>
-      setup(steps, options).pipe(
-        Effect.provideService(LibraryStore, store),
-        Effect.provide(writer),
-        Effect.provide(importing),
-      ),
-  });
-});
 /** Compatibility construction; callers migrate to the single public layer. */
 export const make = makeWithRouting();
 /** Routing is part of constructing this Library, never assembled by an operation's caller. */
@@ -534,18 +239,6 @@ export const layer = (
   import("./store/library-store.js").LibraryStoreLayerError,
   TreeRequirements | Digest.Digest
 > => {
-  const storage = libraryStoreLayer({ home: config.home });
-  const files = Layer.effect(
-    InstalledSkills.Service,
-    Effect.gen(function* () {
-      if (config.routing._tag === "None") return yield* InstalledSkills.make();
-      if (config.routing._tag === "Configured") return yield* InstalledSkills.make(config.routing);
-      const store = yield* LibraryStore;
-      return yield* InstalledSkills.make(yield* InstalledSkills.recordedRouting(yield* store.load));
-    }),
-  ).pipe(Layer.provide(storage), Layer.provide(treeHasherLayer));
-  return Layer.effect(Service, makeWithRouting(config.routing)).pipe(
-    Layer.provide(Layer.merge(storage, files)),
-  );
+  return Layer.effect(Service, Service).pipe(Layer.provide(ownerLayer(config)));
 };
 export * as Library from "./library.js";
