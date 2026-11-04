@@ -35,6 +35,9 @@ export const layout = {
       "sync",
       "platform",
       "api",
+      // Small primitives most owners use (failure codes, hashes, paths, text). The corpus gives these
+      // one home: t3code packages/shared, opencode packages/util. A folder here, not a package.
+      "shared",
     ],
   },
   "packages/skit-server-effect/src/": {
@@ -49,20 +52,13 @@ export const layout = {
 
 export const undecided = [
   // Core folders the work item does not place.
-  "packages/skit/src/merge/",
-  "packages/skit/src/usage/",
   "packages/skit/src/invocation/",
-  "packages/skit/src/models/",
-  "packages/skit/src/distribution/",
   "packages/skit/src/auditing/",
-  "packages/skit/src/shared/",
   // Package export entry points (./universal/consumer, ./universal/authoring); the work item keeps
   // today's runtime-neutral entry points as compatibility exports.
   "packages/skit/src/universal-consumer.ts",
   "packages/skit/src/universal-authoring.ts",
   // Server folders the work item does not place.
-  "packages/skit-server-effect/src/integrity/",
-  "packages/skit-server-effect/src/readiness/",
   // The Worker entry (wrangler.jsonc "main").
   "packages/skit-server-effect/src/index.ts",
   // The work item gives Storybook no layout, only an explicit CLI story export.
@@ -70,6 +66,30 @@ export const undecided = [
 ];
 
 export const layoutDebt = [
+  // Placed by who uses them, as t3code keeps its checkpoint diffs inside checkpointing/:
+  // packages/skit/src/merge/ -> sync/ (only sync uses it)
+  "packages/skit/src/merge/files.ts",
+  "packages/skit/src/merge/merge.ts",
+  "packages/skit/src/merge/skill-moves.ts",
+  // packages/skit/src/usage/ -> harnesses/ (only harnesses uses it)
+  "packages/skit/src/usage/contracts.ts",
+  "packages/skit/src/usage/events.ts",
+  "packages/skit/src/usage/invocations.ts",
+  "packages/skit/src/usage/literals.ts",
+  "packages/skit/src/usage/scanner.ts",
+  // packages/skit/src/models/ -> harnesses/ (only harnesses uses it)
+  "packages/skit/src/models/model-context-windows.ts",
+  // packages/skit/src/distribution/ -> api/ (Registry consumer contracts)
+  "packages/skit/src/distribution/api-contracts.ts",
+  "packages/skit/src/distribution/registry-identity.ts",
+  // packages/skit-server-effect/src/integrity/ -> skits/ (its callers consolidate into Skits)
+  "packages/skit-server-effect/src/integrity/contracts.ts",
+  "packages/skit-server-effect/src/integrity/descriptor.ts",
+  "packages/skit-server-effect/src/integrity/projection-limits.ts",
+  "packages/skit-server-effect/src/integrity/validate.ts",
+  // packages/skit-server-effect/src/readiness/ -> platform/ (operator health and migrations)
+  "packages/skit-server-effect/src/readiness/migrations.generated.ts",
+  "packages/skit-server-effect/src/readiness/service.ts",
   "packages/cli/src/bootstrap/server-bootstrap.ts",
   "packages/cli/src/build-info.ts",
   "packages/cli/src/configuration-writer.ts",
