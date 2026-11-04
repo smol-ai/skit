@@ -1,4 +1,22 @@
 import {
+  planAcceptance,
+  applyAcceptance,
+  type AcceptFindingIntent,
+  type AcceptFindingPlan,
+  type AcceptFindingOutcome,
+  type AcceptFindingPlanError,
+  type AcceptFindingApplyError,
+} from "./internal/security/accept.js";
+export {
+  AcceptFindingIntent,
+  AcceptFindingPlan,
+  AcceptFindingChange,
+  type AcceptFindingResult,
+  type AcceptFindingOutcome,
+  type AcceptFindingPlanError,
+  type AcceptFindingApplyError,
+} from "./internal/security/accept.js";
+import {
   planInventory,
   applyInventory,
   type RefreshInventoryIntent,
@@ -133,6 +151,10 @@ export interface Interface {
    */
   readonly plan: {
     (
+      intent: AcceptFindingIntent,
+      options: { readonly base: Snapshot },
+    ): Effect.Effect<AcceptFindingPlan, AcceptFindingPlanError>;
+    (
       intent: RefreshInventoryIntent,
       options: { readonly base: Snapshot },
     ): Effect.Effect<RefreshInventoryPlan, RefreshInventoryPlanError>;
@@ -146,6 +168,7 @@ export interface Interface {
     ): Effect.Effect<Plan, PlanError>;
   };
   readonly apply: {
+    (plan: AcceptFindingPlan): Effect.Effect<AcceptFindingOutcome, AcceptFindingApplyError>;
     (
       plan: RefreshInventoryPlan,
     ): Effect.Effect<RefreshInventoryOutcome, RefreshInventoryApplyError>;
@@ -243,6 +266,10 @@ export const make = Effect.gen(function* () {
   });
 
   function planFor(
+    intent: AcceptFindingIntent,
+    options: { readonly base: Snapshot },
+  ): Effect.Effect<AcceptFindingPlan, AcceptFindingPlanError>;
+  function planFor(
     intent: RefreshInventoryIntent,
     options: { readonly base: Snapshot },
   ): Effect.Effect<RefreshInventoryPlan, RefreshInventoryPlanError>;
@@ -255,12 +282,23 @@ export const make = Effect.gen(function* () {
     options: { readonly base: Snapshot | LibraryState; readonly approvals?: readonly Approval[] },
   ): Effect.Effect<Plan, PlanError>;
   function planFor(
-    intent: RefreshInventoryIntent | UndoIntent | Intent,
+    intent: AcceptFindingIntent | RefreshInventoryIntent | UndoIntent | Intent,
     options: { readonly base: Snapshot | LibraryState; readonly approvals?: readonly Approval[] },
   ): Effect.Effect<
-    RefreshInventoryPlan | UndoPlan | Plan,
-    RefreshInventoryPlanError | UndoPlanError | PlanError
+    AcceptFindingPlan | RefreshInventoryPlan | UndoPlan | Plan,
+    AcceptFindingPlanError | RefreshInventoryPlanError | UndoPlanError | PlanError
   > {
+    if (intent._tag === "AcceptFinding") {
+      if (!("revision" in options.base))
+        return Effect.fail(
+          new StalePlan({ message: "Acceptance requires the displayed Library snapshot" }),
+        );
+      return planAcceptance(intent, { base: options.base }).pipe(
+        Effect.provideService(LibraryStore, store),
+        Effect.provideService(InstalledSkills.Service, files),
+        Effect.provide(importing),
+      );
+    }
     if (intent._tag === "RefreshInventory") {
       if (!("revision" in options.base))
         return Effect.fail(
@@ -306,16 +344,26 @@ export const make = Effect.gen(function* () {
     );
   }
   function applyFor(
+    plan: AcceptFindingPlan,
+  ): Effect.Effect<AcceptFindingOutcome, AcceptFindingApplyError>;
+  function applyFor(
     plan: RefreshInventoryPlan,
   ): Effect.Effect<RefreshInventoryOutcome, RefreshInventoryApplyError>;
   function applyFor(plan: UndoPlan): Effect.Effect<UndoResult, UndoApplyError>;
   function applyFor(plan: Plan): Effect.Effect<Outcome, ApplyError>;
   function applyFor(
-    plan: RefreshInventoryPlan | UndoPlan | Plan,
+    plan: AcceptFindingPlan | RefreshInventoryPlan | UndoPlan | Plan,
   ): Effect.Effect<
-    RefreshInventoryOutcome | UndoResult | Outcome,
-    RefreshInventoryApplyError | UndoApplyError | ApplyError
+    AcceptFindingOutcome | RefreshInventoryOutcome | UndoResult | Outcome,
+    AcceptFindingApplyError | RefreshInventoryApplyError | UndoApplyError | ApplyError
   > {
+    if ("_tag" in plan && plan._tag === "AcceptFinding")
+      return applyAcceptance(plan).pipe(
+        Effect.provideService(LibraryStore, store),
+        Effect.provideService(InstalledSkills.Service, files),
+        Effect.provide(writer),
+        Effect.provide(importing),
+      );
     if ("_tag" in plan && plan._tag === "RefreshInventory")
       return applyInventory(plan).pipe(
         Effect.provideService(LibraryStore, store),

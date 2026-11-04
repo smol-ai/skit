@@ -1,15 +1,10 @@
-import { withLibraryWriter } from "@smolai/skit-core";
-import {
-  acceptSecurityFindingFromState,
-  LibraryStore,
-  securityReviewFromState,
-  type Hash,
-} from "@smolai/skit-core";
-import { Effect } from "effect";
+import { Library, type Hash } from "@smolai/skit-core";
+import { Effect, Option } from "effect";
+import { openLibraryView } from "../library-application/library-view.js";
 
 export const reviewLibrarySecurity = Effect.fn("Library.reviewSecurity")(function* (query: string) {
-  const state = yield* (yield* LibraryStore).load;
-  return yield* securityReviewFromState(state, query);
+  const view = yield* openLibraryView();
+  return yield* view.securityReview(query);
 });
 
 export const acceptLibrarySecurityFinding = Effect.fn("Library.acceptSecurity")(function* (
@@ -21,6 +16,10 @@ export const acceptLibrarySecurityFinding = Effect.fn("Library.acceptSecurity")(
     readonly expiresAt?: string;
   },
 ) {
-  const state = yield* (yield* LibraryStore).load;
-  return yield* acceptSecurityFindingFromState(state, query, input);
-}, withLibraryWriter);
+  const library = yield* Library.Service;
+  const plan = yield* library.plan(
+    { _tag: "AcceptFinding", query, ...input, expiresAt: Option.fromNullishOr(input.expiresAt) },
+    { base: yield* library.read },
+  );
+  return (yield* library.apply(plan)).result.review;
+});

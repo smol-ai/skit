@@ -24,7 +24,6 @@ export * from "./authoring/invocation/generation.js";
 export * from "./harnesses/default-roots.js";
 export * from "./harnesses/install-destinations.js";
 export * from "./library/inventory/doctor-report.js";
-export * from "./library/security/review.js";
 export * from "./authoring/archive.js";
 export * from "./authoring/scaffold.js";
 export * from "./platform/link-stat.js";

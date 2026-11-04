@@ -1,23 +1,18 @@
 import { Clock, Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import type { Hash, SkillAssessmentAcceptance, SkillSecurityReview } from "../../contracts.js";
-import {
-  AcceptanceIncomplete,
-  SecurityFindingAbsent,
-  UnknownInstalledSkill,
-} from "../../failures.js";
-import { LibraryStore } from "../store/library-store.js";
-import { auditSkill, evaluateSkillAudit } from "../../auditing/skill-audit.js";
-import type { LibraryState } from "../library-state.js";
+import type { SkillSecurityReview } from "../../../contracts.js";
+import { ContentAddressCollision, UnknownInstalledSkill } from "../../../failures.js";
+import { auditSkill, evaluateSkillAudit } from "../../../auditing/skill-audit.js";
+import type { LibraryState } from "../../library-state.js";
 import {
   currentCollectionSkills,
   currentSkillVersion,
   versionBacking,
-} from "../library-contracts.js";
-import { parseSkillFrontmatter } from "../../harnesses/frontmatter.js";
-import { collectionVersionPath } from "../collection-version.js";
+} from "../../library-contracts.js";
+import { parseSkillFrontmatter } from "../../../harnesses/frontmatter.js";
+import { collectionVersionPath, originalTreeHash } from "../../collection-version.js";
 
-const securitySkill = Effect.fn("Library.securitySkill")(function* (
+export const securitySkill = Effect.fn("Library.securitySkill")(function* (
   state: LibraryState,
   query: string,
 ) {
@@ -50,13 +45,15 @@ const securitySkill = Effect.fn("Library.securitySkill")(function* (
   return match;
 });
 
-export const securityReviewFromState = Effect.fn("Library.securityReviewSnapshot")(function* (
+export const securityReview = Effect.fn("Library.securityReviewSnapshot")(function* (
   state: LibraryState,
+  originalsPath: string,
   query: string,
 ) {
-  const store = yield* LibraryStore;
   const { version, member, tree } = yield* securitySkill(state, query);
-  const originalPath = collectionVersionPath(store.originalsPath, tree.hash);
+  const originalPath = collectionVersionPath(originalsPath, tree.hash);
+  if ((yield* originalTreeHash(originalPath)) !== tree.hash)
+    return yield* new ContentAddressCollision();
   const skillPath =
     member.source_path === "." ? originalPath : join(originalPath, member.source_path);
   const text = yield* (yield* FileSystem.FileSystem).readFileString(join(skillPath, "SKILL.md"));
@@ -97,53 +94,3 @@ export const securityReviewFromState = Effect.fn("Library.securityReviewSnapshot
       })),
   } satisfies SkillSecurityReview;
 });
-
-export const acceptSecurityFindingFromState = Effect.fn("Library.acceptSecurityFindingSnapshot")(
-  function* (
-    state: LibraryState,
-    query: string,
-    input: {
-      readonly fingerprint: Hash;
-      readonly principal: string;
-      readonly rationale: string;
-      readonly expiresAt?: string;
-    },
-  ) {
-    const acceptedAt = new Date(yield* Clock.currentTimeMillis).toISOString();
-    if (!input.principal.trim() || !input.rationale.trim())
-      return yield* new AcceptanceIncomplete({ reason: "missing" });
-    let expiresAt: string | undefined;
-    if (input.expiresAt) {
-      const parsed = Date.parse(input.expiresAt);
-      if (
-        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(
-          input.expiresAt,
-        ) ||
-        !Number.isFinite(parsed)
-      )
-        return yield* new AcceptanceIncomplete({ reason: "invalid-expiry" });
-      if (parsed <= Date.parse(acceptedAt))
-        return yield* new AcceptanceIncomplete({ reason: "expiry-in-past" });
-      expiresAt = new Date(parsed).toISOString();
-    }
-    const review = yield* securityReviewFromState(state, query);
-    if (!review.audit.findings.some((finding) => finding.fingerprint === input.fingerprint))
-      return yield* new SecurityFindingAbsent({ fingerprint: input.fingerprint });
-    const acceptance: SkillAssessmentAcceptance = {
-      fingerprint: input.fingerprint,
-      artifactContentHash: review.artifactContentHash,
-      skill_version_id: review.skill_version_id,
-      context: "project",
-      principal: input.principal.trim(),
-      rationale: input.rationale.trim(),
-      acceptedAt,
-      ...(expiresAt ? { expiresAt } : {}),
-    };
-    const next = {
-      ...state,
-      assessmentAcceptances: [...(state.assessmentAcceptances ?? []), acceptance],
-    };
-    yield* (yield* LibraryStore).save(next, state);
-    return yield* securityReviewFromState(next, review.skill_version_id);
-  },
-);

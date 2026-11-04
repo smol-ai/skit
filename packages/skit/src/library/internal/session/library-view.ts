@@ -1,3 +1,4 @@
+import { securityReview } from "../security/review.js";
 import { Library } from "../../library.js";
 import { emptyLibraryState } from "../../library-state.js";
 import { join } from "node:path";
@@ -76,6 +77,7 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
     });
   });
   return {
+    securityReview: (query: string) => securityReview(state, originalsPath, query),
     collections: structuredClone(collections),
     placements: structuredClone(placements),
     placementsAt: (scope: EnabledCollection["scope"] | undefined) =>
