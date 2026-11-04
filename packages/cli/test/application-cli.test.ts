@@ -82,7 +82,8 @@ syncBuiltinESMExports();
     expect(await exited).toEqual({ code: 130, signal: null });
     expect(stdout).toBe("");
     expect(stderr).toBe("");
-    expect(await readdir(home)).toEqual([]);
+    // Only the home lock, which never holds data and is never unlinked, remains.
+    expect(await readdir(home)).toEqual(["lock.sqlite"]);
   } finally {
     if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
     await exited;

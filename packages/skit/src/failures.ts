@@ -591,15 +591,16 @@ export class InvalidLibraryState
   }
 }
 
+/** Another running SKIT process holds the home lock; the OS frees it when that process exits. */
 export class LibraryBusy
-  extends Data.TaggedError("LibraryBusy")<{ path: string; owner: string }>
+  extends Data.TaggedError("LibraryBusy")<{ path: string }>
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  readonly remediation = "Wait for the other SKIT process to finish, then retry.";
+  readonly remediation = "Wait for the other SKIT process to finish, or stop it, then retry.";
   get message(): string {
-    return `Another SKIT process (${this.owner}, as pid@host) holds this Library's writer lock at ${this.path}. Remove that file only after confirming that process has stopped, then retry`;
+    return `Another running SKIT process holds this Library's writer lock at ${this.path}`;
   }
 }
 

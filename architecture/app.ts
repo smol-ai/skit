@@ -337,7 +337,8 @@ export const workflows = {
 /**
  * Plain platform functions (not services, under the service rule): acquireWorkspaceLock (A8) and
  * the home lock, one exclusive lock per <home>, reentrant with leases as WriterAuthority is today
- * (writer-lock.ts:9-13,133-135; D3), a plain Effect.fn as t3code's directory lock is.
+ * (writer-lock.ts:7-12,126-128; D3), a plain Effect.fn as t3code's directory lock is. Across processes
+ * the home lock is acquireWorkspaceLock on <home>/lock.sqlite, which the OS releases on crash.
  */
 /** Platform services, each kept under the service rule above (not every entry is re-checked yet). */
 export const platform = [

@@ -82,8 +82,8 @@ it.effect("absent R and absent L: clean, and nothing is created anywhere", () =>
       assert.deepStrictEqual(result, { status: "clean", changed: false });
       yield* unchanged;
     }
-    // Only the writer lock's home exists afterwards, and it holds nothing.
-    assert.deepStrictEqual(yield* homes.fs.readDirectory(a.home), []);
+    // Only the writer lock's home exists afterwards, holding only that lock, which holds no data.
+    assert.deepStrictEqual(yield* homes.fs.readDirectory(a.home), ["lock.sqlite"]);
     assert.strictEqual(server.remote, null);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

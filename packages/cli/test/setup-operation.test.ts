@@ -19,6 +19,7 @@ import { setupApplyCommand } from "../src/handlers/library/setup-machine.js";
 import { runSetup } from "../src/workflows/library/setup.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { libraryHome, scratch } from "./helpers/library-home.js";
+import { homeLockIsFree } from "./helpers/home-lock.js";
 
 const fixture = Effect.fn("Test.setupOperationFixture")(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -264,7 +265,7 @@ it.effect(
       expect(saved.complete).toBeUndefined();
       expect((yield* MachineSettings.read(f.home.home)).machineId).toBeUndefined();
       expect(yield* f.fs.exists(join(f.home.home, "state.json"))).toBe(false);
-      expect(yield* f.fs.exists(join(f.home.home, ".lock"))).toBe(false);
+      expect(yield* homeLockIsFree(f.home.home)).toBe(true);
       expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toContain("Original bytes");
     }).pipe(Effect.provide(skitLayer)),
 );

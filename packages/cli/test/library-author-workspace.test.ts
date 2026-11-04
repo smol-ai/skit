@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem, Schema } from "effect";
+import { Effect, Exit, FileSystem, Schema, Scope } from "effect";
 import { join } from "node:path";
 import {
   COLLECTION_CONTROL_DIRECTORY,
@@ -9,6 +9,7 @@ import {
   skitLayer,
 } from "@smolai/skit-core";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
+import { holdHomeLock } from "./helpers/home-lock.js";
 import { importSource } from "../src/library-application/import-source.js";
 import { executeRemove } from "../src/workflows/library/remove.js";
 import { authorInitCommand } from "../src/workflows/author/initialization.js";
@@ -166,14 +167,14 @@ it.effect("a refused Library import leaves the workspace registered for a retry"
   Effect.gen(function* () {
     const f = yield* workspaceFixture;
     // Another process holds the Library writer, so Library refuses the import.
-    const lock = join(f.home.home, ".lock");
-    yield* f.fs.writeFileString(lock, "999999999@elsewhere token\n");
+    const other = yield* Scope.make();
+    yield* holdHomeLock(f.home.home).pipe(Scope.provide(other));
     const failure = yield* Effect.flip(f.init());
     assert.strictEqual(failure._tag, "LibraryBusy");
     const pending = yield* f.metadata;
     assert.strictEqual(pending.registration, "registered");
     assert.strictEqual((yield* f.home.durable).collections.length, 0);
-    yield* f.fs.remove(lock);
+    yield* Scope.close(other, Exit.void);
     const retried = yield* f.init();
     assert.ok(retried.entry);
     assert.strictEqual((yield* f.metadata).workspace_id, pending.workspace_id);

@@ -1,10 +1,8 @@
-import { Context, Deferred, Effect, FileSystem, Semaphore } from "effect";
-import type { PlatformError } from "effect/PlatformError";
-import { randomUUID } from "node:crypto";
-import { hostname } from "node:os";
+import { Context, Deferred, Effect, Exit, FileSystem, Scope, Semaphore } from "effect";
+import { systemError } from "effect/PlatformError";
 import { join, resolve } from "node:path";
 import { LibraryBusy } from "../../failures.js";
-import { writeRawAtomic } from "../../platform/atomic-write.js";
+import { acquireWorkspaceLock } from "../../platform/workspace-lock.js";
 
 /**
  * Authority over a held writer lock: the owner's, or a lease of it. Forked fibers inherit it, so
@@ -38,7 +36,7 @@ const endAuthority = (authority: WriterAuthority) =>
     return authority.leases === 0 ? Effect.void : Deferred.await(authority.drained);
   });
 
-/** Writers in this process queue for a Library; the lock file only has to exclude other ones. */
+/** Writers in this process queue for a Library; the home lock only has to exclude other processes. */
 const processWriters = new Map<string, Semaphore.Semaphore>();
 /** Every read-compare-write of a Library's state in this process, held or inherited writer alike. */
 const processSavers = new Map<string, Semaphore.Semaphore>();
@@ -53,9 +51,11 @@ const semaphoreFor = (semaphores: Map<string, Semaphore.Semaphore>, root: string
 };
 
 /**
- * Hold a Library's exclusive writer lock while `program` runs. The lock is never reclaimed
- * automatically: a lock left by a process that died fails closed as `LibraryBusy`, naming the
- * file and its recorded owner so a person can remove it once that owner is confirmed stopped.
+ * Hold a Library's exclusive writer lock, the home lock, while `program` runs. Across processes it
+ * is an exclusive SQLite transaction on `<home>/lock.sqlite` (decisions.md A8, D3): the file never
+ * holds data and is never unlinked, so the OS releases the lock when its holder exits, even on
+ * SIGKILL. It never waits: a lock another process holds fails `LibraryBusy` at once. A `.lock` left
+ * by an earlier SKIT means nothing and is ignored.
  */
 export const withLibraryWriterLock = Effect.fn("Library.withWriterLock")(function* <A, E, R>(
   home: string,
@@ -63,43 +63,35 @@ export const withLibraryWriterLock = Effect.fn("Library.withWriterLock")(functio
 ) {
   const fs = yield* FileSystem.FileSystem;
   const root = resolve(home);
-  const path = join(root, ".lock");
-  const ownership = `${process.pid}@${hostname()} ${randomUUID()}\n`;
-  const acquire = Effect.fn("Library.acquireWriterLock")(function* (): Effect.fn.Return<
-    void,
-    PlatformError | LibraryBusy
-  > {
+  const path = join(root, "lock.sqlite");
+  const acquire = Effect.gen(function* () {
     yield* fs.makeDirectory(root, { recursive: true, mode: 0o700 });
-    // Write complete ownership atomically, so a contender never reads a half-written owner.
-    const attempt = yield* Effect.result(
-      writeRawAtomic(path, ownership, true).pipe(Effect.provideService(FileSystem.FileSystem, fs)),
+    const lock = yield* Scope.make();
+    yield* acquireWorkspaceLock(path).pipe(
+      Scope.provide(lock),
+      Effect.catchTags({
+        WorkspaceLockBusy: () => Effect.fail(new LibraryBusy({ path })),
+        WorkspaceLockFailed: (error) =>
+          Effect.fail(
+            systemError({
+              _tag: "Unknown",
+              module: "FileSystem",
+              method: "lock",
+              pathOrDescriptor: path,
+              cause: error.cause,
+            }),
+          ),
+      }),
+      Effect.onError(() => Scope.close(lock, Exit.void)),
     );
-    if (attempt._tag === "Success") return;
-    if (attempt.failure.reason._tag !== "AlreadyExists") return yield* attempt.failure;
-    const owner = yield* fs
-      .readFileString(path)
-      .pipe(
-        Effect.catchTag("PlatformError", (error) =>
-          error.reason._tag === "NotFound" ? Effect.succeed("") : Effect.fail(error),
-        ),
-      );
-    return yield* new LibraryBusy({ path, owner: owner.trim().split(/\s/)[0] || "unrecorded" });
+    return { lock, authority: authorityOver(root) };
   });
-  // Remove only the lock this acquisition wrote. Reading then removing is not one atomic step, so
-  // this relies on every writer following the protocol: nothing else removes a live owner's lock.
-  const release = fs.readFileString(path).pipe(
-    Effect.flatMap((recorded) =>
-      recorded === ownership ? fs.remove(path, { force: true }) : Effect.void,
-    ),
-    Effect.catchTag("PlatformError", (error) =>
-      error.reason._tag === "NotFound" ? Effect.void : Effect.fail(error),
-    ),
-  );
   const exclusive = semaphoreFor(processWriters, root).withPermit(
     Effect.acquireUseRelease(
-      acquire().pipe(Effect.map(() => authorityOver(root))),
-      (authority) => program.pipe(Effect.provideService(CurrentLibraryWriter, authority)),
-      (authority) => endAuthority(authority).pipe(Effect.andThen(release)),
+      acquire,
+      ({ authority }) => program.pipe(Effect.provideService(CurrentLibraryWriter, authority)),
+      ({ authority, lock }) =>
+        endAuthority(authority).pipe(Effect.andThen(Scope.close(lock, Exit.void))),
     ),
   );
   const current = yield* CurrentLibraryWriter;

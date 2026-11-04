@@ -16,6 +16,7 @@ import {
 import { updateSubjects } from "../src/library-application/update.js";
 import { importSource } from "../src/library-application/import-source.js";
 import { copySkitFixtureEffect, libraryHome } from "./helpers/library-home.js";
+import { homeLockIsFree } from "./helpers/home-lock.js";
 
 it.effect("a headless update emits domain progress and records one attributed transaction", () =>
   Effect.gen(function* () {
@@ -81,7 +82,7 @@ it.effect("a headless update emits domain progress and records one attributed tr
     const recorded = yield* history;
     assert.strictEqual(recorded.length, previousEvents + 1);
     assert.strictEqual(recorded.at(-1)?.workflow, "headless");
-    assert.isFalse(yield* fs.exists(join(home.home, ".lock")));
+    assert.isTrue(yield* homeLockIsFree(home.home));
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 

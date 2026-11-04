@@ -190,7 +190,7 @@ Apply:
 | Interruption | State left | Legal next outcome |
 | --- | --- | --- |
 | Before M5 | Orphan originals and uploads | The same merge, or a new merge if R advanced |
-| The process is killed after M5 commits | As the row below, plus the writer's `.lock` naming the dead process | Later commands that need the writer lock fail `LibraryBusy`, naming the lock and its recorded owner; reads still work. Once that process is confirmed stopped, remove the lock by hand; then as below |
+| The process is killed after M5 commits | As the row below; the OS releases the writer lock with the process | As below |
 | M5 loses the CAS | Orphan originals and uploads; `LibraryChangedOnServer`; L, B, projections unchanged | A merge against the new R |
 | After M5 (or M5's response lost), before M7 | R = merged; L and B old; some projections possibly retired | Re-merge of (B, L, merged). If merged equals L this is `clean`; otherwise it yields merged and M5 is skipped. A `--take-remote` resolution must be repeated. If another home advanced R, a genuine `conflicted` is legal. |
 | M6 or M7 is refused because L changed since the plan | R = merged; L as the other writer left it, B old; `SyncLocalChanged` | As after M5, before M7, against the new L |

@@ -134,11 +134,10 @@ export type RemoteHome = AuthorRemoteHome;
 /** FROM CODE: `skit://<authority>/<namespace>/<skit>` (sync.ts:195-198). */
 export type Locator = string;
 
-/** NEW: another process holds the home lock (D3). Today the same lock fails LibraryBusy (packages/skit/src/failures.ts:594). */
+/** NEW: another process holds the home lock (D3). Today the same lock fails LibraryBusy (packages/skit/src/failures.ts:595). */
 export interface HomeBusy {
   readonly _tag: "HomeBusy";
   readonly path: string;
-  readonly owner: string; // pid@host, as LibraryBusy reports today
 }
 
 /**

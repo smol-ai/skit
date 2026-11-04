@@ -6,6 +6,7 @@ import * as MachineSettings from "../src/library/machine-settings.js";
 import { LegacyMachineId, makeMachineId, migratedMachineId } from "../src/library/entity-ids.js";
 import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
+import { acquireWorkspaceLock } from "../src/platform/workspace-lock.js";
 
 it.effect("reading missing settings creates no files or directories", () =>
   Effect.gen(function* () {
@@ -113,7 +114,9 @@ it.effect(
       ]);
       assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), corruptState);
       assert.strictEqual(yield* fs.exists(join(home, "audit.jsonl")), false);
-      assert.strictEqual(yield* fs.exists(join(home, ".lock")), false);
+      assert.isTrue(
+        yield* Effect.isSuccess(Effect.scoped(acquireWorkspaceLock(join(home, "lock.sqlite")))),
+      );
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -124,13 +127,13 @@ it.effect("refuses an occupied root lock before replacing settings", () =>
     yield* MachineSettings.ensureIdentity(home);
     const path = join(home, "machine.json");
     const before = yield* fs.readFileString(path);
-    yield* fs.writeFileString(join(home, ".lock"), "4242@elsewhere token\n");
+    // Another holder, as another process would be.
+    yield* acquireWorkspaceLock(join(home, "lock.sqlite"));
     const error = yield* MachineSettings.setRepositoryDecision(home, "/repo", "ignored").pipe(
       Effect.flip,
     );
     assert.strictEqual(error._tag, "LibraryBusy");
     assert.strictEqual(yield* fs.readFileString(path), before);
-    assert.strictEqual(yield* fs.readFileString(join(home, ".lock")), "4242@elsewhere token\n");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -240,7 +243,9 @@ it.effect("saves no settings when pre-save inverse evidence fails", () =>
     );
     assert.strictEqual(failure, "inverse-refused");
     assert.strictEqual(yield* fs.readFileString(path), bytes);
-    assert.isFalse(yield* fs.exists(join(home, ".lock")));
+    assert.isTrue(
+      yield* Effect.isSuccess(Effect.scoped(acquireWorkspaceLock(join(home, "lock.sqlite")))),
+    );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 

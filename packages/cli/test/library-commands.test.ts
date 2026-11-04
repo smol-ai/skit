@@ -15,6 +15,7 @@ import {
   proposeLibraryEnable,
 } from "../src/library-application/session.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
+import { homeLockIsFree } from "./helpers/home-lock.js";
 import {
   initializeLibraryMachine,
   libraryHome,
@@ -594,6 +595,6 @@ it.effect("rejects a stale multi-destination disable before changing any Binding
     if (Result.isFailure(outcome)) assert.instanceOf(outcome.failure, SetEnabledStale);
     assert.deepStrictEqual(yield* home.durable, concurrent);
     assert.deepStrictEqual(results, []);
-    assert.isFalse(yield* fs.exists(join(home.home, ".lock")));
+    assert.isTrue(yield* homeLockIsFree(home.home));
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
