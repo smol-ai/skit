@@ -1,23 +1,19 @@
 import { Clock, Effect, Option, Predicate, Schema } from "effect";
-import {
-  canonicalJson,
-  currentSkillVersion,
-  ensureSkillsDirectoryWritable,
-  FailureTypeId,
-  MachineSettings,
-  type Hash,
-  type InstallScope,
-  type LibraryState,
-  type SkitFailure,
-} from "@smolai/skit-core";
-import { readableSkillsDirectories } from "@smolai/skit-core/library/routing";
+import { canonicalJson } from "../../shared/json.js";
+import { currentSkillVersion } from "../library-contracts.js";
+import { ensureSkillsDirectoryWritable } from "../../install/writable.js";
+import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
+import { type Hash, type InstallScope } from "../../vocabulary.js";
+import { type LibraryState } from "../library-state.js";
+import * as MachineSettings from "../machine-settings.js";
+import { readableSkillsDirectories } from "../routing/duplicates.js";
 import {
   activeInstallDestinations,
   skillsDirectoryFor,
   type InventoryRootOptions,
-} from "@smolai/skit-core/library/routing";
-import { Library } from "@smolai/skit-core/library";
-import type { ManageOptions } from "../../workflows/library/manage-existing.js";
+} from "../routing/roots.js";
+import { Library } from "../library.js";
+import type { ManageOptions } from "./manage-existing.js";
 import { revalidateSetupPlan, saveSetupMachineConfig, type SetupOptions } from "./setup.js";
 import type {
   SetupKnownSourceSelection,
@@ -36,7 +32,7 @@ import {
   changesNeedingChoice,
   setupVersionAlternatives,
 } from "./setup-installed-skills.js";
-import { PlanIsStale } from "../failures.js";
+import { PlanIsStale } from "../internal/recovery/evidence.js";
 
 /** What the user reviewed and approved: the plan ID they saw and the selections they made. */
 export interface SetupApproval {

@@ -1,12 +1,9 @@
 import { Effect } from "effect";
 import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
-import { applySetupPlan } from "../../src/library/setup/setup-apply.js";
-import type { SetupOptions } from "../../src/library/setup/setup.js";
-import type {
-  SetupKnownSourceSelection,
-  SetupResult,
-} from "../../src/library/setup/setup-contract.js";
-import type { SetupCopySelection } from "../../src/library/setup/setup-decisions.js";
+import { applySetupPlan } from "@smolai/skit-core/library/setup";
+import type { SetupOptions } from "@smolai/skit-core/library/setup";
+import type { SetupKnownSourceSelection, SetupResult } from "@smolai/skit-core/library/setup";
+import type { SetupCopySelection } from "@smolai/skit-core/library/setup";
 
 /**
  * Apply these selections from `scan` through setup's one apply path, updating no existing copies.

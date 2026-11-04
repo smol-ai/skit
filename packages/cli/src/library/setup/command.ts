@@ -24,9 +24,9 @@ import {
   setupStepPlan,
   type SetupStepPlan,
 } from "./setup-steps.js";
-import { runSetup, type SetupOptions } from "./setup.js";
-import { openSetupReview, type SetupReview } from "./setup-review.js";
-import type { ManageOptions } from "../../workflows/library/manage-existing.js";
+import { runSetup, type SetupOptions } from "@smolai/skit-core/library/setup";
+import { openSetupReview, type SetupReview } from "@smolai/skit-core/library/setup";
+import type { ManageOptions } from "@smolai/skit-core/library/setup";
 import { result } from "../../handlers/contracts.js";
 import {
   setupDiscoveryOutput,
@@ -39,7 +39,7 @@ import {
 } from "./actions.js";
 import { emptyLibraryState } from "@smolai/skit-core";
 import { OptionCombinationInvalid } from "../../workflows/failures.js";
-import { SetupDuplicateAction } from "./setup-decisions.js";
+import { SetupDuplicateAction } from "@smolai/skit-core/library/setup";
 import { checkSubjects } from "../../workflows/library/check.js";
 import { renderCheck } from "../../presentation/check.js";
 import { setupReviewSkillChoices } from "./setup-skills.js";

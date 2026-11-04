@@ -1,15 +1,14 @@
-import { DuplicateCopy } from "@smolai/skit-core/library/routing";
+import { DuplicateCopy } from "../duplicates.js";
 import {
   CollectionId,
-  Hash,
-  HarnessName,
   MachineId,
   InstalledSkillId,
   SkillId,
   SkillVersionId,
-} from "@smolai/skit-core";
+} from "../entity-ids.js";
+import { Hash, HarnessName } from "../../vocabulary.js";
 import { Schema } from "effect";
-import { PnpmSkillOwner } from "@smolai/skit-core";
+import { PnpmSkillOwner } from "../../install/pnpm-skills.js";
 
 export const SetupVersionChoice = Schema.Struct({
   skillId: SkillId,

@@ -6,8 +6,8 @@ import { it } from "@effect/vitest";
 import { skitLayer, MachineSettings } from "@smolai/skit-core";
 import { setupCommand } from "../src/library/setup/command.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
-import { collectSetupEvidence } from "../src/library/setup/setup-discovery.js";
-import { runSetup } from "../src/library/setup/setup.js";
+import { collectSetupEvidence } from "@smolai/skit-core/library/setup";
+import { runSetup } from "@smolai/skit-core/library/setup";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 it.effect("preserves saved v1 discovery roots when plain setup imports a Collection", () =>

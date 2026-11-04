@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { discoveryPathExcluded } from "@smolai/skit-core";
+import { discoveryPathExcluded } from "../../sources/discovery-exclusions.js";
 import { Effect, FileSystem, Result, Schema } from "effect";
 import type { SetupRepositoryConfig } from "./setup-contract.js";
 

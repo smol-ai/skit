@@ -2,7 +2,7 @@ import type {
   InstalledSkillChange,
   InstalledSkillChangeResult,
   SetupVersionChoice,
-} from "../library/setup/setup-contract.js";
+} from "@smolai/skit-core/library/setup";
 import { terminalData } from "./terminal-text.js";
 
 export function renderInstalledSkillChange(

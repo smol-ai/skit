@@ -3,13 +3,13 @@ import { dirname, join } from "node:path";
 import type { HarnessName } from "@smolai/skit-core";
 import { compactHomePath } from "../../presentation/home-path.js";
 import type { Choice } from "../../presentation/prompter.js";
-import type { SetupOnboardingCandidate, SetupSkillInstance } from "./setup-contract.js";
+import type { SetupOnboardingCandidate, SetupSkillInstance } from "@smolai/skit-core/library/setup";
 import {
   recommendedSetupSelection,
   setupReviewCopies,
   type SetupRecommendation,
   type SetupReviewCopy,
-} from "./setup-decisions.js";
+} from "@smolai/skit-core/library/setup";
 
 const agentNames: Record<HarnessName, string> = {
   "claude-code": "Claude",

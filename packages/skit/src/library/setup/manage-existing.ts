@@ -1,18 +1,19 @@
 import { Effect, FileSystem, Schema } from "effect";
-import { LinkStat, leavePnpmSkill } from "@smolai/skit-core";
-import type { DuplicateCopy } from "@smolai/skit-core/library/routing";
-import { PlanIsStale } from "../../library/failures.js";
-import { recordSetupCopies } from "../../library/setup/setup-copy-backup.js";
+import { LinkStat } from "../../platform/link-stat.js";
+import { leavePnpmSkill } from "../../install/pnpm-skills.js";
+import { type DuplicateCopy } from "../duplicates.js";
+import { PlanIsStale } from "../internal/recovery/evidence.js";
+import { recordSetupCopies } from "./setup-copy-backup.js";
 import {
   duplicateSymlinksToBackUp,
   ApprovedSymlink,
   type SetupCopySelection,
   type SetupCopyConflict,
-} from "../../library/setup/setup-decisions.js";
-import type { InstalledSkillOptions } from "./installed-skill-options.js";
+} from "./setup-decisions.js";
+import type { InventoryRootOptions } from "../routing/roots.js";
 
 export interface ManageOptions {
-  readonly installOptions: InstalledSkillOptions;
+  readonly installOptions: InventoryRootOptions;
 }
 
 /**

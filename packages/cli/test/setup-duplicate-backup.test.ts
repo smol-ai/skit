@@ -5,7 +5,7 @@ import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { LibraryStore, LinkStat, skitLayer } from "@smolai/skit-core";
 import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply-command.js";
-import { runSetup } from "../src/library/setup/setup.js";
+import { runSetup } from "@smolai/skit-core/library/setup";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { inspectRecoveryOperation } from "@smolai/skit-core";
 import { prepareSetupUndo } from "../src/library/setup/setup-undo.js";

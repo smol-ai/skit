@@ -6,7 +6,7 @@ import { HttpClient, HttpClientResponse } from "effect/http";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import { libraryStoreLayer, LibraryStore, skitLayer, type LibraryState } from "@smolai/skit-core";
-import { runSetup } from "../src/library/setup/setup.js";
+import { runSetup } from "@smolai/skit-core/library/setup";
 import { applySetupSelections } from "./helpers/setup-apply.js";
 import { checkSkillsShSubject } from "../src/workflows/library/skills-sh-update-check.js";
 import { librarySubjects } from "@smolai/skit-core";

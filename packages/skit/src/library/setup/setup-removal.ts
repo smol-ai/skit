@@ -1,7 +1,10 @@
 import { dirname, resolve } from "node:path";
 import { Effect, Option } from "effect";
-import { LinkStat, observePathEvidence, pathIsWithin, type Library } from "@smolai/skit-core";
-import { PlanIsStale } from "../failures.js";
+import { LinkStat } from "../../platform/link-stat.js";
+import { observePathEvidence } from "../folder-evidence.js";
+import { pathIsWithin } from "../../platform/path-identity.js";
+import { type Library } from "../library.js";
+import { PlanIsStale } from "../internal/recovery/evidence.js";
 import { collectSkillsDirectories, type SetupOptions } from "./setup.js";
 import type { SetupResult } from "./setup-contract.js";
 

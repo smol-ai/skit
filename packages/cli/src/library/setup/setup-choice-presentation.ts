@@ -1,13 +1,13 @@
 import { Effect } from "effect";
-import type { InstalledSkillChange, SetupVersionChoice } from "./setup-contract.js";
-import type { SetupReviewSummary } from "./setup-review.js";
+import type { InstalledSkillChange, SetupVersionChoice } from "@smolai/skit-core/library/setup";
+import type { SetupReviewSummary } from "@smolai/skit-core/library/setup";
 import {
   setupDuplicateActions,
   setupDuplicateChoiceRequired,
   type SetupCopyChoice,
   type SetupDuplicateAction,
   type SetupSelectedCopy,
-} from "./setup-decisions.js";
+} from "@smolai/skit-core/library/setup";
 import { Prompter, type Choice } from "../../presentation/prompter.js";
 import { Renderer } from "../../presentation/renderer.js";
 import {

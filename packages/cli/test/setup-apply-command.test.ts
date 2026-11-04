@@ -1,5 +1,5 @@
 import { assert, it } from "vitest";
-import { setupApplyCommandLine } from "../src/library/setup/setup-decisions.js";
+import { setupApplyCommandLine } from "@smolai/skit-core/library/setup";
 
 const planId = `sha256:${"a".repeat(64)}`;
 

@@ -1,14 +1,17 @@
 import { createHash } from "node:crypto";
 import { basename, dirname } from "node:path";
 import { Data, Effect, FileSystem, Result, Schema } from "effect";
-import { skillsShLockFileEntry, sourceLocator, SkitSource } from "@smolai/skit-core";
-import type { MachineId, SkillsShLockFileEntry } from "@smolai/skit-core";
+import { skillsShLockFileEntry } from "../skills-sh-lock-file.js";
+import { sourceLocator } from "../../sources/resolve.js";
+import { SkitSource } from "../library-contracts.js";
+import { type MachineId } from "../entity-ids.js";
+import { type SkillsShLockFileEntry } from "../library-contracts.js";
 import type {
   SetupLockMatch,
   SetupSkillsLock,
   SetupSkillsLockEntry,
   SetupSkillInstance,
-} from "../../library/setup/setup-contract.js";
+} from "./setup-contract.js";
 import { computeSkillsShCompatibleHash } from "./skills-sh-compatible-hash.js";
 
 const namePattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;

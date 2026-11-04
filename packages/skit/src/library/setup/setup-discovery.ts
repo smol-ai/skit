@@ -1,28 +1,23 @@
-import { Library } from "@smolai/skit-core/library";
+import { Library } from "../library.js";
 import { basename, join, posix, relative, resolve, sep } from "node:path";
 import { Context, Effect, FileSystem, Result, Schema } from "effect";
-import {
-  LinkStat,
-  emptyLibraryState,
-  harnessProfile,
-  inspectOwnershipMarker,
-  scanInventory,
-  parseSkillFrontmatter,
-  pathIsWithin,
-  readSkitDescriptor,
-  resolveSkillsDirectory,
-  sourceLocator,
-  SourceIdentity,
-  SourceProcess,
-  HarnessName,
-  MachineSettings,
-  type HarnessName as Harness,
-  type LibraryState,
-  type OperationId,
-} from "@smolai/skit-core";
-import { readSkillsLock } from "../../workflows/library/skills-sh-lock-source.js";
-import { readableSkillsDirectories } from "@smolai/skit-core/library/routing";
-import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
+import { LinkStat } from "../../platform/link-stat.js";
+import { emptyLibraryState, type LibraryState } from "../library-state.js";
+import { harnessProfile, resolveSkillsDirectory } from "../../harnesses/catalog.js";
+import { inspectOwnershipMarker } from "../../install/files.js";
+import { scanInventory } from "../inventory/refresh.js";
+import { parseSkillFrontmatter } from "../../harnesses/frontmatter.js";
+import { pathIsWithin } from "../../platform/path-identity.js";
+import { readSkitDescriptor } from "../../artifact/skit.js";
+import { sourceLocator } from "../../sources/resolve.js";
+import { SourceIdentity } from "../library-contracts.js";
+import { SourceProcess } from "../../platform/source-process.js";
+import { HarnessName, type HarnessName as Harness } from "../../vocabulary.js";
+import { type OperationId } from "../entity-ids.js";
+import * as MachineSettings from "../machine-settings.js";
+import { readSkillsLock } from "./skills-sh-lock-source.js";
+import { readableSkillsDirectories } from "../routing/duplicates.js";
+import { type InventoryRootOptions } from "../routing/roots.js";
 import { readRepositoryConfig, repositoryPathExcluded } from "./setup-config.js";
 import type { SetupOptions } from "./setup.js";
 import type {

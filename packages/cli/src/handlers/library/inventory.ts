@@ -22,7 +22,7 @@ import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { inventoryRootOptions, localFlags } from "../../commands/parameters.js";
 import { result } from "../contracts.js";
-import { runSetup } from "../../library/setup/setup.js";
+import { runSetup } from "@smolai/skit-core/library/setup";
 import { inspectNativeDiscovery } from "../../workflows/library/doctor-harnesses.js";
 import { promptsAllowed } from "../../presentation/interactivity.js";
 

@@ -16,7 +16,7 @@ import type { CommandAction } from "../src/commands/command-actions.js";
 import { readSkillPathDetails } from "@smolai/skit-core";
 import { listRecoveryOperations } from "@smolai/skit-core";
 import { prepareSetupUndo } from "../src/library/setup/setup-undo.js";
-import { runSetup } from "../src/library/setup/setup.js";
+import { runSetup } from "@smolai/skit-core/library/setup";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import {
   deterministicTreeHash,

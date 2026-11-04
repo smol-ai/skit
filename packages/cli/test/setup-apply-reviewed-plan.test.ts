@@ -9,9 +9,9 @@ import {
 } from "@smolai/skit-core";
 import { setupApplyCommand, setupCommand } from "../src/library/setup/command.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
-import { SetupPlanStale } from "../src/library/setup/setup.js";
+import { SetupPlanStale } from "@smolai/skit-core/library/setup";
 import { OptionCombinationInvalid } from "../src/workflows/failures.js";
-import type { SetupDuplicateAction } from "../src/library/setup/setup-decisions.js";
+import type { SetupDuplicateAction } from "@smolai/skit-core/library/setup";
 import { inspectRecoveryOperation } from "@smolai/skit-core";
 import { prepareSetupUndo } from "../src/library/setup/setup-undo.js";
 import { captureDisk, diskChanges, noDiskChanges } from "./helpers/disk-snapshot.js";

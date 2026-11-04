@@ -16,14 +16,11 @@ import {
 import { setupCommand } from "../src/library/setup/command.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { setupPrompts } from "../src/library/setup/setup-steps.js";
-import { runSetup } from "../src/library/setup/setup.js";
-import { setupImportRequests } from "../src/library/setup/setup-import.js";
+import { runSetup } from "@smolai/skit-core/library/setup";
+import { setupImportRequests } from "@smolai/skit-core/library/setup";
 import { applySetupSelections } from "./helpers/setup-apply.js";
-import {
-  SetupLockMatch,
-  type SetupOnboardingCandidate,
-} from "../src/library/setup/setup-contract.js";
-import { resolveSkillsShSelectedSource } from "../src/workflows/library/skills-sh-lock-source.js";
+import { SetupLockMatch, type SetupOnboardingCandidate } from "@smolai/skit-core/library/setup";
+import { resolveSkillsShSelectedSource } from "@smolai/skit-core/library/setup";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 const skillDocument = (body: string) =>

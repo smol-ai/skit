@@ -1,13 +1,17 @@
+import { withHomeLock } from "../store/writer-lock.js";
 import { join } from "node:path";
-import { withConfigurationWriter } from "../../configuration-writer.js";
+
 import { Data, Effect } from "effect";
-import { canonicalJson, Hash, hashParts, libraryStateRevision } from "@smolai/skit-core";
-import { isEntryLink, findDuplicates } from "@smolai/skit-core/library/routing";
+import { canonicalJson } from "../../shared/json.js";
+import { Hash } from "../../vocabulary.js";
+import { hashParts } from "../../artifact/descriptor.js";
+import { libraryStateRevision } from "../library-state.js";
+import { isEntryLink, findDuplicates } from "../routing/duplicates.js";
 import {
   activeInstallDestinations,
   skillsDirectoryFor,
   type InventoryRootOptions,
-} from "@smolai/skit-core/library/routing";
+} from "../routing/roots.js";
 import type { SetupResult } from "./setup-contract.js";
 import { collectBrokenLinks, SetupDiscovery, suggestRepositoryRoots } from "./setup-discovery.js";
 import { scanSetupCopies } from "./setup-scan.js";
@@ -23,7 +27,7 @@ import {
   setupApplyCommandLine,
   setupDuplicateChoiceRequired,
 } from "./setup-decisions.js";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 export {
   collectSkillsDirectories,
   saveSetupMachineConfig,
@@ -31,11 +35,8 @@ export {
 } from "./setup-discovery.js";
 export { classifyOwner, isSetupCandidateFromCodex } from "./setup-onboarding.js";
 export { classifySetupOnboarding, setupInstanceGroupKey } from "./setup-onboarding.js";
-export {
-  setupLockCollection,
-  setupLockGroupKey,
-} from "../../workflows/library/skills-sh-lock-source.js";
-export { computeSkillsShCompatibleHash as computeSkillsLockCompatibleHash } from "../../workflows/library/skills-sh-compatible-hash.js";
+export { setupLockCollection, setupLockGroupKey } from "./skills-sh-lock-source.js";
+export { computeSkillsShCompatibleHash as computeSkillsLockCompatibleHash } from "./skills-sh-compatible-hash.js";
 export class SetupPlanStale
   extends Data.TaggedError("SetupPlanStale")<{
     approvedPlanId: typeof Hash.Type;
@@ -236,7 +237,7 @@ const scanForSetup = Effect.fn("Library.setup")(
     return { scan, library };
   },
   (effect, options) =>
-    options.persistRoots ? withConfigurationWriter(options.libraryHome, effect) : effect,
+    options.persistRoots ? withHomeLock(options.libraryHome, Effect.scoped(effect)) : effect,
 );
 
 export const runSetup = (options: SetupOptions) =>

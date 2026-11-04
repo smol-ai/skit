@@ -10,8 +10,8 @@ import {
   type ScriptedAnswer,
 } from "../src/presentation/interaction-recorder.js";
 import { setupPrompts, setupStepTitles } from "../src/library/setup/setup-steps.js";
-import { runSetup, revalidateSetupPlan } from "../src/library/setup/setup.js";
-import { planSetupRemovals, setupRemovablePaths } from "../src/library/setup/setup-removal.js";
+import { runSetup, revalidateSetupPlan } from "@smolai/skit-core/library/setup";
+import { planSetupRemovals, setupRemovablePaths } from "@smolai/skit-core/library/setup";
 import { localLibrary } from "../src/library-application/library-owner.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 

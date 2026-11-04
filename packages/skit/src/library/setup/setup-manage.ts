@@ -1,15 +1,12 @@
 import { Data, Effect, Option, Schema } from "effect";
-import {
-  FailureTypeId,
-  observePathEvidence,
-  type Hash,
-  type Library,
-  type MachineId,
-  type SkitFailure,
-} from "@smolai/skit-core";
-import { localImportRequest } from "../../library-application/import-source.js";
-import { PlanIsStale } from "../failures.js";
-import { checkManageSelection } from "../../workflows/library/manage-existing.js";
+import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
+import { observePathEvidence } from "../folder-evidence.js";
+import { type Hash } from "../../vocabulary.js";
+import { type Library } from "../library.js";
+import { type MachineId } from "../entity-ids.js";
+import { localImportRequest } from "./local-import.js";
+import { PlanIsStale } from "../internal/recovery/evidence.js";
+import { checkManageSelection } from "./manage-existing.js";
 import {
   SetupCopySelection,
   copyConflict,

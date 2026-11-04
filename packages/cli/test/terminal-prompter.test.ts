@@ -11,8 +11,8 @@ import { afterEach, beforeEach, expect, vi, type MockInstance } from "vitest";
 import { Prompter, terminalPrompterLayer, type Choice } from "../src/presentation/prompter.js";
 
 import { setupDiscoveredSkillChoices } from "../src/library/setup/setup-skills.js";
-import { classifySetupOnboarding } from "../src/library/setup/setup.js";
-import type { SetupSkillInstance } from "../src/library/setup/setup-contract.js";
+import { classifySetupOnboarding } from "@smolai/skit-core/library/setup";
+import type { SetupSkillInstance } from "@smolai/skit-core/library/setup";
 
 type Key =
   | "up"

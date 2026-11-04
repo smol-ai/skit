@@ -1,9 +1,10 @@
 import { join, resolve } from "node:path";
 import { Effect, FileSystem, Schema } from "effect";
-import { deterministicTreeHash, LinkStat } from "@smolai/skit-core";
-import type { DuplicateCopy } from "@smolai/skit-core/library/routing";
-import { checkSetupGlobalContent } from "@smolai/skit-core";
-import { PlanIsStale } from "../failures.js";
+import { deterministicTreeHash } from "../../artifact/skit.js";
+import { LinkStat } from "../../platform/link-stat.js";
+import { type DuplicateCopy } from "../duplicates.js";
+import { checkSetupGlobalContent } from "../internal/setup/protection.js";
+import { PlanIsStale } from "../internal/recovery/evidence.js";
 import { SetupApprovedCopy } from "./setup-decisions.js";
 
 /** Only direct, equal global copies approved by review can enter automatic preservation. */

@@ -1,3 +1,5 @@
+import { sourceIdentityLabel } from "@smolai/skit-core";
+export { sourceIdentityLabel } from "@smolai/skit-core";
 import {
   currentSkillVersion,
   readSkitDescriptor,
@@ -5,7 +7,6 @@ import {
   versionBacking,
   type LibraryState,
   type SkitDescriptor,
-  type SourceIdentity,
 } from "@smolai/skit-core";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { join } from "node:path";
@@ -18,26 +19,6 @@ export const SkillMetadata = Schema.Struct({
   imported_at: Schema.NullOr(Schema.String),
 });
 export type SkillMetadata = typeof SkillMetadata.Type;
-
-export const sourceIdentityLabel = (source: SourceIdentity): string => {
-  switch (source.kind) {
-    case "github":
-      return `${source.owner}/${source.repository}${source.collection_root === "." ? "" : `/${source.collection_root}`}`;
-    case "git":
-      return `${source.remote.value}${source.collection_root === "." ? "" : `/${source.collection_root}`}`;
-    case "registry":
-      return `${source.authority.replace(/\/+$/, "")}/${source.namespace}/${source.slug}`;
-    case "url":
-    case "archive":
-      return source.url.value;
-    case "local":
-      return source.path.value;
-    case "authored-workspace":
-      return `authored:${source.workspace_id}`;
-    case "well-known":
-      return source.locator.value;
-  }
-};
 
 /** Read the original file's date, following symlinks. Never substitute an observation time. */
 export const skillModificationTime = Effect.fn("Library.skillModificationTime")(function* (

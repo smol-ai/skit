@@ -6,9 +6,9 @@ import {
   SetupResult,
   InstalledSkillChange,
   SetupVersionChoice,
-} from "./setup-contract.js";
-import { SetupDuplicateAction, type SetupExplicitSelection } from "./setup-decisions.js";
-import type { SetupReview, SetupReviewSummary } from "./setup-review.js";
+} from "@smolai/skit-core/library/setup";
+import { SetupDuplicateAction, type SetupExplicitSelection } from "@smolai/skit-core/library/setup";
+import type { SetupReview, SetupReviewSummary } from "@smolai/skit-core/library/setup";
 import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { CommandAction } from "../../commands/command-actions.js";
 

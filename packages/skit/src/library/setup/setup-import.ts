@@ -1,8 +1,10 @@
 import { Data, Effect, Schema } from "effect";
-import { sourceLocator, type ImportRequest, type MachineId } from "@smolai/skit-core";
+import { sourceLocator } from "../../sources/resolve.js";
+import { type ImportRequest } from "../import-collection.js";
+import { type MachineId } from "../entity-ids.js";
 import { SetupKnownSourceSelection, type SetupResult } from "./setup-contract.js";
-import { prepareSkillsShImportEvidence } from "../../workflows/library/skills-sh-lock-source.js";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { prepareSkillsShImportEvidence } from "./skills-sh-lock-source.js";
+import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 
 export class SetupImportInvalid
   extends Data.TaggedError("SetupImportInvalid")<{

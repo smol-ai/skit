@@ -120,3 +120,23 @@ export const collectionLabelFromSource = (
       return source.origin;
   }
 };
+
+export const sourceIdentityLabel = (source: SourceIdentity): string => {
+  switch (source.kind) {
+    case "github":
+      return `${source.owner}/${source.repository}${source.collection_root === "." ? "" : `/${source.collection_root}`}`;
+    case "git":
+      return `${source.remote.value}${source.collection_root === "." ? "" : `/${source.collection_root}`}`;
+    case "registry":
+      return `${source.authority.replace(/\/+$/, "")}/${source.namespace}/${source.slug}`;
+    case "url":
+    case "archive":
+      return source.url.value;
+    case "local":
+      return source.path.value;
+    case "authored-workspace":
+      return `authored:${source.workspace_id}`;
+    case "well-known":
+      return source.locator.value;
+  }
+};

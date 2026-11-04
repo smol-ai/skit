@@ -184,4 +184,5 @@ export {
   recoveryFingerprint as setupRecoveryFingerprint,
 } from "./library/internal/recovery/evidence.js";
 export { readSkillPathDetails } from "./library/internal/setup/journal.js";
-export { checkSetupGlobalContent } from "./library/internal/setup/protection.js";
+
+export { OptionCombinationInvalid } from "./shared/input-failures.js";

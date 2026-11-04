@@ -30,9 +30,9 @@ import {
   revalidateSetupPlan,
   runSetup,
   type SetupOptions,
-} from "../src/library/setup/setup.js";
-import type { SetupSkillInstance } from "../src/library/setup/setup-contract.js";
-import { ownershipAt, collectSetupEvidence } from "../src/library/setup/setup-discovery.js";
+} from "@smolai/skit-core/library/setup";
+import type { SetupSkillInstance } from "@smolai/skit-core/library/setup";
+import { ownershipAt, collectSetupEvidence } from "@smolai/skit-core/library/setup";
 
 const skillDocument = (name: string) =>
   `---\nname: ${name}\ndescription: ${name} skill\n---\n\n# ${name}\n`;

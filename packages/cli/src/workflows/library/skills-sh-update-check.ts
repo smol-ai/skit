@@ -1,7 +1,7 @@
 import { dirname, join } from "node:path";
 import { Clock, Effect } from "effect";
 import { LibraryStore, collectionVersionPath, type LibraryState } from "@smolai/skit-core";
-import { computeSkillsShCompatibleHash } from "./skills-sh-compatible-hash.js";
+import { computeSkillsShCompatibleHash } from "@smolai/skit-core/library/setup";
 import type { LibrarySubject } from "@smolai/skit-core";
 import { inspectSkillsShGitEvidence } from "./skills-sh-git-evidence.js";
 export { GitInspectionFailed } from "./skills-sh-git-evidence.js";

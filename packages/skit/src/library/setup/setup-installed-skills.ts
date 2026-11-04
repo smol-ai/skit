@@ -1,15 +1,12 @@
 import { basename } from "node:path";
 import { Data, Effect } from "effect";
-import {
-  hashParts,
-  InstalledSkills,
-  Library,
-  changeWrites,
-  FailureTypeId,
-  type LibraryState,
-  type SkitFailure,
-} from "@smolai/skit-core";
-import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
+import { hashParts } from "../../artifact/descriptor.js";
+import { InstalledSkills } from "../installed-skills.js";
+import { Library } from "../library.js";
+import { changeWrites } from "../installed-update.js";
+import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
+import { type LibraryState } from "../library-state.js";
+import { type InventoryRootOptions } from "../routing/roots.js";
 import type {
   InstalledSkillChange,
   InstalledSkillChangeResult,

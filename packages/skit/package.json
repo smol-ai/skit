@@ -33,6 +33,10 @@
     "./universal/api": {
       "types": "./dist/universal/api/index.d.ts",
       "import": "./dist/universal/api/index.js"
+    },
+    "./library/setup": {
+      "types": "./dist/library/setup/index.d.ts",
+      "import": "./dist/library/setup/index.js"
     }
   },
   "scripts": {

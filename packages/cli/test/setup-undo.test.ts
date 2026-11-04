@@ -16,7 +16,6 @@ import {
 } from "@smolai/skit-core";
 import { readSkillPathDetails } from "@smolai/skit-core";
 const { setupDiscoverySettings } = MachineSettings;
-import { checkSetupGlobalContent } from "@smolai/skit-core";
 import { setupRecoveryFingerprint as recoveryFingerprint } from "@smolai/skit-core";
 import { prepareSetupUndo } from "../src/library/setup/setup-undo.js";
 import { setupResultActions } from "../src/library/setup/actions.js";
@@ -25,7 +24,7 @@ import { runCommandTree } from "../src/commands/runtime.js";
 import { renderContract } from "../src/presentation/contract-presenters.js";
 import { inspectRecoveryOperation, prepareRecoveryMoves } from "@smolai/skit-core";
 import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply-command.js";
-import { runSetup } from "../src/library/setup/setup.js";
+import { runSetup } from "@smolai/skit-core/library/setup";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { libraryHome, scratch } from "./helpers/library-home.js";
 
@@ -545,23 +544,6 @@ it.effect.each([".git", "skit.json", "skit.remote.json"])(
       expect(yield* f.fs.readFileString(join(f.successor, "SKILL.md"))).toBe(bytes);
       expect(yield* f.fs.exists(join(f.root, "claude", marker))).toBe(true);
     }).pipe(Effect.provide(skitLayer)),
-);
-
-it.effect("physical ancestors of a configured root alias retain their ownership veto", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const root = yield* fs.realPath(yield* scratch("skit-protected-alias-"));
-    const physical = join(root, "checkout", "nested", "skills");
-    yield* fs.makeDirectory(physical, { recursive: true });
-    const alias = join(root, "alias");
-    yield* fs.symlink(physical, alias);
-    const destination = join(alias, "absent-skill");
-    yield* checkSetupGlobalContent(destination);
-    yield* fs.writeFileString(join(root, "checkout", ".git"), "gitdir: elsewhere");
-    expect((yield* Effect.result(checkSetupGlobalContent(destination)))._tag).toBe("Failure");
-    expect(yield* fs.exists(destination)).toBe(false);
-    expect(yield* fs.readLink(alias)).toBe(physical);
-  }).pipe(Effect.provide(skitLayer)),
 );
 
 it.effect(

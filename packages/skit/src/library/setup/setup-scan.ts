@@ -1,20 +1,17 @@
 import { resolve } from "node:path";
 import { Effect, FileSystem, Result } from "effect";
-import {
-  currentSkillVersion,
-  type LibraryState,
-  type SkillId,
-  type SkillVersionId,
-  deterministicTreeHash,
-  pathIsWithin,
-  installDestinationHarnesses,
-} from "@smolai/skit-core";
-import { sourceIdentityLabel } from "../../library-application/skill-metadata.js";
+import { currentSkillVersion } from "../library-contracts.js";
+import { type LibraryState } from "../library-state.js";
+import { type SkillId, type SkillVersionId } from "../entity-ids.js";
+import { deterministicTreeHash } from "../../artifact/skit.js";
+import { pathIsWithin } from "../../platform/path-identity.js";
+import { installDestinationHarnesses } from "../../harnesses/install-destinations.js";
+import { sourceIdentityLabel } from "../source-identity.js";
 import { ownershipAt, type SetupEvidence } from "./setup-discovery.js";
-import { lockMatches } from "../../workflows/library/skills-sh-lock-source.js";
+import { lockMatches } from "./skills-sh-lock-source.js";
 import { classifyOwner } from "./setup-onboarding.js";
-import { makePnpmSkillCheck, pnpmSkillOwner } from "@smolai/skit-core";
-import { probeHarnesses } from "@smolai/skit-core/harnesses";
+import { makePnpmSkillCheck, pnpmSkillOwner } from "../../install/pnpm-skills.js";
+import { probeHarnesses } from "../../harnesses/probe.js";
 import type {
   SetupAuthoredCollection,
   SetupInstalledSkill,

@@ -8,9 +8,9 @@ import {
 } from "@smolai/skit-core";
 import { renderContract } from "../src/presentation/contract-presenters.js";
 import { result } from "../src/handlers/contracts.js";
-import { classifySetupOnboarding } from "../src/library/setup/setup.js";
+import { classifySetupOnboarding } from "@smolai/skit-core/library/setup";
 import { setupDiscoveredSkillChoices } from "../src/library/setup/setup-skills.js";
-import type { SetupSkillInstance } from "../src/library/setup/setup-contract.js";
+import type { SetupSkillInstance } from "@smolai/skit-core/library/setup";
 
 it("shows all physical copies, groups actual sources, and leaves conflicts and Codex unchecked", () => {
   const instance = (name: string, path: string, hash = "a"): SetupSkillInstance => ({

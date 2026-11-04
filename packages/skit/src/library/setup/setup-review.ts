@@ -1,18 +1,12 @@
 import { join } from "node:path";
 import { Data, Effect, FileSystem } from "effect";
-import {
-  deterministicTreeHash,
-  canonicalJson,
-  hashParts,
-  FailureTypeId,
-  MachineSettings,
-  type SkitFailure,
-} from "@smolai/skit-core";
-import { OptionCombinationInvalid } from "../../workflows/failures.js";
-import {
-  recordDuplicateSymlinks,
-  type ManageOptions,
-} from "../../workflows/library/manage-existing.js";
+import { deterministicTreeHash } from "../../artifact/skit.js";
+import { canonicalJson } from "../../shared/json.js";
+import { hashParts } from "../../artifact/descriptor.js";
+import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
+import * as MachineSettings from "../machine-settings.js";
+import { OptionCombinationInvalid } from "../../shared/input-failures.js";
+import { recordDuplicateSymlinks, type ManageOptions } from "./manage-existing.js";
 import { applySetupPlan, type SetupApplyOptions, type SetupApproval } from "./setup-apply.js";
 import type { SetupOptions } from "./setup.js";
 import type {
