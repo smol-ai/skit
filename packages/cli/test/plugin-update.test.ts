@@ -1,3 +1,4 @@
+import { skitConfigurationLayer } from "@smolai/skit-core";
 import { Library } from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
@@ -51,6 +52,7 @@ it.effect(
         effect.pipe(
           Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
           Effect.provide(libraryStoreLayer({ home })),
+          Effect.provide(skitConfigurationLayer(home)),
           Effect.provideService(HttpClient.HttpClient, client),
           Effect.provide(rendererTestLayer()),
         );

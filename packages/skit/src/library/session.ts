@@ -96,3 +96,13 @@ export type {
   SkillsShUpdateMember,
   SkillsShUpdateStatus,
 } from "./internal/session/skills-sh-update-check.js";
+
+export {
+  CollectionNotUpdatable,
+  type SourceInspection,
+  type LibraryProgressSubject,
+  type LibraryProgressStage,
+  type LibraryProgressCompletion,
+  type LibraryProgressReporter,
+} from "./internal/session/source-updates.js";
+export { updateSources, type SourceUpdateAdapters } from "./internal/session/update-sources.js";

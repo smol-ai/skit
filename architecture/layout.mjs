@@ -127,7 +127,6 @@ export const layoutDebt = [
   "packages/cli/src/harness/failures.ts",
   "packages/cli/src/install/failures.ts",
   "packages/cli/src/install/targets.ts",
-  "packages/cli/src/library-application/collection-update.ts",
   "packages/cli/src/library-application/doctor-cleanup.ts",
   "packages/cli/src/library-application/import-source.ts",
   "packages/cli/src/library-application/layers.ts",

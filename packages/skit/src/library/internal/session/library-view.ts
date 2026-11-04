@@ -1,3 +1,4 @@
+import { previewSourceUpdates, type SourceInspection } from "./source-updates.js";
 import { checkLibrarySubjects } from "./check.js";
 import type { Hash } from "../../../vocabulary.js";
 import type { SkitSource } from "../../library-contracts.js";
@@ -81,6 +82,13 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
     });
   });
   return {
+    previewSourceUpdates: <E, R>(
+      query: string | undefined,
+      inspectSource: (
+        input: SkitSource,
+        previousSkillPaths?: readonly string[],
+      ) => Effect.Effect<SourceInspection, E, R>,
+    ) => previewSourceUpdates(state, query, inspectSource),
     checkSubjects: <E, R>(
       query: string | undefined,
       options: {

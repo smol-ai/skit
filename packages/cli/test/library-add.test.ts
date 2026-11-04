@@ -136,7 +136,8 @@ it.effect("previews without mutation, then retains exact root Skill bytes", () =
     assert.strictEqual(refreshed.imports.length, 2);
     assert.strictEqual(refreshed.skills[0]?.versions.length, 2);
     const failure = yield* planUpdates(added.collection_id).pipe(
-      Effect.provide(libraryStoreLayer({ home })),
+      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provide(skitConfigurationLayer(home)),
       Effect.flip,
     );
     if (failure._tag !== "Library.CollectionNotUpdatable")
@@ -321,6 +322,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
       effect.pipe(
         Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
         Effect.provide(libraryStoreLayer({ home })),
+        Effect.provide(skitConfigurationLayer(home)),
         Effect.provideService(HttpClient.HttpClient, client),
       );
     const added = yield* run(importSource(source));

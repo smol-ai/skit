@@ -1,17 +1,16 @@
 import { Context, Effect, Exit, Layer } from "effect";
 
-export interface LibraryProgressSubject {
-  readonly id: string;
-  readonly label: string;
-}
-
-export type LibraryProgressStage =
-  | { readonly kind: "source"; readonly subject: LibraryProgressSubject }
-  | { readonly kind: "install"; readonly subject: LibraryProgressSubject };
-
-export type LibraryProgressCompletion =
-  | { readonly kind: "source-inspected"; readonly changed: boolean }
-  | { readonly kind: "installed-skills-updated"; readonly installed: number };
+import type {
+  LibraryProgressStage,
+  LibraryProgressCompletion,
+  LibraryProgressReporter,
+} from "@smolai/skit-core/library/session";
+export type {
+  LibraryProgressSubject,
+  LibraryProgressStage,
+  LibraryProgressCompletion,
+  LibraryProgressReporter,
+} from "@smolai/skit-core/library/session";
 
 export type LibraryProgressEvent =
   | { readonly kind: "started"; readonly stage: LibraryProgressStage }
@@ -21,14 +20,6 @@ export type LibraryProgressEvent =
       readonly result: LibraryProgressCompletion;
     }
   | { readonly kind: "failed"; readonly stage: LibraryProgressStage };
-
-export interface LibraryProgressReporter {
-  readonly around: <A, E, R>(
-    stage: LibraryProgressStage,
-    operation: Effect.Effect<A, E, R>,
-    completed: (value: A) => LibraryProgressCompletion,
-  ) => Effect.Effect<A, E, R>;
-}
 
 /**
  * Front ends own display and event delivery; workflows describe domain progress only.

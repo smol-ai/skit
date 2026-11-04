@@ -1,171 +1,42 @@
-import {
-  enabledByScope,
-  enabledSkillIds,
-  withLibraryWriter,
-  LibraryStore,
-  type LibraryState,
-} from "@smolai/skit-core";
-import { Data, Cause, Effect, FileSystem, Predicate } from "effect";
-import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
-import { importSource, inspectLibrarySource } from "./import-source.js";
-import type { UpdateFailure } from "../workflows/library/update-contract.js";
-import { LibraryProgress } from "./progress.js";
-import { latestSourceImport, type LibrarySubject } from "@smolai/skit-core";
-import { dirname, join, resolve } from "node:path";
+import { Cause, Effect, FileSystem, Predicate } from "effect";
 import { isPlatformError } from "effect/PlatformError";
-import { commandFailure } from "../failure-classification.js";
-import { sourceLocator, Library, InstalledSkills } from "@smolai/skit-core";
-import { sourceFromUpstream } from "@smolai/skit-core/library/session";
-import { FailureTypeId, isSkitFailure, type SkitFailure } from "@smolai/skit-core";
+import { dirname, join, resolve } from "node:path";
+import { Library } from "../../library.js";
+import { ownerLayer } from "../runtime.js";
+import { emptyLibraryState, type LibraryState } from "../../library-state.js";
+import { LibraryStore, withLibraryWriter } from "../../store/library-store.js";
+import { latestSourceImport, type LibrarySubject } from "../../subject-resolution.js";
+import { sourceLocator } from "../../../sources/resolve.js";
+import { isSkitFailure } from "../../../shared/failure.js";
+import type { InventoryRootOptions } from "../../routing/roots.js";
+import type { Hash } from "../../../vocabulary.js";
+import type { SkitSource } from "../../library-contracts.js";
+import type { SourceDiscoveryDiagnostic } from "../../../sources/source-diagnostics.js";
+import {
+  resolveUpdate,
+  selectSubjects,
+  skillChanges,
+  type LibraryProgressReporter,
+} from "./source-updates.js";
 
-export class CollectionNotUpdatable
-  extends Data.TaggedError("Library.CollectionNotUpdatable")<{
-    subject_id: string;
-    label: string;
-    source?: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  get message(): string {
-    return `${this.label} has no upstream source`;
-  }
-  get remediation(): string {
-    return this.source === undefined
-      ? "Add its source again to update it."
-      : `Run \`skit add ${this.source}\` to update it.`;
-  }
+/** The existing acquisition adapter's imported-content facts; no storage or lifecycle is exposed. */
+export interface SourceUpdateAdapters<E, R, F extends { readonly remediation: string }> {
+  readonly importSource: (
+    input: SkitSource,
+    previousSkillPaths: readonly string[],
+    owner: Library.Interface,
+  ) => Effect.Effect<
+    {
+      readonly snapshot_digest: Hash;
+      readonly collection_version_id: string;
+      readonly diagnostics?: readonly SourceDiscoveryDiagnostic[];
+    },
+    E,
+    R
+  >;
+  readonly progress: LibraryProgressReporter;
+  readonly classifyFailure: (cause: Cause.Cause<unknown>) => F;
 }
-
-const subjectSource = Effect.fn("Library.updateSource")(function* (
-  subject: LibrarySubject,
-  sourceInput?: string,
-) {
-  const upstream = subject.kind === "collection" ? subject.collection.upstream : undefined;
-  const resolved = upstream === undefined ? undefined : sourceFromUpstream(upstream);
-  if (resolved === undefined)
-    return yield* new CollectionNotUpdatable({
-      subject_id: subject.subjectId,
-      label: subject.label,
-      ...(sourceInput === undefined ? {} : { source: sourceInput }),
-    });
-  return resolved;
-});
-
-/**
- * What an update of one Collection means for this device: Skills a followed Collection enables
- * or retires, enabled Skills that changed, individually enabled Skills kept after upstream
- * deleted them, and how many new Skills nothing enables. Unenabled Skills are only counted, so a
- * Source with thousands of Skills stays readable.
- */
-const skillChanges = (
-  state: LibraryState,
-  collectionId: string,
-  previous: ReadonlyArray<{ readonly source_path: string; readonly artifact_hash: string }>,
-  observed: ReadonlyArray<{
-    readonly source_path: string;
-    readonly name: string;
-    readonly artifact_hash?: string;
-  }>,
-) => {
-  const lists = enabledByScope(state);
-  const followed = lists.some((list) =>
-    list.enabled.some((item) => "collection" in item && item.collection === collectionId),
-  );
-  const individual = new Set<string>(
-    lists.flatMap((list) => list.enabled.flatMap((item) => ("skill" in item ? [item.skill] : []))),
-  );
-  const enabled = new Set<string>(lists.flatMap((list) => enabledSkillIds(state, list.enabled)));
-  const skillAt = (path: string) =>
-    state.skills.find((skill) => skill.collection_id === collectionId && skill.path === path);
-  const added = observed.filter(
-    (member) => !previous.some((item) => item.source_path === member.source_path),
-  );
-  const deleted = previous.flatMap((member) => {
-    const skill = skillAt(member.source_path);
-    return skill === undefined || observed.some((item) => item.source_path === member.source_path)
-      ? []
-      : [skill];
-  });
-  return {
-    enabled: followed ? added.map((member) => member.name) : [],
-    new_available: followed ? 0 : added.length,
-    updated: observed.flatMap((member) => {
-      const before = previous.find((item) => item.source_path === member.source_path);
-      const skill = skillAt(member.source_path);
-      return before !== undefined &&
-        member.artifact_hash !== undefined &&
-        member.artifact_hash !== before.artifact_hash &&
-        skill !== undefined &&
-        enabled.has(skill.skill_id)
-        ? [skill.name]
-        : [];
-    }),
-    removed: deleted
-      .filter((skill) => enabled.has(skill.skill_id) && !individual.has(skill.skill_id))
-      .map((skill) => skill.name),
-    kept: deleted.filter((skill) => individual.has(skill.skill_id)).map((skill) => skill.name),
-  };
-};
-
-const resolveUpdate = Effect.fn("Library.resolveCollectionUpdate")(function* (
-  state: LibraryState,
-  subject: LibrarySubject,
-) {
-  const sourceImport = latestSourceImport(state, subject);
-  const priorTree =
-    sourceImport === undefined
-      ? undefined
-      : state.collection_versions.find(
-          (tree) => tree.collection_version_id === sourceImport.collection_version_id,
-        );
-  if (sourceImport === undefined || priorTree === undefined)
-    return yield* new CollectionNotUpdatable({
-      subject_id: subject.subjectId,
-      label: subject.label,
-    });
-  const input = yield* subjectSource(subject, sourceImport.input.value);
-  return { acquisition: sourceImport, priorTree, input };
-});
-
-/** Observe one Collection without retaining content or reconciling installed skills. */
-export const previewCollectionUpdate = Effect.fn("Library.previewCollectionUpdate")(function* (
-  state: LibraryState,
-  subject: LibrarySubject,
-) {
-  const {
-    acquisition: sourceImport,
-    priorTree: tree,
-    input,
-  } = yield* resolveUpdate(state, subject);
-  const inspected = yield* inspectLibrarySource(
-    input,
-    tree.members.map((member) => member.source_path),
-  );
-  const members = ("members" in inspected ? inspected.members : undefined) ?? [];
-  return {
-    subject_id: subject.subjectId,
-    subject_kind: subject.kind,
-    current_snapshot_digest: tree.hash,
-    available_snapshot_digest: inspected.snapshot_digest,
-    changed: tree.hash !== inspected.snapshot_digest,
-    label: subject.label,
-    ...("diagnostics" in inspected && inspected.diagnostics?.length
-      ? { diagnostics: inspected.diagnostics }
-      : {}),
-    ...skillChanges(
-      state,
-      sourceImport.collection_id,
-      tree.members,
-      inspected.skills.map((skill) => ({
-        source_path: skill.verbatim_path,
-        name: skill.name,
-        ...members.find((member) => member.source_path === skill.verbatim_path),
-      })),
-    ),
-  };
-});
 
 /** Canonicalize the existing ancestor too, since a failed write's destination may not exist. */
 const canonicalStoragePath = Effect.fn("Library.canonicalStoragePath")(function* (input: string) {
@@ -192,15 +63,16 @@ const canonicalStoragePath = Effect.fn("Library.canonicalStoragePath")(function*
  * Own one update through scope cleanup. Recoverable failures report persisted evidence;
  * shared-storage failures, interruption and programming defects remain failures of the action.
  */
-export const updateCollection = Effect.fn("Library.updateCollection")(function* (
-  state: LibraryState,
-  before: LibrarySubject,
-  options: { readonly roots: InventoryRootOptions },
-) {
-  const progress = yield* LibraryProgress;
+const updateCollection = Effect.fn("Library.updateCollection")(function* <
+  E,
+  R,
+  F extends { readonly remediation: string },
+>(state: LibraryState, before: LibrarySubject, adapters: SourceUpdateAdapters<E, R, F>) {
+  const progress = adapters.progress;
+  const library = yield* Library.Service;
   const store = yield* LibraryStore;
   const storeHome = yield* canonicalStoragePath(store.home);
-  let phase: UpdateFailure["phase"] = "source";
+  let phase: "source" | "install" = "source";
   let source = before.label;
   let sourceImported = false;
   return yield* Effect.scoped(
@@ -210,9 +82,10 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
       const subject = { id: before.subjectId, label: before.label };
       const imported = yield* progress.around(
         { kind: "source", subject },
-        importSource(
+        adapters.importSource(
           input,
           priorTree.members.map((member) => member.source_path),
+          library,
         ),
         (value) => ({
           kind: "source-inspected",
@@ -227,17 +100,11 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
       // Reconcile even when the Source is current: a previous run may have retained
       // this snapshot before installing failed or temporary-source cleanup interrupted it.
       {
-        const current = yield* (yield* LibraryStore).load;
+        const current = yield* library.read;
         phase = "install";
         const installedSkillUpdate = yield* progress.around(
           { kind: "install", subject },
           Effect.gen(function* () {
-            const library = yield* Library.make.pipe(
-              Effect.provideService(
-                InstalledSkills.Service,
-                yield* InstalledSkills.make(options.roots),
-              ),
-            );
             const outcome = yield* library.apply(
               yield* library.plan({ _tag: "Update" }, { base: current }),
             );
@@ -329,7 +196,7 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
             const latest = latestSourceImport(current, before);
             sourceImported = latest !== undefined && latest.import_id !== previous?.import_id;
           }
-          const error = commandFailure(cause);
+          const error = adapters.classifyFailure(cause);
           return {
             status: "failed" as const,
             subject_id: before.subjectId,
@@ -350,3 +217,29 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
     ),
   );
 }, withLibraryWriter);
+
+/** One owner and one batch action; Collection failures stay local, shared-storage failures stop it. */
+export const updateSources = Effect.fn("Library.updateSources")(
+  function* <E, R, F extends { readonly remediation: string }>(
+    home: string,
+    roots: InventoryRootOptions,
+    query: string | undefined,
+    adapters: SourceUpdateAdapters<E, R, F>,
+  ) {
+    const library = yield* Library.Service;
+    return yield* withLibraryWriter(
+      Effect.gen(function* () {
+        const snapshot = yield* library.read;
+        const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
+        const selected = yield* selectSubjects(state, query);
+        return yield* Effect.forEach(selected, (subject) =>
+          updateCollection(state, subject, adapters),
+        );
+      }),
+    );
+  },
+  (effect, home, roots) =>
+    Effect.scoped(effect).pipe(
+      Effect.provide(ownerLayer({ home, routing: { _tag: "Configured", ...roots } })),
+    ),
+);

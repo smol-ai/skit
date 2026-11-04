@@ -1,3 +1,4 @@
+import { skitConfigurationLayer } from "@smolai/skit-core";
 import { Library } from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
@@ -6,7 +7,7 @@ import { systemError } from "effect/PlatformError";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
-import { InvalidLibraryState, LibraryStore, libraryStoreLayer } from "@smolai/skit-core";
+import { LibraryStore, libraryStoreLayer } from "@smolai/skit-core";
 import { collectionVersionPath } from "@smolai/skit-core";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { writingTo } from "./helpers/library-home.js";
@@ -64,6 +65,7 @@ const fixture = Effect.gen(function* () {
     operation.pipe(
       Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
       Effect.provide(libraryStoreLayer({ home })),
+      Effect.provide(skitConfigurationLayer(home)),
       Effect.provideService(HttpClient.HttpClient, client),
     );
   for (const url of urls) yield* run(importSource({ type: "archive", url }));
@@ -329,24 +331,20 @@ it.effect("keeps candidate manifest validation failures local to their Collectio
 it.effect("aborts the batch on typed shared state failures", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    const exit = yield* f.run(
-      Effect.gen(function* () {
-        const store = yield* LibraryStore;
-        return yield* Effect.exit(
-          updateSubjects(f.options).pipe(
-            Effect.provide(rendererTestLayer()),
-            Effect.provideService(LibraryStore, {
-              ...store,
-              load: Effect.fail(
-                new InvalidLibraryState({
-                  path: join(f.home, "state.json"),
-                  detail: "invalid state",
-                }),
-              ),
-            }),
-          ),
-        );
-      }),
+    const statePath = join(f.home, "state.json");
+    const exit = yield* Effect.exit(
+      f.run(updateSubjects(f.options).pipe(Effect.provide(rendererTestLayer()))).pipe(
+        Effect.provideService(FileSystem.FileSystem, {
+          ...f.fs,
+          readFileString: (path, options) =>
+            path === statePath && f.requests.length > 0
+              ? Effect.as(
+                  f.fs.writeFileString(statePath, "invalid state bytes\n"),
+                  "invalid state bytes\n",
+                )
+              : f.fs.readFileString(path, options),
+        }),
+      ),
     );
     assert.isTrue(Exit.isFailure(exit));
     if (Exit.isFailure(exit))
@@ -355,8 +353,9 @@ it.effect("aborts the batch on typed shared state failures", () =>
           (r) => Cause.isFailReason(r) && r.error._tag === "InvalidLibraryState",
         ),
       );
-    // A source fetch may precede the store load inside retention; no subsequent Source runs.
-    assert.isFalse(f.requests.includes(f.urls[1]!));
+    // Corruption arrives after the first fetch, inside the owner batch; no later Source runs.
+    assert.deepStrictEqual(f.requests, [f.urls[0]]);
+    assert.strictEqual(yield* f.fs.readFileString(statePath), "invalid state bytes\n");
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
@@ -382,5 +381,21 @@ it.effect("stops on corruption of an existing retained object", () =>
         ),
       );
     assert.deepStrictEqual(f.requests, [f.urls[0]]);
+  }).pipe(Effect.provide(testPlatformLayer)),
+);
+
+it.effect("several successful source updates are one composed history action", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const first = f.urls[0];
+    assert.ok(first);
+    f.bodies.set(first, yield* f.archive("broken", false, "after"));
+    const auditPath = join(f.home, "audit.jsonl");
+    const before = (yield* f.fs.readFileString(auditPath)).trim().split("\n").length;
+    const outcomes = yield* f.run(updateSubjects(f.options));
+    assert.strictEqual(outcomes.length, 2);
+    assert.isTrue(outcomes.every((item) => "changed" in item && item.changed));
+    const after = (yield* f.fs.readFileString(auditPath)).trim().split("\n").length;
+    assert.strictEqual(after, before + 1);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
