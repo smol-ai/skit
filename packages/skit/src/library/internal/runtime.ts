@@ -28,7 +28,7 @@ import {
   type RefreshInventoryApplyError,
 } from "./inventory/refresh.js";
 import { planUndo, applyUndo, type UndoPlanError, type UndoApplyError } from "./setup/undo.js";
-import type { UndoIntent, UndoPlan, UndoResult } from "./setup/undo-plan.js";
+import type { UndoIntent, UndoPlan } from "./setup/undo-plan.js";
 import { Effect, FileSystem, Layer, Option, Schema } from "effect";
 import { FetchHttpClient, HttpClient } from "effect/http";
 import {
@@ -57,13 +57,19 @@ import {
   type ApplyError,
   type Approval,
   type Intent,
-  type Outcome,
   type Plan,
   type PlanError,
 } from "../library-plan.js";
 import { planIntent } from "../plan-changes.js";
 import { apply } from "../apply-plan.js";
-import { Service, type Config, type Routing, type History } from "../library.js";
+import {
+  Service,
+  type Config,
+  type Routing,
+  type History,
+  type Outcome,
+  type UndoOutcome,
+} from "../library.js";
 
 export const makeWithRouting = Effect.fn("Library.make")(function* (configuration?: Routing) {
   const store = yield* LibraryStore;
@@ -212,12 +218,14 @@ export const makeWithRouting = Effect.fn("Library.make")(function* (configuratio
   function applyFor(
     plan: RefreshInventoryPlan,
   ): Effect.Effect<RefreshInventoryOutcome, RefreshInventoryApplyError>;
-  function applyFor(plan: UndoPlan): Effect.Effect<UndoResult, UndoApplyError>;
-  function applyFor(plan: Plan): Effect.Effect<Outcome, ApplyError>;
+  function applyFor(plan: UndoPlan): Effect.Effect<UndoOutcome, UndoApplyError>;
+  function applyFor<P extends Plan>(
+    plan: P,
+  ): Effect.Effect<Extract<Outcome, { readonly _tag: P["_tag"] }>, ApplyError>;
   function applyFor(
     plan: ManagePlan | AcceptFindingPlan | RefreshInventoryPlan | UndoPlan | Plan,
   ): Effect.Effect<
-    ManageOutcome | AcceptFindingOutcome | RefreshInventoryOutcome | UndoResult | Outcome,
+    Outcome,
     | ManageApplyError
     | AcceptFindingApplyError
     | RefreshInventoryApplyError
@@ -250,11 +258,13 @@ export const makeWithRouting = Effect.fn("Library.make")(function* (configuratio
       );
     if (plan._tag === "Undo")
       return applyUndo(plan).pipe(
+        Effect.map((result) => ({ _tag: "Undo" as const, result })),
         Effect.provideService(LibraryStore, store),
         Effect.provide(writer),
         Effect.provide(importing),
       );
     return apply(plan).pipe(
+      Effect.map((result) => ({ _tag: plan._tag, result })),
       Effect.provideService(LibraryStore, store),
       Effect.provideService(InstalledSkills.Service, files),
       Effect.provide(writer),

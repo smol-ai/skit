@@ -41,7 +41,9 @@ it.effect(
         assert.strictEqual(decoded.change.status, "ready");
         assert.isFalse(yield* fs.exists(folder));
         assert.isFalse(yield* fs.exists(join(home, "removed", plan.backupId)));
-        const result = yield* library.apply(decoded);
+        const outcome = yield* library.apply(decoded);
+        assert.strictEqual(outcome._tag, "Undo");
+        const result = outcome.result;
         assert.strictEqual(result._tag, "Undone");
         assert.strictEqual(
           yield* fs.readFileString(join(folder, "SKILL.md")),
@@ -62,7 +64,7 @@ it.effect(
           { _tag: "Undo", operationId },
           { base: yield* library.read },
         );
-        assert.strictEqual((yield* library.apply(repeated))._tag, "AlreadyUndone");
+        assert.strictEqual((yield* library.apply(repeated)).result._tag, "AlreadyUndone");
         assert.strictEqual(
           yield* fs.readFileString(join(folder, "SKILL.md")),
           "Later independent bytes.\n",

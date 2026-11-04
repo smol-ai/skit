@@ -105,9 +105,9 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <
         const installedSkillUpdate = yield* progress.around(
           { kind: "install", subject },
           Effect.gen(function* () {
-            const outcome = yield* library.apply(
+            const outcome = (yield* library.apply(
               yield* library.plan({ _tag: "Update" }, { base: current }),
-            );
+            )).result;
             return {
               installed:
                 outcome._tag === "Applied"

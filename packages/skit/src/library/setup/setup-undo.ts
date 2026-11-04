@@ -45,9 +45,10 @@ export const prepareSetupUndo = Effect.fn("SetupUndo.prepare")(function* (
           if (canonicalJson(current) !== canonicalJson(settings)) return yield* new PlanIsStale();
         }
         const owner = yield* Library.Service;
-        const undone = yield* owner
-          .apply(plan)
-          .pipe(Effect.catchTag("Library.StalePlan", () => Effect.fail(new PlanIsStale())));
+        const undone = yield* owner.apply(plan).pipe(
+          Effect.map((outcome) => outcome.result),
+          Effect.catchTag("Library.StalePlan", () => Effect.fail(new PlanIsStale())),
+        );
         if (settings !== undefined) yield* MachineSettings.applyRestoreDiscovery(home, settings);
         if (undone._tag === "Undone")
           return { ...summary, status: "undone" as const, backupId: undone.backupId };

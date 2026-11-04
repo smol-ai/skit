@@ -31,7 +31,10 @@ it.effect("a plan narrows by operation and a forged tag cannot redirect apply", 
         assert.isFalse(yield* fs.exists(home));
       }
       Object.assign(plan, { _tag: "Update" });
-      assert.strictEqual((yield* library.apply(plan))._tag, "Applied");
+      const outcome = yield* library.apply(plan);
+      expectTypeOf(outcome).toEqualTypeOf<Extract<Library.Outcome, { readonly _tag: "Update" }>>();
+      assert.strictEqual(outcome._tag, "Update");
+      assert.strictEqual(outcome.result._tag, "Applied");
       assert.isFalse(yield* fs.exists(join(home, "skills")));
     }).pipe(
       Effect.provide(
@@ -121,7 +124,7 @@ it.effect("planning refuses a changed Snapshot revision without writing the Libr
       if (result._tag === "Failure") assert.strictEqual(result.failure._tag, "Library.StalePlan");
       assert.isFalse(yield* fs.exists(home));
       const plan = yield* library.plan({ _tag: "Update" }, { base: snapshot });
-      assert.strictEqual((yield* library.apply(plan))._tag, "Applied");
+      assert.strictEqual((yield* library.apply(plan)).result._tag, "Applied");
       assert.isFalse(yield* fs.exists(join(home, "skills")));
     }).pipe(
       Effect.provide(
@@ -160,7 +163,7 @@ it.effect("all planning validates captured state, and a delayed plan owns its Sn
       assert.strictEqual(inventoryError._tag, "Library.StalePlan");
       const captured = yield* planning;
       assert.strictEqual(captured.baseRevision, snapshot.revision);
-      assert.strictEqual((yield* library.apply(captured))._tag, "Applied");
+      assert.strictEqual((yield* library.apply(captured)).result._tag, "Applied");
       assert.strictEqual(yield* fs.readFileString(statePath), bytes);
     }).pipe(
       Effect.provide(

@@ -42,7 +42,7 @@ it.effect("Sync planning protects edited copies without saving state or moving f
         },
         { base: yield* library.read },
       );
-      assert.strictEqual((yield* library.apply(plan))._tag, "Applied");
+      assert.strictEqual((yield* library.apply(plan)).result._tag, "Applied");
       const snapshot = yield* library.read;
       if (snapshot._tag !== "Present") return yield* Effect.die("Expected a Library");
       const current = snapshot.state;

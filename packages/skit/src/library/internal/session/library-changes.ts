@@ -143,7 +143,7 @@ export const applyLibraryChange = Effect.fn("LibrarySelection.apply")(function* 
     return yield* new Library.StalePlan({
       message: "This plan belongs to another Library selection",
     });
-  const outcome = yield* prepared[planOwner].apply(prepared.owner.plan);
+  const outcome = (yield* prepared[planOwner].apply(prepared.owner.plan)).result;
   const results = setEnabledResults(outcome);
   if (outcome._tag === "Incomplete")
     return yield* new SetEnabledIncomplete({

@@ -60,7 +60,9 @@ export const updateSyncInstalledSkills = Effect.fn("Library.sync.updateInstalled
   const library = yield* Library.make.pipe(
     Effect.provideService(InstalledSkills.Service, yield* syncInstalledSkills(current, rootFor)),
   );
-  const outcome = yield* library.apply(yield* library.plan({ _tag: "Update" }, { base: snapshot }));
+  const outcome = (yield* library.apply(
+    yield* library.plan({ _tag: "Update" }, { base: snapshot }),
+  )).result;
   const copies = outcome._tag === "Applied" ? outcome.copies : [];
   return {
     installed: copies.filter((copy) => copy._tag === "Installed").length,
@@ -80,14 +82,14 @@ const uninstallForSync = Effect.fn("Library.sync.uninstallForSync")(function* (
   const current = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
   if (plan.retire.length === 0) return { uninstalled: 0, state: current };
   const library = yield* Library.Service;
-  const outcome = yield* library.apply(
+  const outcome = (yield* library.apply(
     yield* library.plan(
       { _tag: "Uninstall", copies: plan.retire, drop: plan.remove },
       {
         base: snapshot,
       },
     ),
-  );
+  )).result;
   return {
     uninstalled:
       outcome._tag === "Applied"

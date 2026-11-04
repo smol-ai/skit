@@ -61,7 +61,7 @@ it.effect(
           },
           { base: snapshot },
         );
-        assert.strictEqual((yield* library.apply(plan))._tag, "Applied");
+        assert.strictEqual((yield* library.apply(plan)).result._tag, "Applied");
         assert.isTrue(yield* fs.exists(join(skills, "review", "SKILL.md")));
       }).pipe(
         Effect.provide(
@@ -93,7 +93,7 @@ it.effect(
           },
           { base: snapshot },
         );
-        assert.strictEqual((yield* library.apply(plan))._tag, "Applied");
+        assert.strictEqual((yield* library.apply(plan)).result._tag, "Applied");
         assert.isFalse(yield* fs.exists(join(skills, "review")));
         assert.strictEqual(yield* fs.readFileString(join(source, "SKILL.md")), bytes);
       }).pipe(Effect.provide(Library.layer({ home, routing: { _tag: "Recorded" } })));

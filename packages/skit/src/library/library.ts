@@ -82,7 +82,7 @@ import {
   type ApplyError,
   type Approval,
   type Intent,
-  type Outcome,
+  type Outcome as ExistingOutcome,
   type Plan,
   type PlanError,
 } from "./library-plan.js";
@@ -125,6 +125,37 @@ export interface History {
   readonly operations: readonly OperationStatus[];
 }
 
+/** The operation applied, with its complete or partial result kept intact. */
+export interface EnabledOutcome {
+  readonly _tag: "Enabled";
+  readonly result: ExistingOutcome;
+}
+export interface RemoveOutcome {
+  readonly _tag: "Remove";
+  readonly result: ExistingOutcome;
+}
+export interface UpdateOutcome {
+  readonly _tag: "Update";
+  readonly result: ExistingOutcome;
+}
+export interface UninstallOutcome {
+  readonly _tag: "Uninstall";
+  readonly result: ExistingOutcome;
+}
+export interface UndoOutcome {
+  readonly _tag: "Undo";
+  readonly result: UndoResult;
+}
+export type Outcome =
+  | EnabledOutcome
+  | RemoveOutcome
+  | UpdateOutcome
+  | UninstallOutcome
+  | UndoOutcome
+  | ManageOutcome
+  | AcceptFindingOutcome
+  | RefreshInventoryOutcome;
+
 export interface Interface {
   /**
    * One read. Never writes: a legacy state.json was migrated when the layer was built, and a read
@@ -163,8 +194,10 @@ export interface Interface {
     (
       plan: RefreshInventoryPlan,
     ): Effect.Effect<RefreshInventoryOutcome, RefreshInventoryApplyError>;
-    (plan: UndoPlan): Effect.Effect<UndoResult, UndoApplyError>;
-    (plan: Plan): Effect.Effect<Outcome, ApplyError>;
+    (plan: UndoPlan): Effect.Effect<UndoOutcome, UndoApplyError>;
+    <P extends Plan>(
+      plan: P,
+    ): Effect.Effect<Extract<Outcome, { readonly _tag: P["_tag"] }>, ApplyError>;
   };
   /**
    * Store a Source's files as a Collection Version and save it. Nothing to preview or recheck: it

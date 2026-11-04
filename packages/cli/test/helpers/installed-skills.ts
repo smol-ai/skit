@@ -35,8 +35,10 @@ const library = (
     return yield* Library.make.pipe(Effect.provideService(InstalledSkills.Service, files));
   });
 
-const count = (outcome: Library.Outcome, tag: Library.InstalledSkillResult["_tag"]) =>
-  outcome._tag === "Applied" ? outcome.copies.filter((copy) => copy._tag === tag).length : 0;
+const count = (
+  outcome: Extract<Library.Outcome, { readonly _tag: "Update" }>["result"],
+  tag: Library.InstalledSkillResult["_tag"],
+) => (outcome._tag === "Applied" ? outcome.copies.filter((copy) => copy._tag === tag).length : 0);
 
 /** Update every installed copy, with what is enabled at `scope` also routed to this destination. */
 export const installEnabledSkills = (options: {
@@ -78,9 +80,9 @@ export const installEnabledSkills = (options: {
             ];
       }),
     ];
-    const outcome = yield* owner.apply(
+    const outcome = (yield* owner.apply(
       yield* owner.plan({ _tag: "Update" }, { base: yield* owner.read, approvals }),
-    );
+    )).result;
     if (outcome._tag === "Incomplete") return yield* Effect.fail(outcome.cause);
     return count(outcome, "Installed");
   });
@@ -90,8 +92,8 @@ export const updateInstalledSkills = (_options: { readonly variantsPath?: string
   Effect.gen(function* () {
     const state = yield* (yield* LibraryStore).load;
     const owner = yield* library(state);
-    const outcome = yield* owner.apply(
+    const outcome = (yield* owner.apply(
       yield* owner.plan({ _tag: "Update" }, { base: yield* owner.read }),
-    );
+    )).result;
     return { installed: count(outcome, "Installed"), uninstalled: count(outcome, "Uninstalled") };
   });
