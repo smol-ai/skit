@@ -130,7 +130,6 @@ export const layoutDebt = [
   "packages/cli/src/library-application/collection-update.ts",
   "packages/cli/src/library-application/doctor-cleanup.ts",
   "packages/cli/src/library-application/import-source.ts",
-  "packages/cli/src/library-application/index.ts",
   "packages/cli/src/library-application/layers.ts",
   "packages/cli/src/library-application/library-owner.ts",
   "packages/cli/src/library-application/library-view.ts",

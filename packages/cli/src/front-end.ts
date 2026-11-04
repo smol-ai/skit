@@ -1,11 +1,9 @@
 /**
  * Supported source-level seam for the workspace TUI and Storybook applications.
  *
- * Presentation and audit adapters live here. Reusable Library behavior is owned by
- * library-application and shared directly by CLI, TUI, and Storybook.
+ * Presentation and audit adapters live here. Reusable Library behavior is imported directly
+ * from core by CLI, TUI and Storybook.
  */
-export { LibraryActor, libraryStoreLayer, skitLayer } from "@smolai/skit-core";
-
 export { errorMessage } from "./failure-classification.js";
 export { auditLocalCapabilitiesV1Alpha4 } from "./audit/local.js";
 export type {
@@ -15,7 +13,6 @@ export type {
   AuditSkillV1Alpha4,
 } from "./audit/schema.js";
 export { probeHarness, type HarnessProbeResult } from "@smolai/skit-core/harnesses";
-export * from "./library-application/index.js";
 
 export {
   defaultTerminalEnvironment,

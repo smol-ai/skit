@@ -2,10 +2,7 @@ import { resolveDeclaredInvocation } from "@smolai/skit-core";
 import { Result } from "effect";
 import { expect, test } from "vitest";
 import type { AuditReportV1Alpha4, HarnessProbeResult } from "../../cli/src/front-end";
-import type {
-  LibrarySkillRow,
-  PendingLibraryChange,
-} from "../../cli/src/library-application/index";
+import type { LibrarySkillRow, PendingLibraryChange } from "@smolai/skit-core/library/session";
 import {
   auditPresentation,
   confirmationPresentation,

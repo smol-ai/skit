@@ -11,9 +11,9 @@ import { skitLayer } from "@smolai/skit-core";
 import {
   cancelLibraryChange,
   confirmLibraryChange,
-  probeHarness,
   proposeLibraryCollectionChange,
-} from "../../cli/src/front-end";
+} from "@smolai/skit-core/library/session";
+import { probeHarness } from "@smolai/skit-core/harnesses";
 import { tuiLibrary } from "./helpers/library-fixture";
 
 /**
