@@ -1,6 +1,7 @@
+import { skitConfigurationLayer } from "@smolai/skit-core";
 import { installEnabledSkills } from "./helpers/installed-skills.js";
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Layer } from "effect";
 import { join } from "node:path";
 import {
   deterministicTreeHash,
@@ -42,7 +43,7 @@ const installedSkillFixture = Effect.gen(function* () {
       }),
     ),
   );
-  const storeLayer = libraryStoreLayer({ home });
+  const storeLayer = Layer.merge(libraryStoreLayer({ home }), skitConfigurationLayer(home));
   const initial = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(storeLayer));
   const skill = initial.skills.find(
     (candidate) => candidate.collection_id === collection.collection?.collection_id,
@@ -102,7 +103,13 @@ it.effect(
       assert.strictEqual(before.skills[0]?.versions.length, 1);
       assert.strictEqual(yield* fs.exists(plan.original_path), false);
 
+      const auditPath = join(home, "audit.jsonl");
+      const beforeEvents = (yield* fs.readFileString(auditPath)).trim().split("\n").length;
       const result = yield* prepared.apply().pipe(Effect.provide(storeLayer));
+      assert.strictEqual(
+        (yield* fs.readFileString(auditPath)).trim().split("\n").length,
+        beforeEvents + 1,
+      );
       assert.deepStrictEqual(
         result.installed_skills.map((installedSkill) => [
           installedSkill.destination,
@@ -169,7 +176,11 @@ it.effect.each(["selected", "other", "Library", "home"] as const)(
       );
       let applicationLayer = f.storeLayer;
       const otherHome = join(f.workspace, "other-library");
-      if (change === "home") applicationLayer = libraryStoreLayer({ home: otherHome });
+      if (change === "home")
+        applicationLayer = Layer.merge(
+          libraryStoreLayer({ home: otherHome }),
+          skitConfigurationLayer(otherHome),
+        );
       else if (change === "Library") {
         yield* writingTo(
           f.home,

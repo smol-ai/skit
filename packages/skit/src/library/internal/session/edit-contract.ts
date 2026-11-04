@@ -1,10 +1,5 @@
-import {
-  Hash,
-  InstalledSkillId,
-  InstallDestination,
-  SkillId,
-  SkillVersionId,
-} from "@smolai/skit-core";
+import { Hash, InstallDestination } from "../../../vocabulary.js";
+import { InstalledSkillId, SkillId, SkillVersionId } from "../../entity-ids.js";
 import { Schema } from "effect";
 
 const EditCandidate = Schema.Struct({

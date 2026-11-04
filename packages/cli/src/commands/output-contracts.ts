@@ -34,7 +34,7 @@ import { SyncResult } from "../workflows/library/library-sync-contract.js";
 import { ListResult } from "../workflows/library/list-contract.js";
 import { SetEnabledChange, SetEnabledResult } from "@smolai/skit-core/library/session";
 import { RepositoryPolicyResult } from "@smolai/skit-core/library/setup";
-import { EditImportPlan, EditImportResult } from "../workflows/library/import-edit-contract.js";
+import { EditImportPlan, EditImportResult } from "@smolai/skit-core/library/session";
 import { MachineInventoryResult } from "../workflows/library/machine-inventory-contract.js";
 import { DoctorReport } from "../workflows/library/doctor-harnesses.js";
 

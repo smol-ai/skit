@@ -84,7 +84,6 @@ export const debt = {
     "withLibraryWriter",
   ],
   "packages/cli/src/library-application/layers.ts": ["libraryStoreLayer"],
-  "packages/cli/src/library-application/update-installed-skills.ts": ["LibraryStore"],
   "packages/cli/src/library-application/update.ts": ["LibraryStore", "withLibraryWriter"],
   "packages/cli/src/storybook/journey-stories.ts": ["LibraryStore", "libraryStoreLayer"],
   "packages/cli/src/storybook/sync-journey.ts": [
@@ -93,11 +92,6 @@ export const debt = {
     "withLibraryWriter",
   ],
   "packages/cli/src/workflows/library/check.ts": ["LibraryStore"],
-  "packages/cli/src/workflows/library/import-edit.ts": [
-    "LibraryStore",
-    "prepareImport",
-    "withLibraryWriter",
-  ],
   "packages/cli/src/workflows/library/library-sync-installed-skills.ts": [
     "LibraryStore",
     "withLibraryWriter",
