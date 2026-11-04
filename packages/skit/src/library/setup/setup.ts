@@ -13,7 +13,11 @@ import {
   type InventoryRootOptions,
 } from "../routing/roots.js";
 import type { SetupResult } from "./setup-contract.js";
-import { collectBrokenLinks, SetupDiscovery, suggestRepositoryRoots } from "./setup-discovery.js";
+import {
+  collectBrokenLinks,
+  collectSetupEvidence,
+  suggestRepositoryRoots,
+} from "./setup-discovery.js";
 import { scanSetupCopies } from "./setup-scan.js";
 import {
   planInstalledSkillChanges,
@@ -28,11 +32,7 @@ import {
   setupDuplicateChoiceRequired,
 } from "./setup-decisions.js";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
-export {
-  collectSkillsDirectories,
-  saveSetupMachineConfig,
-  SetupDiscovery,
-} from "./setup-discovery.js";
+export { collectSkillsDirectories, saveSetupMachineConfig } from "./setup-discovery.js";
 export { classifyOwner, isSetupCandidateFromCodex } from "./setup-onboarding.js";
 export { classifySetupOnboarding, setupInstanceGroupKey } from "./setup-onboarding.js";
 export { setupLockCollection, setupLockGroupKey } from "./skills-sh-lock-source.js";
@@ -72,7 +72,7 @@ export interface SetupOptions {
 /** One full setup scan, and the Library state its plan was made against. */
 const scanForSetup = Effect.fn("Library.setup")(
   function* (options: SetupOptions) {
-    const evidence = yield* (yield* SetupDiscovery).collect(options);
+    const evidence = yield* collectSetupEvidence(options);
     const {
       machineConfig,
       discoveryRoots,

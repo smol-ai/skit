@@ -20,7 +20,7 @@ import { Prompter } from "../src/presentation/prompter.js";
 import { setupPrompts } from "../src/library/setup/setup-steps.js";
 import { inspectRecoveryOperation, listRecoveryOperations } from "@smolai/skit-core";
 import { PlanIsStale } from "../src/library/failures.js";
-import { SetupDiscovery, SetupPlanStale } from "@smolai/skit-core/library/setup";
+import { SetupPlanStale } from "@smolai/skit-core/library/setup";
 import { SetupStopped } from "@smolai/skit-core/library/setup";
 import { captureDisk, diskChanges, noDiskChanges, type DiskDiff } from "./helpers/disk-snapshot.js";
 import {
@@ -76,7 +76,8 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
     flags: { interactive?: boolean; dryRun?: boolean; workDirFlag?: string } = {},
   ) =>
     Effect.gen(function* () {
-      // Full discovery scans, counted at the setup scan seam, in all and after approval.
+      // Each complete scan reads the global skills.sh lock once. Count that real IO,
+      // including an absent lock, rather than introducing a service to substitute the scan.
       let scans = 0;
       let approvedAt: number | undefined;
       let publishes = 0;
@@ -126,21 +127,15 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
               })),
             ),
             Effect.provideServiceEffect(
-              SetupDiscovery,
-              Effect.map(SetupDiscovery, (discovery) => ({
-                collect: (scanned: Parameters<typeof discovery.collect>[0]) =>
-                  Effect.andThen(
-                    Effect.sync(() => {
-                      scans++;
-                    }),
-                    discovery.collect(scanned),
-                  ),
-              })),
-            ),
-            Effect.provideServiceEffect(
               FileSystem.FileSystem,
               Effect.map(FileSystem.FileSystem, (files) => ({
                 ...files,
+                readFileString: (...args: Parameters<typeof files.readFileString>) =>
+                  Effect.suspend(() => {
+                    if (args[0] === join(options.skillsStateHome, "skills", ".skill-lock.json"))
+                      scans++;
+                    return files.readFileString(...args);
+                  }),
                 rename: (from: string, to: string) =>
                   Effect.andThen(gates.rename?.(from, to) ?? Effect.void, files.rename(from, to)),
               })),

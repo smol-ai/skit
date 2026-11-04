@@ -1,6 +1,6 @@
 import { Library } from "../library.js";
 import { basename, join, posix, relative, resolve, sep } from "node:path";
-import { Context, Effect, FileSystem, Result, Schema } from "effect";
+import { Effect, FileSystem, Result, Schema } from "effect";
 import { LinkStat } from "../../platform/link-stat.js";
 import { emptyLibraryState, type LibraryState } from "../library-state.js";
 import { harnessProfile, resolveSkillsDirectory } from "../../harnesses/catalog.js";
@@ -646,11 +646,3 @@ export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function*
 });
 
 export type SetupEvidence = Effect.Success<ReturnType<typeof collectSetupEvidence>>;
-
-/**
- * The full setup discovery scan: every skills directory, git in every repository, and a tree hash per
- * Skill. Setup scans through this reference so a caller can observe how often it scans.
- */
-export const SetupDiscovery = Context.Reference<{
-  readonly collect: (options: SetupOptions) => ReturnType<typeof collectSetupEvidence>;
-}>("skit/setup/SetupDiscovery", { defaultValue: () => ({ collect: collectSetupEvidence }) });

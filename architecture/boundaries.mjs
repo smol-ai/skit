@@ -307,7 +307,6 @@ export const serviceDebt = {
   "@skit-server-effect/ReadinessInspector": "plain inspect()",
   "@skit-server-effect/ReleaseStore": "folds into Skits",
   "@skit-server-effect/SkitDeletion": "folds into Skits.delete",
-  "skit/setup/SetupDiscovery": "plain function",
   "test/ListingFixture": "test-only service; tests change, not the model",
   "test/NativeLibraryFixture": "test-only service; tests change, not the model",
 };

@@ -29,7 +29,7 @@ export {
   type SetupReviewCopy,
   type SetupSelectedCopy,
 } from "./setup-decisions.js";
-export { SetupDiscovery, collectSetupEvidence, ownershipAt } from "./setup-discovery.js";
+export { collectSetupEvidence, ownershipAt } from "./setup-discovery.js";
 export { setupImportRequests } from "./setup-import.js";
 export { changeResults } from "./setup-installed-skills.js";
 export { setupExistingSelections, setupNewSelections } from "./setup-manage.js";
