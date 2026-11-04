@@ -5,6 +5,7 @@ import { Data, Effect } from "effect";
 import { canonicalJson } from "../../shared/json.js";
 import { Hash } from "../../vocabulary.js";
 import { hashParts } from "../../artifact/descriptor.js";
+import { Library } from "../library.js";
 import { libraryStateRevision } from "../library-state.js";
 import { isEntryLink, findDuplicates } from "../routing/duplicates.js";
 import {
@@ -127,7 +128,7 @@ const scanForSetup = Effect.fn("Library.setup")(
       };
     });
     const sortedInstances = instances.sort((left, right) => left.path.localeCompare(right.path));
-    const installedSkillChanges = yield* planInstalledSkillChanges(library, options.inventory);
+    const installedSkillChanges = yield* planInstalledSkillChanges(evidence.snapshot);
     const recommended = recommendedSetupSelection(
       sortedInstances,
       onboarding,
@@ -237,7 +238,16 @@ const scanForSetup = Effect.fn("Library.setup")(
     return { scan, library };
   },
   (effect, options) =>
-    options.persistRoots ? withHomeLock(options.libraryHome, Effect.scoped(effect)) : effect,
+    (options.persistRoots ? withHomeLock(options.libraryHome, Effect.scoped(effect)) : effect).pipe(
+      // Build the configured owner before taking the settings lock. Startup recovery may itself
+      // need the writer, and the scan must review the same roots setup was asked to use.
+      Effect.provide(
+        Library.layer({
+          home: options.libraryHome,
+          routing: { _tag: "Configured", ...options.inventory },
+        }),
+      ),
+    ),
 );
 
 export const runSetup = (options: SetupOptions) =>

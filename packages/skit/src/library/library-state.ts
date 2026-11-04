@@ -2,56 +2,25 @@ import { createHash } from "node:crypto";
 import { Effect, Schema, Struct } from "effect";
 import { resolve } from "node:path";
 import {
-  Import,
-  Collection,
-  Enabled,
   currentLibraryManifest,
   LibraryManifest,
-  CollectionVersion,
-  Skill,
   librarySnapshotDigests,
 } from "./library-contracts.js";
-import { LibraryDeviceStateFields, OperationStatus } from "./store/state-schema.js";
 import {
-  DeviceSkillSelection,
-  InstalledSkill,
-  Repository,
-  InvocationPolicies,
-} from "./device-state.js";
+  LibraryStateFields,
+  OperationStatus,
+  CURRENT_LIBRARY_STATE_VERSION,
+} from "./store/state-schema.js";
 import { canonicalJson } from "../shared/json.js";
 
 export * from "./device-state.js";
 
-/**
- * The portable Library this state was last reconciled with. It lives in the same document as the
- * state it describes so that no write, crash, or restore can pair state with a newer base.
- */
-export const SyncAncestry = Schema.Struct({
-  origin: Schema.NonEmptyString,
-  library_id: Schema.NonEmptyString,
-  revision_id: Schema.NonEmptyString,
-  base_manifest: LibraryManifest,
-});
-export interface SyncAncestry extends Schema.Schema.Type<typeof SyncAncestry> {}
-
-export const CURRENT_LIBRARY_STATE_VERSION = 12 as const;
+export { CURRENT_LIBRARY_STATE_VERSION, SyncAncestry } from "./store/state-schema.js";
+export type { SyncPublication } from "./store/state-schema.js";
 
 export const LibraryState = Schema.Struct({
-  ...LibraryDeviceStateFields,
-  schemaVersion: Schema.Literal(CURRENT_LIBRARY_STATE_VERSION),
-  sync_ancestry: Schema.optionalKey(SyncAncestry),
-  device_skill_selection: Schema.optionalKey(DeviceSkillSelection),
-  pending_device_selection_origin: Schema.optionalKey(Schema.NonEmptyString),
-  collections: Schema.mutable(Schema.Array(Collection)),
-  skills: Schema.mutable(Schema.Array(Skill)),
-  collection_versions: Schema.mutable(Schema.Array(CollectionVersion)),
-  imports: Schema.mutable(Schema.Array(Import)),
-  /** What is enabled for every project: the account's selection, as this device last saw it. */
-  enabled: Schema.mutable(Schema.Array(Enabled)),
-  invocation_policies: Schema.optionalKey(InvocationPolicies),
-  repositories: Schema.mutable(Schema.Array(Repository)),
-  installed_skills: Schema.mutable(Schema.Array(InstalledSkill)),
-  /** Setup's operation records, as JSON. They stay on this device; sync and pack never send them. */
+  ...LibraryStateFields,
+  /** Operation records are local; a Sync publication never embeds them. */
   operations: Schema.Array(Schema.toEncoded(OperationStatus)),
 }).check(
   Schema.makeFilter(

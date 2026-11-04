@@ -195,3 +195,10 @@ export {
 } from "./platform/configuration.js";
 
 export { normalizeLibraryManifest } from "./library/manifest.js";
+
+export { SyncStopped } from "./library/internal/sync/sync.js";
+export type {
+  SyncProgram,
+  StoredSyncProgram,
+  SyncPublication,
+} from "./library/store/state-schema.js";

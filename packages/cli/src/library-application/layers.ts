@@ -1,6 +1,6 @@
 import { SkitConfiguration } from "@smolai/skit-core";
 import { Effect, Layer } from "effect";
-import { InstalledSkills, libraryStoreLayer, skitLayer } from "@smolai/skit-core";
+import { skitLayer } from "@smolai/skit-core";
 import { Library } from "@smolai/skit-core/library";
 import { AuthorWorkspace } from "../author/workspace.js";
 
@@ -8,12 +8,19 @@ import { AuthorWorkspace } from "../author/workspace.js";
 export const libraryApplicationLayer = Layer.unwrap(
   Effect.map(SkitConfiguration, (paths) =>
     Layer.mergeAll(
-      Layer.effect(Library.Service, Library.make).pipe(
-        Layer.provide(InstalledSkills.layer()),
-        Layer.provideMerge(libraryStoreLayer({ home: paths.skitHome })),
-      ),
+      Library.layer({ home: paths.skitHome, routing: { _tag: "None" } }),
       // Removing an authored Collection marks its workspace (A15); `author init` registers one.
       AuthorWorkspace.layer,
     ).pipe(Layer.provideMerge(skitLayer)),
   ),
 );
+
+/** The executable's Sync root supplies routing once; the owner keeps its storage private. */
+export const syncLibraryApplicationLayer = (
+  roots: import("@smolai/skit-core/library/routing").InventoryRootOptions,
+) =>
+  Layer.unwrap(
+    Effect.map(SkitConfiguration, (paths) =>
+      Library.layer({ home: paths.skitHome, routing: { _tag: "Configured", ...roots } }),
+    ),
+  );

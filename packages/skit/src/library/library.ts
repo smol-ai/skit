@@ -1,3 +1,22 @@
+import {
+  type SyncIntent,
+  type SyncPlan,
+  type SyncOutcome,
+  type SyncApplyRequest,
+  type SyncPlanError,
+  type SyncApplyError,
+} from "./internal/sync/sync.js";
+export {
+  SyncIntent,
+  SyncPlan,
+  RemoteReceipt,
+  SyncStopped,
+  type SyncResult,
+  type SyncOutcome,
+  type SyncApplyRequest,
+  type SyncPlanError,
+  type SyncApplyError,
+} from "./internal/sync/sync.js";
 import { makeWithRouting, ownerLayer } from "./internal/runtime.js";
 import {
   type ManageIntent,
@@ -147,6 +166,7 @@ export interface UndoOutcome {
   readonly result: UndoResult;
 }
 export type Outcome =
+  | SyncOutcome
   | EnabledOutcome
   | RemoveOutcome
   | UpdateOutcome
@@ -167,6 +187,10 @@ export interface Interface {
    * Captures its state; apply refuses the plan if the Library has changed since.
    */
   readonly plan: {
+    (
+      intent: SyncIntent,
+      options: { readonly base: Snapshot },
+    ): Effect.Effect<SyncPlan, SyncPlanError>;
     (
       intent: ManageIntent,
       options: { readonly base: Snapshot },
@@ -189,6 +213,7 @@ export interface Interface {
     ): Effect.Effect<Extract<Plan, { readonly _tag: I["_tag"] }>, PlanError>;
   };
   readonly apply: {
+    (request: SyncApplyRequest): Effect.Effect<SyncOutcome, SyncApplyError>;
     (plan: ManagePlan): Effect.Effect<ManageOutcome, ManageApplyError>;
     (plan: AcceptFindingPlan): Effect.Effect<AcceptFindingOutcome, AcceptFindingApplyError>;
     (

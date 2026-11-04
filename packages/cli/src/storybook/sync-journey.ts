@@ -5,7 +5,6 @@ import { join } from "node:path";
 import {
   deterministicTreeHash,
   libraryManifestFromLocalState,
-  libraryStoreLayer,
   makeMachineId,
   skitLayer,
 } from "@smolai/skit-core";
@@ -116,8 +115,17 @@ export const syncJourney = (failDownload: boolean) =>
           rootFor: (target) => (target === "agents" ? join(workspace, "agents-skills") : undefined),
         },
       }).pipe(
-        Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
-        Effect.provide(libraryStoreLayer({ home })),
+        Effect.provide(
+          Library.layer({
+            home,
+            routing: {
+              _tag: "Configured",
+              home: workspace,
+              configHome: workspace,
+              overrides: { codex: [join(workspace, "agents-skills")] },
+            },
+          }),
+        ),
         Effect.provide(transport),
         Effect.catchCause((cause) =>
           renderer.failure(commandFailure(cause)).pipe(Effect.andThen(Effect.failCause(cause))),

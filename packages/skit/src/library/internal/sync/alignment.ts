@@ -1,14 +1,13 @@
 import { Schema } from "effect";
 import {
   Upstream,
-  remapEnabled,
   type Enabled,
-  type CollectionId,
   type LibraryManifest,
-  type LibraryState,
-  type SkillId,
   type SkillVersion,
-} from "@smolai/skit-core";
+} from "../../library-contracts.js";
+import type { CollectionId, SkillId } from "../../entity-ids.js";
+import type { LibraryState } from "../../library-state.js";
+import { remapEnabled } from "../../enabled.js";
 
 /**
  * The remote handles independently created local records adopt: Collections by upstream and

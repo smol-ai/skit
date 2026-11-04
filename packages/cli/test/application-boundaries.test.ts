@@ -9,7 +9,7 @@ import {
 import { assert, it } from "@effect/vitest";
 import { ConfigProvider, Deferred, Effect, Fiber, FileSystem, Layer } from "effect";
 import { join, resolve } from "node:path";
-import { LibraryStore, withLibraryWriter } from "@smolai/skit-core";
+import { Library } from "@smolai/skit-core/library";
 import { libraryApplicationLayer } from "../src/library-application/layers.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
@@ -128,20 +128,11 @@ it.effect(
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-read-during-write-" });
       const ready = yield* Deferred.make<void>();
       const release = yield* Deferred.make<void>();
-      const writer = yield* withLibraryWriter(
-        Effect.gen(function* () {
-          const store = yield* LibraryStore;
-          const state = yield* store.load;
-          yield* store.save(state, state);
-          yield* Deferred.succeed(ready, undefined);
-          yield* Deferred.await(release);
-        }),
-      ).pipe(
-        Effect.provide(
-          libraryApplicationLayer.pipe(Layer.provideMerge(skitConfigurationLayer(home))),
-        ),
-        Effect.forkScoped,
-      );
+      const writer = yield* Effect.gen(function* () {
+        yield* holdHomeLock(home);
+        yield* Deferred.succeed(ready, undefined);
+        yield* Deferred.await(release);
+      }).pipe(Effect.scoped, Effect.forkScoped);
       yield* Deferred.await(ready);
       const results: CommandResult[] = [];
       const failures: CommandFailure[] = [];
@@ -220,9 +211,12 @@ it.effect("application layers consume the supplied paths without re-reading conf
       Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
     );
     yield* Effect.gen(function* () {
-      const store = yield* LibraryStore;
+      const library = yield* Library.Service;
+      yield* library.apply(
+        yield* library.plan({ _tag: "RefreshInventory", roots: [] }, { base: yield* library.read }),
+      );
+      assert.isTrue(yield* fs.exists(join(paths.skitHome, "state.json")));
       const supplied = yield* SkitConfiguration;
-      assert.strictEqual(store.home, paths.skitHome);
       assert.strictEqual(supplied.userHome, paths.userHome);
       yield* addRegistryRemote("fixture", "https://registry.example.test", undefined);
       assert.isTrue(yield* fs.exists(paths.authPath));
@@ -244,10 +238,16 @@ it.effect("separate application boundaries retain their own storage roots", () =
     const homes = [join(root, "first"), join(root, "second")];
     const resolved = yield* Effect.forEach(homes, (home) =>
       Effect.gen(function* () {
-        const store = yield* LibraryStore;
-        const paths = yield* SkitConfiguration;
-        assert.strictEqual(store.home, paths.skitHome);
-        return store.home;
+        const library = yield* Library.Service;
+        assert.strictEqual((yield* library.read)._tag, "Absent");
+        yield* library.apply(
+          yield* library.plan(
+            { _tag: "RefreshInventory", roots: [] },
+            { base: yield* library.read },
+          ),
+        );
+        assert.isTrue(yield* fs.exists(join(home, "state.json")));
+        return home;
       }).pipe(
         Effect.provide(
           libraryApplicationLayer.pipe(Layer.provideMerge(skitConfigurationLayer(home))),

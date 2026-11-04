@@ -252,7 +252,7 @@ it.effect("sync saves only declared fields, and writes nothing that would drop o
 
 for (const ancestry of ["missing", "stale"] as const)
   it.effect(
-    `a clean sync anchoring ${ancestry} ancestry saves once, without undeclared fields`,
+    `a clean sync anchoring ${ancestry} ancestry records one completed Sync, without undeclared fields`,
     () =>
       Effect.gen(function* () {
         const { a, remote } = yield* devices;
@@ -277,29 +277,36 @@ for (const ancestry of ["missing", "stale"] as const)
         assert.deepStrictEqual(yield* a.state, before);
 
         assert.strictEqual((yield* a.sync()).status, "clean");
-        assert.strictEqual(a.saves, saves + 1);
+        assert.strictEqual(a.saves, saves + 6);
+        const record = (yield* a.state).operations.at(-1);
+        assert.strictEqual(record?._tag, "Done");
+        assert.deepStrictEqual(
+          record?.steps.map((step) => step.status),
+          ["Done", "Done", "Done"],
+        );
         const anchored = yield* a.state;
         assert.isFalse(Object.hasOwn(anchored, "extension"));
         assert.strictEqual(anchored.sync_ancestry?.revision_id, head.revision_id);
       }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
   );
 
-it.effect("an install failure after sync saves leaves state and ancestry coherent", () =>
+it.effect("an obstructed install directory is refused before Sync publishes locally", () =>
   Effect.gen(function* () {
-    const { fs, a, b, remote } = yield* devices;
+    const { fs, a, b, remote, server } = yield* devices;
     yield* a.importSource("first");
     yield* a.edit(enable((yield* a.state).skills[0]!.skill_id));
     yield* a.sync();
-    // B's skills directory is occupied by a file, so nothing can be installed there.
     yield* fs.writeFileString(b.root, "not a directory\n");
-
-    yield* Effect.exit(b.sync());
-    const pulled = yield* b.state;
-    assert.strictEqual(pulled.collections.length, 1);
-    assert.strictEqual(pulled.sync_ancestry?.revision_id, (yield* remote)?.revision_id);
-
+    const head = yield* remote;
+    const writes = server.writeRequests;
+    const failure = yield* Effect.flip(b.sync());
+    assert.strictEqual(failure._tag, "PlatformError");
+    assert.isFalse(yield* fs.exists(join(b.home, "state.json")));
+    assert.strictEqual(yield* fs.readFileString(b.root), "not a directory\n");
+    assert.strictEqual(server.writeRequests, writes);
+    assert.deepStrictEqual(yield* remote, head);
     yield* fs.remove(b.root);
-    assert.strictEqual((yield* b.sync()).status, "clean");
+    assert.strictEqual((yield* b.sync()).status, "pulled");
     assert.isTrue(yield* fs.exists(join(b.root, "first", "SKILL.md")));
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

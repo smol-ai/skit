@@ -78,14 +78,6 @@ export const debt = {
   "packages/cli/src/author/history.ts": ["withHomeLock"],
   "packages/cli/src/configuration-writer.ts": ["withHomeLock"],
   "packages/cli/src/handlers/library/recovery.ts": ["prepareRecoveryRestore"],
-  "packages/cli/src/library-application/layers.ts": ["libraryStoreLayer"],
-  "packages/cli/src/storybook/sync-journey.ts": ["libraryStoreLayer"],
-  "packages/cli/src/workflows/library/library-sync-installed-skills.ts": [
-    "LibraryStore",
-    "withLibraryWriter",
-  ],
-  "packages/cli/src/workflows/library/library-sync.ts": ["LibraryStore", "withLibraryWriter"],
-  "packages/cli/test/application-boundaries.test.ts": ["LibraryStore", "withLibraryWriter"],
   "packages/cli/test/author-workspace-identity.test.ts": ["withLibraryWriter"],
   "packages/cli/test/collection-load.test.ts": ["LibraryStore", "libraryStoreLayer"],
   "packages/cli/test/doctor-harnesses.test.ts": ["LibraryStore"],
@@ -123,7 +115,6 @@ export const debt = {
     "importAuthoredCollection",
   ],
   "packages/cli/test/library-set-enabled.test.ts": ["LibraryStore", "libraryStoreLayer"],
-  "packages/cli/test/library-sync-outcomes.test.ts": ["libraryStoreLayer"],
   "packages/cli/test/library-sync-source-restoration.test.ts": [
     "LibraryStore",
     "libraryStoreLayer",

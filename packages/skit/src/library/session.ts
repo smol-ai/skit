@@ -113,3 +113,5 @@ export {
   previewSyncInstalledSkills,
   type SyncInstalledSkillsPreview,
 } from "./internal/sync/installed-skills.js";
+
+export { alignLibrary, aliasManifest, aliasDevice } from "./internal/sync/alignment.js";

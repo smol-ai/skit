@@ -19,7 +19,45 @@ import {
 } from "@smolai/skit-core";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
 import { syncLibrary } from "../../src/workflows/library/library-sync.js";
-import { syncInstalledSkills } from "../../src/workflows/library/library-sync-installed-skills.js";
+import {
+  existingRepositorySkillsDirectory,
+  findDuplicates,
+} from "@smolai/skit-core/library/routing";
+const syncInstalledSkills = Effect.fn("Test.syncInstalledSkills")(function* (
+  state: LibraryState,
+  rootFor: (target: InstallDestination) => string | undefined,
+  inventory?: Parameters<typeof syncLibrary>[0]["inventory"],
+) {
+  const active = (["agents", "claude"] as const).filter((target) => rootFor(target) !== undefined);
+  const context = yield* Effect.context<
+    | import("effect").FileSystem.FileSystem
+    | import("@smolai/skit-core").LinkStat
+    | import("effect/crypto").Digest.Digest
+  >();
+  return yield* InstalledSkills.make({
+    active: Effect.succeed(active),
+    destinations: (scope) =>
+      Effect.succeed(
+        active.flatMap((destination) => {
+          const root =
+            scope.kind === "global"
+              ? rootFor(destination)
+              : existingRepositorySkillsDirectory(state, scope.root, destination);
+          return root === undefined ? [] : [{ destination, root }];
+        }),
+      ),
+    duplicates: {
+      scan: (scope, names) =>
+        inventory === undefined
+          ? Effect.succeed({ copies: [], warnings: [], roots: [] })
+          : Effect.map(findDuplicates(inventory, scope, names), (copies) => ({
+              copies,
+              warnings: [],
+              roots: [],
+            })).pipe(Effect.provide(context)),
+    },
+  });
+});
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 import { faultQueue, librarySyncServer } from "./library-sync-server.js";
 
@@ -93,7 +131,12 @@ export const devices = Effect.gen(function* () {
             });
           yield* store.save(state, base);
           events.push(`save ${name}`);
-          const obstruction = faults.take("ObstructAfterSave", (fault) => fault.home === home);
+          const obstruction = faults.take(
+            "ObstructAfterSave",
+            (fault) =>
+              fault.home === home &&
+              state.sync_ancestry?.revision_id === server.remote?.revision_id,
+          );
           if (obstruction) yield* fs.writeFileString(obstruction.path, "occupied by a file\n");
         }),
       })),
@@ -250,8 +293,22 @@ export const devices = Effect.gen(function* () {
             rootFor: options.rootFor ?? ((target) => (target === "agents" ? root : undefined)),
           },
         }).pipe(
-          withLibraryWriter,
-          Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+          Effect.provide(
+            Layer.effect(
+              Library.Service,
+              Effect.gen(function* () {
+                const state = yield* (yield* LibraryStore).load;
+                const files = yield* syncInstalledSkills(
+                  state,
+                  options.rootFor ?? ((target) => (target === "agents" ? root : undefined)),
+                  options.inventory,
+                );
+                return yield* Library.make.pipe(
+                  Effect.provideService(InstalledSkills.Service, files),
+                );
+              }),
+            ),
+          ),
           Effect.provide(layer),
           Effect.provide(http),
           Effect.scoped,

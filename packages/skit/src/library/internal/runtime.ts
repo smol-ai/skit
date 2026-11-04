@@ -1,4 +1,14 @@
 import {
+  planSync,
+  applySync,
+  type SyncIntent,
+  type SyncPlan,
+  type SyncOutcome,
+  type SyncApplyRequest,
+  type SyncPlanError,
+  type SyncApplyError,
+} from "./sync/sync.js";
+import {
   planManaging,
   applyManaging,
   checkedManageIntent,
@@ -111,6 +121,10 @@ export const makeWithRouting = Effect.fn("Library.make")(function* (configuratio
   });
 
   function planFor(
+    intent: SyncIntent,
+    options: { readonly base: Snapshot },
+  ): Effect.Effect<SyncPlan, SyncPlanError>;
+  function planFor(
     intent: ManageIntent,
     options: { readonly base: Snapshot },
   ): Effect.Effect<ManagePlan, ManagePlanError | InstalledSkills.Cause>;
@@ -131,11 +145,22 @@ export const makeWithRouting = Effect.fn("Library.make")(function* (configuratio
     options: { readonly base: Snapshot; readonly approvals?: readonly Approval[] },
   ): Effect.Effect<Extract<Plan, { readonly _tag: I["_tag"] }>, PlanError>;
   function planFor(
-    intent: ManageIntent | AcceptFindingIntent | RefreshInventoryIntent | UndoIntent | Intent,
+    intent:
+      | SyncIntent
+      | ManageIntent
+      | AcceptFindingIntent
+      | RefreshInventoryIntent
+      | UndoIntent
+      | Intent,
     options: { readonly base: Snapshot; readonly approvals?: readonly Approval[] },
   ): Effect.Effect<
-    ManagePlan | AcceptFindingPlan | RefreshInventoryPlan | UndoPlan | Plan,
-    ManagePlanError | AcceptFindingPlanError | RefreshInventoryPlanError | UndoPlanError | PlanError
+    SyncPlan | ManagePlan | AcceptFindingPlan | RefreshInventoryPlan | UndoPlan | Plan,
+    | SyncPlanError
+    | ManagePlanError
+    | AcceptFindingPlanError
+    | RefreshInventoryPlanError
+    | UndoPlanError
+    | PlanError
   > {
     const snapshot = structuredClone(options.base);
     if (snapshot._tag !== "Present" && snapshot._tag !== "Absent")
@@ -149,6 +174,17 @@ export const makeWithRouting = Effect.fn("Library.make")(function* (configuratio
         .revision
     )
       return Effect.fail(new StalePlan({ message: "The displayed Library snapshot was changed" }));
+    if (intent._tag === "Sync")
+      return planSync(intent, {
+        base: snapshot,
+        none: configuration?._tag === "None",
+        ...(configuration?._tag === "Configured" ? { roots: configuration } : {}),
+      }).pipe(
+        Effect.provideService(LibraryStore, store),
+        Effect.provideService(InstalledSkills.Service, files),
+        Effect.provide(importing),
+        Effect.provide(treeHasherLayer),
+      );
     if (intent._tag === "Manage") {
       return Effect.gen(function* () {
         const checked = yield* checkedManageIntent(intent);
@@ -211,6 +247,7 @@ export const makeWithRouting = Effect.fn("Library.make")(function* (configuratio
       Effect.provideService(InstalledSkills.Service, files),
     );
   }
+  function applyFor(request: SyncApplyRequest): Effect.Effect<SyncOutcome, SyncApplyError>;
   function applyFor(plan: ManagePlan): Effect.Effect<ManageOutcome, ManageApplyError>;
   function applyFor(
     plan: AcceptFindingPlan,
@@ -223,15 +260,32 @@ export const makeWithRouting = Effect.fn("Library.make")(function* (configuratio
     plan: P,
   ): Effect.Effect<Extract<Outcome, { readonly _tag: P["_tag"] }>, ApplyError>;
   function applyFor(
-    plan: ManagePlan | AcceptFindingPlan | RefreshInventoryPlan | UndoPlan | Plan,
+    plan:
+      | SyncApplyRequest
+      | ManagePlan
+      | AcceptFindingPlan
+      | RefreshInventoryPlan
+      | UndoPlan
+      | Plan,
   ): Effect.Effect<
     Outcome,
+    | SyncApplyError
     | ManageApplyError
     | AcceptFindingApplyError
     | RefreshInventoryApplyError
     | UndoApplyError
     | ApplyError
   > {
+    if (plan._tag === "Apply" || plan._tag === "ApplySynced")
+      return applySync(plan, {
+        none: configuration?._tag === "None",
+        ...(configuration?._tag === "Configured" ? { roots: configuration } : {}),
+      }).pipe(
+        Effect.provideService(LibraryStore, store),
+        Effect.provideService(InstalledSkills.Service, files),
+        Effect.provide(importing),
+        Effect.provide(treeHasherLayer),
+      );
     if (plan._tag !== plan.intent._tag)
       return Effect.fail(
         new StalePlan({ message: "The plan tag does not match its reviewed intent" }),

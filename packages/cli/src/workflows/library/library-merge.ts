@@ -1,5 +1,5 @@
 import { normalizeLibraryManifest } from "@smolai/skit-core";
-import { alignLibrary, aliasManifest, aliasDevice } from "./library-alignment.js";
+import { alignLibrary, aliasManifest, aliasDevice } from "@smolai/skit-core/library/session";
 import {
   importCanBeRefetched,
   sourceImports,

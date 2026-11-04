@@ -124,9 +124,6 @@ it.effect.each(["connected", "connecting"] as const)(
       }).pipe(
         Effect.exit,
         Effect.provide(rendererTestLayer()),
-        Effect.provide(
-          Layer.effect(Library.Service, Library.make).pipe(Layer.provide(InstalledSkills.layer())),
-        ),
         Effect.provide(authorLayer(home)),
         Effect.provide(libraryApplicationLayer.pipe(Layer.provide(skitConfigurationLayer(home)))),
         Effect.provide(

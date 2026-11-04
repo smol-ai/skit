@@ -83,7 +83,7 @@ it.effect("absent R and absent L: clean, and nothing is created anywhere", () =>
       yield* unchanged;
     }
     // Only the writer lock's home exists afterwards, holding only that lock, which holds no data.
-    assert.deepStrictEqual(yield* homes.fs.readDirectory(a.home), ["lock.sqlite"]);
+    assert.isFalse(yield* homes.fs.exists(a.home));
     assert.strictEqual(server.remote, null);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
@@ -154,8 +154,9 @@ it.effect("empty R and empty L without ancestry: clean, anchoring only local anc
     const saves = a.saves;
     const writeRequests = server.writeRequests;
     assert.strictEqual((yield* a.sync()).status, "clean");
-    // Anchoring is one local publication and no Registry write.
-    assert.strictEqual(a.saves, saves + 1);
+    // Pending, three phase checkpoints, publication, and Done; no Registry write.
+    assert.strictEqual(a.saves, saves + 6);
+    assert.strictEqual((yield* a.state).operations.at(-1)?._tag, "Done");
     assert.strictEqual(server.writeRequests, writeRequests);
     assert.strictEqual((yield* a.state).sync_ancestry?.revision_id, head.revision_id);
     assert.strictEqual(server.writes, 1);

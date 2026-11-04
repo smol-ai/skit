@@ -1,8 +1,9 @@
+import { syncLibraryApplicationLayer } from "../../library-application/layers.js";
 import { skitConfigurationLayer } from "@smolai/skit-core";
 import { RegistryAuth } from "../../registry/auth-service.js";
 import { Option, Effect, Result } from "effect";
 import { Command, Flag } from "effect/cli";
-import { handleSourceCommand } from "../../application.js";
+import { handleRegistryCommand } from "../../application.js";
 import type { ResolvedAuth } from "../../registry/auth.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import {
@@ -123,7 +124,7 @@ export const librarySyncCliCommand = Command.make(
     ...localFlags,
   },
   (input) =>
-    handleSourceCommand(
+    handleRegistryCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const choosing =
@@ -157,7 +158,7 @@ export const librarySyncCliCommand = Command.make(
                   },
                 }
               : {}),
-        });
+        }).pipe(Effect.provide(syncLibraryApplicationLayer(configuration.inventory)));
         yield* renderer.result(
           result(
             "librarySync",

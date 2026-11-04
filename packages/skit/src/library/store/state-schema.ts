@@ -17,7 +17,16 @@ import {
   SkillId,
   SkillVersionId,
 } from "../entity-ids.js";
-import { Enabled, SkillsShLockFileEntry, SkitSource } from "../library-contracts.js";
+import {
+  Collection,
+  Skill,
+  CollectionVersion,
+  Import,
+  LibraryManifest,
+  Enabled,
+  SkillsShLockFileEntry,
+  SkitSource,
+} from "../library-contracts.js";
 import {
   DeviceSkillSelection,
   InstalledSkill,
@@ -108,6 +117,42 @@ export const LibraryDeviceStateFields = {
     Schema.optional(Schema.mutable(Schema.Array(SkillAssessmentAcceptance))),
   ),
 } as const;
+
+/** The accepted remote head is saved atomically with the Library it describes. */
+export const SyncAncestry = Schema.Struct({
+  origin: Schema.NonEmptyString,
+  library_id: Schema.NonEmptyString,
+  revision_id: Schema.NonEmptyString,
+  base_manifest: LibraryManifest,
+});
+export interface SyncAncestry extends Schema.Schema.Type<typeof SyncAncestry> {}
+export const CURRENT_LIBRARY_STATE_VERSION = 12 as const;
+
+/** State fields a publication replaces; operation history is deliberately separate. */
+export const LibraryStateFields = {
+  ...LibraryDeviceStateFields,
+  schemaVersion: Schema.Literal(CURRENT_LIBRARY_STATE_VERSION),
+  sync_ancestry: Schema.optionalKey(SyncAncestry),
+  device_skill_selection: Schema.optionalKey(DeviceSkillSelection),
+  pending_device_selection_origin: Schema.optionalKey(Schema.NonEmptyString),
+  collections: Schema.mutable(Schema.Array(Collection)),
+  skills: Schema.mutable(Schema.Array(Skill)),
+  collection_versions: Schema.mutable(Schema.Array(CollectionVersion)),
+  imports: Schema.mutable(Schema.Array(Import)),
+  /** What is enabled for every project: the account's selection, as this device last saw it. */
+  enabled: Schema.mutable(Schema.Array(Enabled)),
+  invocation_policies: Schema.optionalKey(InvocationPolicies),
+  repositories: Schema.mutable(Schema.Array(Repository)),
+  installed_skills: Schema.mutable(Schema.Array(InstalledSkill)),
+};
+const syncPublication = Schema.Struct(LibraryStateFields);
+export interface SyncPublication extends Schema.Schema.Type<typeof syncPublication> {}
+export const SyncPublication: Schema.Codec<SyncPublication, unknown> = Schema.Unknown.pipe(
+  Schema.refine(
+    (value): value is SyncPublication =>
+      Schema.is(syncPublication)(value) && !Object.hasOwn(value, "operations"),
+  ),
+);
 
 // ── Operation records ───────────────────────────────────────────────────────────────────────────
 // Setup's record of each operation (architecture/library.ts OperationStatus, RecordedSetupStep).
@@ -292,7 +337,35 @@ export const StepRouting = Schema.Struct({
 });
 export type StepRouting = typeof StepRouting.Type;
 
+/** Lossless installer observations, kept without requiring installer construction when decoding. */
+export const SyncFolder = Schema.Struct({
+  path: Schema.String,
+  entry: Schema.Literals(["Absent", "Directory", "SymbolicLink", "File", "Other"]),
+  evidence: Schema.String,
+  ancestors: Schema.Array(Schema.Struct({ path: Schema.String, evidence: Schema.String })),
+});
+export type SyncFolder = typeof SyncFolder.Type;
+const syncProgram = Schema.Struct({
+  before: SyncPublication,
+  after: SyncPublication,
+  routing: StepRouting,
+  retire: Schema.Array(InstalledSkill),
+  drop: Schema.Array(InstalledSkillId),
+  manifestDigest: Hash,
+  receipt: Schema.OptionFromOptionalKey(SyncAncestry),
+  folders: Schema.Array(SyncFolder),
+  issues: Schema.Array(Schema.String),
+});
+export interface SyncProgram extends Schema.Schema.Type<typeof syncProgram> {}
+export interface StoredSyncProgram extends Schema.Codec.Encoded<typeof syncProgram> {}
+export const SyncProgram: Schema.Codec<SyncProgram, StoredSyncProgram> = syncProgram;
+
 export const SetupStep = Schema.Union([
+  Schema.TaggedStruct("Sync", { phase: Schema.Literal("retire"), program: SyncProgram }),
+  Schema.TaggedStruct("Sync", {
+    phase: Schema.Literals(["publish", "install"]),
+    sourceStep: Schema.Int,
+  }),
   Schema.TaggedStruct("Import", { request: ImportRequest }),
   Schema.TaggedStruct("Manage", {
     mode: Schema.Literal("existing"),

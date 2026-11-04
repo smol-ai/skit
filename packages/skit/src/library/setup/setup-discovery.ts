@@ -637,6 +637,7 @@ export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function*
     repositoryConfigs,
     harnessRoots,
     library,
+    snapshot,
     authoredCollections,
     libraryInventory,
     discoveryComplete: complete,

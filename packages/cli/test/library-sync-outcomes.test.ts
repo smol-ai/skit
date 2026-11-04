@@ -1,12 +1,11 @@
 import { Library } from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
-import { Effect, Schema, Exit, type Layer, type Scope } from "effect";
+import { Effect, Schema, Option, Exit, type Layer, type Scope } from "effect";
 import type { SkillId } from "@smolai/skit-core";
 import { join } from "node:path";
 import {
   LibraryState,
-  libraryStoreLayer,
   InvalidLibraryState,
   readSnapshotArchive,
   deterministicTreeHash,
@@ -19,7 +18,6 @@ import {
   LibraryApiRejected,
   LibraryManifestTooNew,
 } from "../src/workflows/library/library-sync-api.js";
-import { prepareSyncDeviceTransition } from "../src/workflows/library/library-sync-installed-skills.js";
 import { SyncLocalChanged } from "../src/workflows/library/library-sync.js";
 import {
   assertDiskUnchanged,
@@ -684,14 +682,26 @@ it.effect("oracle: every applying path commits remote before local, on the revis
         return [...events];
       });
     yield* a.importSource("first");
-    assert.deepStrictEqual(yield* committed(a.sync()), ["upload", "write on null", "save a"]);
+    assert.deepStrictEqual(yield* committed(a.sync()), [
+      "upload",
+      "write on null",
+      ...Array(6).fill("save a"),
+    ]);
     const pushed = server.remote!.revision_id;
-    assert.deepStrictEqual(yield* committed(b.sync()), ["save b"]);
+    assert.deepStrictEqual(yield* committed(b.sync()), Array(6).fill("save b"));
     yield* b.importSource("second");
-    assert.deepStrictEqual(yield* committed(b.sync()), ["upload", `write on ${pushed}`, "save b"]);
+    assert.deepStrictEqual(yield* committed(b.sync()), [
+      "upload",
+      `write on ${pushed}`,
+      ...Array(6).fill("save b"),
+    ]);
     const merged = server.remote!.revision_id;
     yield* a.importSource("third");
-    assert.deepStrictEqual(yield* committed(a.sync()), ["upload", `write on ${merged}`, "save a"]);
+    assert.deepStrictEqual(yield* committed(a.sync()), [
+      "upload",
+      `write on ${merged}`,
+      ...Array(6).fill("save a"),
+    ]);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -770,8 +780,7 @@ for (const home of ["current", "legacy", "absent"] as const)
           assert.deepStrictEqual(paths(changes.deleted), []);
           if (home === "current") assert.deepStrictEqual(changes, noDiskChanges);
           if (home === "absent") {
-            assert.deepStrictEqual([changes.changed, paths(changes.created)], [[], [""]]);
-            assert.strictEqual(changes.created[0]!.path[0], a.home);
+            assert.deepStrictEqual(changes, noDiskChanges);
           }
           if (home === "legacy") {
             assert.deepStrictEqual(paths(changes.changed), ["state.json"]);
@@ -857,75 +866,63 @@ it.effect("a failed snapshot download retains nothing and leaves the remote unch
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("a prepared transition distinguishes an absent Library from a newly empty one", () =>
+/** Prepare through the owner; the resulting plan contains no writer callbacks. */
+const prepareLocalSync = Effect.gen(function* () {
+  const library = yield* Library.Service;
+  const base = yield* library.read;
+  const state = base._tag === "Present" ? base.state : emptyLibraryState();
+  const manifest = yield* libraryManifestFromLocalState(state);
+  const localArchives = base._tag === "Present" ? yield* library.content.pack(base) : [];
+  const staged = yield* library.content.stage(manifest, {
+    localArchives,
+    registry: { origin: "https://registry.test", token: Option.none() },
+  });
+  return yield* library.plan(
+    {
+      _tag: "Sync",
+      staged,
+      deviceSelection: Option.none(),
+      pendingOrigin: Option.none(),
+      acceptedBase: Option.fromUndefinedOr(state.sync_ancestry),
+      remote: Option.none(),
+    },
+    { base },
+  );
+});
+
+it.effect("a Sync plan distinguishes an absent Library from a newly empty one", () =>
   Effect.gen(function* () {
     const { a, fs } = yield* devices;
     const layer = Library.layer({ home: a.home, routing: { _tag: "None" } });
-    const current = yield* Effect.flatMap(Library.Service, (library) => library.read).pipe(
-      Effect.provide(layer),
-    );
-    assert.strictEqual(current._tag, "Absent");
-    const state = emptyLibraryState();
-    const manifest = yield* libraryManifestFromLocalState(state);
-    const transition = yield* prepareSyncDeviceTransition({
-      current,
-      aligned: state,
-      manifest,
-      rootFor: undefined,
-    }).pipe(Effect.provide(libraryStoreLayer({ home: a.home })));
-    if (transition._tag !== "Ready") return yield* Effect.die("Expected a ready transition");
+    const plan = yield* prepareLocalSync.pipe(Effect.provide(layer));
     yield* fs.makeDirectory(a.home, { recursive: true });
     const statePath = join(a.home, "state.json");
-    const bytes = JSON.stringify(state);
+    const bytes = JSON.stringify(emptyLibraryState());
     yield* fs.writeFileString(statePath, bytes);
-    const failure = yield* transition
-      .saveRestored(state, {
-        origin: "https://registry.test",
-        library_id: "library_test",
-        revision_id: "revision_test",
-        base_manifest: manifest,
-      })
-      .pipe(
+    const failure = yield* Effect.flip(
+      Effect.flatMap(Library.Service, (library) => library.apply({ _tag: "Apply", plan })).pipe(
         Effect.provide(layer),
-        Effect.provide(libraryStoreLayer({ home: a.home })),
-        Effect.flip,
-      );
-    assert.strictEqual(failure._tag, "LibraryChanged");
+      ),
+    );
+    assert.strictEqual(failure._tag, "Library.StalePlan");
     assert.strictEqual(yield* fs.readFileString(statePath), bytes);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("a prepared device transition cannot save into another Library home", () =>
+it.effect("a Sync plan cannot save into another Library home", () =>
   Effect.gen(function* () {
     const { a, b } = yield* devices;
     yield* a.importSource("first");
-    const state = yield* a.state;
-    const manifest = yield* libraryManifestFromLocalState(state);
-    const transition = yield* prepareSyncDeviceTransition({
-      current: yield* Effect.flatMap(Library.Service, (library) => library.read).pipe(
-        Effect.provide(Library.layer({ home: a.home, routing: { _tag: "None" } })),
-      ),
-      aligned: state,
-      manifest,
-      rootFor: undefined,
-    }).pipe(Effect.provide(libraryStoreLayer({ home: a.home })));
-    assert.strictEqual(transition._tag, "Ready");
-    if (transition._tag !== "Ready") return;
+    const plan = yield* prepareLocalSync.pipe(
+      Effect.provide(Library.layer({ home: a.home, routing: { _tag: "None" } })),
+    );
     const before = yield* captureDisk([...a.disk, ...b.disk], { identity: true });
     const failure = yield* Effect.flip(
-      transition
-        .saveRestored(state, {
-          origin: "https://registry.test",
-          library_id: "library_test",
-          revision_id: "revision_test",
-          base_manifest: manifest,
-        })
-        .pipe(
-          Effect.provide(Library.layer({ home: b.home, routing: { _tag: "None" } })),
-          Effect.provide(libraryStoreLayer({ home: b.home })),
-        ),
+      Effect.flatMap(Library.Service, (library) => library.apply({ _tag: "Apply", plan })).pipe(
+        Effect.provide(Library.layer({ home: b.home, routing: { _tag: "None" } })),
+      ),
     );
-    assert.strictEqual(failure._tag, "LibraryChanged");
+    assert.strictEqual(failure._tag, "Library.StalePlan");
     yield* assertDiskUnchanged(before);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
@@ -1004,6 +1001,7 @@ it.effect("sync exposes bounded completed phases in transfer and save order", ()
     assert.strictEqual(result.status, "pulled");
     assert.deepStrictEqual(imported, [2]);
     assert.isBelow(completed.indexOf("download"), completed.indexOf("save-local"));
-    assert.strictEqual(completed.at(-1), "enable");
+    // One owner call now completes both the publication and its installations.
+    assert.strictEqual(completed.at(-1), "save-local");
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

@@ -22,6 +22,7 @@ import { absentEvidence, observePathEvidence } from "./folder-evidence.js";
 import { changeWrites } from "./installed-update.js";
 import { recordedLibrary } from "./setup-intent.js";
 import { moveAside, recoveryDirectory } from "./setup-moves.js";
+import { runSyncStep, type SyncStepResult } from "./internal/sync/operation.js";
 import { importCollection, type ImportedCollection } from "./import-collection.js";
 import { emptyLibraryState, type LibraryState } from "./library-state.js";
 import { StalePlan } from "./library-plan.js";
@@ -47,6 +48,7 @@ import {
 
 /** One finished step, by step tag. */
 export type SetupStepResult =
+  | SyncStepResult
   | { readonly _tag: "Import"; readonly imported: ImportedCollection }
   | ManageResult
   | { readonly _tag: "Update"; readonly changes: readonly UpdatedCopy[] }
@@ -94,6 +96,8 @@ const observed = (paths: readonly string[]) =>
  */
 const recordedStep = Effect.fn("Library.setup.recordedStep")(function* (step: SetupStep) {
   switch (step._tag) {
+    case "Sync":
+      return { step, before: [], after: [], status: "Pending" } satisfies RecordedSetupStep;
     // Import's retained Collection Version is known only once it runs; its Done write saves it,
     // and saves it too in the `after` of each Manage step whose files it imports.
     case "Import":
@@ -173,6 +177,12 @@ const removedBy = (step: SetupStep): readonly (FolderEvidence | LinkEvidence)[] 
 
 /** Refuse steps setup could not run safely, before anything is written. */
 export const checkSteps = (home: string, steps: readonly SetupStep[]) => {
+  for (const [index, step] of steps.entries()) {
+    if (step._tag !== "Sync" || step.phase === "retire") continue;
+    const source = steps[step.sourceStep];
+    if (step.sourceStep >= index || source?._tag !== "Sync" || source.phase !== "retire")
+      return Option.some(`Sync step ${index + 1} has no earlier recorded program`);
+  }
   const firstRemove = steps.findIndex((step) => step._tag === "Remove");
   if (firstRemove >= 0 && steps.slice(firstRemove).some((step) => step._tag !== "Remove"))
     return Option.some("Setup removes folders only after every other step");
@@ -253,6 +263,8 @@ const runStep = Effect.fn("Library.setup.step")(function* (
   const store = yield* LibraryStore;
   const step = steps[index]!.step;
   switch (step._tag) {
+    case "Sync":
+      return yield* runSyncStep(operationId, index, steps);
     case "Import": {
       const imported = yield* Effect.scoped(importCollection(step.request));
       return {

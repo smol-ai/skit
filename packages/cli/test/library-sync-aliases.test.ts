@@ -57,9 +57,14 @@ const assertIntact = Effect.fn("Test.assertIntact")(function* (
 const collectionVersionHashes = (device: Device) =>
   Effect.map(device.state, (state) => state.collection_versions.map((copy) => copy.hash));
 
-/** Raw state text, so retired handles are checked without going through the loader. */
-const stateBytes = (fs: FileSystem.FileSystem, device: Device) =>
-  fs.readFileString(join(device.home, "state.json"));
+/** Check every current reference, including unknown fields, without loader normalization.
+ * The operation journal deliberately retains the exact pre-Sync identities as recovery evidence.
+ */
+const publicationBytes = (fs: FileSystem.FileSystem, device: Device) =>
+  Effect.map(fs.readFileString(join(device.home, "state.json")), (text) => {
+    const { operations: _history, ...current } = JSON.parse(text);
+    return JSON.stringify(current);
+  });
 
 it.effect(
   "the same upstream under different Collection IDs adopts the published identity and remaps every device reference",
@@ -149,9 +154,12 @@ it.effect(
         [publishedSkill.skill_id],
       );
       // No portable or device reference keeps a retired local handle.
-      const text = yield* stateBytes(fs, b);
+      const text = yield* publicationBytes(fs, b);
       for (const retired of [local.collection.collection_id, localSkill.skill_id, localVersion])
         assert.notInclude(text, retired);
+      const history = JSON.stringify(after.operations);
+      for (const retired of [local.collection.collection_id, localSkill.skill_id, localVersion])
+        assert.include(history, retired);
       yield* assertIntact(homes, b, imported);
 
       // A gains B's import without another write, then both homes are clean.
@@ -280,7 +288,7 @@ it.effect(
         ids(after.skills[0]!.versions, (item) => item.skill_version_id),
         [v1, remoteV2].sort(),
       );
-      assert.notInclude(yield* stateBytes(fs, b), localV2);
+      assert.notInclude(yield* publicationBytes(fs, b), localV2);
       // The rejected Version's import and bytes stay retained.
       assert.deepStrictEqual(
         ids(after.imports, (item) => item.import_id),
@@ -367,7 +375,7 @@ it.effect("an identical retained local edit aligns local_version_id to the publi
       ids(skill.versions, (item) => item.skill_version_id),
       ids((yield* a.state).skills[0]!.versions, (item) => item.skill_version_id),
     );
-    assert.notInclude(yield* stateBytes(fs, b), bEdit);
+    assert.notInclude(yield* publicationBytes(fs, b), bEdit);
     // The source import and both devices' retained edits.
     assert.strictEqual(after.imports.length, 3);
     assert.strictEqual(after.imports.filter((item) => item.kind === "edit").length, 2);

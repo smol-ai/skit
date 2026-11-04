@@ -23,7 +23,7 @@ import {
 } from "../src/workflows/library/library-merge.js";
 import { planLibrarySync } from "../src/workflows/library/library-sync-plan.js";
 
-import { alignLibrary, aliasManifest } from "../src/workflows/library/library-alignment.js";
+import { alignLibrary, aliasManifest } from "@smolai/skit-core/library/session";
 
 const hash = `sha256:${"a".repeat(64)}`;
 const hashB = `sha256:${"b".repeat(64)}`;
