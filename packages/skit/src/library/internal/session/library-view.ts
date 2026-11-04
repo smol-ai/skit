@@ -144,12 +144,21 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
       ),
       skills: enabledSkillIds(state, globalEnabled(state).enabled),
     }),
-    descriptionLoad: (collectionId: string) => {
-      const collection = state.collections.find((item) => item.collection_id === collectionId);
+    descriptionLoad: (
+      subject: { readonly collection: string } | { readonly skills: readonly string[] },
+    ) => {
+      const collection =
+        "collection" in subject
+          ? state.collections.find((item) => item.collection_id === subject.collection)
+          : undefined;
       return readDescriptionLoad(
         state,
         originalsPath,
-        collection === undefined ? [] : currentCollectionSkills(state, collection.collection_id),
+        "skills" in subject
+          ? state.skills.filter((skill) => subject.skills.includes(skill.skill_id))
+          : collection === undefined
+            ? []
+            : currentCollectionSkills(state, collection.collection_id),
       );
     },
     listingSizeAfter: (change: {

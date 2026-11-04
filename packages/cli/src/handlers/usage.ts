@@ -1,5 +1,5 @@
 import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
-import { LibraryStore, UsageHarness, skillUsageLayer } from "@smolai/skit-core";
+import { Library, emptyLibraryState, UsageHarness, skillUsageLayer } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { Command, Flag } from "effect/cli";
 import { scanLocalUsage } from "../library-application/local-usage.js";
@@ -40,8 +40,9 @@ export const usageCliCommand = Command.make(
       return yield* handleLibraryCommand(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
-          const store = yield* LibraryStore;
-          const state = yield* store.load;
+          const library = yield* Library.Service;
+          const snapshot = yield* library.read;
+          const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
           const report = yield* renderer.withStatus(
             "Scanning local transcripts",
             scanLocalUsage(state, {

@@ -249,7 +249,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
           value: "collection",
           label: input.enabled
             ? `Enable whole collection · ${descriptionLoadMessage(
-                yield* view.descriptionLoad(collection.id),
+                yield* view.descriptionLoad({ collection: collection.id }),
               )}`
             : "Disable whole collection",
           hint: input.enabled

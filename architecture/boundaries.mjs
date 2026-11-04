@@ -74,12 +74,10 @@ export const debt = {
   "packages/cli/test/pnpm-skills.test.ts": ["prepareRecoveryMoves"],
   "packages/cli/test/recovery-moves.test.ts": ["prepareRecoveryMoves", "prepareRecoveryRestore"],
   "packages/cli/test/recovery-command.test.ts": ["prepareRecoveryMoves"],
-  "packages/cli/src/audit/local.ts": ["LibraryStore", "libraryStoreLayer"],
   // The home lock is withHomeLock until the home-lock function exists (D3; A6).
   "packages/cli/src/author/history.ts": ["withHomeLock"],
   "packages/cli/src/configuration-writer.ts": ["withHomeLock"],
   "packages/cli/src/front-end.ts": ["libraryStoreLayer"],
-  "packages/cli/src/handlers/library/add.ts": ["LibraryStore"],
   "packages/cli/src/handlers/library/check.ts": ["LibraryStore"],
   "packages/cli/src/handlers/library/inventory.ts": [
     "LibraryStore",
@@ -88,7 +86,6 @@ export const debt = {
   ],
   "packages/cli/src/handlers/library/recovery.ts": ["LibraryStore", "prepareRecoveryRestore"],
   "packages/cli/src/handlers/library/remove.ts": ["LibraryStore"],
-  "packages/cli/src/handlers/usage.ts": ["LibraryStore"],
   "packages/cli/src/library-application/collection-update.ts": [
     "LibraryStore",
     "withLibraryWriter",

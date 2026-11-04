@@ -1,10 +1,7 @@
 import { skitConfigurationLayer } from "@smolai/skit-core";
 import { Effect, Option, Result } from "effect";
-import { LibraryStore } from "@smolai/skit-core";
-import {
-  readDescriptionLoad,
-  descriptionLoadMessage,
-} from "../../workflows/library/collection-load.js";
+import { descriptionLoadMessage } from "../../workflows/library/collection-load.js";
+import { openLibraryView } from "../../library-application/library-view.js";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleSourceCommand } from "../../application.js";
 import { MissingRequirement } from "../../workflows/failures.js";
@@ -97,14 +94,8 @@ export const addCliCommand = Command.make(
           }),
         );
         const measurement = yield* Effect.gen(function* () {
-          const store = yield* LibraryStore;
-          const state = yield* store.load;
-          const ids = new Set<string>(imported.skill_ids);
-          const load = yield* readDescriptionLoad(
-            state,
-            store.originalsPath,
-            state.skills.filter((skill) => ids.has(skill.skill_id)),
-          );
+          const view = yield* openLibraryView();
+          const load = yield* view.descriptionLoad({ skills: imported.skill_ids });
           return descriptionLoadMessage(load);
         }).pipe(Effect.orElseSucceed(() => "Description size unavailable."));
         yield* renderer.note(measurement, "Description size");

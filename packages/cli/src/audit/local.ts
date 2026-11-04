@@ -1,5 +1,6 @@
 import { Clock, Effect } from "effect";
 import type { Digest } from "effect/crypto";
+import { Library } from "@smolai/skit-core/library";
 
 import {
   configurationForHome,
@@ -8,8 +9,6 @@ import {
 } from "@smolai/skit-core";
 import { dirname, join, resolve } from "node:path";
 import {
-  LibraryStore,
-  libraryStoreLayer,
   inspectOwnershipMarker,
   objectAt,
   physicalPath,
@@ -42,17 +41,17 @@ type LedgerInspection =
 const inspectLibraryLedger = Effect.fn("Audit.ledger")(function* (
   library: ResolvedSkitConfiguration,
 ): Effect.gen.Return<LedgerInspection, never, TreeRequirements | Digest.Digest> {
-  // Building the store migrates a legacy ledger; a ledger it cannot open is unreadable evidence.
-  return yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
+  // Library owns migration/startup; failure to open it is unreadable forensic evidence.
+  return yield* Effect.flatMap(Library.Service, (owner) => owner.read).pipe(
     Effect.map((inspected): LedgerInspection =>
-      inspected.present
+      inspected._tag === "Present"
         ? {
             kind: "readable",
             imported: new Set(inspected.state.skills.map((skill) => skill.skill_id)),
           }
         : { kind: "absent" },
     ),
-    Effect.provide(libraryStoreLayer({ home: library.skitHome })),
+    Effect.provide(Library.layer({ home: library.skitHome, routing: { _tag: "None" } })),
     Effect.orElseSucceed((): LedgerInspection => ({
       kind: "unreadable",
       path: join(resolve(library.skitHome), "state.json"),

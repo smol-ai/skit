@@ -11,6 +11,7 @@ import {
 } from "@smolai/skit-core";
 import { readDescriptionLoad } from "../src/workflows/library/collection-load.js";
 import { importSource } from "../src/library-application/import-source.js";
+import { openLibraryView } from "../src/library-application/library-view.js";
 import {
   initializeLibraryMachine,
   libraryHome,
@@ -86,6 +87,19 @@ effectIt.effect(
         members.filter((member) => member.name === "keep"),
         "2026-10-13T00:00:00.000Z",
       );
+      const view = yield* home.owned(openLibraryView());
+      expect(yield* view.descriptionLoad({ collection: first.collection.collection_id })).toEqual({
+        skills: 1,
+        characters: 3,
+        unknown: 0,
+      });
+      expect(
+        yield* view.descriptionLoad({ skills: first.skills.map((skill) => skill.skill_id) }),
+      ).toEqual({
+        skills: 2,
+        characters: 6,
+        unknown: 0,
+      });
       expect((yield* home.durable).skills.map((skill) => skill.name).sort()).toEqual([
         "keep",
         "removed",
