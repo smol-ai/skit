@@ -104,7 +104,8 @@ it.effect("a directory that becomes repository-owned before cleanup stays in pla
         }),
       ),
     );
-    expect(failed._tag).toBe("PlanIsStale");
+    // The copy no longer matches what the step recorded, so setup stops before moving it.
+    expect(failed._tag).toBe("SetupStopped");
     expect(yield* f.fs.readFileString(join(f.duplicate, "SKILL.md"))).toBe(f.markdown);
     expect(yield* f.fs.readFileString(join(f.duplicate, ".git"))).toBe(
       "gitdir: newly-owned-checkout\n",

@@ -159,7 +159,7 @@ export function setupPlanLines(input: {
             (entry) =>
               `  ${entry.name} · ${entry.path}${entry.type === "SymbolicLink" ? " (symlink only; source stays)" : " (move directory to recovery)"}`,
           ),
-          `Recovery folder: ${summary.removals.recoveryDirectory}`,
+          "Removed copies are moved into the Library's removed/ folder, under this setup's operation ID.",
           "Library entries and source files outside these locations stay in place.",
         ]
       : []),

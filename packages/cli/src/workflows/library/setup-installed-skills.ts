@@ -1,11 +1,10 @@
 import { basename } from "node:path";
-import { Clock, Data, Effect } from "effect";
+import { Data, Effect } from "effect";
 import {
   hashParts,
   InstalledSkills,
   Library,
   changeWrites,
-  updateInstalledSkills,
   FailureTypeId,
   type LibraryState,
   type SkitFailure,
@@ -17,7 +16,6 @@ import type {
   InstalledSkillChangeResult,
   SetupVersionChoice,
 } from "./setup-contract.js";
-import { PlanIsStale } from "../../library/failures.js";
 
 export class ChangeChoiceRequired
   extends Data.TaggedError("ChangeChoiceRequired")<{
@@ -142,26 +140,5 @@ export const planInstalledSkillChanges = Effect.fn("Setup.planInstalledSkillChan
         ]),
       ),
     ),
-  );
-});
-
-/**
- * Apply reviewed changes to existing copies through the Library, routed by this machine's
- * configuration: each local choice becomes its Skill's Version, then one update installs what was
- * reviewed.
- */
-export const applyInstalledSkillChanges = Effect.fn("Setup.applyInstalledSkillChanges")(function* (
-  roots: InventoryRootOptions,
-  reviewed: readonly InstalledSkillChange[],
-  choices: readonly SetupVersionChoice[],
-) {
-  return yield* updateInstalledSkills(
-    reviewed,
-    choices,
-    new Date(yield* Clock.currentTimeMillis).toISOString(),
-  ).pipe(
-    Effect.provideService(InstalledSkills.Service, yield* makeInstalledSkills(roots)),
-    Effect.catchTag("Library.ReviewedChangeDiffers", () => Effect.fail(new PlanIsStale())),
-    Effect.map((copies): InstalledSkillChangeResult[] => [...copies]),
   );
 });

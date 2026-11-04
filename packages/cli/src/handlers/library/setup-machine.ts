@@ -92,7 +92,7 @@ export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (
     removed: removals.entries.map(({ name, path }) => ({ name, path })),
     recoveryDirectories: [
       ...(applied?.recoveryDirectories ?? []),
-      ...(removals.entries.length && applied ? [removals.recoveryDirectory] : []),
+      ...(applied?.removalDirectory === undefined ? [] : [applied.removalDirectory]),
     ],
     imported: sources.map(({ source, names }) => ({ source, names })),
     added: additions,

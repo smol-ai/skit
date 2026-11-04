@@ -11,7 +11,16 @@ import { pathIsWithin } from "../platform/path-identity.js";
 import { InvalidIntent } from "./enabled-plan.js";
 import { makeOperationId, type OperationId } from "./entity-ids.js";
 import type { UpdatedCopy } from "./installed-update.js";
-import { duplicatesToMove, runManage, runUpdate, type ManageResult } from "./setup-manage.js";
+import {
+  duplicatesToMove,
+  installedPaths,
+  runManage,
+  runUpdate,
+  type ManageResult,
+} from "./setup-manage.js";
+import { absentEvidence, observePathEvidence } from "./folder-evidence.js";
+import { changeWrites } from "./installed-update.js";
+import { recordedLibrary } from "./setup-intent.js";
 import { moveAside, recoveryDirectory } from "./setup-moves.js";
 import { importCollection, type ImportedCollection } from "./import-collection.js";
 import { emptyLibraryState, type LibraryState } from "./library-state.js";
@@ -70,14 +79,41 @@ export type SetupResult =
  */
 export type SetupError = StalePlan | InvalidIntent | LibraryStateReadError | LibraryStateWriteError;
 
-/** What a step expects at each path it touches, before it runs and once it has. */
-const recordedStep = (step: SetupStep): RecordedSetupStep => {
+/** What is at each path, as evidence; a missing folder is recorded as "nothing here". */
+const observed = (paths: readonly string[]) =>
+  Effect.forEach([...new Set(paths)], (path) =>
+    Effect.flatMap(observePathEvidence(path), (evidence) =>
+      Option.isSome(evidence) ? Effect.succeed<StepEvidence>(evidence.value) : absentEvidence(path),
+    ),
+  );
+
+/**
+ * What a step expects at each path it touches, before it runs and once it has. Where it installs
+ * or updates copies, `before` also records what was there, so undo can tell its copies from the
+ * user's.
+ */
+const recordedStep = Effect.fn("Library.setup.recordedStep")(function* (step: SetupStep) {
   switch (step._tag) {
     // Import's retained Collection Version is known only once it runs; its Done write saves it,
     // and saves it too in the `after` of each Manage step whose files it imports.
     case "Import":
+      return { step, before: [], after: [], status: "Pending" } satisfies RecordedSetupStep;
     case "Update":
-      return { step, before: [], after: [], status: "Pending" };
+      return {
+        step,
+        before: yield* observed(
+          step.changes
+            .filter(
+              (change) =>
+                changeWrites(change) ||
+                (change.status !== "native-delete" &&
+                  step.versionChoices.some((choice) => choice.skillId === change.skillId)),
+            )
+            .map(({ path }) => path),
+        ),
+        after: [],
+        status: "Pending",
+      } satisfies RecordedSetupStep;
     case "Remove":
       return {
         step,
@@ -88,16 +124,24 @@ const recordedStep = (step: SetupStep): RecordedSetupStep => {
           parent: folder.parent,
         })),
         status: "Pending",
-      };
+      } satisfies RecordedSetupStep;
     case "Manage": {
       const selections: readonly (ManageExistingSelection | ManageNewSelection)[] = step.selections;
+      const reviewed = selections.flatMap((selection) => [
+        selection.source,
+        ...(selection.mode === "new" ? selection.equalCopies : []),
+        ...duplicatesToMove(step.routing, selection),
+      ]);
       return {
         step,
-        before: selections.flatMap((selection) => [
-          selection.source,
-          ...(selection.mode === "new" ? selection.equalCopies : []),
-          ...duplicatesToMove(step.routing, selection),
-        ]),
+        before: [
+          ...reviewed,
+          ...(yield* observed(
+            selections
+              .flatMap((selection) => installedPaths(step.routing, selection))
+              .filter((path) => !reviewed.some((evidence) => evidence.path === path)),
+          )),
+        ],
         after: selections.flatMap((selection) =>
           duplicatesToMove(step.routing, selection).map((folder) => ({
             _tag: "Absent" as const,
@@ -106,10 +150,10 @@ const recordedStep = (step: SetupStep): RecordedSetupStep => {
           })),
         ),
         status: "Pending",
-      };
+      } satisfies RecordedSetupStep;
     }
   }
-};
+});
 
 /** The Import steps whose result a step's "new" selections take their files from. */
 const importsUsedBy = (step: SetupStep): readonly number[] =>
@@ -174,6 +218,10 @@ const operationIn = Effect.fn("Library.setup.operationIn")(function* (
 /** The steps an operation records, whatever its status, so undo keeps their evidence. */
 const stepsOf = (operation: Option.Option<OperationStatus>) =>
   Option.match(operation, { onNone: () => [], onSome: ({ steps }) => steps });
+
+/** What the record saved of the Library before any step ran; `state` when it is gone. */
+const beforeOf = (operation: Option.Option<OperationStatus>, state: LibraryState) =>
+  Option.match(operation, { onNone: () => recordedLibrary(state), onSome: ({ before }) => before });
 
 /** Save `operation` in place of the record of the same id, or after the others. */
 const saveOperation = Effect.fn("Library.setup.saveOperation")(function* (
@@ -292,12 +340,15 @@ const runOperation = Effect.fn("Library.setup.run")(function* (operationId: Oper
   const stop = (reason: SetupStopReason) =>
     Effect.gen(function* () {
       const current = yield* store.load;
+      const operation = yield* operationIn(current, operationId);
       yield* saveOperation(
         current,
         OperationStatus.cases.Stopped.make({
           operationId,
-          steps: stepsOf(yield* operationIn(current, operationId)),
+          steps: stepsOf(operation),
           reason,
+          before: beforeOf(operation, current),
+          after: recordedLibrary(current),
         }),
       );
     }).pipe(
@@ -350,6 +401,7 @@ const runOperation = Effect.fn("Library.setup.run")(function* (operationId: Oper
           current,
           OperationStatus.cases.Pending.make({
             operationId,
+            before: operation.value.before,
             // A later step that takes its files from this one records what it retained.
             steps: operation.value.steps.map((saved, at) =>
               at === index
@@ -371,11 +423,14 @@ const runOperation = Effect.fn("Library.setup.run")(function* (operationId: Oper
   const finished = yield* Effect.result(
     Effect.gen(function* () {
       const current = yield* store.load;
+      const operation = yield* operationIn(current, operationId);
       yield* saveOperation(
         current,
         OperationStatus.cases.Done.make({
           operationId,
-          steps: stepsOf(yield* operationIn(current, operationId)),
+          steps: stepsOf(operation),
+          before: beforeOf(operation, current),
+          after: recordedLibrary(current),
         }),
       );
     }),
@@ -421,7 +476,15 @@ export const setup = Effect.fn("Library.setup")(function* (
       const state = inspected.present ? inspected.state : emptyLibraryState();
       const operationId = makeOperationId();
       const pending = yield* encodeOperation(
-        OperationStatus.cases.Pending.make({ operationId, steps: steps.map(recordedStep) }),
+        OperationStatus.cases.Pending.make({
+          operationId,
+          steps: yield* Effect.forEach(steps, recordedStep).pipe(
+            Effect.catchTag("TreeError", (error) =>
+              Effect.fail(new InvalidIntent({ detail: `Setup cannot record ${error.message}` })),
+            ),
+          ),
+          before: recordedLibrary(state),
+        }),
       ).pipe(
         Effect.mapError(
           () => new InvalidLibraryState({ path: store.statePath, detail: "invalid setup record" }),
@@ -496,6 +559,8 @@ export const recover = Effect.fn("Library.recover")(function* () {
                 operationId: operation.operationId,
                 steps: operation.steps,
                 reason: result.reason,
+                before: operation.before,
+                after: operation.before,
               }),
         );
       }

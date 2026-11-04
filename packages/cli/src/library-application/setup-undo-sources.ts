@@ -8,8 +8,8 @@ import {
   type CollectionId,
   type LibraryState,
   type MachineId,
+  type SetupIntent,
 } from "@smolai/skit-core";
-import type { SetupIntent } from "./setup-undo-intent.js";
 
 export interface UndoSourceImport {
   readonly importId: Import["import_id"];

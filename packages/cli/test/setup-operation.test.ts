@@ -1,20 +1,14 @@
-import { basename, join } from "node:path";
-import { Effect, FileSystem } from "effect";
-import { systemError } from "effect/PlatformError";
+import { join } from "node:path";
+import { Effect, FileSystem, Option } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import {
-  LinkStat,
+  InvalidLibraryState,
   LibraryStore,
-  libraryStateRevision,
   MachineSettings,
   skitLayer,
+  type LibraryState,
 } from "@smolai/skit-core";
-import { inspectSetupOperation } from "../src/library-application/setup-operation.js";
-import {
-  inspectRecoveryOperation,
-  listRecoveryOperations,
-} from "../src/library-application/recovery-moves.js";
 import { setupApplyCommand } from "../src/handlers/library/setup-machine.js";
 import { runSetup } from "../src/workflows/library/setup.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
@@ -50,222 +44,130 @@ const fixture = Effect.fn("Test.setupOperationFixture")(function* () {
   }).pipe(Effect.provide(interaction.layer));
   return { fs, root, source, home, apply };
 });
-const refuse = (path: string) =>
-  Effect.fail(
-    systemError({
-      _tag: "PermissionDenied",
-      module: "FileSystem",
-      method: "link",
-      pathOrDescriptor: path,
+
+/** The operation records `state.json` holds, as saved. */
+const operations = (state: LibraryState) =>
+  state.operations.map((operation) => ({
+    _tag: operation._tag,
+    operationId: operation.operationId,
+    steps: operation.steps.map((recorded) => ({
+      tag: recorded.step._tag,
+      status: recorded.status,
+      sources:
+        recorded.step._tag === "Manage"
+          ? recorded.step.selections.map((selection) => selection.source.path)
+          : [],
+    })),
+  }));
+
+/** Save the Library state as `onSave` decides, counting each save from one. */
+const watchingSaves = (
+  onSave: (save: number, next: LibraryState) => Effect.Effect<void, InvalidLibraryState>,
+) =>
+  Effect.provideServiceEffect(
+    LibraryStore,
+    Effect.map(LibraryStore, (store) => {
+      let saves = 0;
+      return {
+        ...store,
+        save: (next: LibraryState, base: LibraryState) =>
+          Effect.gen(function* () {
+            yield* onSave(++saves, next);
+            yield* store.save(next, base);
+          }),
+      };
     }),
   );
 
 it.effect(
-  "real setup persists each typed inverse before saving and captures original file ownership",
+  "setup records its steps in state.json before running any, and its discovery folders under the same operation",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const links = yield* LinkStat;
-      let settingsChecked = false;
-      let saves = 0;
+      let recorded: ReturnType<typeof operations> | undefined;
       const applied = yield* f.home.owned(
         f.apply.pipe(
-          Effect.provideServiceEffect(
-            LibraryStore,
-            Effect.map(LibraryStore, (store) => ({
-              ...store,
-              save: (next, base) =>
-                Effect.gen(function* () {
-                  yield* Effect.gen(function* () {
-                    const [id] = yield* listRecoveryOperations(f.home.home);
-                    const saved = yield* inspectSetupOperation(f.home.home, id);
-                    const last = saved.changes.at(-1);
-                    expect(last?.saved).toBe(false);
-                    if (last?.change.kind !== "library")
-                      return yield* Effect.die(new Error("Missing pre-save Library inverse"));
-                    expect(last.change.beforeRevision).toBe(libraryStateRevision(base));
-                    expect(last.change.afterRevision).toBe(libraryStateRevision(next));
-                    expect(libraryStateRevision(yield* store.load)).toBe(
-                      libraryStateRevision(base),
-                    );
-                    saves++;
-                  }).pipe(
-                    Effect.provideService(FileSystem.FileSystem, f.fs),
-                    Effect.provideService(LinkStat, links),
-                    Effect.orDie,
-                  );
-                  yield* store.save(next, base);
-                }),
-            })),
+          watchingSaves((save, next) =>
+            Effect.gen(function* () {
+              if (save !== 1) return;
+              recorded = operations(next);
+              // Nothing has run yet: the copy setup manages is still the user's.
+              expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(false);
+            }).pipe(Effect.orDie),
           ),
-          Effect.provideService(FileSystem.FileSystem, {
-            ...f.fs,
-            rename: (from, to) =>
-              Effect.gen(function* () {
-                if (basename(to) === "machine.json") {
-                  yield* Effect.gen(function* () {
-                    const [id] = yield* listRecoveryOperations(f.home.home);
-                    const saved = yield* inspectSetupOperation(f.home.home, id);
-                    expect(saved.changes[0].change.kind).toBe("settings");
-                    expect(saved.changes[0].saved).toBe(false);
-                    expect(yield* f.fs.exists(to)).toBe(false);
-                    settingsChecked = true;
-                  }).pipe(
-                    Effect.provideService(FileSystem.FileSystem, f.fs),
-                    Effect.provideService(LinkStat, links),
-                    Effect.orDie,
-                  );
-                }
-                yield* f.fs.rename(from, to);
-              }),
-          }),
         ),
       );
-      expect(settingsChecked).toBe(true);
-      expect(saves).toBeGreaterThan(1);
-      if (!applied.operationId)
-        return yield* Effect.die(new Error("Missing setup operation identity"));
-      const saved = yield* inspectSetupOperation(f.home.home, applied.operationId);
-      expect(saved.changes.every((entry) => entry.saved)).toBe(true);
-      expect(saved.complete).toBeDefined();
-      expect(saved.operation.before.global).toEqual({ enabled: [] });
-      expect(saved.operation.files.find((entry) => entry.path === f.source)?.entry?.marker).toBe(
-        null,
+      if (!applied.operationId) return yield* Effect.die(new Error("Missing setup operation"));
+      expect(recorded).toEqual([
+        {
+          _tag: "Pending",
+          operationId: applied.operationId,
+          steps: [{ tag: "Manage", status: "Pending", sources: [f.source] }],
+        },
+      ]);
+      expect(operations(yield* f.home.durable)).toEqual([
+        {
+          _tag: "Done",
+          operationId: applied.operationId,
+          steps: [{ tag: "Manage", status: "Done", sources: [f.source] }],
+        },
+      ]);
+      // Setup created this machine's identity, so it saved the discovery folders it observed.
+      const settings = yield* MachineSettings.setupRecord(f.home.home, applied.operationId);
+      expect(Option.map(settings, (record) => record.before.discoveryRoots)).toEqual(
+        Option.some([]),
       );
-      expect(
-        saved.operation.files.find((entry) => entry.path === join(f.root, "claude", "review"))
-          ?.entry,
-      ).toBe(null);
-      expect(saved.complete?.intent.global.enabled).toHaveLength(1);
       expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toContain("Original bytes");
-      expect((yield* inspectRecoveryOperation(f.home.home, applied.operationId)).entries).toEqual(
-        [],
-      );
+      expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(true);
     }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect("a refused inverse record prevents the settings and Library effects it describes", () =>
+it.effect("a refused setup record changes no skill and saves no discovery folders", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     const failure = yield* Effect.flip(
       f.home.owned(
         f.apply.pipe(
-          Effect.provideService(FileSystem.FileSystem, {
-            ...f.fs,
-            link: (from, to) =>
-              to.endsWith("changes/00000001.json") ? refuse(to) : f.fs.link(from, to),
-          }),
+          watchingSaves(() =>
+            Effect.fail(
+              new InvalidLibraryState({ path: f.home.statePath, detail: "Test refusal" }),
+            ),
+          ),
         ),
       ),
     );
-    expect(failure._tag).toBe("PlatformError");
-    expect(yield* f.fs.exists(join(f.home.home, "machine.json"))).toBe(false);
+    expect(failure._tag).toBe("InvalidLibraryState");
     expect(yield* f.fs.exists(join(f.home.home, "state.json"))).toBe(false);
+    expect((yield* MachineSettings.read(f.home.home)).setups).toEqual([]);
+    expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(false);
     expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toContain("Original bytes");
-    const [id] = yield* listRecoveryOperations(f.home.home);
-    const saved = yield* inspectSetupOperation(f.home.home, id);
-    expect(saved.changes).toEqual([]);
-    expect(saved.complete).toBeUndefined();
   }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect(
-  "a lost publication acknowledgement leaves an explicit uncertain step and all retained bytes",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const failure = yield* Effect.flip(
-        f.home.owned(
-          f.apply.pipe(
-            Effect.provideService(FileSystem.FileSystem, {
-              ...f.fs,
-              link: (from, to) =>
-                to.endsWith("changes/00000002.published.json") ? refuse(to) : f.fs.link(from, to),
-            }),
-          ),
-        ),
-      );
-      expect(failure._tag).toBe("PlatformError");
-      const [id] = yield* listRecoveryOperations(f.home.home);
-      const saved = yield* inspectSetupOperation(f.home.home, id);
-      expect(saved.complete).toBeUndefined();
-      expect(saved.changes.map((entry) => entry.saved)).toEqual([true, false]);
-      const last = saved.changes.at(-1);
-      if (last?.change.kind !== "library")
-        return yield* Effect.die(new Error("Expected an uncertain Library publication"));
-      expect(libraryStateRevision(yield* f.home.durable)).toBe(last.change.afterRevision);
-      expect((yield* f.home.durable).skills.map((skill) => skill.name)).toEqual(["review"]);
-      expect((yield* f.home.durable).enabled).toEqual([]);
-      expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toContain("Original bytes");
-    }).pipe(Effect.provide(skitLayer)),
-);
-
-it.effect("completion never claims a later machine decision as a setup-owned effect", () =>
+it.effect("a setup interrupted after its record is saved is finished by the next Library", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
-    let changed = false;
-    const applied = yield* f.home.owned(
-      f.apply.pipe(
-        Effect.provideServiceEffect(
-          LibraryStore,
-          Effect.map(LibraryStore, (store) => ({
-            ...store,
-            save: (next, base) =>
-              Effect.gen(function* () {
-                yield* store.save(next, base);
-                if (!changed) {
-                  changed = true;
-                  yield* MachineSettings.setRepositoryDecision(
-                    f.home.home,
-                    "/later/repository",
-                    "watched",
-                  ).pipe(Effect.provideService(FileSystem.FileSystem, f.fs), Effect.orDie);
-                }
-              }),
-          })),
-        ),
+    const exit = yield* Effect.exit(
+      f.home.owned(
+        f.apply.pipe(watchingSaves((save) => (save === 2 ? Effect.interrupt : Effect.void))),
       ),
     );
-    if (!applied.operationId) return yield* Effect.die(new Error("Missing operation"));
-    const saved = yield* inspectSetupOperation(f.home.home, applied.operationId);
-    expect(saved.complete?.settings.repositories).toEqual([]);
-    expect((yield* MachineSettings.read(f.home.home)).repositories).toEqual([
-      { path: "/later/repository", status: "watched" },
+    expect(exit._tag).toBe("Failure");
+    expect(yield* homeLockIsFree(f.home.home)).toBe(true);
+    // As saved: reading it through a Library would already have recovered it.
+    const saved: { operations: readonly { _tag: string; operationId: string }[] } = JSON.parse(
+      yield* f.fs.readFileString(f.home.statePath),
+    );
+    const [pending] = saved.operations;
+    expect(pending?._tag).toBe("Pending");
+    // The next command's Library finishes it at startup, routed as the setup recorded.
+    expect(operations(yield* f.home.durable)).toEqual([
+      {
+        _tag: "Done",
+        operationId: pending?.operationId,
+        steps: [{ tag: "Manage", status: "Done", sources: [f.source] }],
+      },
     ]);
+    expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(true);
   }).pipe(Effect.provide(skitLayer)),
-);
-
-it.effect(
-  "interruption after inverse intent publication is inspectable without applying the described settings",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const exit = yield* Effect.exit(
-        f.home.owned(
-          f.apply.pipe(
-            Effect.provideService(FileSystem.FileSystem, {
-              ...f.fs,
-              link: (from, to) =>
-                f.fs
-                  .link(from, to)
-                  .pipe(
-                    Effect.andThen(
-                      to.endsWith("changes/00000001.json") ? Effect.interrupt : Effect.void,
-                    ),
-                  ),
-            }),
-          ),
-        ),
-      );
-      expect(exit._tag).toBe("Failure");
-      const [id] = yield* listRecoveryOperations(f.home.home);
-      const saved = yield* inspectSetupOperation(f.home.home, id);
-      expect(saved.changes.map((entry) => entry.saved)).toEqual([false]);
-      expect(saved.changes[0].change.kind).toBe("settings");
-      expect(saved.complete).toBeUndefined();
-      expect((yield* MachineSettings.read(f.home.home)).machineId).toBeUndefined();
-      expect(yield* f.fs.exists(join(f.home.home, "state.json"))).toBe(false);
-      expect(yield* homeLockIsFree(f.home.home)).toBe(true);
-      expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toContain("Original bytes");
-    }).pipe(Effect.provide(skitLayer)),
 );

@@ -5,7 +5,12 @@ import { deterministicTreeHash } from "../artifact/skit.js";
 import { LinkStat } from "../platform/link-stat.js";
 import { TreeError } from "../shared/tree-error.js";
 import type { Hash } from "../vocabulary.js";
-import type { FileIdentity, FolderEvidence, LinkEvidence } from "./store/state-schema.js";
+import type {
+  AbsentEvidence,
+  FileIdentity,
+  FolderEvidence,
+  LinkEvidence,
+} from "./store/state-schema.js";
 
 const markerName = ".skit-ownership.json";
 
@@ -112,6 +117,24 @@ export const observePathEvidence = Effect.fn("Library.observePathEvidence")(func
       contentHash,
     });
   return Option.none<FolderEvidence | LinkEvidence>();
+});
+
+/**
+ * Recorded "nothing here" at `path`. Its parent is the nearest folder that exists, which is the
+ * physical parent unless setup is about to create the folders between.
+ */
+export const absentEvidence = Effect.fn("Library.absentEvidence")(function* (path: string) {
+  let ancestor = dirname(path);
+  while (Option.isNone(yield* statAt(ancestor)) && dirname(ancestor) !== ancestor)
+    ancestor = dirname(ancestor);
+  const links = yield* LinkStat;
+  const physical = yield* links.realPathNative(ancestor);
+  const info = yield* links.identity.lstat(physical);
+  return {
+    _tag: "Absent",
+    path,
+    parent: { path: physical, dev: info.dev, ino: info.ino },
+  } satisfies AbsentEvidence;
 });
 
 /** Whether the physical parent of `path` is still the one recorded. */

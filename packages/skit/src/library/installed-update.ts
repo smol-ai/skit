@@ -165,10 +165,13 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
 
   // Outside the chosen Skills, each copy is as reviewed, or (after an earlier run) already the
   // update it was reviewed for; nothing writes that was not reviewed.
+  // A change's reason is text the review derives from its status; a setup record does not keep it.
+  const withoutReason = (change: ReviewedChange | undefined) =>
+    change === undefined ? null : { ...change, reason: undefined };
   for (const fact of facts) {
     if (chosen.has(fact.skillId)) continue;
     const before = reviewed.find((item) => item.path === fact.path);
-    const asReviewed = canonicalJson(fact) === canonicalJson(before);
+    const asReviewed = canonicalJson(withoutReason(fact)) === canonicalJson(withoutReason(before));
     const alreadyUpdated =
       before !== undefined &&
       changeWrites(before) &&

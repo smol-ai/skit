@@ -1,3 +1,5 @@
+import { recordedLibrary } from "../src/library/setup-intent.js";
+import { emptyLibraryState } from "../src/library/library-state.js";
 import { assert, it } from "@effect/vitest";
 import { Context, Effect, Exit, FileSystem, Layer, Option, Schema } from "effect";
 import { join } from "node:path";
@@ -114,6 +116,9 @@ it.effect("removes a reviewed folder into removed/<operationId>/ and records it 
             status: "Done",
           },
         ],
+        // Moving a folder aside changes nothing the Library records.
+        before: recordedLibrary(emptyLibraryState()),
+        after: recordedLibrary(emptyLibraryState()),
       }),
     ]);
     assert.strictEqual(yield* auditLines(home), 1);
@@ -249,6 +254,8 @@ for (const [commits, after] of [
         OperationStatus.cases.Done.make({
           operationId: operation.operationId,
           steps: operation.steps.map((step) => ({ ...step, status: "Done" as const })),
+          before: operation.before,
+          after: operation.before,
         }),
       ]);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -283,6 +290,8 @@ it.effect("a re-run stops, moving nothing, when the folder changed after the rec
         operationId: operation.operationId,
         steps: operation.steps,
         reason: result.reason,
+        before: operation.before,
+        after: operation.before,
       }),
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),

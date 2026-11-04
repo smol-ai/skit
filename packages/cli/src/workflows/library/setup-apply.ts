@@ -1,17 +1,23 @@
-import { join } from "node:path";
-import { Effect } from "effect";
+import { Clock, Effect, Option, Predicate, Schema } from "effect";
 import {
-  LibraryChanged,
-  currentSkillVersion,
   canonicalJson,
-  LibraryStore,
+  currentSkillVersion,
   ensureSkillsDirectoryWritable,
-  libraryStateRevision,
-  withLibraryWriter,
+  FailureTypeId,
+  MachineSettings,
   type Hash,
-  type SkillId,
+  type InstallScope,
+  type Library,
+  type LibraryState,
+  type SkitFailure,
 } from "@smolai/skit-core";
-import { activeInstallDestinations, skillsDirectoryFor } from "../../install/roots.js";
+import { readableSkillsDirectories } from "../../install/duplicates.js";
+import {
+  activeInstallDestinations,
+  skillsDirectoryFor,
+  type InventoryRootOptions,
+} from "../../install/roots.js";
+import { localLibrary } from "../../library-application/library-owner.js";
 import type { ManageOptions } from "./manage-existing.js";
 import { revalidateSetupPlan, saveSetupMachineConfig, type SetupOptions } from "./setup.js";
 import type {
@@ -21,12 +27,10 @@ import type {
   InstalledSkillChangeResult,
 } from "./setup-contract.js";
 import { isSetupInstallDestination, type SetupCopySelection } from "./setup-decisions.js";
-import { manageSetupCopies } from "./setup-manage.js";
-import { importSetupCollections } from "./setup-import.js";
-import { beginSetupOperation } from "../../library-application/setup-operation.js";
-import type { PreparedRecoveryMoves } from "../../library-application/recovery-moves.js";
+import { setupExistingSelections, setupNewSelections } from "./setup-manage.js";
+import { setupImportRequests } from "./setup-import.js";
+import type { SetupRemovals } from "./setup-removal.js";
 import {
-  applyInstalledSkillChanges,
   changeResults,
   hasChangesToApply,
   ChangeChoiceRequired,
@@ -44,7 +48,7 @@ export interface SetupApproval {
   readonly imports: readonly SetupKnownSourceSelection[];
   readonly bindings: readonly SetupCopySelection[];
   readonly ownership: readonly SetupCopySelection[];
-  readonly removals: PreparedRecoveryMoves;
+  readonly removals: SetupRemovals;
   readonly versionChoices?: readonly SetupVersionChoice[];
   readonly changes?: readonly InstalledSkillChange[];
 }
@@ -59,228 +63,330 @@ export interface SetupApplyOptions {
 }
 
 /**
- * Apply an approved setup plan from one scan taken under the Library writer.
- *
- * That scan must reproduce the approved plan ID, which covers the observed copies and the Library
- * revision. No stage observes again, so consent never moves to a plan the user did not review;
- * each stage still checks the identity of what it touches immediately before touching it. Every
- * Library publication must build on the approved revision or on this apply's previous publication.
- * Additive stages run first and removals last, so a failed or stale additive stage removes nothing.
+ * The Library stopped this setup part way: what ran stays, nothing is rolled back, and the user
+ * can undo it by its operation ID.
  */
-export const applySetupPlan = Effect.fn("Setup.applyPlan")(
-  function* (options: SetupApplyOptions, approval: SetupApproval) {
-    const revalidated = yield* options.withStatus(
-      "Revalidating the approved setup plan",
-      revalidateSetupPlan(approval.setup, approval.planId),
-    );
-    const installedSkillChanges = approval.changes ?? revalidated.scan.changes ?? [];
-    const reviewedPaths = new Set<string>();
-    for (const fact of installedSkillChanges) {
+export class SetupStopped
+  extends Schema.TaggedError<SetupStopped>()("SetupStopped", {
+    operationId: Schema.String,
+    step: Schema.Int,
+    detail: Schema.String,
+  })
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "CONFLICT" as const;
+  get message() {
+    return `Setup ${this.operationId} stopped at step ${this.step + 1}: ${this.detail}`;
+  }
+  get remediation() {
+    return `Nothing was rolled back. Preview undoing it with skit library undo ${this.operationId}, or run skit setup again to review the current plan.`;
+  }
+}
+
+/** What stopped a setup, in a sentence. */
+const stopDetail = (reason: Library.SetupStopReason) => {
+  switch (reason._tag) {
+    case "EvidenceDiffers":
+      return `${reason.path} changed after it was reviewed`;
+    case "LibraryChanged":
+      return "the Library changed while setup ran";
+    case "StepFailed":
+      return Predicate.hasProperty(reason.error, "message") &&
+        Predicate.isString(reason.error.message)
+        ? reason.error.message
+        : reason.error._tag;
+  }
+};
+
+/**
+ * Where setup installs and which folders agents read, resolved from this machine's configuration
+ * once, so a re-run of a step after a crash routes exactly as this one did.
+ */
+const stepRouting = Effect.fn("Setup.stepRouting")(function* (
+  roots: InventoryRootOptions,
+  state: LibraryState,
+) {
+  const active = yield* activeInstallDestinations(roots);
+  const scopes: readonly InstallScope[] = [
+    { kind: "global" },
+    ...state.repositories.map((repository) => ({
+      kind: "repository" as const,
+      root: repository.root,
+    })),
+  ];
+  return {
+    active,
+    destinations: scopes.flatMap((scope) =>
+      active.map((destination) => ({
+        scope,
+        destination,
+        root: skillsDirectoryFor(destination, scope, roots),
+      })),
+    ),
+    readable: scopes.flatMap((scope) =>
+      readableSkillsDirectories(roots, scope).map(({ harness, root }) => ({
+        scope,
+        harness,
+        root,
+      })),
+    ),
+  } satisfies Library.StepRouting;
+});
+
+/** A reviewed change as a setup step records it. */
+const recordedChange = (change: InstalledSkillChange): Library.ReviewedInstalledSkillChange => ({
+  installedSkillId: Option.fromUndefinedOr(change.installedSkillId),
+  skillId: change.skillId,
+  name: change.name,
+  path: change.path,
+  destination: change.destination,
+  baselineHash: Option.fromUndefinedOr(change.baselineHash),
+  currentHash: Option.fromUndefinedOr(change.currentHash),
+  desiredHash: Option.fromUndefinedOr(change.desiredHash),
+  desiredVersionId: Option.fromUndefinedOr(change.desiredVersionId),
+  evidence: change.evidence,
+  status: change.status,
+  metadataChanged: change.metadataChanged,
+});
+
+const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
+
+/**
+ * Apply an approved setup plan from one scan that reproduces the approved plan ID, which covers
+ * the observed copies and the Library revision. No step observes again, so consent never moves to
+ * a plan the user did not review.
+ *
+ * The approval becomes the Library's setup steps, each recording the folders it expects: imports,
+ * then copies bound and managed, then updates, removals last. The Library saves them before any
+ * runs, refuses them if it changed since the scan, and checks each folder as recorded before
+ * touching it. Then this machine's discovery folders are saved under the same operation ID.
+ */
+export const applySetupPlan = Effect.fn("Setup.applyPlan")(function* (
+  options: SetupApplyOptions,
+  approval: SetupApproval,
+) {
+  const library = yield* localLibrary;
+  // Read before the scan: a change after it fails the plan ID, one after this read the setup.
+  const base = yield* library.read;
+  const revalidated = yield* options.withStatus(
+    "Revalidating the approved setup plan",
+    revalidateSetupPlan(approval.setup, approval.planId),
+  );
+  const installedSkillChanges = approval.changes ?? revalidated.scan.changes ?? [];
+  const reviewedPaths = new Set<string>();
+  for (const fact of installedSkillChanges) {
+    if (
+      reviewedPaths.has(fact.path) ||
+      canonicalJson(fact) !==
+        canonicalJson(revalidated.scan.changes?.find((item) => item.path === fact.path) ?? null)
+    )
+      return yield* new PlanIsStale();
+    reviewedPaths.add(fact.path);
+  }
+  const reviewedSkills = new Set(installedSkillChanges.map((fact) => fact.skillId));
+  if (
+    (revalidated.scan.changes ?? []).some(
+      (fact) => reviewedSkills.has(fact.skillId) && !reviewedPaths.has(fact.path),
+    )
+  )
+    return yield* new PlanIsStale();
+  const versionChoices = approval.versionChoices ?? [];
+  const alternatives = setupVersionAlternatives(installedSkillChanges);
+  if (
+    new Set(versionChoices.map((choice) => choice.skillId)).size !== versionChoices.length ||
+    versionChoices.some(
+      (choice) =>
+        !alternatives.some((alternative) => canonicalJson(choice) === canonicalJson(alternative)),
+    )
+  )
+    return yield* new PlanIsStale();
+  const unresolved = changesNeedingChoice(installedSkillChanges, versionChoices);
+  if (unresolved.length) return yield* new ChangeChoiceRequired({ facts: unresolved });
+  // Only enabled global copies install into this device's skills directories. Prove those roots
+  // are writable before any step writes, so a sandboxed or read-only root (Codex keeps `.agents`
+  // read-only) fails the apply whole instead of leaving a Library with no copies behind.
+  const installedCopies = [...approval.bindings, ...approval.ownership].filter(
+    (copy) =>
+      copy.duplicateAction !== "retain-only" &&
+      isSetupInstallDestination(
+        revalidated.scan.instances.find((instance) => instance.path === copy.sourcePath),
+      ) &&
+      !revalidated.scan.onboarding.candidates.some(
+        (candidate) =>
+          candidate.action === "repository-owned" && candidate.paths.includes(copy.sourcePath),
+      ),
+  );
+  const enablingCopies = installedCopies.length > 0;
+  // Updating existing copies updates every one the approved plan showed, not only those selected.
+  const scanChanges = revalidated.scan.changes ?? [];
+  const updating = hasChangesToApply(installedSkillChanges, versionChoices);
+  if (enablingCopies || updating)
+    for (const target of yield* activeInstallDestinations(approval.setup.inventory))
       if (
-        reviewedPaths.has(fact.path) ||
-        canonicalJson(fact) !==
-          canonicalJson(revalidated.scan.changes?.find((item) => item.path === fact.path) ?? null)
-      )
-        return yield* new PlanIsStale();
-      reviewedPaths.add(fact.path);
-    }
-    const reviewedSkills = new Set(installedSkillChanges.map((fact) => fact.skillId));
-    if (
-      (revalidated.scan.changes ?? []).some(
-        (fact) => reviewedSkills.has(fact.skillId) && !reviewedPaths.has(fact.path),
-      )
-    )
-      return yield* new PlanIsStale();
-    const versionChoices = approval.versionChoices ?? [];
-    const alternatives = setupVersionAlternatives(installedSkillChanges);
-    if (
-      new Set(versionChoices.map((choice) => choice.skillId)).size !== versionChoices.length ||
-      versionChoices.some(
-        (choice) =>
-          !alternatives.some((alternative) => canonicalJson(choice) === canonicalJson(alternative)),
-      )
-    )
-      return yield* new PlanIsStale();
-    const unresolved = changesNeedingChoice(installedSkillChanges, versionChoices);
-    if (unresolved.length) return yield* new ChangeChoiceRequired({ facts: unresolved });
-    // Only enabled global copies install into this device's skills directories. Prove those roots
-    // are writable before any stage writes, so a sandboxed or read-only root (Codex keeps `.agents`
-    // read-only) fails the apply whole instead of leaving a Library with no copies behind.
-    const installedCopies = [...approval.bindings, ...approval.ownership].filter(
-      (copy) =>
-        copy.duplicateAction !== "retain-only" &&
-        isSetupInstallDestination(
-          revalidated.scan.instances.find((instance) => instance.path === copy.sourcePath),
-        ) &&
-        !revalidated.scan.onboarding.candidates.some(
-          (candidate) =>
-            candidate.action === "repository-owned" && candidate.paths.includes(copy.sourcePath),
-        ),
-    );
-    const enablingCopies = installedCopies.length > 0;
-    // Updating existing copies updates every one the approved plan showed, not only those selected.
-    const scanChanges = revalidated.scan.changes ?? [];
-    const updating = hasChangesToApply(installedSkillChanges, versionChoices);
-    const projects = enablingCopies || updating;
-    if (projects)
-      for (const target of yield* activeInstallDestinations(approval.setup.inventory))
-        if (
-          enablingCopies ||
-          (updating ? scanChanges : installedSkillChanges).some(
-            (fact) =>
-              fact.destination === target &&
-              (fact.status === "incoming-update" ||
-                fact.status === "uninstall" ||
-                fact.status === "install" ||
-                fact.metadataChanged ||
-                (fact.status !== "native-delete" &&
-                  versionChoices.some((choice) => choice.skillId === fact.skillId))),
-          )
+        enablingCopies ||
+        (updating ? scanChanges : installedSkillChanges).some(
+          (fact) =>
+            fact.destination === target &&
+            (fact.status === "incoming-update" ||
+              fact.status === "uninstall" ||
+              fact.status === "install" ||
+              fact.metadataChanged ||
+              (fact.status !== "native-delete" &&
+                versionChoices.some((choice) => choice.skillId === fact.skillId))),
         )
-          yield* ensureSkillsDirectoryWritable(
-            skillsDirectoryFor(target, { kind: "global" }, approval.setup.inventory),
-          );
-    let current = revalidated.scan;
-    const store = yield* LibraryStore;
-    let revision = libraryStateRevision(revalidated.library);
-    const operation = yield* beginSetupOperation(
-      { ...approval, changes: updating ? scanChanges : installedSkillChanges },
-      revalidated.library,
-      projects,
-      installedCopies.map((copy) => copy.name),
+      )
+        yield* ensureSkillsDirectoryWritable(
+          skillsDirectoryFor(target, { kind: "global" }, approval.setup.inventory),
+        );
+
+  // Imports and managed copies are recorded under this machine's identity, created once.
+  const home = approval.setup.libraryHome;
+  const needsIdentity = approval.imports.length > 0 || approval.ownership.length > 0;
+  const machineId = needsIdentity
+    ? Option.some(yield* MachineSettings.ensureIdentity(home))
+    : Option.none();
+  const at = new Date(yield* Clock.currentTimeMillis).toISOString();
+  const steps: Library.SetupStep[] = [];
+  const stages: string[] = [];
+  if (approval.imports.length && Option.isSome(machineId)) {
+    const requests = yield* setupImportRequests(
+      revalidated.scan,
+      approval.imports,
+      machineId.value,
+      at,
     );
-    const warnings: { name: string; message: string }[] = [];
-    const recoveryDirectories: string[] = [];
-    const changeOutcomes: InstalledSkillChangeResult[] = [];
-    const manage = {
-      ...options.manage,
-      recoveryOperationDirectory: approval.removals.operationDirectory,
+    steps.push(...requests.map((request) => ({ _tag: "Import" as const, request })));
+    stages.push(
+      `importing ${requests.length} installed ${plural(requests.length, "Collection", "Collections")} (${approval.imports.length} ${plural(approval.imports.length, "Skill", "Skills")})`,
+    );
+  }
+  const manageRouting = yield* stepRouting(options.manage.installOptions, revalidated.library);
+  if (approval.bindings.length) {
+    steps.push({
+      _tag: "Manage",
+      mode: "existing",
+      selections: yield* setupExistingSelections(revalidated.scan, approval.bindings),
+      routing: manageRouting,
+    });
+    const reconnects = approval.bindings.filter(
+      (selection) => selection.duplicateAction !== "retain-only",
+    ).length;
+    stages.push(
+      reconnects
+        ? `reconnecting ${reconnects} existing Library ${plural(reconnects, "match", "matches")}`
+        : "keeping existing Library matches without enabling",
+    );
+  }
+  if (approval.ownership.length && Option.isSome(machineId)) {
+    steps.push({
+      _tag: "Manage",
+      mode: "new",
+      selections: yield* setupNewSelections(
+        revalidated.scan,
+        approval.ownership,
+        machineId.value,
+        at,
+      ),
+      routing: manageRouting,
+    });
+    stages.push(
+      `managing ${approval.ownership.length} existing local ${plural(approval.ownership.length, "Skill", "Skills")}`,
+    );
+  }
+  if (updating) {
+    steps.push({
+      _tag: "Update",
+      changes: scanChanges.map(recordedChange),
+      versionChoices: versionChoices.map((choice) => ({
+        skillId: choice.skillId,
+        version: choice.version,
+        path: Option.fromUndefinedOr(choice.path),
+      })),
+      importedAt: at,
+      routing: yield* stepRouting(approval.setup.inventory, revalidated.library),
+    });
+    stages.push(
+      versionChoices.length
+        ? "applying the selected active versions"
+        : "updating reviewed existing copies",
+    );
+  }
+  if (approval.removals.folders.length) {
+    steps.push({ _tag: "Remove", folders: approval.removals.folders });
+    const count = approval.removals.entries.length;
+    stages.push(`removing ${count} installed ${plural(count, "copy", "copies")}`);
+  }
+  const outcome = yield* options.withStatus(
+    stages.length ? `Applying setup: ${stages.join(", ")}` : "Recording this machine's setup",
+    library.setup(steps, { base }),
+  );
+  if (outcome._tag === "Stopped")
+    return yield* new SetupStopped({
+      operationId: outcome.operationId,
+      step: outcome.reason.step,
+      detail: stopDetail(outcome.reason),
+    });
+
+  let current = revalidated.scan;
+  if (approval.persistRoots || (needsIdentity && !revalidated.scan.machineConfig.machineId)) {
+    const saved = yield* options.withStatus(
+      "Saving this machine's discovery roots",
+      saveSetupMachineConfig(
+        { ...approval.setup, persistRoots: true },
+        undefined,
+        outcome.operationId,
+      ),
+    );
+    current = {
+      ...current,
+      machineConfig: {
+        ...current.machineConfig,
+        ...(saved.machineId === undefined ? {} : { machineId: saved.machineId }),
+        ...(saved.displayName === undefined ? {} : { displayName: saved.displayName }),
+        persisted: approval.persistRoots,
+      },
     };
-    yield* Effect.gen(function* () {
-      if (
-        approval.persistRoots ||
-        ((approval.imports.length || approval.ownership.length) && !current.machineConfig.machineId)
-      ) {
-        const saved = yield* options.withStatus(
-          current.machineConfig.machineId
-            ? "Saving this machine's discovery roots"
-            : "Creating this machine's Library identity",
-          saveSetupMachineConfig(
-            { ...approval.setup, persistRoots: true },
-            operation.recordSettings,
-          ),
-        );
-        yield* operation.settingsSaved();
-        current = {
-          ...current,
-          machineConfig: {
-            ...current.machineConfig,
-            ...(saved.machineId === undefined ? {} : { machineId: saved.machineId }),
-            ...(saved.displayName === undefined ? {} : { displayName: saved.displayName }),
-            persisted: approval.persistRoots,
-          },
-        };
-      }
-      if (approval.imports.length) {
-        const collections = new Set(approval.imports.map((selection) => selection.groupKey)).size;
-        yield* options.withStatus(
-          `Importing ${collections} installed Collection${collections === 1 ? "" : "s"} (${approval.imports.length} Skill${approval.imports.length === 1 ? "" : "s"})`,
-          importSetupCollections({ setup: approval.setup }, current, approval.imports),
-        );
-      }
-      if (approval.bindings.length) {
-        const reconnects = approval.bindings.filter(
-          (selection) => selection.duplicateAction !== "retain-only",
-        ).length;
-        const applied = yield* options.withStatus(
-          reconnects
-            ? `Reconnecting ${reconnects} existing Library match${reconnects === 1 ? "" : "es"}`
-            : "Keeping existing Library matches without enabling",
-          manageSetupCopies(manage, current, approval.bindings, "existing"),
-        );
-        warnings.push(...applied.warnings);
-        recoveryDirectories.push(...applied.recoveryDirectories);
-      }
-      if (approval.ownership.length) {
-        const names =
-          approval.ownership.length <= 5
-            ? `: ${approval.ownership.map((selection) => selection.name).join(", ")}`
-            : "";
-        const applied = yield* options.withStatus(
-          `Managing ${approval.ownership.length} existing local Skill${approval.ownership.length === 1 ? "" : "s"}${names}`,
-          manageSetupCopies(manage, current, approval.ownership, "new"),
-        );
-        warnings.push(...applied.warnings);
-        recoveryDirectories.push(...applied.recoveryDirectories);
-      }
-      const deferredSkills = new Set<SkillId>();
-      if (approval.imports.length) {
-        const imported = yield* store.load;
-        if (libraryStateRevision(imported) !== revision)
-          return yield* new LibraryChanged({ path: join(store.home, "state.json") });
-        for (const fact of revalidated.scan.changes ?? []) {
-          const skill = imported.skills.find((item) => item.skill_id === fact.skillId);
-          if (
-            skill &&
-            currentSkillVersion(imported, skill)?.skill_version_id !== fact.desiredVersionId
-          )
-            deferredSkills.add(fact.skillId);
-        }
-      }
-      // One update installs every copy, so a Version the import changed holds all of them back.
-      if (deferredSkills.size)
-        changeOutcomes.push(
-          ...installedSkillChanges.map((fact) => ({
-            ...(fact.installedSkillId === undefined
-              ? {}
-              : { installedSkillId: fact.installedSkillId }),
-            name: fact.name,
-            path: fact.path,
-            status:
-              fact.status === "native-delete" ? ("native-delete" as const) : ("pending" as const),
-            reason:
-              "The source import changed the desired Version. Observe setup and review these copies again; this apply leaves them untouched.",
-          })),
-        );
-      else if (updating)
-        changeOutcomes.push(
-          ...(yield* options.withStatus(
-            versionChoices.length
-              ? "Applying the selected active versions"
-              : "Updating reviewed existing copies",
-            applyInstalledSkillChanges(approval.setup.inventory, scanChanges, versionChoices),
-          )),
-        );
-      else changeOutcomes.push(...changeResults(installedSkillChanges, true));
-    }).pipe(
-      Effect.provideService(LibraryStore, {
-        ...store,
-        save: (next, base) =>
-          libraryStateRevision(base) === revision
-            ? Effect.tap(operation.save(next, base), () =>
-                Effect.sync(() => {
-                  revision = libraryStateRevision(next);
-                }),
-              )
-            : Effect.fail(new LibraryChanged({ path: join(store.home, "state.json") })),
-      }),
-    );
-    if (approval.removals.entries.length) {
-      if (libraryStateRevision(yield* store.load) !== revision)
-        return yield* new LibraryChanged({ path: join(store.home, "state.json") });
-      yield* options.withStatus(
-        `Removing ${approval.removals.entries.length} installed cop${approval.removals.entries.length === 1 ? "y" : "ies"}`,
-        approval.removals.apply(),
+  }
+  const updated = outcome.steps.flatMap((step) => (step._tag === "Update" ? step.changes : []));
+  // A source import can change the Version a reviewed copy should hold; that copy then needs a
+  // fresh review. (An update this setup ran would have stopped on it instead.)
+  const after = updating || !approval.imports.length ? undefined : yield* library.read;
+  const deferred =
+    after?._tag === "Present" &&
+    scanChanges.some((fact) => {
+      const skill = after.state.skills.find((item) => item.skill_id === fact.skillId);
+      return (
+        skill !== undefined &&
+        currentSkillVersion(after.state, skill)?.skill_version_id !== fact.desiredVersionId
       );
-    }
-    yield* operation.complete();
-    return {
-      scan: current,
-      warnings,
-      recoveryDirectories,
-      changes: changeOutcomes,
-      operationId: operation.operationId,
-    };
-  },
-  (effect) => withLibraryWriter(effect),
-);
+    });
+  const changes: InstalledSkillChangeResult[] = updating
+    ? [...updated]
+    : deferred
+      ? installedSkillChanges.map((fact) => ({
+          ...(fact.installedSkillId === undefined
+            ? {}
+            : { installedSkillId: fact.installedSkillId }),
+          name: fact.name,
+          path: fact.path,
+          status: fact.status === "native-delete" ? "native-delete" : "pending",
+          reason:
+            "The source import changed the desired Version. Observe setup and review these copies again; this apply leaves them untouched.",
+        }))
+      : changeResults(installedSkillChanges, true);
+  return {
+    scan: current,
+    warnings: outcome.warnings,
+    /** Where duplicates moved aside while managing copies were saved. */
+    recoveryDirectories: outcome.steps.flatMap((step) =>
+      step._tag === "Manage" ? step.recoveryDirectories : [],
+    ),
+    /** Where the removed copies were saved, when the plan removed any. */
+    removalDirectory: outcome.steps.flatMap((step) =>
+      step._tag === "Remove" ? [step.recoveryDirectory] : [],
+    )[0],
+    changes,
+    operationId: outcome.operationId,
+  };
+});

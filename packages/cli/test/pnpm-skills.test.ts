@@ -12,7 +12,7 @@ import { runSetup } from "../src/workflows/library/setup.js";
 import { SetupResult } from "../src/workflows/library/setup-contract.js";
 import { setupDiscoveredSkillChoices } from "../src/presentation/setup-skills.js";
 import { setupRemovablePaths } from "../src/workflows/library/setup-removal.js";
-import { manageSetupCopies } from "../src/workflows/library/setup-manage.js";
+import { applySetupSelections } from "./helpers/setup-apply.js";
 import { importSource, inspectLibrarySource } from "../src/library-application/import-source.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
@@ -376,12 +376,9 @@ it.effect("reports pnpm copies but excludes acquisition, setup selection and rem
     if (add._tag === "Failure") expect(add.failure._tag).toBe("PnpmSkillManaged");
     const takeover = yield* Effect.result(
       home.owned(
-        manageSetupCopies(
-          { installOptions: home.installOptions },
-          scan,
-          [{ name: "demo-guide", sourcePath: f.skill }],
-          "new",
-        ),
+        applySetupSelections(options, scan, home.installOptions, {
+          ownership: [{ name: "demo-guide", sourcePath: f.skill }],
+        }),
       ),
     );
     expect(takeover._tag).toBe("Failure");

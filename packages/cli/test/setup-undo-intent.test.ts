@@ -6,6 +6,7 @@ import {
   enabledSkillIds,
   currentSkillVersion,
   MachineSettings,
+  setupIntent,
   skitLayer,
   type LibraryState,
   type Hash,
@@ -14,7 +15,6 @@ import {
   reverseSetupDiscovery,
   reverseSetupIntent,
   setupDiscoverySettings,
-  setupIntent,
 } from "../src/library-application/setup-undo-intent.js";
 import {
   deterministicTreeHash,

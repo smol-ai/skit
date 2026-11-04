@@ -16,7 +16,8 @@
  */
 import type { Brand, Effect, FileSystem, Option, Path, Scope } from "effect";
 import type { Digest } from "effect/crypto";
-import type { LibraryState } from "../packages/skit/src/library/library-state.js";
+import type { InstalledSkill, LibraryState } from "../packages/skit/src/library/library-state.js";
+import type { SetupIntent } from "../packages/skit/src/library/setup-intent.js";
 import type {
   Approval,
   Intent as ExistingIntent,
@@ -376,23 +377,39 @@ export interface RecordedSetupStep {
 
 // ── History ─────────────────────────────────────────────────────────────────────────────────────
 
+/**
+ * CONTRACT EDIT (2026-11-04, to match app.ts's invariant "setup intent carries prior/expected-after
+ * evidence in the same state.json write"): what the Library held that a setup can change, saved in
+ * the write that records the operation (`before`) and the write that marks it Done or Stopped
+ * (`after`). Undo reverses only the difference, so later changes are kept.
+ */
+export interface RecordedLibrary {
+  readonly intent: SetupIntent;
+  readonly installedSkills: readonly InstalledSkill[];
+}
+
 /** Status of one recorded operation (setup, restore, undo). Replaces bare audit events for operations. */
 export type OperationStatus =
   | {
       readonly _tag: "Pending";
       readonly operationId: OperationId;
       readonly steps: readonly RecordedSetupStep[];
+      readonly before: RecordedLibrary;
     } // recorded, not finished
   | {
       readonly _tag: "Done";
       readonly operationId: OperationId;
       readonly steps: readonly RecordedSetupStep[]; // kept: undo needs the evidence
+      readonly before: RecordedLibrary;
+      readonly after: RecordedLibrary;
     }
   | {
       readonly _tag: "Stopped";
       readonly operationId: OperationId;
       readonly steps: readonly RecordedSetupStep[];
       readonly reason: SetupStopReason;
+      readonly before: RecordedLibrary;
+      readonly after: RecordedLibrary;
     }; // user may undo
 
 export interface History {

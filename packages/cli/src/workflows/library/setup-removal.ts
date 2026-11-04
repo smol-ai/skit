@@ -1,12 +1,19 @@
 import { dirname, resolve } from "node:path";
-import { Effect } from "effect";
-import { LinkStat, pathIsWithin } from "@smolai/skit-core";
+import { Effect, Option } from "effect";
+import { LinkStat, observePathEvidence, pathIsWithin, type Library } from "@smolai/skit-core";
+import { PlanIsStale } from "../../library/failures.js";
 import { collectSkillsDirectories, type SetupOptions } from "./setup.js";
 import type { SetupResult } from "./setup-contract.js";
-import {
-  prepareRecoveryMoves,
-  type RecoveryMoveRequest,
-} from "../../library-application/recovery-moves.js";
+
+/** The copies setup removes, as reviewed: what to show, and the evidence its Remove step records. */
+export interface SetupRemovals {
+  readonly entries: {
+    readonly name: string;
+    readonly path: string;
+    readonly type: "Directory" | "SymbolicLink";
+  }[];
+  readonly folders: readonly (Library.FolderEvidence | Library.LinkEvidence)[];
+}
 
 /** Only observed, unmanaged agent locations are removable. Canonical source trees stay put. */
 export const setupRemovablePaths = Effect.fn("Setup.removablePaths")(function* (
@@ -53,22 +60,31 @@ export const setupRemovablePaths = Effect.fn("Setup.removablePaths")(function* (
   return paths;
 });
 
+/**
+ * Record each selected removable copy as it is now. A folder must still hold the bytes the scan
+ * saw; setup's Remove step moves only what matches this evidence.
+ */
 export const planSetupRemovals = Effect.fn("Setup.planRemovals")(function* (
-  options: SetupOptions,
   scan: SetupResult,
   selections: readonly { readonly name: string; readonly paths: readonly string[] }[],
   removablePaths: ReadonlyMap<string, readonly string[]>,
 ) {
-  const requests: RecoveryMoveRequest[] = [];
-  for (const selection of selections) {
-    for (const instance of scan.instances.filter((item) => selection.paths.includes(item.path))) {
-      for (const path of removablePaths.get(instance.path) ?? [])
-        requests.push({
-          name: selection.name,
-          path,
-          currentHash: instance.contentIdentity.currentHash,
-        });
-    }
-  }
-  return yield* prepareRecoveryMoves(options.libraryHome, requests);
+  const entries: SetupRemovals["entries"][number][] = [];
+  const folders: SetupRemovals["folders"][number][] = [];
+  for (const selection of selections)
+    for (const instance of scan.instances.filter((item) => selection.paths.includes(item.path)))
+      for (const path of removablePaths.get(instance.path) ?? []) {
+        if (folders.some((folder) => folder.path === path)) continue;
+        const observed = yield* observePathEvidence(path);
+        if (Option.isNone(observed)) return yield* new PlanIsStale();
+        const evidence = observed.value;
+        if (
+          evidence._tag === "Directory" &&
+          evidence.treeHash !== instance.contentIdentity.currentHash
+        )
+          return yield* new PlanIsStale();
+        entries.push({ name: selection.name, path, type: evidence._tag });
+        folders.push(evidence);
+      }
+  return { entries, folders } satisfies SetupRemovals;
 });

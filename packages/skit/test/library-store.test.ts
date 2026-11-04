@@ -4,7 +4,12 @@ import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { makeOperationId, migratedMachineId } from "../src/library/entity-ids.js";
 import { collectionVersionPath } from "../src/library/collection-version.js";
-import { libraryManifestFromLocalState, type LibraryState } from "../src/library/library-state.js";
+import {
+  emptyLibraryState,
+  libraryManifestFromLocalState,
+  type LibraryState,
+} from "../src/library/library-state.js";
+import { recordedLibrary } from "../src/library/setup-intent.js";
 import { readSnapshotArchive } from "../src/library/snapshot-archive.js";
 import { OperationStatus, type StepError } from "../src/library/store/state-schema.js";
 import { InvalidLibraryState, LibraryBusy, LibraryChanged } from "../src/failures.js";
@@ -260,6 +265,7 @@ it.effect("keeps operation records on this device: saved and loaded, never synce
             status: "Pending",
           },
         ],
+        before: recordedLibrary(base),
       }),
       OperationStatus.cases.Stopped.make({
         operationId: makeOperationId(),
@@ -270,8 +276,15 @@ it.effect("keeps operation records on this device: saved and loaded, never synce
           path: folder.path,
           expected: { before: Option.some(folder), after: Option.none() },
         },
+        before: recordedLibrary(base),
+        after: recordedLibrary(base),
       }),
-      OperationStatus.cases.Done.make({ operationId: makeOperationId(), steps: [] }),
+      OperationStatus.cases.Done.make({
+        operationId: makeOperationId(),
+        steps: [],
+        before: recordedLibrary(base),
+        after: recordedLibrary(base),
+      }),
     ];
     const next = {
       ...base,
@@ -325,6 +338,8 @@ it.effect(
           operationId: makeOperationId(),
           steps: [],
           reason: { _tag: "StepFailed", step, error },
+          before: recordedLibrary(emptyLibraryState()),
+          after: recordedLibrary(emptyLibraryState()),
         }),
       );
       const base = yield* store.load;

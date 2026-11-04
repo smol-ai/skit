@@ -12,12 +12,13 @@ import { routedInstalledSkills } from "../src/library/setup-manage.js";
 import {
   OperationStatus,
   type FolderEvidence,
+  type LinkEvidence,
   type SetupStep,
   type StepRouting,
 } from "../src/library/store/state-schema.js";
 import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
 import { skitLayer } from "../src/platform/layer.js";
-import { inLibrary, inspectLibrary, libraryLayer } from "./helpers/library-store.js";
+import { inLibrary, inspectLibrary, libraryLayer, saveLibrary } from "./helpers/library-store.js";
 
 const machineId = migratedMachineId("019950c0-4c00-7000-8000-000000000001", "setup-manage-test");
 const skill = "---\nname: review\n---\nReview.\n";
@@ -661,5 +662,110 @@ it.effect(
       );
 
       yield* assertManaged(home, copy);
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+// Ported from the CLI's manage-existing test: an alias is retired once SKIT's copy is readable,
+// however the skills folders are spelled, and a suppressed copy elsewhere does not hold it back.
+it.effect(
+  "a Manage existing step retires an approved alias despite a suppressed Claude copy and an aliased spelling of the skills folders",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const workspace = yield* fs.realPath(
+        yield* fs.makeTempDirectoryScoped({ prefix: "skit-setup-alias-" }),
+      );
+      const home = join(workspace, "library");
+      const source = join(workspace, "Work", "skills", "review");
+      const alias = join(workspace, ".codex", "skills", "review");
+      yield* fs.makeDirectory(source, { recursive: true });
+      yield* fs.writeFileString(join(source, "SKILL.md"), skill);
+      yield* fs.makeDirectory(join(workspace, ".codex", "skills"), { recursive: true });
+      yield* fs.makeDirectory(join(workspace, ".agents", "skills"), { recursive: true });
+      yield* fs.makeDirectory(join(workspace, ".claude", "skills"), { recursive: true });
+      yield* fs.symlink(source, alias);
+      // The same folders, spelled through a link to the workspace.
+      const spelled = join(workspace, "home-alias");
+      yield* fs.symlink(workspace, spelled);
+      const global = { kind: "global" } as const;
+      const routing: StepRouting = {
+        active: ["agents", "claude"],
+        destinations: [
+          { scope: global, destination: "agents", root: join(spelled, ".agents", "skills") },
+          { scope: global, destination: "claude", root: join(spelled, ".claude", "skills") },
+        ],
+        readable: [
+          { scope: global, harness: "codex", root: join(spelled, ".codex", "skills") },
+          { scope: global, harness: "codex", root: join(spelled, ".agents", "skills") },
+          { scope: global, harness: "claude-code", root: join(spelled, ".claude", "skills") },
+        ],
+      };
+      const currentHash = yield* deterministicTreeHash(source);
+      const setup = (steps: readonly SetupStep[]) =>
+        withLibrary(home, (library) =>
+          Effect.flatMap(library.read, (base) => library.setup(steps, { base })),
+        );
+      yield* setup([
+        {
+          _tag: "Import",
+          request: {
+            machineId,
+            source: { type: "local", path: source },
+            input: source,
+            importedAt: "2026-11-04T00:00:00.000Z",
+            skills: [{ name: "review", sourcePath: source, relativePath: ".", currentHash }],
+            lockFileEntries: [],
+          },
+        },
+      ]);
+      const imported = yield* inspectLibrary(home);
+      if (!imported.present) return assert.fail("no Library");
+      const subjectId = imported.state.collections[0]!.collection_id;
+      const bind = (
+        duplicates: "keep-both" | "retire-aliases",
+        approvedSymlinks: readonly LinkEvidence[],
+      ) =>
+        Effect.map(evidenceAt(source), (evidence): SetupStep => ({
+          _tag: "Manage",
+          mode: "existing",
+          routing,
+          selections: [
+            {
+              name: "review",
+              mode: "existing",
+              source: evidence,
+              duplicates: Option.some(duplicates),
+              approvedSymlinks,
+              approvedCopies: [],
+              subjectId,
+              currentHash,
+            },
+          ],
+        }));
+      // Enabled with both copies installed, then the Claude copy deleted by its user.
+      const enabled = yield* setup([yield* bind("keep-both", [])]);
+      assert.strictEqual(enabled._tag, "Done");
+      const installed = yield* inspectLibrary(home);
+      if (!installed.present) return assert.fail("no Library");
+      assert.isTrue(installed.state.installed_skills.some((copy) => copy.destination === "claude"));
+      yield* saveLibrary(home, {
+        ...installed.state,
+        installed_skills: installed.state.installed_skills.map((copy) =>
+          copy.destination === "claude"
+            ? { ...copy, status: "suppressed", suppression_reason: "native_delete" }
+            : copy,
+        ),
+      });
+      const link = Option.getOrUndefined(yield* observePathEvidence(alias));
+      if (link?._tag !== "SymbolicLink") return assert.fail("no link evidence");
+
+      const result = yield* setup([yield* bind("retire-aliases", [link])]);
+
+      assert.strictEqual(result._tag, "Done");
+      if (result._tag !== "Done") return;
+      assert.lengthOf(result.recoveryDirectories, 1);
+      assert.deepStrictEqual(result.warnings, []);
+      assert.isFalse(yield* fs.exists(alias));
+      assert.isTrue(yield* fs.exists(join(workspace, ".agents", "skills", "review", "SKILL.md")));
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

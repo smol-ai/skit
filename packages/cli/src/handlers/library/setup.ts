@@ -237,9 +237,9 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   }
   const applied = yield* plan.apply(renderer.withStatus);
   yield* renderSetupAliasRecovery(applied);
-  if (plan.summary.removals.entries.length)
+  if (applied.removalDirectory !== undefined)
     yield* renderer.note(
-      `Removed installed locations are saved at ${plan.summary.removals.recoveryDirectory}. Inspect them with skit library recovery list --home ${JSON.stringify(input.options.libraryHome)}. File recovery does not undo setup bindings or settings.`,
+      `Removed installed locations are saved at ${applied.removalDirectory}. Inspect them with skit library recovery list --home ${JSON.stringify(input.options.libraryHome)}. File recovery does not undo setup bindings or settings.`,
       "Removed copies saved",
     );
   yield* renderer.note(

@@ -7,7 +7,7 @@ import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import { libraryStoreLayer, LibraryStore, skitLayer, type LibraryState } from "@smolai/skit-core";
 import { runSetup } from "../src/workflows/library/setup.js";
-import { importSetupCollections } from "../src/workflows/library/setup-import.js";
+import { applySetupSelections } from "./helpers/setup-apply.js";
 import { checkSkillsShSubject } from "../src/workflows/library/skills-sh-update-check.js";
 import { librarySubjects } from "@smolai/skit-core";
 import { checkSubjects } from "../src/workflows/library/check.js";
@@ -76,9 +76,9 @@ it.effect("checks skills.sh status against real Git history without saving Libra
     yield* home.owned(
       writingTo(
         home.home,
-        importSetupCollections({ setup }, preview, [
-          { name: candidate.name, paths: candidate.paths, groupKey: candidate.groupKey },
-        ]),
+        applySetupSelections(setup, preview, home.installOptions, {
+          imports: [{ name: candidate.name, paths: candidate.paths, groupKey: candidate.groupKey }],
+        }),
       ),
     );
     const saved = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(

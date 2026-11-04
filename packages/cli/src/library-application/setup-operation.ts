@@ -1,36 +1,24 @@
-import { basename, dirname, join, resolve } from "node:path";
+// The journal setups wrote under removed/<operationId>/ before state.json recorded operations:
+// setup.json, changes/ and complete.json. Read only, for undo; such a setup is never resumed.
+
+import { dirname, join, resolve } from "node:path";
 import { Effect, FileSystem, Schema } from "effect";
 import {
   AbsoluteDevicePath,
-  enabledSkillIds,
   FileIdentityNumber,
   LegacyFileIdentityNumber,
   canonicalJson,
-  deviceInstallationIntent,
   Hash,
   hashParts,
-  LibraryState,
-  LibraryChanged,
-  libraryStateRevision,
-  LibraryStore,
   LinkStat,
   MachineId,
-  MachineSettings,
   InstalledSkill,
   InstallDestination,
-  writeJsonExclusive,
-  type MachineSettingsSnapshot,
-} from "@smolai/skit-core";
-import { activeInstallDestinations, skillsDirectoryFor } from "../install/roots.js";
-import type { SetupApproval } from "../workflows/library/setup-apply.js";
-import { ensureRecoveryOperation, recoveryOperationPath } from "./recovery-moves.js";
-import { RecoveryInvalid, recoveryFingerprint } from "./recovery-evidence.js";
-import {
-  SetupDiscoverySettings,
-  setupDiscoverySettings,
   SetupIntent,
-  setupIntent,
-} from "./setup-undo-intent.js";
+} from "@smolai/skit-core";
+import { recoveryOperationPath } from "./recovery-moves.js";
+import { RecoveryInvalid, recoveryFingerprint } from "./recovery-evidence.js";
+import { SetupDiscoverySettings } from "./setup-undo-intent.js";
 
 const DevicePath = AbsoluteDevicePath.check(
   Schema.makeFilter((path) => resolve(path) === path, {
@@ -126,7 +114,6 @@ const StoredOperation = Schema.Union([
   Operation,
 ]);
 const StoredChange = Schema.Union([LibraryChange, SettingsChange]);
-const StoredCompletion = Completion;
 
 const maybeStat = Effect.fn("SetupOperation.stat")(function* (path: string) {
   const links = yield* LinkStat;
@@ -181,204 +168,6 @@ export const readSkillPathDetails = Effect.fn("SetupOperation.readSkillPathDetai
           linkTarget: info.type === "SymbolicLink" ? yield* fs.readLink(path) : null,
         }
       : null,
-  };
-});
-
-/** Capture setup's inverse inputs once under its existing writer, before settings or intent effects. */
-export const beginSetupOperation = Effect.fn("SetupOperation.begin")(function* (
-  approval: SetupApproval,
-  initial: LibraryState,
-  projecting: boolean,
-  installedNames: readonly string[],
-) {
-  const store = yield* LibraryStore;
-  const fs = yield* FileSystem.FileSystem;
-  const links = yield* LinkStat;
-  const settings = yield* MachineSettings.read(store.home);
-  const directory = approval.removals.operationDirectory;
-  const targets = projecting ? yield* activeInstallDestinations(approval.setup.inventory) : [];
-  const possibleTargets = projecting ? (["agents", "claude"] as const) : [];
-  const installedSkillPaths = new Set(
-    (approval.changes ?? [])
-      .filter(
-        (fact) =>
-          fact.status === "incoming-update" ||
-          fact.status === "uninstall" ||
-          fact.status === "install" ||
-          fact.metadataChanged ||
-          (fact.status !== "native-delete" &&
-            approval.versionChoices?.some((choice) => choice.skillId === fact.skillId)),
-      )
-      .map((fact) => resolve(fact.path)),
-  );
-  for (const target of targets)
-    for (const name of installedNames)
-      installedSkillPaths.add(
-        join(skillsDirectoryFor(target, { kind: "global" }, approval.setup.inventory), name),
-      );
-  const paths = new Set(approval.removals.entries.map((entry) => resolve(entry.path)));
-  if (projecting) {
-    const intent = deviceInstallationIntent(initial);
-    const boundIds = new Set(
-      intent.globals.flatMap((global) => enabledSkillIds(initial, global.enabled)),
-    );
-    const names = new Set([
-      ...initial.skills.filter((skill) => boundIds.has(skill.skill_id)).map((skill) => skill.name),
-      ...[...approval.bindings, ...approval.ownership]
-        .filter((copy) => copy.duplicateAction !== "retain-only")
-        .map((copy) => copy.name),
-    ]);
-    for (const installedSkill of initial.installed_skills) paths.add(resolve(installedSkill.path));
-    for (const target of possibleTargets)
-      for (const name of names)
-        paths.add(
-          join(skillsDirectoryFor(target, { kind: "global" }, approval.setup.inventory), name),
-        );
-    for (const copy of [...approval.bindings, ...approval.ownership]) {
-      if (copy.duplicateAction === "retain-only") continue;
-      paths.add(resolve(copy.sourcePath));
-      for (const alias of copy.approvedSymlinks ?? []) paths.add(resolve(alias.path));
-      for (const entry of copy.approvedCopies ?? []) paths.add(resolve(entry.path));
-    }
-  }
-  const files = yield* Effect.forEach([...paths].sort(), readSkillPathDetails);
-  let expectedIntent = setupIntent(initial);
-  let expectedInstalledSkills = structuredClone(initial.installed_skills);
-  let expectedSettings = setupDiscoverySettings(settings);
-  let expectedMachineId = settings.machineId;
-  yield* ensureRecoveryOperation(store.home, directory);
-  yield* writeJsonExclusive(
-    join(directory, "setup.json"),
-    Schema.encodeSync(Operation)({
-      schemaVersion: 3,
-      kind: "setup",
-      planId: approval.planId,
-      before: expectedIntent,
-      installedSkills: expectedInstalledSkills,
-      settings: expectedSettings,
-      machineId: settings.machineId ?? null,
-      targets: targets.map((target) => ({
-        target,
-        root: skillsDirectoryFor(target, { kind: "global" }, approval.setup.inventory),
-      })),
-      installedSkillPaths: [...installedSkillPaths].sort(),
-      files,
-    }),
-  );
-  const changes = join(directory, "changes");
-  yield* fs.makeDirectory(changes, { mode: 0o700 });
-  if ((yield* links.identity.lstat(changes)).type !== "Directory")
-    return yield* new RecoveryInvalid({ detail: "Redirected setup changes" });
-  let sequence = 0;
-  const writeChange = Effect.fn("SetupOperation.recordChange")(
-    function* (
-      change:
-        | Omit<typeof LibraryChange.Type, "schemaVersion" | "sequence">
-        | Omit<typeof SettingsChange.Type, "schemaVersion" | "sequence">,
-    ) {
-      const step = {
-        ...change,
-        schemaVersion: change.kind === "library" ? (2 as const) : (1 as const),
-        sequence: ++sequence,
-      };
-      const key = String(step.sequence).padStart(8, "0");
-      const path = join(changes, `${key}.json`);
-      yield* writeJsonExclusive(path, step);
-      return {
-        sequence: step.sequence,
-        hash: hashParts([yield* fs.readFileString(path)]),
-      };
-    },
-    (effect) => effect.pipe(Effect.provideService(FileSystem.FileSystem, fs)),
-  );
-  const markSaved = Effect.fn("SetupOperation.markSaved")(
-    function* (changeRecord: { sequence: number; hash: Hash }) {
-      yield* writeJsonExclusive(
-        join(changes, `${String(changeRecord.sequence).padStart(8, "0")}.published.json`),
-        {
-          schemaVersion: 1,
-          sequence: changeRecord.sequence,
-          hash: changeRecord.hash,
-        },
-      );
-    },
-    (effect) => effect.pipe(Effect.provideService(FileSystem.FileSystem, fs)),
-  );
-  let pendingSettings:
-    | {
-        sequence: number;
-        hash: Hash;
-        after: SetupDiscoverySettings;
-        machineId: MachineId | undefined;
-      }
-    | undefined;
-  return {
-    operationId: basename(directory),
-    directory,
-    recordSettings: Effect.fn("SetupOperation.recordSettings")(function* (
-      before: MachineSettingsSnapshot,
-      after: MachineSettingsSnapshot,
-    ) {
-      if (
-        canonicalJson(setupDiscoverySettings(before)) !== canonicalJson(expectedSettings) ||
-        before.machineId !== expectedMachineId
-      )
-        return yield* new LibraryChanged({ path: before.path });
-      const changed = setupDiscoverySettings(after);
-      const changeRecord = yield* writeChange({
-        kind: "settings",
-        before: setupDiscoverySettings(before),
-        after: changed,
-        machineId: after.machineId ?? null,
-      });
-      pendingSettings = {
-        ...changeRecord,
-        after: changed,
-        machineId: after.machineId,
-      };
-    }),
-    settingsSaved: Effect.fn("SetupOperation.settingsSaved")(function* () {
-      if (pendingSettings) {
-        yield* markSaved(pendingSettings);
-        expectedSettings = pendingSettings.after;
-        expectedMachineId = pendingSettings.machineId;
-        pendingSettings = undefined;
-      }
-    }),
-    save: Effect.fn("SetupOperation.save")(function* (next: LibraryState, base: LibraryState) {
-      const before = setupIntent(base);
-      const after = setupIntent(next);
-      const installedSkillsAfter = structuredClone(next.installed_skills);
-      const changed =
-        canonicalJson(before) !== canonicalJson(after) ||
-        canonicalJson(base.installed_skills) !== canonicalJson(next.installed_skills);
-      const changeRecord = changed
-        ? yield* writeChange({
-            kind: "library",
-            beforeRevision: libraryStateRevision(base),
-            afterRevision: libraryStateRevision(next),
-            before,
-            after,
-            installedSkillsBefore: structuredClone(base.installed_skills),
-            installedSkillsAfter: installedSkillsAfter,
-          })
-        : undefined;
-      yield* store.save(next, base);
-      if (changeRecord) yield* markSaved(changeRecord);
-      expectedIntent = after;
-      expectedInstalledSkills = installedSkillsAfter;
-    }),
-    complete: Effect.fn("SetupOperation.complete")(
-      function* () {
-        yield* writeJsonExclusive(join(directory, "complete.json"), {
-          schemaVersion: 2,
-          intent: expectedIntent,
-          settings: expectedSettings,
-          installedSkills: expectedInstalledSkills,
-        } satisfies typeof Completion.Type);
-      },
-      (effect) => effect.pipe(Effect.provideService(FileSystem.FileSystem, fs)),
-    ),
   };
 });
 
@@ -445,7 +234,7 @@ export const inspectSetupOperation = Effect.fn("SetupOperation.inspect")(functio
     }
   }
   const complete = (yield* maybeStat(join(directory, "complete.json")))
-    ? (yield* read("complete.json", StoredCompletion)).value
+    ? (yield* read("complete.json", Completion)).value
     : undefined;
   let intent = operation.before;
   let settings = operation.settings;

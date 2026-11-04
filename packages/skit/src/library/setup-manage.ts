@@ -165,6 +165,18 @@ export const duplicatesToMove = (
   return selection.approvedSymlinks.filter((link) => !destinations.includes(link.path));
 };
 
+/** Where a selection installs SKIT's copy: each active global destination, unless it only retains. */
+export const installedPaths = (
+  routing: StepRouting,
+  selection: ManageExistingSelection | ManageNewSelection,
+): readonly string[] =>
+  Option.getOrUndefined(selection.duplicates) === "retain-only" ||
+  (selection.mode === "new" && Option.isNone(selection.ownership))
+    ? []
+    : destinationsIn(routing, global)
+        .filter(({ destination }) => routing.active.includes(destination))
+        .map(({ root }) => join(root, selection.name));
+
 /** Enable the subject's `name` globally, managing the reviewed folder in place where it is one. */
 const enable = Effect.fn("Library.setup.enable")(function* (
   selection: ManageExistingSelection | ManageNewSelection,

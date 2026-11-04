@@ -8,10 +8,11 @@ import {
   parseSkitSource,
   sourceLocator,
   resolveSkitSource,
+  type ImportRequest,
   type ResolvedSkitSource,
   type SkitSource,
 } from "@smolai/skit-core";
-import { Clock, Effect } from "effect";
+import { Clock, Effect, Option } from "effect";
 import { RegistryAuth } from "../registry/auth-service.js";
 import { leavePnpmSkill } from "@smolai/skit-core";
 
@@ -71,6 +72,31 @@ export const previewLibrarySource = Effect.fn("Library.previewSource")(function*
     skills: inspected.skills,
     ...("diagnostics" in inspected ? { diagnostics: inspected.diagnostics } : {}),
   };
+});
+
+/**
+ * The import of a local folder that holds observed skills, as a request a setup step records and
+ * runs later. None when the folder declares its own Collection (`skit.json`): that is an authored
+ * import, which a setup step does not make.
+ */
+export const localImportRequest = Effect.fn("Library.localImportRequest")(function* (
+  path: string,
+  importedAt: string,
+) {
+  return yield* withResolvedSource(path, undefined, ({ resolved, historicalInput }) =>
+    resolved.descriptorKind === "declared"
+      ? Effect.succeedNone
+      : Effect.map(describeSourceSkills(resolved, historicalInput), (skills) =>
+          Option.some<ImportRequest>({
+            source: resolved.source,
+            input: historicalInput,
+            ...(resolved.revision === undefined ? {} : { revision: resolved.revision }),
+            importedAt,
+            skills,
+            lockFileEntries: [],
+          }),
+        ),
+  );
 });
 
 /** Own the retention transaction, including partial commits and temporary-source cleanup. */

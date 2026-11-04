@@ -9,13 +9,21 @@ import { InvalidLibraryState, LibraryBusy, LibraryChanged } from "../../failures
 import { TreeError } from "../../shared/tree-error.js";
 import {
   CollectionId,
+  CollectionVersionId,
+  ImportId,
   InstalledSkillId,
   MachineId,
   OperationId,
   SkillId,
   SkillVersionId,
 } from "../entity-ids.js";
-import { SkillsShLockFileEntry, SkitSource } from "../library-contracts.js";
+import { Enabled, SkillsShLockFileEntry, SkitSource } from "../library-contracts.js";
+import {
+  DeviceSkillSelection,
+  InstalledSkill,
+  InvocationPolicies,
+  Repository,
+} from "../device-state.js";
 import { FileIdentityNumber } from "../../platform/link-stat.js";
 import { Hash, HarnessName, InstallDestination, InstallScope } from "../../vocabulary.js";
 
@@ -422,18 +430,70 @@ export const SetupStopReason = Schema.TaggedUnion({
 });
 export type SetupStopReason = typeof SetupStopReason.Type;
 
+/** The desired fields a setup can change. Retained versions and history are not among them. */
+export const SetupIntent = Schema.Struct({
+  /** The account's global list. */
+  global: Schema.Struct({
+    enabled: Schema.Array(Enabled),
+    invocation_policies: Schema.optionalKey(InvocationPolicies),
+  }),
+  repositories: Schema.Array(Repository),
+  device: Schema.NullOr(DeviceSkillSelection),
+  sources: Schema.optionalKey(
+    Schema.Array(
+      Schema.Struct({
+        collectionId: CollectionId,
+        importId: ImportId,
+        collectionVersionId: CollectionVersionId,
+      }),
+    ),
+  ),
+  memberships: Schema.optionalKey(
+    Schema.Array(Schema.Struct({ collectionId: CollectionId, skillIds: Schema.Array(SkillId) })),
+  ),
+  versions: Schema.Array(
+    Schema.Struct({
+      skillId: SkillId,
+      selected: Schema.NullOr(SkillVersionId),
+      local: Schema.NullOr(SkillVersionId),
+    }),
+  ),
+});
+export type SetupIntent = typeof SetupIntent.Type;
+
+/**
+ * The parts of the Library a setup can change, as one write of its record saw them: before any
+ * step ran, and once it finished or stopped. Undo reverses only what changed between the two.
+ */
+export const RecordedLibrary = Schema.Struct({
+  intent: SetupIntent,
+  installedSkills: Schema.Array(InstalledSkill),
+});
+export type RecordedLibrary = typeof RecordedLibrary.Type;
+
 /** Status of one recorded operation (setup, restore, undo). */
 /**
  * Every status keeps its steps and their evidence: undo needs a Done or Stopped operation's
  * evidence as much as resuming needs a Pending one's.
  */
 export const OperationStatus = Schema.TaggedUnion({
-  Pending: { operationId: OperationId, steps: Schema.Array(RecordedSetupStep) },
-  Done: { operationId: OperationId, steps: Schema.Array(RecordedSetupStep) },
+  Pending: {
+    operationId: OperationId,
+    steps: Schema.Array(RecordedSetupStep),
+    before: RecordedLibrary,
+  },
+  Done: {
+    operationId: OperationId,
+    steps: Schema.Array(RecordedSetupStep),
+    before: RecordedLibrary,
+    after: RecordedLibrary,
+  },
   Stopped: {
     operationId: OperationId,
     steps: Schema.Array(RecordedSetupStep),
     reason: SetupStopReason,
+    before: RecordedLibrary,
+    after: RecordedLibrary,
   },
 });
 export type OperationStatus = typeof OperationStatus.Type;

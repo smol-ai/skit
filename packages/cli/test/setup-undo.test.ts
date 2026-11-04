@@ -4,12 +4,17 @@ import { systemError } from "effect/PlatformError";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import {
+  deterministicTreeHash,
+  hashParts,
   LibraryStore,
   LinkStat,
   MachineSettings,
   prepareInstalledSkillRebuild,
+  setupIntent,
   skitLayer,
 } from "@smolai/skit-core";
+import { readSkillPathDetails } from "../src/library-application/setup-operation.js";
+import { setupDiscoverySettings } from "../src/library-application/setup-undo-intent.js";
 import { checkSetupGlobalContent } from "../src/library-application/setup-external-ownership.js";
 import { recoveryFingerprint } from "../src/library-application/recovery-evidence.js";
 import { prepareSetupUndo } from "../src/library-application/setup-undo.js";
@@ -17,7 +22,10 @@ import { setupResultActions } from "../src/commands/setup-actions.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import { renderContract } from "../src/presentation/contract-presenters.js";
-import { inspectRecoveryOperation } from "../src/library-application/recovery-moves.js";
+import {
+  inspectRecoveryOperation,
+  prepareRecoveryMoves,
+} from "../src/library-application/recovery-moves.js";
 import { prepareSetupCommand, setupApplyCommand } from "../src/handlers/library/setup-machine.js";
 import { runSetup } from "../src/workflows/library/setup.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
@@ -130,44 +138,75 @@ it.effect("undo of an explicit removal restores the original inode and move reco
   }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect("setup records save exact identities, and v2 numeric records still undo", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture(true);
-    const path = join(f.home.home, "removed", f.operationId, "setup.json");
-    const record = JSON.parse(yield* f.fs.readFileString(path));
-    expect(record.schemaVersion).toBe(3);
-    expect(typeof record.files[0].anchor.ino).toBe("string");
-    const numeric = <A extends { dev: string; ino: string }>(identity: A) => ({
-      ...identity,
-      dev: Number(identity.dev),
-      ino: Number(identity.ino),
-    });
-    yield* f.fs.writeFileString(
-      path,
-      JSON.stringify({
-        ...record,
-        schemaVersion: 2,
-        files: record.files.map(
-          (file: {
-            anchor: { dev: string; ino: string };
-            entry: { dev: string; ino: string } | null;
-          }) => ({
-            ...file,
-            anchor: numeric(file.anchor),
-            entry: file.entry === null ? null : numeric(file.entry),
-          }),
-        ),
-      }),
-    );
-    yield* f.home.owned(
-      Effect.gen(function* () {
-        const preview = yield* prepareSetupUndo(f.operationId);
-        expect(preview.summary.conflicts).toEqual([]);
-        expect((yield* preview.apply()).status).toBe("undone");
-        expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe(f.markdown);
-      }),
-    );
-  }).pipe(Effect.provide(skitLayer)),
+// Setups from before state.json recorded operations left a journal under removed/<id>/; undo reads
+// it, in both formats it was written in. Here one is written as that SKIT wrote it for a removal.
+it.effect.each([3, 2] as const)(
+  "a setup journal from before records (v%s) still undoes",
+  (version) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* fs.realPath(yield* scratch("skit-setup-journal-"));
+      const source = join(root, "agents", "review");
+      const markdown = "---\nname: review\ndescription: review\n---\n\nOriginal bytes\n";
+      yield* fs.makeDirectory(source, { recursive: true });
+      yield* fs.writeFileString(join(source, "SKILL.md"), markdown);
+      const home = yield* libraryHome({ home: join(root, "library"), inventoryHome: root });
+      const operationId = "0f0e0d0c-0b0a-4908-8706-050403020100";
+      const directory = join(home.home, "removed", operationId);
+      const identity = (value: bigint) => (version === 3 ? String(value) : Number(value));
+      const file = yield* readSkillPathDetails(source);
+      const moves = yield* prepareRecoveryMoves(
+        home.home,
+        [{ name: "review", path: source, currentHash: yield* deterministicTreeHash(source) }],
+        directory,
+      );
+      yield* moves.apply();
+      const settings = setupDiscoverySettings(yield* MachineSettings.read(home.home));
+      const intent = setupIntent(yield* home.durable);
+      yield* fs.writeFileString(
+        join(directory, "setup.json"),
+        JSON.stringify({
+          schemaVersion: version,
+          kind: "setup",
+          planId: hashParts(["journal"]),
+          settings,
+          machineId: null,
+          targets: [],
+          before: intent,
+          installedSkills: [],
+          installedSkillPaths: [],
+          files: [
+            {
+              ...file,
+              anchor: {
+                ...file.anchor,
+                dev: identity(file.anchor.dev),
+                ino: identity(file.anchor.ino),
+              },
+              entry: file.entry && {
+                ...file.entry,
+                dev: identity(file.entry.dev),
+                ino: identity(file.entry.ino),
+              },
+            },
+          ],
+        }),
+      );
+      yield* fs.writeFileString(
+        join(directory, "complete.json"),
+        JSON.stringify({ schemaVersion: 2, intent, settings, installedSkills: [] }),
+      );
+      expect(yield* fs.exists(source)).toBe(false);
+      yield* home.owned(
+        Effect.gen(function* () {
+          const preview = yield* prepareSetupUndo(operationId);
+          expect(preview.summary.conflicts).toEqual([]);
+          expect(preview.summary.files).toEqual([{ path: source, kind: "restore" }]);
+          expect((yield* preview.apply()).status).toBe("undone");
+        }),
+      );
+      expect(yield* fs.readFileString(join(source, "SKILL.md"))).toBe(markdown);
+    }).pipe(Effect.provide(skitLayer)),
 );
 
 it.effect("undo refuses an occupied removal destination and redirected original parent", () =>

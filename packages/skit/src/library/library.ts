@@ -40,6 +40,19 @@ export type { Subject, Invocation, EnabledCollection, SetupApproval } from "./en
 
 export { Revision, type Snapshot } from "./snapshot.js";
 export type { SetupError, SetupResult, SetupStepResult, StartupRecovery } from "./setup.js";
+export type {
+  AbsentEvidence,
+  FolderEvidence,
+  LinkEvidence,
+  ManageExistingSelection,
+  ManageNewSelection,
+  ReviewedInstalledSkillChange,
+  SetupStep,
+  SetupStopReason,
+  StepRouting,
+  VersionChoice,
+} from "./store/state-schema.js";
+export { OperationStatus } from "./store/state-schema.js";
 
 export interface Interface {
   /**

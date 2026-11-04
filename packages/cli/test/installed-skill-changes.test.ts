@@ -225,7 +225,7 @@ it.effect("competing changes fail usefully before any update or inverse record i
     yield* f.update;
     yield* f.fs.writeFileString(join(f.copy, "SKILL.md"), document("Competing user edits"));
     const before = yield* f.home.durable;
-    const removed = yield* f.fs.readDirectory(join(f.home.home, "removed"));
+    const removed = yield* listRecoveryOperations(f.home.home);
     const failed = yield* Effect.flip(f.apply);
     expect(failed._tag).toBe("ChangeChoiceRequired");
     expect(yield* f.home.durable).toEqual(before);
@@ -235,7 +235,7 @@ it.effect("competing changes fail usefully before any update or inverse record i
     expect(yield* f.fs.readFileString(join(f.claude, "review", "SKILL.md"))).toBe(
       document("Original baseline"),
     );
-    expect(yield* f.fs.readDirectory(join(f.home.home, "removed"))).toEqual(removed);
+    expect(yield* listRecoveryOperations(f.home.home)).toEqual(removed);
   }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -676,7 +676,6 @@ it.effect(
       const edited = document("Chosen local edits before interruption");
       yield* f.fs.writeFileString(join(f.copy, "SKILL.md"), edited);
       const before = yield* f.home.durable;
-      const existing = new Set(yield* listRecoveryOperations(f.home.home));
       const scan = yield* f.observe;
       const input = {
         options: f.options,
@@ -714,11 +713,11 @@ it.effect(
           Effect.result,
         ),
       );
-      expect(failed._tag).toBe("Failure");
+      // The refused move stops the setup; undo reverses what it did, by its operation ID.
+      if (failed._tag !== "Failure" || failed.failure._tag !== "SetupStopped")
+        return yield* Effect.die(new Error("Expected the setup to stop"));
       expect(moves).toBe(1);
-      const operationId = (yield* listRecoveryOperations(f.home.home)).find(
-        (id) => !existing.has(id),
-      )!;
+      const operationId = failed.failure.operationId;
       const undo = yield* f.home.owned(prepareSetupUndo(operationId));
       expect(undo.summary.conflicts).toEqual([]);
       yield* f.home.owned(undo.apply());

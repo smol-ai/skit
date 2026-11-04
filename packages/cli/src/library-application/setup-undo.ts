@@ -1,31 +1,40 @@
 import { randomUUID } from "node:crypto";
-import { basename, join } from "node:path";
-import { Effect, FileSystem, Schema } from "effect";
+import { basename, dirname, join } from "node:path";
+import { Effect, FileSystem, Option, Schema } from "effect";
 import {
   canonicalJson,
   Hash,
   hashParts,
+  Library,
   libraryStateRevision,
   LibraryStore,
   LinkStat,
   MachineSettings,
+  setupIntent,
+  SetupIntent,
   sourceImports,
   withLibraryWriter,
   writeJsonExclusive,
   type CollectionId,
+  type LibraryState,
+  type MachineSettingsSnapshot,
+  type OperationId,
 } from "@smolai/skit-core";
 import { PlanIsStale } from "../library/failures.js";
 import { ensureRecoveryOperation, recoveryOperationDirectory } from "./recovery-moves.js";
 import { RecoveryInvalid } from "./recovery-evidence.js";
 import { inspectSetupOperation } from "./setup-operation.js";
-import { prepareSetupUndoFiles, installedSkillChoice } from "./setup-undo-files.js";
+import {
+  prepareSetupUndoFiles,
+  installedSkillChoice,
+  type SetupChanges,
+  type SetupFile,
+} from "./setup-undo-files.js";
 import { prepareSetupSourceUndo, type UndoSourceImport } from "./setup-undo-sources.js";
 import {
   reverseSetupDiscovery,
   reverseSetupIntent,
   setupDiscoverySettings,
-  setupIntent,
-  SetupIntent,
   SetupDiscoverySettings,
 } from "./setup-undo-intent.js";
 
@@ -46,6 +55,223 @@ const StoredAttempt = Attempt;
 const Done = Schema.Struct({ schemaVersion: Schema.Literal(1), planId: Hash });
 const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
 
+/** A setup as undo reads it: what it changed, and its record, which the undo plan covers. */
+interface SetupRecord extends SetupChanges {
+  /** Where undo keeps its attempts: `removed/<operationId>/undo`. */
+  readonly directory: string;
+  readonly before: SetupIntent;
+  readonly after: SetupIntent;
+  readonly conflicts: readonly string[];
+  /** Discovery settings: an old journal recorded them; MachineSettings keeps a state.json setup's. */
+  readonly discovery:
+    | {
+        readonly _tag: "Journal";
+        readonly before: SetupDiscoverySettings;
+        readonly after: SetupDiscoverySettings;
+      }
+    | { readonly _tag: "MachineSettings"; readonly operationId: OperationId };
+  readonly evidence: unknown;
+}
+
+/**
+ * The nearest folder above `path` whose physical path is `parent`: the physical parent, or, when
+ * setup created the folders between, the folder it recorded instead.
+ */
+const anchorOf = Effect.fn("SetupUndo.anchorOf")(function* (
+  path: string,
+  parent: { readonly path: string; readonly dev: bigint; readonly ino: bigint },
+) {
+  const links = yield* LinkStat;
+  let candidate = dirname(path);
+  for (;;) {
+    const physical = yield* links.realPathNative(candidate).pipe(Effect.option);
+    if (Option.isSome(physical) && physical.value === parent.path) break;
+    if (dirname(candidate) === candidate) {
+      candidate = dirname(path);
+      break;
+    }
+    candidate = dirname(candidate);
+  }
+  return { path: candidate, physicalPath: parent.path, dev: parent.dev, ino: parent.ino };
+});
+
+/** What a step recorded at one path, as undo reads it. */
+const setupFile = Effect.fn("SetupUndo.setupFile")(function* (
+  evidence: Library.FolderEvidence | Library.LinkEvidence | Library.AbsentEvidence,
+) {
+  const anchor = yield* anchorOf(evidence.path, evidence.parent);
+  const entry: SetupFile["entry"] =
+    evidence._tag === "Absent"
+      ? null
+      : evidence._tag === "SymbolicLink"
+        ? {
+            dev: evidence.dev,
+            ino: evidence.ino,
+            type: "SymbolicLink",
+            hash: evidence.contentHash,
+            unmarked: { by: "fingerprint", hash: evidence.contentHash },
+            marker: null,
+            linkTarget: evidence.linkTarget,
+          }
+        : {
+            dev: evidence.dev,
+            ino: evidence.ino,
+            type: "Directory",
+            hash: evidence.contentHash,
+            unmarked: { by: "tree", hash: evidence.treeHash },
+            marker: Option.getOrNull(evidence.marker),
+            // SKIT writes its marker owner-only (install/files.ts).
+            markerType: Option.isSome(evidence.marker) ? "File" : null,
+            markerMode: Option.isSome(evidence.marker) ? 0o100600 : null,
+            linkTarget: null,
+          };
+  return { path: evidence.path, anchor, entry } satisfies SetupFile;
+});
+
+/** A setup recorded in state.json: its steps' evidence and what it held before and after. */
+const recordedSetup = Effect.fn("SetupUndo.recordedSetup")(function* (
+  home: string,
+  operation: Library.OperationStatus,
+) {
+  const after = operation._tag === "Pending" ? operation.before : operation.after;
+  const evidence = operation.steps.flatMap(({ before }) =>
+    before.flatMap((item) => (item._tag === "Retained" ? [] : [item])),
+  );
+  const files: SetupFile[] = [];
+  for (const item of evidence)
+    if (!files.some((file) => file.path === item.path)) files.push(yield* setupFile(item));
+  return {
+    directory: join(home, "removed", operation.operationId),
+    before: operation.before.intent,
+    after: after.intent,
+    installedSkillsBefore: operation.before.installedSkills,
+    installedSkillsAfter: after.installedSkills,
+    files,
+    approvedPaths: new Set(files.map((file) => file.path)),
+    // The Done or Stopped write recorded every copy the setup's steps installed.
+    claimedPaths: new Set(
+      after.installedSkills
+        .filter(
+          (copy) =>
+            copy.status === "installed" &&
+            !equal(
+              copy,
+              operation.before.installedSkills.find(
+                (item) => item.installed_skill_id === copy.installed_skill_id,
+              ),
+            ),
+        )
+        .map((copy) => copy.path),
+    ),
+    conflicts:
+      operation._tag === "Pending"
+        ? ["Setup has not finished. Run any SKIT command to finish or stop it, then undo it."]
+        : [],
+    discovery: { _tag: "MachineSettings", operationId: operation.operationId },
+    evidence: yield* Schema.encodeEffect(Library.OperationStatus)(operation),
+  } satisfies SetupRecord;
+});
+
+/** A setup from before state.json recorded operations, read from its journal. */
+const journalSetup = Effect.fn("SetupUndo.journalSetup")(function* (
+  home: string,
+  operationId: string,
+  state: LibraryState,
+  settings: MachineSettingsSnapshot,
+) {
+  const saved = yield* inspectSetupOperation(home, operationId);
+  const conflicts: string[] = [];
+  const expectedMachine = saved.changes.reduce(
+    (id, entry) => (entry.change.kind === "settings" ? entry.change.machineId : id),
+    saved.operation.machineId,
+  );
+  if (expectedMachine !== null && settings.machineId !== expectedMachine)
+    conflicts.push("Setup belongs to a different machine identity");
+  let expected = saved.operation.before;
+  let expectedSettings = saved.operation.settings;
+  let installedSkills = saved.operation.installedSkills;
+  const confirmedInstalledSkillPaths = new Set(
+    saved.complete ? (saved.operation.installedSkillPaths ?? []) : [],
+  );
+  for (const { change, saved: confirmed } of saved.changes) {
+    if (change.kind === "library") {
+      const applied = confirmed || libraryStateRevision(state) === change.afterRevision;
+      if (!applied && libraryStateRevision(state) !== change.beforeRevision)
+        conflicts.push("Unconfirmed setup Library save differs from both recorded revisions");
+      if (applied) {
+        expected = change.after;
+        installedSkills = change.installedSkillsAfter;
+        for (const installedSkill of change.installedSkillsAfter)
+          if (
+            installedSkill.status === "installed" &&
+            !equal(
+              installedSkill,
+              change.installedSkillsBefore.find(
+                (item) => item.installed_skill_id === installedSkill.installed_skill_id,
+              ),
+            )
+          )
+            confirmedInstalledSkillPaths.add(installedSkill.path);
+      }
+    } else {
+      const current = setupDiscoverySettings(settings);
+      const applied = confirmed || equal(current, change.after);
+      if (!applied && !equal(current, change.before))
+        conflicts.push("Unconfirmed setup settings save differs from both recorded values");
+      if (applied) expectedSettings = change.after;
+    }
+  }
+  return {
+    directory: saved.directory,
+    before: saved.operation.before,
+    after: expected,
+    installedSkillsBefore: saved.operation.installedSkills,
+    installedSkillsAfter: installedSkills,
+    files: saved.operation.files.map((file): SetupFile => ({
+      path: file.path,
+      anchor: file.anchor,
+      entry:
+        file.entry === null
+          ? null
+          : {
+              ...file.entry,
+              unmarked: { by: "fingerprint", hash: file.entry.unstampedHash },
+            },
+    })),
+    approvedPaths:
+      saved.operation.installedSkillPaths === undefined
+        ? undefined
+        : new Set(saved.operation.installedSkillPaths),
+    claimedPaths: confirmedInstalledSkillPaths,
+    conflicts,
+    discovery: { _tag: "Journal", before: saved.operation.settings, after: expectedSettings },
+    evidence: saved,
+  } satisfies SetupRecord;
+});
+
+/** The discovery folders undo puts back, and whether it can. */
+const discoveryUndo = Effect.fn("SetupUndo.discovery")(function* (
+  home: string,
+  setup: SetupRecord,
+  settings: MachineSettingsSnapshot,
+) {
+  if (setup.discovery._tag === "Journal")
+    return reverseSetupDiscovery(settings, setup.discovery.before, setup.discovery.after);
+  const record = yield* MachineSettings.setupRecord(home, setup.discovery.operationId);
+  if (Option.isNone(record) || equal(settings.discoveryRoots, record.value.before.discoveryRoots))
+    return { settings, conflicts: [], changed: false };
+  if (
+    settings.machineId !== record.value.expectedAfter.machineId ||
+    !equal(settings.discoveryRoots, record.value.expectedAfter.discoveryRoots)
+  )
+    return { settings, conflicts: ["Discovery folders changed after setup"], changed: false };
+  return {
+    settings: { ...settings, discoveryRoots: [...record.value.before.discoveryRoots] },
+    conflicts: [],
+    changed: true,
+  };
+});
+
 const readUndo = Effect.fn("SetupUndo.read")(function* (
   operationId: string,
   backupDirectory: string,
@@ -54,10 +280,27 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
   const store = yield* LibraryStore;
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
-  const saved = yield* inspectSetupOperation(store.home, operationId);
   const state = yield* store.load;
   const settings = yield* MachineSettings.read(store.home);
-  const undoDirectory = join(saved.directory, "undo");
+  const operations = yield* Schema.decodeUnknownEffect(Schema.Array(Library.OperationStatus))(
+    state.operations,
+  ).pipe(Effect.mapError(() => new RecoveryInvalid({ detail: "Invalid setup record" })));
+  const recorded = operations.find((operation) => operation.operationId === operationId);
+  if (!/^[a-zA-Z0-9_-]+$/.test(operationId))
+    return yield* new RecoveryInvalid({ detail: "Invalid operation identifier" });
+  // Only the latest finished setup keeps its record; older ones may have their journal.
+  if (
+    recorded === undefined &&
+    !(yield* fs.exists(join(store.home, "removed", operationId, "setup.json")))
+  )
+    return yield* new RecoveryInvalid({
+      detail: `Setup ${operationId} has no undo record: a later setup replaced it`,
+    });
+  const setup =
+    recorded === undefined
+      ? yield* journalSetup(store.home, operationId, state, settings)
+      : yield* recordedSetup(store.home, recorded);
+  const undoDirectory = join(setup.directory, "undo");
   const undoInfo = yield* links.identity
     .lstat(undoDirectory)
     .pipe(
@@ -101,76 +344,34 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
       }
     }
   }
-  const conflicts: string[] = [];
-  const expectedMachine = saved.changes.reduce(
-    (id, entry) => (entry.change.kind === "settings" ? entry.change.machineId : id),
-    saved.operation.machineId,
-  );
-  if (expectedMachine !== null && settings.machineId !== expectedMachine)
-    conflicts.push("Setup belongs to a different machine identity");
-  let expected = saved.operation.before;
-  let expectedSettings = saved.operation.settings;
-  let installedSkills = saved.operation.installedSkills;
-  const confirmedInstalledSkillPaths = new Set(
-    saved.complete ? (saved.operation.installedSkillPaths ?? []) : [],
-  );
-  for (const { change, saved: confirmed } of saved.changes) {
-    if (change.kind === "library") {
-      const applied = confirmed || libraryStateRevision(state) === change.afterRevision;
-      if (!applied && libraryStateRevision(state) !== change.beforeRevision)
-        conflicts.push("Unconfirmed setup Library save differs from both recorded revisions");
-      if (applied) {
-        expected = change.after;
-        installedSkills = change.installedSkillsAfter;
-        for (const installedSkill of change.installedSkillsAfter)
-          if (
-            installedSkill.status === "installed" &&
-            !equal(
-              installedSkill,
-              change.installedSkillsBefore.find(
-                (item) => item.installed_skill_id === installedSkill.installed_skill_id,
-              ),
-            )
-          )
-            confirmedInstalledSkillPaths.add(installedSkill.path);
-      }
-    } else {
-      const current = setupDiscoverySettings(settings);
-      const applied = confirmed || equal(current, change.after);
-      if (!applied && !equal(current, change.before))
-        conflicts.push("Unconfirmed setup settings save differs from both recorded values");
-      if (applied) expectedSettings = change.after;
-    }
-  }
+  const conflicts: string[] = [...setup.conflicts];
   const sources = done
     ? { conflicts: [], evidence: [], restorations: [] }
     : yield* prepareSetupSourceUndo(
         state,
-        saved.operation.before,
-        expected,
+        setup.before,
+        setup.after,
         store.originalsPath,
         settings.machineId,
         undoSourceImports,
       );
-  const intent = reverseSetupIntent(state, saved.operation.before, expected, sources.restorations);
-  const discovery = reverseSetupDiscovery(settings, saved.operation.settings, expectedSettings);
+  const intent = reverseSetupIntent(state, setup.before, setup.after, sources.restorations);
+  const discovery = yield* discoveryUndo(store.home, setup, settings);
   conflicts.push(...sources.conflicts, ...intent.conflicts, ...discovery.conflicts);
   const files = done
     ? undefined
     : yield* prepareSetupUndoFiles(
         operationId,
-        saved.operation,
-        installedSkills,
+        setup,
         state,
         backupDirectory,
         priorBackups,
         intent.state,
-        confirmedInstalledSkillPaths,
       );
   if (files) conflicts.push(...files.conflicts);
   const nextInstalledSkills = structuredClone(intent.state.installed_skills);
   for (const path of files?.affected ?? []) {
-    const prior = saved.operation.installedSkills.find((item) => item.path === path);
+    const prior = setup.installedSkillsBefore.find((item) => item.path === path);
     const current = nextInstalledSkills.find((item) => item.path === path);
     if (equal(installedSkillChoice(prior), installedSkillChoice(current))) continue;
     const index = nextInstalledSkills.findIndex((item) => item.path === path);
@@ -180,7 +381,7 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
   const next = { ...intent.state, installed_skills: nextInstalledSkills };
   const planId = hashParts([
     canonicalJson({
-      saved,
+      saved: setup.evidence,
       revision: libraryStateRevision(state),
       settings,
       attempts,
@@ -220,7 +421,7 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
       intentChanged: !done && !equal(setupIntent(state), setupIntent(next)),
       settingsChanged: !done && discovery.changed,
     },
-    saved,
+    setup,
     state,
     settings,
     next,
@@ -248,6 +449,7 @@ export const prepareSetupUndo = Effect.fn("SetupUndo.prepare")(function* (operat
           if (current.summary.conflicts.length)
             return yield* new RecoveryInvalid({ detail: current.summary.conflicts.join("; ") });
           yield* ensureRecoveryOperation(store.home, backupDirectory);
+          yield* ensureRecoveryOperation(store.home, current.setup.directory);
           yield* fs
             .makeDirectory(current.undoDirectory, { mode: 0o700 })
             .pipe(
@@ -270,12 +472,19 @@ export const prepareSetupUndo = Effect.fn("SetupUndo.prepare")(function* (operat
           } satisfies typeof Attempt.Type);
           yield* current.files!.apply();
           if (!equal(current.state, current.next)) yield* store.save(current.next, current.state);
-          if (current.summary.settingsChanged)
-            yield* MachineSettings.restoreDiscovery(
-              store.home,
-              current.settings,
-              current.restoredSettings,
-            );
+          if (current.summary.settingsChanged) {
+            if (current.setup.discovery._tag === "Journal")
+              yield* MachineSettings.restoreDiscovery(
+                store.home,
+                current.settings,
+                current.restoredSettings,
+              );
+            else
+              yield* MachineSettings.restoreSetupDiscovery(
+                store.home,
+                current.setup.discovery.operationId,
+              );
+          }
           if (
             libraryStateRevision(yield* store.load) !== libraryStateRevision(current.next) ||
             !equal(

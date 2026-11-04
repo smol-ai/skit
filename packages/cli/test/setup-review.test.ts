@@ -97,7 +97,7 @@ it.effect("prepares mixed choices without writes and applies their captured mean
     decisions.length = 0;
     plan.summary.removals.entries.length = 0;
     plan.summary.additions.length = 0;
-    yield* f.home.owned(plan.apply(f.apply));
+    const applied = yield* f.home.owned(plan.apply(f.apply));
     const state = yield* f.home.durable;
     assert.deepStrictEqual(state.skills.map((skill) => skill.name).sort(), ["alpha", "beta"]);
     assert.deepStrictEqual(state.enabled, []);
@@ -107,7 +107,7 @@ it.effect("prepares mixed choices without writes and applies their captured mean
       "---\nname: linked\ndescription: linked\n---\nlinked bytes.\n",
     );
     assert.strictEqual(
-      yield* f.fs.exists(join(plan.summary.removals.recoveryDirectory, "receipt.json")),
+      yield* f.fs.exists(join(applied.removalDirectory ?? "", "receipt.json")),
       true,
     );
     assert.strictEqual(yield* f.fs.exists(join(f.agentRoot, "beta", "SKILL.md")), true);

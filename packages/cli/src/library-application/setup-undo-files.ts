@@ -3,6 +3,7 @@ import { Effect, FileSystem } from "effect";
 import {
   canonicalJson,
   copyLocalTree,
+  deterministicTreeHash,
   globalEnabled,
   inspectOwnershipMarker,
   inspectInstalledSkillBackups,
@@ -17,14 +18,59 @@ import {
   type InstalledSkill,
 } from "@smolai/skit-core";
 import { PlanIsStale } from "../library/failures.js";
-import { inspectSetupOperation, readSkillPathDetails } from "./setup-operation.js";
+import { readSkillPathDetails } from "./setup-operation.js";
 import { inspectRecoveryOperation, prepareOwnedRecoveryMoves } from "./recovery-moves.js";
 import { checkSetupGlobalContent } from "./setup-external-ownership.js";
 import { recoveryFingerprint, RecoveryInvalid } from "./recovery-evidence.js";
 
-type Operation = Effect.Success<ReturnType<typeof inspectSetupOperation>>["operation"];
-type File = Operation["files"][number];
 type SkillPathDetails = Effect.Success<ReturnType<typeof readSkillPathDetails>>;
+
+/**
+ * What a setup recorded at one path before it ran: the nearest existing folder above it, and the
+ * entry, or null for nothing there. `unmarked` identifies its bytes without SKIT's marker, by the
+ * hash the record kept: a recovery fingerprint (old journals) or a tree hash (state.json records).
+ */
+export interface SetupFile {
+  readonly path: string;
+  readonly anchor: {
+    readonly path: string;
+    readonly physicalPath: string;
+    readonly dev: bigint;
+    readonly ino: bigint;
+  };
+  readonly entry: {
+    readonly dev: bigint;
+    readonly ino: bigint;
+    readonly type: string;
+    readonly hash: string;
+    readonly unmarked: { readonly by: "fingerprint" | "tree"; readonly hash: string };
+    readonly marker: string | null;
+    readonly markerType?: string | null | undefined;
+    readonly markerMode?: number | null | undefined;
+    readonly linkTarget: string | null;
+  } | null;
+}
+
+/** What a setup changed and recorded, as undo needs it from either kind of record. */
+export interface SetupChanges {
+  readonly files: readonly SetupFile[];
+  readonly installedSkillsBefore: readonly InstalledSkill[];
+  readonly installedSkillsAfter: readonly InstalledSkill[];
+  /** Paths the setup was approved to install at; every recorded path when the record says none. */
+  readonly approvedPaths: ReadonlySet<string> | undefined;
+  /** Paths where a save the setup confirmed installed a copy. */
+  readonly claimedPaths: ReadonlySet<string>;
+}
+
+/** The bytes at `path` without SKIT's marker, measured as the record measured them. */
+const unmarkedAt = Effect.fn("SetupUndo.unmarkedAt")(function* (
+  path: string,
+  by: "fingerprint" | "tree",
+) {
+  return by === "tree"
+    ? yield* deterministicTreeHash(path)
+    : yield* recoveryFingerprint(path, "exclude");
+});
 
 /** Scan timestamps are evidence, not a change to desired installed-skill ownership. */
 export const installedSkillChoice = (installedSkill: InstalledSkill | undefined) =>
@@ -45,7 +91,7 @@ export const installedSkillChoice = (installedSkill: InstalledSkill | undefined)
 const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
 
 /** Check the original namespace anchor, even when today's nearest existing parent has changed. */
-const checkAnchor = Effect.fn("SetupUndo.checkAnchor")(function* (file: File) {
+const checkAnchor = Effect.fn("SetupUndo.checkAnchor")(function* (file: SetupFile) {
   const links = yield* LinkStat;
   const physical = yield* links.realPathNative(file.anchor.path);
   const anchor = yield* links.identity.lstat(physical);
@@ -77,7 +123,7 @@ const checkAnchor = Effect.fn("SetupUndo.checkAnchor")(function* (file: File) {
 
 const restoreMarker = Effect.fn("SetupUndo.restoreMarker")(function* (
   path: string,
-  entry: NonNullable<File["entry"]>,
+  entry: NonNullable<SetupFile["entry"]>,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
@@ -106,18 +152,19 @@ const restoreMarker = Effect.fn("SetupUndo.restoreMarker")(function* (
 /** File effects are prepared from immutable before evidence, never inferred from desired bindings. */
 export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(function* (
   operationId: string,
-  operation: Operation,
-  expected: readonly InstalledSkill[],
+  setup: SetupChanges,
   state: LibraryState,
   backupDirectory: string,
   priorBackups: readonly string[],
   restoredState: LibraryState,
-  confirmedInstalledSkillPaths: ReadonlySet<string>,
 ) {
   const store = yield* LibraryStore;
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
-  const recovery = yield* inspectRecoveryOperation(store.home, operationId);
+  // A setup that moved nothing aside and was never undone has no recovery folder.
+  const recovery = (yield* fs.exists(join(store.home, "removed", operationId)))
+    ? yield* inspectRecoveryOperation(store.home, operationId)
+    : { entries: [] };
   const backups = yield* Effect.forEach(priorBackups, (id) =>
     inspectRecoveryOperation(store.home, id),
   );
@@ -137,9 +184,9 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
   const affected = new Set<string>();
   const physicalPaths: string[] = [];
   const physicalHome = yield* links.realPathNative(store.home);
-  for (const file of operation.files) {
-    const prior = operation.installedSkills.find((item) => resolve(item.path) === file.path);
-    const after = expected.find((item) => resolve(item.path) === file.path);
+  for (const file of setup.files) {
+    const prior = setup.installedSkillsBefore.find((item) => resolve(item.path) === file.path);
+    const after = setup.installedSkillsAfter.find((item) => resolve(item.path) === file.path);
     const current = state.installed_skills.find((item) => resolve(item.path) === file.path);
     const saved = recovery.entries.filter((entry) => entry.path === file.path);
     const details = yield* readSkillPathDetails(file.path);
@@ -149,10 +196,8 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
       details.entry?.marker !== file.entry?.marker &&
       after?.status === "installed" &&
       (file.entry === null || file.entry.marker === null);
-    const approvedPath =
-      operation.installedSkillPaths === undefined ||
-      operation.installedSkillPaths.includes(file.path);
-    const claim = possibleClaim && approvedPath && confirmedInstalledSkillPaths.has(file.path);
+    const approvedPath = setup.approvedPaths === undefined || setup.approvedPaths.has(file.path);
+    const claim = possibleClaim && approvedPath && setup.claimedPaths.has(file.path);
     if (!saved.length && !changedInstalledSkill && possibleClaim && approvedPath && !claim) {
       conflicts.push(`Setup's ownership claim is not confirmed: ${file.path}`);
       continue;
@@ -168,7 +213,8 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
     if (
       file.entry?.type === "Directory" &&
       file.entry.marker === null &&
-      file.entry.hash !== file.entry.unstampedHash
+      file.entry.unmarked.by === "fingerprint" &&
+      file.entry.hash !== file.entry.unmarked.hash
     ) {
       conflicts.push(`Original ownership marker is not reproducible: ${file.path}`);
       continue;
@@ -211,6 +257,12 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
       continue;
     const marker =
       details.entry?.markerType === "File" ? yield* inspectOwnershipMarker(file.path) : undefined;
+    const unmarked =
+      file.entry && details.entry
+        ? yield* Effect.result(unmarkedAt(file.path, file.entry.unmarked.by))
+        : undefined;
+    const sameBytes =
+      unmarked?._tag === "Success" && unmarked.success === file.entry?.unmarked.hash;
     const owned =
       current &&
       after &&
@@ -226,7 +278,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
       owned &&
       details.entry.dev === file.entry.dev &&
       details.entry.ino === file.entry.ino &&
-      details.entry.unstampedHash === file.entry.unstampedHash
+      sameBytes
     ) {
       actions.push({ path: file.path, kind: "release-ownership" });
       continue;
@@ -236,7 +288,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
       details.entry &&
       details.entry.dev === file.entry.dev &&
       details.entry.ino === file.entry.ino &&
-      details.entry.unstampedHash !== file.entry.unstampedHash
+      !sameBytes
     ) {
       conflicts.push(`Managed original was edited: ${file.path}`);
       continue;
@@ -298,11 +350,8 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
           const root = collectionVersionPath(store.originalsPath, backing.copy.hash);
           const path =
             backing.member.source_path === "." ? root : join(root, backing.member.source_path);
-          const evidence = yield* Effect.result(readSkillPathDetails(path));
-          if (
-            evidence._tag === "Success" &&
-            evidence.success.entry?.unstampedHash === file.entry.unstampedHash
-          )
+          const evidence = yield* Effect.result(unmarkedAt(path, file.entry.unmarked.by));
+          if (evidence._tag === "Success" && evidence.success === file.entry.unmarked.hash)
             source = path;
         }
     }
@@ -361,7 +410,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
         Effect.gen(function* () {
           const staged = new Map<string, string>();
           for (const action of actions) {
-            const file = operation.files.find((item) => item.path === action.path)!;
+            const file = setup.files.find((item) => item.path === action.path)!;
             yield* checkSetupGlobalContent(file.path);
             yield* checkAnchor(file);
             if (action.kind !== "restore" || action.source === undefined || file.entry === null)
@@ -383,7 +432,7 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
           }
           yield* backup.apply();
           for (const action of actions) {
-            const file = operation.files.find((item) => item.path === action.path)!;
+            const file = setup.files.find((item) => item.path === action.path)!;
             yield* checkSetupGlobalContent(file.path);
             yield* checkAnchor(file);
             if (action.kind === "release-ownership") {

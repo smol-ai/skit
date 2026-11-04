@@ -1,100 +1,21 @@
 import { Schema } from "effect";
 import {
   canonicalJson,
-  ImportId,
-  CollectionId,
   currentCollectionSkills,
   currentSkillVersion,
-  DeviceSkillSelection,
   Enabled,
   InvocationPolicies,
   Repository,
-  CollectionVersionId,
   SkillId,
-  SkillVersionId,
   CurrentMachineDocument,
-  sourceImports,
   type LibraryState,
   type Import,
   type MachineSettingsSnapshot,
+  type SetupIntent,
 } from "@smolai/skit-core";
-
-const Memberships = Schema.optionalKey(
-  Schema.Array(
-    Schema.Struct({
-      collectionId: CollectionId,
-      skillIds: Schema.Array(SkillId),
-    }),
-  ),
-);
-const Versions = Schema.Array(
-  Schema.Struct({
-    skillId: SkillId,
-    selected: Schema.NullOr(SkillVersionId),
-    local: Schema.NullOr(SkillVersionId),
-  }),
-);
-
-/** The desired fields setup can change. Retained artifacts and audit history are not inverse data. */
-export const SetupIntent = Schema.Struct({
-  /** The account's global list. */
-  global: Schema.Struct({
-    enabled: Schema.Array(Enabled),
-    invocation_policies: Schema.optionalKey(InvocationPolicies),
-  }),
-  repositories: Schema.Array(Repository),
-  device: Schema.NullOr(DeviceSkillSelection),
-  sources: Schema.optionalKey(
-    Schema.Array(
-      Schema.Struct({
-        collectionId: CollectionId,
-        importId: ImportId,
-        collectionVersionId: CollectionVersionId,
-      }),
-    ),
-  ),
-  memberships: Memberships,
-  versions: Versions,
-});
-export type SetupIntent = typeof SetupIntent.Type;
 
 const withPolicies = (invocation_policies: InvocationPolicies | undefined) =>
   invocation_policies === undefined ? {} : { invocation_policies };
-
-export const setupIntent = (state: LibraryState): SetupIntent => ({
-  global: { enabled: [...state.enabled], ...withPolicies(state.invocation_policies) },
-  repositories: structuredClone(state.repositories),
-  device: structuredClone(state.device_skill_selection ?? null),
-  sources: state.collections
-    .flatMap((collection) => {
-      const selected = sourceImports(state, collection.collection_id)[0];
-      return selected
-        ? [
-            {
-              collectionId: collection.collection_id,
-              importId: selected.import_id,
-              collectionVersionId: selected.collection_version_id,
-            },
-          ]
-        : [];
-    })
-    .sort((left, right) => left.collectionId.localeCompare(right.collectionId)),
-  memberships: state.collections
-    .map((collection) => ({
-      collectionId: collection.collection_id,
-      skillIds: currentCollectionSkills(state, collection.collection_id)
-        .map((skill) => skill.skill_id)
-        .sort(),
-    }))
-    .sort((left, right) => left.collectionId.localeCompare(right.collectionId)),
-  versions: state.skills
-    .map((skill) => ({
-      skillId: skill.skill_id,
-      selected: currentSkillVersion(state, skill)?.skill_version_id ?? null,
-      local: skill.local_version_id ?? null,
-    }))
-    .sort((left, right) => left.skillId.localeCompare(right.skillId)),
-});
 
 export const SetupDiscoverySettings = Schema.Struct({
   discoveryRoots: CurrentMachineDocument.fields.discoveryRoots,

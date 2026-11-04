@@ -161,7 +161,11 @@ it.effect(
       expect(
         yield* f.fs.readFileString(join(recovered.data.entries[0].recoveryPath, "SKILL.md")),
       ).toContain("Original review bytes");
-      expect(yield* f.fs.exists(join(f.home, "state.json"))).toBe(false);
+      // The Library holds only the setup's record: removing a copy imports nothing.
+      const state: { skills: readonly unknown[] } = JSON.parse(
+        yield* f.fs.readFileString(join(f.home, "state.json")),
+      );
+      expect(state.skills).toEqual([]);
     }).pipe(Effect.provide(skitLayer)),
 );
 

@@ -1,12 +1,12 @@
 import { testPlatformLayer } from "./helpers/platform.js";
-import { LinkStat, deterministicTreeHash } from "@smolai/skit-core";
+import { LinkStat, MachineSettings } from "@smolai/skit-core";
 import { systemError } from "effect/PlatformError";
-import { manageSetupCopies } from "../src/workflows/library/setup-manage.js";
 import {
-  recordDuplicateSymlinks,
-  checkManageSelection,
-  manageCopy,
-} from "../src/workflows/library/manage-existing.js";
+  setupExistingSelections,
+  setupNewSelections,
+} from "../src/workflows/library/setup-manage.js";
+import { recordDuplicateSymlinks } from "../src/workflows/library/manage-existing.js";
+import { applySetupSelections } from "./helpers/setup-apply.js";
 import { copyConflict } from "../src/workflows/library/setup-decisions.js";
 import type { DuplicateScanError } from "../src/install/duplicates.js";
 import { codexSkillAliases } from "../src/workflows/library/doctor-codex.js";
@@ -213,12 +213,9 @@ it.effect("setup requires a duplicate decision before retaining any selected sou
           const options = { ...f.options, repositoryRoots: [], persistRoots: false };
           const scan = yield* runSetup(options);
           const result = yield* Effect.result(
-            manageSetupCopies(
-              { installOptions: f.home.installOptions },
-              scan,
-              [{ name: "review", sourcePath: f.source }],
-              "new",
-            ),
+            applySetupSelections(options, scan, f.home.installOptions, {
+              ownership: [{ name: "review", sourcePath: f.source }],
+            }),
           );
           expect(
             Result.isFailure(result) &&
@@ -260,14 +257,13 @@ it.effect("a failed replacement keeps the original alias available", () =>
                 : f.fs.rename(from, to),
           });
           const result = yield* Effect.result(
-            manageSetupCopies(
-              { installOptions: f.home.installOptions },
-              scan,
-              [{ name: "review", sourcePath: f.source, duplicateAction: "retire-aliases" }],
-              "new",
-            ).pipe(Effect.provideService(FileSystem.FileSystem, fs)),
+            applySetupSelections(options, scan, f.home.installOptions, {
+              ownership: [
+                { name: "review", sourcePath: f.source, duplicateAction: "retire-aliases" },
+              ],
+            }).pipe(Effect.provideService(FileSystem.FileSystem, fs)),
           );
-          expect(Result.isFailure(result)).toBe(true);
+          expect(Result.isFailure(result) && result.failure._tag).toBe("SetupStopped");
           expect((yield* (yield* LibraryStore).load).skills).toHaveLength(1);
           expect(yield* f.fs.readLink(f.alias)).toBe(f.source);
           expect(yield* f.fs.readFileString(join(f.alias, "SKILL.md"))).toContain("Review code.");
@@ -376,93 +372,6 @@ it.effect("setup's alias allowance does not permit an unapproved copy", () =>
 );
 
 it.effect(
-  "retires Codex aliases despite an unrelated suppressed Claude target and aliased root spelling",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      yield* initializeLibraryMachine(f.home.home);
-      yield* f.fs.makeDirectory(join(f.root, ".claude"));
-      const aliasHome = join(f.root, "home-alias");
-      yield* f.fs.symlink(f.root, aliasHome);
-      yield* f.home.owned(
-        writingTo(
-          f.home.home,
-          Effect.gen(function* () {
-            yield* importSource(f.source);
-            const store = yield* LibraryStore;
-            yield* setLibraryEnabled({
-              query: "review",
-              all: false,
-              allowDuplicate: true,
-              invocation: {
-                scope: { kind: "global" },
-                enabled: true,
-                dryRun: false,
-              },
-              roots: f.home.inventory,
-              variantsPath: f.home.variantsPath,
-            });
-            const state = yield* store.load;
-            expect(
-              state.installed_skills.some(
-                (installedSkill) => installedSkill.destination === "claude",
-              ),
-            ).toBe(true);
-            yield* store.save(
-              {
-                ...state,
-                installed_skills: state.installed_skills.map((installedSkill) =>
-                  installedSkill.destination === "claude"
-                    ? {
-                        ...installedSkill,
-                        status: "suppressed",
-                        suppression_reason: "native_delete",
-                      }
-                    : installedSkill,
-                ),
-              },
-              state,
-            );
-            const duplicates = yield* findDuplicates(
-              { ...f.home.inventory, home: aliasHome },
-              { kind: "global" },
-              ["review"],
-            );
-            const approvedSymlinks = yield* recordDuplicateSymlinks(f.source, duplicates);
-            const selection = yield* checkManageSelection(
-              {
-                name: "review",
-                sourcePath: f.source,
-                duplicateAction: "retire-aliases",
-                approvedSymlinks,
-              },
-              {
-                kind: "retirable",
-                duplicates,
-                aliases: approvedSymlinks.map((alias) => alias.path),
-                replacesLink: false,
-              },
-              () => new Error("Expected retirable aliases"),
-            );
-            const outcome = yield* manageCopy(
-              { installOptions: { ...f.home.inventory, home: aliasHome } },
-              selection,
-              {
-                kind: "existing",
-                subjectId: "review",
-                currentHash: yield* deterministicTreeHash(f.source),
-              },
-            );
-            expect(outcome.recoveryDirectories).toHaveLength(1);
-            expect(yield* f.fs.exists(f.alias)).toBe(false);
-            expect(yield* f.fs.exists(f.destination)).toBe(true);
-          }),
-        ),
-      );
-    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-);
-
-it.effect(
   "preserves an alias with a blocked replacement and continues later setup selections",
   () =>
     Effect.gen(function* () {
@@ -487,15 +396,12 @@ it.effect(
           Effect.gen(function* () {
             const options = { ...f.options, repositoryRoots: [], persistRoots: false };
             const scan = yield* runSetup(options);
-            const applied = yield* manageSetupCopies(
-              { installOptions: f.home.installOptions },
-              scan,
-              [
+            const applied = yield* applySetupSelections(options, scan, f.home.installOptions, {
+              ownership: [
                 { name: "review", sourcePath: f.source, duplicateAction: "retire-aliases" },
                 { name: "later", sourcePath: later, duplicateAction: "retire-aliases" },
               ],
-              "new",
-            );
+            });
             expect(applied.warnings).toEqual([
               expect.objectContaining({
                 name: "review",
@@ -695,20 +601,19 @@ for (const operation of ["add", "bind"] as const) {
                 duplicateAction: "retire-aliases" as const,
                 approvedSymlinks,
               };
+              const machineId = yield* MachineSettings.ensureIdentity(f.home.home);
               const result =
                 operation === "add"
-                  ? yield* manageSetupCopies(
-                      { installOptions: f.home.installOptions },
+                  ? yield* setupNewSelections(
                       fresh,
                       [selection],
-                      "new",
+                      machineId,
+                      "2026-11-04T00:00:00.000Z",
                     ).pipe(Effect.asVoid, Effect.result)
-                  : yield* manageSetupCopies(
-                      { installOptions: f.home.installOptions },
-                      fresh,
-                      [selection],
-                      "existing",
-                    ).pipe(Effect.asVoid, Effect.result);
+                  : yield* setupExistingSelections(fresh, [selection]).pipe(
+                      Effect.asVoid,
+                      Effect.result,
+                    );
               expect(result._tag === "Failure" && result.failure._tag).toBe("PlanIsStale");
               expect(yield* (yield* LibraryStore).load).toEqual(before);
               expect(yield* f.fs.exists(f.alias)).toBe(change !== "removed");
@@ -773,25 +678,24 @@ it.effect("setup keeps retirement consent across its reconnect and add stages", 
           }).pipe(
             Effect.provideService(Renderer, {
               ...renderer,
+              // Once setup has recorded its steps, before it runs them, another link appears.
               withStatus: (message, operation) =>
-                renderer
-                  .withStatus(message, operation)
-                  .pipe(
-                    Effect.tap(() =>
-                      typeof message === "string" && message.startsWith("Reconnecting")
-                        ? f.fs.symlink(later, addedAlias).pipe(Effect.orDie)
-                        : Effect.void,
-                    ),
-                  ),
+                renderer.withStatus(
+                  message,
+                  typeof message === "string" && message.startsWith("Applying setup")
+                    ? Effect.andThen(f.fs.symlink(later, addedAlias).pipe(Effect.orDie), operation)
+                    : operation,
+                ),
             }),
             Effect.result,
           );
         }).pipe(Effect.provide(interaction.layer)),
       ),
     );
-    expect(Result.isFailure(result) && result.failure._tag).toBe("PlanIsStale");
-    // The earlier approved reconnect succeeded; the newly observed links do not authorize an add.
-    expect((yield* f.home.durable).skills.map((skill) => skill.name)).toEqual(["review"]);
+    expect(Result.isFailure(result) && result.failure._tag).toBe("SetupStopped");
+    // The earlier approved reconnect succeeded; the newly observed link does not authorize the
+    // add, which stops after retaining its copy's files and before installing anything.
+    expect((yield* f.home.durable).skills.map((skill) => skill.name)).toEqual(["review", "later"]);
     expect(yield* f.fs.exists(f.alias)).toBe(false);
     expect(yield* f.fs.exists(f.destination)).toBe(true);
     expect(yield* f.fs.readLink(laterAlias)).toBe(later);
@@ -801,7 +705,7 @@ it.effect("setup keeps retirement consent across its reconnect and add stages", 
 );
 
 it.effect.each(["source", "alias"] as const)(
-  "managing rejects a %s changed after the check, before importing or backing up anything",
+  "managing stops when a %s changes after the steps are recorded, before installing or moving anything",
   (changed) =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -813,44 +717,34 @@ it.effect.each(["source", "alias"] as const)(
             repositoryRoots: [],
             persistRoots: false,
           });
-          const input = {
-            name: "review",
-            sourcePath: f.source,
-            duplicateAction: "retire-aliases" as const,
-          };
-          const selection = yield* checkManageSelection(
-            input,
-            copyConflict(scan, input),
-            () => new Error("Expected retirable aliases"),
-          );
-          const request = {
-            kind: "retain" as const,
-            currentHash: yield* deterministicTreeHash(f.source),
-            ownership: {
-              harnesses: ["codex" as const],
-              machineId: scan.machineConfig.machineId,
-            },
-          };
+          const setup = { ...f.options, repositoryRoots: [], persistRoots: false };
           expect(yield* f.fs.exists(join(f.home.home, "state.json"))).toBe(false);
           expect(yield* f.fs.exists(f.destination)).toBe(false);
-          if (changed === "source") {
-            yield* f.fs.writeFileString(
-              join(f.source, "SKILL.md"),
-              "---\nname: review\ndescription: Changed\n---\nChanged after preparation.\n",
-            );
-          } else {
-            // Keep the old inode alive, then replace the alias with the same target and a new identity.
-            yield* f.fs.rename(f.alias, join(f.root, "displaced-alias"));
-            yield* f.fs.symlink(f.source, f.alias);
-          }
-          const result = yield* manageCopy(
-            { installOptions: f.home.installOptions },
-            selection,
-            request,
+          const change =
+            changed === "source"
+              ? f.fs.writeFileString(
+                  join(f.source, "SKILL.md"),
+                  "---\nname: review\ndescription: Changed\n---\nChanged after preparation.\n",
+                )
+              : // Keep the old inode alive, then replace the alias with the same target and a new identity.
+                Effect.andThen(
+                  f.fs.rename(f.alias, join(f.root, "displaced-alias")),
+                  f.fs.symlink(f.source, f.alias),
+                );
+          const result = yield* applySetupSelections(
+            setup,
+            scan,
+            f.home.installOptions,
+            {
+              ownership: [
+                { name: "review", sourcePath: f.source, duplicateAction: "retire-aliases" },
+              ],
+            },
+            change,
           ).pipe(Effect.result);
-          expect(result._tag === "Failure" && result.failure._tag).toBe("PlanIsStale");
-          expect(yield* f.fs.exists(join(f.home.home, "state.json"))).toBe(false);
-          expect(yield* f.fs.exists(join(f.home.home, "originals"))).toBe(false);
+          // The Library recorded the steps, then stopped at the copy that no longer matches them.
+          expect(result._tag === "Failure" && result.failure._tag).toBe("SetupStopped");
+          expect(yield* f.fs.exists(join(f.home.home, "originals"))).toBe(changed === "alias");
           expect(yield* f.fs.exists(join(f.home.home, "removed"))).toBe(false);
           expect(yield* f.fs.exists(f.destination)).toBe(false);
           expect(yield* f.fs.readLink(f.alias)).toBe(f.source);

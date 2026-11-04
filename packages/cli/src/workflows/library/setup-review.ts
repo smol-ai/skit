@@ -254,7 +254,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
       imports,
       bindings: decisions.filter((copy) => copy.operation === "bind"),
       ownership: decisions.filter((copy) => copy.operation === "add"),
-      removals: yield* planSetupRemovals(setup, scan, removals, removablePaths),
+      removals: yield* planSetupRemovals(scan, removals, removablePaths),
       versionChoices: structuredClone(versionChoices),
       changes: structuredClone(
         (scan.changes ?? []).filter(
@@ -373,10 +373,7 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
             ]
           : [];
       }),
-      removals: {
-        entries: approval.removals.entries,
-        recoveryDirectory: approval.removals.recoveryDirectory,
-      },
+      removals: { entries: approval.removals.entries },
     };
     // Neither presentation facts nor caller-owned consent arrays may redirect confirmation.
     const approved = {

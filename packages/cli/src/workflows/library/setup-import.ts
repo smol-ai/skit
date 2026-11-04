@@ -1,7 +1,5 @@
-import { localLibrary } from "../../library-application/library-owner.js";
 import { Data, Effect, Schema } from "effect";
-import { LibraryStore, sourceLocator } from "@smolai/skit-core";
-import { type SetupOptions } from "./setup.js";
+import { sourceLocator, type ImportRequest, type MachineId } from "@smolai/skit-core";
 import { SetupKnownSourceSelection, type SetupResult } from "./setup-contract.js";
 import { prepareSkillsShImportEvidence } from "./skills-sh-lock-source.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
@@ -13,12 +11,10 @@ export class SetupImportInvalid
       | "duplicate-selection"
       | "candidate-not-found"
       | "candidate-not-importable"
-      | "machine-identity-missing"
       | "observation-missing"
       | "contested-observation"
       | "source-unresolvable"
-      | "lock-changed"
-      | "retention-missing";
+      | "lock-changed";
   }>
   implements SkitFailure
 {
@@ -30,25 +26,19 @@ export class SetupImportInvalid
   }
 }
 
-export interface SetupImportOptions {
-  readonly setup: SetupOptions;
-}
-
-/** Retain selected installed bytes from one freshly revalidated observation. */
-export const importSetupCollections = Effect.fn("Setup.importCollections")(function* (
-  options: SetupImportOptions,
+/**
+ * The import each selected Collection group makes, from one revalidated observation: one request
+ * per group, in group order, each lockfile's hash checked as it is read.
+ */
+export const setupImportRequests = Effect.fn("Setup.importRequests")(function* (
   current: SetupResult,
   untrustedSelections: readonly unknown[],
+  machineId: MachineId,
+  checkedAt: string,
 ) {
   const selections = yield* Schema.decodeUnknownEffect(Schema.Array(SetupKnownSourceSelection))(
     untrustedSelections,
   );
-  const machineId = current.machineConfig.machineId;
-  if (!machineId)
-    return yield* new SetupImportInvalid({
-      name: "machine",
-      reason: "machine-identity-missing",
-    });
   const selected = new Set<string>();
   const groups = new Map<
     string,
@@ -90,11 +80,7 @@ export const importSetupCollections = Effect.fn("Setup.importCollections")(funct
       { ...candidate, paths: selection.paths },
     ]);
   }
-
-  const checkedAt = new Date(
-    yield* Effect.clockWith((clock) => clock.currentTimeMillis),
-  ).toISOString();
-  const imported = [];
+  const requests: ImportRequest[] = [];
   for (const [groupKey, candidates] of [...groups].sort(([left], [right]) =>
     left.localeCompare(right),
   )) {
@@ -109,34 +95,13 @@ export const importSetupCollections = Effect.fn("Setup.importCollections")(funct
         Effect.fail(new SetupImportInvalid({ name, reason })),
       ),
     );
-    imported.push(
-      yield* (yield* localLibrary).import.collection({
-        input: sourceLocator(evidence.source),
-        source: evidence.source,
-        importedAt: checkedAt,
-        skills: evidence.skills,
-        lockFileEntries: evidence.lockFileEntries,
-      }),
-    );
-  }
-  const persisted = yield* (yield* LibraryStore).inspect;
-  if (!persisted.present)
-    return yield* new SetupImportInvalid({
-      name: "Library",
-      reason: "retention-missing",
+    requests.push({
+      input: sourceLocator(evidence.source),
+      source: evidence.source,
+      importedAt: checkedAt,
+      skills: evidence.skills,
+      lockFileEntries: evidence.lockFileEntries,
     });
-  for (const result of imported) {
-    if (
-      result.skills.length === 0 ||
-      result.skills.some(
-        (skill) =>
-          !persisted.state.skills.some((candidate) => candidate.skill_id === skill.skill_id),
-      )
-    )
-      return yield* new SetupImportInvalid({
-        name: result.collection?.collection_id ?? result.skills[0]?.skill_id ?? "Library",
-        reason: "retention-missing",
-      });
   }
-  return { planId: current.onboarding.planId, imported };
+  return requests;
 });

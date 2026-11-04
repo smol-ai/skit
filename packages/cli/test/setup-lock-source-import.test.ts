@@ -8,6 +8,7 @@ import {
   LibraryActor,
   LibraryAuditLog,
   LibraryStore,
+  MachineSettings,
   libraryStoreLayer,
   collectionVersionPath,
   skitLayer,
@@ -16,7 +17,8 @@ import { setupCommand } from "../src/handlers/library/setup.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { setupPrompts } from "../src/presentation/setup-steps.js";
 import { runSetup } from "../src/workflows/library/setup.js";
-import { importSetupCollections } from "../src/workflows/library/setup-import.js";
+import { setupImportRequests } from "../src/workflows/library/setup-import.js";
+import { applySetupSelections } from "./helpers/setup-apply.js";
 import {
   SetupLockMatch,
   type SetupOnboardingCandidate,
@@ -140,17 +142,6 @@ for (const skillCount of [1, 12]) {
             }).pipe(Effect.provide(interaction.layer)),
           ),
         );
-        expect(
-          (yield* interaction.events).flatMap((event) =>
-            event._tag === "StatusStarted" ? [event.message] : [],
-          ),
-        ).toEqual([
-          "Observing local skills",
-          "Observing local skills",
-          "Revalidating the approved setup plan",
-          "Saving this machine's discovery roots",
-          `Importing 1 installed Collection (${skillCount} Skill${skillCount === 1 ? "" : "s"})`,
-        ]);
         const sourcePicker = (yield* interaction.prompts).find(
           (prompt) => prompt.message === setupPrompts.collections,
         );
@@ -229,17 +220,16 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
     if (!candidate || candidate.action !== "import-observed-collection") return;
     const lockPath = join(repository, "skills-lock.json");
     const lockSnapshot = yield* fs.readFileString(lockPath);
+    const machineId = yield* MachineSettings.ensureIdentity(home.home);
     for (const change of ["changed", "missing"] as const) {
       if (change === "changed") yield* fs.writeFileString(lockPath, "changed lock snapshot\n");
       else yield* fs.remove(lockPath);
       const stale = yield* Effect.result(
-        home.owned(
-          writingTo(
-            home.home,
-            importSetupCollections({ setup }, preview, [
-              { name: candidate.name, paths: candidate.paths, groupKey: candidate.groupKey },
-            ]),
-          ),
+        setupImportRequests(
+          preview,
+          [{ name: candidate.name, paths: candidate.paths, groupKey: candidate.groupKey }],
+          machineId,
+          "2026-11-04T00:00:00.000Z",
         ),
       );
       expect(stale).toMatchObject({
@@ -251,23 +241,24 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
       expect(yield* fs.readFileString(join(installed, "SKILL.md"))).toBe(installedText);
       yield* fs.writeFileString(lockPath, lockSnapshot);
     }
-    const adopted = yield* home.owned(
+    yield* home.owned(
       writingTo(
         home.home,
-        importSetupCollections({ setup }, preview, [
-          { name: candidate.name, paths: candidate.paths, groupKey: candidate.groupKey },
-        ]),
+        applySetupSelections(setup, preview, home.installOptions, {
+          imports: [{ name: candidate.name, paths: candidate.paths, groupKey: candidate.groupKey }],
+        }),
       ).pipe(Effect.provideService(LibraryActor, "setup")),
     );
-    expect(adopted.imported).toHaveLength(1);
     const history = yield* home.owned(Effect.flatMap(LibraryAuditLog, (audit) => audit.list()));
     expect(history).toHaveLength(1);
     expect(history[0]).toMatchObject({ type: "collection.retained", workflow: "setup" });
+    // One event for the whole setup: its operation record, the import, and the record marked done.
     expect(history[0]?.changes.map((change) => `${change.entity}:${change.action}`)).toEqual([
+      "library:operation-Pending",
       "collection:added",
       "skill:added",
+      "library:operation-Done",
     ]);
-    const imported = adopted.imported[0]!;
     const persisted = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
       Effect.provide(libraryStoreLayer({ home: home.home })),
     );
@@ -283,9 +274,7 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
         content_agreement: "agrees",
       }),
     ]);
-    const skill = persisted.state.skills.find(
-      (item) => item.skill_id === imported.skills[0]?.skill_id,
-    );
+    const skill = persisted.state.skills.find((item) => item.name === "review");
     expect(sourceImport.collection_id).toBe(skill?.collection_id);
     const tree = persisted.state.collection_versions[0]!;
     const original = collectionVersionPath(home.originals, tree.hash);
@@ -471,28 +460,27 @@ it.effect("manages a selected member from a two-Skill GitHub lock collection", (
     expect(new Set(candidates.map((candidate) => candidate.groupKey)).size).toBe(1);
     const selected = candidates.find((candidate) => candidate.name === "review");
     if (!selected) return;
-    const adopted = yield* home.owned(
+    yield* home.owned(
       writingTo(
         home.home,
-        importSetupCollections({ setup }, preview, [
-          { name: selected.name, paths: selected.paths, groupKey: selected.groupKey },
-        ]),
+        applySetupSelections(setup, preview, home.installOptions, {
+          imports: [{ name: selected.name, paths: selected.paths, groupKey: selected.groupKey }],
+        }),
       ),
     );
-    expect(adopted.imported).toHaveLength(1);
-    const imported = adopted.imported[0];
-    if (!imported) return;
     const saved = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
       Effect.provide(libraryStoreLayer({ home: home.home })),
     );
     expect(saved.present).toBe(true);
     if (!saved.present) return;
+    expect(saved.state.collections).toHaveLength(1);
+    const collectionId = saved.state.collections[0]?.collection_id;
     expect(
       saved.state.skills
-        .filter((skill) => skill.collection_id === imported.collection?.collection_id)
+        .filter((skill) => skill.collection_id === collectionId)
         .map((skill) => skill.name),
     ).toEqual(["review"]);
-    expect(saved.state.imports[0]?.collection_id).toBe(imported.collection?.collection_id);
+    expect(saved.state.imports[0]?.collection_id).toBe(collectionId);
     expect(saved.state.imports[0]?.lock_file_entries).toHaveLength(1);
     expect(saved.state.imports[0]?.lock_file_entries[0]?.source).toBe("acme/skills");
     const secondSetup = yield* home.owned(runSetup(setup));

@@ -17,6 +17,7 @@ import {
   MachineSettings,
   type HarnessName as Harness,
   type LibraryState,
+  type OperationId,
 } from "@smolai/skit-core";
 import { readSkillsLock } from "./skills-sh-lock-source.js";
 import { readableSkillsDirectories } from "../../install/duplicates.js";
@@ -576,7 +577,12 @@ const setupMachineScope = (options: SetupOptions, prior: MachineSettings.Setting
 export const saveSetupMachineConfig = Effect.fn("Setup.saveMachineConfig")(function* <
   E = never,
   R = never,
->(options: SetupOptions, beforeSave?: MachineSettings.BeforeSave<E, R>) {
+>(
+  options: SetupOptions,
+  beforeSave?: MachineSettings.BeforeSave<E, R>,
+  /** The setup this save belongs to, so undoing it can put the discovery folders back. */
+  operationId?: OperationId,
+) {
   return yield* MachineSettings.updateDiscovery(
     options.libraryHome,
     {
@@ -588,6 +594,7 @@ export const saveSetupMachineConfig = Effect.fn("Setup.saveMachineConfig")(funct
         : { displayName: options.machineDisplayName }),
     },
     beforeSave,
+    operationId,
   );
 });
 

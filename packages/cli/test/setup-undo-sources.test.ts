@@ -21,8 +21,7 @@ import {
 import { skillsDirectoryFor } from "../src/install/roots.js";
 import { prepareSetupCommand, setupApplyCommand } from "../src/handlers/library/setup-machine.js";
 import { prepareSetupUndo } from "../src/library-application/setup-undo.js";
-import { inspectSetupOperation } from "../src/library-application/setup-operation.js";
-import { listRecoveryOperations } from "../src/library-application/recovery-moves.js";
+import { setupSourceChoiceId } from "../src/workflows/library/setup-decisions.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { runSetup } from "../src/workflows/library/setup.js";
 import { skitCommand } from "../src/commands/tree.js";
@@ -42,7 +41,7 @@ const document = (name: string, body: string) =>
 
 const fixture = Effect.fn("Test.setupSourceUndo")(function* (
   selectedOverride = false,
-  failSourceAcknowledgement = false,
+  interruptAfterImport = false,
   projectExisting = false,
 ) {
   const fs = yield* FileSystem.FileSystem;
@@ -155,45 +154,63 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
   );
   expect(scan.onboarding.recommended.sources).toHaveLength(1);
   const interaction = yield* makeScriptedInteraction([]);
-  const executed = yield* Effect.result(
+  // Unprojected, the recommended plan would also install the enabled Collection, which the source
+  // import changes after review and so stops the setup: approve the source import alone.
+  const input = {
+    options,
+    workDirFlag: root,
+    manageOptions: { installOptions: home.installOptions },
+    planId: scan.onboarding.planId,
+    ...(projectExisting
+      ? {}
+      : {
+          selection: {
+            sourceIds: scan.onboarding.recommended.sources.map((source) =>
+              setupSourceChoiceId(source.groupKey),
+            ),
+            copyPaths: [],
+            removePaths: [],
+          },
+        }),
+  };
+  let saves = 0;
+  const executed = yield* Effect.exit(
     home.owned(
-      setupApplyCommand({
-        options,
-        workDirFlag: root,
-        manageOptions: { installOptions: home.installOptions },
-        planId: scan.onboarding.planId,
+      Effect.gen(function* () {
+        const reviewed = projectExisting
+          ? undefined
+          : (yield* prepareSetupCommand(input)).plan.reviewId;
+        return yield* setupApplyCommand({
+          ...input,
+          ...(reviewed === undefined ? {} : { reviewedPlanId: reviewed }),
+        });
       }).pipe(
         Effect.provide(interaction.layer),
-        Effect.provideService(FileSystem.FileSystem, {
-          ...fs,
-          link: (from, to) =>
-            Effect.gen(function* () {
-              if (failSourceAcknowledgement && to.endsWith(".published.json")) {
-                const change = JSON.parse(
-                  yield* fs.readFileString(to.replace(".published.json", ".json")),
-                );
-                if (change.kind === "library")
-                  return yield* systemError({
-                    _tag: "PermissionDenied",
-                    module: "FileSystem",
-                    method: "link",
-                    pathOrDescriptor: to,
-                  });
-              }
-              return yield* fs.link(from, to);
-            }),
-        }),
+        // The record is the first save and the import the second: dying there leaves it Pending.
+        Effect.provideServiceEffect(
+          LibraryStore,
+          Effect.map(LibraryStore, (store) => ({
+            ...store,
+            save: (next: LibraryState, base: LibraryState) =>
+              Effect.andThen(
+                store.save(next, base),
+                interruptAfterImport && ++saves === 2 ? Effect.interrupt : Effect.void,
+              ),
+          })),
+        ),
       ),
     ),
   );
   let operationId: string | undefined;
-  if (failSourceAcknowledgement) {
+  if (interruptAfterImport) {
     expect(executed._tag).toBe("Failure");
-    if (executed._tag === "Failure") expect(executed.failure._tag).toBe("PlatformError");
-    [operationId] = yield* listRecoveryOperations(home.home);
+    const saved: { operations: readonly { operationId: string }[] } = JSON.parse(
+      yield* fs.readFileString(home.statePath),
+    );
+    operationId = saved.operations[0]?.operationId;
   } else {
-    if (executed._tag === "Failure") return yield* Effect.fail(executed.failure);
-    operationId = executed.success.operationId;
+    if (executed._tag === "Failure") return yield* Effect.failCause(executed.cause);
+    operationId = executed.value.operationId;
   }
   if (!operationId) return yield* Effect.die(new Error("Setup omitted operation evidence"));
   yield* TestClock.adjust("1 second");
@@ -202,7 +219,7 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
     root,
     home,
     options,
-    applied: executed._tag === "Success" ? executed.success : undefined,
+    applied: executed._tag === "Success" ? executed.value : undefined,
     existing,
     introduced,
     before,
@@ -214,13 +231,11 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
 });
 
 it.effect(
-  "full undo resolves an interrupted forward source publication from actual Library revision",
+  "full undo reverses a setup interrupted after its import, once the next Library finished it",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture(false, true);
-      const operation = yield* inspectSetupOperation(f.home.home, f.operationId);
-      expect(operation.complete).toBeUndefined();
-      expect(operation.changes.at(-1)?.saved).toBe(false);
+      // The next Library finished the setup the import was interrupted in.
       expect(enabledSkillIds(yield* f.home.durable, f.enabled)).toHaveLength(2);
       const inverse = yield* f.home.owned(prepareSetupUndo(f.operationId));
       expect(inverse.summary.conflicts).toEqual([]);
@@ -513,19 +528,12 @@ it.effect(
       const undoUpdate = yield* f.home.owned(prepareSetupUndo(reconciled.operationId));
       expect(undoUpdate.summary.conflicts).toEqual([]);
       yield* f.home.owned(undoUpdate.apply());
-      const undoImport = yield* f.home.owned(prepareSetupUndo(f.operationId));
-      expect(undoImport.summary.conflicts).toEqual([]);
-      yield* f.home.owned(undoImport.apply());
       expect(yield* f.fs.readFileString(join(original.path, "SKILL.md"))).toBe(
         document("existing", "Before setup"),
       );
-      const state = yield* f.home.durable;
-      expect(state.installed_skills).toEqual(f.before.installed_skills);
-      expect(
-        currentSkillVersion(
-          state,
-          state.skills.find((skill) => skill.skill_id === original.skill_id)!,
-        )?.skill_version_id,
-      ).toBe(original.skill_version_id);
+      expect((yield* f.home.durable).installed_skills).toEqual(f.before.installed_skills);
+      // The later setup replaced the import's record, so only the later one can be undone.
+      const undoImport = yield* Effect.flip(f.home.owned(prepareSetupUndo(f.operationId)));
+      expect(undoImport._tag).toBe("RecoveryInvalid");
     }).pipe(Effect.provide(skitLayer)),
 );
