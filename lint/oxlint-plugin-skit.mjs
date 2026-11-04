@@ -5,6 +5,7 @@ import {
   debt as boundaryDebt,
   serviceDebt,
 } from "../architecture/boundaries.mjs";
+import { importDebt, layout, layoutDebt, undecided } from "../architecture/layout.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 
@@ -569,6 +570,94 @@ const effectRules = {
           if (declares && !known.has(id.value))
             context.report({ node: id, messageId: "forbidden", data: { id: id.value } });
         },
+      };
+    },
+  },
+
+  "directory-layout": {
+    meta: {
+      type: "problem",
+      docs: { description: "Source files live in the target folder layout" },
+      messages: {
+        forbidden:
+          "{{file}} is outside the target layout for {{package}} (architecture/layout.mjs). Put it in one of: {{allowed}}. Existing files are listed as debt there; new ones are not allowed.",
+      },
+    },
+    create(context) {
+      const file = relative(repositoryRoot, context.filename);
+      const source = Object.keys(layout).find((path) => file.startsWith(path));
+      if (source === undefined) return {};
+      if (layoutDebt.includes(file)) return {};
+      if (undecided.some((path) => (path.endsWith("/") ? file.startsWith(path) : file === path)))
+        return {};
+      const target = layout[source];
+      const [top, ...rest] = file.slice(source.length).split("/");
+      if (rest.length === 0 ? target.files.includes(top) : target.folders.includes(top)) return {};
+      return {
+        Program() {
+          context.report({
+            loc: { start: { line: 1, column: 0 }, end: { line: 1, column: 0 } },
+            messageId: "forbidden",
+            data: {
+              file,
+              package: source,
+              allowed: [...target.files, ...target.folders.map((folder) => `${folder}/`)].join(
+                ", ",
+              ),
+            },
+          });
+        },
+      };
+    },
+  },
+
+  "import-direction": {
+    meta: {
+      type: "problem",
+      docs: { description: "Imports follow the target layout's direction" },
+      messages: {
+        frontend:
+          "{{target}} is CLI source. The TUI and Storybook import core subpath exports, not CLI source (architecture/layout.mjs). Existing imports are listed as debt there; new ones are not allowed.",
+        internal:
+          "{{target}} is internal to {{owner}}. Only code under {{owner}} may import it; call the owner's public module instead (architecture/layout.mjs).",
+      },
+    },
+    create(context) {
+      const file = relative(repositoryRoot, context.filename);
+      const fileDirectory = dirname(context.filename);
+      const frontend =
+        file.startsWith("packages/tui/src/") || file.startsWith("packages/storybook/");
+      const allowed = new Set(importDebt[file] ?? []);
+      const check = (node, sourceNode) => {
+        const source = sourceNode?.value;
+        if (typeof source !== "string") return;
+        const target = source.startsWith(".")
+          ? relative(repositoryRoot, resolve(fileDirectory, source)).replace(/\.js$/, "")
+          : source.startsWith("@smolai/skit-core/")
+            ? `packages/skit/src/${source.slice("@smolai/skit-core/".length)}`
+            : undefined;
+        if (target === undefined) return;
+        if (
+          frontend &&
+          source.startsWith(".") &&
+          target.startsWith("packages/cli/src/") &&
+          !allowed.has(target)
+        )
+          context.report({ node: sourceNode, messageId: "frontend", data: { target } });
+        const internal = /^(packages\/skit\/src\/[^/]+\/)internal(?:\/|$)/.exec(target);
+        if (internal && !file.startsWith(internal[1]))
+          context.report({
+            node: sourceNode,
+            messageId: "internal",
+            data: { target, owner: internal[1] },
+          });
+      };
+      const declaration = (node) => check(node, node.source);
+      return {
+        ImportDeclaration: declaration,
+        ExportNamedDeclaration: declaration,
+        ExportAllDeclaration: declaration,
+        ImportExpression: (node) => check(node, node.source),
       };
     },
   },

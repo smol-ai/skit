@@ -1,6 +1,7 @@
 /**
  * Whole-app ownership model. Approved; enforced by lint (architecture/boundaries.mjs) and
  * conformance types (architecture/conformance/).
+ * Target folder layout: architecture/layout.mjs (Arc work_01m6jatvy5f21a7x5q214td7a3).
  *
  * Every piece of persisted state has exactly one owner. Nothing outside an owner may import that
  * owner's private modules. `removes` lists what stops existing when the owner exists: the subtraction

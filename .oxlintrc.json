@@ -69,7 +69,15 @@
         "skit/no-handrolled-fetch-double": "warn",
         "skit/no-node-fs": "error",
         "skit/owner-boundaries": "error",
-        "skit/approved-services": "error"
+        "skit/approved-services": "error",
+        "skit/directory-layout": "error",
+        "skit/import-direction": "error"
+      }
+    },
+    {
+      "files": ["packages/storybook/**/*.ts"],
+      "rules": {
+        "skit/import-direction": "error"
       }
     },
     {
