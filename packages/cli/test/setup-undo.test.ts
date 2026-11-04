@@ -14,7 +14,7 @@ import {
   skitLayer,
 } from "@smolai/skit-core";
 import { readSkillPathDetails } from "../src/library/setup/setup-operation.js";
-import { setupDiscoverySettings } from "../src/library/setup/setup-undo-intent.js";
+const { setupDiscoverySettings } = MachineSettings;
 import { checkSetupGlobalContent } from "../src/library/setup/setup-external-ownership.js";
 import { recoveryFingerprint } from "../src/library-application/recovery-evidence.js";
 import { prepareSetupUndo } from "../src/library/setup/setup-undo.js";

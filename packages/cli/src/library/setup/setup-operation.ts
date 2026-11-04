@@ -15,13 +15,14 @@ import {
   InstalledSkill,
   InstallDestination,
   SetupIntent,
+  MachineSettings,
 } from "@smolai/skit-core";
 import { recoveryOperationPath } from "../../library-application/recovery-moves.js";
 import {
   RecoveryInvalid,
   recoveryFingerprint,
 } from "../../library-application/recovery-evidence.js";
-import { SetupDiscoverySettings } from "./setup-undo-intent.js";
+const SetupDiscoverySettings = MachineSettings.SetupDiscoverySettings;
 
 const DevicePath = AbsoluteDevicePath.check(
   Schema.makeFilter((path) => resolve(path) === path, {

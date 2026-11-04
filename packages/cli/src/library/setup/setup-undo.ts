@@ -17,7 +17,6 @@ import {
   writeJsonExclusive,
   type CollectionId,
   type LibraryState,
-  type MachineSettingsSnapshot,
   type OperationId,
 } from "@smolai/skit-core";
 import { PlanIsStale } from "../failures.js";
@@ -34,12 +33,9 @@ import {
   type SetupFile,
 } from "./setup-undo-files.js";
 import { prepareSetupSourceUndo, type UndoSourceImport } from "./setup-undo-sources.js";
-import {
-  reverseSetupDiscovery,
-  reverseSetupIntent,
-  setupDiscoverySettings,
-  SetupDiscoverySettings,
-} from "./setup-undo-intent.js";
+import { reverseSetupIntent } from "./setup-undo-intent.js";
+
+const { SetupDiscoverySettings, setupDiscoverySettings } = MachineSettings;
 
 const AttemptFields = {
   planId: Hash,
@@ -69,8 +65,7 @@ interface SetupRecord extends SetupChanges {
   readonly discovery:
     | {
         readonly _tag: "Journal";
-        readonly before: SetupDiscoverySettings;
-        readonly after: SetupDiscoverySettings;
+        readonly legacy: MachineSettings.LegacySetupDiscovery;
       }
     | { readonly _tag: "MachineSettings"; readonly operationId: OperationId };
   readonly evidence: unknown;
@@ -180,18 +175,10 @@ const journalSetup = Effect.fn("SetupUndo.journalSetup")(function* (
   home: string,
   operationId: string,
   state: LibraryState,
-  settings: MachineSettingsSnapshot,
 ) {
   const saved = yield* inspectSetupOperation(home, operationId);
   const conflicts: string[] = [];
-  const expectedMachine = saved.changes.reduce(
-    (id, entry) => (entry.change.kind === "settings" ? entry.change.machineId : id),
-    saved.operation.machineId,
-  );
-  if (expectedMachine !== null && settings.machineId !== expectedMachine)
-    conflicts.push("Setup belongs to a different machine identity");
   let expected = saved.operation.before;
-  let expectedSettings = saved.operation.settings;
   let installedSkills = saved.operation.installedSkills;
   const confirmedInstalledSkillPaths = new Set(
     saved.complete ? (saved.operation.installedSkillPaths ?? []) : [],
@@ -216,12 +203,6 @@ const journalSetup = Effect.fn("SetupUndo.journalSetup")(function* (
           )
             confirmedInstalledSkillPaths.add(installedSkill.path);
       }
-    } else {
-      const current = setupDiscoverySettings(settings);
-      const applied = confirmed || equal(current, change.after);
-      if (!applied && !equal(current, change.before))
-        conflicts.push("Unconfirmed setup settings save differs from both recorded values");
-      if (applied) expectedSettings = change.after;
     }
   }
   return {
@@ -247,32 +228,27 @@ const journalSetup = Effect.fn("SetupUndo.journalSetup")(function* (
         : new Set(saved.operation.installedSkillPaths),
     claimedPaths: confirmedInstalledSkillPaths,
     conflicts,
-    discovery: { _tag: "Journal", before: saved.operation.settings, after: expectedSettings },
+    discovery: {
+      _tag: "Journal",
+      legacy: {
+        before: saved.operation.settings,
+        machineId: saved.operation.machineId,
+        changes: saved.changes.flatMap(({ change, saved: confirmed }) =>
+          change.kind === "settings"
+            ? [
+                {
+                  before: change.before,
+                  after: change.after,
+                  machineId: change.machineId,
+                  confirmed,
+                },
+              ]
+            : [],
+        ),
+      },
+    },
     evidence: saved,
   } satisfies SetupRecord;
-});
-
-/** The discovery folders undo puts back, and whether it can. */
-const discoveryUndo = Effect.fn("SetupUndo.discovery")(function* (
-  home: string,
-  setup: SetupRecord,
-  settings: MachineSettingsSnapshot,
-) {
-  if (setup.discovery._tag === "Journal")
-    return reverseSetupDiscovery(settings, setup.discovery.before, setup.discovery.after);
-  const record = yield* MachineSettings.setupRecord(home, setup.discovery.operationId);
-  if (Option.isNone(record) || equal(settings.discoveryRoots, record.value.before.discoveryRoots))
-    return { settings, conflicts: [], changed: false };
-  if (
-    settings.machineId !== record.value.expectedAfter.machineId ||
-    !equal(settings.discoveryRoots, record.value.expectedAfter.discoveryRoots)
-  )
-    return { settings, conflicts: ["Discovery folders changed after setup"], changed: false };
-  return {
-    settings: { ...settings, discoveryRoots: [...record.value.before.discoveryRoots] },
-    conflicts: [],
-    changed: true,
-  };
 });
 
 const readUndo = Effect.fn("SetupUndo.read")(function* (
@@ -284,7 +260,6 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
   const state = yield* store.load;
-  const settings = yield* MachineSettings.read(store.home);
   const operations = yield* Schema.decodeUnknownEffect(Schema.Array(Library.OperationStatus))(
     state.operations,
   ).pipe(Effect.mapError(() => new RecoveryInvalid({ detail: "Invalid setup record" })));
@@ -301,7 +276,7 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
     });
   const setup =
     recorded === undefined
-      ? yield* journalSetup(store.home, operationId, state, settings)
+      ? yield* journalSetup(store.home, operationId, state)
       : yield* recordedSetup(store.home, recorded);
   const undoDirectory = join(setup.directory, "undo");
   const undoInfo = yield* links.identity
@@ -347,6 +322,12 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
       }
     }
   }
+  const discovery = yield* MachineSettings.planRestoreDiscovery(
+    store.home,
+    operationId,
+    setup.discovery._tag === "Journal" ? setup.discovery.legacy : undefined,
+  );
+  const settings = discovery.before;
   const conflicts: string[] = [...setup.conflicts];
   const sources = done
     ? { conflicts: [], evidence: [], restorations: [] }
@@ -359,7 +340,6 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
         undoSourceImports,
       );
   const intent = reverseSetupIntent(state, setup.before, setup.after, sources.restorations);
-  const discovery = yield* discoveryUndo(store.home, setup, settings);
   conflicts.push(...sources.conflicts, ...intent.conflicts, ...discovery.conflicts);
   const files = done
     ? undefined
@@ -428,7 +408,8 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
     state,
     settings,
     next,
-    restoredSettings: discovery.settings,
+    restoredSettings: discovery.after,
+    discoveryPlan: discovery,
     files,
     undoDirectory,
   };
@@ -475,19 +456,8 @@ export const prepareSetupUndo = Effect.fn("SetupUndo.prepare")(function* (operat
           } satisfies typeof Attempt.Type);
           yield* current.files!.apply();
           if (!equal(current.state, current.next)) yield* store.save(current.next, current.state);
-          if (current.summary.settingsChanged) {
-            if (current.setup.discovery._tag === "Journal")
-              yield* MachineSettings.restoreDiscovery(
-                store.home,
-                current.settings,
-                current.restoredSettings,
-              );
-            else
-              yield* MachineSettings.restoreSetupDiscovery(
-                store.home,
-                current.setup.discovery.operationId,
-              );
-          }
+          if (current.discoveryPlan.recorded)
+            yield* MachineSettings.applyRestoreDiscovery(store.home, current.discoveryPlan);
           if (
             libraryStateRevision(yield* store.load) !== libraryStateRevision(current.next) ||
             !equal(

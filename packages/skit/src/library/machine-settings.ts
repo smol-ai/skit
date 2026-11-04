@@ -2,6 +2,8 @@ import { Effect, FileSystem, Option, Schema } from "effect";
 import { hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { writeJsonAtomic } from "../platform/atomic-write.js";
+import { hashParts } from "../artifact/descriptor.js";
+import { Hash } from "../vocabulary.js";
 import { canonicalJson } from "../shared/json.js";
 import { LibraryChanged } from "../failures.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
@@ -10,8 +12,8 @@ import {
   currentMachineDocument,
   emptyMachineDocument,
   MachineDocumentJson,
-  MachineDocumentV6,
-  type CurrentMachineDocument,
+  MachineDocumentV7,
+  CurrentMachineDocument,
   type DiscoveryEvidence,
   type MachineRepositoryDecision,
   type MachineSettingsSetupRecord,
@@ -82,12 +84,17 @@ const mutate = Effect.fn("MachineSettings.mutate")(function* <E = never, R = nev
   beforeSave?: BeforeSave<E, R>,
   /** The setup this save belongs to: the same write records what it changed, for undo. */
   operationId?: OperationId,
+  undoOperationId?: string,
 ) {
   return yield* withLibraryStateReplacement(
     home,
     Effect.gen(function* () {
       const prior = yield* read(home);
-      const changed = change(prior);
+      const changed =
+        change(prior) ??
+        (undoOperationId !== undefined && !prior.undoneSetups.includes(undoOperationId)
+          ? prior
+          : undefined);
       if (changed === undefined) return prior;
       const machineId = prior.machineId ?? makeMachineId();
       const evidence = (
@@ -97,9 +104,13 @@ const mutate = Effect.fn("MachineSettings.mutate")(function* <E = never, R = nev
         discoveryRoots: [...discoveryRoots],
         ...(identity === undefined ? {} : { machineId: identity }),
       });
-      const document = yield* MachineDocumentV6.makeEffect(
+      const document = yield* MachineDocumentV7.makeEffect(
         currentMachineDocument({
           machineId,
+          undoneSetups:
+            undoOperationId === undefined
+              ? [...prior.undoneSetups]
+              : [...new Set([...prior.undoneSetups, undoOperationId])],
           displayName: displayName ?? prior.displayName ?? hostname(),
           repositoryDecisionsInitialized: changed.repositoryDecisionsInitialized,
           discoveryRoots: [...changed.discoveryRoots],
@@ -216,6 +227,7 @@ export const restoreDiscovery = Effect.fn("MachineSettings.restoreDiscovery")(fu
     "discoveryRoots" | "repositories" | "repositoryDecisionsInitialized" | "displayName"
   >,
   beforeSave?: BeforeSave<E, R>,
+  undoOperationId?: string,
 ) {
   const approved = structuredClone(expected);
   const choice = structuredClone(restored);
@@ -233,6 +245,8 @@ export const restoreDiscovery = Effect.fn("MachineSettings.restoreDiscovery")(fu
           return yield* new LibraryChanged({ path: before.path });
         if (beforeSave) yield* beforeSave(before, after);
       }),
+    undefined,
+    undoOperationId,
   );
 });
 
@@ -265,7 +279,8 @@ export class SetupNotRecorded
 /**
  * Put back the discovery folders the setup `operationId` replaced. Refuses with `LibraryChanged`
  * unless they and this machine's identity are still what that setup saved. Never touches the
- * identity, the name or repository decisions. Already restored is a success that writes nothing.
+ * identity, the name or repository decisions. The same write records completion; once recorded,
+ * another restore succeeds without writing, including after independent settings changes.
  */
 export const restoreSetupDiscovery = Effect.fn("MachineSettings.restoreSetupDiscovery")(function* (
   home: string,
@@ -275,33 +290,193 @@ export const restoreSetupDiscovery = Effect.fn("MachineSettings.restoreSetupDisc
     home,
     Effect.gen(function* () {
       const current = yield* read(home);
-      const record = current.setups.find((saved) => saved.operationId === operationId);
-      if (record === undefined)
+      if (current.undoneSetups.includes(operationId)) return "unchanged" as const;
+      if (!current.setups.some((saved) => saved.operationId === operationId))
         return yield* new SetupNotRecorded({ path: current.path, operationId });
-      const holds = (evidence: DiscoveryEvidence) =>
-        canonicalJson(evidence.discoveryRoots) === canonicalJson(current.discoveryRoots);
-      // The identity the setup saved under stays; restoring never undoes one it created.
-      if (current.machineId !== record.expectedAfter.machineId)
-        return yield* new LibraryChanged({ path: current.path });
-      if (holds(record.before)) return "unchanged" as const;
-      if (!holds(record.expectedAfter)) return yield* new LibraryChanged({ path: current.path });
-      yield* mutate(
-        home,
-        undefined,
-        (prior) => ({
-          discoveryRoots: [...record.before.discoveryRoots],
-          repositories: prior.repositories,
-          repositoryDecisionsInitialized: prior.repositoryDecisionsInitialized,
-        }),
-        // Another fiber of this process may have saved since the check above.
-        (before) =>
-          canonicalJson(before) === canonicalJson(current)
-            ? Effect.void
-            : Effect.fail(new LibraryChanged({ path: current.path })),
-      );
-      return "restored" as const;
+      return yield* applyRestoreDiscovery(home, yield* planRestoreDiscovery(home, operationId));
     }),
   );
 });
 
 export type { MachineSettingsSetupRecord };
+
+export const SetupDiscoverySettings = Schema.Struct({
+  discoveryRoots: CurrentMachineDocument.fields.discoveryRoots,
+  repositories: CurrentMachineDocument.fields.repositories,
+  initialized: Schema.Boolean,
+  displayName: Schema.NullOr(Schema.NonEmptyString),
+});
+export type SetupDiscoverySettings = typeof SetupDiscoverySettings.Type;
+export const setupDiscoverySettings = (settings: Settings): SetupDiscoverySettings => ({
+  discoveryRoots: [...settings.discoveryRoots],
+  repositories: structuredClone(settings.repositories),
+  initialized: settings.repositoryDecisionsInitialized,
+  displayName: settings.displayName ?? null,
+});
+
+const equal = (left: unknown, right: unknown) =>
+  canonicalJson(left ?? null) === canonicalJson(right ?? null);
+
+/** A later repository decision is independent of the paths setup touched. Identity stays local. */
+export const reverseSetupDiscovery = (
+  settings: Settings,
+  before: SetupDiscoverySettings,
+  expected: SetupDiscoverySettings,
+) => {
+  const conflicts: string[] = [];
+  const restore = <A>(label: string, prior: A, after: A, current: A): A => {
+    if (equal(prior, after) || equal(current, prior)) return current;
+    if (equal(current, after)) return prior;
+    conflicts.push(label);
+    return current;
+  };
+  const discoveryRoots = restore(
+    "discovery roots",
+    before.discoveryRoots,
+    expected.discoveryRoots,
+    settings.discoveryRoots,
+  );
+  const repositories = new Map(settings.repositories.map((item) => [item.path, item.status]));
+  const old = new Map(before.repositories.map((item) => [item.path, item.status]));
+  const after = new Map(expected.repositories.map((item) => [item.path, item.status]));
+  for (const path of new Set([...old.keys(), ...after.keys()])) {
+    const status = restore(
+      `repository decision ${path}`,
+      old.get(path),
+      after.get(path),
+      repositories.get(path),
+    );
+    if (status === undefined) repositories.delete(path);
+    else repositories.set(path, status);
+  }
+  const initialized = [...repositories.keys()].some((path) => !old.has(path) && !after.has(path))
+    ? settings.repositoryDecisionsInitialized
+    : restore(
+        "repository discovery initialization",
+        before.initialized,
+        expected.initialized,
+        settings.repositoryDecisionsInitialized,
+      );
+  // A newly created identity's default name is provenance, not a prior user setting to erase.
+  const displayName =
+    before.displayName === null
+      ? settings.displayName
+      : restore(
+          "machine display name",
+          before.displayName,
+          expected.displayName,
+          settings.displayName ?? null,
+        );
+  const next = {
+    ...settings,
+    discoveryRoots: [...discoveryRoots],
+    repositories: [...repositories]
+      .map(([path, status]) => ({ path, status }))
+      .sort((a, b) => a.path.localeCompare(b.path)),
+    repositoryDecisionsInitialized: initialized,
+    ...(displayName === null || displayName === undefined ? {} : { displayName }),
+  };
+  return {
+    settings: next,
+    conflicts,
+    changed: !equal(setupDiscoverySettings(settings), setupDiscoverySettings(next)),
+  };
+};
+
+/** Machine-owned evidence carried by a pre-state.json setup journal. */
+export interface LegacySetupDiscovery {
+  readonly before: SetupDiscoverySettings;
+  readonly machineId: Settings["machineId"] | null;
+  readonly changes: readonly {
+    readonly before: SetupDiscoverySettings;
+    readonly after: SetupDiscoverySettings;
+    readonly machineId: Settings["machineId"] | null;
+    readonly confirmed: boolean;
+  }[];
+}
+
+/** Plain review data; apply recomputes it before saving anything. */
+export interface DiscoveryRestorePlan {
+  readonly operationId: string;
+  readonly planId: Hash;
+  readonly legacy?: LegacySetupDiscovery;
+  readonly before: Settings;
+  readonly after: Settings;
+  readonly conflicts: readonly string[];
+  readonly changed: boolean;
+  readonly recorded: boolean;
+}
+
+/** Preview only this owner's part of an undo. A legacy journal is evidence, never a writer. */
+export const planRestoreDiscovery = Effect.fn("MachineSettings.planRestoreDiscovery")(function* (
+  home: string,
+  operationId: string,
+  legacy?: LegacySetupDiscovery,
+) {
+  const before = yield* read(home);
+  const completed = before.undoneSetups.includes(operationId);
+  const record = before.setups.find((saved) => saved.operationId === operationId);
+  let after = before;
+  let conflicts: readonly string[] = [];
+  if (!completed && legacy !== undefined && record !== undefined) {
+    conflicts = ["Legacy evidence cannot replace this setup's recorded machine settings"];
+  } else if (!completed && legacy !== undefined) {
+    const problems: string[] = [];
+    const expectedMachine = legacy.changes.reduce(
+      (id, change) => change.machineId,
+      legacy.machineId,
+    );
+    if (expectedMachine !== null && before.machineId !== expectedMachine)
+      problems.push("Setup belongs to a different machine identity");
+    let expected = legacy.before;
+    for (const change of legacy.changes) {
+      const current = setupDiscoverySettings(before);
+      const applied = change.confirmed || equal(current, change.after);
+      if (!applied && !equal(current, change.before))
+        problems.push("Unconfirmed setup settings save differs from both recorded values");
+      if (applied) expected = change.after;
+    }
+    const reversed = reverseSetupDiscovery(before, legacy.before, expected);
+    after = reversed.settings;
+    conflicts = [...problems, ...reversed.conflicts];
+  } else if (!completed && record !== undefined) {
+    if (before.machineId !== record.expectedAfter.machineId)
+      conflicts = ["Setup belongs to a different machine identity"];
+    else if (!equal(before.discoveryRoots, record.before.discoveryRoots)) {
+      if (!equal(before.discoveryRoots, record.expectedAfter.discoveryRoots))
+        conflicts = ["Discovery folders changed after setup"];
+      else after = { ...before, discoveryRoots: [...record.before.discoveryRoots] };
+    }
+  }
+  const plan = {
+    operationId,
+    ...(legacy === undefined ? {} : { legacy: structuredClone(legacy) }),
+    before,
+    after,
+    conflicts,
+    changed: !equal(setupDiscoverySettings(before), setupDiscoverySettings(after)),
+    recorded: !completed && (record !== undefined || legacy !== undefined),
+  };
+  return { ...plan, planId: hashParts([canonicalJson(plan)]) } satisfies DiscoveryRestorePlan;
+});
+
+/** Revalidate the whole review and save its inverse and completion in one machine.json write. */
+export const applyRestoreDiscovery = Effect.fn("MachineSettings.applyRestoreDiscovery")(function* (
+  home: string,
+  plan: DiscoveryRestorePlan,
+) {
+  const approved = structuredClone(plan);
+  return yield* withHomeLock(
+    home,
+    Effect.gen(function* () {
+      const current = yield* planRestoreDiscovery(home, approved.operationId, approved.legacy);
+      if (!equal(current, approved) || current.conflicts.length)
+        return yield* new LibraryChanged({ path: current.before.path });
+      if (!current.recorded) return "unchanged" as const;
+      // There is no identity to preserve or settings to restore on an untouched machine.
+      if (!current.changed && current.before.machineId === undefined) return "unchanged" as const;
+      yield* restoreDiscovery(home, current.before, current.after, undefined, current.operationId);
+      return current.changed ? ("restored" as const) : ("unchanged" as const);
+    }),
+  );
+});

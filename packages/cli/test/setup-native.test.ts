@@ -235,7 +235,8 @@ it.effect("migrates the version-one machine config only when setup persists", ()
     });
     // Saving roots decides nothing about repositories, so later scans still discover them.
     expect(JSON.parse(yield* f.fs.readFileString(join(f.libraryHome, "machine.json")))).toEqual({
-      schemaVersion: 6,
+      schemaVersion: 7,
+      undoneSetups: [],
       repositoryDecisionsInitialized: false,
       machineId: migrated.machineConfig.machineId,
       displayName: "Test machine",

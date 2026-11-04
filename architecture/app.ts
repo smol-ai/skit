@@ -100,6 +100,8 @@ export const owners = {
       "identity (write-once link; no lock)",
       "updateDiscovery",
       "restoreDiscovery",
+      "planRestoreDiscovery / applyRestoreDiscovery (reviewed setup inverse; completion in machine.json)",
+      "restoreSetupDiscovery (by operation id)",
       "setRepositoryDecision",
     ],
     requires: ["FileSystem", "HomeLock"],

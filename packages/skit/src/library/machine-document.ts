@@ -80,9 +80,18 @@ export const MachineDocumentV6 = Schema.Struct({
 });
 export interface MachineDocumentV6 extends Schema.Schema.Type<typeof MachineDocumentV6> {}
 
+/** V7 records completed setup inverses alongside the discovery folders they restored. */
+export const MachineDocumentV7 = Schema.Struct({
+  ...MachineDocumentV6.fields,
+  schemaVersion: Schema.Literal(7),
+  undoneSetups: Schema.Array(Schema.NonEmptyString),
+});
+export interface MachineDocumentV7 extends Schema.Schema.Type<typeof MachineDocumentV7> {}
+
 /** One current read shape. V1 has no identity or display name to recover. */
 export const CurrentMachineDocument = Schema.Struct({
-  schemaVersion: Schema.Literal(6),
+  schemaVersion: Schema.Literal(7),
+  undoneSetups: Schema.Array(Schema.NonEmptyString),
   machineId: Schema.optionalKey(MachineId),
   legacyMachineId: Schema.optionalKey(LegacyMachineId),
   displayName: Schema.optionalKey(Schema.NonEmptyString),
@@ -105,11 +114,12 @@ const fromV1 = MachineDocumentV1.pipe(
   Schema.decodeTo(
     CurrentMachineDocument,
     decodeOnly((document) => ({
-      schemaVersion: 6 as const,
+      schemaVersion: 7 as const,
       discoveryRoots: document.repositoryRoots ?? [],
       repositories: [],
       repositoryDecisionsInitialized: false,
       setups: [],
+      undoneSetups: [],
     })),
   ),
 );
@@ -118,7 +128,7 @@ const fromV2 = MachineDocumentV2.pipe(
   Schema.decodeTo(
     CurrentMachineDocument,
     decodeOnly((document) => ({
-      schemaVersion: 6 as const,
+      schemaVersion: 7 as const,
       machineId: migratedMachineId(document.machineId, document.machineId),
       legacyMachineId: document.machineId,
       ...(document.displayName === undefined ? {} : { displayName: document.displayName }),
@@ -126,6 +136,7 @@ const fromV2 = MachineDocumentV2.pipe(
       repositories: [],
       repositoryDecisionsInitialized: false,
       setups: [],
+      undoneSetups: [],
     })),
   ),
 );
@@ -134,13 +145,14 @@ const fromV3 = MachineDocumentV3.pipe(
   Schema.decodeTo(
     CurrentMachineDocument,
     decodeOnly((document) => ({
-      schemaVersion: 6 as const,
+      schemaVersion: 7 as const,
       machineId: document.machineId,
       ...(document.displayName === undefined ? {} : { displayName: document.displayName }),
       discoveryRoots: document.repositoryRoots ?? [],
       repositories: [],
       repositoryDecisionsInitialized: false,
       setups: [],
+      undoneSetups: [],
     })),
   ),
 );
@@ -150,9 +162,10 @@ const fromV4 = MachineDocumentV4.pipe(
     CurrentMachineDocument,
     decodeOnly((document) => ({
       ...document,
-      schemaVersion: 6 as const,
+      schemaVersion: 7 as const,
       repositoryDecisionsInitialized: true,
       setups: [],
+      undoneSetups: [],
     })),
   ),
 );
@@ -160,12 +173,25 @@ const fromV4 = MachineDocumentV4.pipe(
 const fromV5 = MachineDocumentV5.pipe(
   Schema.decodeTo(
     CurrentMachineDocument,
-    decodeOnly((document) => ({ ...document, schemaVersion: 6 as const, setups: [] })),
+    decodeOnly((document) => ({
+      ...document,
+      schemaVersion: 7 as const,
+      setups: [],
+      undoneSetups: [],
+    })),
+  ),
+);
+
+const fromV6 = MachineDocumentV6.pipe(
+  Schema.decodeTo(
+    CurrentMachineDocument,
+    decodeOnly((document) => ({ ...document, schemaVersion: 7 as const, undoneSetups: [] })),
   ),
 );
 
 export const MachineDocument = Schema.Union([
-  MachineDocumentV6,
+  MachineDocumentV7,
+  fromV6,
   fromV5,
   fromV4,
   fromV3,
@@ -176,7 +202,8 @@ export const MachineDocumentJson = Schema.fromJsonString(MachineDocument);
 
 /** What a machine reads as before it has written `machine.json`. */
 export const emptyMachineDocument = (): CurrentMachineDocument => ({
-  schemaVersion: 6,
+  schemaVersion: 7,
+  undoneSetups: [],
   discoveryRoots: [],
   repositories: [],
   repositoryDecisionsInitialized: false,
@@ -184,8 +211,8 @@ export const emptyMachineDocument = (): CurrentMachineDocument => ({
 });
 
 export const currentMachineDocument = (
-  fields: Omit<MachineDocumentV6, "schemaVersion">,
-): MachineDocumentV6 => ({ ...fields, schemaVersion: 6 });
+  fields: Omit<MachineDocumentV7, "schemaVersion">,
+): MachineDocumentV7 => ({ ...fields, schemaVersion: 7 });
 
 export const machineDocumentIdentity = (
   document: CurrentMachineDocument,

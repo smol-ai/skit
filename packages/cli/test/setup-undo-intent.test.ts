@@ -11,11 +11,7 @@ import {
   type LibraryState,
   type Hash,
 } from "@smolai/skit-core";
-import {
-  reverseSetupDiscovery,
-  reverseSetupIntent,
-  setupDiscoverySettings,
-} from "../src/library/setup/setup-undo-intent.js";
+import { reverseSetupIntent } from "../src/library/setup/setup-undo-intent.js";
 import {
   deterministicTreeHash,
   libraryHome,
@@ -23,6 +19,8 @@ import {
   scratch,
   writingTo,
 } from "./helpers/library-home.js";
+
+const { setupDiscoverySettings, reverseSetupDiscovery } = MachineSettings;
 
 const fixture = Effect.fn("Test.undoIntentFixture")(function* () {
   const fs = yield* FileSystem.FileSystem;

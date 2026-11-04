@@ -1,4 +1,3 @@
-import { Schema } from "effect";
 import {
   canonicalJson,
   currentCollectionSkills,
@@ -7,31 +6,13 @@ import {
   InvocationPolicies,
   Repository,
   SkillId,
-  CurrentMachineDocument,
   type LibraryState,
   type Import,
-  type MachineSettingsSnapshot,
   type SetupIntent,
 } from "@smolai/skit-core";
 
 const withPolicies = (invocation_policies: InvocationPolicies | undefined) =>
   invocation_policies === undefined ? {} : { invocation_policies };
-
-export const SetupDiscoverySettings = Schema.Struct({
-  discoveryRoots: CurrentMachineDocument.fields.discoveryRoots,
-  repositories: CurrentMachineDocument.fields.repositories,
-  initialized: Schema.Boolean,
-  displayName: Schema.NullOr(Schema.NonEmptyString),
-});
-export type SetupDiscoverySettings = typeof SetupDiscoverySettings.Type;
-export const setupDiscoverySettings = (
-  settings: MachineSettingsSnapshot,
-): SetupDiscoverySettings => ({
-  discoveryRoots: [...settings.discoveryRoots],
-  repositories: structuredClone(settings.repositories),
-  initialized: settings.repositoryDecisionsInitialized,
-  displayName: settings.displayName ?? null,
-});
 
 const equal = (left: unknown, right: unknown) =>
   canonicalJson(left ?? null) === canonicalJson(right ?? null);
@@ -228,70 +209,4 @@ export const reverseSetupIntent = (
       );
   }
   return { state: next, conflicts, changed: !equal(state, next) };
-};
-
-/** A later repository decision is independent of the paths setup touched. Identity stays local. */
-export const reverseSetupDiscovery = (
-  settings: MachineSettingsSnapshot,
-  before: SetupDiscoverySettings,
-  expected: SetupDiscoverySettings,
-) => {
-  const conflicts: string[] = [];
-  const restore = <A>(label: string, prior: A, after: A, current: A): A => {
-    if (equal(prior, after) || equal(current, prior)) return current;
-    if (equal(current, after)) return prior;
-    conflicts.push(label);
-    return current;
-  };
-  const discoveryRoots = restore(
-    "discovery roots",
-    before.discoveryRoots,
-    expected.discoveryRoots,
-    settings.discoveryRoots,
-  );
-  const repositories = new Map(settings.repositories.map((item) => [item.path, item.status]));
-  const old = new Map(before.repositories.map((item) => [item.path, item.status]));
-  const after = new Map(expected.repositories.map((item) => [item.path, item.status]));
-  for (const path of new Set([...old.keys(), ...after.keys()])) {
-    const status = restore(
-      `repository decision ${path}`,
-      old.get(path),
-      after.get(path),
-      repositories.get(path),
-    );
-    if (status === undefined) repositories.delete(path);
-    else repositories.set(path, status);
-  }
-  const initialized = [...repositories.keys()].some((path) => !old.has(path) && !after.has(path))
-    ? settings.repositoryDecisionsInitialized
-    : restore(
-        "repository discovery initialization",
-        before.initialized,
-        expected.initialized,
-        settings.repositoryDecisionsInitialized,
-      );
-  // A newly created identity's default name is provenance, not a prior user setting to erase.
-  const displayName =
-    before.displayName === null
-      ? settings.displayName
-      : restore(
-          "machine display name",
-          before.displayName,
-          expected.displayName,
-          settings.displayName ?? null,
-        );
-  const next = {
-    ...settings,
-    discoveryRoots: [...discoveryRoots],
-    repositories: [...repositories]
-      .map(([path, status]) => ({ path, status }))
-      .sort((a, b) => a.path.localeCompare(b.path)),
-    repositoryDecisionsInitialized: initialized,
-    ...(displayName === null || displayName === undefined ? {} : { displayName }),
-  };
-  return {
-    settings: next,
-    conflicts,
-    changed: !equal(setupDiscoverySettings(settings), setupDiscoverySettings(next)),
-  };
 };
