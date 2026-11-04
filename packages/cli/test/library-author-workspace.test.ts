@@ -124,9 +124,8 @@ it.effect("removal requires explicit re-registration and preserves workspace ide
     const first = yield* f.init();
     assert.ok(first.entry);
     const identity = (yield* f.metadata).workspace_id;
-    const state = yield* f.home.durable;
     yield* f.home.owned(
-      executeRemove(state, { query: first.entry.collection.collection_id, dryRun: false }),
+      executeRemove({ query: first.entry.collection.collection_id, dryRun: false }),
     );
     assert.strictEqual((yield* f.metadata).registration, "removed");
     assert.strictEqual((yield* f.init()).entry, undefined);
@@ -153,7 +152,7 @@ it.effect("removal leaves a different workspace identity untouched", () =>
     });
     yield* f.fs.writeFileString(f.path, replacement);
     yield* f.home.owned(
-      executeRemove(yield* f.home.durable, {
+      executeRemove({
         query: first.entry.collection.collection_id,
         dryRun: false,
       }),

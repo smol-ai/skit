@@ -78,3 +78,5 @@ export {
 } from "./internal/session/skill-metadata.js";
 
 export type { InstallScope as Scope } from "../vocabulary.js";
+
+export { openRemoveSession } from "./internal/session/remove.js";

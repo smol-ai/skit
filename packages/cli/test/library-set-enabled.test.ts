@@ -15,7 +15,7 @@ import { isolatedRoots } from "./helpers/isolated-library.js";
 import { setLibraryEnabled, planLibraryEnabled } from "./helpers/set-enabled.js";
 import { calculateSetEnabled } from "@smolai/skit-core/library/session";
 import { applySetEnabledPlan } from "../src/library-application/set-enabled.js";
-import { planRemove } from "../src/workflows/library/remove.js";
+import { libraryView } from "@smolai/skit-core/library/session";
 import { planUpdates } from "../src/library-application/update.js";
 import { checkSubjects } from "../src/workflows/library/check.js";
 import { matchingLibrarySubjects } from "@smolai/skit-core";
@@ -93,7 +93,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       ["skill"],
     );
     assert.strictEqual(
-      (yield* planRemove(state, member.skill_id).pipe(Effect.flip))._tag,
+      (yield* libraryView(state, "unused").removalSummary(member.skill_id).pipe(Effect.flip))._tag,
       "Library.SkillRemovalRequiresCollection",
     );
     const sameNamed = {
@@ -104,7 +104,10 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       matchingLibrarySubjects(sameNamed, "review").map((subject) => subject.kind),
       ["collection"],
     );
-    assert.strictEqual((yield* planRemove(sameNamed, "review")).subject_kind, "collection");
+    assert.strictEqual(
+      (yield* libraryView(sameNamed, "unused").removalSummary("review")).subject_kind,
+      "collection",
+    );
     const secondCollectionId = makeCollectionId();
     const ambiguous = {
       ...sameNamed,
@@ -120,7 +123,7 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
     assert.strictEqual(matchingLibrarySubjects(ambiguous, "review").length, 2);
     const previewStore = yield* LibraryStore.pipe(Effect.provide(layer));
     assert.strictEqual(
-      (yield* planRemove(ambiguous, "review").pipe(Effect.flip))._tag,
+      (yield* libraryView(ambiguous, "unused").removalSummary("review").pipe(Effect.flip))._tag,
       "Library.SubjectAmbiguous",
     );
     assert.strictEqual(

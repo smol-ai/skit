@@ -1,5 +1,4 @@
 import { skitConfigurationLayer } from "@smolai/skit-core";
-import { LibraryStore } from "@smolai/skit-core";
 import { Option, Effect } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleLibraryCommand } from "../../application.js";
@@ -23,11 +22,9 @@ export const removeCliCommand = Command.make(
     handleLibraryCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
-        const store = yield* LibraryStore;
-        const state = yield* store.load;
         const outcome = yield* renderer.withStatus(
           input.dryRun ? "Planning Collection removal" : "Removing retained Collection",
-          executeRemove(state, {
+          executeRemove({
             query: input.subject,
             dryRun: input.dryRun,
           }),

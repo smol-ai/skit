@@ -1,3 +1,4 @@
+import { removalSummary } from "./remove.js";
 import { securityReview } from "../security/review.js";
 import { Library } from "../../library.js";
 import { emptyLibraryState } from "../../library-state.js";
@@ -77,6 +78,7 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
     });
   });
   return {
+    removalSummary: (query: string) => removalSummary(state, query),
     securityReview: (query: string) => securityReview(state, originalsPath, query),
     collections: structuredClone(collections),
     placements: structuredClone(placements),

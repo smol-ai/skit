@@ -79,7 +79,6 @@ export const debt = {
   "packages/cli/src/configuration-writer.ts": ["withHomeLock"],
   "packages/cli/src/handlers/library/check.ts": ["LibraryStore"],
   "packages/cli/src/handlers/library/recovery.ts": ["LibraryStore", "prepareRecoveryRestore"],
-  "packages/cli/src/handlers/library/remove.ts": ["LibraryStore"],
   "packages/cli/src/library-application/collection-update.ts": [
     "LibraryStore",
     "withLibraryWriter",

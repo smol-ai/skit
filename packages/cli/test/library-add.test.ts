@@ -1,3 +1,4 @@
+import { skitConfigurationLayer } from "@smolai/skit-core";
 import { Library } from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
@@ -379,10 +380,10 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
       home,
       run(
         // The Collection's only Skill can be removed, taking its Collection with it.
-        executeRemove(disabled, {
+        executeRemove({
           query: skill.skill_id,
           dryRun: false,
-        }),
+        }).pipe(Effect.provide(skitConfigurationLayer(home))),
       ),
     );
     const removed = yield* run(Effect.flatMap(LibraryStore, (store) => store.load));
