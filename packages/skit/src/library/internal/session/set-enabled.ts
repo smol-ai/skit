@@ -1,17 +1,26 @@
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { Library } from "../../library.js";
 import { FailureTypeId, type SkitFailure } from "../../../shared/failure.js";
 import { Effect, Schema } from "effect";
 import { type InventoryRootOptions } from "../../routing/roots.js";
-import { libraryChangeSelection, applyLibraryChange } from "./library-changes.js";
-import type { SetEnabledIntent, SetEnabledRequest } from "./set-enabled-request.js";
+import {
+  expandSetEnabledIntent,
+  type SetEnabledIntent,
+  type SetEnabledRequest,
+} from "./set-enabled-request.js";
 export type {
   SetEnabledIntent,
   SetEnabledRequest,
   EnabledCollection,
 } from "./set-enabled-request.js";
 import { failureDetails } from "../../../shared/failure.js";
-import { SetEnabledChange, SetEnabledResult } from "./set-enabled-contract.js";
+import { setEnabledResults, SetEnabledChange, SetEnabledResult } from "./set-enabled-contract.js";
+
+import { canonicalJson } from "../../../shared/json.js";
+import { emptyLibraryState, type LibraryState } from "../../library-state.js";
+import type { Snapshot } from "../../snapshot.js";
+import { resolveLibrarySubject } from "../../subject-resolution.js";
+import { libraryView } from "./library-view.js";
 
 export type SetEnabledConfiguration = InventoryRootOptions;
 
@@ -51,6 +60,121 @@ export class SetEnabledIncomplete
   }
   readonly remediation =
     "Inspect the saved bindings and installed copies, resolve the reported condition, then preview and retry the change. No binding rollback was attempted.";
+}
+
+/** Text and displayed names are resolved here; Library accepts only stable identities. */
+export type SelectionError =
+  | Library.PlanError
+  | import("../../store/library-store.js").LibraryStoreLayerError
+  | import("../../subject-resolution.js").LibrarySubjectNotFound
+  | import("../../subject-resolution.js").LibrarySubjectAmbiguous
+  | import("../../../shared/input-failures.js").OptionCombinationInvalid;
+export type SelectionRequirements = never;
+export interface LibraryChangeSelection {
+  readonly configuration: SetEnabledConfiguration;
+  readonly home: string;
+  readonly state: LibraryState;
+  readonly view: ReturnType<typeof libraryView>;
+  readonly planMany: (
+    intents: readonly SetEnabledIntent[],
+    configuration: SetEnabledConfiguration,
+  ) => Effect.Effect<SetEnabledPlan, SelectionError, SelectionRequirements>;
+  readonly plan: (
+    intent: SetEnabledIntent,
+    configuration: SetEnabledConfiguration,
+  ) => Effect.Effect<SetEnabledPlan, SelectionError, SelectionRequirements>;
+}
+function libraryChangeSelection(
+  current: Snapshot,
+  home: string,
+  originalsPath: string,
+  library: Library.Interface,
+  configuration: SetEnabledConfiguration,
+): LibraryChangeSelection {
+  const snapshot = structuredClone(current);
+  const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
+  const routing = {
+    home: configuration.home,
+    configHome: configuration.configHome,
+    overrides: structuredClone(configuration.overrides),
+  };
+  const planMany = Effect.fn("LibrarySelection.plan")(function* (
+    intents: readonly SetEnabledIntent[],
+    configuration: SetEnabledConfiguration,
+  ) {
+    const selected: Library.Enabled["changes"][number][] = [];
+    for (const intent of intents) {
+      // Preserve frontend option errors before converting member names to IDs.
+      yield* expandSetEnabledIntent(state, intent);
+      const subject = yield* resolveLibrarySubject(state, intent.subject);
+      selected.push({
+        _tag: intent.enabled ? "Enable" : "Disable",
+        subject:
+          subject.kind === "collection"
+            ? { _tag: "Collection", id: subject.collection.collection_id }
+            : { _tag: "Skill", id: subject.skill.skill_id },
+        ...(intent.members === undefined
+          ? {}
+          : {
+              members:
+                intent.members === "whole"
+                  ? "whole"
+                  : intent.members.flatMap((name) =>
+                      subject.skills
+                        .filter((skill) => skill.name === name)
+                        .map((skill) => skill.skill_id),
+                    ),
+            }),
+        where: intent.where,
+        ...(intent.invocation === undefined ? {} : { invocation: intent.invocation }),
+        ...(intent.allowDuplicate === undefined ? {} : { allowDuplicate: intent.allowDuplicate }),
+        ...(intent.setup === undefined ? {} : { setup: intent.setup }),
+      });
+    }
+    if (
+      canonicalJson(routing) !==
+      canonicalJson({
+        home: configuration.home,
+        configHome: configuration.configHome,
+        overrides: configuration.overrides,
+      })
+    )
+      return yield* new Library.StalePlan({
+        message: "The install configuration changed; open a new Library selection",
+      });
+    const [first, ...rest] = selected;
+    if (first === undefined)
+      return yield* new Library.InvalidIntent({
+        detail: "Choose something to enable or disable",
+      });
+    const plan = yield* library.plan(
+      { _tag: "Enabled", changes: [first, ...rest] },
+      {
+        base: snapshot,
+        approvals: intents.flatMap((intent) =>
+          intent.manage === undefined ? [] : [{ _tag: "Manage" as const, manage: intent.manage }],
+        ),
+      },
+    );
+    const prepared: SetEnabledPlan = {
+      [planOwner]: library,
+      changes: plan.changes.filter(
+        (change): change is Library.EnabledChange =>
+          change._tag === "Enable" || change._tag === "Disable",
+      ),
+      owner: { home, plan, configuration: routing },
+    };
+    return prepared;
+  });
+  return {
+    configuration: routing,
+    home,
+    state,
+    view: libraryView(state, originalsPath),
+    planMany,
+    plan: (intent: SetEnabledIntent, configuration: SetEnabledConfiguration) =>
+      planMany([intent], configuration),
+  };
 }
 
 /** Initialize the configured owner once, then capture the Library before asking questions. */
@@ -115,5 +239,17 @@ export const applySetEnabledPlan = Effect.fn("SetEnabled.applyPlan")(function* (
   home: string,
   plan: SetEnabledPlan,
 ) {
-  return yield* applyLibraryChange(home, plan);
+  if (resolve(home) !== resolve(plan.owner.home) || plan[planOwner] === undefined)
+    return yield* new Library.StalePlan({
+      message: "This plan belongs to another Library selection",
+    });
+  const outcome = (yield* plan[planOwner].apply(plan.owner.plan)).result;
+  const results = setEnabledResults(outcome);
+  if (outcome._tag === "Incomplete")
+    return yield* new SetEnabledIncomplete({
+      results,
+      reason: outcome.reason,
+      failure: outcome.cause,
+    });
+  return results.map((value) => ({ kind: "applied" as const, value }));
 });

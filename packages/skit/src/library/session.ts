@@ -19,7 +19,7 @@ export {
   type SelectionError,
   type SelectionRequirements,
   type LibraryChangeSelection,
-} from "./internal/session/library-changes.js";
+} from "./internal/session/set-enabled.js";
 export { libraryView, openLibraryView } from "./internal/session/library-view.js";
 export {
   type ScopeChoice,
