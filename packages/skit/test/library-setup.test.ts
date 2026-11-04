@@ -376,6 +376,8 @@ it.effect("a later setup replaces Done records and keeps Stopped ones", () =>
     assert.strictEqual(first._tag, "Done");
     assert.strictEqual(second._tag, "Stopped");
     assert.strictEqual(third._tag, "Done");
+    const history = yield* withLibrary(home, (library) => library.history);
+    assert.deepStrictEqual(history.operations, yield* recordedOperations(home));
     assert.deepStrictEqual(
       (yield* recordedOperations(home)).map(({ _tag, operationId }) => ({ _tag, operationId })),
       [

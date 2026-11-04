@@ -1,3 +1,4 @@
+import { withLibraryOwner } from "./helpers/library-owner.js";
 import { installEnabledSkills } from "./helpers/installed-skills.js";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
@@ -187,6 +188,7 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
       }).pipe(
         Effect.provide(interaction.layer),
         // The record is the first save and the import the second: dying there leaves it Pending.
+        withLibraryOwner,
         Effect.provideServiceEffect(
           LibraryStore,
           Effect.map(LibraryStore, (store) => ({

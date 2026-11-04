@@ -1,3 +1,4 @@
+import { Library } from "@smolai/skit-core/library";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
@@ -5,7 +6,6 @@ import {
   deterministicTreeHash,
   LibraryActor,
   LibraryStore,
-  LibraryAuditLog,
   skitLayer,
   type LibraryState,
 } from "@smolai/skit-core";
@@ -55,7 +55,11 @@ it.effect("a front end that confirms a Library session change leaves attributed 
         }),
       ),
     );
-    const history = home.owned(Effect.flatMap(LibraryAuditLog, (audit) => audit.list()));
+    const history = home.owned(
+      Effect.flatMap(Library.Service, (owner) =>
+        Effect.map(owner.history, (history) => history.events),
+      ),
+    );
     const importedEvents = (yield* history).length;
 
     const session = yield* home.owned(openLibrarySession());

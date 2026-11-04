@@ -1,3 +1,4 @@
+import { withLibraryOwner } from "./helpers/library-owner.js";
 import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { it } from "@effect/vitest";
@@ -84,6 +85,7 @@ it.effect("a directory that becomes repository-owned before cleanup stays in pla
         Effect.gen(function* () {
           const store = yield* LibraryStore;
           return yield* f.apply.pipe(
+            withLibraryOwner,
             Effect.provideService(LibraryStore, {
               ...store,
               save: (next, base) =>
@@ -172,6 +174,7 @@ it.effect(
         Effect.gen(function* () {
           const store = yield* LibraryStore;
           return yield* f.apply.pipe(
+            withLibraryOwner,
             Effect.provideService(LibraryStore, {
               ...store,
               save: (next, base) =>

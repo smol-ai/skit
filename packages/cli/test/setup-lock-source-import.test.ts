@@ -1,3 +1,4 @@
+import { Library } from "@smolai/skit-core/library";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { Effect, FileSystem, Schema } from "effect";
@@ -6,7 +7,6 @@ import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import {
   LibraryActor,
-  LibraryAuditLog,
   LibraryStore,
   MachineSettings,
   libraryStoreLayer,
@@ -249,7 +249,11 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
         }),
       ).pipe(Effect.provideService(LibraryActor, "setup")),
     );
-    const history = yield* home.owned(Effect.flatMap(LibraryAuditLog, (audit) => audit.list()));
+    const history = yield* home.owned(
+      Effect.flatMap(Library.Service, (owner) =>
+        Effect.map(owner.history, (history) => history.events),
+      ),
+    );
     expect(history).toHaveLength(1);
     expect(history[0]).toMatchObject({ type: "collection.retained", workflow: "setup" });
     // One event for the whole setup: its operation record, the import, and the record marked done.

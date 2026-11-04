@@ -57,7 +57,6 @@ export const owners = {
       "LibraryStore service → private functions inside Library (tests that counted saves through it are rewritten)",
       "LibraryStore.inspect, .home/.originalsPath/.variantsPath/.statePath fields",
       "withLibraryWriter, withHomeLock, lastSavedLibraryState exports",
-      "LibraryAuditLog service (append never called; list → Library.history)",
       "CurrentLibraryAction / CurrentLibraryWriter as cross-module references",
       "exported importCollection/importEdit/importAuthoredCollection/prepareImport",
       "exported refreshLibraryInventory, acceptSecurityFindingFromState, prepareRestore",

@@ -1,4 +1,4 @@
-import { Context, Effect, FileSystem, Layer } from "effect";
+import { Context, Effect, FileSystem, Layer, Schema } from "effect";
 import type { Digest } from "effect/crypto";
 import { InstalledSkills } from "./installed-skills.js";
 import {
@@ -7,6 +7,13 @@ import {
   type LibraryStateReadError,
 } from "./store/library-store.js";
 import type { LibraryState } from "./library-state.js";
+import { InvalidLibraryState } from "../failures.js";
+import { OperationStatus } from "./store/state-schema.js";
+import {
+  readLibraryAudit,
+  type LibraryAuditEvent,
+  type LibraryAuditInvalid,
+} from "./audit/audit-log.js";
 import { snapshotOf, type Snapshot } from "./snapshot.js";
 import { setup, type SetupError, type SetupResult, type StartupRecovery } from "./setup.js";
 import type { SetupStep } from "./store/state-schema.js";
@@ -54,6 +61,11 @@ export type {
 } from "./store/state-schema.js";
 export { OperationStatus } from "./store/state-schema.js";
 
+export interface History {
+  readonly events: readonly LibraryAuditEvent[];
+  readonly operations: readonly OperationStatus[];
+}
+
 export interface Interface {
   /**
    * One read. Never writes: a legacy state.json was migrated when the layer was built, and a read
@@ -92,6 +104,8 @@ export interface Interface {
     steps: readonly SetupStep[],
     options: { readonly base: Snapshot },
   ) => Effect.Effect<SetupResult, SetupError>;
+  /** Audit events and recorded operations, including Pending and Stopped setup. Never writes. */
+  readonly history: Effect.Effect<History, LibraryStateReadError | LibraryAuditInvalid>;
   /** What startup recovery did when the layer was built. */
   readonly startup: StartupRecovery;
 }
@@ -112,6 +126,22 @@ export const make = Effect.gen(function* () {
 
   return Service.of({
     read: Effect.map(store.inspect, snapshotOf),
+    history: Effect.gen(function* () {
+      const state = yield* store.load;
+      const operations = yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
+        state.operations,
+      ).pipe(
+        Effect.mapError(
+          () =>
+            new InvalidLibraryState({
+              path: store.statePath,
+              detail: "invalid operation history",
+            }),
+        ),
+      );
+      const events = yield* readLibraryAudit(store.home);
+      return { events, operations } satisfies History;
+    }).pipe(Effect.provide(writer)),
     plan: (intent, options) =>
       planIntent(intent, options).pipe(
         Effect.provideService(LibraryStore, store),

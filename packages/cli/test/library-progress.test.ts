@@ -1,13 +1,8 @@
+import { Library } from "@smolai/skit-core/library";
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem } from "effect";
 import { join } from "node:path";
-import {
-  createSkitArchive,
-  LibraryActor,
-  LibraryAuditLog,
-  LibraryStore,
-  skitLayer,
-} from "@smolai/skit-core";
+import { createSkitArchive, LibraryActor, LibraryStore, skitLayer } from "@smolai/skit-core";
 import {
   LibraryProgress,
   libraryProgressLayer,
@@ -43,7 +38,11 @@ it.effect("a headless update emits domain progress and records one attributed tr
     yield* home.owned(importSource({ type: "archive", url: "https://fixtures.test/source.zip" }));
     const before = yield* home.durable;
     const events: LibraryProgressEvent[] = [];
-    const history = home.owned(LibraryAuditLog.use((log) => log.list()));
+    const history = home.owned(
+      Effect.flatMap(Library.Service, (owner) =>
+        Effect.map(owner.history, (history) => history.events),
+      ),
+    );
     const previousEvents = (yield* history).length;
     const skillPath = join(source, "skills", "review", "SKILL.md");
     yield* fs.writeFileString(skillPath, `${yield* fs.readFileString(skillPath)}\nUpdated body.\n`);

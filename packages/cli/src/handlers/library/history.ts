@@ -1,5 +1,5 @@
 import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
-import { LibraryAuditLog } from "@smolai/skit-core";
+import { Library } from "@smolai/skit-core/library";
 import { Option, Effect } from "effect";
 import { Command } from "effect/cli";
 import { handleLibraryCommand } from "../../application.js";
@@ -15,9 +15,9 @@ export const libraryHistoryCliCommand = Command.make(
   (input) =>
     handleLibraryCommand(
       Effect.gen(function* () {
-        const audit = yield* LibraryAuditLog;
+        const library = yield* Library.Service;
         const renderer = yield* Renderer;
-        const events = yield* audit.list();
+        const { events } = yield* library.history;
         yield* renderer.result(result("libraryHistory", { events }));
       }),
     ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),

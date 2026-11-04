@@ -1,3 +1,4 @@
+import { withLibraryOwner } from "./helpers/library-owner.js";
 import { join } from "node:path";
 import { Effect, FileSystem, Option } from "effect";
 import { it } from "@effect/vitest";
@@ -41,7 +42,7 @@ const fixture = Effect.fn("Test.setupOperationFixture")(function* () {
     options,
     manageOptions: { installOptions: home.installOptions },
     planId: scan.onboarding.planId,
-  }).pipe(Effect.provide(interaction.layer));
+  }).pipe(withLibraryOwner, Effect.provide(interaction.layer));
   return { fs, root, source, home, apply };
 });
 

@@ -7,7 +7,6 @@ import {
   CURRENT_LIBRARY_STATE_VERSION,
   LibraryState,
   LibraryStore,
-  libraryAuditLogLayer,
   libraryStoreLayer,
   makeImportId,
   makeCollectionId,
@@ -133,10 +132,7 @@ const previewEnable = Effect.scoped(
         configuration,
       });
       return yield* openLibrarySession();
-    }).pipe(
-      Effect.provide(libraryStoreLayer({ home })),
-      Effect.provide(libraryAuditLogLayer({ home })),
-    );
+    }).pipe(Effect.provide(libraryStoreLayer({ home })));
   }),
 ).pipe(Effect.provide(skitLayer), Effect.provide(skitConfigurationLayer()));
 

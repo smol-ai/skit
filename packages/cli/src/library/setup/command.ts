@@ -16,6 +16,7 @@ import { inventoryRootOptions, localFlags, optionalString } from "../../commands
 import { Prompter, terminalPrompterLayer } from "../../presentation/prompter.js";
 import { promptsAllowed } from "../../presentation/interactivity.js";
 import { compactHomePath } from "../../presentation/home-path.js";
+import { Library } from "@smolai/skit-core/library";
 import { Renderer } from "../../presentation/renderer.js";
 import {
   setupOverviewTitle,
@@ -36,7 +37,7 @@ import {
   setupApplyAction,
   setupReviewSummary,
 } from "./actions.js";
-import { LibraryStore } from "@smolai/skit-core";
+import { emptyLibraryState } from "@smolai/skit-core";
 import { OptionCombinationInvalid } from "../../workflows/failures.js";
 import { SetupDuplicateAction } from "./setup-decisions.js";
 import { checkSubjects } from "../../workflows/library/check.js";
@@ -255,8 +256,9 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
 });
 
 const offerSkillsShUpdateCheck = Effect.fn("CLI.setup.offerSkillsShUpdateCheck")(function* () {
-  const store = yield* LibraryStore;
-  const state = yield* store.load;
+  const library = yield* Library.Service;
+  const snapshot = yield* library.read;
+  const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
   const collectionIds = [
     ...new Set(
       state.imports

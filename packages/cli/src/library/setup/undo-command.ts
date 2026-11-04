@@ -1,8 +1,10 @@
 import { Cause, Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
-import { LibraryStore } from "@smolai/skit-core";
 import { commandFailure, handleLibraryCommand } from "../../application.js";
-import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
+import {
+  skitConfigurationLayer,
+  SkitConfiguration,
+} from "../../configuration/skit-configuration.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homeFlag, jsonFlag, optionalString } from "../../commands/parameters.js";
@@ -25,7 +27,7 @@ export const librarySetupUndoCliCommand = Command.make(
   (input) =>
     handleLibraryCommand(
       Effect.gen(function* () {
-        const store = yield* LibraryStore;
+        const configuration = yield* SkitConfiguration;
         const renderer = yield* Renderer;
         const prepared = yield* Effect.result(prepareSetupUndo(input.operation));
         if (prepared._tag === "Failure") {
@@ -43,7 +45,7 @@ export const librarySetupUndoCliCommand = Command.make(
                 settingsChanged: false,
                 sourceSelections: [],
                 failure: failure.message,
-                actions: setupUndoActions(store.home, input.operation),
+                actions: setupUndoActions(configuration.skitHome, input.operation),
               },
               failure.exitCode,
             ),
@@ -59,7 +61,7 @@ export const librarySetupUndoCliCommand = Command.make(
                 ...plan.summary,
                 phase: "preview",
                 actions: setupUndoActions(
-                  store.home,
+                  configuration.skitHome,
                   input.operation,
                   plan.summary.status === "ready" ? plan.summary.planId : undefined,
                 ),
@@ -76,7 +78,7 @@ export const librarySetupUndoCliCommand = Command.make(
                 phase: "stale",
                 failure:
                   "Setup undo evidence changed. Review the refreshed preview before applying.",
-                actions: setupUndoActions(store.home, input.operation),
+                actions: setupUndoActions(configuration.skitHome, input.operation),
               },
               12,
             ),
@@ -91,7 +93,7 @@ export const librarySetupUndoCliCommand = Command.make(
                 ...plan.summary,
                 phase: "failed",
                 failure: failure.message,
-                actions: setupUndoActions(store.home, input.operation),
+                actions: setupUndoActions(configuration.skitHome, input.operation),
               },
               failure.exitCode,
             ),
@@ -103,7 +105,7 @@ export const librarySetupUndoCliCommand = Command.make(
             ...undone,
             phase: "applied",
             actions: [
-              ...setupUndoActions(store.home, input.operation),
+              ...setupUndoActions(configuration.skitHome, input.operation),
               ...("backupId" in undone
                 ? [
                     {
@@ -115,7 +117,7 @@ export const librarySetupUndoCliCommand = Command.make(
                         "inspect",
                         undone.backupId,
                         "--home",
-                        store.home,
+                        configuration.skitHome,
                         "--json",
                       ],
                       effect: "read" as const,

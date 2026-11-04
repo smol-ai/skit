@@ -10,12 +10,11 @@ import {
   createSkitArchive,
   deterministicTreeHash,
   initSkit,
+  InstalledSkills,
   libraryStoreLayer,
-  libraryAuditLogLayer,
   treeHasherLayer,
   TreeHasher,
   LibraryStore,
-  LibraryAuditLog,
   readSkitDescriptor,
   validateSkitDirectory,
   type HarnessName,
@@ -29,6 +28,8 @@ import type { InstalledSkillOptions } from "../../src/workflows/library/installe
 import { testHttpClientLayer, type TestHttpHandler } from "./http-test-client.js";
 import { registryAuthAccessLayer } from "../../src/registry/auth-service.js";
 import { RegistryHttp, registryHttpLayer } from "../../src/registry/registry-http.js";
+
+import { Library } from "@smolai/skit-core/library";
 
 export type HarnessRoots = SkillsDirectoryOverrides;
 
@@ -107,8 +108,10 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
       Effect.provide(
         Layer.mergeAll(
           skitConfigurationLayer(home),
-          libraryStoreLayer({ home }),
-          libraryAuditLogLayer({ home }),
+          Library.layer.pipe(
+            Layer.provide(InstalledSkills.layer()),
+            Layer.provideMerge(libraryStoreLayer({ home })),
+          ),
           transport,
           registryHttpLayer(transport),
           registryAuth,
@@ -122,7 +125,7 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
           R,
           | SkitConfiguration
           | LibraryStore
-          | LibraryAuditLog
+          | Library.Service
           | HttpClient.HttpClient
           | RegistryHttp
           | TreeHasher

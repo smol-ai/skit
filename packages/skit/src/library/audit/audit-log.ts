@@ -1,5 +1,4 @@
-import { Data, Context, Effect, FileSystem, Layer, Schema } from "effect";
-import type { PlatformError } from "effect/PlatformError";
+import { Data, Effect, FileSystem, Schema } from "effect";
 import { join } from "node:path";
 import { Hash } from "../../contracts.js";
 import { OperationId, makeOperationId } from "../entity-ids.js";
@@ -56,20 +55,6 @@ export class LibraryAuditInvalid
   }
 }
 
-export interface LibraryAuditLogService {
-  readonly append: (
-    draft: LibraryAuditDraft,
-  ) => Effect.Effect<LibraryAuditEvent, PlatformError | LibraryAuditInvalid>;
-  readonly list: () => Effect.Effect<
-    readonly LibraryAuditEvent[],
-    PlatformError | LibraryAuditInvalid
-  >;
-}
-
-export class LibraryAuditLog extends Context.Service<LibraryAuditLog, LibraryAuditLogService>()(
-  "skit/library/LibraryAuditLog",
-) {}
-
 /** Append one event to a Library's history. The log and the store's own journal share this. */
 export const appendLibraryAudit = Effect.fn("LibraryAudit.append")(function* (
   home: string,
@@ -88,37 +73,25 @@ export const appendLibraryAudit = Effect.fn("LibraryAudit.append")(function* (
   return event;
 });
 
-export function libraryAuditLogLayer(options: { readonly home: string }) {
-  return Layer.effect(
-    LibraryAuditLog,
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const path = join(options.home, "audit.jsonl");
-      const append = (draft: LibraryAuditDraft) =>
-        appendLibraryAudit(options.home, draft).pipe(
-          Effect.provideService(FileSystem.FileSystem, fs),
-        );
-      const list = Effect.fn("LibraryAudit.list")(function* () {
-        const text = yield* fs
-          .readFileString(path)
-          .pipe(
-            Effect.catchTag("PlatformError", (error) =>
-              error.reason._tag === "NotFound" ? Effect.succeed("") : Effect.fail(error),
-            ),
-          );
-        const events: LibraryAuditEvent[] = [];
-        const lines = text.split("\n");
-        for (let index = 0; index < lines.length; index++) {
-          const line = lines[index]!;
-          if (!line && index === lines.length - 1) continue;
-          const event = yield* Schema.decodeUnknownEffect(AuditLine)(line).pipe(
-            Effect.mapError((cause) => new LibraryAuditInvalid({ path, line: index + 1, cause })),
-          );
-          events.push(event);
-        }
-        return events;
-      });
-      return LibraryAuditLog.of({ append, list });
-    }),
-  );
-}
+export const readLibraryAudit = Effect.fn("LibraryAudit.list")(function* (home: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = join(home, "audit.jsonl");
+  const text = yield* fs
+    .readFileString(path)
+    .pipe(
+      Effect.catchTag("PlatformError", (error) =>
+        error.reason._tag === "NotFound" ? Effect.succeed("") : Effect.fail(error),
+      ),
+    );
+  const events: LibraryAuditEvent[] = [];
+  const lines = text.split("\n");
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index]!;
+    if (!line && index === lines.length - 1) continue;
+    const event = yield* Schema.decodeUnknownEffect(AuditLine)(line).pipe(
+      Effect.mapError((cause) => new LibraryAuditInvalid({ path, line: index + 1, cause })),
+    );
+    events.push(event);
+  }
+  return events;
+});

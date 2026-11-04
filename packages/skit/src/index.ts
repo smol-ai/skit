@@ -107,7 +107,12 @@ export { installedSkillSource } from "./library/installation/installed-skill-sou
 export * from "./library/snapshot-archive.js";
 export * from "./library/entity-ids.js";
 export * from "./library/machine-document.js";
-export * from "./library/audit/audit-log.js";
+export {
+  LibraryAuditEvent,
+  LibraryAuditChange,
+  LibraryAuditInvalid,
+  type LibraryAuditDraft,
+} from "./library/audit/audit-log.js";
 export {
   writeRawAtomic,
   writeJsonAtomic,

@@ -7,7 +7,6 @@ import {
   MachineSettings,
   type Hash,
   type InstallScope,
-  type Library,
   type LibraryState,
   type SkitFailure,
 } from "@smolai/skit-core";
@@ -17,7 +16,7 @@ import {
   skillsDirectoryFor,
   type InventoryRootOptions,
 } from "../../install/roots.js";
-import { localLibrary } from "../../library-application/library-owner.js";
+import { Library } from "@smolai/skit-core/library";
 import type { ManageOptions } from "../../workflows/library/manage-existing.js";
 import { revalidateSetupPlan, saveSetupMachineConfig, type SetupOptions } from "./setup.js";
 import type {
@@ -166,7 +165,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(function* (
   options: SetupApplyOptions,
   approval: SetupApproval,
 ) {
-  const library = yield* localLibrary;
+  const library = yield* Library.Service;
   // Read before the scan: a change after it fails the plan ID, one after this read the setup.
   const base = yield* library.read;
   const revalidated = yield* options.withStatus(

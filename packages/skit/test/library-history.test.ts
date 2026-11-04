@@ -2,7 +2,8 @@ import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem } from "effect";
 import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
-import { LibraryAuditLog, libraryAuditLogLayer } from "../src/library/audit/audit-log.js";
+import { Library } from "../src/library/library.js";
+import { libraryLayer } from "./helpers/library-store.js";
 import { classifyLibraryAuditEvent } from "../src/library/audit/state-diff.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
 import { importCollection } from "../src/library/import-collection.js";
@@ -73,9 +74,9 @@ const library = Effect.gen(function* () {
     ],
     lockFileEntries: [],
   });
-  const history = Effect.flatMap(LibraryAuditLog, (log) => log.list()).pipe(
-    Effect.provide(libraryAuditLogLayer({ home })),
-  );
+  const history = Effect.flatMap(Library.Service, (owner) =>
+    Effect.map(owner.history, (history) => history.events),
+  ).pipe(Effect.provide(libraryLayer(home)));
   return { inLibrary, importSource, history, home };
 });
 
@@ -233,5 +234,65 @@ it.live("records a writer that outlives its action as an action of its own", () 
       events.map((event) => event.changes.map((change) => `${change.entity}:${change.action}`)),
       [["binding:enabled"], ["binding:disabled"]],
     );
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("the Library owner reads empty history without creating its home", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const workspace = yield* fs.makeTempDirectoryScoped({ prefix: "skit-owner-history-" });
+    const home = join(workspace, "absent");
+    const history = yield* Effect.flatMap(Library.Service, (owner) => owner.history).pipe(
+      Effect.provide(libraryLayer(home)),
+    );
+    assert.deepStrictEqual(history, { events: [], operations: [] });
+    assert.isFalse(yield* fs.exists(home));
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("owner history includes unfinished operations without resuming them", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const workspace = yield* fs.makeTempDirectoryScoped({ prefix: "skit-owner-history-" });
+    const home = join(workspace, "home");
+    yield* Effect.gen(function* () {
+      const owner = yield* Library.Service;
+      const result = yield* owner.setup([], { base: yield* owner.read });
+      assert.strictEqual(result._tag, "Done");
+      const done = yield* owner.history;
+      assert.strictEqual(done.operations[0]?._tag, "Done");
+      assert.strictEqual(done.events.length, 1);
+      const statePath = join(home, "state.json");
+      const saved = JSON.parse(yield* fs.readFileString(statePath));
+      saved.operations[0]._tag = "Pending";
+      delete saved.operations[0].after;
+      const pendingBytes = JSON.stringify(saved);
+      yield* fs.writeFileString(statePath, pendingBytes);
+      const filesBefore = (yield* fs.readDirectory(home)).sort();
+      const pending = yield* owner.history;
+      assert.strictEqual(pending.operations[0]?._tag, "Pending");
+      assert.deepStrictEqual(pending.events, done.events);
+      assert.strictEqual(yield* fs.readFileString(statePath), pendingBytes);
+      assert.deepStrictEqual((yield* fs.readDirectory(home)).sort(), filesBefore);
+    }).pipe(Effect.provide(libraryLayer(home)));
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("owner history preserves a malformed audit line's path and number", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-owner-history-invalid-" });
+    const path = join(home, "audit.jsonl");
+    yield* fs.writeFileString(path, "{}\n");
+    const failure = yield* Effect.flatMap(Library.Service, (owner) => owner.history).pipe(
+      Effect.provide(libraryLayer(home)),
+      Effect.flip,
+    );
+    assert.isTrue(failure._tag === "LibraryAuditInvalid");
+    if (failure._tag === "LibraryAuditInvalid") {
+      assert.strictEqual(failure.path, path);
+      assert.strictEqual(failure.line, 1);
+    }
+    assert.strictEqual(yield* fs.readFileString(path), "{}\n");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

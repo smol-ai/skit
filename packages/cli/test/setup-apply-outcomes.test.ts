@@ -1,3 +1,4 @@
+import { withLibraryOwner } from "./helpers/library-owner.js";
 import { basename, join, relative } from "node:path";
 import { Effect, Exit, FileSystem, Option, Schema } from "effect";
 import { PlatformError, systemError } from "effect/PlatformError";
@@ -92,6 +93,7 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
             ...(flags.workDirFlag ? { workDirFlag: flags.workDirFlag } : {}),
             manageOptions: { installOptions: home.installOptions },
           }).pipe(
+            withLibraryOwner,
             Effect.provideServiceEffect(
               Prompter,
               Effect.map(Prompter, (prompter) => ({

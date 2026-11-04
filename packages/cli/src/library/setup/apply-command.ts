@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { Effect, Option, Schema } from "effect";
-import { Hash, LibraryStore } from "@smolai/skit-core";
+import { Hash, emptyLibraryState } from "@smolai/skit-core";
+import { Library } from "@smolai/skit-core/library";
 import { Renderer } from "../../presentation/renderer.js";
 import { OptionCombinationInvalid } from "../../workflows/failures.js";
 import { runSetup, SetupPlanStale, type SetupOptions } from "./setup.js";
@@ -82,8 +83,9 @@ export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (
     ...reconnects.map((copy) => copy.name),
     ...removals.entries.map((copy) => copy.name),
   ]);
-  const store = yield* LibraryStore;
-  const state = yield* store.load;
+  const library = yield* Library.Service;
+  const snapshot = yield* library.read;
+  const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
   const names = new Map(state.skills.map((skill) => [skill.skill_id, skill.name]));
   return {
     planId,

@@ -28,12 +28,14 @@ export type ChangedMethods<Contract, Actual> = {
 export type UndeclaredRequirements<Make, Allowed> = Exclude<Effect.Services<Make>, Allowed>;
 
 // ── Debt: today's gaps, to be closed by migration ─────────────────────────────────────────────
-type MissingDebt = "content" | "history";
+type MissingDebt = "content";
 type ExtraDebt = never;
 // setup: core result and error types (the contract's are Ref placeholders).
 // startup: a stopped reason's StepFailed error is saved as JSON (Schema.Defect), so it reads back
 // as unknown, not the contract's error union.
-type ChangedDebt = "plan" | "apply" | "setup";
+// history retains the existing audit reader's LibraryAuditInvalid failure (path + line).
+// The target omits that failure; keep the mismatch explicit pending contract review.
+type ChangedDebt = "plan" | "apply" | "setup" | "history";
 // LibraryStore folds into Library; InstalledSkills is built inside Library.layer from routing.
 type RequirementDebt = LibraryStore | InstalledSkills.Service;
 

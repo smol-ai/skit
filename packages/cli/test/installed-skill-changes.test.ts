@@ -1,3 +1,4 @@
+import { withLibraryOwner } from "./helpers/library-owner.js";
 import { installEnabledSkills } from "./helpers/installed-skills.js";
 import { join } from "node:path";
 import { systemError } from "effect/PlatformError";
@@ -691,6 +692,7 @@ it.effect(
       const failed = yield* f.home.owned(
         setupApplyCommand({ ...input, reviewedPlanId: review.plan.reviewId }).pipe(
           Effect.provide(interaction.layer),
+          withLibraryOwner,
           Effect.provideService(FileSystem.FileSystem, {
             ...f.fs,
             rename: (from, to) => {
