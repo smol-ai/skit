@@ -8,6 +8,9 @@ import type { UndoIntent, UndoPlan, UndoResult } from "./internal/setup/undo-pla
 import { Context, Effect, FileSystem, Layer, Schema } from "effect";
 import type { Digest } from "effect/crypto";
 import { InstalledSkills } from "./installed-skills.js";
+import { libraryStoreLayer } from "./library-store-layer.js";
+import { treeHasherLayer } from "../artifact/tree-hasher.js";
+import type { InventoryRootOptions } from "./routing/roots.js";
 import {
   LibraryStore,
   withLibraryWriter,
@@ -234,5 +237,35 @@ export const make = Effect.gen(function* () {
       ),
   });
 });
-export const layer = Layer.effect(Service, make);
+/** Routing is part of constructing this Library, never assembled by an operation's caller. */
+export type Routing =
+  | { readonly _tag: "None" }
+  | { readonly _tag: "Recorded" }
+  | ({ readonly _tag: "Configured" } & InventoryRootOptions);
+
+export interface Config {
+  readonly home: string;
+  readonly routing: Routing;
+}
+
+/** One public constructor owns migration, startup recovery, storage and installed-skill routing. */
+export const layer = (
+  config: Config,
+): Layer.Layer<
+  Service,
+  import("./store/library-store.js").LibraryStoreLayerError,
+  TreeRequirements | Digest.Digest
+> => {
+  const storage = libraryStoreLayer({ home: config.home });
+  const files = Layer.effect(
+    InstalledSkills.Service,
+    Effect.gen(function* () {
+      if (config.routing._tag === "None") return yield* InstalledSkills.make();
+      if (config.routing._tag === "Configured") return yield* InstalledSkills.make(config.routing);
+      const store = yield* LibraryStore;
+      return yield* InstalledSkills.make(yield* InstalledSkills.recordedRouting(yield* store.load));
+    }),
+  ).pipe(Layer.provide(storage), Layer.provide(treeHasherLayer));
+  return Layer.effect(Service, make).pipe(Layer.provide(Layer.merge(storage, files)));
+};
 export * as Library from "./library.js";

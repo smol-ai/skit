@@ -108,7 +108,7 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
       Effect.provide(
         Layer.mergeAll(
           skitConfigurationLayer(home),
-          Library.layer.pipe(
+          Layer.effect(Library.Service, Library.make).pipe(
             Layer.provide(InstalledSkills.layer()),
             Layer.provideMerge(libraryStoreLayer({ home })),
           ),

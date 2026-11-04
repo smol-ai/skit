@@ -8,7 +8,7 @@ import { AuthorWorkspace } from "../author/workspace.js";
 export const libraryApplicationLayer = Layer.unwrap(
   Effect.map(SkitConfiguration, (paths) =>
     Layer.mergeAll(
-      Library.layer.pipe(
+      Layer.effect(Library.Service, Library.make).pipe(
         Layer.provide(InstalledSkills.layer()),
         Layer.provideMerge(libraryStoreLayer({ home: paths.skitHome })),
       ),

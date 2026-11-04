@@ -1,5 +1,4 @@
-import { Effect, Layer } from "effect";
-import { InstalledSkills } from "../../src/library/installed-skills.js";
+import { Effect } from "effect";
 import { Library } from "../../src/library/library.js";
 import { LibraryStore } from "../../src/library/store/library-store.js";
 import { libraryStoreLayer } from "../../src/library/library-store-layer.js";
@@ -20,7 +19,4 @@ export const saveLibrary = (home: string, state: LibraryState) =>
   ).pipe(inLibrary(home));
 
 /** The Library rooted at `home`, routing nothing; building it migrates a legacy state.json. */
-export const libraryLayer = (home: string) =>
-  Library.layer.pipe(
-    Layer.provide(Layer.merge(libraryStoreLayer({ home }), InstalledSkills.layer())),
-  );
+export const libraryLayer = (home: string) => Library.layer({ home, routing: { _tag: "None" } });

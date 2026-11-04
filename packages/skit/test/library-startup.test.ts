@@ -37,8 +37,7 @@ const setupProcess = (home: string, folder: string, commits: number) =>
            rename: (from, to) => Effect.andThen(gate, fs.rename(from, to)),
            link: (from, to) => Effect.andThen(gate, fs.link(from, to)) };
        }));
-       const layer = core.Library.layer.pipe(
-         Layer.provide(Layer.merge(core.libraryStoreLayer({ home }), core.InstalledSkills.layer())),
+       const layer = core.Library.layer({ home, routing: { _tag: "None" } }).pipe(
          Layer.provide(paused));
        await Effect.runPromise(Effect.gen(function* () {
          const library = Context.get(yield* Layer.build(layer), core.Library.Service);
