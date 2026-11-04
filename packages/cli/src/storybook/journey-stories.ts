@@ -3,19 +3,10 @@ import { skitConfigurationLayer } from "@smolai/skit-core";
 import { presentDoctorCleanup } from "../workflows/library/doctor-cleanup.js";
 import { syncJourney } from "./sync-journey.js";
 import { join } from "node:path";
-import { ConfigProvider, Effect, FileSystem, Option, Schema } from "effect";
+import { ConfigProvider, Effect, FileSystem, Option } from "effect";
 import {
-  CURRENT_LIBRARY_STATE_VERSION,
-  LibraryState,
-  LibraryStore,
-  libraryStoreLayer,
-  makeImportId,
-  makeCollectionId,
+  deterministicTreeHash,
   makeMachineId,
-  makeInstalledSkillId,
-  makeCollectionVersionId,
-  makeSkillId,
-  makeSkillVersionId,
   skitLayer,
   skillUsageLayer,
 } from "@smolai/skit-core";
@@ -35,76 +26,31 @@ export interface JourneyStory<A, E, R> {
   readonly finalState: (result: A) => string;
 }
 
-const hash = `sha256:${"0".repeat(64)}`;
-const collectionId = makeCollectionId();
-const collectionVersionId = makeCollectionVersionId();
-const skillVersionId = makeSkillVersionId();
-const skillId = makeSkillId();
-const importId = makeImportId();
-const machineId = makeMachineId();
-const storyState = Schema.decodeUnknownSync(LibraryState)({
-  schemaVersion: CURRENT_LIBRARY_STATE_VERSION,
-  collections: [
-    {
-      collection_id: collectionId,
-      label: "review-tools",
-    },
-  ],
-  skills: [
-    {
-      skill_id: skillId,
-      collection_id: collectionId,
-      path: ".",
-      name: "review",
-      versions: [
-        {
-          skill_version_id: skillVersionId,
-          source_hash: hash,
-          artifact_hash: hash,
-          validation_identity_hash: hash,
-          materialization_profile: "plain-skill/v1",
-        },
-      ],
-    },
-  ],
-  collection_versions: [
-    {
-      collection_version_id: collectionVersionId,
-      hash: hash,
-      copy_profile: "verbatim/v1",
-      members: [
-        {
-          source_path: ".",
-          source_hash: hash,
-          artifact_hash: hash,
-          materialization_profile: "plain-skill/v1",
-        },
-      ],
-    },
-  ],
-  imports: [
-    {
-      import_id: importId,
-      collection_id: collectionId,
-      kind: "source",
-      collection_version_id: collectionVersionId,
-      input: { value: "/fixtures/review" },
-      source_identity: {
-        kind: "local",
-        machine_id: machineId,
-        path: { value: "/fixtures/review" },
+/** Real retained bytes and owner-generated identities, shared by the preview journeys. */
+const importReview = Effect.fn("Storybook.importReview")(function* (root: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const library = yield* Library.Service;
+  const sourcePath = join(root, "review-tools");
+  yield* fs.makeDirectory(sourcePath, { recursive: true });
+  yield* fs.writeFileString(
+    join(sourcePath, "SKILL.md"),
+    "---\nname: review\ndescription: Review code changes.\n---\n# Review\nPreserve the intended behavior.\n",
+  );
+  return yield* library.import.collection({
+    machineId: makeMachineId(),
+    source: { type: "local", path: sourcePath },
+    input: sourcePath,
+    importedAt: "2026-01-01T00:00:00.000Z",
+    skills: [
+      {
+        name: "review",
+        sourcePath,
+        relativePath: ".",
+        currentHash: yield* deterministicTreeHash(sourcePath),
       },
-      imported_at: "2026-01-01T00:00:00.000Z",
-      machine_id: machineId,
-      lock_file_entries: [],
-    },
-  ],
-  enabled: [],
-  repositories: [],
-  installed_skills: [],
-  unmanaged: [],
-  operations: [],
-  adoption_receipts: [],
+    ],
+    lockFileEntries: [],
+  });
 });
 
 const previewEnable = Effect.scoped(
@@ -121,8 +67,9 @@ const previewEnable = Effect.scoped(
       devinRoot: [],
     });
     return yield* Effect.gen(function* () {
-      const store = yield* LibraryStore;
-      yield* store.save(storyState, yield* store.load);
+      const library = yield* Library.Service;
+      yield* importReview(home);
+      const before = yield* library.read;
       yield* presentSetEnabled({
         action: "enable",
         enabled: true,
@@ -132,10 +79,17 @@ const previewEnable = Effect.scoped(
         interactive: true,
         configuration,
       });
+      const after = yield* library.read;
+      if (
+        before._tag !== "Present" ||
+        after._tag !== "Present" ||
+        before.revision !== after.revision ||
+        (yield* fs.readDirectory(codexRoot)).length !== 0
+      )
+        return yield* Effect.die("The enable preview changed the Library or installed files");
       return yield* openLibrarySession(configuration.pull.installOptions);
     }).pipe(
       Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
-      Effect.provide(libraryStoreLayer({ home })),
       Effect.provide(skitConfigurationLayer(home)),
     );
   }),
@@ -155,27 +109,28 @@ const previewDoctorCleanup = Effect.scoped(
       overrides: { codex: [skillsRoot] },
     };
     return yield* Effect.gen(function* () {
-      const store = yield* LibraryStore;
-      yield* store.save(
+      const library = yield* Library.Service;
+      const imported = yield* importReview(root);
+      const skill = imported.skills[0];
+      if (!skill) return yield* Effect.die("Expected the imported review Skill");
+      const plan = yield* library.plan(
         {
-          ...storyState,
-          enabled: [{ skill: skillId }],
-          installed_skills: [
+          _tag: "Enabled",
+          changes: [
             {
-              installed_skill_id: makeInstalledSkillId(),
-              skill_id: skillId,
-              skill_version_id: skillVersionId,
-              destination: "agents",
-              root: skillsRoot,
-              path,
-              expected_hash: hash,
-              status: "installed",
-              installed_at: "2026-10-18T00:00:00.000Z",
+              _tag: "Enable",
+              subject: { _tag: "Skill", id: skill.skill_id },
+              where: [{ kind: "global" }],
             },
           ],
         },
-        yield* store.load,
+        { base: yield* library.read },
       );
+      const installed = yield* library.apply(plan);
+      if (installed._tag !== "Applied" || !(yield* fs.exists(join(path, "SKILL.md"))))
+        return yield* Effect.die("Expected the review Skill to be installed");
+      const before = yield* library.read;
+      const bytes = yield* fs.readFileString(join(path, "SKILL.md"));
       yield* presentDoctorCleanup(
         [
           {
@@ -201,10 +156,17 @@ const previewDoctorCleanup = Effect.scoped(
         30,
         true,
       );
-      return "Preview only · 1 Skill remains enabled";
+      const after = yield* library.read;
+      if (
+        before._tag !== "Present" ||
+        after._tag !== "Present" ||
+        before.revision !== after.revision ||
+        (yield* fs.readFileString(join(path, "SKILL.md"))) !== bytes
+      )
+        return yield* Effect.die("The cleanup preview changed the Library or installed bytes");
+      return `Preview only · ${after.state.enabled.length} Skill remains enabled`;
     }).pipe(
-      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
-      Effect.provide(libraryStoreLayer({ home })),
+      Effect.provide(Library.layer({ home, routing: { _tag: "Configured", ...configuration } })),
       Effect.provide(skitConfigurationLayer(home)),
       Effect.provide(
         ConfigProvider.layer(
@@ -222,14 +184,14 @@ export const journeyStories: ReadonlyArray<JourneyStory<string, unknown, Prompte
   {
     name: "doctor/cleanup-preview",
     initialState: "Codex listing ~12,000 / 10,000 tokens · no retained usage transcripts",
-    answers: [[`${skillId}:global`]],
+    answers: [{ labels: ["review"] }],
     run: previewDoctorCleanup.pipe(Effect.provide(skitConfigurationLayer())),
     finalState: (state) => state,
   },
   {
     name: "preview-enable-portable-collection",
     initialState: "1 Collection · 1 Skill · 0 Bindings",
-    answers: [collectionId, "global"],
+    answers: [{ label: "review-tools" }, "global"],
     run: previewEnable.pipe(
       Effect.map(
         (state) =>

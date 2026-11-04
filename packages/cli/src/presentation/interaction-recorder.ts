@@ -3,8 +3,13 @@ import type { CommandFailure, CommandResult } from "../commands/types.js";
 import { Prompter, PromptCancelled, type Choice, type PrompterShape } from "./prompter.js";
 import { Renderer, type RendererShape } from "./renderer.js";
 
-/** One scripted answer: a value to choose, or a cancellation. */
-export type ScriptedAnswer = string | readonly string[] | boolean | "cancel" | "escape";
+/** Choose by value or exact visible label; generated IDs need not be known by fixtures. */
+export type ScriptedAnswer =
+  | string
+  | readonly string[]
+  | boolean
+  | { readonly label: string }
+  | { readonly labels: readonly string[] };
 
 export type PromptKind =
   | "select"
@@ -61,12 +66,27 @@ export const makeScriptedInteraction = Effect.fn("InteractionRecorder.make")(fun
   const answers = yield* Ref.make(script);
   const events = yield* Ref.make<ReadonlyArray<InteractionEvent>>([]);
   const record = (event: InteractionEvent) => Ref.update(events, (current) => [...current, event]);
-  const take = (message: string) =>
+  const take = (message: string, choices: ReadonlyArray<Choice<string>> = []) =>
     Ref.modify(answers, (current) => [current[0], current.slice(1)] as const).pipe(
       Effect.flatMap((answer) =>
-        answer === undefined
-          ? Effect.die(new Error(`Prompt script exhausted: ${message}`))
-          : Effect.succeed(answer),
+        Effect.gen(function* () {
+          if (answer === undefined)
+            return yield* Effect.die(new Error(`Prompt script exhausted: ${message}`));
+          if (typeof answer !== "object" || !("label" in answer || "labels" in answer))
+            return answer;
+          const labels = "label" in answer ? [answer.label] : answer.labels;
+          const values = yield* Effect.forEach(labels, (label) => {
+            const matches = choices.filter((choice) => choice.label === label);
+            return matches.length === 1 && !matches[0].disabled
+              ? Effect.succeed(matches[0].value)
+              : Effect.die(
+                  new Error(
+                    `Prompt "${message}" requires one available choice labelled "${label}"`,
+                  ),
+                );
+          });
+          return "label" in answer ? values[0] : values;
+        }),
       ),
     );
   const shown = (kind: PromptKind, message: string, choices: ReadonlyArray<Choice<string>>) =>
@@ -81,7 +101,7 @@ export const makeScriptedInteraction = Effect.fn("InteractionRecorder.make")(fun
   ) =>
     Effect.gen(function* () {
       yield* shown(kind, message, choices);
-      const answer = yield* take(message);
+      const answer = yield* take(message, choices);
       yield* answered(answer);
       if (answer === "cancel" || answer === "escape")
         return yield* new PromptCancelled({
@@ -121,7 +141,7 @@ export const makeScriptedInteraction = Effect.fn("InteractionRecorder.make")(fun
     multiselect: (message, choices) =>
       Effect.gen(function* () {
         yield* shown("multiselect", message, choices);
-        const answer = yield* take(message);
+        const answer = yield* take(message, choices);
         yield* answered(answer);
         if (answer === "cancel" || answer === "escape")
           return yield* new PromptCancelled({
