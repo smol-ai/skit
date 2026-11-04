@@ -5,7 +5,7 @@
 // The Scope owns the child, so failing here kills it rather than letting it keep writing.
 
 import { Effect } from "effect";
-import { SourceProcess } from "@smolai/skit-core";
+import { SourceProcess } from "../platform/source-process.js";
 
 export interface BoundedCapture {
   readonly output: string;

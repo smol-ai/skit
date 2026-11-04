@@ -7,7 +7,7 @@ import {
   type HarnessName,
   type LibraryInventory,
 } from "@smolai/skit-core";
-import { harnessLabel } from "../harness/catalog.js";
+import { harnessLabel } from "@smolai/skit-core/harnesses";
 import { conditionHeadline, installedSkillStatusLabel } from "./condition-language.js";
 import type { MachineInventoryResult } from "../workflows/library/machine-inventory-contract.js";
 

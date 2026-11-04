@@ -1,7 +1,7 @@
 import { Match } from "effect";
 import { createColors } from "picocolors";
 import { largeListingEntries, type ListingBudget } from "@smolai/skit-core";
-import { harnessLabel } from "../harness/catalog.js";
+import { harnessLabel } from "@smolai/skit-core/harnesses";
 import { compactHomePath } from "./home-path.js";
 
 const amount = (value: number) => value.toLocaleString("en-US");

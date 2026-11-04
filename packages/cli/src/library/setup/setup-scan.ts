@@ -14,7 +14,7 @@ import { ownershipAt, type SetupEvidence } from "./setup-discovery.js";
 import { lockMatches } from "../../workflows/library/skills-sh-lock-source.js";
 import { classifyOwner } from "./setup-onboarding.js";
 import { makePnpmSkillCheck, pnpmSkillOwner } from "@smolai/skit-core";
-import { probeHarnesses } from "../../harness/probe.js";
+import { probeHarnesses } from "@smolai/skit-core/harnesses";
 import type {
   SetupAuthoredCollection,
   SetupInstalledSkill,

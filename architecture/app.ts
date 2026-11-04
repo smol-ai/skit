@@ -378,7 +378,7 @@ export const removedServices = [
 /** Deleted commands (decisions.md "Unwired commands"): never wired since the initial public release. */
 export const removedCommands = [
   "audit command (handlers/audit.ts only; audit/local.ts stays: the TUI is built on it)",
-  "harness probe (handlers/harness/probe.ts)",
+  "harness probe command (handlers/harness/probe.ts); reusable probes live in core harnesses/",
 ] as const;
 
 /** Composition: one boundary layer per process; handlers yield owners and nothing else. */

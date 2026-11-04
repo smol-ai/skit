@@ -2,7 +2,7 @@
 // kills the child. The allowlist is checked before spawning, and a probe that refuses, exceeds its
 // budget or answers with something other than JSON is a failed probe rather than a failed audit.
 import { Effect, Result } from "effect";
-import { captureBounded } from "../harness/probe-process.js";
+import { captureBounded } from "@smolai/skit-core/harnesses";
 import { arrayAt, isJsonObject } from "@smolai/skit-core";
 
 export interface ProbeOptions {

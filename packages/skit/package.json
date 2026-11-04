@@ -10,6 +10,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
+    "./harnesses": {
+      "types": "./dist/harnesses/index.d.ts",
+      "import": "./dist/harnesses/index.js"
+    },
     "./library": {
       "types": "./dist/library/index.d.ts",
       "import": "./dist/library/index.js"

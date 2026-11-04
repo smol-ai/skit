@@ -8,7 +8,7 @@ import {
 import type { CommandResult } from "../commands/types.js";
 import { basename, dirname, relative, sep } from "node:path";
 import { compactHomePath } from "./home-path.js";
-import { harnessLabel } from "../harness/catalog.js";
+import { harnessLabel } from "@smolai/skit-core/harnesses";
 import { renderInventory } from "./inventory.js";
 import { renderSetEnabled } from "./set-enabled.js";
 import { renderRemove, renderRemovePlan } from "./remove.js";

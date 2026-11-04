@@ -4,7 +4,7 @@ import { handlePlatformCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { jsonFlag } from "../../commands/parameters.js";
-import { probeRequestedHarnesses } from "../../harness/probe.js";
+import { probeRequestedHarnesses } from "@smolai/skit-core/harnesses";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
 

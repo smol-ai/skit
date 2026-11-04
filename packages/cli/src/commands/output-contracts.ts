@@ -23,7 +23,7 @@ import {
 import { RecoveryList, RecoveryOutput } from "./recovery-contract.js";
 import { SetupUndoOutput } from "../library/setup/undo-result.js";
 import { AuditReportV1Alpha4 } from "../audit/schema.js";
-import { HarnessProbeReport } from "../harness/probe.js";
+import { HarnessProbeReport } from "@smolai/skit-core/harnesses";
 import { RegistryRemoteChange, RegistryRemoteList } from "../registry/contracts.js";
 import { AuthorSyncResult } from "../workflows/author/sync-contract.js";
 import { RemovePlan, RemoveResult } from "../workflows/library/remove-contract.js";

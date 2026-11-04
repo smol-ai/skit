@@ -13,7 +13,7 @@ import {
   ResolvedDeclaredPolicy,
 } from "@smolai/skit-core";
 import { Record, Schema } from "effect";
-import { harnessLabel } from "../harness/catalog.js";
+import { harnessLabel } from "@smolai/skit-core/harnesses";
 import type { InvocationOption } from "./policy.js";
 import type { InstallScope as Scope } from "@smolai/skit-core";
 

@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest";
-import { skitLayer } from "@smolai/skit-core";
+import { skitLayer } from "../src/index.js";
 import { Effect } from "effect";
-import { probeRequestedHarnesses } from "../src/harness/probe.js";
+import { probeRequestedHarnesses } from "../src/harnesses/index.js";
 
 it.effect("probes every supported Harness when no subject is requested", () =>
   Effect.gen(function* () {

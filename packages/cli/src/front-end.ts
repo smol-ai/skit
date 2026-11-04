@@ -14,7 +14,7 @@ export type {
   AuditMcpServerV1Alpha4,
   AuditSkillV1Alpha4,
 } from "./audit/schema.js";
-export { probeHarness, type HarnessProbeResult } from "./harness/probe.js";
+export { probeHarness, type HarnessProbeResult } from "@smolai/skit-core/harnesses";
 export * from "./library-application/index.js";
 
 export {

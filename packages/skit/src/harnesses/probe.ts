@@ -5,9 +5,11 @@ import { delimiter, join } from "node:path";
 // belong to the caller's fiber, so an interrupted probe kills the child. The TUI composes
 // `probeHarness` on its own host runtime; the command table, install-method
 // classification, version parsing and result shape are shared and pure.
-import { HarnessName, LinkStat, harnessDrivers, harnessFromAlias } from "@smolai/skit-core";
+import { HarnessName } from "../vocabulary.js";
+import { LinkStat } from "../platform/link-stat.js";
+import { harnessDrivers, harnessFromAlias } from "./drivers.js";
 import { Result } from "effect";
-import { UnknownHarness } from "./failures.js";
+import { UnknownHarness } from "./probe-failures.js";
 
 export const HarnessProbeResult = Schema.Struct({
   harnessId: HarnessName,

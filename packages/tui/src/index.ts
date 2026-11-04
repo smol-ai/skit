@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { probeHarness, type HarnessProbeResult } from "@smolai/skit-core/harnesses";
 
 // PROTOTYPE: five audit inventory projections plus a command palette.
 
@@ -44,12 +45,7 @@ import {
   type Scope,
   type InvocationOption,
 } from "../../cli/src/library-application/index";
-import {
-  errorMessage,
-  auditLocalCapabilitiesV1Alpha4,
-  probeHarness,
-  type HarnessProbeResult,
-} from "../../cli/src/front-end";
+import { errorMessage, auditLocalCapabilitiesV1Alpha4 } from "../../cli/src/front-end";
 import {
   HarnessName,
   LibraryStore,

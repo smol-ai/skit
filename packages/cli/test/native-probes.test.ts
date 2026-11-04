@@ -11,8 +11,8 @@ import { Deferred, Effect, Fiber, FileSystem, Schedule } from "effect";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import { runAuditProbes } from "../src/audit/probes.js";
-import { probeHarness } from "../src/harness/probe.js";
-import { captureBounded } from "../src/harness/probe-process.js";
+import { probeHarness } from "@smolai/skit-core/harnesses";
+import { captureBounded } from "@smolai/skit-core/harnesses";
 import { scratch } from "./helpers/library-home.js";
 
 /** A disposable executable at `<directory>/<name>` with the given shell body. */
