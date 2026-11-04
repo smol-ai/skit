@@ -215,7 +215,7 @@ export const syncLibrary = Effect.fn("Library.sync")(
     const transition = yield* progress.around(
       { kind: "check-installed-skills" },
       prepareSyncDeviceTransition({
-        current: local.present ? local.state : undefined,
+        current: snapshot,
         aligned: device,
         baseline: merge.device,
         manifest: effectiveManifest,

@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 import {
   LibraryState,
+  emptyLibraryState,
   LibraryManifest,
   LibraryStore,
   LibraryChanged,
@@ -54,11 +55,12 @@ export const syncInstalledSkills = Effect.fn("Library.sync.installedSkills")(fun
 export const updateSyncInstalledSkills = Effect.fn("Library.sync.updateInstalledSkills")(function* (
   rootFor: ((target: InstallDestination) => string | undefined) | undefined,
 ) {
-  const current = yield* (yield* LibraryStore).load;
+  const snapshot = yield* (yield* Library.Service).read;
+  const current = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
   const library = yield* Library.make.pipe(
     Effect.provideService(InstalledSkills.Service, yield* syncInstalledSkills(current, rootFor)),
   );
-  const outcome = yield* library.apply(yield* library.plan({ _tag: "Update" }, { base: current }));
+  const outcome = yield* library.apply(yield* library.plan({ _tag: "Update" }, { base: snapshot }));
   const copies = outcome._tag === "Applied" ? outcome.copies : [];
   return {
     installed: copies.filter((copy) => copy._tag === "Installed").length,
@@ -72,16 +74,17 @@ export const updateSyncInstalledSkills = Effect.fn("Library.sync.updateInstalled
  */
 const uninstallForSync = Effect.fn("Library.sync.uninstallForSync")(function* (
   plan: SyncInstalledSkillsPreview,
-  current: LibraryState,
+  snapshot: Library.Snapshot,
 ) {
   const store = yield* LibraryStore;
+  const current = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
   if (plan.retire.length === 0) return { uninstalled: 0, state: current };
   const library = yield* Library.Service;
   const outcome = yield* library.apply(
     yield* library.plan(
       { _tag: "Uninstall", copies: plan.retire, drop: plan.remove },
       {
-        base: current,
+        base: snapshot,
       },
     ),
   );
@@ -97,7 +100,7 @@ const uninstallForSync = Effect.fn("Library.sync.uninstallForSync")(function* (
 /** Prepare this device's local transition before remote publication; keep mutation records private. */
 export const prepareSyncDeviceTransition = Effect.fn("Library.sync.prepareDeviceTransition")(
   function* (options: {
-    readonly current: LibraryState | undefined;
+    readonly current: Library.Snapshot;
     readonly aligned: LibraryState;
     readonly baseline?: LibraryState;
     readonly manifest: LibraryManifest;
@@ -106,7 +109,9 @@ export const prepareSyncDeviceTransition = Effect.fn("Library.sync.prepareDevice
   }) {
     const store = yield* LibraryStore;
     const home = store.home;
-    const { current, aligned } = options;
+    const snapshot = structuredClone(options.current);
+    const aligned = structuredClone(options.aligned);
+    const current = snapshot._tag === "Present" ? snapshot.state : undefined;
     // An absent Library has no local copies to protect. A pull may accept remote Bindings
     // without a selected Version, which planning an empty device would otherwise reject.
     const plan =
@@ -120,7 +125,7 @@ export const prepareSyncDeviceTransition = Effect.fn("Library.sync.prepareDevice
             options.deferDeviceConflicts ?? false,
           );
     if (plan?.conflicts.length) return { _tag: "Conflicted" as const, conflicts: plan.conflicts };
-    const baseline = current ?? options.baseline ?? aligned;
+    const baseline = current ?? structuredClone(options.baseline ?? aligned);
     return {
       _tag: "Ready" as const,
       issues: plan?.issues ?? [],
@@ -132,10 +137,13 @@ export const prepareSyncDeviceTransition = Effect.fn("Library.sync.prepareDevice
         if (store.home !== home) return yield* new LibraryChanged({ path: store.statePath });
         return yield* withLibraryWriter(
           Effect.gen(function* () {
+            const library = yield* Library.Service;
+            if ((yield* library.read).revision !== snapshot.revision)
+              return yield* new LibraryChanged({ path: store.statePath });
             const uninstallResult =
               plan === undefined
                 ? { uninstalled: 0, state: baseline }
-                : yield* uninstallForSync(plan, baseline);
+                : yield* uninstallForSync(plan, snapshot);
             const blended = yield* blendRestoredState(
               { ...aligned, installed_skills: [...(plan?.projections ?? [])] },
               restored,

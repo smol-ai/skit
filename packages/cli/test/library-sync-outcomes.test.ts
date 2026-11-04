@@ -12,6 +12,7 @@ import {
   deterministicTreeHash,
   collectionVersionPath,
   libraryManifestFromLocalState,
+  emptyLibraryState,
 } from "@smolai/skit-core";
 import { LibraryChangedOnServer, RegistryUnreachable } from "../src/registry/failures.js";
 import {
@@ -856,6 +857,44 @@ it.effect("a failed snapshot download retains nothing and leaves the remote unch
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
+it.effect("a prepared transition distinguishes an absent Library from a newly empty one", () =>
+  Effect.gen(function* () {
+    const { a, fs } = yield* devices;
+    const layer = Library.layer({ home: a.home, routing: { _tag: "None" } });
+    const current = yield* Effect.flatMap(Library.Service, (library) => library.read).pipe(
+      Effect.provide(layer),
+    );
+    assert.strictEqual(current._tag, "Absent");
+    const state = emptyLibraryState();
+    const manifest = yield* libraryManifestFromLocalState(state);
+    const transition = yield* prepareSyncDeviceTransition({
+      current,
+      aligned: state,
+      manifest,
+      rootFor: undefined,
+    }).pipe(Effect.provide(libraryStoreLayer({ home: a.home })));
+    if (transition._tag !== "Ready") return yield* Effect.die("Expected a ready transition");
+    yield* fs.makeDirectory(a.home, { recursive: true });
+    const statePath = join(a.home, "state.json");
+    const bytes = JSON.stringify(state);
+    yield* fs.writeFileString(statePath, bytes);
+    const failure = yield* transition
+      .saveRestored(state, {
+        origin: "https://registry.test",
+        library_id: "library_test",
+        revision_id: "revision_test",
+        base_manifest: manifest,
+      })
+      .pipe(
+        Effect.provide(layer),
+        Effect.provide(libraryStoreLayer({ home: a.home })),
+        Effect.flip,
+      );
+    assert.strictEqual(failure._tag, "LibraryChanged");
+    assert.strictEqual(yield* fs.readFileString(statePath), bytes);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
 it.effect("a prepared device transition cannot save into another Library home", () =>
   Effect.gen(function* () {
     const { a, b } = yield* devices;
@@ -863,7 +902,9 @@ it.effect("a prepared device transition cannot save into another Library home", 
     const state = yield* a.state;
     const manifest = yield* libraryManifestFromLocalState(state);
     const transition = yield* prepareSyncDeviceTransition({
-      current: state,
+      current: yield* Effect.flatMap(Library.Service, (library) => library.read).pipe(
+        Effect.provide(Library.layer({ home: a.home, routing: { _tag: "None" } })),
+      ),
       aligned: state,
       manifest,
       rootFor: undefined,

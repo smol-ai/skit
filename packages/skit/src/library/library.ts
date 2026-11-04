@@ -62,7 +62,6 @@ import type { Digest } from "effect/crypto";
 import { InstalledSkills } from "./installed-skills.js";
 import type { InventoryRootOptions } from "./routing/roots.js";
 import { type LibraryStateReadError } from "./store/library-store.js";
-import { type LibraryState } from "./library-state.js";
 import { OperationStatus } from "./store/state-schema.js";
 import { type LibraryAuditEvent, type LibraryAuditInvalid } from "./audit/audit-log.js";
 import { type Snapshot } from "./snapshot.js";
@@ -133,8 +132,8 @@ export interface Interface {
    */
   readonly read: Effect.Effect<Snapshot, LibraryStateReadError>;
   /**
-   * Plan against the Library the front end showed, never a fresh read: apply refuses the plan if
-   * the Library has changed since.
+   * Plan against the Snapshot the front end showed, including whether the Library existed.
+   * Captures its state; apply refuses the plan if the Library has changed since.
    */
   readonly plan: {
     (
@@ -155,7 +154,7 @@ export interface Interface {
     ): Effect.Effect<UndoPlan, UndoPlanError>;
     (
       intent: Intent,
-      options: { readonly base: Snapshot | LibraryState; readonly approvals?: readonly Approval[] },
+      options: { readonly base: Snapshot; readonly approvals?: readonly Approval[] },
     ): Effect.Effect<Plan, PlanError>;
   };
   readonly apply: {

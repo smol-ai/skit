@@ -137,7 +137,7 @@ it.effect("refuses to remove a Collection that gained a member after removal was
       Effect.flip,
     );
 
-    assert.strictEqual(error._tag, "LibraryChanged");
+    assert.strictEqual(error._tag, "Library.StalePlan");
     const state = yield* load;
     assert.deepStrictEqual(state.skills.map((skill) => skill.name).sort(), ["alpha", "beta"]);
     assert.strictEqual(state.installed_skills.length, 2);

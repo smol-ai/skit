@@ -3,6 +3,8 @@ import { Library } from "../../src/library/library.js";
 import { InstalledSkills } from "../../src/library/installed-skills.js";
 import { CollectionRemovalMissing } from "../../src/library/installation/remove.js";
 import { LibraryStore } from "../../src/library/store/library-store.js";
+import { emptyLibraryState } from "../../src/library/library-state.js";
+import { snapshotOf } from "../../src/library/snapshot.js";
 import type { LibraryState, InstalledSkill } from "../../src/library/library-state.js";
 import type { ManageApproval } from "../../src/install/files.js";
 import type { OwnershipMarker } from "../../src/contracts.js";
@@ -43,7 +45,7 @@ const library = (
 const applied = (outcome: Library.Outcome, tag: Library.InstalledSkillResult["_tag"]) =>
   outcome._tag === "Applied" ? outcome.copies.filter((copy) => copy._tag === tag).length : 0;
 
-/** Remove a Collection through the Library owner, planned against `state`. */
+/** Keep the known-present, deliberately stale state supplied by removal safety tests. */
 export const removeCollection = (state: LibraryState, collectionId: string) =>
   Effect.gen(function* () {
     const id = state.collections.find((item) => item.collection_id === collectionId)?.collection_id;
@@ -51,7 +53,10 @@ export const removeCollection = (state: LibraryState, collectionId: string) =>
       return yield* new CollectionRemovalMissing({ collection_id: collectionId });
     const owner = yield* library(state);
     return yield* owner.apply(
-      yield* owner.plan({ _tag: "Remove", collectionId: id }, { base: state }),
+      yield* owner.plan(
+        { _tag: "Remove", collectionId: id },
+        { base: snapshotOf({ present: true, state }) },
+      ),
     );
   });
 
@@ -69,7 +74,8 @@ export const installEnabledSkills = (options: {
   >;
 }) =>
   Effect.gen(function* () {
-    const state = yield* (yield* LibraryStore).load;
+    const snapshot = snapshotOf(yield* (yield* LibraryStore).inspect);
+    const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
     const owner = yield* library(state, {
       add: {
         scope: options.scope ?? { kind: "global" },
@@ -98,7 +104,7 @@ export const installEnabledSkills = (options: {
       }),
     ];
     const outcome = yield* owner.apply(
-      yield* owner.plan({ _tag: "Update" }, { base: state, approvals }),
+      yield* owner.plan({ _tag: "Update" }, { base: snapshot, approvals }),
     );
     if (outcome._tag === "Incomplete") return yield* Effect.fail(outcome.cause);
     return applied(outcome, "Installed");
@@ -114,13 +120,14 @@ export const planUpdate = (options: {
   readonly approvals: readonly Library.Approval[];
 }) =>
   Effect.gen(function* () {
-    const state = yield* (yield* LibraryStore).load;
+    const snapshot = snapshotOf(yield* (yield* LibraryStore).inspect);
+    const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
     const owner = yield* library(state, {
       add: { scope: { kind: "global" }, destination: options.target, root: options.root },
     });
     const plan = yield* owner.plan(
       { _tag: "Update" },
-      { base: state, approvals: options.approvals },
+      { base: snapshot, approvals: options.approvals },
     );
     return { plan, apply: owner.apply(plan) };
   });
@@ -131,13 +138,14 @@ export const uninstallLeftovers = (options: {
   readonly variantsPath?: string;
 }) =>
   Effect.gen(function* () {
-    const state = yield* (yield* LibraryStore).load;
+    const snapshot = snapshotOf(yield* (yield* LibraryStore).inspect);
+    const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
     const owner = yield* library(state, { active: options.activeTargets });
-    const outcome = yield* owner.apply(yield* owner.plan({ _tag: "Update" }, { base: state }));
+    const outcome = yield* owner.apply(yield* owner.plan({ _tag: "Update" }, { base: snapshot }));
     return applied(outcome, "Uninstalled");
   });
 
-/** Uninstall recorded copies, planned against `state`. */
+/** Keep the known-present, deliberately stale state supplied by backup safety tests. */
 export const uninstallCopies = (state: LibraryState, copies: readonly InstalledSkill[]) =>
   Effect.gen(function* () {
     const owner = yield* library(state);
@@ -148,7 +156,7 @@ export const uninstallCopies = (state: LibraryState, copies: readonly InstalledS
           copies: copies.map((copy) => copy.installed_skill_id),
           drop: [],
         },
-        { base: state },
+        { base: snapshotOf({ present: true, state }) },
       ),
     );
   });

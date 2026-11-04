@@ -631,7 +631,7 @@ it.effect(
                   ],
                 },
                 {
-                  base: read.state,
+                  base: read,
                   approvals: [{ _tag: "Manage", manage: { path: copy, currentHash } }],
                 },
               ),
@@ -657,7 +657,7 @@ it.effect(
           );
           const read = yield* library.read;
           if (read._tag !== "Present") return yield* Effect.die("no Library");
-          yield* library.apply(yield* library.plan({ _tag: "Update" }, { base: read.state }));
+          yield* library.apply(yield* library.plan({ _tag: "Update" }, { base: read }));
         }),
       );
 

@@ -37,7 +37,7 @@ it.effect(
                 { _tag: "Enable", subject: { _tag: "Skill", id }, where: [{ kind: "global" }] },
               ],
             },
-            { base: snapshot.state },
+            { base: snapshot },
           ),
         );
         assert.strictEqual(refused._tag, "Failure");
@@ -59,7 +59,7 @@ it.effect(
               },
             ],
           },
-          { base: snapshot.state },
+          { base: snapshot },
         );
         assert.strictEqual((yield* library.apply(plan))._tag, "Applied");
         assert.isTrue(yield* fs.exists(join(skills, "review", "SKILL.md")));
@@ -91,7 +91,7 @@ it.effect(
               },
             ],
           },
-          { base: snapshot.state },
+          { base: snapshot },
         );
         assert.strictEqual((yield* library.apply(plan))._tag, "Applied");
         assert.isFalse(yield* fs.exists(join(skills, "review")));

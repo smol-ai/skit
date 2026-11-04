@@ -44,7 +44,7 @@ import { InstalledSkills } from "../installed-skills.js";
 import { libraryStoreLayer } from "../library-store-layer.js";
 import { treeHasherLayer } from "../../artifact/tree-hasher.js";
 import { LibraryStore, withLibraryWriter } from "../store/library-store.js";
-import { emptyLibraryState, type LibraryState } from "../library-state.js";
+import { emptyLibraryState } from "../library-state.js";
 import { InvalidLibraryState } from "../../failures.js";
 import { type StepRouting, OperationStatus } from "../store/state-schema.js";
 import { readLibraryAudit } from "../audit/audit-log.js";
@@ -122,24 +122,30 @@ export const makeWithRouting = Effect.fn("Library.make")(function* (configuratio
   ): Effect.Effect<UndoPlan, UndoPlanError>;
   function planFor(
     intent: Intent,
-    options: { readonly base: Snapshot | LibraryState; readonly approvals?: readonly Approval[] },
+    options: { readonly base: Snapshot; readonly approvals?: readonly Approval[] },
   ): Effect.Effect<Plan, PlanError>;
   function planFor(
     intent: ManageIntent | AcceptFindingIntent | RefreshInventoryIntent | UndoIntent | Intent,
-    options: { readonly base: Snapshot | LibraryState; readonly approvals?: readonly Approval[] },
+    options: { readonly base: Snapshot; readonly approvals?: readonly Approval[] },
   ): Effect.Effect<
     ManagePlan | AcceptFindingPlan | RefreshInventoryPlan | UndoPlan | Plan,
     ManagePlanError | AcceptFindingPlanError | RefreshInventoryPlanError | UndoPlanError | PlanError
   > {
+    const snapshot = structuredClone(options.base);
+    if (snapshot._tag !== "Present" && snapshot._tag !== "Absent")
+      return Effect.fail(
+        new StalePlan({ message: "Planning requires the displayed Library snapshot" }),
+      );
+    const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
+    if (
+      snapshot.revision !==
+      snapshotOf(snapshot._tag === "Present" ? { present: true, state } : { present: false })
+        .revision
+    )
+      return Effect.fail(new StalePlan({ message: "The displayed Library snapshot was changed" }));
     if (intent._tag === "Manage") {
-      if (!("revision" in options.base))
-        return Effect.fail(
-          new StalePlan({ message: "Manage requires the displayed Library snapshot" }),
-        );
-      const base = options.base;
       return Effect.gen(function* () {
         const checked = yield* checkedManageIntent(intent);
-        const state = base._tag === "Present" ? base.state : emptyLibraryState();
         const installs = checked.selections.some(
           (selection) =>
             Option.getOrUndefined(selection.duplicates) !== "retain-only" &&
@@ -165,7 +171,7 @@ export const makeWithRouting = Effect.fn("Library.make")(function* (configuratio
             };
           }
         }
-        return yield* planManaging(checked, { base, routing });
+        return yield* planManaging(checked, { base: snapshot, routing });
       }).pipe(
         Effect.provideService(LibraryStore, store),
         Effect.provideService(InstalledSkills.Service, files),
@@ -173,56 +179,28 @@ export const makeWithRouting = Effect.fn("Library.make")(function* (configuratio
       );
     }
     if (intent._tag === "AcceptFinding") {
-      if (!("revision" in options.base))
-        return Effect.fail(
-          new StalePlan({ message: "Acceptance requires the displayed Library snapshot" }),
-        );
-      return planAcceptance(intent, { base: options.base }).pipe(
+      return planAcceptance(intent, { base: snapshot }).pipe(
         Effect.provideService(LibraryStore, store),
         Effect.provideService(InstalledSkills.Service, files),
         Effect.provide(importing),
       );
     }
     if (intent._tag === "RefreshInventory") {
-      if (!("revision" in options.base))
-        return Effect.fail(
-          new StalePlan({ message: "Inventory requires the displayed Library snapshot" }),
-        );
-      return planInventory(intent, { base: options.base }).pipe(
+      return planInventory(intent, { base: snapshot }).pipe(
         Effect.provideService(LibraryStore, store),
         Effect.provideService(InstalledSkills.Service, files),
         Effect.provide(importing),
       );
     }
     if (intent._tag === "Undo") {
-      if (!("revision" in options.base))
-        return Effect.fail(
-          new StalePlan({ message: "Undo requires the displayed Library snapshot" }),
-        );
-      return planUndo(intent, { base: options.base }).pipe(
+      return planUndo(intent, { base: snapshot }).pipe(
         Effect.provideService(LibraryStore, store),
         Effect.provide(writer),
         Effect.provide(importing),
       );
     }
-    const snapshot = "revision" in options.base ? options.base : undefined;
-    const state =
-      "revision" in options.base
-        ? options.base._tag === "Present"
-          ? options.base.state
-          : emptyLibraryState()
-        : options.base;
-    if (
-      snapshot !== undefined &&
-      snapshot.revision !==
-        snapshotOf(snapshot._tag === "Present" ? { present: true, state } : { present: false })
-          .revision
-    )
-      return Effect.fail(new StalePlan({ message: "The displayed Library snapshot was changed" }));
     return planIntent(intent, { base: state, approvals: options.approvals }).pipe(
-      Effect.map((plan) =>
-        snapshot === undefined ? plan : { ...plan, baseRevision: snapshot.revision },
-      ),
+      Effect.map((plan) => ({ ...plan, baseRevision: snapshot.revision })),
       Effect.provideService(LibraryStore, store),
       Effect.provideService(InstalledSkills.Service, files),
     );

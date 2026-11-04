@@ -207,7 +207,10 @@ export const devices = Effect.gen(function* () {
                 ),
               );
               return yield* library.apply(
-                yield* library.plan({ _tag: "Remove", collectionId: id }, { base: state }),
+                yield* library.plan(
+                  { _tag: "Remove", collectionId: id },
+                  { base: yield* library.read },
+                ),
               );
             }),
           ),

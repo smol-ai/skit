@@ -359,6 +359,42 @@ it.effect("aborts the batch on typed shared state failures", () =>
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
+it.effect("a stale installed-copy plan aborts before fetching the next Source", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "after"));
+    const statePath = join(f.home, "state.json");
+    const library = yield* f.run(Effect.service(Library.Service));
+    let changed: string | undefined;
+    const failure = yield* Effect.flip(
+      f.run(
+        updateSubjects(f.options).pipe(
+          Effect.provide(
+            rendererTestLayer({
+              withStatus: (status, operation) =>
+                typeof status !== "string" && status.pending.endsWith("Updating installed skills")
+                  ? Effect.gen(function* () {
+                      const current = yield* library.read;
+                      if (current._tag !== "Present")
+                        return yield* Effect.die("Expected a Library");
+                      changed = JSON.stringify({
+                        ...current.state,
+                        repositories: [{ root: join(f.root, "later-project"), enabled: [] }],
+                      });
+                      yield* f.fs.writeFileString(statePath, changed);
+                    }).pipe(Effect.orDie, Effect.andThen(operation))
+                  : operation,
+            }),
+          ),
+        ),
+      ),
+    );
+    assert.strictEqual(failure._tag, "Library.StalePlan");
+    assert.deepStrictEqual(f.requests, [f.urls[0]]);
+    assert.strictEqual(yield* f.fs.readFileString(statePath), changed);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
 it.effect("stops on corruption of an existing retained object", () =>
   Effect.gen(function* () {
     const f = yield* fixture;

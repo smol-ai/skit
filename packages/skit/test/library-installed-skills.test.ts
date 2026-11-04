@@ -1091,7 +1091,7 @@ it.effect("a backup is never settled against a state the Library has moved on fr
       home,
       uninstallCopies(loaded, [installedSkill]).pipe(Effect.provide(storeLayer), Effect.flip),
     );
-    assert.strictEqual(failed._tag, "LibraryChanged");
+    assert.strictEqual(failed._tag, "Library.StalePlan");
     assert.deepStrictEqual(
       (yield* backupsBeside(targetRoot)).map((backup) => backup.disposition),
       ["pending"],

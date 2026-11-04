@@ -1,9 +1,16 @@
 import { assert, it } from "@effect/vitest";
+import { expectTypeOf } from "vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { Library } from "../src/library/library.js";
 import { emptyLibraryState } from "../src/library/library-state.js";
 import { skitLayer } from "../src/platform/layer.js";
+
+it("requires a Snapshot at the public planning type boundary", () => {
+  expectTypeOf<
+    Parameters<Library.Interface["plan"]>[1]["base"]
+  >().toEqualTypeOf<Library.Snapshot>();
+});
 
 for (const initiallyPresent of [false, true])
   it.effect(
@@ -87,6 +94,45 @@ it.effect("planning refuses a changed Snapshot revision without writing the Libr
             _tag: "Configured",
             home,
             configHome: join(home, "config"),
+            overrides: { codex: [join(home, "skills")] },
+          },
+        }),
+      ),
+    );
+  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+);
+
+it.effect("all planning validates captured state, and a delayed plan owns its Snapshot", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-snapshot-capture-" });
+    const statePath = join(home, "state.json");
+    yield* fs.writeFileString(statePath, JSON.stringify(emptyLibraryState()));
+    const bytes = yield* fs.readFileString(statePath);
+    yield* Effect.gen(function* () {
+      const library = yield* Library.Service;
+      const snapshot = yield* library.read;
+      if (snapshot._tag !== "Present") return yield* Effect.die("Expected a present Library");
+      const planning = library.plan({ _tag: "Update" }, { base: snapshot });
+      snapshot.state.repositories.push({ root: join(home, "later-project"), enabled: [] });
+      const updateError = yield* Effect.flip(library.plan({ _tag: "Update" }, { base: snapshot }));
+      const inventoryError = yield* Effect.flip(
+        library.plan({ _tag: "RefreshInventory", roots: [] }, { base: snapshot }),
+      );
+      assert.strictEqual(updateError._tag, "Library.StalePlan");
+      assert.strictEqual(inventoryError._tag, "Library.StalePlan");
+      const captured = yield* planning;
+      assert.strictEqual(captured.baseRevision, snapshot.revision);
+      assert.strictEqual((yield* library.apply(captured))._tag, "Applied");
+      assert.strictEqual(yield* fs.readFileString(statePath), bytes);
+    }).pipe(
+      Effect.provide(
+        Library.layer({
+          home,
+          routing: {
+            _tag: "Configured",
+            home,
+            configHome: home,
             overrides: { codex: [join(home, "skills")] },
           },
         }),

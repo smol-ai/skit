@@ -164,6 +164,7 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <
               Predicate.isTagged(error, "InvalidLibraryState") ||
               Predicate.isTagged(error, "LibraryBusy") ||
               Predicate.isTagged(error, "LibraryChanged") ||
+              Predicate.isTagged(error, "Library.StalePlan") ||
               Predicate.isTagged(error, "ContentAddressCollision") ||
               Predicate.isTagged(error, "MachineSettingsUnusable")
             )
