@@ -1,4 +1,4 @@
-import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
+import { skitConfigurationLayer } from "@smolai/skit-core";
 import { terminalLibraryProgressLayer } from "../../presentation/library-progress.js";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";

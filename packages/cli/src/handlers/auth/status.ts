@@ -1,7 +1,4 @@
-import {
-  SkitConfiguration,
-  skitConfigurationLayer,
-} from "../../configuration/skit-configuration.js";
+import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
 import { Option, Effect } from "effect";
 import { Command } from "effect/cli";
 import { handlePlatformCommand } from "../../application.js";

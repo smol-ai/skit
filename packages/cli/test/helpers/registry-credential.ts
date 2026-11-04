@@ -1,5 +1,5 @@
 import { ConfigProvider, Layer } from "effect";
-import { skitConfigurationLayer } from "../../src/configuration/skit-configuration.js";
+import { skitConfigurationLayer } from "@smolai/skit-core";
 
 /**
  * The SKIT configuration of a shell whose environment holds a token for `origin` only, as

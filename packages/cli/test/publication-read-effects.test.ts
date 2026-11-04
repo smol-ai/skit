@@ -1,5 +1,5 @@
 import { ChildProcessSpawner } from "effect/process";
-import { SkitConfiguration } from "../src/configuration/skit-configuration.js";
+import { SkitConfiguration } from "@smolai/skit-core";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { Cause, Config, Deferred, Effect, Fiber, FileSystem, Layer } from "effect";
 import { it } from "@effect/vitest";

@@ -3,7 +3,7 @@ import { registryHttpLayer } from "./registry/registry-http.js";
 import { registryAuthLayer } from "./registry/auth-service.js";
 import { skitLayer } from "@smolai/skit-core";
 import { libraryApplicationLayer } from "./library-application/layers.js";
-import { skitConfigurationLayer, SkitConfiguration } from "./configuration/skit-configuration.js";
+import { skitConfigurationLayer, SkitConfiguration } from "@smolai/skit-core";
 import { commandFailure } from "./failure-classification.js";
 import { Renderer, consoleRendererLayer } from "./presentation/renderer.js";
 import { AuthorWorkspace } from "./author/workspace.js";

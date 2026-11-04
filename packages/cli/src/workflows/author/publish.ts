@@ -53,7 +53,7 @@ import {
   RegistryRejectedWrite,
   type RegistryOriginInvalid,
 } from "../../registry/failures.js";
-import type { SkitConfiguration } from "../../configuration/skit-configuration.js";
+import type { SkitConfiguration } from "@smolai/skit-core";
 import {
   AuthenticationRequired,
   CredentialLacksScope,

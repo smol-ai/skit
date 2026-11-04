@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { configurationForHome, SkitConfiguration } from "./configuration/skit-configuration.js";
+import { configurationForHome, SkitConfiguration } from "@smolai/skit-core";
 import { withHomeLock } from "@smolai/skit-core";
 
 /** Serialize root configuration writes with other writers without loading Library state or

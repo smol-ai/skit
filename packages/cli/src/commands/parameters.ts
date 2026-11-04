@@ -1,7 +1,7 @@
 import { Option, Record } from "effect";
 import { CliConfig, Flag, GlobalFlag } from "effect/cli";
 import type { HarnessName } from "@smolai/skit-core";
-import type { ResolvedSkitConfiguration } from "../configuration/skit-configuration.js";
+import type { ResolvedSkitConfiguration } from "@smolai/skit-core";
 import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 
 /**

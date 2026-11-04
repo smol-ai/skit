@@ -1,4 +1,4 @@
-import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
+import { skitConfigurationLayer } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
 import { LibraryStore } from "@smolai/skit-core";

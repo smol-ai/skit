@@ -186,3 +186,11 @@ export {
 export { readSkillPathDetails } from "./library/internal/setup/journal.js";
 
 export { OptionCombinationInvalid } from "./shared/input-failures.js";
+
+export {
+  SkitConfiguration,
+  resolveSkitConfiguration,
+  configurationForHome,
+  skitConfigurationLayer,
+  type ResolvedSkitConfiguration,
+} from "./platform/configuration.js";

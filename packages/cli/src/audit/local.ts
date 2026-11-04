@@ -5,7 +5,7 @@ import {
   configurationForHome,
   resolveSkitConfiguration,
   type ResolvedSkitConfiguration,
-} from "../configuration/skit-configuration.js";
+} from "@smolai/skit-core";
 import { dirname, join, resolve } from "node:path";
 import {
   LibraryStore,

@@ -1,4 +1,4 @@
-import { configurationForHome } from "../configuration/skit-configuration.js";
+import { configurationForHome } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { libraryInstallationConfiguration } from "../library/installation-configuration.js";
 import { detectInstalledHarnesses } from "../harness/catalog.js";

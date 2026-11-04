@@ -2,7 +2,7 @@ import { Cause, Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
 import { LibraryStore } from "@smolai/skit-core";
 import { handleLibraryCommand, commandFailure } from "../../application.js";
-import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
+import { skitConfigurationLayer } from "@smolai/skit-core";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { recoveryActions } from "../../commands/recovery-contract.js";

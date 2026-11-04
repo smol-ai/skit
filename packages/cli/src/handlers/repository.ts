@@ -1,4 +1,4 @@
-import { SkitConfiguration, skitConfigurationLayer } from "../configuration/skit-configuration.js";
+import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
 import { Option, Effect } from "effect";
 import { Argument, Command } from "effect/cli";
 import { resolve } from "node:path";

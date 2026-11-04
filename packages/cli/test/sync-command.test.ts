@@ -9,7 +9,7 @@ import { authorSyncCommand } from "../src/handlers/author/sync.js";
 import { librarySyncCommand } from "../src/handlers/library/sync.js";
 import { CredentialsUnusable } from "../src/registry/failures.js";
 import { RegistryHttp, registryClient, registryHttpLayer } from "../src/registry/registry-http.js";
-import { skitConfigurationLayer } from "../src/configuration/skit-configuration.js";
+import { skitConfigurationLayer } from "@smolai/skit-core";
 import { testHttpClientLayer } from "./helpers/http-test-client.js";
 import { scratch } from "./helpers/library-home.js";
 import { rendererTestLayer } from "./helpers/renderer.js";

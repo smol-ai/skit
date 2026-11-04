@@ -1,7 +1,4 @@
-import {
-  SkitConfiguration,
-  skitConfigurationLayer,
-} from "../../configuration/skit-configuration.js";
+import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
 import {
   AuthoringAuthenticatedApi,
   InsufficientScopeResponse,

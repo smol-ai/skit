@@ -1,4 +1,4 @@
-import { configurationForHome, SkitConfiguration } from "../configuration/skit-configuration.js";
+import { configurationForHome, SkitConfiguration } from "@smolai/skit-core";
 import {
   Clock,
   Config,

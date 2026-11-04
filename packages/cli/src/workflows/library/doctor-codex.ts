@@ -1,4 +1,4 @@
-import { configurationForHome } from "../../configuration/skit-configuration.js";
+import { configurationForHome } from "@smolai/skit-core";
 import {
   SkillAlias,
   type DuplicateCopy,

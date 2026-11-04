@@ -5,7 +5,7 @@ import {
   resolveSkitConfiguration,
   skitConfigurationLayer,
   SkitConfiguration,
-} from "../src/configuration/skit-configuration.js";
+} from "@smolai/skit-core";
 import { assert, it } from "@effect/vitest";
 import { ConfigProvider, Deferred, Effect, Fiber, FileSystem, Layer } from "effect";
 import { join, resolve } from "node:path";

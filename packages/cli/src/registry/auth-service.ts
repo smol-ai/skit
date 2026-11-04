@@ -1,4 +1,4 @@
-import { SkitConfiguration, configurationForHome } from "../configuration/skit-configuration.js";
+import { SkitConfiguration, configurationForHome } from "@smolai/skit-core";
 import { Context, Effect, Layer, Result } from "effect";
 import type { FileSystem } from "effect/FileSystem";
 import { ChildProcessSpawner } from "effect/process";

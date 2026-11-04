@@ -26,7 +26,7 @@ import {
 } from "../src/workflows/library/doctor-harnesses.js";
 import { NativeLibraryFixture, nativeLibraryLayer } from "./helpers/native-library.js";
 
-import { skitConfigurationLayer } from "../src/configuration/skit-configuration.js";
+import { skitConfigurationLayer } from "@smolai/skit-core";
 import { captureDisk } from "./helpers/disk-snapshot.js";
 
 it.effect.each([false, true])(

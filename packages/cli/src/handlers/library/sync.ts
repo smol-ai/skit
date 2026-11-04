@@ -1,4 +1,4 @@
-import { skitConfigurationLayer } from "../../configuration/skit-configuration.js";
+import { skitConfigurationLayer } from "@smolai/skit-core";
 import { RegistryAuth } from "../../registry/auth-service.js";
 import { Option, Effect, Result } from "effect";
 import { Command, Flag } from "effect/cli";
