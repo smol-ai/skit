@@ -1,6 +1,6 @@
 import { Cause, Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
-import { LibraryStore } from "@smolai/skit-core";
+import { SkitConfiguration } from "@smolai/skit-core";
 import { handleLibraryCommand, commandFailure } from "../../application.js";
 import { skitConfigurationLayer } from "@smolai/skit-core";
 import { CommandMetadata } from "../../commands/metadata.js";
@@ -25,8 +25,8 @@ const apply = optionalString(
 const list = Command.make("list", flags, (input) =>
   handleLibraryCommand(
     Effect.gen(function* () {
-      const store = yield* LibraryStore;
-      const home = store.home;
+      const configuration = yield* SkitConfiguration;
+      const home = configuration.skitHome;
       const operations = yield* listRecoveryOperations(home);
       const renderer = yield* Renderer;
       yield* renderer.result(
@@ -56,8 +56,8 @@ const list = Command.make("list", flags, (input) =>
 const inspect = Command.make("inspect", { operation, ...flags }, (input) =>
   handleLibraryCommand(
     Effect.gen(function* () {
-      const store = yield* LibraryStore;
-      const home = store.home;
+      const configuration = yield* SkitConfiguration;
+      const home = configuration.skitHome;
       const inspection = yield* inspectRecoveryOperation(home, input.operation);
       const renderer = yield* Renderer;
       yield* renderer.result(
@@ -84,8 +84,8 @@ const inspect = Command.make("inspect", { operation, ...flags }, (input) =>
 const restore = Command.make("restore", { operation, apply, ...flags }, (input) =>
   handleLibraryCommand(
     Effect.gen(function* () {
-      const store = yield* LibraryStore;
-      const home = store.home;
+      const configuration = yield* SkitConfiguration;
+      const home = configuration.skitHome;
       const renderer = yield* Renderer;
       const plan = yield* prepareRecoveryRestore(home, input.operation);
       const approved = Option.getOrUndefined(input.apply);

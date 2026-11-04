@@ -77,7 +77,7 @@ export const debt = {
   // The home lock is withHomeLock until the home-lock function exists (D3; A6).
   "packages/cli/src/author/history.ts": ["withHomeLock"],
   "packages/cli/src/configuration-writer.ts": ["withHomeLock"],
-  "packages/cli/src/handlers/library/recovery.ts": ["LibraryStore", "prepareRecoveryRestore"],
+  "packages/cli/src/handlers/library/recovery.ts": ["prepareRecoveryRestore"],
   "packages/cli/src/library-application/layers.ts": ["libraryStoreLayer"],
   "packages/cli/src/storybook/journey-stories.ts": ["LibraryStore", "libraryStoreLayer"],
   "packages/cli/src/storybook/sync-journey.ts": ["libraryStoreLayer"],
