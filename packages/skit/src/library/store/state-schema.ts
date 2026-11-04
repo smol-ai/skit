@@ -24,7 +24,6 @@ import {
   InvocationPolicies,
   Repository,
 } from "../device-state.js";
-import { FileIdentityNumber } from "../../platform/link-stat.js";
 import { Hash, HarnessName, InstallDestination, InstallScope } from "../../vocabulary.js";
 
 // Decoded state is readonly except where the transaction API revises a candidate in place.
@@ -118,8 +117,8 @@ export const LibraryDeviceStateFields = {
 /** A file's identity: exact device and inode, saved as decimal text. */
 export const FileIdentity = Schema.Struct({
   path: Schema.String,
-  dev: FileIdentityNumber,
-  ino: FileIdentityNumber,
+  dev: Schema.BigIntFromString,
+  ino: Schema.BigIntFromString,
 });
 export type FileIdentity = typeof FileIdentity.Type;
 
