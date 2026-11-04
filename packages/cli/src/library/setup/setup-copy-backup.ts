@@ -1,7 +1,7 @@
 import { join, resolve } from "node:path";
 import { Effect, FileSystem, Schema } from "effect";
 import { deterministicTreeHash, LinkStat } from "@smolai/skit-core";
-import type { DuplicateCopy } from "../../install/duplicates.js";
+import type { DuplicateCopy } from "@smolai/skit-core/library/routing";
 import { checkSetupGlobalContent } from "@smolai/skit-core";
 import { PlanIsStale } from "../failures.js";
 import { SetupApprovedCopy } from "./setup-decisions.js";

@@ -10,12 +10,12 @@ import {
   type LibraryState,
   type SkitFailure,
 } from "@smolai/skit-core";
-import { readableSkillsDirectories } from "../../install/duplicates.js";
+import { readableSkillsDirectories } from "@smolai/skit-core/library/routing";
 import {
   activeInstallDestinations,
   skillsDirectoryFor,
   type InventoryRootOptions,
-} from "../../install/roots.js";
+} from "@smolai/skit-core/library/routing";
 import { Library } from "@smolai/skit-core/library";
 import type { ManageOptions } from "../../workflows/library/manage-existing.js";
 import { revalidateSetupPlan, saveSetupMachineConfig, type SetupOptions } from "./setup.js";

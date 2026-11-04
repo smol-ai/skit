@@ -22,7 +22,7 @@ import { terminalSyncProgress } from "../../presentation/sync-progress.js";
 import { renderLibrarySyncPlan } from "../../presentation/library-sync.js";
 import { terminalData } from "../../presentation/terminal-text.js";
 import { OptionCombinationInvalid } from "../../workflows/failures.js";
-import type { InventoryRootOptions } from "../../install/roots.js";
+import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 
 export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthError>(options: {
   readonly authState: Result.Result<ResolvedAuth, AuthError>;

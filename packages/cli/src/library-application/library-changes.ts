@@ -1,6 +1,5 @@
 import { Effect } from "effect";
 import { Library, InstalledSkills, type LibraryState } from "@smolai/skit-core";
-import { make as makeInstalledSkills } from "../install/installed-skills.js";
 import { resolveLibrarySubject } from "@smolai/skit-core";
 import {
   expandSetEnabledIntent,
@@ -83,7 +82,7 @@ export function libraryChangeSelection(
       configHome: configuration.configHome,
       overrides: structuredClone(configuration.overrides),
     };
-    const installation = yield* makeInstalledSkills(routing);
+    const installation = yield* InstalledSkills.make(routing);
     const library = yield* Library.make.pipe(
       Effect.provideService(InstalledSkills.Service, installation),
     );
@@ -124,7 +123,7 @@ export const applyLibraryChange = Effect.fn("LibrarySelection.apply")(function* 
   Library.ApplyError | SetEnabledIncomplete,
   SelectionRequirements
 > {
-  const installation = yield* makeInstalledSkills(owner.configuration);
+  const installation = yield* InstalledSkills.make(owner.configuration);
   const library = yield* Library.make.pipe(
     Effect.provideService(InstalledSkills.Service, installation),
   );

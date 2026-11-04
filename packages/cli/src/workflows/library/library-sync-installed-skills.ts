@@ -26,7 +26,7 @@ import {
   type Enabled,
 } from "@smolai/skit-core";
 import { SyncConflictDetail } from "./library-sync-contract.js";
-import { existingRepositorySkillsDirectory } from "../../install/roots.js";
+import { existingRepositorySkillsDirectory } from "@smolai/skit-core/library/routing";
 
 const targets = ["agents", "claude"] as const;
 const Candidate = Schema.Struct({

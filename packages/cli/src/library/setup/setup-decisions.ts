@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { Hash, hashParts } from "@smolai/skit-core";
-import type { DuplicateCopy } from "../../install/duplicates.js";
+import type { DuplicateCopy } from "@smolai/skit-core/library/routing";
 import type {
   SetupResult,
   SetupSkillInstance,

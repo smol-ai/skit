@@ -6,7 +6,7 @@ import {
   applySetEnabledPlan,
   type SetEnabledRequest,
 } from "../../src/library-application/set-enabled.js";
-import type { InventoryRootOptions } from "../../src/install/roots.js";
+import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 
 interface SetEnabledOptions {
   readonly query: string;

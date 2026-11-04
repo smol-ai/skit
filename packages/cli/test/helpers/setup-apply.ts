@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import type { InventoryRootOptions } from "../../src/install/roots.js";
+import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { applySetupPlan } from "../../src/library/setup/setup-apply.js";
 import type { SetupOptions } from "../../src/library/setup/setup.js";
 import type {

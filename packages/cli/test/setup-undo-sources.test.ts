@@ -19,7 +19,7 @@ import {
   sourceImports,
   skitLayer,
 } from "@smolai/skit-core";
-import { skillsDirectoryFor } from "../src/install/roots.js";
+import { skillsDirectoryFor } from "@smolai/skit-core/library/routing";
 import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply-command.js";
 import { prepareSetupUndo } from "../src/library/setup/setup-undo.js";
 import { setupSourceChoiceId } from "../src/library/setup/setup-decisions.js";

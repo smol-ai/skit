@@ -4,8 +4,8 @@ import {
   type DuplicateCopy,
   scanSkillsDirectory,
   readableSkillsDirectories,
-} from "../../install/duplicates.js";
-import type { InventoryRootOptions } from "../../install/roots.js";
+} from "@smolai/skit-core/library/routing";
+import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { Effect, FileSystem, Schema } from "effect";

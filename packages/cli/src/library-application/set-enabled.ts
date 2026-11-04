@@ -6,7 +6,7 @@ import {
   type LibraryState,
 } from "@smolai/skit-core";
 import { Effect, Schema } from "effect";
-import type { InventoryRootOptions } from "../install/roots.js";
+import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import {
   libraryChangeSelection,
   applyLibraryChange,

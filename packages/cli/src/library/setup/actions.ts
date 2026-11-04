@@ -9,7 +9,7 @@ import {
 } from "./setup-contract.js";
 import { SetupDuplicateAction, type SetupExplicitSelection } from "./setup-decisions.js";
 import type { SetupReview, SetupReviewSummary } from "./setup-review.js";
-import type { InventoryRootOptions } from "../../install/roots.js";
+import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { CommandAction } from "../../commands/command-actions.js";
 
 const Choice = Schema.Struct({

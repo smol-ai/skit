@@ -3,7 +3,7 @@ import {
   installDestinationsFor,
   skillsDirectoryFor,
   type InventoryRootOptions,
-} from "../install/roots.js";
+} from "@smolai/skit-core/library/routing";
 
 export interface LibraryInstallationConfiguration {
   /** A target's global root, or undefined when the target is inactive on this device. */

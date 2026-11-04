@@ -3,8 +3,8 @@ import {
   scanSkillsDirectory,
   readableSkillsDirectories,
   type DuplicateScanError,
-} from "../../install/duplicates.js";
-import type { InventoryRootOptions } from "../../install/roots.js";
+} from "@smolai/skit-core/library/routing";
+import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { Data, Effect, FileSystem, Option, Record, Schema, Stream } from "effect";
 import { dirname, join, resolve } from "node:path";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";

@@ -1,13 +1,9 @@
 import { resolve } from "node:path";
 import { Effect } from "effect";
-import {
-  HarnessName,
-  findDuplicates as findDuplicatesIn,
-  harnessDrivers,
-  resolveSkillsDirectory,
-  type DuplicateScanError,
-  type InstallScope,
-} from "@smolai/skit-core";
+import { HarnessName, type InstallScope } from "../../vocabulary.js";
+import { findDuplicates as findDuplicatesIn, type DuplicateScanError } from "../duplicates.js";
+import { harnessDrivers } from "../../harnesses/drivers.js";
+import { resolveSkillsDirectory } from "../../harnesses/catalog.js";
 import {
   activeInstallDestinations,
   skillsDirectoryFor,
@@ -17,12 +13,12 @@ import {
 export {
   DuplicateCopy,
   DuplicateScanError,
-  DuplicateScanIncomplete,
   SkillAlias,
   isEntryLink,
   readSkillSymlink,
   scanSkillsDirectory,
-} from "@smolai/skit-core";
+} from "../duplicates.js";
+export { DuplicateScanIncomplete } from "../installed-skill-facts.js";
 
 /** Each Harness's readable skills directories for a scope; a global override stands in for its own. */
 export function readableSkillsDirectories(
@@ -71,5 +67,3 @@ export const findDuplicates = Effect.fn("Install.findDuplicatesConfigured")(func
     errors,
   );
 });
-
-export { InstalledSkillWouldReplaceLink, InstalledSkillWouldDuplicate } from "@smolai/skit-core";

@@ -2,12 +2,12 @@ import { join } from "node:path";
 import { withConfigurationWriter } from "../../configuration-writer.js";
 import { Data, Effect } from "effect";
 import { canonicalJson, Hash, hashParts, libraryStateRevision } from "@smolai/skit-core";
-import { isEntryLink, findDuplicates } from "../../install/duplicates.js";
+import { isEntryLink, findDuplicates } from "@smolai/skit-core/library/routing";
 import {
   activeInstallDestinations,
   skillsDirectoryFor,
   type InventoryRootOptions,
-} from "../../install/roots.js";
+} from "@smolai/skit-core/library/routing";
 import type { SetupResult } from "./setup-contract.js";
 import { collectBrokenLinks, SetupDiscovery, suggestRepositoryRoots } from "./setup-discovery.js";
 import { scanSetupCopies } from "./setup-scan.js";

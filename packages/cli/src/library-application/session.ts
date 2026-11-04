@@ -1,4 +1,4 @@
-import { InstalledSkillWouldDuplicate } from "../install/duplicates.js";
+import { InstalledSkillWouldDuplicate } from "@smolai/skit-core/library/routing";
 import type { SkillMetadata } from "./skill-metadata.js";
 import {
   collectionVersionPath,

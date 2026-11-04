@@ -6,7 +6,7 @@ import { setupExistingSelections, setupNewSelections } from "../src/library/setu
 import { recordDuplicateSymlinks } from "../src/workflows/library/manage-existing.js";
 import { applySetupSelections } from "./helpers/setup-apply.js";
 import { copyConflict } from "../src/library/setup/setup-decisions.js";
-import type { DuplicateScanError } from "../src/install/duplicates.js";
+import type { DuplicateScanError } from "@smolai/skit-core/library/routing";
 import { codexSkillAliases } from "../src/workflows/library/doctor-codex.js";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem, Result } from "effect";
@@ -17,7 +17,7 @@ import {
   findDuplicates,
   scanSkillsDirectory,
   readableSkillsDirectories,
-} from "../src/install/duplicates.js";
+} from "@smolai/skit-core/library/routing";
 import { importSource } from "../src/library-application/import-source.js";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { runSetup, revalidateSetupPlan } from "../src/library/setup/setup.js";

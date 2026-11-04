@@ -9,8 +9,7 @@ import {
   type LibraryState,
   type SkitFailure,
 } from "@smolai/skit-core";
-import { make as makeInstalledSkills } from "../../install/installed-skills.js";
-import type { InventoryRootOptions } from "../../install/roots.js";
+import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import type {
   InstalledSkillChange,
   InstalledSkillChangeResult,
@@ -107,7 +106,7 @@ export const setupVersionAlternatives = (facts: readonly InstalledSkillChange[])
 /** The Library owner routed by setup's roots. Built where it runs, so it saves through that store. */
 const setupLibrary = Effect.fn("Setup.library")(function* (roots: InventoryRootOptions) {
   return yield* Library.make.pipe(
-    Effect.provideService(InstalledSkills.Service, yield* makeInstalledSkills(roots)),
+    Effect.provideService(InstalledSkills.Service, yield* InstalledSkills.make(roots)),
   );
 });
 

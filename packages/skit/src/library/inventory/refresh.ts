@@ -14,22 +14,9 @@ import {
 } from "../../install/files.js";
 import { keepInstalledSkillBackup, pendingInstalledSkillBackups } from "../../install/backups.js";
 import { LibraryStore } from "../store/library-store.js";
-export interface InventoryScanRoot {
-  readonly harness: HarnessName;
-  readonly root: string;
-}
-export function deduplicateInventoryRoots(
-  roots: readonly InventoryScanRoot[],
-): InventoryScanRoot[] {
-  return [
-    ...new Map(
-      roots.map(({ harness, root }) => [
-        JSON.stringify([harness, resolve(root)]),
-        { harness, root: resolve(root) },
-      ]),
-    ).values(),
-  ];
-}
+import { deduplicateInventoryRoots, type InventoryScanRoot } from "./roots.js";
+export { deduplicateInventoryRoots, type InventoryScanRoot } from "./roots.js";
+
 /** Scan into a copy of `loaded`. Saves nothing and backs nothing up. */
 export const scanInventory = Effect.fn("Library.scanInventory")(function* (
   loaded: LibraryState,

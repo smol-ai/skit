@@ -21,8 +21,8 @@ import {
   type OperationId,
 } from "@smolai/skit-core";
 import { readSkillsLock } from "../../workflows/library/skills-sh-lock-source.js";
-import { readableSkillsDirectories } from "../../install/duplicates.js";
-import type { InventoryRootOptions } from "../../install/roots.js";
+import { readableSkillsDirectories } from "@smolai/skit-core/library/routing";
+import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { readRepositoryConfig, repositoryPathExcluded } from "./setup-config.js";
 import type { SetupOptions } from "./setup.js";
 import type {

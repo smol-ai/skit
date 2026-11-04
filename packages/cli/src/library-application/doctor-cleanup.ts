@@ -12,7 +12,7 @@ import {
   skillsDirectoryFor,
   existingRepositorySkillsDirectory,
   type InventoryRootOptions,
-} from "../install/roots.js";
+} from "@smolai/skit-core/library/routing";
 import { scanLocalUsage } from "./local-usage.js";
 
 type Estimated = Extract<ListingBudget, { _tag: "Estimated" }>;

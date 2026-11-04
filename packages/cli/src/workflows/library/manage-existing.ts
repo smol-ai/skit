@@ -1,6 +1,6 @@
 import { Effect, FileSystem, Schema } from "effect";
 import { LinkStat, leavePnpmSkill } from "@smolai/skit-core";
-import type { DuplicateCopy } from "../../install/duplicates.js";
+import type { DuplicateCopy } from "@smolai/skit-core/library/routing";
 import { PlanIsStale } from "../../library/failures.js";
 import { recordSetupCopies } from "../../library/setup/setup-copy-backup.js";
 import {

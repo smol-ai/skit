@@ -6,10 +6,9 @@ import {
   type LibraryState,
 } from "@smolai/skit-core";
 import { Data, Cause, Effect, FileSystem, Predicate } from "effect";
-import type { InventoryRootOptions } from "../install/roots.js";
+import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { importSource, inspectLibrarySource } from "./import-source.js";
 import type { UpdateFailure } from "../workflows/library/update-contract.js";
-import { make as makeInstalledSkills } from "../install/installed-skills.js";
 import { LibraryProgress } from "./progress.js";
 import { latestSourceImport, type LibrarySubject } from "@smolai/skit-core";
 import { dirname, join, resolve } from "node:path";
@@ -236,7 +235,7 @@ export const updateCollection = Effect.fn("Library.updateCollection")(function* 
             const library = yield* Library.make.pipe(
               Effect.provideService(
                 InstalledSkills.Service,
-                yield* makeInstalledSkills(options.roots),
+                yield* InstalledSkills.make(options.roots),
               ),
             );
             const outcome = yield* library.apply(

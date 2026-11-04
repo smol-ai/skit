@@ -1,4 +1,4 @@
-import { DuplicateCopy } from "../../install/duplicates.js";
+import { DuplicateCopy } from "@smolai/skit-core/library/routing";
 import {
   CollectionId,
   Hash,

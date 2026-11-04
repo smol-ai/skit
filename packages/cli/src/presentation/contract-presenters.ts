@@ -254,10 +254,10 @@ function renderDoctor(data: ContractDataForId<"skit.doctor.v9">, context: Render
       `  ${color.yellow("!")} ${color.bold(finding.name)} ${color.dim(`· Codex · ${finding.instances.length} entries`)}`,
       `      ${finding.kind === "layered-name" ? "Same skill name at different scopes (layered)" : finding.kind === "duplicate-name" ? "Same skill name" : "Different skill names share this display name"} · ${finding.documents === "identical" ? "identical SKILL.md" : finding.documents === "different" ? "different SKILL.md" : "content comparison unavailable"}`,
       ...finding.instances.flatMap((instance) => {
-        const locations: readonly import("../install/duplicates.js").SkillAlias[] = instance.aliases
-          ?.length
-          ? instance.aliases
-          : [{ path: instance.path, via: "unknown-root" }];
+        const locations: readonly import("@smolai/skit-core/library/routing").SkillAlias[] =
+          instance.aliases?.length
+            ? instance.aliases
+            : [{ path: instance.path, via: "unknown-root" }];
         return locations.map(
           (alias) =>
             `      ${path(alias.path)}${alias.via === "symlink" ? ` → ${path(dirname(instance.canonicalPath))} ${color.dim(`(symlink${alias.linkPath && alias.linkPath !== alias.path ? ` at ${compactHomePath(alias.linkPath)}` : ""})`)}` : color.dim(` (${alias.via})`)} ${color.dim(`· ${instance.scope}${instance.pluginId ? ` · plugin ${instance.pluginId}` : ""} · ${instance.skitManaged ? "SKIT projection" : "not tracked by SKIT"}`)}`,

@@ -1,21 +1,17 @@
 import { resolve } from "node:path";
 import { Effect, Record } from "effect";
+import { HarnessName, type InstallDestination, type InstallScope } from "../../vocabulary.js";
+import { harnessDrivers } from "../../harnesses/drivers.js";
+import { installSkillsDirectory, resolveSkillsDirectory } from "../../harnesses/catalog.js";
 import {
-  HarnessName,
-  harnessDrivers,
-  installSkillsDirectory,
   installDestinationProfiles,
   installDestinationDirectory,
-  resolveSkillsDirectory,
-  deduplicateInventoryRoots,
-  pathIsWithin,
-  type SkillsDirectoryOverrides,
-  type InstallDestination,
-  type InstallScope,
-  type LibraryState,
-  type InventoryScanRoot,
-} from "@smolai/skit-core";
-import { detectInstalledHarnesses } from "../harness/catalog.js";
+} from "../../harnesses/install-destinations.js";
+import { deduplicateInventoryRoots, type InventoryScanRoot } from "../inventory/roots.js";
+import { pathIsWithin } from "../../platform/path-identity.js";
+import { type SkillsDirectoryOverrides } from "../../harnesses/contracts.js";
+import { type LibraryState } from "../library-state.js";
+import { detectInstalledHarnesses } from "../../harnesses/discovery.js";
 export interface InventoryRootOptions {
   readonly home: string;
   readonly configHome: string;
