@@ -1,4 +1,3 @@
-import { localLibrary } from "../../library-application/library-owner.js";
 import { Effect, Schema } from "effect";
 import { join } from "node:path";
 import {
@@ -365,7 +364,7 @@ const uninstallForSync = Effect.fn("Library.sync.uninstallForSync")(function* (
 ) {
   const store = yield* LibraryStore;
   if (plan.retire.length === 0) return { uninstalled: 0, state: current };
-  const library = yield* localLibrary;
+  const library = yield* Library.Service;
   const outcome = yield* library.apply(
     yield* library.plan(
       { _tag: "Uninstall", copies: plan.retire, drop: plan.remove },

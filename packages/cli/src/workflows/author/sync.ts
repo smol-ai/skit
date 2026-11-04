@@ -37,14 +37,13 @@ import {
   type Connecting,
   type WorkspaceId,
 } from "../../author/workspace.js";
-import { localLibrary } from "../../library-application/library-owner.js";
 import { adoptFrom, collectionsAt } from "./library-claims.js";
 import { AuthorHistory, AuthorHistoryInvalid } from "../../author/history.js";
 
 export type { AuthorVisibility } from "./sync-contract.js";
 export type { AuthorRemoteHome } from "../../author/remote.js";
 export { AuthorSyncStateInvalid } from "../../author/workspace.js";
-import { History, conflictKind, SkitContractError, Sync } from "@smolai/skit-core";
+import { Library, History, conflictKind, SkitContractError, Sync } from "@smolai/skit-core";
 import { MissingRequirement } from "../failures.js";
 import {
   DestinationExistsWithoutHistory,
@@ -238,7 +237,7 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
           const workspaceId = Option.isSome(identity)
             ? identity.value.workspaceId
             : yield* Effect.gen(function* () {
-                const snapshot = yield* (yield* localLibrary).read;
+                const snapshot = yield* (yield* Library.Service).read;
                 const adopt =
                   snapshot._tag === "Present"
                     ? adoptFrom(yield* collectionsAt(root, snapshot.state))

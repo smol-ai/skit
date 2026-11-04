@@ -1,18 +1,13 @@
 import { Library } from "@smolai/skit-core/library";
-import { localLibrary } from "../library-application/library-owner.js";
 import { Effect, FileSystem, Layer, Result, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { join } from "node:path";
 import {
-  LibraryStore,
-  readSnapshotArchive,
   deterministicTreeHash,
   libraryManifestFromLocalState,
   libraryStoreLayer,
   makeMachineId,
-  collectionVersionPath,
   skitLayer,
-  withLibraryWriter,
 } from "@smolai/skit-core";
 import {
   LibraryResponse,
@@ -34,6 +29,7 @@ export const syncJourney = (failDownload: boolean) =>
       const seedHome = join(workspace, "seed");
       const machineId = makeMachineId();
       const seeded = yield* Effect.gen(function* () {
+        const library = yield* Library.Service;
         for (const name of ["review", "testing", "docs"]) {
           const sourcePath = join(workspace, name);
           yield* fs.makeDirectory(sourcePath);
@@ -41,7 +37,7 @@ export const syncJourney = (failDownload: boolean) =>
             join(sourcePath, "SKILL.md"),
             `# ${name}\nFixture Skill for sync preview.\n`,
           );
-          yield* (yield* localLibrary).import.collection({
+          yield* library.import.collection({
             machineId,
             source: { type: "github", owner: "fixture", repository: name },
             input: sourcePath,
@@ -57,18 +53,17 @@ export const syncJourney = (failDownload: boolean) =>
             lockFileEntries: [],
           });
         }
-        const store = yield* LibraryStore;
-        const state = yield* store.load;
+        const snapshot = yield* library.read;
+        if (snapshot._tag === "Absent") return yield* Effect.die("Expected seeded Library");
+        const state = snapshot.state;
         const bound = {
           ...state,
           enabled: state.skills.map((skill) => ({ skill: skill.skill_id })),
         };
         const manifest = yield* libraryManifestFromLocalState(bound);
-        const archives = yield* Effect.forEach(state.collection_versions, (tree) =>
-          readSnapshotArchive(collectionVersionPath(store.originalsPath, tree.hash)),
-        );
+        const archives = yield* library.content.pack(snapshot);
         return { manifest, archives };
-      }).pipe(withLibraryWriter, Effect.provide(libraryStoreLayer({ home: seedHome })));
+      }).pipe(Effect.provide(Library.layer({ home: seedHome, routing: { _tag: "None" } })));
       const remote = {
         library_id: "library_story",
         revision_id: "revision_story",
@@ -121,7 +116,6 @@ export const syncJourney = (failDownload: boolean) =>
           rootFor: (target) => (target === "agents" ? join(workspace, "agents-skills") : undefined),
         },
       }).pipe(
-        withLibraryWriter,
         Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
         Effect.provide(libraryStoreLayer({ home })),
         Effect.provide(transport),

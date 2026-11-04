@@ -12,7 +12,7 @@ import {
 import { setupPrompts, setupStepTitles } from "../src/library/setup/setup-steps.js";
 import { runSetup, revalidateSetupPlan } from "@smolai/skit-core/library/setup";
 import { planSetupRemovals, setupRemovablePaths } from "@smolai/skit-core/library/setup";
-import { localLibrary } from "../src/library-application/library-owner.js";
+import { Library } from "@smolai/skit-core/library";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 const fixture = Effect.gen(function* () {
@@ -210,7 +210,7 @@ it.effect("rejects stale consent and replaced paths before moving any copy", () 
           ).toBe("SetupPlanStale");
           yield* f.fs.rename(f.copy, `${f.copy}-original`);
           yield* f.fs.makeDirectory(f.copy);
-          const library = yield* localLibrary;
+          const library = yield* Library.Service;
           const removed = yield* library.setup([{ _tag: "Remove", folders: plan.folders }], {
             base: yield* library.read,
           });

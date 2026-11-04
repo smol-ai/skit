@@ -1,10 +1,5 @@
 import { skitConfigurationLayer } from "@smolai/skit-core";
-import {
-  ImportContentInvalid,
-  initSkit,
-  validateSkitDirectory,
-  type Library,
-} from "@smolai/skit-core";
+import { ImportContentInvalid, initSkit, validateSkitDirectory, Library } from "@smolai/skit-core";
 import { Clock, Effect, FileSystem, Option, Path } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleLibraryCommand } from "../../application.js";
@@ -13,7 +8,6 @@ import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags } from "../../commands/parameters.js";
 import { result } from "../../handlers/contracts.js";
 import { Renderer } from "../../presentation/renderer.js";
-import { localLibrary } from "../../library-application/library-owner.js";
 import {
   AuthorWorkspaceAlreadyRegistered,
   AuthorWorkspaceRemovalUnfinished,
@@ -89,7 +83,7 @@ export const authorInitCommand = Effect.fn("CLI.authorInit")(function* (
   yield* fs.makeDirectory(folder, { recursive: true });
   const root = yield* workspaces.resolveRoot(folder);
   const lease = yield* workspaces.acquire(root);
-  const library = yield* localLibrary;
+  const library = yield* Library.Service;
   const identity = yield* workspaces.readIdentity(root);
   const claims = yield* checkLibraryClaims(root, yield* library.read, identity);
   const initialized = yield* initSkit(folder);

@@ -1,3 +1,4 @@
+import { Library } from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, Schema, Exit, type Layer, type Scope } from "effect";
@@ -878,7 +879,10 @@ it.effect("a prepared device transition cannot save into another Library home", 
           revision_id: "revision_test",
           base_manifest: manifest,
         })
-        .pipe(Effect.provide(libraryStoreLayer({ home: b.home }))),
+        .pipe(
+          Effect.provide(Library.layer({ home: b.home, routing: { _tag: "None" } })),
+          Effect.provide(libraryStoreLayer({ home: b.home })),
+        ),
     );
     assert.strictEqual(failure._tag, "LibraryChanged");
     yield* assertDiskUnchanged(before);
