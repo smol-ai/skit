@@ -460,7 +460,7 @@ export type SetupStopReason =
       /** The step failed after the operation was persisted (ManageError, PlatformError, write errors). */
       readonly _tag: "StepFailed";
       readonly step: number;
-      readonly error: ManageError | PlatformError | TreeError | LibraryStateWriteError;
+      readonly error: unknown; // saved with Schema.Defect: name and message only (decided 2026-11-04, step 1)
     };
 
 export type SetupResult =

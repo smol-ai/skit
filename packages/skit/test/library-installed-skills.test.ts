@@ -21,10 +21,9 @@ import { Hash } from "../src/vocabulary.js";
 import {
   LibraryStore,
   lastSavedLibraryState,
-  libraryStoreLayer,
-  type LibraryStoreLayerError,
   withLibraryWriter,
 } from "../src/library/store/library-store.js";
+import { libraryStoreLayer } from "../src/library/library-store-layer.js";
 import { withHomeLock } from "../src/library/store/writer-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { refreshLibraryInventory } from "../src/library/inventory/refresh.js";
@@ -1022,9 +1021,7 @@ for (const stale of ["observed-successor", "settle-failure"] as const)
   );
 
 /** The fixture's store, counting every publication a workflow attempts through it. */
-const countingStore = (
-  storeLayer: Layer.Layer<LibraryStore, LibraryStoreLayerError, FileSystem.FileSystem>,
-) => {
+const countingStore = (storeLayer: ReturnType<typeof libraryStoreLayer>) => {
   const counter = { saves: 0 };
   const layer = Layer.effect(
     LibraryStore,

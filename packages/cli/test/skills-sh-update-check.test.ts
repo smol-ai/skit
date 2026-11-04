@@ -146,6 +146,7 @@ it.effect("checks skills.sh status against real Git history without saving Libra
       originalsPath: home.originals,
       statePath: home.statePath,
       variantsPath: home.variantsPath,
+      startup: { finished: [], stopped: [] },
     };
     const checked = yield* checkSubjects(localState, member.skill_id).pipe(
       Effect.provideService(LibraryStore, store),

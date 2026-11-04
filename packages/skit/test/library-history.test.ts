@@ -9,9 +9,9 @@ import { importCollection } from "../src/library/import-collection.js";
 import {
   LibraryActor,
   LibraryStore,
-  libraryStoreLayer,
   withLibraryWriter,
 } from "../src/library/store/library-store.js";
+import { libraryStoreLayer } from "../src/library/library-store-layer.js";
 import { withHomeLock } from "../src/library/store/writer-lock.js";
 import type { LibraryState } from "../src/library/library-state.js";
 import { skitLayer } from "../src/platform/layer.js";

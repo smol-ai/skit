@@ -19,6 +19,7 @@ export const owners = [
     private: [
       "LibraryStore",
       "libraryStoreLayer",
+      "makeLibraryStore",
       "withLibraryWriter",
       "withHomeLock",
       "lastSavedLibraryState",

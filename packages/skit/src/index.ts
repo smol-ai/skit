@@ -63,6 +63,7 @@ export {
 } from "./artifact/plain-author-ignore.js";
 
 export * from "./library/store/library-store.js";
+export { libraryStoreLayer } from "./library/library-store-layer.js";
 export { withHomeLock } from "./library/store/writer-lock.js";
 // Records written beside v9 state (setup and undo evidence) migrate through the same shapes.
 export {
@@ -150,7 +151,7 @@ export {
   planManage,
   type ManagePlan,
 } from "./library/manage-plan.js";
-export { recoveryFingerprint } from "./library/folder-evidence.js";
+export { observePathEvidence, recoveryFingerprint } from "./library/folder-evidence.js";
 export type {
   PlanError as LibraryPlanError,
   ApplyError as LibraryApplyError,

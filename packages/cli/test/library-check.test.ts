@@ -38,6 +38,7 @@ it.effect("checks retained files without treating an observed local copy as an u
         originalsPath: join(home, "originals"),
         statePath: join(home, "state.json"),
         variantsPath: join(home, "variants"),
+        startup: { finished: [], stopped: [] },
       }),
     );
     assert.strictEqual(current[0]?.collection_versions[0]?.original_intact, true);
@@ -59,6 +60,7 @@ it.effect("checks retained files without treating an observed local copy as an u
         originalsPath: join(home, "originals"),
         statePath: join(home, "state.json"),
         variantsPath: join(home, "variants"),
+        startup: { finished: [], stopped: [] },
       }),
     );
     assert.strictEqual(changed[0]?.collection_versions[0]?.original_intact, false);
@@ -74,6 +76,7 @@ it.effect("checks retained files without treating an observed local copy as an u
         originalsPath: join(home, "originals"),
         statePath: join(home, "state.json"),
         variantsPath: join(home, "variants"),
+        startup: { finished: [], stopped: [] },
       }),
     );
     assert.strictEqual(withoutCopy[0]?.source_status, "not-applicable");

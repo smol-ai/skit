@@ -1,4 +1,5 @@
-import { Clock, Effect, FileSystem } from "effect";
+import { Clock, Effect } from "effect";
+import type { Digest } from "effect/crypto";
 
 import {
   configurationForHome,
@@ -12,6 +13,7 @@ import {
   inspectOwnershipMarker,
   objectAt,
   physicalPath,
+  type TreeRequirements,
 } from "@smolai/skit-core";
 import { auditClaude } from "./claude.js";
 import { auditCodex } from "./codex.js";
@@ -39,7 +41,7 @@ type LedgerInspection =
 
 const inspectLibraryLedger = Effect.fn("Audit.ledger")(function* (
   library: ResolvedSkitConfiguration,
-): Effect.gen.Return<LedgerInspection, never, FileSystem.FileSystem> {
+): Effect.gen.Return<LedgerInspection, never, TreeRequirements | Digest.Digest> {
   // Building the store migrates a legacy ledger; a ledger it cannot open is unreadable evidence.
   return yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
     Effect.map((inspected): LedgerInspection =>

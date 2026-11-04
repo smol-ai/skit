@@ -6,7 +6,8 @@ import { migratedMachineId } from "../src/library/entity-ids.js";
 import { installEnabledSkills, removeCollection } from "./helpers/library.js";
 import type { Enabled } from "../src/library/library-contracts.js";
 import { importCollection } from "../src/library/import-collection.js";
-import { LibraryStore, libraryStoreLayer } from "../src/library/store/library-store.js";
+import { LibraryStore } from "../src/library/store/library-store.js";
+import { libraryStoreLayer } from "../src/library/library-store-layer.js";
 import { withHomeLock } from "../src/library/store/writer-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
 

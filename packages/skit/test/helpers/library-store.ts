@@ -1,7 +1,8 @@
 import { Effect, Layer } from "effect";
 import { InstalledSkills } from "../../src/library/installed-skills.js";
 import { Library } from "../../src/library/library.js";
-import { LibraryStore, libraryStoreLayer } from "../../src/library/store/library-store.js";
+import { LibraryStore } from "../../src/library/store/library-store.js";
+import { libraryStoreLayer } from "../../src/library/library-store-layer.js";
 import type { LibraryState } from "../../src/library/library-state.js";
 
 /** Run an Effect against the Library rooted at `home`, through the store production consumes. */

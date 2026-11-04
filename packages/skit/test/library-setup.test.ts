@@ -5,10 +5,10 @@ import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
 import { observePathEvidence } from "../src/library/folder-evidence.js";
 import { Library } from "../src/library/library.js";
-import { resumeSetup } from "../src/library/setup.js";
 import { OperationStatus, type SetupStep } from "../src/library/store/state-schema.js";
+import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
 import { skitLayer } from "../src/platform/layer.js";
-import { inLibrary, inspectLibrary, libraryLayer } from "./helpers/library-store.js";
+import { inspectLibrary, libraryLayer } from "./helpers/library-store.js";
 
 const machineId = migratedMachineId("019950c0-4c00-7000-8000-000000000001", "library-setup-test");
 
@@ -57,9 +57,13 @@ const fixture = Effect.gen(function* () {
   return { fs, workspace, home, folder, remove };
 });
 
+/** Build the Library over `home` as the next SKIT run would: what its startup recovery did. */
+const restart = (home: string) => withLibrary(home, (library) => Effect.succeed(library.startup));
+
+/** The operation records in `state.json`, read as a file: building a store would recover them. */
 const recordedOperations = (home: string) =>
   Effect.gen(function* () {
-    const inspected = yield* inspectLibrary(home);
+    const inspected = yield* inspectLocalLibraryState(home);
     return inspected.present
       ? yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(inspected.state.operations)
       : [];
@@ -145,14 +149,9 @@ it.effect("a crash after an import saved, before its Done mark, re-runs the impo
       ["Pending", "Pending"],
     );
 
-    const result = yield* inLibrary(home)(resumeSetup(interrupted.operationId));
+    const startup = yield* restart(home);
 
-    assert.strictEqual(result._tag, "Done");
-    if (result._tag !== "Done") return;
-    assert.deepStrictEqual(
-      result.steps.map(({ _tag }) => _tag),
-      ["Import", "Remove"],
-    );
+    assert.deepStrictEqual(startup, { finished: [interrupted.operationId], stopped: [] });
     assert.isFalse(yield* fs.exists(folder));
     const inspected = yield* inspectLibrary(home);
     assert.isTrue(inspected.present && inspected.state.collections.length === 1);
@@ -169,7 +168,7 @@ it.effect("the import's Done mark saves the Collection Version it retained", () 
         crashingAfter(4),
       ),
     );
-    const inspected = yield* inspectLibrary(home);
+    const inspected = yield* inspectLocalLibraryState(home);
     if (!inspected.present) return assert.fail("no Library");
     const [interrupted] = yield* recordedOperations(home);
     if (interrupted?._tag !== "Pending") return assert.fail("setup is not Pending");
@@ -184,14 +183,9 @@ it.effect("the import's Done mark saves the Collection Version it retained", () 
       ],
     );
 
-    const result = yield* inLibrary(home)(resumeSetup(interrupted.operationId));
+    const startup = yield* restart(home);
 
-    assert.strictEqual(result._tag, "Done");
-    if (result._tag !== "Done") return;
-    assert.deepStrictEqual(
-      result.steps.map(({ _tag }) => _tag),
-      ["Remove"],
-    );
+    assert.deepStrictEqual(startup, { finished: [interrupted.operationId], stopped: [] });
     assert.isFalse(yield* fs.exists(folder));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -218,9 +212,9 @@ for (const [commits, after] of [
       assert.strictEqual(operation?._tag, "Pending");
       if (operation === undefined) return;
 
-      const result = yield* inLibrary(home)(resumeSetup(operation.operationId));
+      const startup = yield* restart(home);
 
-      assert.strictEqual(result._tag, "Done");
+      assert.deepStrictEqual(startup, { finished: [operation.operationId], stopped: [] });
       assert.isFalse(yield* fs.exists(folder));
       const saved = join(home, "removed", operation.operationId, "step-1", "1-review");
       assert.strictEqual(
@@ -247,10 +241,11 @@ it.effect("a re-run stops, moving nothing, when the folder changed after the rec
     if (operation === undefined) return assert.fail("no operation recorded");
     yield* fs.writeFileString(join(folder, "notes.md"), "the user's edit\n");
 
-    const result = yield* inLibrary(home)(resumeSetup(operation.operationId));
+    const startup = yield* restart(home);
 
-    assert.strictEqual(result._tag, "Stopped");
-    if (result._tag !== "Stopped") return;
+    assert.deepStrictEqual(startup.finished, []);
+    const [result] = startup.stopped;
+    if (result === undefined) return assert.fail("not stopped");
     assert.strictEqual(result.reason._tag, "EvidenceDiffers");
     assert.strictEqual(yield* fs.readFileString(join(folder, "notes.md")), "the user's edit\n");
     const [stopped] = yield* recordedOperations(home);
@@ -279,9 +274,12 @@ it.effect("a re-run stops when something new is where a moved folder was", () =>
     yield* fs.makeDirectory(folder);
     yield* fs.writeFileString(join(folder, "SKILL.md"), "a new skill\n");
 
-    const result = yield* inLibrary(home)(resumeSetup(operation.operationId));
+    const startup = yield* restart(home);
 
-    assert.strictEqual(result._tag, "Stopped");
+    assert.deepStrictEqual(
+      startup.stopped.map(({ operationId }) => operationId),
+      [operation.operationId],
+    );
     assert.strictEqual(yield* fs.readFileString(join(folder, "SKILL.md")), "a new skill\n");
     assert.isTrue(
       yield* fs.exists(join(home, "removed", operation.operationId, "step-1", "1-review")),

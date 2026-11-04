@@ -5,7 +5,8 @@ import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { currentCollectionSkills, currentSkillVersion } from "../src/library/library-contracts.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
 import { importCollection } from "../src/library/import-collection.js";
-import { LibraryStore, libraryStoreLayer } from "../src/library/store/library-store.js";
+import { LibraryStore } from "../src/library/store/library-store.js";
+import { libraryStoreLayer } from "../src/library/library-store-layer.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 const machineId = migratedMachineId("019950c0-4c00-7000-8000-000000000001", "moved-skill-test");

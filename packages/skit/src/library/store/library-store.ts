@@ -1,4 +1,4 @@
-import { Context, DateTime, Effect, FileSystem, Layer } from "effect";
+import { Context, DateTime, Effect, FileSystem } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { join, resolve } from "node:path";
 import type { InvalidLibraryState, LibraryBusy, LibraryChanged } from "../../failures.js";
@@ -12,6 +12,7 @@ import {
 import { appendLibraryAudit, type LibraryAuditChange } from "../audit/audit-log.js";
 import { classifyLibraryAuditEvent, diffLibraryState } from "../audit/state-diff.js";
 import { withHomeLock } from "./writer-lock.js";
+import type { StartupRecovery } from "../setup.js";
 
 export type { InspectedLibraryState };
 
@@ -47,6 +48,8 @@ export class LibraryStore extends Context.Service<
     readonly originalsPath: string;
     readonly statePath: string;
     readonly variantsPath: string;
+    /** What startup recovery did when the layer was built. */
+    readonly startup: StartupRecovery;
   }
 >()("skit/library/LibraryStore") {}
 
@@ -62,52 +65,46 @@ const CurrentLibraryAction = Context.Reference<
 >("skit/library/CurrentLibraryAction", { defaultValue: () => undefined });
 
 /**
- * Building the layer migrates a legacy state.json once, under the home lock, and fails with
- * `LibraryBusy` if the lock is held elsewhere. It creates nothing when state.json is absent.
+ * The store over `home`, once a legacy state.json has been migrated, under the home lock: fails
+ * with `LibraryBusy` if the lock is held elsewhere, and creates nothing when state.json is absent.
+ * Its layer, `libraryStoreLayer`, then runs startup recovery.
  */
-export function libraryStoreLayer(options: { home: string }) {
-  return Layer.effect(
-    LibraryStore,
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const home = resolve(options.home);
-      yield* migrateLocalLibraryState(home);
-      const path = join(home, "state.json");
-      const inspect = inspectLocalLibraryState(home).pipe(
+export const makeLibraryStore = (options: { home: string }) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = resolve(options.home);
+    yield* migrateLocalLibraryState(home);
+    const path = join(home, "state.json");
+    const inspect = inspectLocalLibraryState(home).pipe(
+      Effect.provideService(FileSystem.FileSystem, fs),
+    );
+    const load = Effect.map(inspect, (inspected) =>
+      inspected.present ? inspected.state : emptyLibraryState(),
+    );
+    const save = Effect.fn("LibraryStore.save")(function* (next: LibraryState, base: LibraryState) {
+      yield* saveLibraryState(home, next, base).pipe(
         Effect.provideService(FileSystem.FileSystem, fs),
       );
-      const load = Effect.map(inspect, (inspected) =>
-        inspected.present ? inspected.state : emptyLibraryState(),
-      );
-      const save = Effect.fn("LibraryStore.save")(function* (
-        next: LibraryState,
-        base: LibraryState,
-      ) {
-        yield* saveLibraryState(home, next, base).pipe(
+      const changes = diffLibraryState(base, next);
+      const action = yield* CurrentLibraryAction;
+      if (action?.home === home && action.live) {
+        action.saved = next;
+        action.changes.push(...changes);
+      } else if (changes.length)
+        yield* recordLibraryHistory(home, changes).pipe(
           Effect.provideService(FileSystem.FileSystem, fs),
         );
-        const changes = diffLibraryState(base, next);
-        const action = yield* CurrentLibraryAction;
-        if (action?.home === home && action.live) {
-          action.saved = next;
-          action.changes.push(...changes);
-        } else if (changes.length)
-          yield* recordLibraryHistory(home, changes).pipe(
-            Effect.provideService(FileSystem.FileSystem, fs),
-          );
-      });
-      return {
-        load,
-        inspect,
-        save,
-        home,
-        statePath: path,
-        originalsPath: join(home, "originals"),
-        variantsPath: join(home, "variants"),
-      };
-    }),
-  );
-}
+    });
+    return {
+      load,
+      inspect,
+      save,
+      home,
+      statePath: path,
+      originalsPath: join(home, "originals"),
+      variantsPath: join(home, "variants"),
+    };
+  });
 
 /** Append one event to a Library's history. Reported, never raised: the change is durable. */
 const recordLibraryHistory = Effect.fn("LibraryStore.recordHistory")(function* (

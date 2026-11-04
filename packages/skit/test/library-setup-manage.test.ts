@@ -8,7 +8,6 @@ import { InstalledSkills } from "../src/library/installed-skills.js";
 import { reviewInstalledSkillChanges } from "../src/library/installed-skill-review.js";
 import { Library } from "../src/library/library.js";
 import { planIntent } from "../src/library/plan-changes.js";
-import { resumeSetup } from "../src/library/setup.js";
 import { routedInstalledSkills } from "../src/library/setup-manage.js";
 import {
   OperationStatus,
@@ -16,6 +15,7 @@ import {
   type SetupStep,
   type StepRouting,
 } from "../src/library/store/state-schema.js";
+import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { inLibrary, inspectLibrary, libraryLayer } from "./helpers/library-store.js";
 
@@ -108,9 +108,13 @@ const fixture = Effect.gen(function* () {
   return { fs, home, source, copy, routing, imported, manage };
 });
 
+/** Build the Library over `home` as the next SKIT run would: what its startup recovery did. */
+const restart = (home: string) => withLibrary(home, (library) => Effect.succeed(library.startup));
+
+/** The operation records in `state.json`, read as a file: building a store would recover them. */
 const recordedOperations = (home: string) =>
   Effect.gen(function* () {
-    const inspected = yield* inspectLibrary(home);
+    const inspected = yield* inspectLocalLibraryState(home);
     return inspected.present
       ? yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(inspected.state.operations)
       : [];
@@ -161,7 +165,7 @@ it.effect("the Import's Done mark saves what it retained in the Manage step that
         crashingAfter(4),
       ),
     );
-    const inspected = yield* inspectLibrary(home);
+    const inspected = yield* inspectLocalLibraryState(home);
     if (!inspected.present) return assert.fail("no Library");
     const [operation] = yield* recordedOperations(home);
     if (operation?._tag !== "Pending") return assert.fail("setup is not Pending");
@@ -176,9 +180,9 @@ it.effect("the Import's Done mark saves what it retained in the Manage step that
       ["Done", "Pending"],
     );
 
-    const result = yield* inLibrary(home)(resumeSetup(operation.operationId));
+    const startup = yield* restart(home);
 
-    assert.strictEqual(result._tag, "Done");
+    assert.deepStrictEqual(startup, { finished: [operation.operationId], stopped: [] });
     yield* assertManaged(home, copy);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -199,9 +203,9 @@ for (const commits of [5, 7, 8])
       const [operation] = yield* recordedOperations(home);
       if (operation?._tag !== "Pending") return assert.fail("setup is not Pending");
 
-      const result = yield* inLibrary(home)(resumeSetup(operation.operationId));
+      const startup = yield* restart(home);
 
-      assert.strictEqual(result._tag, "Done");
+      assert.deepStrictEqual(startup, { finished: [operation.operationId], stopped: [] });
       yield* assertManaged(home, copy);
       assert.deepStrictEqual(yield* recordedOperations(home), [
         OperationStatus.cases.Done.make({ operationId: operation.operationId }),
@@ -226,10 +230,11 @@ it.effect("a crash between the marker and its record stops the re-run, touching 
     if (operation?._tag !== "Pending") return assert.fail("setup is not Pending");
     const marker = yield* fs.readFileString(join(copy, ".skit-ownership.json"));
 
-    const result = yield* inLibrary(home)(resumeSetup(operation.operationId));
+    const startup = yield* restart(home);
 
-    assert.strictEqual(result._tag, "Stopped");
-    if (result._tag !== "Stopped") return;
+    assert.deepStrictEqual(startup.finished, []);
+    const [result] = startup.stopped;
+    if (result === undefined) return assert.fail("not stopped");
     assert.deepStrictEqual(
       { tag: result.reason._tag, step: result.reason.step },
       { tag: "EvidenceDiffers", step: 1 },
@@ -253,10 +258,11 @@ it.effect("a re-run stops when the copy to manage changed after the record", () 
     if (operation === undefined) return assert.fail("no operation recorded");
     yield* fs.writeFileString(join(copy, "notes.md"), "the user's edit\n");
 
-    const result = yield* inLibrary(home)(resumeSetup(operation.operationId));
+    const startup = yield* restart(home);
 
-    assert.strictEqual(result._tag, "Stopped");
-    if (result._tag !== "Stopped") return;
+    assert.deepStrictEqual(startup.finished, []);
+    const [result] = startup.stopped;
+    if (result === undefined) return assert.fail("not stopped");
     assert.deepStrictEqual(
       { tag: result.reason._tag, step: result.reason.step },
       { tag: "EvidenceDiffers", step: 1 },
@@ -351,7 +357,7 @@ it.effect("updates the reviewed copies, routed as recorded", () =>
 // record of it, the step's Done mark, then Done.
 it.effect("a crash after the update was saved is finished by a re-run that accepts it", () =>
   Effect.gen(function* () {
-    const { fs, home, copy, update } = yield* updateFixture;
+    const { fs, home, copy, update, routing } = yield* updateFixture;
     const crashed = yield* Effect.exit(
       withLibrary(
         home,
@@ -366,13 +372,11 @@ it.effect("a crash after the update was saved is finished by a re-run that accep
     if (operation === undefined) return assert.fail("setup is not Pending");
     assert.include(yield* fs.readFileString(join(copy, "SKILL.md")), "Now with more.");
 
-    const result = yield* inLibrary(home)(resumeSetup(operation.operationId));
+    const startup = yield* restart(home);
 
-    assert.strictEqual(result._tag, "Done");
-    if (result._tag !== "Done") return;
-    const [step] = result.steps;
+    assert.deepStrictEqual(startup, { finished: [operation.operationId], stopped: [] });
     assert.deepStrictEqual(
-      step?._tag === "Update" ? step.changes.map(({ path, status }) => ({ path, status })) : [],
+      (yield* reviewUpdate(home, routing)).map(({ path, status }) => ({ path, status })),
       [{ path: copy, status: "unchanged" }],
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -479,7 +483,7 @@ it.effect("a re-run imports a chosen local edit once", () =>
         crashingAfter(4),
       ),
     );
-    const edits = Effect.map(inspectLibrary(home), (inspected) =>
+    const edits = Effect.map(inspectLocalLibraryState(home), (inspected) =>
       inspected.present
         ? inspected.state.imports.filter((sourceImport) => sourceImport.kind === "edit").length
         : 0,
@@ -490,9 +494,9 @@ it.effect("a re-run imports a chosen local edit once", () =>
     );
     if (operation === undefined) return assert.fail("setup is not Pending");
 
-    const result = yield* inLibrary(home)(resumeSetup(operation.operationId));
+    const startup = yield* restart(home);
 
-    assert.strictEqual(result._tag, "Done");
+    assert.deepStrictEqual(startup, { finished: [operation.operationId], stopped: [] });
     assert.strictEqual(yield* edits, 1);
     assert.include(yield* fs.readFileString(join(copy, "SKILL.md")), "The user's own line.");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),

@@ -8,7 +8,7 @@ import {
 } from "./store/library-store.js";
 import type { LibraryState } from "./library-state.js";
 import { snapshotOf, type Snapshot } from "./snapshot.js";
-import { setup, type SetupError, type SetupResult } from "./setup.js";
+import { setup, type SetupError, type SetupResult, type StartupRecovery } from "./setup.js";
 import type { SetupStep } from "./store/state-schema.js";
 import {
   importCollection,
@@ -39,7 +39,7 @@ export {
 export type { Subject, Invocation, EnabledCollection, SetupApproval } from "./enabled-plan.js";
 
 export { Revision, type Snapshot } from "./snapshot.js";
-export type { SetupError, SetupResult, SetupStepResult } from "./setup.js";
+export type { SetupError, SetupResult, SetupStepResult, StartupRecovery } from "./setup.js";
 
 export interface Interface {
   /**
@@ -79,6 +79,8 @@ export interface Interface {
     steps: readonly SetupStep[],
     options: { readonly base: Snapshot },
   ) => Effect.Effect<SetupResult, SetupError>;
+  /** What startup recovery did when the layer was built. */
+  readonly startup: StartupRecovery;
 }
 export class Service extends Context.Service<Service, Interface>()("skit/library/Library") {}
 
@@ -113,6 +115,7 @@ export const make = Effect.gen(function* () {
       authored: (request) => owned(importAuthoredCollection(request)),
       edit: (request) => owned(importEdit(request)),
     },
+    startup: store.startup,
     setup: (steps, options) =>
       setup(steps, options).pipe(
         Effect.provideService(LibraryStore, store),

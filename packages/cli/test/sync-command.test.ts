@@ -34,6 +34,7 @@ const services = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         originalsPath: "/unreachable/originals",
         statePath: "/unreachable/state.json",
         variantsPath: "/unreachable/variants",
+        startup: { finished: [], stopped: [] },
       }),
     ),
     Effect.provideService(

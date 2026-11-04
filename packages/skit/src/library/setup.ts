@@ -389,44 +389,55 @@ export const setup = Effect.fn("Library.setup")(function* (
   );
 });
 
+/** What startup recovery did with the operations it found unfinished. */
+export interface StartupRecovery {
+  /** Finished: only steps safe to repeat were run. */
+  readonly finished: readonly OperationId[];
+  /** Stopped instead, each with its reason; the user can undo them. */
+  readonly stopped: readonly Extract<OperationStatus, { readonly _tag: "Stopped" }>[];
+}
+
 /**
- * Run what remains of a Pending operation, as after a crash: a step whose effect is complete is
- * skipped, one still as recorded runs, and anything else stops the operation. An operation that
- * is not Pending is returned as recorded.
+ * Resume every Pending operation, as after a crash: a step whose effect is complete is skipped,
+ * one still as recorded runs, and anything else stops its operation. Never rolls back. Reads
+ * `state.json` without the lock first, and takes it only when an operation is Pending. Setups
+ * interrupted before operations were recorded in `state.json` are not resumed.
  */
-export const resumeSetup = Effect.fn("Library.resumeSetup")(function* (operationId: OperationId) {
+export const recover = Effect.fn("Library.recover")(function* () {
   const store = yield* LibraryStore;
-  return yield* withLibraryWriter(
-    Effect.gen(function* () {
-      const operation = yield* Effect.flatMap(store.load, (state) =>
-        operationIn(state, operationId).pipe(
+  const operations = Effect.flatMap(store.inspect, (inspected) =>
+    inspected.present
+      ? decodeOperations(inspected.state).pipe(
           Effect.mapError(
             () =>
               new InvalidLibraryState({ path: store.statePath, detail: "invalid setup record" }),
           ),
-        ),
-      );
-      if (Option.isNone(operation))
-        return yield* new InvalidIntent({ detail: `No setup is recorded as ${operationId}` });
-      switch (operation.value._tag) {
-        case "Pending":
-          return yield* runOperation(operationId);
-        case "Done":
-          return {
-            _tag: "Done",
-            operationId,
-            steps: [],
-            warnings: [],
-            recoveryDirectories: [],
-          } satisfies SetupResult;
-        case "Stopped":
-          return {
-            _tag: "Stopped",
-            operationId,
-            completed: [],
-            reason: operation.value.reason,
-          } satisfies SetupResult;
+        )
+      : Effect.succeed([]),
+  );
+  // A state.json the store cannot read is left for reads to refuse, as they always have.
+  const found = yield* operations.pipe(
+    Effect.catchTag("InvalidLibraryState", () => Effect.succeed([])),
+  );
+  if (!found.some((operation) => operation._tag === "Pending"))
+    return { finished: [], stopped: [] } satisfies StartupRecovery;
+  return yield* withLibraryWriter(
+    Effect.gen(function* () {
+      const finished: OperationId[] = [];
+      const stopped: Extract<OperationStatus, { readonly _tag: "Stopped" }>[] = [];
+      for (const operation of yield* operations) {
+        if (operation._tag !== "Pending") continue;
+        const result = yield* runOperation(operation.operationId);
+        if (result._tag === "Done") finished.push(operation.operationId);
+        else
+          stopped.push(
+            OperationStatus.cases.Stopped.make({
+              operationId: operation.operationId,
+              reason: result.reason,
+            }),
+          );
       }
+      return { finished, stopped } satisfies StartupRecovery;
     }),
   );
 });

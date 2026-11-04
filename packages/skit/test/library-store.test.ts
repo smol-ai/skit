@@ -8,11 +8,8 @@ import { libraryManifestFromLocalState, type LibraryState } from "../src/library
 import { readSnapshotArchive } from "../src/library/snapshot-archive.js";
 import { OperationStatus } from "../src/library/store/state-schema.js";
 import { importCollection } from "../src/library/import-collection.js";
-import {
-  LibraryStore,
-  libraryStoreLayer,
-  withLibraryWriter,
-} from "../src/library/store/library-store.js";
+import { LibraryStore, withLibraryWriter } from "../src/library/store/library-store.js";
+import { libraryStoreLayer } from "../src/library/library-store-layer.js";
 import { withHomeLock } from "../src/library/store/writer-lock.js";
 import { Hash } from "../src/vocabulary.js";
 import { skitLayer } from "../src/platform/layer.js";
