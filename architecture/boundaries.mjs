@@ -93,7 +93,6 @@ export const debt = {
     "LibraryStore",
     "withLibraryWriter",
   ],
-  "packages/cli/src/library-application/import-source.ts": ["withLibraryWriter"],
   "packages/cli/src/library-application/index.ts": ["libraryStoreLayer"],
   "packages/cli/src/library-application/layers.ts": ["libraryStoreLayer"],
   "packages/cli/src/library-application/update-installed-skills.ts": ["LibraryStore"],

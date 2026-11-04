@@ -1,3 +1,4 @@
+import { Library } from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Result } from "effect";
@@ -28,6 +29,61 @@ import {
 } from "./helpers/library-home.js";
 import { registryAuthAccessLayer } from "../src/registry/auth-service.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
+import { homeLockIsFree } from "./helpers/home-lock.js";
+
+it.effect(
+  "source acquisition stays outside the writer and the owner publishes one locked action",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-add-lock-scope-" });
+      const home = join(root, "library");
+      const source = join(root, "source");
+      const skillPath = join(source, "SKILL.md");
+      const bytes =
+        "---\nname: review\ndescription: Lock scope fixture\n---\nExact source bytes.\n";
+      yield* fs.makeDirectory(home);
+      yield* fs.makeDirectory(source);
+      yield* fs.writeFileString(skillPath, bytes);
+      let sourceReadWithoutWriter: boolean | undefined;
+      let stateSavedWithWriter = false;
+      const checkSourceRead = <A, E, R>(path: string, read: Effect.Effect<A, E, R>) =>
+        Effect.gen(function* () {
+          if (path === skillPath && sourceReadWithoutWriter === undefined)
+            sourceReadWithoutWriter = yield* homeLockIsFree(home);
+          return yield* read;
+        });
+      yield* Effect.gen(function* () {
+        const added = yield* importSource(source);
+        const library = yield* Library.Service;
+        const history = yield* library.history;
+        assert.strictEqual(sourceReadWithoutWriter, true);
+        assert.strictEqual(stateSavedWithWriter, true);
+        assert.strictEqual(history.events.length, 1);
+        assert.strictEqual(yield* fs.readFileString(skillPath), bytes);
+        assert.strictEqual(
+          yield* fs.readFileString(
+            join(collectionVersionPath(join(home, "originals"), added.snapshot_digest), "SKILL.md"),
+          ),
+          bytes,
+        );
+      }).pipe(
+        Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+        Effect.provideService(FileSystem.FileSystem, {
+          ...fs,
+          readFile: (path) => checkSourceRead(path, fs.readFile(path)),
+          readFileString: (path, encoding) =>
+            checkSourceRead(path, fs.readFileString(path, encoding)),
+          rename: (from, to) =>
+            Effect.gen(function* () {
+              yield* fs.rename(from, to);
+              if (to === join(home, "state.json"))
+                stateSavedWithWriter = !(yield* homeLockIsFree(home));
+            }),
+        }),
+      );
+    }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),
+);
 
 it.effect("previews without mutation, then retains exact root Skill bytes", () =>
   Effect.gen(function* () {
@@ -45,7 +101,10 @@ it.effect("previews without mutation, then retains exact root Skill bytes", () =
     });
     assert.strictEqual(yield* fs.exists(join(home, "state.json")), false);
 
-    const added = yield* importSource(source).pipe(Effect.provide(libraryStoreLayer({ home })));
+    const added = yield* importSource(source).pipe(
+      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provide(libraryStoreLayer({ home })),
+    );
     const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
@@ -65,6 +124,7 @@ it.effect("previews without mutation, then retains exact root Skill bytes", () =
 
     yield* fs.writeFileString(join(source, "SKILL.md"), `${bytes}\nSecond snapshot.\n`);
     const addedAgain = yield* importSource(source).pipe(
+      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
       Effect.provide(libraryStoreLayer({ home })),
     );
     const refreshed = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
@@ -100,7 +160,10 @@ it.effect("retains nested Skills as one Collection with independent Skill identi
         `---\nname: ${name}\ndescription: ${name}\n---\n`,
       );
     }
-    const added = yield* importSource(source).pipe(Effect.provide(libraryStoreLayer({ home })));
+    const added = yield* importSource(source).pipe(
+      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provide(libraryStoreLayer({ home })),
+    );
     const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
@@ -136,10 +199,19 @@ it.effect("reports the retained package when its source disappears after publica
       Effect.provide(libraryStoreLayer({ home })),
     );
     const added = yield* importSource(source).pipe(
-      Effect.provideService(LibraryStore, {
-        ...store,
-        save: (next, base) =>
-          store.save(next, base).pipe(Effect.andThen(fs.remove(source, { recursive: true }))),
+      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provideService(FileSystem.FileSystem, {
+        ...fs,
+        rename: (from, to) =>
+          fs
+            .rename(from, to)
+            .pipe(
+              Effect.andThen(
+                to === join(home, "state.json")
+                  ? fs.remove(source, { recursive: true })
+                  : Effect.void,
+              ),
+            ),
       }),
     );
     assert.strictEqual(yield* fs.exists(source), false);
@@ -186,6 +258,7 @@ it.effect("retains the exact bytes of a direct SKILL.md URL", () =>
       { kind: "plain", skills: [{ name: "review", verbatim_path: "." }] },
     );
     const added = yield* importSource(source).pipe(
+      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
       Effect.provide(libraryStoreLayer({ home })),
       Effect.provideService(HttpClient.HttpClient, client),
     );
@@ -245,6 +318,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     };
     const run = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
       effect.pipe(
+        Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
         Effect.provide(libraryStoreLayer({ home })),
         Effect.provideService(HttpClient.HttpClient, client),
       );
@@ -329,7 +403,10 @@ it.effect("re-adding a changed local source adds a Skill Version and uses it", (
       join(source, "SKILL.md"),
       "---\nname: review\ndescription: Review\n---\nfirst\n",
     );
-    const added = yield* importSource(source).pipe(Effect.provide(libraryStoreLayer({ home })));
+    const added = yield* importSource(source).pipe(
+      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provide(libraryStoreLayer({ home })),
+    );
     yield* fs.writeFileString(
       join(source, "SKILL.md"),
       "---\nname: review\ndescription: Review\n---\nsecond\n",
@@ -362,12 +439,18 @@ it.effect("repeated identical local re-adds record nothing new", () =>
       join(source, "SKILL.md"),
       "---\nname: review\ndescription: Review\n---\ncurrent\n",
     );
-    const added = yield* importSource(source).pipe(Effect.provide(libraryStoreLayer({ home })));
+    const added = yield* importSource(source).pipe(
+      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provide(libraryStoreLayer({ home })),
+    );
     yield* fs.writeFileString(
       join(source, ".skit-ownership.json"),
       '{"schemaVersion":1,"projectionId":"projection-test"}\n',
     );
-    const reAdd = importSource(source).pipe(Effect.provide(libraryStoreLayer({ home })));
+    const reAdd = importSource(source).pipe(
+      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provide(libraryStoreLayer({ home })),
+    );
     const load = Effect.flatMap(LibraryStore, (store) => store.load).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );
@@ -472,6 +555,7 @@ it.effect("records the Registry Release a Collection is added from, so sync can 
       slug: "tools",
       version: "1.2.3",
     }).pipe(
+      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
       Effect.provide(libraryStoreLayer({ home })),
       Effect.provide(
         registryAuthAccessLayer({

@@ -1,3 +1,4 @@
+import { Library } from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
@@ -48,6 +49,7 @@ it.effect(
       );
       const run = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         effect.pipe(
+          Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
           Effect.provide(libraryStoreLayer({ home })),
           Effect.provideService(HttpClient.HttpClient, client),
           Effect.provide(rendererTestLayer()),

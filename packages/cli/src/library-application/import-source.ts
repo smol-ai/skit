@@ -1,6 +1,5 @@
-import { localLibrary } from "./library-owner.js";
+import { Library } from "@smolai/skit-core/library";
 import { officialRegistryOrigin } from "../registry/accounts.js";
-import { withLibraryWriter } from "@smolai/skit-core";
 import {
   describeSourceSkills,
   inspectResolvedSource,
@@ -102,7 +101,7 @@ export const importSource = Effect.fn("Library.addSource")(function* (
           revision: resolved.revision,
           importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
         };
-        const library = yield* localLibrary;
+        const library = yield* Library.Service;
         const imported =
           resolved.descriptorKind === "declared"
             ? yield* library.import.authored({ ...request, root: resolved.root })
@@ -127,4 +126,4 @@ export const importSource = Effect.fn("Library.addSource")(function* (
         };
       }),
   );
-}, withLibraryWriter);
+});

@@ -1,3 +1,4 @@
+import { Library } from "@smolai/skit-core/library";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Ref } from "effect";
 import { join } from "node:path";
@@ -20,7 +21,10 @@ it.effect("checks retained files without treating an observed local copy as an u
     yield* fs.makeDirectory(source, { recursive: true });
     yield* initializeLibraryMachine(home);
     yield* fs.writeFileString(join(source, "SKILL.md"), "observed raw Skill\n");
-    const imported = yield* importSource(source).pipe(Effect.provide(libraryStoreLayer({ home })));
+    const imported = yield* importSource(source).pipe(
+      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provide(libraryStoreLayer({ home })),
+    );
     const loaded = yield* Effect.flatMap(LibraryStore, (store) => store.inspect).pipe(
       Effect.provide(libraryStoreLayer({ home })),
     );

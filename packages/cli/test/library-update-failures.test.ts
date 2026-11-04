@@ -1,3 +1,4 @@
+import { Library } from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Cause, Effect, Exit, FileSystem } from "effect";
@@ -61,6 +62,7 @@ const fixture = Effect.gen(function* () {
   });
   const run = <A, E, R>(operation: Effect.Effect<A, E, R>) =>
     operation.pipe(
+      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
       Effect.provide(libraryStoreLayer({ home })),
       Effect.provideService(HttpClient.HttpClient, client),
     );
@@ -82,9 +84,7 @@ it.effect("stops the batch when shared machine settings cannot be read", () =>
     f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "after"));
     yield* f.fs.writeFileString(join(f.home, "machine.json"), "invalid machine settings");
     const before = yield* f.fs.readFileString(join(f.home, "state.json"));
-    const error = yield* f
-      .run(updateSubjects(f.options))
-      .pipe(Effect.flip);
+    const error = yield* f.run(updateSubjects(f.options)).pipe(Effect.flip);
     assert.strictEqual(error._tag, "MachineSettingsUnusable");
     assert.deepStrictEqual(f.requests, [f.urls[0]]);
     assert.strictEqual(yield* f.fs.readFileString(join(f.home, "state.json")), before);

@@ -1,3 +1,4 @@
+import { Library } from "@smolai/skit-core/library";
 import { it as effectIt } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
 import { join } from "node:path";
@@ -132,7 +133,10 @@ effectIt.effect(
         join(source, "SKILL.md"),
         '---\nname: review\ndescription: "A😀é"\n---\n',
       );
-      const first = yield* importSource(source).pipe(Effect.provide(libraryStoreLayer({ home })));
+      const first = yield* importSource(source).pipe(
+        Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+        Effect.provide(libraryStoreLayer({ home })),
+      );
       const firstState = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
         Effect.provide(libraryStoreLayer({ home })),
       );
@@ -141,7 +145,10 @@ effectIt.effect(
         join(source, "SKILL.md"),
         '---\nname: review\ndescription: "A much longer new description"\n---\n',
       );
-      yield* importSource(source).pipe(Effect.provide(libraryStoreLayer({ home })));
+      yield* importSource(source).pipe(
+        Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+        Effect.provide(libraryStoreLayer({ home })),
+      );
       const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
         Effect.provide(libraryStoreLayer({ home })),
       );
