@@ -3,15 +3,15 @@ import { Effect, FileSystem, Schema } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { LinkStat, skitLayer } from "@smolai/skit-core";
-import { setupCommand } from "../src/handlers/library/setup.js";
+import { setupCommand } from "../src/library/setup/command.js";
 import {
   makeScriptedInteraction,
   type InteractionEvent,
   type ScriptedAnswer,
 } from "../src/presentation/interaction-recorder.js";
-import { setupPrompts, setupStepTitles } from "../src/presentation/setup-steps.js";
-import { runSetup, revalidateSetupPlan } from "../src/workflows/library/setup.js";
-import { planSetupRemovals, setupRemovablePaths } from "../src/workflows/library/setup-removal.js";
+import { setupPrompts, setupStepTitles } from "../src/library/setup/setup-steps.js";
+import { runSetup, revalidateSetupPlan } from "../src/library/setup/setup.js";
+import { planSetupRemovals, setupRemovablePaths } from "../src/library/setup/setup-removal.js";
 import { localLibrary } from "../src/library-application/library-owner.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 

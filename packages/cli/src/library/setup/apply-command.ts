@@ -3,13 +3,13 @@ import { Effect, Option, Schema } from "effect";
 import { Hash, LibraryStore } from "@smolai/skit-core";
 import { Renderer } from "../../presentation/renderer.js";
 import { OptionCombinationInvalid } from "../../workflows/failures.js";
-import { runSetup, SetupPlanStale, type SetupOptions } from "../../workflows/library/setup.js";
-import { openSetupReview } from "../../workflows/library/setup-review.js";
+import { runSetup, SetupPlanStale, type SetupOptions } from "./setup.js";
+import { openSetupReview } from "./setup-review.js";
 import type { ManageOptions } from "../../workflows/library/manage-existing.js";
-import type { SetupDuplicateAction as SetupDuplicateActionType } from "../../workflows/library/setup-decisions.js";
-import type { SetupApplied } from "../../workflows/library/setup-contract.js";
-import type { SetupCommandSelection } from "../../commands/setup-actions.js";
-import { changeResults } from "../../workflows/library/setup-installed-skills.js";
+import type { SetupDuplicateAction as SetupDuplicateActionType } from "./setup-decisions.js";
+import type { SetupApplied } from "./setup-contract.js";
+import type { SetupCommandSelection } from "./actions.js";
+import { changeResults } from "./setup-installed-skills.js";
 
 /**
  * `skit setup --apply`: the non-interactive apply. The plan ID is the caller's consent: it must

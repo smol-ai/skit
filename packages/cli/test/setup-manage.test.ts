@@ -10,9 +10,9 @@ import {
   skitLayer,
 } from "@smolai/skit-core";
 import { importSource } from "../src/library-application/import-source.js";
-import { setupCommand } from "../src/handlers/library/setup.js";
+import { setupCommand } from "../src/library/setup/command.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
-import { setupStepTitles } from "../src/presentation/setup-steps.js";
+import { setupStepTitles } from "../src/library/setup/setup-steps.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 const skillDocument = (name: string, body: string) =>

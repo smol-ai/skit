@@ -4,10 +4,10 @@ import { systemError } from "effect/PlatformError";
 import {
   setupExistingSelections,
   setupNewSelections,
-} from "../src/workflows/library/setup-manage.js";
+} from "../src/library/setup/setup-manage.js";
 import { recordDuplicateSymlinks } from "../src/workflows/library/manage-existing.js";
 import { applySetupSelections } from "./helpers/setup-apply.js";
-import { copyConflict } from "../src/workflows/library/setup-decisions.js";
+import { copyConflict } from "../src/library/setup/setup-decisions.js";
 import type { DuplicateScanError } from "../src/install/duplicates.js";
 import { codexSkillAliases } from "../src/workflows/library/doctor-codex.js";
 import { it } from "@effect/vitest";
@@ -22,8 +22,8 @@ import {
 } from "../src/install/duplicates.js";
 import { importSource } from "../src/library-application/import-source.js";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
-import { runSetup, revalidateSetupPlan } from "../src/workflows/library/setup.js";
-import { setupCommand } from "../src/handlers/library/setup.js";
+import { runSetup, revalidateSetupPlan } from "../src/library/setup/setup.js";
+import { setupCommand } from "../src/library/setup/command.js";
 import { Renderer } from "../src/presentation/renderer.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import {

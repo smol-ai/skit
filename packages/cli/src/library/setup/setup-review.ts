@@ -8,8 +8,11 @@ import {
   MachineSettings,
   type SkitFailure,
 } from "@smolai/skit-core";
-import { OptionCombinationInvalid } from "../failures.js";
-import { recordDuplicateSymlinks, type ManageOptions } from "./manage-existing.js";
+import { OptionCombinationInvalid } from "../../workflows/failures.js";
+import {
+  recordDuplicateSymlinks,
+  type ManageOptions,
+} from "../../workflows/library/manage-existing.js";
 import { applySetupPlan, type SetupApplyOptions, type SetupApproval } from "./setup-apply.js";
 import type { SetupOptions } from "./setup.js";
 import type {

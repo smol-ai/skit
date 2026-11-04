@@ -1,18 +1,15 @@
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { HarnessName } from "@smolai/skit-core";
-import { compactHomePath } from "./home-path.js";
-import type { Choice } from "./prompter.js";
-import type {
-  SetupOnboardingCandidate,
-  SetupSkillInstance,
-} from "../workflows/library/setup-contract.js";
+import { compactHomePath } from "../../presentation/home-path.js";
+import type { Choice } from "../../presentation/prompter.js";
+import type { SetupOnboardingCandidate, SetupSkillInstance } from "./setup-contract.js";
 import {
   recommendedSetupSelection,
   setupReviewCopies,
   type SetupRecommendation,
   type SetupReviewCopy,
-} from "../workflows/library/setup-decisions.js";
+} from "./setup-decisions.js";
 
 const agentNames: Record<HarnessName, string> = {
   "claude-code": "Claude",

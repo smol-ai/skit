@@ -1,7 +1,7 @@
 import { dirname, resolve } from "node:path";
 import { Effect, Option } from "effect";
 import { LinkStat, observePathEvidence, pathIsWithin, type Library } from "@smolai/skit-core";
-import { PlanIsStale } from "../../library/failures.js";
+import { PlanIsStale } from "../failures.js";
 import { collectSkillsDirectories, type SetupOptions } from "./setup.js";
 import type { SetupResult } from "./setup-contract.js";
 

@@ -1,5 +1,5 @@
-import { openSetupCommandReview, prepareSetupCommand, setupApplyCommand } from "./setup-machine.js";
-export { setupApplyCommand } from "./setup-machine.js";
+import { openSetupCommandReview, prepareSetupCommand, setupApplyCommand } from "./apply-command.js";
+export { setupApplyCommand } from "./apply-command.js";
 import {
   SkitConfiguration,
   skitConfigurationLayer,
@@ -22,11 +22,11 @@ import {
   setupPrompts,
   setupStepPlan,
   type SetupStepPlan,
-} from "../../presentation/setup-steps.js";
-import { runSetup, type SetupOptions } from "../../workflows/library/setup.js";
-import { openSetupReview, type SetupReview } from "../../workflows/library/setup-review.js";
+} from "./setup-steps.js";
+import { runSetup, type SetupOptions } from "./setup.js";
+import { openSetupReview, type SetupReview } from "./setup-review.js";
 import type { ManageOptions } from "../../workflows/library/manage-existing.js";
-import { result } from "../contracts.js";
+import { result } from "../../handlers/contracts.js";
 import {
   setupDiscoveryOutput,
   setupScanAction,
@@ -35,13 +35,13 @@ import {
   setupReviewAction,
   setupApplyAction,
   setupReviewSummary,
-} from "../../commands/setup-actions.js";
+} from "./actions.js";
 import { LibraryStore } from "@smolai/skit-core";
 import { OptionCombinationInvalid } from "../../workflows/failures.js";
-import { SetupDuplicateAction } from "../../workflows/library/setup-decisions.js";
+import { SetupDuplicateAction } from "./setup-decisions.js";
 import { checkSubjects } from "../../workflows/library/check.js";
 import { renderCheck } from "../../presentation/check.js";
-import { setupReviewSkillChoices } from "../../presentation/setup-skills.js";
+import { setupReviewSkillChoices } from "./setup-skills.js";
 
 import { renderChangeResult } from "../../presentation/installed-skill-changes.js";
 import {
@@ -49,7 +49,7 @@ import {
   chooseSetupVersions,
   setupPlanLines,
   renderSetupAliasRecovery,
-} from "../../presentation/setup-choice-presentation.js";
+} from "./setup-choice-presentation.js";
 
 const workDirFlag = optionalString(
   "work-dir",

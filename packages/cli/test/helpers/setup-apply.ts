@@ -1,12 +1,12 @@
 import { Effect } from "effect";
 import type { InventoryRootOptions } from "../../src/install/roots.js";
-import { applySetupPlan } from "../../src/workflows/library/setup-apply.js";
-import type { SetupOptions } from "../../src/workflows/library/setup.js";
+import { applySetupPlan } from "../../src/library/setup/setup-apply.js";
+import type { SetupOptions } from "../../src/library/setup/setup.js";
 import type {
   SetupKnownSourceSelection,
   SetupResult,
-} from "../../src/workflows/library/setup-contract.js";
-import type { SetupCopySelection } from "../../src/workflows/library/setup-decisions.js";
+} from "../../src/library/setup/setup-contract.js";
+import type { SetupCopySelection } from "../../src/library/setup/setup-decisions.js";
 
 /**
  * Apply these selections from `scan` through setup's one apply path, updating no existing copies.

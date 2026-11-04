@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { CollectionId, Hash } from "@smolai/skit-core";
-import { CommandAction } from "./command-actions.js";
+import { CommandAction } from "../../commands/command-actions.js";
 
 export const SetupUndoOutput = Schema.Struct({
   operationId: Schema.String,

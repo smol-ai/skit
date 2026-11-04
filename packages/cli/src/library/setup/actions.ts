@@ -6,14 +6,11 @@ import {
   SetupResult,
   InstalledSkillChange,
   SetupVersionChoice,
-} from "../workflows/library/setup-contract.js";
-import {
-  SetupDuplicateAction,
-  type SetupExplicitSelection,
-} from "../workflows/library/setup-decisions.js";
-import type { SetupReview, SetupReviewSummary } from "../workflows/library/setup-review.js";
-import type { InventoryRootOptions } from "../install/roots.js";
-import { CommandAction } from "./command-actions.js";
+} from "./setup-contract.js";
+import { SetupDuplicateAction, type SetupExplicitSelection } from "./setup-decisions.js";
+import type { SetupReview, SetupReviewSummary } from "./setup-review.js";
+import type { InventoryRootOptions } from "../../install/roots.js";
+import { CommandAction } from "../../commands/command-actions.js";
 
 const Choice = Schema.Struct({
   kind: Schema.Literals(["copy", "source", "removal", "existing", "version"]),

@@ -29,9 +29,9 @@ import {
   revalidateSetupPlan,
   runSetup,
   type SetupOptions,
-} from "../src/workflows/library/setup.js";
-import type { SetupSkillInstance } from "../src/workflows/library/setup-contract.js";
-import { ownershipAt, collectSetupEvidence } from "../src/workflows/library/setup-discovery.js";
+} from "../src/library/setup/setup.js";
+import type { SetupSkillInstance } from "../src/library/setup/setup-contract.js";
+import { ownershipAt, collectSetupEvidence } from "../src/library/setup/setup-discovery.js";
 
 const skillDocument = (name: string) =>
   `---\nname: ${name}\ndescription: ${name} skill\n---\n\n# ${name}\n`;

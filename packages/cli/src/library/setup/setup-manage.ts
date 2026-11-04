@@ -8,8 +8,8 @@ import {
   type SkitFailure,
 } from "@smolai/skit-core";
 import { localImportRequest } from "../../library-application/import-source.js";
-import { PlanIsStale } from "../../library/failures.js";
-import { checkManageSelection } from "./manage-existing.js";
+import { PlanIsStale } from "../failures.js";
+import { checkManageSelection } from "../../workflows/library/manage-existing.js";
 import {
   SetupCopySelection,
   copyConflict,

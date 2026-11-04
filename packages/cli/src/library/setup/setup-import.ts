@@ -1,7 +1,7 @@
 import { Data, Effect, Schema } from "effect";
 import { sourceLocator, type ImportRequest, type MachineId } from "@smolai/skit-core";
 import { SetupKnownSourceSelection, type SetupResult } from "./setup-contract.js";
-import { prepareSkillsShImportEvidence } from "./skills-sh-lock-source.js";
+import { prepareSkillsShImportEvidence } from "../../workflows/library/skills-sh-lock-source.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
 export class SetupImportInvalid

@@ -17,11 +17,17 @@ import {
   type LibraryState,
   type InstalledSkill,
 } from "@smolai/skit-core";
-import { PlanIsStale } from "../library/failures.js";
+import { PlanIsStale } from "../failures.js";
 import { readSkillPathDetails } from "./setup-operation.js";
-import { inspectRecoveryOperation, prepareOwnedRecoveryMoves } from "./recovery-moves.js";
+import {
+  inspectRecoveryOperation,
+  prepareOwnedRecoveryMoves,
+} from "../../library-application/recovery-moves.js";
 import { checkSetupGlobalContent } from "./setup-external-ownership.js";
-import { recoveryFingerprint, RecoveryInvalid } from "./recovery-evidence.js";
+import {
+  recoveryFingerprint,
+  RecoveryInvalid,
+} from "../../library-application/recovery-evidence.js";
 
 type SkillPathDetails = Effect.Success<ReturnType<typeof readSkillPathDetails>>;
 

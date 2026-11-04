@@ -4,10 +4,10 @@ import { Effect, FileSystem } from "effect";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import { skitLayer, MachineSettings } from "@smolai/skit-core";
-import { setupCommand } from "../src/handlers/library/setup.js";
+import { setupCommand } from "../src/library/setup/command.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
-import { collectSetupEvidence } from "../src/workflows/library/setup-discovery.js";
-import { runSetup } from "../src/workflows/library/setup.js";
+import { collectSetupEvidence } from "../src/library/setup/setup-discovery.js";
+import { runSetup } from "../src/library/setup/setup.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 it.effect("preserves saved v1 discovery roots when plain setup imports a Collection", () =>

@@ -18,7 +18,7 @@ import {
   type InventoryRootOptions,
 } from "../../install/roots.js";
 import { localLibrary } from "../../library-application/library-owner.js";
-import type { ManageOptions } from "./manage-existing.js";
+import type { ManageOptions } from "../../workflows/library/manage-existing.js";
 import { revalidateSetupPlan, saveSetupMachineConfig, type SetupOptions } from "./setup.js";
 import type {
   SetupKnownSourceSelection,
@@ -37,7 +37,7 @@ import {
   changesNeedingChoice,
   setupVersionAlternatives,
 } from "./setup-installed-skills.js";
-import { PlanIsStale } from "../../library/failures.js";
+import { PlanIsStale } from "../failures.js";
 
 /** What the user reviewed and approved: the plan ID they saw and the selections they made. */
 export interface SetupApproval {

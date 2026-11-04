@@ -7,13 +7,13 @@ import {
   SkillsDirectoryNotWritable,
   skitLayer,
 } from "@smolai/skit-core";
-import { setupApplyCommand, setupCommand } from "../src/handlers/library/setup.js";
+import { setupApplyCommand, setupCommand } from "../src/library/setup/command.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
-import { SetupPlanStale } from "../src/workflows/library/setup.js";
+import { SetupPlanStale } from "../src/library/setup/setup.js";
 import { OptionCombinationInvalid } from "../src/workflows/failures.js";
-import type { SetupDuplicateAction } from "../src/workflows/library/setup-decisions.js";
+import type { SetupDuplicateAction } from "../src/library/setup/setup-decisions.js";
 import { inspectRecoveryOperation } from "../src/library-application/recovery-moves.js";
-import { prepareSetupUndo } from "../src/library-application/setup-undo.js";
+import { prepareSetupUndo } from "../src/library/setup/setup-undo.js";
 import { captureDisk, diskChanges, noDiskChanges } from "./helpers/disk-snapshot.js";
 import { libraryHome, scratch } from "./helpers/library-home.js";
 import { withSandboxDenying } from "./helpers/sandbox.js";

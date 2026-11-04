@@ -9,8 +9,8 @@ import {
   skitLayer,
   type LibraryState,
 } from "@smolai/skit-core";
-import { setupApplyCommand } from "../src/handlers/library/setup-machine.js";
-import { runSetup } from "../src/workflows/library/setup.js";
+import { setupApplyCommand } from "../src/library/setup/apply-command.js";
+import { runSetup } from "../src/library/setup/setup.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { libraryHome, scratch } from "./helpers/library-home.js";
 import { homeLockIsFree } from "./helpers/home-lock.js";

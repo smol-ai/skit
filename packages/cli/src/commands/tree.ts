@@ -13,7 +13,7 @@ import { librarySyncCliCommand } from "../handlers/library/sync.js";
 import { disableCliCommand, enableCliCommand } from "../handlers/library/set-enabled.js";
 import { securityAcceptCliCommand } from "../handlers/security/accept.js";
 import { securityReviewCliCommand } from "../handlers/security/review.js";
-import { setupCliCommand } from "../handlers/library/setup.js";
+import { setupCliCommand } from "../library/setup/command.js";
 import { doctorCliCommand, inventoryCliCommand } from "../handlers/library/inventory.js";
 import {
   repositoryForgetCliCommand,
@@ -22,7 +22,7 @@ import {
   repositoryWatchCliCommand,
 } from "../handlers/repository.js";
 import { libraryRecoveryCliCommand } from "../handlers/library/recovery.js";
-import { librarySetupUndoCliCommand } from "../handlers/library/setup-undo.js";
+import { librarySetupUndoCliCommand } from "../library/setup/undo-command.js";
 import { libraryHistoryCliCommand } from "../handlers/library/history.js";
 import { versionCliCommand } from "../handlers/version.js";
 import { feedbackSendCliCommand } from "../handlers/feedback.js";

@@ -64,7 +64,7 @@ type SkillAssessmentAcceptance = Ref<"skit/src/library/store/state-schema.ts:28-
 type SkillSecurityReview = Ref<"skit/src/contracts.ts:256">;
 type SyncConflictDetail = Ref<"cli/src/workflows/library/library-sync-contract.ts:8">;
 type SetEnabledResult = Ref<"cli/src/workflows/library/set-enabled-contract.ts:62">;
-type InstalledSkillChangeResult = Ref<"cli/src/workflows/library/setup-contract.ts:240-255">;
+type InstalledSkillChangeResult = Ref<"cli/src/library/setup/setup-contract.ts:240-255">;
 type ImportedCollection = Ref<"skit/src/library/import-collection.ts:77">;
 type Backup = Ref<"skit/src/library/installed-skills.ts Backup">;
 type ExistingPlan = Ref<"Plan, skit/src/library/library-plan.ts:219-230">;
@@ -100,12 +100,12 @@ type SecurityFindingAbsent = Ref<"skit/src/failures.ts:442-445">;
 type UnknownInstalledSkill = Ref<"skit/src/failures.ts:349-352">;
 type TreeError = Ref<"skit/src/shared/tree-error.ts:56">;
 type ManageInvalid = Ref<"cli/src/workflows/library/manage-existing.ts:250-254">;
-type SetupManageSelectionInvalid = Ref<"cli/src/workflows/library/setup-manage.ts:9-25">;
+type SetupManageSelectionInvalid = Ref<"cli/src/library/setup/setup-manage.ts:9-25">;
 type SetEnabledIncomplete = Ref<"cli/src/library-application/set-enabled.ts:41-42">;
-type ChangeChoiceRequired = Ref<"cli/src/workflows/library/setup-installed-skills.ts:21">;
+type ChangeChoiceRequired = Ref<"cli/src/library/setup/setup-installed-skills.ts:21">;
 
 // ── Undo ────────────────────────────────────────────────────────────────────────────────────────
-// Source: cli/src/library-application/setup-undo.ts (+ setup-undo-files.ts).
+// Source: cli/src/library/setup/setup-undo.ts (+ setup-undo-files.ts).
 
 /** One folder action undo would take. setup-undo-files.ts:126-131, pushed at :231, :253, :323, :345. */
 export interface UndoFileAction {
@@ -431,7 +431,7 @@ export type ManageError =
 // OPEN: importSource's error channel (manage-existing.ts:371, :410) not traced.
 
 // ── Setup ───────────────────────────────────────────────────────────────────────────────────────
-// Source: cli/src/workflows/library/setup-apply.ts:70-285. The one SetupResult; library.ts uses it.
+// Source: cli/src/library/setup/setup-apply.ts:70-285. The one SetupResult; library.ts uses it.
 
 /** One finished step, by step tag. */
 export type SetupStepResult =

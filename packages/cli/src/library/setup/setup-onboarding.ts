@@ -14,7 +14,10 @@ import {
   type SetupImportEvidence,
 } from "./setup-evidence.js";
 import type { SetupLockMatch } from "./setup-contract.js";
-import { setupLockCollection, setupLockGroupKey } from "./skills-sh-lock-source.js";
+import {
+  setupLockCollection,
+  setupLockGroupKey,
+} from "../../workflows/library/skills-sh-lock-source.js";
 import type { SetupOnboardingCandidate, SetupSkillInstance } from "./setup-contract.js";
 
 export const classifyOwner = (input: {

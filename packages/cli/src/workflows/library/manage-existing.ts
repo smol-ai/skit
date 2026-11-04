@@ -2,13 +2,13 @@ import { Effect, FileSystem, Schema } from "effect";
 import { LinkStat, leavePnpmSkill } from "@smolai/skit-core";
 import type { DuplicateCopy } from "../../install/duplicates.js";
 import { PlanIsStale } from "../../library/failures.js";
-import { recordSetupCopies } from "./setup-copy-backup.js";
+import { recordSetupCopies } from "../../library/setup/setup-copy-backup.js";
 import {
   duplicateSymlinksToBackUp,
   ApprovedSymlink,
   type SetupCopySelection,
   type SetupCopyConflict,
-} from "./setup-decisions.js";
+} from "../../library/setup/setup-decisions.js";
 import type { InstalledSkillOptions } from "./installed-skill-options.js";
 
 export interface ManageOptions {

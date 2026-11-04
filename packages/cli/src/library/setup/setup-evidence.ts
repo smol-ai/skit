@@ -1,5 +1,8 @@
 import type { LibraryState, MachineId } from "@smolai/skit-core";
-import { setupLockGroupKey, resolveSkillsShSelectedSource } from "./skills-sh-lock-source.js";
+import {
+  setupLockGroupKey,
+  resolveSkillsShSelectedSource,
+} from "../../workflows/library/skills-sh-lock-source.js";
 import type { SetupSkillInstance } from "./setup-contract.js";
 export interface SetupImportEvidence {
   readonly library?: LibraryState;

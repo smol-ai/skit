@@ -31,8 +31,11 @@ export {
 } from "./setup-discovery.js";
 export { classifyOwner, isSetupCandidateFromCodex } from "./setup-onboarding.js";
 export { classifySetupOnboarding, setupInstanceGroupKey } from "./setup-onboarding.js";
-export { setupLockCollection, setupLockGroupKey } from "./skills-sh-lock-source.js";
-export { computeSkillsShCompatibleHash as computeSkillsLockCompatibleHash } from "./skills-sh-compatible-hash.js";
+export {
+  setupLockCollection,
+  setupLockGroupKey,
+} from "../../workflows/library/skills-sh-lock-source.js";
+export { computeSkillsShCompatibleHash as computeSkillsLockCompatibleHash } from "../../workflows/library/skills-sh-compatible-hash.js";
 export class SetupPlanStale
   extends Data.TaggedError("SetupPlanStale")<{
     approvedPlanId: typeof Hash.Type;

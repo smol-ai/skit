@@ -2,8 +2,8 @@ import { join } from "node:path";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Result } from "effect";
 import { skitLayer, deterministicTreeHash } from "@smolai/skit-core";
-import { openSetupReview } from "../src/workflows/library/setup-review.js";
-import { runSetup } from "../src/workflows/library/setup.js";
+import { openSetupReview } from "../src/library/setup/setup-review.js";
+import { runSetup } from "../src/library/setup/setup.js";
 import { captureDisk } from "./helpers/disk-snapshot.js";
 import { libraryHome, importCollectionIn, scratch, writingTo } from "./helpers/library-home.js";
 

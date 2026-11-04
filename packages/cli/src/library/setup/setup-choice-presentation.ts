@@ -1,19 +1,19 @@
 import { Effect } from "effect";
-import type {
-  InstalledSkillChange,
-  SetupVersionChoice,
-} from "../workflows/library/setup-contract.js";
-import type { SetupReviewSummary } from "../workflows/library/setup-review.js";
+import type { InstalledSkillChange, SetupVersionChoice } from "./setup-contract.js";
+import type { SetupReviewSummary } from "./setup-review.js";
 import {
   setupDuplicateActions,
   setupDuplicateChoiceRequired,
   type SetupCopyChoice,
   type SetupDuplicateAction,
   type SetupSelectedCopy,
-} from "../workflows/library/setup-decisions.js";
-import { Prompter, type Choice } from "./prompter.js";
-import { Renderer } from "./renderer.js";
-import { renderSetupVersionChoice, renderReviewedChanges } from "./installed-skill-changes.js";
+} from "./setup-decisions.js";
+import { Prompter, type Choice } from "../../presentation/prompter.js";
+import { Renderer } from "../../presentation/renderer.js";
+import {
+  renderSetupVersionChoice,
+  renderReviewedChanges,
+} from "../../presentation/installed-skill-changes.js";
 
 const skillCount = (count: number) => `${count} skill${count === 1 ? "" : "s"}`;
 

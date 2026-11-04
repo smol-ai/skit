@@ -3,11 +3,11 @@ import { Effect, FileSystem } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { LibraryStore, LinkStat, skitLayer } from "@smolai/skit-core";
-import { prepareSetupCommand, setupApplyCommand } from "../src/handlers/library/setup-machine.js";
-import { runSetup } from "../src/workflows/library/setup.js";
+import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply-command.js";
+import { runSetup } from "../src/library/setup/setup.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { inspectRecoveryOperation } from "../src/library-application/recovery-moves.js";
-import { prepareSetupUndo } from "../src/library-application/setup-undo.js";
+import { prepareSetupUndo } from "../src/library/setup/setup-undo.js";
 import { libraryHome, scratch } from "./helpers/library-home.js";
 
 const fixture = Effect.fn("Test.setupDuplicateCopies")(function* () {

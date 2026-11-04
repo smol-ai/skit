@@ -6,10 +6,10 @@ import { skitConfigurationLayer } from "../../configuration/skit-configuration.j
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homeFlag, jsonFlag, optionalString } from "../../commands/parameters.js";
-import { setupUndoActions } from "../../commands/setup-undo-contract.js";
-import { prepareSetupUndo } from "../../library-application/setup-undo.js";
+import { setupUndoActions } from "./undo-result.js";
+import { prepareSetupUndo } from "./setup-undo.js";
 import { Renderer } from "../../presentation/renderer.js";
-import { result } from "../contracts.js";
+import { result } from "../../handlers/contracts.js";
 
 export const librarySetupUndoCliCommand = Command.make(
   "undo",

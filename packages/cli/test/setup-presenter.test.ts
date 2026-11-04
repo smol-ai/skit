@@ -8,9 +8,9 @@ import {
 } from "@smolai/skit-core";
 import { renderContract } from "../src/presentation/contract-presenters.js";
 import { result } from "../src/handlers/contracts.js";
-import { classifySetupOnboarding } from "../src/workflows/library/setup.js";
-import { setupDiscoveredSkillChoices } from "../src/presentation/setup-skills.js";
-import type { SetupSkillInstance } from "../src/workflows/library/setup-contract.js";
+import { classifySetupOnboarding } from "../src/library/setup/setup.js";
+import { setupDiscoveredSkillChoices } from "../src/library/setup/setup-skills.js";
+import type { SetupSkillInstance } from "../src/library/setup/setup-contract.js";
 
 it("shows all physical copies, groups actual sources, and leaves conflicts and Codex unchecked", () => {
   const instance = (name: string, path: string, hash = "a"): SetupSkillInstance => ({

@@ -15,7 +15,7 @@ import {
   reverseSetupDiscovery,
   reverseSetupIntent,
   setupDiscoverySettings,
-} from "../src/library-application/setup-undo-intent.js";
+} from "../src/library/setup/setup-undo-intent.js";
 import {
   deterministicTreeHash,
   libraryHome,

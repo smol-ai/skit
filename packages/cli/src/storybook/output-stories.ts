@@ -12,7 +12,7 @@ import {
 import type { CommandFailure, CommandResult } from "../commands/types.js";
 import { result } from "../handlers/contracts.js";
 import { recoveryActions } from "../commands/recovery-contract.js";
-import { setupUndoActions } from "../commands/setup-undo-contract.js";
+import { setupUndoActions } from "../library/setup/undo-result.js";
 
 export type OutputStory = Data.TaggedEnum<{
   Result: { readonly name: string; readonly group: string; readonly result: CommandResult };

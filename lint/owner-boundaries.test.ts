@@ -124,11 +124,15 @@ class Library extends Context.Service<Library, {}>()("skit/library/Library") {}`
 
   test("service debt only shrinks: every listed service is still declared", async () => {
     const { execFileSync } = await import("node:child_process");
-    const declared = execFileSync("git", ["grep", "-h", "-o", "-E", '"[^"]+"', "--", "packages"], {
-      cwd: root,
-      encoding: "utf8",
-      maxBuffer: 64 * 1024 * 1024,
-    });
+    const declared = execFileSync(
+      "git",
+      ["grep", "--untracked", "--exclude-standard", "-h", "-o", "-E", '"[^"]+"', "--", "packages"],
+      {
+        cwd: root,
+        encoding: "utf8",
+        maxBuffer: 64 * 1024 * 1024,
+      },
+    );
     const strings = new Set(declared.split("\n").map((line) => line.slice(1, -1)));
     const stale = Object.keys(serviceDebt).filter((id) => !strings.has(id));
     const overlap = Object.keys(serviceDebt).filter((id) => approvedServices.includes(id));

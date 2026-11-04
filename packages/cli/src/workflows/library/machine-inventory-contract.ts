@@ -1,6 +1,6 @@
 import { LibraryInventory } from "@smolai/skit-core";
 import { Schema } from "effect";
-import { SetupSkillInstance, SetupResult } from "./setup-contract.js";
+import { SetupSkillInstance, SetupResult } from "../../library/setup/setup-contract.js";
 
 /** The refreshed Library view plus the complete read-only machine Skill observation. */
 export const MachineInventoryResult = Schema.Struct({

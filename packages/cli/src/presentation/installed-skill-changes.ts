@@ -2,7 +2,7 @@ import type {
   InstalledSkillChange,
   InstalledSkillChangeResult,
   SetupVersionChoice,
-} from "../workflows/library/setup-contract.js";
+} from "../library/setup/setup-contract.js";
 import { terminalData } from "./terminal-text.js";
 
 export function renderInstalledSkillChange(

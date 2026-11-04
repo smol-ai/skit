@@ -10,9 +10,9 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { afterEach, beforeEach, expect, vi, type MockInstance } from "vitest";
 import { Prompter, terminalPrompterLayer, type Choice } from "../src/presentation/prompter.js";
 
-import { setupDiscoveredSkillChoices } from "../src/presentation/setup-skills.js";
-import { classifySetupOnboarding } from "../src/workflows/library/setup.js";
-import type { SetupSkillInstance } from "../src/workflows/library/setup-contract.js";
+import { setupDiscoveredSkillChoices } from "../src/library/setup/setup-skills.js";
+import { classifySetupOnboarding } from "../src/library/setup/setup.js";
+import type { SetupSkillInstance } from "../src/library/setup/setup-contract.js";
 
 type Key =
   | "up"

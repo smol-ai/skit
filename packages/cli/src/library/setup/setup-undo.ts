@@ -20,9 +20,12 @@ import {
   type MachineSettingsSnapshot,
   type OperationId,
 } from "@smolai/skit-core";
-import { PlanIsStale } from "../library/failures.js";
-import { ensureRecoveryOperation, recoveryOperationDirectory } from "./recovery-moves.js";
-import { RecoveryInvalid } from "./recovery-evidence.js";
+import { PlanIsStale } from "../failures.js";
+import {
+  ensureRecoveryOperation,
+  recoveryOperationDirectory,
+} from "../../library-application/recovery-moves.js";
+import { RecoveryInvalid } from "../../library-application/recovery-evidence.js";
 import { inspectSetupOperation } from "./setup-operation.js";
 import {
   prepareSetupUndoFiles,

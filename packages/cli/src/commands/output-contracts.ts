@@ -19,9 +19,9 @@ import {
   SetupAppliedOutput,
   SetupReviewOutput,
   SetupFailureOutput,
-} from "./setup-actions.js";
+} from "../library/setup/actions.js";
 import { RecoveryList, RecoveryOutput } from "./recovery-contract.js";
-import { SetupUndoOutput } from "./setup-undo-contract.js";
+import { SetupUndoOutput } from "../library/setup/undo-result.js";
 import { AuditReportV1Alpha4 } from "../audit/schema.js";
 import { HarnessProbeReport } from "../harness/probe.js";
 import { RegistryRemoteChange, RegistryRemoteList } from "../registry/contracts.js";
@@ -33,7 +33,7 @@ import { UpdatePlan, UpdateResult } from "../workflows/library/update-contract.j
 import { SyncResult } from "../workflows/library/library-sync-contract.js";
 import { ListResult } from "../workflows/library/list-contract.js";
 import { SetEnabledChange, SetEnabledResult } from "../workflows/library/set-enabled-contract.js";
-import { RepositoryPolicyResult } from "../workflows/library/setup-contract.js";
+import { RepositoryPolicyResult } from "../library/setup/setup-contract.js";
 import { EditImportPlan, EditImportResult } from "../workflows/library/import-edit-contract.js";
 import { MachineInventoryResult } from "../workflows/library/machine-inventory-contract.js";
 import { DoctorReport } from "../workflows/library/doctor-harnesses.js";

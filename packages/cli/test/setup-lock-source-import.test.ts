@@ -13,16 +13,16 @@ import {
   collectionVersionPath,
   skitLayer,
 } from "@smolai/skit-core";
-import { setupCommand } from "../src/handlers/library/setup.js";
+import { setupCommand } from "../src/library/setup/command.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
-import { setupPrompts } from "../src/presentation/setup-steps.js";
-import { runSetup } from "../src/workflows/library/setup.js";
-import { setupImportRequests } from "../src/workflows/library/setup-import.js";
+import { setupPrompts } from "../src/library/setup/setup-steps.js";
+import { runSetup } from "../src/library/setup/setup.js";
+import { setupImportRequests } from "../src/library/setup/setup-import.js";
 import { applySetupSelections } from "./helpers/setup-apply.js";
 import {
   SetupLockMatch,
   type SetupOnboardingCandidate,
-} from "../src/workflows/library/setup-contract.js";
+} from "../src/library/setup/setup-contract.js";
 import { resolveSkillsShSelectedSource } from "../src/workflows/library/skills-sh-lock-source.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 

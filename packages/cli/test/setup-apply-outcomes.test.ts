@@ -9,21 +9,21 @@ import {
   skitLayer,
 } from "@smolai/skit-core";
 import { withSandboxDenying } from "./helpers/sandbox.js";
-import { SetupResult } from "../src/workflows/library/setup-contract.js";
-import { setupCommand } from "../src/handlers/library/setup.js";
+import { SetupResult } from "../src/library/setup/setup-contract.js";
+import { setupCommand } from "../src/library/setup/command.js";
 import {
   makeScriptedInteraction,
   type ScriptedAnswer,
 } from "../src/presentation/interaction-recorder.js";
 import { Prompter } from "../src/presentation/prompter.js";
-import { setupPrompts } from "../src/presentation/setup-steps.js";
+import { setupPrompts } from "../src/library/setup/setup-steps.js";
 import {
   inspectRecoveryOperation,
   listRecoveryOperations,
 } from "../src/library-application/recovery-moves.js";
 import { PlanIsStale } from "../src/library/failures.js";
-import { SetupDiscovery, SetupPlanStale } from "../src/workflows/library/setup.js";
-import { SetupStopped } from "../src/workflows/library/setup-apply.js";
+import { SetupDiscovery, SetupPlanStale } from "../src/library/setup/setup.js";
+import { SetupStopped } from "../src/library/setup/setup-apply.js";
 import { captureDisk, diskChanges, noDiskChanges, type DiskDiff } from "./helpers/disk-snapshot.js";
 import {
   deterministicTreeHash,

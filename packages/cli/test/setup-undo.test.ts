@@ -13,12 +13,12 @@ import {
   setupIntent,
   skitLayer,
 } from "@smolai/skit-core";
-import { readSkillPathDetails } from "../src/library-application/setup-operation.js";
-import { setupDiscoverySettings } from "../src/library-application/setup-undo-intent.js";
-import { checkSetupGlobalContent } from "../src/library-application/setup-external-ownership.js";
+import { readSkillPathDetails } from "../src/library/setup/setup-operation.js";
+import { setupDiscoverySettings } from "../src/library/setup/setup-undo-intent.js";
+import { checkSetupGlobalContent } from "../src/library/setup/setup-external-ownership.js";
 import { recoveryFingerprint } from "../src/library-application/recovery-evidence.js";
-import { prepareSetupUndo } from "../src/library-application/setup-undo.js";
-import { setupResultActions } from "../src/commands/setup-actions.js";
+import { prepareSetupUndo } from "../src/library/setup/setup-undo.js";
+import { setupResultActions } from "../src/library/setup/actions.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import { renderContract } from "../src/presentation/contract-presenters.js";
@@ -26,8 +26,8 @@ import {
   inspectRecoveryOperation,
   prepareRecoveryMoves,
 } from "../src/library-application/recovery-moves.js";
-import { prepareSetupCommand, setupApplyCommand } from "../src/handlers/library/setup-machine.js";
-import { runSetup } from "../src/workflows/library/setup.js";
+import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply-command.js";
+import { runSetup } from "../src/library/setup/setup.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { libraryHome, scratch } from "./helpers/library-home.js";
 

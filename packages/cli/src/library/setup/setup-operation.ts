@@ -16,8 +16,11 @@ import {
   InstallDestination,
   SetupIntent,
 } from "@smolai/skit-core";
-import { recoveryOperationPath } from "./recovery-moves.js";
-import { RecoveryInvalid, recoveryFingerprint } from "./recovery-evidence.js";
+import { recoveryOperationPath } from "../../library-application/recovery-moves.js";
+import {
+  RecoveryInvalid,
+  recoveryFingerprint,
+} from "../../library-application/recovery-evidence.js";
 import { SetupDiscoverySettings } from "./setup-undo-intent.js";
 
 const DevicePath = AbsoluteDevicePath.check(

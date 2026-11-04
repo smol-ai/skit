@@ -19,7 +19,7 @@ import {
   type LibraryState,
   type OperationId,
 } from "@smolai/skit-core";
-import { readSkillsLock } from "./skills-sh-lock-source.js";
+import { readSkillsLock } from "../../workflows/library/skills-sh-lock-source.js";
 import { readableSkillsDirectories } from "../../install/duplicates.js";
 import type { InventoryRootOptions } from "../../install/roots.js";
 import { readRepositoryConfig, repositoryPathExcluded } from "./setup-config.js";

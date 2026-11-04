@@ -6,16 +6,16 @@ import { TestClock } from "effect/testing";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { LibraryStore, libraryStateRevision, skitLayer } from "@smolai/skit-core";
-import { prepareSetupCommand, setupApplyCommand } from "../src/handlers/library/setup-machine.js";
+import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply-command.js";
 import { renderContract } from "../src/presentation/contract-presenters.js";
-import { setupCommand } from "../src/handlers/library/setup.js";
+import { setupCommand } from "../src/library/setup/command.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import type { CommandAction } from "../src/commands/command-actions.js";
-import { readSkillPathDetails } from "../src/library-application/setup-operation.js";
+import { readSkillPathDetails } from "../src/library/setup/setup-operation.js";
 import { listRecoveryOperations } from "../src/library-application/recovery-moves.js";
-import { prepareSetupUndo } from "../src/library-application/setup-undo.js";
-import { runSetup } from "../src/workflows/library/setup.js";
+import { prepareSetupUndo } from "../src/library/setup/setup-undo.js";
+import { runSetup } from "../src/library/setup/setup.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import {
   deterministicTreeHash,

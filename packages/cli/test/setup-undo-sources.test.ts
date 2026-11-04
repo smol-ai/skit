@@ -19,11 +19,11 @@ import {
   skitLayer,
 } from "@smolai/skit-core";
 import { skillsDirectoryFor } from "../src/install/roots.js";
-import { prepareSetupCommand, setupApplyCommand } from "../src/handlers/library/setup-machine.js";
-import { prepareSetupUndo } from "../src/library-application/setup-undo.js";
-import { setupSourceChoiceId } from "../src/workflows/library/setup-decisions.js";
+import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply-command.js";
+import { prepareSetupUndo } from "../src/library/setup/setup-undo.js";
+import { setupSourceChoiceId } from "../src/library/setup/setup-decisions.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
-import { runSetup } from "../src/workflows/library/setup.js";
+import { runSetup } from "../src/library/setup/setup.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import { renderContract } from "../src/presentation/contract-presenters.js";

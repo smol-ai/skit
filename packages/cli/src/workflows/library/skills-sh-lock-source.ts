@@ -8,7 +8,7 @@ import type {
   SetupSkillsLock,
   SetupSkillsLockEntry,
   SetupSkillInstance,
-} from "./setup-contract.js";
+} from "../../library/setup/setup-contract.js";
 import { computeSkillsShCompatibleHash } from "./skills-sh-compatible-hash.js";
 
 const namePattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
