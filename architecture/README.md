@@ -41,15 +41,6 @@ This is a local acceptance gate, not a filesystem sandbox. An agent with shell
 access can ignore a command. Its result becomes authoritative only when the user
 or an independent runner chooses the SHA and executes the pinned command.
 
-## Size only falls
-
-Debt lists track where code sits, not how much there is. `size.mjs` records approved limits for
-source lines per package, names exported per package entry point, and files reachable from each CLI
-command. The pinned check fails when the working tree measures above the checkpoint's limits.
-`lint/size-ratchet.test.ts` also fails on a stale limit, so a shrink lowers its number in the same
-change. Raising a limit or adding a command is an architecture change with its own checkpoint.
-Moving code behind a new owner without deleting the old path therefore fails.
-
 ## Private means private, regardless of the exported name
 
 Library's storage implementation (`library-store`, `state-file`, `writer-lock`)
