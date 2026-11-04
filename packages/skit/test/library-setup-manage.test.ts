@@ -7,9 +7,10 @@ import { migratedMachineId } from "../src/library/entity-ids.js";
 import { observePathEvidence } from "../src/library/folder-evidence.js";
 import { InstalledSkills } from "../src/library/installed-skills.js";
 import { reviewInstalledSkillChanges } from "../src/library/installed-skill-review.js";
+import { LibraryState } from "../src/library/library-state.js";
 import { Library } from "../src/library/library.js";
 import { planIntent } from "../src/library/plan-changes.js";
-import { routedInstalledSkills } from "../src/library/setup-manage.js";
+import { routedInstalledSkills } from "../src/library/routing/recorded.js";
 import {
   OperationStatus,
   type FolderEvidence,
@@ -35,6 +36,61 @@ const crashingAfter = (commits: number) =>
         ...fs,
         rename: (from: string, to: string) => Effect.andThen(crash, fs.rename(from, to)),
         link: (from: string, to: string) => Effect.andThen(crash, fs.link(from, to)),
+      };
+    }),
+  );
+
+/** Interrupt after a named durable state or filesystem change, independent of write counts. */
+const crashingAt = (
+  home: string,
+  boundary: "intent" | "pending" | "marker" | "installed" | "step" | "backup" | "successor",
+) =>
+  Layer.effect(
+    FileSystem.FileSystem,
+    Effect.map(FileSystem.FileSystem, (fs) => {
+      let crashed = false;
+      return {
+        ...fs,
+        rename: (from: string, to: string) =>
+          Effect.gen(function* () {
+            yield* fs.rename(from, to);
+            if (crashed) return;
+            let stop = boundary === "marker" && to.endsWith("/.skit-ownership.json");
+            stop ||=
+              boundary === "backup" &&
+              from.endsWith("/review") &&
+              to.includes(".skit-backups/pending-");
+            stop ||=
+              boundary === "successor" && from.includes(".skit-stage-") && to.endsWith("/review");
+            if (to === join(home, "state.json")) {
+              const state = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(LibraryState))(
+                yield* fs.readFileString(to),
+              ).pipe(Effect.orDie);
+              const operation = (yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
+                state.operations,
+              ).pipe(Effect.orDie)).find((item) => item._tag === "Pending");
+              if (operation?._tag === "Pending") {
+                const step = operation.steps.find(
+                  (item) => item.step._tag === "Manage" || item.step._tag === "Update",
+                );
+                const batch = step?.applies?.at(-1)?.apply;
+                stop ||=
+                  boundary === "intent" &&
+                  !!batch &&
+                  state.enabled.length > 0 &&
+                  state.installed_skills.length === 0;
+                stop ||=
+                  boundary === "pending" &&
+                  state.installed_skills.some((row) => row.status === "pending");
+                stop ||= boundary === "installed" && !!batch && Option.isSome(batch.completed);
+                stop ||= boundary === "step" && step?.status === "Done";
+              }
+            }
+            if (stop) {
+              crashed = true;
+              return yield* Effect.die("crash at " + boundary);
+            }
+          }),
       };
     }),
   );
@@ -192,11 +248,11 @@ it.effect("the Import's Done mark saves what it retained in the Manage step that
 
 // Managing the copy commits: the intent; the copy recorded as pending; SKIT's marker; the copy
 // recorded as installed; the Manage step's Done mark.
-for (const [commits, after] of [
-  [5, "the intent"],
-  [7, "the marker"],
-  [8, "the installed record"],
-  [9, "the Done mark"],
+for (const [boundary, after] of [
+  ["intent", "the intent"],
+  ["marker", "the marker"],
+  ["installed", "the installed record"],
+  ["step", "the Done mark"],
 ] as const)
   it.effect(`a Manage step that crashed after ${after} is finished by a re-run`, () =>
     Effect.gen(function* () {
@@ -206,7 +262,7 @@ for (const [commits, after] of [
         withLibrary(
           home,
           (library) => Effect.flatMap(library.read, (base) => library.setup(steps, { base })),
-          crashingAfter(commits),
+          crashingAt(home, boundary),
         ),
       );
       assert.isTrue(Exit.isFailure(crashed));
@@ -234,7 +290,7 @@ it.effect("a crash after the copy is recorded, before its marker, is finished by
       withLibrary(
         home,
         (library) => Effect.flatMap(library.read, (base) => library.setup(steps, { base })),
-        crashingAfter(6),
+        crashingAt(home, "pending"),
       ),
     );
     const [operation] = yield* recordedOperations(home);
@@ -264,7 +320,7 @@ it.effect("a re-run checks the managed folder itself, and stops when it was edit
       withLibrary(
         home,
         (library) => Effect.flatMap(library.read, (base) => library.setup(steps, { base })),
-        crashingAfter(8),
+        crashingAt(home, "installed"),
       ),
     );
     const [operation] = yield* recordedOperations(home);
@@ -403,7 +459,7 @@ it.effect("a crash after the update was saved is finished by a re-run that accep
       withLibrary(
         home,
         (library) => Effect.flatMap(library.read, (base) => library.setup([update], { base })),
-        crashingAfter(4),
+        crashingAt(home, "installed"),
       ),
     );
     assert.isTrue(Exit.isFailure(crashed));
@@ -779,3 +835,41 @@ it.effect(
       assert.isTrue(yield* fs.exists(join(workspace, ".agents", "skills", "review", "SKILL.md")));
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+for (const boundary of ["backup", "successor"] as const)
+  it.effect(`a recorded setup Update resumes after the ${boundary} rename`, () =>
+    Effect.gen(function* () {
+      const { fs, home, copy, update, routing } = yield* updateFixture;
+      const crashed = yield* Effect.exit(
+        withLibrary(
+          home,
+          (library) => Effect.flatMap(library.read, (base) => library.setup([update], { base })),
+          crashingAt(home, boundary),
+        ),
+      );
+      assert.isTrue(Exit.isFailure(crashed));
+      const [operation] = (yield* recordedOperations(home)).filter(
+        (item) => item._tag === "Pending",
+      );
+      if (operation?._tag !== "Pending") return assert.fail("Missing Pending Update");
+      const batch = operation.steps[0]?.applies?.[0]?.apply;
+      if (!batch) return assert.fail("Missing recorded installed changes");
+      const expected = batch.expected.find((row) => row.path === copy);
+      assert.isDefined(expected);
+      assert.deepStrictEqual(yield* restart(home), {
+        finished: [operation.operationId],
+        stopped: [],
+      });
+      const state = yield* inspectLibrary(home);
+      assert.strictEqual(
+        state.present &&
+          state.state.installed_skills.find((row) => row.path === copy)?.installed_skill_id,
+        expected?.installed_skill_id,
+      );
+      assert.include(yield* fs.readFileString(join(copy, "SKILL.md")), "Now with more.");
+      assert.deepStrictEqual(
+        (yield* reviewUpdate(home, routing)).map((row) => row.status),
+        ["unchanged"],
+      );
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  );

@@ -360,24 +360,26 @@ export interface SyncProgram extends Schema.Schema.Type<typeof syncProgram> {}
 export interface StoredSyncProgram extends Schema.Codec.Encoded<typeof syncProgram> {}
 export const SyncProgram: Schema.Codec<SyncProgram, StoredSyncProgram> = syncProgram;
 
+export const InstalledApply = Schema.TaggedStruct("Apply", {
+  /** A Plan codec document, decoded by the operation owner. Its next state never embeds operations. */
+  reviewed: Schema.Json,
+  before: SyncPublication,
+  routing: StepRouting,
+  installedAt: Schema.String,
+  ids: Schema.Array(Schema.Struct({ path: Schema.String, id: InstalledSkillId })),
+  /** Expected installed rows, recorded after root preparation and before any skill changes. */
+  expected: Schema.Array(InstalledSkill),
+  prepared: Schema.Boolean,
+  completed: Schema.OptionFromOptionalKey(
+    Schema.Struct({
+      state: SyncPublication,
+      folders: Schema.Array(SyncFolder),
+    }),
+  ),
+});
+
 export const SetupStep = Schema.Union([
-  Schema.TaggedStruct("Apply", {
-    /** A Plan codec document, decoded by the executor. Its next state never embeds operations. */
-    reviewed: Schema.Json,
-    before: SyncPublication,
-    routing: StepRouting,
-    installedAt: Schema.String,
-    ids: Schema.Array(Schema.Struct({ path: Schema.String, id: InstalledSkillId })),
-    /** Expected installed rows, recorded after root preparation and before any skill changes. */
-    expected: Schema.Array(InstalledSkill),
-    prepared: Schema.Boolean,
-    completed: Schema.OptionFromOptionalKey(
-      Schema.Struct({
-        state: SyncPublication,
-        folders: Schema.Array(SyncFolder),
-      }),
-    ),
-  }),
+  InstalledApply,
   Schema.TaggedStruct("Sync", { phase: Schema.Literal("retire"), program: SyncProgram }),
   Schema.TaggedStruct("Sync", {
     phase: Schema.Literals(["publish", "install"]),
@@ -410,6 +412,10 @@ export type SetupStep = typeof SetupStep.Type;
 /** One step as saved before any step runs; Done once its effect is complete. */
 export const RecordedSetupStep = Schema.Struct({
   step: SetupStep,
+  /** Named installed-change batches. Absent in existing v12 operation records. */
+  applies: Schema.optionalKey(
+    Schema.Array(Schema.Struct({ key: Schema.String, apply: InstalledApply })),
+  ),
   before: Schema.Array(StepEvidence),
   after: Schema.Array(StepEvidence),
   status: Schema.Literals(["Pending", "Done"]),

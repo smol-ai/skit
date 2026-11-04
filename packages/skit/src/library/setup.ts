@@ -16,7 +16,6 @@ import {
   installedPaths,
   runManage,
   runUpdate,
-  runApply,
   type ManageResult,
 } from "./setup-manage.js";
 import { absentEvidence, observePathEvidence } from "./folder-evidence.js";
@@ -28,7 +27,9 @@ import { importCollection, type ImportedCollection } from "./import-collection.j
 import { emptyLibraryState, type LibraryState } from "./library-state.js";
 import { StalePlan, type Plan, type Outcome, type InstalledSkillResult } from "./library-plan.js";
 import { InstalledSkillInvalid } from "./installation/install-enabled.js";
-import { prepareApply, reviewedApply, applyOutcome } from "./internal/apply/recorded.js";
+import { prepareApply, reviewedApply } from "./internal/operations/recorded.js";
+import { applyOutcome } from "./internal/operations/result.js";
+import { runApply, operationScope } from "./internal/operations/operations.js";
 import type { Routing } from "./library.js";
 import { snapshotOf, type Snapshot } from "./snapshot.js";
 import {
@@ -285,7 +286,7 @@ const runStep = Effect.fn("Library.setup.step")(function* (
       return { _tag: "Ran", result, after: [] } satisfies StepOutcome;
     }
     case "Sync":
-      return yield* runSyncStep(operationId, index, steps);
+      return yield* runSyncStep(operationId, index, steps, home);
     case "Import": {
       const imported = yield* Effect.scoped(importCollection(step.request));
       return {
@@ -301,9 +302,35 @@ const runStep = Effect.fn("Library.setup.step")(function* (
       } satisfies StepOutcome;
     }
     case "Manage":
-      return yield* Effect.scoped(runManage(operationId, index, step, steps));
+      return yield* operationScope(operationId, index, step.routing).pipe(
+        Effect.flatMap((scope) => Effect.scoped(runManage(operationId, index, step, steps, scope))),
+        Effect.catchTag("Library.InstalledSkillsChanged", (error) =>
+          Effect.succeed({
+            _tag: "Stop" as const,
+            reason: {
+              _tag: "EvidenceDiffers" as const,
+              step: index,
+              path: error.path,
+              expected: { before: Option.none(), after: Option.none() },
+            },
+          }),
+        ),
+      );
     case "Update":
-      return yield* Effect.scoped(runUpdate(index, step));
+      return yield* operationScope(operationId, index, step.routing).pipe(
+        Effect.flatMap((scope) => Effect.scoped(runUpdate(index, step, scope))),
+        Effect.catchTag("Library.InstalledSkillsChanged", (error) =>
+          Effect.succeed({
+            _tag: "Stop" as const,
+            reason: {
+              _tag: "EvidenceDiffers" as const,
+              step: index,
+              path: error.path,
+              expected: { before: Option.none(), after: Option.none() },
+            },
+          }),
+        ),
+      );
     case "Remove": {
       const moved = yield* moveAside(
         operationId,
@@ -599,12 +626,20 @@ export const applyRecorded = Effect.fn("Library.applyRecorded")(function* (
   return applyOutcome(reviewed, yield* loadLibrary(home), applied.outcome);
 }, Effect.scoped);
 
+type StoppedOperation = Extract<OperationStatus, { readonly _tag: "Stopped" }>;
+/** Installed-change batches are private recovery state, not part of startup's operation report. */
+type StartupStoppedOperation = {
+  readonly [K in keyof StoppedOperation]: K extends "steps"
+    ? readonly Omit<RecordedSetupStep, "applies">[]
+    : StoppedOperation[K];
+};
+
 /** What startup recovery did with the operations it found unfinished. */
 export interface StartupRecovery {
   /** Finished: only steps safe to repeat were run. */
   readonly finished: readonly OperationId[];
   /** Stopped instead, each with its reason; the user can undo them. */
-  readonly stopped: readonly Extract<OperationStatus, { readonly _tag: "Stopped" }>[];
+  readonly stopped: readonly StartupStoppedOperation[];
 }
 
 /**
@@ -661,7 +696,13 @@ export const recover = Effect.fn("Library.recover")(function* (home: string) {
               }),
         );
       }
-      return { finished, stopped } satisfies StartupRecovery;
+      return {
+        finished,
+        stopped: stopped.map(({ steps, ...operation }) => ({
+          ...operation,
+          steps: steps.map(({ applies: _applies, ...step }) => step),
+        })),
+      } satisfies StartupRecovery;
     }),
   );
 });

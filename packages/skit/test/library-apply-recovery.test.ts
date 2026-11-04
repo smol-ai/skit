@@ -8,7 +8,7 @@ import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 type Operation = "enable" | "disable" | "update" | "remove" | "uninstall";
-type Boundary = "recorded" | "folder" | "successor" | "completion";
+type Boundary = "recorded" | "folder" | "successor" | "completion" | "directory" | "settlement";
 const bytes = (text: string) =>
   `---\nname: review\ndescription: Recorded apply fixture\n---\n${text}\n`;
 
@@ -89,6 +89,14 @@ const interrupt = Effect.fn("test.applyRecovery.interrupt")(function* (
   let crashed = false;
   const fs: FileSystem.FileSystem = {
     ...f.fs,
+    makeDirectory: (path, options) =>
+      Effect.gen(function* () {
+        yield* f.fs.makeDirectory(path, options);
+        if (!crashed && boundary === "directory" && path === f.skills) {
+          crashed = true;
+          return yield* Effect.die("Process exited after creating skills directory");
+        }
+      }),
     rename: (from, to) =>
       Effect.gen(function* () {
         if (!crashed && to === join(f.home, "state.json")) {
@@ -100,6 +108,13 @@ const interrupt = Effect.fn("test.applyRecovery.interrupt")(function* (
               yield* f.fs.rename(from, to);
               crashed = true;
               return yield* Effect.die("Process exited after recording apply");
+            }
+            if (boundary === "settlement" && step.step.completed !== undefined) {
+              yield* f.fs.rename(from, to);
+              crashed = true;
+              return yield* Effect.die(
+                "Process exited after state commit before backup settlement",
+              );
             }
             if (boundary === "completion" && step.status === "Done") {
               crashed = true;
@@ -304,5 +319,41 @@ it.effect("apply returns the final journal revision and rebuilds the next state 
       assert.strictEqual(outcome.result.results[0]?.revision, libraryStateRevision(snapshot.state));
       assert.strictEqual(snapshot.state.operations.at(-1)?._tag, "Done");
     }).pipe(Effect.provide(f.layer));
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("recovery resumes after creating a previously absent skills directory", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture("enable", true);
+    const operation = yield* interrupt(f, "directory");
+    assert.isTrue(yield* f.fs.exists(f.skills));
+    assert.isFalse(yield* f.fs.exists(f.installed));
+    yield* Effect.gen(function* () {
+      const library = yield* Library.Service;
+      assert.deepStrictEqual(library.startup.finished, [operation.operationId]);
+      assert.deepStrictEqual(library.startup.stopped, []);
+      assert.strictEqual(
+        yield* f.fs.readFileString(join(f.installed, "SKILL.md")),
+        bytes("Original"),
+      );
+    }).pipe(Effect.provide(Library.layer({ home: f.home, routing: { _tag: "None" } })));
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("recovery settles predecessor backups after the completed state was committed", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture("update");
+    const operation = yield* interrupt(f, "settlement");
+    const backups = join(f.root, ".skit-backups");
+    assert.isTrue((yield* f.fs.readDirectory(backups)).some((name) => name.startsWith("pending-")));
+    yield* Effect.gen(function* () {
+      const library = yield* Library.Service;
+      assert.deepStrictEqual(library.startup.finished, [operation.operationId]);
+      assert.deepStrictEqual(library.startup.stopped, []);
+    }).pipe(Effect.provide(Library.layer({ home: f.home, routing: { _tag: "None" } })));
+    assert.isFalse(
+      (yield* f.fs.readDirectory(backups)).some((name) => name.startsWith("pending-")),
+    );
+    assert.strictEqual(yield* f.fs.readFileString(join(f.installed, "SKILL.md")), bytes("Updated"));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

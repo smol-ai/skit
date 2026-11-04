@@ -2,25 +2,20 @@
 // machine's configuration, so a re-run after a crash installs exactly where the first run did.
 
 import { snapshotOf } from "./snapshot.js";
-import { Effect, FileSystem, Option, Schema } from "effect";
-import { Digest } from "effect/crypto";
+import { Effect, FileSystem, Option } from "effect";
 import { dirname, join, resolve } from "node:path";
-import { digestTreeHash } from "../artifact/skit.js";
 import { TreeHasher } from "../artifact/tree-hasher.js";
 import { hasHarnessProfile } from "../harnesses/catalog.js";
 import { inspectInstalledSkill } from "../install/files.js";
 import { LinkStat } from "../platform/link-stat.js";
-import { canonicalJson } from "../shared/json.js";
 import { InstallScope } from "../vocabulary.js";
-import { apply } from "./apply-plan.js";
+import type { OperationScope } from "./internal/operations/operations.js";
 import {
-  resumeApply,
-  reviewedApply,
-  applyOutcome,
-  type ApplyStep,
-} from "./internal/apply/recorded.js";
-import { StalePlan, type Outcome } from "./library-plan.js";
-import { findDuplicates, type DuplicateScanError } from "./duplicates.js";
+  routedInstalledSkills,
+  destinationsIn,
+  readableIn,
+  digestTreeHasher,
+} from "./routing/recorded.js";
 import { InvalidIntent } from "./enabled-plan.js";
 import type { CollectionId, OperationId } from "./entity-ids.js";
 import { absentUnder, holdsEvidence, parentIsAsRecorded } from "./folder-evidence.js";
@@ -39,7 +34,7 @@ import {
 import { incompleteManageWarning, planManage } from "./manage-plan.js";
 import { planIntent } from "./plan-changes.js";
 import { moveAside, recoveryDirectory } from "./setup-moves.js";
-import { LibraryWriter, loadLibrary } from "./store/library-store.js";
+import { loadLibrary } from "./store/library-store.js";
 import type {
   FolderEvidence,
   LinkEvidence,
@@ -53,72 +48,6 @@ import type {
   StepRouting,
 } from "./store/state-schema.js";
 import { resolveLibrarySubject } from "./subject-resolution.js";
-
-/** The recorded runner is the only entry to ordinary folder execution. */
-export const runApply = Effect.fn("Library.recordedApplyStep")(function* (
-  operationId: OperationId,
-  index: number,
-  step: ApplyStep,
-) {
-  const files = yield* routedInstalledSkills(step.routing);
-  return yield* Effect.scoped(
-    Effect.gen(function* () {
-      const original = yield* reviewedApply(step);
-      const intent = original.intent;
-      const attempt = yield* Effect.result(
-        Effect.gen(function* () {
-          const resumed = yield* resumeApply(operationId, index, step);
-          if (
-            resumed.completed ||
-            (intent._tag === "Remove" &&
-              !resumed.state.collections.some((item) => item.collection_id === intent.collectionId))
-          )
-            return { _tag: "Applied", results: [], copies: [] } satisfies Outcome;
-          const plan = yield* planIntent(original.intent, {
-            home: (yield* LibraryWriter).home,
-            base: resumed.base,
-            approvals: original.approvals,
-          });
-          if (
-            canonicalJson(plan.routes) !== canonicalJson(original.routes) ||
-            plan.changes.some((change) => {
-              if ("subject_id" in change) return false;
-              const path = "path" in change ? change.path : change.recorded.path;
-              return !original.changes.some((saved) => {
-                if ("subject_id" in saved) return false;
-                return (
-                  ("path" in saved ? saved.path : saved.recorded.path) === path &&
-                  (!("skillVersionId" in change) ||
-                    ("skillVersionId" in saved &&
-                      saved.skillId === change.skillId &&
-                      saved.skillVersionId === change.skillVersionId))
-                );
-              });
-            })
-          )
-            return yield* new StalePlan({
-              message: "Recorded routing or installed-skill choices changed",
-            });
-          return yield* apply(plan, {
-            installedAt: step.installedAt,
-            ids: resumed.ids,
-            operationId,
-            step: index,
-          });
-        }).pipe(
-          Effect.catchTag("Library.InstalledSkillsChanged", (error) =>
-            Effect.fail(new StalePlan({ message: error.message })),
-          ),
-        ),
-      );
-      const outcome: Outcome =
-        attempt._tag === "Success"
-          ? attempt.success
-          : { _tag: "Incomplete", results: [], reason: "update", cause: attempt.failure };
-      return applyOutcome(original, yield* loadLibrary((yield* LibraryWriter).home), outcome);
-    }).pipe(Effect.provideService(InstalledSkills.Service, files)),
-  );
-});
 
 /** What a Manage step did: each enable it applied, its warnings and where it moved duplicates. */
 export interface ManageResult {
@@ -135,48 +64,7 @@ export type ManagedStep =
 type ManageStep = Extract<SetupStep, { readonly _tag: "Manage" }>;
 type UpdateStep = Extract<SetupStep, { readonly _tag: "Update" }>;
 
-const sameScope = Schema.toEquivalence(InstallScope);
-const destinationsIn = (routing: StepRouting, scope: InstallScope) =>
-  routing.destinations
-    .filter((target) => sameScope(target.scope, scope))
-    .map(({ destination, root }) => ({ destination, root }));
-const readableIn = (routing: StepRouting, scope: InstallScope) =>
-  routing.readable
-    .filter((root) => sameScope(root.scope, scope))
-    .map(({ harness, root }) => ({ harness, root }));
 const global: InstallScope = { kind: "global" };
-
-/** The tree hash over Digest, so setup needs no TreeHasher service. */
-const digestTreeHasher = Effect.map(Digest.Digest, (digest) => ({
-  hash: (path: string) => digestTreeHash(path).pipe(Effect.provideService(Digest.Digest, digest)),
-}));
-
-/** This device's skill folders, routed only by what the step recorded. */
-export const routedInstalledSkills = Effect.fn("Library.setup.routedInstalledSkills")(function* (
-  routing: StepRouting,
-) {
-  const context = yield* Effect.context<FileSystem.FileSystem | LinkStat | Digest.Digest>();
-  const hasher = yield* digestTreeHasher;
-  return yield* InstalledSkills.make({
-    active: Effect.succeed(routing.active),
-    destinations: (scope) => Effect.succeed(destinationsIn(routing, scope)),
-    duplicates: {
-      scan: (scope, names) =>
-        Effect.gen(function* () {
-          const warnings: DuplicateScanError[] = [];
-          const readable = readableIn(routing, scope);
-          const copies = names.length
-            ? yield* findDuplicates(
-                { destinations: destinationsIn(routing, scope), readable },
-                names,
-                warnings,
-              )
-            : [];
-          return { copies, warnings, roots: readable.map(({ root }) => root) };
-        }).pipe(Effect.provide(context)),
-    },
-  }).pipe(Effect.provideService(TreeHasher, hasher));
-});
 
 const differs = (step: number, evidence: FolderEvidence | LinkEvidence): ManagedStep => ({
   _tag: "Stop",
@@ -199,9 +87,10 @@ const differs = (step: number, evidence: FolderEvidence | LinkEvidence): Managed
  * "The reviewed folder" means the same parent and file, and the reviewed bytes.
  */
 const reviewedOrManaged = Effect.fn("Library.setup.reviewedOrManaged")(function* (
+  home: string,
   evidence: FolderEvidence,
 ) {
-  const state = yield* loadLibrary((yield* LibraryWriter).home);
+  const state = yield* loadLibrary(home);
   if (!(yield* parentIsAsRecorded(evidence.path, evidence.parent))) return "differs" as const;
   if (yield* holdsEvidence(evidence, evidence.path)) return "reviewed" as const;
   const recorded = state.installed_skills.find(
@@ -323,6 +212,8 @@ export const planManageEnable = Effect.fn("Library.planManageEnable")(function* 
 });
 
 const enable = Effect.fn("Library.setup.enable")(function* (
+  scope: OperationScope,
+  key: string,
   selection: ManageExistingSelection | ManageNewSelection,
   subjectId: string,
   manage: {
@@ -331,10 +222,10 @@ const enable = Effect.fn("Library.setup.enable")(function* (
     readonly currentHash: string;
   },
 ) {
-  const { home } = yield* LibraryWriter;
+  const { home } = scope;
   const state = yield* loadLibrary(home);
   const plan = yield* planManageEnable(home, selection, subjectId, manage, state);
-  const outcome = yield* apply(plan);
+  const outcome = yield* scope.apply(key, plan);
   if (outcome._tag === "Applied") return { results: setEnabledResults(outcome), warnings: [] };
   // Setup keeps the managed copy while other differing copies stay where agents read them.
   const warning = incompleteManageWarning(selection.name, {
@@ -350,6 +241,7 @@ const enable = Effect.fn("Library.setup.enable")(function* (
  * reads does not hold SKIT's intact copy yet. None when every one does.
  */
 const replacementMissing = Effect.fn("Library.setup.replacementMissing")(function* (
+  home: string,
   routing: StepRouting,
   subjectId: string,
   name: string,
@@ -357,7 +249,7 @@ const replacementMissing = Effect.fn("Library.setup.replacementMissing")(functio
 ) {
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
-  const state = yield* loadLibrary((yield* LibraryWriter).home);
+  const state = yield* loadLibrary(home);
   const subject = yield* resolveLibrarySubject(state, subjectId);
   const skill = subject.skills.find((item) => item.name === name);
   const canonical = (path: string) =>
@@ -451,8 +343,9 @@ export const runManage = Effect.fn("Library.setup.manage")(function* (
   index: number,
   step: ManageStep,
   steps: readonly RecordedSetupStep[],
+  scope: OperationScope,
 ) {
-  const { home } = yield* LibraryWriter;
+  const { home } = scope;
   const files = yield* routedInstalledSkills(step.routing);
   const results: SetEnabledResult[] = [];
   const warnings: { readonly name: string; readonly message: string }[] = [];
@@ -472,14 +365,14 @@ export const runManage = Effect.fn("Library.setup.manage")(function* (
       if (policy === "retain-only" || Option.isNone(selection.ownership)) continue;
       subjectId = collectionId;
       for (const copy of selection.equalCopies)
-        if ((yield* reviewedOrManaged(copy)) === "differs") return differs(index, copy);
+        if ((yield* reviewedOrManaged(home, copy)) === "differs") return differs(index, copy);
       manage = {
         path: selection.source.path,
         equalPaths: selection.equalCopies.map(({ path }) => path),
         currentHash: selection.source.treeHash,
       };
     }
-    const source = yield* reviewedOrManaged(selection.source);
+    const source = yield* reviewedOrManaged(home, selection.source);
     if (source === "differs") return differs(index, selection.source);
     const moving = duplicatesToMove(step.routing, selection);
     for (const folder of moving)
@@ -516,14 +409,20 @@ export const runManage = Effect.fn("Library.setup.manage")(function* (
           });
         manage = { ...manage, path: plan.sourcePath, currentHash: plan.skill.validationHash };
       }
-      const enabled = yield* enable(selection, subjectId, manage).pipe(
+      const enabled = yield* enable(scope, String(at), selection, subjectId, manage).pipe(
         Effect.provideService(InstalledSkills.Service, files),
       );
       results.push(...enabled.results);
       warnings.push(...enabled.warnings);
     }
     if (!moving.length) continue;
-    const missing = yield* replacementMissing(step.routing, subjectId, selection.name, moving);
+    const missing = yield* replacementMissing(
+      home,
+      step.routing,
+      subjectId,
+      selection.name,
+      moving,
+    );
     if (Option.isSome(missing)) {
       warnings.push({ name: selection.name, message: missing.value });
       continue;
@@ -588,6 +487,7 @@ const reviewedChange = (change: ReviewedInstalledSkillChange): ReviewedChange =>
 export const runUpdate = Effect.fn("Library.setup.update")(function* (
   index: number,
   step: UpdateStep,
+  scope: OperationScope,
 ) {
   const files = yield* routedInstalledSkills(step.routing);
   return yield* updateInstalledSkills(
@@ -598,6 +498,7 @@ export const runUpdate = Effect.fn("Library.setup.update")(function* (
       ...Option.match(choice.path, { onNone: () => ({}), onSome: (path) => ({ path }) }),
     })),
     step.importedAt,
+    scope,
   ).pipe(
     Effect.provideService(InstalledSkills.Service, files),
     Effect.map((changes) => ({

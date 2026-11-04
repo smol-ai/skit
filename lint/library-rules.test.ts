@@ -267,11 +267,10 @@ describe("skit/library-recorded-execution", () => {
     expect(
       await reported(
         "library-recorded-execution",
-        `${library}setup-manage.ts`,
+        `${library}internal/operations/operations.ts`,
         `
-      import { apply as run } from "./apply-plan.js";
-      import { updateInstalledSkills } from "./installed-update.js";
-      export const execute = [run, updateInstalledSkills];
+      import { apply as run } from "./apply.js";
+      export const execute = run;
     `,
       ),
     ).toEqual([]);
@@ -333,5 +332,73 @@ describe("skit/library-recorded-execution", () => {
     `,
       ),
     ).toHaveLength(2);
+  });
+});
+
+describe("skit/library-operation-owner", () => {
+  test.each([
+    `import { LibraryWriter as writer } from "./store/library-store.js";`,
+    `import * as store from "./store/library-store.js";`,
+    `export { writeLibrary } from "./store/library-store.js";`,
+    `const store = import("./store/library-store.js");`,
+    `import { saveLibraryState } from "./store/state-file.js";`,
+    `import { apply } from "./apply-plan.js";`,
+  ])("adapters cannot reopen state or the old executor: %s", async (source) => {
+    expect(
+      await reported("library-operation-owner", `${library}setup-manage.ts`, source),
+    ).toHaveLength(1);
+  });
+  test.each([
+    `const files = yield* Copies.Service; files.install();`,
+    `const files = yield* Copies.Service; files["uninstall"]();`,
+    `const files = yield* Copies.Service; files.backups.discard();`,
+    `const files = yield* Copies.Service; const { prepare: create } = files;`,
+    `const files = yield* routed(); files.manage();`,
+  ])("adapters cannot mutate installed files directly: %s", async (body) => {
+    const source = `import { InstalledSkills as Copies } from "./installed-skills.js";
+      import { routedInstalledSkills as routed } from "./routing/recorded.js";
+      function* run() { ${body} }`;
+    expect(
+      await reported("library-operation-owner", `${library}setup-manage.ts`, source),
+    ).toHaveLength(1);
+  });
+  test("adapters cannot import the replacement executor or journal writer directly", async () => {
+    expect(
+      await reported(
+        "library-recorded-execution",
+        `${library}setup-manage.ts`,
+        `import { apply } from "./internal/operations/apply.js";`,
+      ),
+    ).toHaveLength(1);
+    expect(
+      await reported(
+        "library-recorded-execution",
+        `${library}new-helper.ts`,
+        `import { saveStep } from "./internal/operations/recorded.js";`,
+      ),
+    ).toHaveLength(1);
+  });
+  test("filesystem executor cannot obtain storage, but data types stay legal", async () => {
+    expect(
+      await reported(
+        "library-operation-owner",
+        `${library}internal/operations/installed-changes.ts`,
+        `import { loadLibrary } from "../../store/library-store.js";`,
+      ),
+    ).toHaveLength(1);
+    expect(
+      await reported(
+        "library-operation-owner",
+        `${library}internal/operations/installed-changes.ts`,
+        `import type { LibraryWriter } from "../../store/library-store.js";`,
+      ),
+    ).toEqual([]);
+    expect(
+      await reported(
+        "library-operation-owner",
+        `${library}setup-manage.ts`,
+        `import { loadLibrary, type LibraryWriter } from "./store/library-store.js";`,
+      ),
+    ).toEqual([]);
   });
 });

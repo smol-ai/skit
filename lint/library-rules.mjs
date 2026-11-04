@@ -53,11 +53,22 @@ const executionEdges = [
   {
     module: `${library}apply-plan`,
     names: ["apply"],
-    callers: [
-      `${library}setup-manage.ts`,
-      `${library}installed-update.ts`,
-      `${library}internal/sync/operation.ts`,
-    ],
+    callers: [],
+  },
+  {
+    module: `${library}internal/operations/apply`,
+    names: ["apply", "settleBackups"],
+    callers: [`${library}internal/operations/operations.ts`],
+  },
+  {
+    module: `${library}internal/operations/installed-changes`,
+    names: ["install"],
+    callers: [`${library}internal/operations/apply.ts`],
+  },
+  {
+    module: `${library}internal/operations/recorded`,
+    names: ["saveStep", "resumeApply"],
+    callers: [`${library}internal/operations/operations.ts`],
   },
   {
     module: `${library}installed-update`,
@@ -114,6 +125,125 @@ const storageModule = (target) =>
   ].some((module) => target === `${library}${module}`);
 
 export const libraryRules = {
+  "library-operation-owner": {
+    meta: {
+      type: "problem",
+      docs: {
+        description: "Installed-change adapters and filesystem execution cannot own Library writes",
+      },
+      messages: {
+        owner:
+          "{{name}} belongs to the Library operation owner. Adapters request recorded changes; filesystem execution cannot save state or journal progress.",
+        legacy:
+          "The legacy apply executor must be removed. Use the Library operation owner for recorded installed changes.",
+      },
+    },
+    create(context) {
+      const file = relative(root, context.filename);
+      if (!file.startsWith(library) || !file.endsWith(".ts")) return {};
+      const adapter = ["setup-manage.ts", "installed-update.ts", "internal/sync/operation.ts"].some(
+        (path) => file === library + path,
+      );
+      const executor = file === library + "internal/operations/installed-changes.ts";
+      const installed = new Set();
+      const routing = new Set();
+      const instances = new Set();
+      const mutators = new Set(["prepare", "build", "install", "manage", "backUp", "uninstall"]);
+      const check = declarations((node) => {
+        if (typeOnly(node)) return;
+        const target = targetOf(context.filename, node.source?.value);
+        if (adapter && node.type === "ImportDeclaration")
+          for (const specifier of node.specifiers) {
+            if (typeOnly(node, specifier)) continue;
+            if (
+              target === library + "installed-skills" &&
+              nameOf(specifier.imported) === "InstalledSkills"
+            )
+              installed.add(specifier.local.name);
+            if (
+              target === library + "routing/recorded" &&
+              nameOf(specifier.imported) === "routedInstalledSkills"
+            )
+              routing.add(specifier.local.name);
+          }
+        if (target === library + "apply-plan") {
+          context.report({ node, messageId: "legacy" });
+          return;
+        }
+        if (!adapter && !executor) return;
+        const names =
+          target === library + "store/library-store"
+            ? executor
+              ? null
+              : ["LibraryWriter", "writeLibrary"]
+            : target === library + "store/state-file" || target === library + "store/writer-lock"
+              ? null
+              : undefined;
+        if (names === undefined) return;
+        if (
+          names === null ||
+          node.type === "ImportExpression" ||
+          node.type === "ExportAllDeclaration"
+        ) {
+          context.report({ node, messageId: "owner", data: { name: node.source.value } });
+          return;
+        }
+        for (const specifier of node.specifiers ?? []) {
+          if (typeOnly(node, specifier)) continue;
+          const name = nameOf(specifier.imported ?? specifier.local);
+          if (
+            specifier.type === "ImportNamespaceSpecifier" ||
+            specifier.type === "ExportNamespaceSpecifier" ||
+            names.includes(name)
+          )
+            context.report({
+              node: specifier,
+              messageId: "owner",
+              data: { name: name ?? node.source.value },
+            });
+        }
+      });
+      const isInstance = (node) =>
+        instances.has(node?.name) ||
+        (node?.type === "YieldExpression" &&
+          node.argument?.type === "MemberExpression" &&
+          installed.has(node.argument.object?.name) &&
+          nameOf(node.argument.property) === "Service");
+      const forbiddenMember = (object, name) =>
+        (isInstance(object) && mutators.has(name)) ||
+        (object?.type === "MemberExpression" &&
+          isInstance(object.object) &&
+          nameOf(object.property) === "backups" &&
+          ["keep", "discard"].includes(name));
+      return {
+        ...check,
+        VariableDeclarator(node) {
+          if (!adapter) return;
+          if (
+            node.id.type === "Identifier" &&
+            (isInstance(node.init) ||
+              (node.init?.type === "YieldExpression" &&
+                node.init.argument?.type === "CallExpression" &&
+                routing.has(node.init.argument.callee?.name)))
+          )
+            instances.add(node.id.name);
+          if (node.id.type === "ObjectPattern")
+            for (const property of node.id.properties)
+              if (forbiddenMember(node.init, nameOf(property.key)))
+                context.report({
+                  node: property,
+                  messageId: "owner",
+                  data: { name: nameOf(property.key) },
+                });
+        },
+        MemberExpression(node) {
+          if (adapter && forbiddenMember(node.object, nameOf(node.property)))
+            context.report({ node, messageId: "owner", data: { name: nameOf(node.property) } });
+        },
+      };
+    },
+  },
+
   "library-contract-complete": {
     meta: {
       type: "problem",

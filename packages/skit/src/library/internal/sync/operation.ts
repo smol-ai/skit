@@ -1,4 +1,4 @@
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option } from "effect";
 import { sha256Hash } from "../../../shared/hash.js";
 import { normalizeLibraryManifest } from "../../manifest.js";
 import { inspectContent } from "../content/content.js";
@@ -8,21 +8,15 @@ import { inspectInstalledSkill } from "../../../install/files.js";
 import { treeHasherLayer } from "../../../artifact/tree-hasher.js";
 import * as InstalledSkillStatus from "../../installed-skill-status.js";
 import { InstalledSkills } from "../../installed-skills.js";
-import { apply } from "../../apply-plan.js";
+import { operationScope } from "../operations/operations.js";
 import { planIntent } from "../../plan-changes.js";
 import { currentSkillVersion, enabledSkillIds } from "../../library-contracts.js";
 import { InvalidIntent } from "../../enabled-plan.js";
 import { LibraryState } from "../../library-state.js";
-import { routedInstalledSkills } from "../../setup-manage.js";
-import {
-  LibraryWriter,
-  libraryOriginalsPath,
-  libraryStatePath,
-  loadLibrary,
-} from "../../store/library-store.js";
+import { routedInstalledSkills } from "../../routing/recorded.js";
+import { libraryOriginalsPath, libraryStatePath, loadLibrary } from "../../store/library-store.js";
 import type { OperationId } from "../../entity-ids.js";
 import {
-  OperationStatus,
   type RecordedSetupStep,
   type SetupStep,
   type SyncProgram,
@@ -62,12 +56,23 @@ const checkFolders = Effect.fn("Library.sync.checkRecordedFolders")(function* (
   program: SyncProgram,
   state: LibraryState,
   installing: boolean,
+  home: string,
 ) {
   const files = yield* InstalledSkills.Service;
-  const { home } = yield* LibraryWriter;
   for (const saved of program.folders) {
     const current = yield* files.inspect(saved.path);
-    if (!same(saved.ancestors, current.ancestors))
+    if (
+      !same(saved.ancestors, current.ancestors) &&
+      (!installing ||
+        current.ancestors.some((ancestor) => {
+          const prior = saved.ancestors.find((item) => item.path === ancestor.path);
+          return (
+            !prior ||
+            (prior.evidence !== ancestor.evidence &&
+              !(prior.evidence === "absent" && ancestor.evidence.startsWith("Directory:")))
+          );
+        }))
+    )
       return yield* new InstalledSkills.Changed({ path: saved.path });
     if (saved.evidence === current.evidence) continue;
     const retired = program.retire.find((copy) => copy.path === saved.path);
@@ -117,6 +122,7 @@ export const runSyncStep = Effect.fn("Library.sync.recordedStep")(function* (
   operationId: OperationId,
   index: number,
   steps: readonly RecordedSetupStep[],
+  home: string,
 ) {
   const step = steps[index]?.step;
   if (step?._tag !== "Sync")
@@ -125,8 +131,6 @@ export const runSyncStep = Effect.fn("Library.sync.recordedStep")(function* (
   if (Option.isNone(found))
     return yield* new InvalidIntent({ detail: "Sync step has no recorded program" });
   const program = found.value;
-  const writer = yield* LibraryWriter;
-  const home = writer.home;
   const files = yield* routedInstalledSkills(program.routing);
   return yield* Effect.gen(function* () {
     let current = yield* loadLibrary(home);
@@ -144,6 +148,8 @@ export const runSyncStep = Effect.fn("Library.sync.recordedStep")(function* (
     );
     if (retained._tag === "Changed")
       return yield* new InstalledSkills.Changed({ path: libraryOriginalsPath(home) });
+    const scope = yield* operationScope(operationId, index, program.routing);
+    current = yield* loadLibrary(home);
     const publication = syncPublication(current);
     const expected = step.phase === "install" ? program.after : program.before;
     const alreadyPublished = same(publication, program.after);
@@ -198,7 +204,7 @@ export const runSyncStep = Effect.fn("Library.sync.recordedStep")(function* (
         )
           return yield* new InstalledSkills.Changed({ path: copy.path });
     }
-    yield* checkFolders(program, current, step.phase === "install");
+    yield* checkFolders(program, current, step.phase === "install", home);
     let installed = 0;
     let uninstalled = 0;
     const issues = [...program.issues];
@@ -207,7 +213,8 @@ export const runSyncStep = Effect.fn("Library.sync.recordedStep")(function* (
         current.installed_skills.some((row) => row.installed_skill_id === copy.installed_skill_id),
       );
       if (live.length) {
-        const outcome = yield* apply(
+        const outcome = yield* scope.apply(
+          "retire",
           yield* planIntent(
             {
               _tag: "Uninstall",
@@ -221,86 +228,12 @@ export const runSyncStep = Effect.fn("Library.sync.recordedStep")(function* (
         uninstalled = outcome.copies.filter((copy) => copy._tag === "Uninstalled").length;
       }
     } else if (step.phase === "publish" && !alreadyPublished) {
-      const next = yield* LibraryState.makeEffect({
-        ...program.after,
-        operations: current.operations,
-      }).pipe(
-        Effect.mapError(() => new InvalidIntent({ detail: "Invalid recorded Sync publication" })),
-      );
-      yield* writer.save(next, current);
+      yield* scope.publishSync();
     } else if (step.phase === "install" && issues.length === 0) {
       const attempt = yield* Effect.result(
         Effect.gen(function* () {
-          const update = yield* planIntent(
-            { _tag: "Update" },
-            { home, base: snapshotOf({ present: true, state: current }) },
-          );
-          const beforePreparation = yield* Effect.forEach(program.folders, (folder) =>
-            files.inspect(folder.path),
-          );
-          yield* files.prepare([
-            ...new Set(
-              update.changes.flatMap((change) =>
-                "skillVersionId" in change &&
-                change._tag !== "KeepDeleted" &&
-                change._tag !== "Protected"
-                  ? [change.root]
-                  : [],
-              ),
-            ),
-          ]);
-          const folders = yield* Effect.forEach(program.folders, (saved, index) =>
-            Effect.gen(function* () {
-              const observed = beforePreparation[index];
-              const prepared = yield* files.inspect(saved.path);
-              if (!observed || observed.evidence !== prepared.evidence)
-                return yield* new InstalledSkills.Changed({ path: saved.path });
-              for (const ancestor of prepared.ancestors) {
-                const before = observed.ancestors.find((item) => item.path === ancestor.path);
-                if (
-                  !before ||
-                  (before.evidence === "absent"
-                    ? ancestor.evidence !== "absent" && !ancestor.evidence.startsWith("Directory:")
-                    : before.evidence !== ancestor.evidence)
-                )
-                  return yield* new InstalledSkills.Changed({ path: ancestor.path });
-              }
-              return { ...saved, ancestors: prepared.ancestors };
-            }),
-          );
-          // Directory preparation changes the captured ancestors. Persist those identities before
-          // the installer can touch any Skill, so startup can distinguish our files from divergence.
-          if (!same(folders, program.folders)) {
-            const operations = yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
-              current.operations,
-            );
-            const sourceIndex = step.phase === "install" ? step.sourceStep : index;
-            const operation = operations.find((item) => item.operationId === operationId);
-            if (!operation || operation._tag !== "Pending")
-              return yield* new InvalidIntent({
-                detail: "Sync installation requires its Pending operation",
-              });
-            const changed = {
-              ...operation,
-              steps: operation.steps.map((item, i) =>
-                i === sourceIndex && item.step._tag === "Sync" && item.step.phase === "retire"
-                  ? { ...item, step: { ...item.step, program: { ...program, folders } } }
-                  : item,
-              ),
-            };
-            const encoded = yield* Schema.encodeEffect(OperationStatus)(changed);
-            yield* writer.save(
-              {
-                ...current,
-                operations: current.operations.map((item) =>
-                  item.operationId === operationId ? encoded : item,
-                ),
-              },
-              current,
-            );
-            current = yield* loadLibrary(home);
-          }
-          return yield* apply(
+          return yield* scope.apply(
+            "install",
             yield* planIntent(
               { _tag: "Update" },
               { home, base: snapshotOf({ present: true, state: current }) },

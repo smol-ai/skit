@@ -3,9 +3,9 @@ import { canonicalJson } from "../../../shared/json.js";
 import { InstalledSkills } from "../../installed-skills.js";
 import * as Status from "../../installed-skill-status.js";
 import { makeInstalledSkillId, type OperationId } from "../../entity-ids.js";
-import { reviewApply, finishChange } from "../../apply-plan.js";
+import { reviewApply } from "./review.js";
 import { InvalidIntent } from "../../enabled-plan.js";
-import { Plan, DestinationsIncomplete, type Outcome } from "../../library-plan.js";
+import { Plan } from "../../library-plan.js";
 import {
   libraryStateRevision,
   type LibraryState,
@@ -98,10 +98,11 @@ export const prepareApply = Effect.fn("Library.prepareRecordedApply")(function* 
 });
 
 /** Root identities and expected rows become durable before the installer can change any skill. */
-const saveStep = Effect.fn("Library.saveApplyStep")(function* (
+export const saveStep = Effect.fn("Library.saveApplyStep")(function* (
   operationId: OperationId,
   index: number,
   step: ApplyStep,
+  batch?: string,
 ) {
   const writer = yield* LibraryWriter;
   const state = yield* loadLibrary(writer.home);
@@ -109,11 +110,22 @@ const saveStep = Effect.fn("Library.saveApplyStep")(function* (
     state.operations,
   ).pipe(Effect.mapError(invalid));
   const operation = operations.find((item) => item.operationId === operationId);
-  if (operation?._tag !== "Pending" || operation.steps[index]?.step._tag !== "Apply")
-    return yield* invalid();
+  if (operation?._tag !== "Pending" || !operation.steps[index]) return yield* invalid();
   const encoded = yield* Schema.encodeEffect(OperationStatus)({
     ...operation,
-    steps: operation.steps.map((item, at) => (at === index ? { ...item, step } : item)),
+    steps: operation.steps.map((item, at) =>
+      at !== index
+        ? item
+        : batch === undefined
+          ? { ...item, step }
+          : {
+              ...item,
+              applies: [
+                ...(item.applies ?? []).filter((item) => item.key !== batch),
+                { key: batch, apply: step },
+              ],
+            },
+    ),
   }).pipe(Effect.mapError(invalid));
   yield* writer.save(
     {
@@ -184,7 +196,18 @@ const checkFolders = Effect.fn("Library.checkApplyFolders")(function* (
   const completed: InstalledSkill[] = [];
   for (const saved of plan.folders) {
     const current = yield* files.inspect(saved.path);
-    if (!same(saved.ancestors, current.ancestors))
+    if (
+      !same(saved.ancestors, current.ancestors) &&
+      (step.prepared ||
+        current.ancestors.some((ancestor) => {
+          const prior = saved.ancestors.find((item) => item.path === ancestor.path);
+          return (
+            !prior ||
+            (prior.evidence !== ancestor.evidence &&
+              !(prior.evidence === "absent" && ancestor.evidence.startsWith("Directory:")))
+          );
+        }))
+    )
       return yield* new InstalledSkills.Changed({ path: saved.path });
     const expected = step.expected.find((item) => item.path === saved.path);
     if (saved.evidence === current.evidence) {
@@ -236,6 +259,7 @@ export const resumeApply = Effect.fn("Library.resumeRecordedApply")(function* (
   operationId: OperationId,
   index: number,
   saved: ApplyStep,
+  batch?: string,
 ) {
   const writer = yield* LibraryWriter;
   const files = yield* InstalledSkills.Service;
@@ -251,11 +275,9 @@ export const resumeApply = Effect.fn("Library.resumeRecordedApply")(function* (
         return yield* new InstalledSkills.Changed({ path: folder.path });
     }
     return {
-      step,
-      plan,
+      expected: step.expected,
       state,
       base: snapshotOf({ present: true, state }),
-      ids: new Map(step.ids.map(({ path, id }) => [path, id])),
       completed: true,
     };
   }
@@ -334,7 +356,7 @@ export const resumeApply = Effect.fn("Library.resumeRecordedApply")(function* (
       Effect.mapError(invalid),
     );
     step = { ...step, reviewed, expected, prepared: true };
-    yield* saveStep(operationId, index, step);
+    yield* saveStep(operationId, index, step, batch);
     state = yield* loadLibrary(writer.home);
     completed = yield* checkFolders(step, plan, state);
   }
@@ -355,45 +377,9 @@ export const resumeApply = Effect.fn("Library.resumeRecordedApply")(function* (
     state = yield* loadLibrary(writer.home);
   }
   return {
-    step,
-    plan,
+    expected: step.expected,
     state,
     base: snapshotOf({ present: true, state }),
-    ids: new Map(step.ids.map(({ path, id }) => [path, id])),
     completed: false,
   };
 });
-
-/** Preserve the original reviewed change in the caller's result, including after a replay. */
-export const applyOutcome = (plan: Plan, state: LibraryState, outcome: Outcome): Outcome => {
-  const results = plan.changes.flatMap((change) => {
-    if (change._tag !== "Enable" && change._tag !== "Disable") return [];
-    const skillIds = plan.next.skills
-      .filter(
-        (skill) =>
-          (skill.skill_id === change.subject_id || skill.collection_id === change.subject_id) &&
-          change.skills.includes(skill.name),
-      )
-      .map((skill) => skill.skill_id);
-    const targets =
-      plan.routes.find((route) => same(route.scope, change.scope))?.destinations ?? [];
-    return [
-      finishChange(
-        change,
-        skillIds,
-        targets,
-        outcome._tag === "Applied" ? outcome.copies : [],
-        state,
-      ),
-    ];
-  });
-  const unresolved = results.flatMap((result) => result.unresolved);
-  if (outcome._tag === "Applied" && unresolved.length)
-    return {
-      _tag: "Incomplete",
-      results,
-      reason: "destinations",
-      cause: new DestinationsIncomplete({ paths: unresolved }),
-    };
-  return { ...outcome, results };
-};

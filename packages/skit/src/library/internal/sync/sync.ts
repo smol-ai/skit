@@ -39,7 +39,7 @@ import {
   type InventoryRootOptions,
 } from "../../routing/roots.js";
 import { readableSkillsDirectories } from "../../routing/duplicates.js";
-import { routedInstalledSkills } from "../../setup-manage.js";
+import { routedInstalledSkills } from "../../routing/recorded.js";
 import { normalizeLibraryManifest } from "../../manifest.js";
 import { blendRestoredState, RestoreInvalid } from "../content/restore.js";
 import { inspectContent } from "../content/content.js";

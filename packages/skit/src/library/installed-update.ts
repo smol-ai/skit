@@ -2,15 +2,14 @@ import { snapshotOf } from "./snapshot.js";
 import { Effect, Schema } from "effect";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 import { canonicalJson } from "../shared/json.js";
-import { apply } from "./apply-plan.js";
+import type { OperationScope } from "./internal/operations/operations.js";
 import type { InstalledSkillId, SkillId, SkillVersionId } from "./entity-ids.js";
 import type { Hash, InstallDestination } from "../vocabulary.js";
 import { importEdit } from "./import-collection.js";
 import { reviewInstalledSkillChanges } from "./installed-skill-review.js";
-import { emptyLibraryState } from "./library-state.js";
 import type { Approval } from "./library-plan.js";
 import { planIntent } from "./plan-changes.js";
-import { LibraryWriter, loadLibrary, inspectLocalLibraryState } from "./store/library-store.js";
+import { loadLibrary, inspectLocalLibraryState } from "./store/library-store.js";
 
 /** A change to one installed copy, as reviewed: what updating every copy would do there. */
 export interface ReviewedChange {
@@ -92,8 +91,9 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
   reviewed: readonly ReviewedChange[],
   choices: readonly UpdateChoice[],
   importedAt: string,
+  scope: OperationScope,
 ) {
-  const writer = yield* LibraryWriter;
+  const { home } = scope;
   const chosen = new Set<string>(choices.map((choice) => choice.skillId));
   const local = reviewed.filter((fact) =>
     choices.some(
@@ -104,7 +104,7 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
   for (const fact of local) {
     if (fact.currentHash === undefined || fact.installedSkillId === undefined)
       return yield* new ReviewedChangeDiffers({ path: fact.path });
-    const before = yield* loadLibrary(writer.home);
+    const before = yield* loadLibrary(home);
     if (
       before.imports.some(
         (sourceImport) =>
@@ -122,11 +122,10 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
       importedAt,
     });
   }
-  const inspected = yield* inspectLocalLibraryState(writer.home);
-  const state = inspected.present ? inspected.state : emptyLibraryState();
+  const inspected = yield* inspectLocalLibraryState(home);
   const planned = yield* planIntent(
     { _tag: "Update" },
-    { home: writer.home, base: snapshotOf(inspected) },
+    { home: home, base: snapshotOf(inspected) },
   );
   const marker = (path: string) => {
     const entry = planned.folders.find((folder) => folder.path === path)?.entry;
@@ -166,7 +165,7 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
   });
   const plan = yield* planIntent(
     { _tag: "Update" },
-    { home: writer.home, base: snapshotOf(inspected), approvals },
+    { home: home, base: snapshotOf(inspected), approvals },
   );
   const facts = reviewInstalledSkillChanges(plan);
 
@@ -193,7 +192,7 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
     if (chosen.has(fact.skillId) && (fact.status === "competing" || fact.status === "local-only"))
       return yield* new ReviewedChangeDiffers({ path: fact.path });
 
-  const outcome = yield* apply(plan);
+  const outcome = yield* scope.apply("update", plan);
   const copies = outcome._tag === "Applied" ? outcome.copies : [];
   return facts.map((fact): UpdatedCopy => {
     const result = copies.find((copy) => copy._tag !== "Failed" && copy.copy.path === fact.path);
