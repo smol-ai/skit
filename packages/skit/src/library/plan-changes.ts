@@ -2,7 +2,8 @@ import { join } from "node:path";
 import { Effect, Schema, type Scope } from "effect";
 import { InstalledSkills } from "./installed-skills.js";
 import { libraryOriginalsPath } from "./store/library-store.js";
-import { libraryStateRevision, type LibraryState, type InstalledSkill } from "./library-state.js";
+import { emptyLibraryState, type LibraryState, type InstalledSkill } from "./library-state.js";
+import type { Snapshot } from "./snapshot.js";
 import { skillsToCheckForDuplicates, deviceInstallationIntent } from "./enabled.js";
 import { edit } from "./library-edit.js";
 import { currentSkillVersion, enabledSkillIds, versionBacking } from "./library-contracts.js";
@@ -455,16 +456,17 @@ export const planIntent = Effect.fn("Library.plan")(function* (
   intent: Intent,
   options: {
     readonly home: string;
-    readonly base: LibraryState;
+    readonly base: Snapshot;
     readonly approvals?: readonly Approval[];
   },
 ) {
-  const base = structuredClone(options.base);
+  const snapshot = structuredClone(options.base);
+  const base = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
   const approvals = structuredClone(options.approvals ?? []);
   const reviewed = structuredClone(intent);
   const planned = yield* Effect.scoped(planChanges(options.home, base, reviewed, approvals));
   const plan = {
-    baseRevision: libraryStateRevision(base),
+    baseRevision: snapshot.revision,
     approvals,
     routes: planned.routes,
     folders: planned.folders,

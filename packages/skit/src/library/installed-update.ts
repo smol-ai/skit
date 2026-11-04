@@ -1,3 +1,4 @@
+import { snapshotOf } from "./snapshot.js";
 import { Effect, Schema } from "effect";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 import { canonicalJson } from "../shared/json.js";
@@ -123,7 +124,10 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
   }
   const inspected = yield* inspectLocalLibraryState(writer.home);
   const state = inspected.present ? inspected.state : emptyLibraryState();
-  const planned = yield* planIntent({ _tag: "Update" }, { home: writer.home, base: state });
+  const planned = yield* planIntent(
+    { _tag: "Update" },
+    { home: writer.home, base: snapshotOf(inspected) },
+  );
   const marker = (path: string) => {
     const entry = planned.folders.find((folder) => folder.path === path)?.entry;
     return entry?._tag === "Present" && entry.facts?.marker.kind === "valid"
@@ -160,7 +164,10 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
       ? [...accept, { _tag: "ReplaceEdit", installedSkillId, currentHash: change.currentHash }]
       : accept;
   });
-  const plan = yield* planIntent({ _tag: "Update" }, { home: writer.home, base: state, approvals });
+  const plan = yield* planIntent(
+    { _tag: "Update" },
+    { home: writer.home, base: snapshotOf(inspected), approvals },
+  );
   const facts = reviewInstalledSkillChanges(plan);
 
   // Outside the chosen Skills, each copy is as reviewed, or (after an earlier run) already the

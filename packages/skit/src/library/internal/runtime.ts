@@ -231,9 +231,8 @@ export const make = Effect.fn("Library.make")(function* (
         Effect.provide(importing),
       );
     return Effect.gen(function* () {
-      const state = yield* planningState(home, base);
-      const plan = yield* planIntent(intent, { home, base: state, approvals: options.approvals });
-      return { ...plan, baseRevision: base.revision };
+      yield* planningState(home, base);
+      return yield* planIntent(intent, { home, base, approvals: options.approvals });
     }).pipe(planning, Effect.provide(writer));
   }
   function applyFor(request: SyncApplyRequest): Effect.Effect<SyncOutcome, SyncApplyError>;

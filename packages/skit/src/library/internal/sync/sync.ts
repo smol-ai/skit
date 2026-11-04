@@ -299,7 +299,7 @@ export const planSync = Effect.fn("Library.planSync")(function* (
   const files = yield* routedInstalledSkills(routing);
   const paths = new Set(state.installed_skills.map((copy) => copy.path));
   const inspected = yield* Effect.result(
-    planIntent({ _tag: "Update" }, { home, base: next }).pipe(
+    planIntent({ _tag: "Update" }, { home, base: snapshotOf({ present: true, state: next }) }).pipe(
       Effect.provideService(InstalledSkills.Service, files),
     ),
   );
@@ -420,7 +420,13 @@ export const applySync = Effect.fn("Library.applySync")(function* (
         const update = yield* Effect.result(
           planIntent(
             { _tag: "Update" },
-            { home, base: { ...next, operations: current.operations } },
+            {
+              home,
+              base: snapshotOf({
+                present: true,
+                state: { ...next, operations: current.operations },
+              }),
+            },
           ).pipe(Effect.provideService(InstalledSkills.Service, files)),
         );
         const work =

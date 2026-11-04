@@ -1,3 +1,4 @@
+import { snapshotOf } from "../src/library/snapshot.js";
 import { assert, it } from "@effect/vitest";
 import { Context, Effect, Exit, FileSystem, Layer, Option, Schema } from "effect";
 import { join } from "node:path";
@@ -319,7 +320,7 @@ const reviewUpdate = (home: string, routing: StepRouting) =>
       if (!inspected.present) return yield* Effect.die("no Library");
       const files = yield* routedInstalledSkills(routing);
       return reviewInstalledSkillChanges(
-        yield* planIntent({ _tag: "Update" }, { home, base: inspected.state }).pipe(
+        yield* planIntent({ _tag: "Update" }, { home, base: snapshotOf(inspected) }).pipe(
           Effect.provideService(InstalledSkills.Service, files),
         ),
       );

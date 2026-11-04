@@ -214,7 +214,7 @@ export const runSyncStep = Effect.fn("Library.sync.recordedStep")(function* (
               copies: live.map((copy) => copy.installed_skill_id),
               drop: program.drop,
             },
-            { home, base: current },
+            { home, base: snapshotOf({ present: true, state: current }) },
           ),
         );
         if (outcome._tag === "Incomplete") return yield* Effect.fail(outcome.cause);
@@ -231,7 +231,10 @@ export const runSyncStep = Effect.fn("Library.sync.recordedStep")(function* (
     } else if (step.phase === "install" && issues.length === 0) {
       const attempt = yield* Effect.result(
         Effect.gen(function* () {
-          const update = yield* planIntent({ _tag: "Update" }, { home, base: current });
+          const update = yield* planIntent(
+            { _tag: "Update" },
+            { home, base: snapshotOf({ present: true, state: current }) },
+          );
           const beforePreparation = yield* Effect.forEach(program.folders, (folder) =>
             files.inspect(folder.path),
           );
@@ -297,7 +300,12 @@ export const runSyncStep = Effect.fn("Library.sync.recordedStep")(function* (
             );
             current = yield* loadLibrary(home);
           }
-          return yield* apply(yield* planIntent({ _tag: "Update" }, { home, base: current }));
+          return yield* apply(
+            yield* planIntent(
+              { _tag: "Update" },
+              { home, base: snapshotOf({ present: true, state: current }) },
+            ),
+          );
         }),
       );
       if (attempt._tag === "Failure") {

@@ -1,6 +1,7 @@
 // Setup's Manage and Update steps. Each routes by the routing recorded in its step, never by this
 // machine's configuration, so a re-run after a crash installs exactly where the first run did.
 
+import { snapshotOf } from "./snapshot.js";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import { dirname, join, resolve } from "node:path";
@@ -231,7 +232,7 @@ export const planManageEnable = Effect.fn("Library.planManageEnable")(function* 
     },
     {
       home,
-      base: state,
+      base: snapshotOf({ present: true, state }),
       approvals: [
         {
           _tag: "Manage",

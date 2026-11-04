@@ -5,7 +5,6 @@ import * as InstalledSkillStatus from "./installed-skill-status.js";
 import {
   LibraryWriter,
   libraryOriginalsPath,
-  libraryStatePath,
   libraryVariantsPath,
   inspectLocalLibraryState,
 } from "./store/library-store.js";
@@ -270,25 +269,18 @@ export const apply = Effect.fn("Library.apply")(function* (reviewed: Plan) {
   const input = structuredClone(reviewed);
   if (input._tag !== input.intent._tag)
     return yield* new StalePlan({ message: "The plan tag does not match its reviewed intent" });
-  const snapshotPlan = input.baseRevision === "absent" || input.baseRevision.startsWith("present:");
   const stale = (message: string) => new StalePlan({ message });
-  const changedSincePreview = () =>
-    snapshotPlan || input.intent._tag === "Enabled"
-      ? stale("Library changed after this change was previewed")
-      : new LibraryChanged({ path: libraryStatePath(writer.home) });
   return yield* Effect.scoped(
     Effect.gen(function* () {
       const inspected = yield* inspectLocalLibraryState(writer.home);
       const base = inspected.present ? inspected.state : emptyLibraryState();
       const actual = snapshotOf(inspected).revision;
-      if (snapshotPlan && actual !== input.baseRevision)
+      if (actual !== input.baseRevision)
         return yield* new StalePlan({
           message: "Library changed after this change was previewed",
           expected: Revision(input.baseRevision),
           actual,
         });
-      if (!snapshotPlan && libraryStateRevision(base) !== input.baseRevision)
-        return yield* changedSincePreview();
       const again = yield* planChanges(writer.home, base, input.intent, input.approvals);
       const targetsAt = (scope: InstallScope) =>
         again.routes.find((route) => Schema.toEquivalence(InstallScope)(route.scope, scope))
@@ -568,8 +560,8 @@ export const apply = Effect.fn("Library.apply")(function* (reviewed: Plan) {
       return { _tag: "Applied", results, copies: touched } satisfies Outcome;
     }),
   ).pipe(
-    Effect.catchTag("LibraryChanged", (error) =>
-      Effect.fail(snapshotPlan || input.intent._tag === "Enabled" ? changedSincePreview() : error),
+    Effect.catchTag("LibraryChanged", () =>
+      Effect.fail(new StalePlan({ message: "Library changed after this change was previewed" })),
     ),
   );
 });
