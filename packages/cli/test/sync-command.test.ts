@@ -1,6 +1,7 @@
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { LibraryStore } from "@smolai/skit-core";
+import { libraryApplicationLayer } from "../src/application.js";
 import { join } from "node:path";
 import { ConfigProvider, Effect, FileSystem, Layer, Result } from "effect";
 import { HttpClient } from "effect/http";
@@ -120,6 +121,7 @@ it.effect.each(["connected", "connecting"] as const)(
         Effect.exit,
         Effect.provide(rendererTestLayer()),
         Effect.provide(authorLayer(home)),
+        Effect.provide(libraryApplicationLayer.pipe(Layer.provide(skitConfigurationLayer(home)))),
         Effect.provide(
           registryHttpLayer(
             testHttpClientLayer((request) =>

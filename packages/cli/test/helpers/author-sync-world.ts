@@ -1,5 +1,7 @@
 import { dirname, join } from "node:path";
-import { Effect, Exit, Fiber, FileSystem, Ref, Scope } from "effect";
+import { Effect, Exit, Fiber, FileSystem, Layer, Ref, Scope } from "effect";
+import { libraryApplicationLayer } from "../../src/application.js";
+import { skitConfigurationLayer } from "../../src/configuration/skit-configuration.js";
 import type { PlatformError } from "effect/PlatformError";
 import { syncAuthorWorkspace } from "../../src/workflows/author/sync.js";
 import { authorLayer, storedTreesAt } from "./author-history.js";
@@ -91,6 +93,12 @@ export const makeAuthorSyncWorld = Effect.fn("Test.makeAuthorSyncWorld")(functio
             Effect.provide(registryHttpLayer(testHttpClientLayer(server.transport(name)))),
             // Fresh, so the author owners write through a FileSystem a test provides here.
             Effect.provide(authorLayer(home)),
+            // The Library's layer carries its own FileSystem; sync keeps the test's.
+            Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem),
+            // A first sync without workspace.json adopts an id from this home's Library (A3).
+            Effect.provide(
+              libraryApplicationLayer.pipe(Layer.provide(skitConfigurationLayer(home))),
+            ),
             // The environment's token is for the test Registry only.
             Effect.provide(registryCredentialLayer(remote.origin)),
           ),

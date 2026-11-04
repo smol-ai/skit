@@ -1,4 +1,4 @@
-import { Context, Effect, FileSystem, Layer } from "effect";
+import { Brand, Context, Effect, FileSystem, Layer } from "effect";
 import { InstalledSkills } from "./installed-skills.js";
 import {
   LibraryStore,
@@ -34,8 +34,21 @@ export {
 } from "./enabled-plan.js";
 export type { Subject, Invocation, EnabledCollection, SetupApproval } from "./enabled-plan.js";
 
+/** What one read saw. "Absent" has its own revision, so a first sync can plan from it. */
+export type Snapshot =
+  | { readonly _tag: "Absent"; readonly revision: Revision }
+  | { readonly _tag: "Present"; readonly revision: Revision; readonly state: LibraryState };
+/**
+ * Covers presence and the whole decoded state, so any unfinished operation state.json records. A
+ * Present revision is the state's canonical digest, the one a plan carries as its baseRevision;
+ * "absent" is never such a digest.
+ */
+export type Revision = Brand.Branded<string, "Revision">;
+export const Revision = Brand.nominal<Revision>();
+
 export interface Interface {
-  readonly load: Effect.Effect<LibraryState, LibraryStateReadError>;
+  /** One read. Like every read of state.json, it rewrites only a legacy file it migrates. */
+  readonly read: Effect.Effect<Snapshot, LibraryStateReadError>;
   /**
    * Plan against the Library the front end showed, never a fresh read: apply refuses the plan if
    * the Library has changed since.
@@ -76,7 +89,15 @@ export const make = Effect.gen(function* () {
     );
 
   return Service.of({
-    load: store.load,
+    read: Effect.map(store.inspect, (inspected): Snapshot =>
+      inspected.present
+        ? {
+            _tag: "Present",
+            revision: Revision(libraryStateRevision(inspected.state)),
+            state: inspected.state,
+          }
+        : { _tag: "Absent", revision: Revision("absent") },
+    ),
     plan: Effect.fn("Library.plan")(function* (intent, options) {
       const base = structuredClone(options.base);
       const approvals = structuredClone(options.approvals ?? []);

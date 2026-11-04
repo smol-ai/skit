@@ -3,10 +3,9 @@ import {
   ImportContentInvalid,
   initSkit,
   validateSkitDirectory,
-  type Collection,
-  type LibraryState,
+  type Library,
 } from "@smolai/skit-core";
-import { Clock, Effect, FileSystem, Option, Path, Schema } from "effect";
+import { Clock, Effect, FileSystem, Option, Path } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleLibraryCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
@@ -22,10 +21,11 @@ import {
 } from "../../library/failures.js";
 import {
   AuthorWorkspace,
-  WorkspaceId,
   type Identity,
+  type WorkspaceId,
   type WorkspaceRoot,
 } from "../../author/workspace.js";
+import { adoptFrom, authoredId, collectionsAt } from "./library-claims.js";
 
 /**
  * What the Library already says about this folder: no other Collection may claim it, and a
@@ -33,25 +33,13 @@ import {
  */
 const checkLibraryClaims = Effect.fn("Author.checkLibraryClaims")(function* (
   root: WorkspaceRoot,
-  state: LibraryState,
+  snapshot: Library.Snapshot,
   identity: Option.Option<Identity>,
 ) {
+  if (snapshot._tag === "Absent") return { adopt: Option.none<WorkspaceId>(), existing: undefined };
+  const { state } = snapshot;
   const fs = yield* FileSystem.FileSystem;
-  const importsFor = (collection: Collection) =>
-    state.imports.filter((sourceImport) => sourceImport.collection_id === collection.collection_id);
-  const sameRoot: Collection[] = [];
-  for (const collection of state.collections) {
-    const inputs = importsFor(collection).map((sourceImport) => sourceImport.input.value);
-    for (const input of inputs)
-      if ((yield* fs.exists(input)) && (yield* fs.realPath(input)) === root) {
-        sameRoot.push(collection);
-        break;
-      }
-  }
-  const authoredId = (collection: Collection | undefined) =>
-    collection?.upstream?.source_identity.kind === "authored-workspace"
-      ? collection.upstream.source_identity.workspace_id
-      : undefined;
+  const sameRoot = yield* collectionsAt(root, state);
   const imported = sameRoot.find((collection) => authoredId(collection) !== undefined);
   const expected = Option.isSome(identity) ? identity.value.workspaceId : authoredId(imported);
   const conflict = sameRoot.find(
@@ -63,7 +51,11 @@ const checkLibraryClaims = Effect.fn("Author.checkLibraryClaims")(function* (
     expected === undefined
       ? undefined
       : state.collections.find((collection) => authoredId(collection) === expected);
-  const existingInput = existing === undefined ? undefined : importsFor(existing)[0]?.input.value;
+  const existingInput =
+    existing === undefined
+      ? undefined
+      : state.imports.find((sourceImport) => sourceImport.collection_id === existing.collection_id)
+          ?.input.value;
   if (
     expected !== undefined &&
     existingInput !== undefined &&
@@ -75,12 +67,7 @@ const checkLibraryClaims = Effect.fn("Author.checkLibraryClaims")(function* (
       at: existingInput,
     });
   return {
-    adopt: Option.isSome(identity)
-      ? Option.none<WorkspaceId>()
-      : Option.flatMap(
-          Option.fromUndefinedOr(authoredId(imported)),
-          Schema.decodeUnknownOption(WorkspaceId),
-        ),
+    adopt: Option.isSome(identity) ? Option.none<WorkspaceId>() : adoptFrom(sameRoot),
     existing,
   };
 });
@@ -104,7 +91,7 @@ export const authorInitCommand = Effect.fn("CLI.authorInit")(function* (
   const lease = yield* workspaces.acquire(root);
   const library = yield* localLibrary;
   const identity = yield* workspaces.readIdentity(root);
-  const claims = yield* checkLibraryClaims(root, yield* library.load, identity);
+  const claims = yield* checkLibraryClaims(root, yield* library.read, identity);
   const initialized = yield* initSkit(folder);
   const validated = yield* validateSkitDirectory(folder, "source", {
     assessmentContext: "import",

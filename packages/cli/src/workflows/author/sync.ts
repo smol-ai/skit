@@ -35,7 +35,10 @@ import {
   AuthorWorkspace,
   AuthorWorkspaceConflict,
   type Connecting,
+  type WorkspaceId,
 } from "../../author/workspace.js";
+import { localLibrary } from "../../library-application/library-owner.js";
+import { adoptFrom, collectionsAt } from "./library-claims.js";
 import { AuthorHistory, AuthorHistoryInvalid } from "../../author/history.js";
 
 export type { AuthorVisibility } from "./sync-contract.js";
@@ -225,19 +228,28 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
     ),
   );
   // Applying gives an identity-less workspace an identity-only registration: backup, never
-  // installation. An existing registration is used as it is. Library has no read yet to find an
-  // authored collection's workspace id, so nothing is adopted (A3).
+  // installation. An existing registration is used as it is. Without workspace.json, the id of an
+  // authored Collection imported from this root is reused (A3).
   const applying =
     lease === undefined
       ? undefined
       : yield* Effect.gen(function* () {
-          const workspaceId = Option.isSome(workspace.identity)
-            ? workspace.identity.value.workspaceId
-            : (yield* lease.register({
-                from: workspace.identity,
-                to: "IdentityOnly",
-                adopt: Option.none(),
-              })).workspaceId;
+          const { identity } = workspace;
+          const workspaceId = Option.isSome(identity)
+            ? identity.value.workspaceId
+            : yield* Effect.gen(function* () {
+                const snapshot = yield* (yield* localLibrary).read;
+                const adopt =
+                  snapshot._tag === "Present"
+                    ? adoptFrom(yield* collectionsAt(root, snapshot.state))
+                    : Option.none<WorkspaceId>();
+                const created = yield* lease.register({
+                  from: identity,
+                  to: "IdentityOnly",
+                  adopt,
+                });
+                return created.workspaceId;
+              });
           if (connection._tag === "Connected" && connection.leftover._tag === "Matching")
             yield* lease.transition({
               from: { ...connection, leftover: connection.leftover },

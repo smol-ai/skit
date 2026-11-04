@@ -3,13 +3,23 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
-import { Cause, Deferred, Effect, Exit, Fiber, FileSystem } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Layer } from "effect";
+import { libraryApplicationLayer } from "../src/application.js";
 import { parseAuthorDestination, syncAuthorWorkspace } from "../src/workflows/author/sync.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 import { registryCredentialLayer } from "./helpers/registry-credential.js";
-import { copySkitFixtureEffect, scratch } from "./helpers/library-home.js";
-import { SkitConfiguration } from "../src/configuration/skit-configuration.js";
+import {
+  copySkitFixtureEffect,
+  initializeLibraryMachine,
+  libraryHome,
+  scratch,
+} from "./helpers/library-home.js";
+import { authorInitCommand } from "../src/workflows/author/initialization.js";
+import {
+  SkitConfiguration,
+  skitConfigurationLayer,
+} from "../src/configuration/skit-configuration.js";
 import { authorLayer, storedTreesAt } from "./helpers/author-history.js";
 import { makeAuthorSyncServer } from "./helpers/author-sync-server.js";
 
@@ -32,6 +42,10 @@ const runAuthorSync = (
       syncAuthorWorkspace(root, options).pipe(
         Effect.provide(registryHttpLayer(testHttpClientLayer(transport))),
         Effect.provide(authorLayer(historyHome)),
+        // A first sync without workspace.json adopts an id from this home's Library (A3).
+        Effect.provide(
+          libraryApplicationLayer.pipe(Layer.provide(skitConfigurationLayer(historyHome))),
+        ),
         // The environment's token is for the test Registry only.
         Effect.provide(registryCredentialLayer("https://registry.example")),
       ),
@@ -135,6 +149,38 @@ it.effect("first sync previews then records one remote home without publishing i
       origin: "https://registry.example",
       namespace: "swyx",
       skit: "tools",
+    });
+  }).pipe(Effect.provide(testPlatformLayer)),
+);
+
+it.effect("a first sync without workspace.json reuses the id its authored Collection carries", () =>
+  Effect.gen(function* () {
+    const root = yield* scratch("skit-sync-adopt-");
+    const source = join(root, "source");
+    yield* copySkitFixtureEffect("authored", source);
+    const library = yield* libraryHome({ home: join(root, "home") });
+    yield* initializeLibraryMachine(library.home);
+    const imported = yield* library.owned(authorInitCommand(source, false));
+    const metadata = join(source, ".skit", "workspace.json");
+    const { workspace_id } = JSON.parse(yield* readText(metadata));
+    expect(imported.entry?.collection.upstream?.source_identity).toEqual({
+      kind: "authored-workspace",
+      workspace_id,
+    });
+    yield* Effect.flatMap(fs, (fs) => fs.remove(metadata));
+
+    const server = yield* makeAuthorSyncServer();
+    expect(
+      yield* runAuthorSync(
+        source,
+        { home: library.home, to: "swyx/tools", visibility: "private", apply: true },
+        server.transport("a"),
+      ),
+    ).toMatchObject({ status: "created" });
+    // Backed up under the Library's id, as identity only: sync never registers for installation.
+    expect(JSON.parse(yield* readText(metadata))).toEqual({
+      schema: "skit.author-workspace.v1",
+      workspace_id,
     });
   }).pipe(Effect.provide(testPlatformLayer)),
 );

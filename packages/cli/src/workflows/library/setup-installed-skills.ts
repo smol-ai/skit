@@ -2,6 +2,7 @@ import { basename } from "node:path";
 import { Clock, Data, Effect } from "effect";
 import {
   canonicalJson,
+  emptyLibraryState,
   hashParts,
   InstalledSkills,
   Library,
@@ -177,7 +178,8 @@ export const applyInstalledSkillChanges = Effect.fn("Setup.applyInstalledSkillCh
       importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
     });
   }
-  const state = yield* library.load;
+  const snapshot = yield* library.read;
+  const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
   const planned = yield* library.plan({ _tag: "Update" }, { base: state });
   const marker = (path: string) => {
     const entry = planned.folders.find((folder) => folder.path === path)?.entry;

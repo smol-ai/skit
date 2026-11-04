@@ -28,8 +28,8 @@ export type ChangedMethods<Contract, Actual> = {
 export type UndeclaredRequirements<Make, Allowed> = Exclude<Effect.Services<Make>, Allowed>;
 
 // ── Debt: today's gaps, to be closed by migration ─────────────────────────────────────────────
-type MissingDebt = "read" | "setup" | "content" | "history" | "startup";
-type ExtraDebt = "load";
+type MissingDebt = "setup" | "content" | "history" | "startup";
+type ExtraDebt = never;
 type ChangedDebt = "plan" | "apply";
 // LibraryStore folds into Library; InstalledSkills is built inside Library.layer from routing.
 type RequirementDebt = LibraryStore | InstalledSkills.Service;

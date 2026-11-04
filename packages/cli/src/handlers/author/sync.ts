@@ -6,7 +6,7 @@ import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { Renderer } from "../../presentation/renderer.js";
 import { syncAuthorWorkspace, type AuthorVisibility } from "../../workflows/author/sync.js";
-import { handleRegistryCommand } from "../../application.js";
+import { handleSourceCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homeFlag, jsonFlag, optionalString } from "../../commands/parameters.js";
@@ -59,7 +59,7 @@ export const authorSyncCliCommand = Command.make(
       const paths = yield* SkitConfiguration;
 
       const selectedHome = paths.skitHome;
-      return yield* handleRegistryCommand(
+      return yield* handleSourceCommand(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
           const value = yield* authorSyncCommand({
