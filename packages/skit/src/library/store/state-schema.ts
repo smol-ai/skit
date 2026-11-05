@@ -73,7 +73,7 @@ export type InventoryScanIssue = typeof InventoryScanIssue.Type;
 /** Where states before v11 recorded a copy, including former per-Harness folders. */
 export const RecordedInstallDestination = Schema.Literals(["agents", "claude", "legacy"]);
 export type RecordedInstallDestination = typeof RecordedInstallDestination.Type;
-export const LibraryDeviceStateFields = {
+const LibraryDeviceStateFields = {
   unmanaged: Schema.mutableKey(
     Schema.mutable(
       Schema.Array(
@@ -177,19 +177,17 @@ export type AbsentEvidence = typeof AbsentEvidence.Type;
  * the import saved it to. Collections with identical bytes share a Version, so the hash alone does
  * not say which Collection an import made.
  */
-export const RetainedEvidence = Schema.TaggedStruct("Retained", {
+const RetainedEvidence = Schema.TaggedStruct("Retained", {
   hash: Hash,
   collectionId: CollectionId,
 });
-export type RetainedEvidence = typeof RetainedEvidence.Type;
 
-export const PathEvidence = Schema.Union([FolderEvidence, LinkEvidence, AbsentEvidence]);
-export type PathEvidence = typeof PathEvidence.Type;
+const PathEvidence = Schema.Union([FolderEvidence, LinkEvidence, AbsentEvidence]);
 export const StepEvidence = Schema.Union([PathEvidence, RetainedEvidence]);
 export type StepEvidence = typeof StepEvidence.Type;
 
 /** An import of observed skills, exactly as `importCollection` takes it. */
-export const ImportRequest = Schema.Struct({
+const ImportRequest = Schema.Struct({
   machineId: Schema.optionalKey(MachineId),
   input: Schema.String,
   source: SkitSource,
@@ -217,15 +215,13 @@ export const ImportRequest = Schema.Struct({
   ),
   lockFileEntries: Schema.Array(SkillsShLockFileEntry),
 });
-export type ImportRequest = typeof ImportRequest.Type;
 
-export const DuplicatePolicy = Schema.Literals([
+const DuplicatePolicy = Schema.Literals([
   "keep-both",
   "preserve-duplicates",
   "retire-aliases",
   "retain-only",
 ]);
-export type DuplicatePolicy = typeof DuplicatePolicy.Type;
 
 const ManageSelectionFields = {
   name: Schema.String,
@@ -293,12 +289,11 @@ export const ReviewedInstalledSkillChange = Schema.Struct({
 });
 export type ReviewedInstalledSkillChange = typeof ReviewedInstalledSkillChange.Type;
 
-export const VersionChoice = Schema.Struct({
+const VersionChoice = Schema.Struct({
   skillId: SkillId,
   version: Schema.Literals(["retained", "local"]),
   path: Schema.OptionFromOptionalKey(Schema.String),
 });
-export type VersionChoice = typeof VersionChoice.Type;
 
 /**
  * Where a step installs and which folders agents read, resolved from this machine's configuration
@@ -488,7 +483,7 @@ const SystemErrorTags = Schema.Literals([
  * Effect's PlatformError, stored as the fields it exposes. Its `cause` can be any value, so it is
  * not stored; a read-back error has none.
  */
-export const StoredPlatformError = Schema.Struct({
+const StoredPlatformError = Schema.Struct({
   _tag: Schema.Literal("PlatformError"),
   reason: Schema.Struct({
     _tag: Schema.Union([SystemErrorTags, Schema.Literal("BadArgument")]),
@@ -532,13 +527,12 @@ export const StoredPlatformError = Schema.Struct({
 );
 
 /** Any other SKIT failure, stored as what every SKIT failure says about itself. */
-export const StoredFailure = Schema.Struct({
+const StoredFailure = Schema.Struct({
   _tag: Schema.String,
   code: Schema.String,
   message: Schema.String,
   remediation: Schema.String,
 });
-export type StoredFailure = typeof StoredFailure.Type;
 
 /**
  * A failed step's error. These errors are stored in full; any other is stored as a

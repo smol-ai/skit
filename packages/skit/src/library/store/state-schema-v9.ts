@@ -48,12 +48,12 @@ export const InstalledSkillV9 = Schema.Struct({
   projected_at: Schema.String,
 });
 
-export const DeviceBindingV9 = Schema.Struct({
+const DeviceBindingV9 = Schema.Struct({
   ...BindingV7.fields,
   invocation_policies: Schema.optionalKey(Schema.Record(SkillId, InvocationPolicy)),
 });
 
-export const RepositoryBindingV9 = Schema.Struct({
+const RepositoryBindingV9 = Schema.Struct({
   scope: Schema.Struct({ kind: Schema.Literal("repository"), root: AbsoluteDevicePath }),
   entries: Schema.Array(BindingEntryV7),
   invocation_policies: Schema.optionalKey(Schema.Record(SkillId, InvocationPolicy)),
@@ -121,8 +121,7 @@ export type LibraryStateV9 = typeof LibraryStateV9.Type;
 const policies = (invocation_policies: Readonly<Record<string, InvocationPolicy>> | undefined) =>
   invocation_policies === undefined ? {} : { invocation_policies };
 
-export const DeviceSkillSelectionV9 = LibraryStateV9.fields.device_skill_selection.schema;
-export type DeviceSkillSelectionV9 = typeof DeviceSkillSelectionV9.Type;
+type DeviceSkillSelectionV9 = typeof LibraryStateV9.fields.device_skill_selection.schema.Type;
 
 const installedSkillFromV9 = ({
   projection_id,

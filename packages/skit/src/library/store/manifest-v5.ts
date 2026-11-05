@@ -30,7 +30,7 @@ import {
 } from "./manifest-v7.js";
 
 /** Frozen `skit.library.v5` entities, decoded only to migrate them to the current model. */
-export const AcquisitionSelectionV5 = Schema.Union([
+const AcquisitionSelectionV5 = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("full-tree") }),
   Schema.Struct({
     kind: Schema.Literal("selected-skills"),
@@ -41,7 +41,6 @@ export const AcquisitionSelectionV5 = Schema.Union([
     paths: Schema.Array(SourceRelativePath),
   }),
 ]);
-export type AcquisitionSelectionV5 = typeof AcquisitionSelectionV5.Type;
 
 export const UpstreamV5 = Schema.Struct({
   source_identity: SourceIdentity,

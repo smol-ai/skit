@@ -28,22 +28,20 @@ const MachineDocumentV3 = Schema.Struct({
   repositoryRoots: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
-export const MachineDocumentV4 = Schema.Struct({
+const MachineDocumentV4 = Schema.Struct({
   schemaVersion: Schema.Literal(4),
   machineId: MachineId,
   displayName: Schema.NonEmptyString,
   discoveryRoots: Schema.Array(Schema.String),
   repositories: Schema.Array(MachineRepositoryDecision),
 });
-export interface MachineDocumentV4 extends Schema.Schema.Type<typeof MachineDocumentV4> {}
 
 /** V5 preserves discovery initialization independently of creating a machine identity. */
-export const MachineDocumentV5 = Schema.Struct({
+const MachineDocumentV5 = Schema.Struct({
   ...MachineDocumentV4.fields,
   schemaVersion: Schema.Literal(5),
   repositoryDecisionsInitialized: Schema.Boolean,
 });
-export interface MachineDocumentV5 extends Schema.Schema.Type<typeof MachineDocumentV5> {}
 
 /** The discovery folders, and the identity they were saved under, at one moment of a setup. */
 export const DiscoveryEvidence = Schema.Struct({
@@ -66,12 +64,11 @@ export interface MachineSettingsSetupRecord extends Schema.Schema.Type<
  * V6 keeps the record of the setup that last saved discovery folders, so undo can restore them; an
  * older SKIT refuses the document instead of dropping it.
  */
-export const MachineDocumentV6 = Schema.Struct({
+const MachineDocumentV6 = Schema.Struct({
   ...MachineDocumentV5.fields,
   schemaVersion: Schema.Literal(6),
   setups: Schema.Array(MachineSettingsSetupRecord),
 });
-export interface MachineDocumentV6 extends Schema.Schema.Type<typeof MachineDocumentV6> {}
 
 /** V7 records completed setup inverses alongside the discovery folders they restored. */
 export const MachineDocumentV7 = Schema.Struct({
@@ -182,7 +179,7 @@ const fromV6 = MachineDocumentV6.pipe(
   ),
 );
 
-export const MachineDocument = Schema.Union([
+const MachineDocument = Schema.Union([
   MachineDocumentV7,
   fromV6,
   fromV5,
