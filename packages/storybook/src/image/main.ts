@@ -1,15 +1,12 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 import {
   type TerminalEnvironment,
   journeyStories,
-  recordJourney,
-  journeyFrames,
   renderReplayFrame,
-} from "../../../cli/src/front-end";
+} from "@smolai/skit/storybook";
 import { catalog, renderOutputFrame } from "../model";
 import { renderImage } from "./export";
 
@@ -61,10 +58,8 @@ Writes a 2× PNG and an SVG sibling with embedded fonts.`);
   };
   let ansi: string;
   if (item.kind === "journey") {
-    const recording = await Effect.runPromise(
-      recordJourney(journeyStories[item.index]!).pipe(Effect.provide(NodeServices.layer)),
-    );
-    const frames = journeyFrames(recording, environment);
+    const recording = await Effect.runPromise(journeyStories[item.index]!.record);
+    const frames = recording.frames(environment);
     if (values.frames) {
       console.log(frames.map((frame, index) => `${index}\t${frame.label}`).join("\n"));
       process.exit(0);

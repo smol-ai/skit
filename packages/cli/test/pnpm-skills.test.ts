@@ -5,13 +5,19 @@ import { expect } from "vitest";
 import { Effect, FileSystem, Logger, References, Schema } from "effect";
 import { systemError } from "effect/PlatformError";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { skitLayer } from "@smolai/skit-core";
-import { makePnpmSkillCheck, pnpmSkillOwner, leavePnpmSkill } from "@smolai/skit-core";
-import { fileProvenance } from "../src/audit/provenance.js";
-import { runSetup } from "@smolai/skit-core/library/setup";
-import { SetupResult } from "@smolai/skit-core/library/setup";
+import {
+  skitLayer,
+  skitConfigurationLayer,
+  makePnpmSkillCheck,
+  pnpmSkillOwner,
+  leavePnpmSkill,
+} from "@smolai/skit-core";
+
+import { auditLocalCapabilitiesV1Alpha4 } from "@smolai/skit-core/audit";
+import { runSetup, SetupResult, setupRemovablePaths } from "@smolai/skit-core/library/setup";
+
 import { setupDiscoveredSkillChoices } from "../src/library/setup/setup-skills.js";
-import { setupRemovablePaths } from "@smolai/skit-core/library/setup";
+
 import { applySetupSelections } from "./helpers/setup-apply.js";
 import { importSource, inspectLibrarySource } from "../src/library/application/import-source.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
@@ -162,7 +168,12 @@ for (const yaml of [false, true]) {
       };
       expect(yield* pnpmSkillOwner(f.alias)).toEqual(expected);
       expect(yield* pnpmSkillOwner(f.skill)).toEqual(expected);
-      expect(yield* fileProvenance(join(f.alias, "SKILL.md"), {}, "demo-guide")).toEqual({
+      const audited = yield* auditLocalCapabilitiesV1Alpha4({ home: f.root, cwd: f.root }).pipe(
+        Effect.provide(skitConfigurationLayer()),
+      );
+      expect(
+        audited.skills.find((entry) => entry.location === join(f.alias, "SKILL.md"))?.provenance,
+      ).toEqual({
         confidence: "exact",
         source: "pnpm · @acme/demo@1.0.0",
         evidence: f.ledgerPath,
@@ -312,9 +323,15 @@ it.effect("does not attribute an unrecorded user alias to pnpm", () =>
     const alias = join(f.root, ".agents", "skills", "user-guide");
     yield* f.fs.symlink(f.skill, alias);
     expect(yield* pnpmSkillOwner(alias)).toBeUndefined();
-    expect((yield* fileProvenance(join(alias, "SKILL.md"), {}, "demo-guide")).source).toBe(
-      "symlink",
+    // Audit deduplicates aliases of one physical Skill. Inspect the user alias on its own.
+    yield* f.fs.remove(f.alias);
+    const audited = yield* auditLocalCapabilitiesV1Alpha4({ home: f.root, cwd: f.root }).pipe(
+      Effect.provide(skitConfigurationLayer()),
     );
+    expect(
+      audited.skills.find((entry) => entry.location === join(alias, "SKILL.md"))?.provenance.source,
+    ).toBe("symlink");
+    yield* f.fs.symlink(f.skill, f.alias);
     const home = yield* libraryHome({
       home: join(f.root, "library"),
       inventoryHome: join(f.root, "home"),

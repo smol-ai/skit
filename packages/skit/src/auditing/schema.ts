@@ -1,4 +1,6 @@
-import { FrontmatterCompatibilityResult, HarnessName, SkillAudit } from "@smolai/skit-core";
+import { FrontmatterCompatibilityResult } from "../harnesses/frontmatter.js";
+import { HarnessName } from "../vocabulary.js";
+import { SkillAudit } from "../contracts.js";
 import { Schema } from "effect";
 
 const StringArray = Schema.Array(Schema.String);

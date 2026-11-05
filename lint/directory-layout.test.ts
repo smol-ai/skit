@@ -66,9 +66,10 @@ describe("skit/directory-layout", () => {
   test("a new file in a legacy folder is flagged once, at the top", async () => {
     expect(
       await reported(
-        "packages/cli/src/workflows/library/PROBE.ts",
+        "packages/cli/src/library/PROBE.ts",
         "\n\nexport const probe = 1;\n",
         "directory-layout",
+        "packages/cli/src/workflows/library/PROBE.ts",
       ),
     ).toEqual([1]);
   });
@@ -96,6 +97,21 @@ describe("skit/directory-layout", () => {
 });
 
 describe("skit/import-direction", () => {
+  test("Storybook uses its declared CLI story API; the TUI stays on core", async () => {
+    const source = `import { journeyStories } from "@smolai/skit/storybook"; export const stories = journeyStories;`;
+    expect(await reported("packages/storybook/src/PROBE.ts", source, "import-direction")).toEqual(
+      [],
+    );
+    expect(await reported("packages/tui/src/PROBE.ts", source, "import-direction")).toEqual([1]);
+    expect(
+      await reported(
+        "packages/storybook/src/PROBE.ts",
+        `import * as privateCli from "@smolai/skit/src/front-end";`,
+        "import-direction",
+      ),
+    ).toEqual([1]);
+  });
+
   test("the TUI importing CLI source is flagged", async () => {
     expect(
       await reported(

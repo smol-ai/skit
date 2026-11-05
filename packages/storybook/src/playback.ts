@@ -1,4 +1,4 @@
-import type { ReplayFrame } from "../../cli/src/front-end";
+import type { ReplayFrame } from "@smolai/skit/storybook";
 
 /** Wall time animates the current screen; only explicit steps or playback move the cursor. */
 export class JourneyPlayback {

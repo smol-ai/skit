@@ -1,14 +1,10 @@
-import {
-  artifactUsesSymlink,
-  inspectOwnershipMarker,
-  isJsonObject,
-  stringAt,
-  type JsonObject,
-} from "@smolai/skit-core";
+import { artifactUsesSymlink } from "../platform/path-identity.js";
+import { inspectOwnershipMarker } from "../installed-skills/files.js";
+import { isJsonObject, stringAt, type JsonObject } from "../shared/json.js";
 import { dirname, join, normalize, sep } from "node:path";
 import { Effect } from "effect";
 import { canonical } from "./io.js";
-import { pnpmSkillOwner, type PnpmSkillCheck } from "@smolai/skit-core";
+import { pnpmSkillOwner, type PnpmSkillCheck } from "../installed-skills/pnpm-skills.js";
 
 function codexSystemSkillsRoot(path: string): string | null {
   const parts = normalize(path).split(sep);

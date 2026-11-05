@@ -1,16 +1,16 @@
+import type { HarnessProbeResult } from "@smolai/skit-core/harnesses";
 import type {
   AuditEntryV1Alpha4,
   AuditMcpServerV1Alpha4,
   AuditReportV1Alpha4,
-  HarnessProbeResult,
-} from "../../cli/src/front-end";
+} from "@smolai/skit-core/audit";
 import {
   invocationRowSummary,
   type LibrarySkillRow,
   type PendingLibraryChange,
 } from "@smolai/skit-core/library/session";
 import type { ListingBudget } from "@smolai/skit-core";
-import { groupSkills, groupKindLabel, groupLocation, type SkillGroup } from "./skill-groups";
+import { groupSkills, groupKindLabel, groupLocation, type SkillGroup } from "../audit/skill-groups";
 
 export type CapabilityKind = "skill" | "plugin" | "mcp-server" | "rule" | "marketplace";
 

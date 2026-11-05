@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { normalizeAuditReport } from "../src/audit/normalize.js";
-import type { AuditReport } from "../src/audit/types.js";
+import { normalizeAuditReport } from "../src/auditing/normalize.js";
+import type { AuditReport } from "../src/auditing/schema.js";
 
 describe("normalized audit report", () => {
   test("links findings by subject identity rather than arbitrary detail values", () => {

@@ -3,7 +3,7 @@ import {
   createInteractionController,
   type BrowseContext,
   type ScrollKey,
-} from "../src/interaction";
+} from "../src/shell/interaction";
 
 const browse: BrowseContext = {
   section: "library",

@@ -142,7 +142,7 @@ export interface Interface {
   readonly hash: (path: string) => Effect.Effect<Hash, Cause>;
   /** Changes nothing: every folder is still exactly as it was inspected. */
   readonly check: (folders: readonly Folder[]) => Effect.Effect<void, Changed | Cause>;
-  /** Create roots and prove them writable, before the Library saves intent. */
+  /** Create roots and prove them writable before saving enablement. */
   readonly prepare: (roots: readonly string[]) => Effect.Effect<void, Cause>;
   /**
    * Build one Installed Skill's bytes from `state`, the Library being planned or applied, so

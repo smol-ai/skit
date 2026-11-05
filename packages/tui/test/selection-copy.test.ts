@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { copySelectedText, isCopySelectionKey } from "../src/selection-copy";
+import { copySelectedText, isCopySelectionKey } from "../src/shell/selection-copy";
 
 describe("isCopySelectionKey", () => {
   it("uses y for copy only when text is selected", () => {

@@ -3,23 +3,12 @@ import type { CommandFailure, CommandResult } from "../commands/types.js";
 import { renderContract } from "./contract-presenters.js";
 import { terminalText } from "./terminal-text.js";
 
-export interface TerminalFrame {
-  readonly stdout: string;
-  readonly stderr: string;
-  readonly exitCode?: number;
-}
-
-export interface TerminalEnvironment {
-  readonly color: boolean;
-  readonly detail: "summary" | "full";
-  readonly format: "human" | "json";
-}
-
-export const defaultTerminalEnvironment: TerminalEnvironment = {
-  color: false,
-  detail: "summary",
-  format: "human",
-};
+import type { TerminalFrame, TerminalEnvironment } from "../terminal/contracts.js";
+export {
+  defaultTerminalEnvironment,
+  type TerminalFrame,
+  type TerminalEnvironment,
+} from "../terminal/contracts.js";
 
 export function renderResultFrame<K extends ContractKey>(
   result: CommandResult<K>,

@@ -1,4 +1,4 @@
-import type { AuditSkillV1Alpha4 } from "../../cli/src/front-end";
+import type { AuditSkillV1Alpha4 } from "@smolai/skit-core/audit";
 
 type GroupableSkill = Pick<AuditSkillV1Alpha4, "provenance" | "canonicalLocation">;
 

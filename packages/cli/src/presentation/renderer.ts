@@ -54,7 +54,7 @@ export interface RendererShape {
 
 export class Renderer extends Context.Service<Renderer, RendererShape>()("skit/Renderer") {}
 
-import { CLEAR_STATUS_LINE, STATUS_FRAME_MS, renderStatusLine } from "./terminal-status.js";
+import { CLEAR_STATUS_LINE, STATUS_FRAME_MS, renderStatusLine } from "../terminal/status.js";
 import { terminalText } from "./terminal-text.js";
 
 const formatElapsed = (milliseconds: number): string =>

@@ -1,21 +1,21 @@
 import { basename, dirname, join } from "node:path";
+import { auditSkill } from "./skill-audit.js";
+import { evaluateSkillFrontmatter } from "../harnesses/frontmatter.js";
+import { harnessDrivers } from "../harnesses/drivers.js";
+import { HarnessName } from "../vocabulary.js";
+import { physicalPath } from "../platform/path-identity.js";
+import { resolveSkillsDirectory } from "../harnesses/catalog.js";
 import {
-  auditSkill,
-  evaluateSkillFrontmatter,
-  harnessDrivers,
-  HarnessName,
-  physicalPath,
-  resolveSkillsDirectory,
   type HarnessProfile,
   type SkillsDirectory,
   type SkillsDirectoryRole,
-  type JsonObject,
-} from "@smolai/skit-core";
+} from "../harnesses/contracts.js";
+import { type JsonObject } from "../shared/json.js";
 import { Effect } from "effect";
 import { canonical, read, walk } from "./io.js";
 import { fileProvenance } from "./provenance.js";
-import { makePnpmSkillCheck } from "@smolai/skit-core";
-import type { AuditFinding, AuditEntry } from "./types.js";
+import { makePnpmSkillCheck } from "../installed-skills/pnpm-skills.js";
+import type { AuditFinding, AuditEntry } from "./schema.js";
 
 function frontmatterProblem(
   issue: ReturnType<typeof evaluateSkillFrontmatter>["issues"][number],

@@ -1,7 +1,8 @@
+import type { HarnessProbeResult } from "@smolai/skit-core/harnesses";
 import { resolveDeclaredInvocation } from "@smolai/skit-core";
 import { Result } from "effect";
 import { expect, test } from "vitest";
-import type { AuditReportV1Alpha4, HarnessProbeResult } from "../../cli/src/front-end";
+import type { AuditReportV1Alpha4 } from "@smolai/skit-core/audit";
 import type { LibrarySkillRow, PendingLibraryChange } from "@smolai/skit-core/library/session";
 import {
   auditPresentation,
@@ -11,7 +12,7 @@ import {
   inventoryPresentation,
   libraryRows,
   type AuditItem,
-} from "../src/presentation";
+} from "../src/shell/presentation";
 
 const entry = {
   id: "review",

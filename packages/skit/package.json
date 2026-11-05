@@ -45,6 +45,10 @@
     "./author": {
       "types": "./dist/author/index.d.ts",
       "import": "./dist/author/index.js"
+    },
+    "./audit": {
+      "types": "./dist/auditing/index.d.ts",
+      "import": "./dist/auditing/index.js"
     }
   },
   "scripts": {

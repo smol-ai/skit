@@ -1,7 +1,7 @@
 import { skitConfigurationLayer } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { Command, Flag } from "effect/cli";
-import { auditLocalCapabilitiesV1Alpha4, type AuditOptions } from "../audit/local.js";
+import { auditLocalCapabilitiesV1Alpha4, type AuditOptions } from "@smolai/skit-core/audit";
 import { handlePlatformCommand } from "../application.js";
 import { CommandMetadata } from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";

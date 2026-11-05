@@ -113,8 +113,8 @@ export { syncPaths } from "./platform/atomic-write.js";
 export { errnoOf, isErrno } from "./shared/errno.js";
 export { sha256Hash, hashHex } from "./shared/hash.js";
 export { isCanonicalRelativePath, parentDirectories } from "./shared/relative-path.js";
-export * from "./usage/contracts.js";
-export { SkillUsage, skillUsageLayer } from "./usage/scanner.js";
+export * from "./library/usage/contracts.js";
+export { scanUsage } from "./library/usage/scanner.js";
 
 export * as MachineSettings from "./library/machine-settings.js";
 export * as Merge from "./merge/merge.js";

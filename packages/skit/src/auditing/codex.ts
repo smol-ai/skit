@@ -7,10 +7,10 @@ import {
   stringAt,
   type JsonObject,
   type JsonValue,
-} from "@smolai/skit-core";
-import type { AuditFinding, AuditEntry } from "./types.js";
+} from "../shared/json.js";
+import type { AuditFinding, AuditEntry } from "./schema.js";
 import { Effect } from "effect";
-import { errorMessage } from "../failure-classification.js";
+import { errorMessage } from "../shared/failure.js";
 import { canonical, read, walk } from "./io.js";
 import { addMcp } from "./mcp.js";
 

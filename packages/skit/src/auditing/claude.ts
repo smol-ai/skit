@@ -8,8 +8,8 @@ import {
   objectEntriesAt,
   stringAt,
   type JsonObject,
-} from "@smolai/skit-core";
-import type { AuditFinding, AuditEntry } from "./types.js";
+} from "../shared/json.js";
+import type { AuditFinding, AuditEntry } from "./schema.js";
 import { canonical, pathExists, read, readJson, walk } from "./io.js";
 import { addMcp } from "./mcp.js";
 import { fileProvenance } from "./provenance.js";

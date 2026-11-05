@@ -17,9 +17,9 @@ const isPermissionDenied = (error: PlatformError): boolean =>
 /**
  * Prove that SKIT can place Installed Skills under a root: create the root and a scratch directory
  * in each place installing writes, the root itself and the staging directory where folders are
- * staged and backed up. A refusal becomes `SkillsDirectoryNotWritable` naming the root. Callers run
- * this before saving Library state, so a sandboxed or read-only root fails without leaving a
- * half-applied Library behind; installing runs it again, so every write fails the same way.
+ * staged and backed up. A refusal becomes `SkillsDirectoryNotWritable` naming the root.
+ * The recorded executor proves writability before saving enablement; its recovery program is
+ * already durable. Installing checks again, so later refusals keep the same typed diagnostic.
  */
 export const ensureSkillsDirectoryWritable = Effect.fn("Install.ensureSkillsDirectoryWritable")(
   function* (root: string) {

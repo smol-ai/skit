@@ -1,12 +1,6 @@
-import {
-  arrayAt,
-  booleanAt,
-  isJsonObject,
-  stringAt,
-  type HarnessName,
-  type JsonObject,
-} from "@smolai/skit-core";
-import type { AuditEntry } from "./types.js";
+import { arrayAt, booleanAt, isJsonObject, stringAt, type JsonObject } from "../shared/json.js";
+import { type HarnessName } from "../vocabulary.js";
+import type { AuditEntry } from "./schema.js";
 
 export function addMcp(
   observations: AuditEntry[],

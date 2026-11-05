@@ -1,4 +1,5 @@
-import type { ApplyStep } from "./program.js";
+import { same, type ApplyStep } from "./program.js";
+import { enabledAt } from "../../enabled.js";
 import { join } from "node:path";
 import { InstalledSkills } from "../../installed-skills.js";
 import { libraryStateRevision, type LibraryState } from "../../library-state.js";
@@ -72,19 +73,29 @@ export const finishChange = (
 
 /** Preserve the original reviewed change in the caller's result, including after a replay. */
 export const applyOutcome = (
-  step: Pick<ApplyStep, "enabled">,
+  step: Pick<ApplyStep, "enabled" | "next">,
   state: LibraryState,
   outcome: Outcome,
 ): Outcome => {
-  const results = step.enabled.map(({ change, skillIds, targets }) =>
-    finishChange(
-      change,
-      skillIds,
-      targets,
-      outcome._tag === "Applied" ? outcome.copies : [],
-      state,
-    ),
-  );
+  const expected: LibraryState = { ...step.next, installed_skills: [], operations: [] };
+  const results = step.enabled
+    .filter(({ change }) => {
+      const found = enabledAt(state, change.scope);
+      const wanted = enabledAt(expected, change.scope);
+      return (
+        same(found?.enabled ?? [], wanted?.enabled ?? []) &&
+        same(found?.invocation_policies ?? {}, wanted?.invocation_policies ?? {})
+      );
+    })
+    .map(({ change, skillIds, targets }) =>
+      finishChange(
+        change,
+        skillIds,
+        targets,
+        outcome._tag === "Applied" ? outcome.copies : [],
+        state,
+      ),
+    );
   const unresolved = results.flatMap((result) => result.unresolved);
   if (outcome._tag === "Applied" && unresolved.length)
     return {

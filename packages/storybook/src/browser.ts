@@ -11,20 +11,16 @@ import {
   type TerminalColors,
   type KeyEvent,
 } from "@opentui/core";
-import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 import {
   defaultTerminalEnvironment,
-  recordJourney,
-  renderRecordedJourney,
-  journeyFrames,
   renderReplayFrame,
   journeyStories,
   STATUS_FRAME_MS,
   CLEAR_STATUS_LINE,
   renderStatusLine,
-  type RecordedJourney,
-} from "../../cli/src/front-end";
+  type JourneyRecording,
+} from "@smolai/skit/storybook";
 import { stripVTControlCharacters } from "node:util";
 import { previewPalette } from "./preview-palette";
 import { JourneyPlayback } from "./playback";
@@ -67,10 +63,10 @@ export function mountStorybook(
   let focus: "catalog" | "preview" = "catalog";
   let transcript = false;
   let playback: JourneyPlayback | undefined;
-  let recorded: RecordedJourney | undefined;
+  let recorded: JourneyRecording | undefined;
   let terminalPrefix: string | undefined;
   let previewTask: Promise<void> = Promise.resolve();
-  const recordings = new Map<number, Promise<RecordedJourney>>();
+  const recordings = new Map<number, Promise<JourneyRecording>>();
 
   const environment = () => ({
     ...defaultTerminalEnvironment,
@@ -244,7 +240,7 @@ export function mountStorybook(
       terminalPrefix = undefined;
       replacePreviewText(
         stripVTControlCharacters(
-          renderRecordedJourney(recorded, { ...environment(), color: false }, process.cwd()),
+          recorded.transcript({ ...environment(), color: false }, process.cwd()),
         ),
       );
     } else if (format === "json") {
@@ -290,13 +286,13 @@ export function mountStorybook(
     if (!recording) {
       const story = journeyStories[item.index];
       if (!story) return;
-      recording = Effect.runPromise(recordJourney(story).pipe(Effect.provide(NodeServices.layer)));
+      recording = Effect.runPromise(story.record);
       recordings.set(item.index, recording);
     }
     const journey = await recording;
     if (token !== generation) return;
     recorded = journey;
-    playback = new JourneyPlayback(journeyFrames(journey, environment()));
+    playback = new JourneyPlayback(journey.frames(environment()));
     playback.seek(previousIndex);
     showReplay();
   }

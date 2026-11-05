@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import type { AuditSkillV1Alpha4 } from "../../cli/src/front-end";
-import { groupForSkill, groupSkills } from "../src/skill-groups";
+import type { AuditSkillV1Alpha4 } from "@smolai/skit-core/audit";
+import { groupForSkill, groupSkills } from "../src/audit/skill-groups";
 
 describe("skill groups", () => {
   test("uses explicit collection, plugin, and source provenance", () => {

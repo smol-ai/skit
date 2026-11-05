@@ -685,9 +685,15 @@ export const applyRecorded = Effect.fn("Library.applyRecorded")(function* (
     return yield* new InstalledSkillInvalid({
       detail: "Library apply stopped before its outcome could be recorded",
     });
-  if (plan.intent._tag !== "Enabled" && applied.outcome._tag === "Incomplete")
-    return yield* Effect.fail(applied.outcome.cause);
-  return applyOutcome(prepared.step, yield* loadLibrary(home), applied.outcome);
+  const outcome = applyOutcome(prepared.step, yield* loadLibrary(home), applied.outcome);
+  // A durable attempt is not saved enablement. Fail normally if root preparation stopped
+  // before any requested enablement was accepted; the stopped operation remains inspectable.
+  if (
+    outcome._tag === "Incomplete" &&
+    (plan.intent._tag !== "Enabled" || outcome.results.length === 0)
+  )
+    return yield* Effect.fail(outcome.cause);
+  return outcome;
 }, Effect.scoped);
 
 type StoppedOperation = Extract<OperationStatus, { readonly _tag: "Stopped" }>;

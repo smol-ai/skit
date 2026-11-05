@@ -642,7 +642,7 @@ const effectRules = {
       docs: { description: "Imports follow the target layout's direction" },
       messages: {
         frontend:
-          "{{target}} is CLI source. The TUI and Storybook import core subpath exports, not CLI source (architecture/layout.mjs).",
+          "{{target}} is CLI source. The TUI imports core public APIs; Storybook may also use the CLI public story export, never CLI source (architecture/layout.mjs).",
         internal:
           "{{target}} is internal to {{owner}}. Only code under {{owner}} may import it; call the owner's public module instead (architecture/layout.mjs).",
       },
@@ -655,6 +655,15 @@ const effectRules = {
       const check = (node, sourceNode) => {
         const source = sourceNode?.value;
         if (typeof source !== "string") return;
+        const cliPackage = source === "@smolai/skit" || source.startsWith("@smolai/skit/");
+        if (
+          frontend &&
+          cliPackage &&
+          !(file.startsWith("packages/storybook/") && source === "@smolai/skit/storybook")
+        ) {
+          context.report({ node: sourceNode, messageId: "frontend", data: { target: source } });
+          return;
+        }
         const target = source.startsWith(".")
           ? relative(repositoryRoot, resolve(fileDirectory, source)).replace(/\.js$/, "")
           : source.startsWith("@smolai/skit-core/")

@@ -10,10 +10,11 @@ import { skitLayer } from "@smolai/skit-core";
 import { Deferred, Effect, Fiber, FileSystem, Schedule } from "effect";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
-import { runAuditProbes } from "../src/audit/probes.js";
+import { runAuditProbes } from "../src/auditing/probes.js";
 import { probeHarness } from "@smolai/skit-core/harnesses";
 import { captureBounded } from "@smolai/skit-core/harnesses";
-import { scratch } from "./helpers/library-home.js";
+const scratch = (prefix: string) =>
+  Effect.flatMap(FileSystem.FileSystem, (fs) => fs.makeTempDirectoryScoped({ prefix }));
 
 /** A disposable executable at `<directory>/<name>` with the given shell body. */
 const executable = Effect.fn("Test.executable")(function* (name: string, body: string) {

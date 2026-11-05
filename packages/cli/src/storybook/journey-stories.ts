@@ -5,12 +5,7 @@ import { presentDoctorCleanup } from "../library/workflows/doctor-cleanup.js";
 import { syncJourney } from "./sync-journey.js";
 import { join } from "node:path";
 import { ConfigProvider, Effect, FileSystem, Option } from "effect";
-import {
-  deterministicTreeHash,
-  makeMachineId,
-  skitLayer,
-  skillUsageLayer,
-} from "@smolai/skit-core";
+import { deterministicTreeHash, makeMachineId, skitLayer } from "@smolai/skit-core";
 import { libraryCommandConfiguration } from "../commands/library-configuration.js";
 import { presentSetEnabled } from "../library/enable/command.js";
 import type { Prompter } from "../presentation/prompter.js";
@@ -181,7 +176,7 @@ const previewDoctorCleanup = Effect.scoped(
       ),
     );
   }),
-).pipe(Effect.provide(skillUsageLayer), Effect.provide(skitLayer));
+).pipe(Effect.provide(skitLayer));
 
 export const journeyStories: ReadonlyArray<JourneyStory<string, unknown, Prompter | Renderer>> = [
   {

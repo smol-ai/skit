@@ -1,6 +1,5 @@
-import { UsageReport } from "@smolai/skit-core";
-import { VersionReport } from "../releases/checker.js";
 import {
+  UsageReport,
   AuthorSkitDeleteResponse,
   AuthorSkitSummary,
   Hash,
@@ -12,6 +11,8 @@ import {
   SkillSecurityReview,
   SkitValidationDiagnostic,
 } from "@smolai/skit-core";
+import { VersionReport } from "../releases/checker.js";
+
 import { Schema } from "effect";
 import {
   SetupOutput,
@@ -22,7 +23,7 @@ import {
 } from "../library/setup/actions.js";
 import { RecoveryList, RecoveryOutput } from "./recovery-contract.js";
 import { SetupUndoOutput } from "../library/setup/undo-result.js";
-import { AuditReportV1Alpha4 } from "../audit/schema.js";
+import { AuditReportV1Alpha4 } from "@smolai/skit-core/audit";
 import { HarnessProbeReport } from "@smolai/skit-core/harnesses";
 import { RegistryRemoteChange, RegistryRemoteList } from "../registry/contracts.js";
 import { AuthorSyncResult } from "../workflows/author/sync-contract.js";
@@ -32,9 +33,14 @@ import { AddPreview, AddResult } from "../library/workflows/add-contract.js";
 import { UpdatePlan, UpdateResult } from "../library/workflows/update-contract.js";
 import { SyncResult } from "../library/workflows/library-sync-contract.js";
 import { ListResult } from "../library/workflows/list-contract.js";
-import { SetEnabledChange, SetEnabledResult } from "@smolai/skit-core/library/session";
+import {
+  SetEnabledChange,
+  SetEnabledResult,
+  EditImportPlan,
+  EditImportResult,
+} from "@smolai/skit-core/library/session";
 import { RepositoryPolicyResult } from "@smolai/skit-core/library/setup";
-import { EditImportPlan, EditImportResult } from "@smolai/skit-core/library/session";
+
 import { MachineInventoryResult } from "../library/workflows/machine-inventory-contract.js";
 import { DoctorReport } from "../library/workflows/doctor-harnesses.js";
 

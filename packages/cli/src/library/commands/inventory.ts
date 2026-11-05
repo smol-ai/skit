@@ -1,5 +1,4 @@
 import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
-import { skillUsageLayer } from "@smolai/skit-core";
 import { skillModificationTime } from "@smolai/skit-core/library/session";
 import { Option, Effect } from "effect";
 import { Command, Flag } from "effect/cli";
@@ -208,10 +207,7 @@ export const doctorCliCommand = Command.make(
               options,
               input.days,
               input.dryRun,
-            ).pipe(
-              Effect.provide(skillUsageLayer),
-              Effect.catchTag("PromptCancelled", () => Effect.succeed(false)),
-            );
+            ).pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(false)));
             if (changed) {
               const checked = yield* doctorCommand(options);
               yield* renderer.result(result("doctor", checked, checked.ok ? 0 : 12));

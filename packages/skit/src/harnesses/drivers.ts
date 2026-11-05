@@ -3,12 +3,12 @@ import type { ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
 import type { HarnessName } from "../contracts.js";
 import type { LibraryState } from "../library/library-state.js";
-import type { UsageHarness } from "../usage/contracts.js";
+import type { UsageHarness } from "../library/usage/contracts.js";
 import {
   claudeTranscriptGrammar,
   codexTranscriptGrammar,
   type TranscriptGrammar,
-} from "../usage/events.js";
+} from "../library/usage/events.js";
 import { harnessProfiles } from "./catalog.js";
 import type { HarnessProfile } from "./contracts.js";
 import {

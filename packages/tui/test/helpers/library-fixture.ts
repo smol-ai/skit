@@ -8,7 +8,7 @@ import {
   proposeLibraryCollectionChange,
   type Scope,
 } from "@smolai/skit-core/library/session";
-import { createLibraryHost } from "../../src/library-host";
+import { createLibraryHost } from "../../src/library/host";
 
 /**
  * A temporary user home holding a Library at `<home>/.skit`, one retained local Collection per

@@ -10,15 +10,10 @@ import {
   renderResultFrame,
   type TerminalEnvironment,
 } from "../presentation/output-frame.js";
-import { renderStatusLine } from "../presentation/terminal-status.js";
 import type { RecordedJourney } from "./journey-runner.js";
 
-export interface ReplayFrame {
-  readonly label: string;
-  readonly output: string;
-  readonly status?: string;
-  readonly prompt?: string;
-}
+import type { ReplayFrame } from "./contracts.js";
+export type { ReplayFrame } from "./contracts.js";
 
 /** Derive screens from captured events, without rerunning a command when seeking backwards. */
 export function journeyFrames(
@@ -120,10 +115,4 @@ export function journeyFrames(
   return frames;
 }
 
-export function renderReplayFrame(frame: ReplayFrame, spinnerFrame: number): string {
-  return (
-    frame.output +
-    (frame.prompt ? `${frame.prompt}\n` : "") +
-    (frame.status ? renderStatusLine(frame.status, spinnerFrame) : "")
-  );
-}
+export { renderReplayFrame } from "./frame.js";

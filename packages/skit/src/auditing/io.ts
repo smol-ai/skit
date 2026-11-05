@@ -5,7 +5,9 @@
 // previous synchronous implementation reached node:fs directly and re-entered a runtime through
 // runSkitSync for every path classification.
 import { Effect, FileSystem } from "effect";
-import { isJsonObject, LinkStat, physicalPath, type JsonObject } from "@smolai/skit-core";
+import { isJsonObject, type JsonObject } from "../shared/json.js";
+import { LinkStat } from "../platform/link-stat.js";
+import { physicalPath } from "../platform/path-identity.js";
 
 const classify = Effect.fn("Audit.classify")(function* (path: string) {
   const linkStat = yield* LinkStat;

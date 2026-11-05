@@ -1,25 +1,23 @@
 import { Clock, Effect } from "effect";
 import type { Digest } from "effect/crypto";
-import { Library } from "@smolai/skit-core/library";
+import { Library } from "../library/library.js";
 
 import {
   configurationForHome,
   resolveSkitConfiguration,
   type ResolvedSkitConfiguration,
-} from "@smolai/skit-core";
+} from "../platform/configuration.js";
 import { dirname, join, resolve } from "node:path";
-import {
-  inspectOwnershipMarker,
-  objectAt,
-  physicalPath,
-  type TreeRequirements,
-} from "@smolai/skit-core";
+import { inspectOwnershipMarker } from "../installed-skills/files.js";
+import { objectAt } from "../shared/json.js";
+import { physicalPath } from "../platform/path-identity.js";
+import { type TreeRequirements } from "../platform/tree-requirements.js";
 import { auditClaude } from "./claude.js";
 import { auditCodex } from "./codex.js";
 import { pathExists, readJson as json } from "./io.js";
 import { runAuditProbes, type ProbeResult } from "./probes.js";
 import { auditSkills } from "./skills.js";
-import type { AuditFinding, AuditEntry } from "./types.js";
+import type { AuditFinding, AuditEntry } from "./schema.js";
 import { normalizeAuditReport } from "./normalize.js";
 
 /** Harnesses that read Agent Skills but that SKIT does not yet audit or drive. */
@@ -143,7 +141,7 @@ const auditOwnershipClaims = Effect.fn("Audit.ownershipClaims")(function* (
 /**
  * Observe local Harness capabilities.
  *
- * Reads and traversals go through `audit/io.ts`, and ownership markers through the core marker
+ * Reads and traversals go through `auditing/io.ts`, and ownership markers through the core marker
  * inspector, all Effects over the platform services: the observation belongs to the caller's
  * fiber rather than re-entering a runtime per path. `suppliedProbes` carries subprocess results the caller already ran, so nothing spawns from
  * inside the observation.
@@ -249,8 +247,8 @@ export const auditLocalCapabilities = Effect.fn("Audit.capabilities")(function* 
  *
  * Its declared subprocesses execute through the process service on this fiber — interrupting the
  * command kills them — and the synchronous observation then folds their results into the report.
- * The filesystem reads stay synchronous on purpose: `audit/io.ts` is the audit's one read
- * chokepoint and the same code serves the synchronous consumer above.
+ * Both entry points use the same scoped filesystem reads. Probes run on this fiber before
+ * the passive snapshot is normalized into the versioned public report.
  */
 export const auditLocalCapabilitiesV1Alpha4 = Effect.fn("Audit.local")(function* (
   options: AuditOptions = {},

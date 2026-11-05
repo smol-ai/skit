@@ -1,12 +1,10 @@
 import {
-  OutputStory,
   journeyStories,
   outputStories,
-  outputStoryKey,
-  renderFailureFrame,
-  renderResultFrame,
+  renderOutputFrame,
   type TerminalEnvironment,
-} from "../../cli/src/front-end";
+} from "@smolai/skit/storybook";
+export { renderOutputFrame } from "@smolai/skit/storybook";
 
 export type CatalogItem =
   | { readonly kind: "output"; readonly key: string; readonly index: number }
@@ -18,7 +16,7 @@ export const catalog: ReadonlyArray<CatalogItem> = [
   ...outputStories
     .map((story, index) => ({
       kind: "output" as const,
-      key: outputStoryKey(story),
+      key: story.key,
       index,
     }))
     .sort(byKey),
@@ -35,18 +33,6 @@ export const filterCatalog = (query: string): ReadonlyArray<CatalogItem> => {
   const needle = query.trim().toLowerCase();
   return needle ? catalog.filter(({ key }) => key.toLowerCase().includes(needle)) : catalog;
 };
-
-/** Renders an output story exactly as the CLI front end would. */
-export function renderOutputFrame(index: number, environment: TerminalEnvironment) {
-  const story = outputStories[index];
-  return (
-    story &&
-    OutputStory.$match(story, {
-      Result: ({ result }) => renderResultFrame(result, environment),
-      Failure: ({ failure }) => renderFailureFrame(failure, environment.format),
-    })
-  );
-}
 
 export function renderOutput(index: number, environment: TerminalEnvironment): string {
   const frame = renderOutputFrame(index, environment);

@@ -2,7 +2,7 @@
 import { Deferred, Effect, Layer } from "effect";
 import { expect, test } from "vitest";
 import type { LibrarySessionState, LibrarySkillRow } from "@smolai/skit-core/library/session";
-import { createLibraryHost } from "../src/library-host";
+import { createLibraryHost } from "../src/library/host";
 
 /**
  * Await a Deferred from outside the host's runtime.

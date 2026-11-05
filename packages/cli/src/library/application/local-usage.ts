@@ -1,25 +1,23 @@
 import {
-  SkillUsage,
+  scanUsage,
   UsageHarness,
   harnessDrivers,
   type LibraryState,
   type UsageRoot,
+  type UsageOptions,
 } from "@smolai/skit-core";
 import { Config, Effect } from "effect";
 import { join, resolve } from "node:path";
 
-type ScanOptions = Parameters<Effect.Success<typeof SkillUsage>["scan"]>[0];
-
 /** Own transcript discovery and managed-document attribution for local usage consumers. */
 export const scanLocalUsage = Effect.fn("LocalUsage.scan")(function* (
   state: LibraryState,
-  options: Omit<ScanOptions, "roots" | "projections"> & {
+  options: Omit<UsageOptions, "roots" | "installedSkills"> & {
     readonly userHome: string;
     readonly harness?: UsageHarness | "all";
     readonly homes?: Partial<Record<UsageHarness, string>>;
   },
 ) {
-  const scanner = yield* SkillUsage;
   const roots: UsageRoot[] = [];
   for (const harness of UsageHarness.literals) {
     if (options.harness && options.harness !== "all" && options.harness !== harness) continue;
@@ -33,7 +31,7 @@ export const scanLocalUsage = Effect.fn("LocalUsage.scan")(function* (
       roots.push({ harness, root: join(resolve(home), directory) });
   }
   const skills = new Map(state.skills.map((skill) => [skill.skill_id, skill]));
-  return yield* scanner.scan({
+  return yield* scanUsage({
     roots,
     days: options.days,
     end: options.end,

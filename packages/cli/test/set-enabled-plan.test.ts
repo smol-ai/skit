@@ -1,7 +1,17 @@
 import { SkitConfiguration } from "@smolai/skit-core";
 import { assert, it } from "@effect/vitest";
 import { systemError } from "effect/PlatformError";
-import { Cause, Clock, ConfigProvider, Effect, Exit, FileSystem, Layer, Option } from "effect";
+import {
+  Cause,
+  Clock,
+  ConfigProvider,
+  Effect,
+  Exit,
+  FileSystem,
+  Layer,
+  Option,
+  Stream,
+} from "effect";
 import { join } from "node:path";
 import {
   deterministicTreeHash,
@@ -10,8 +20,6 @@ import {
   enabledAt,
   enabledSkillIds,
   SkillsDirectoryNotWritable,
-  skillUsageLayer,
-  SkillUsage,
 } from "@smolai/skit-core";
 import { withSandboxDenying } from "./helpers/sandbox.js";
 import {
@@ -543,50 +551,87 @@ it.effect(
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("cleanup uses one captured Library and an injected usage scanner", () =>
+it.effect("cleanup reads one captured Library and protects a Skill used in a real transcript", () =>
   Effect.gen(function* () {
     const f = yield* cleanupFixture;
+    const sessions = join(f.root, "cleanup-codex", "sessions");
+    const transcript = join(sessions, "record.jsonl");
+    const at = new Date((yield* Clock.currentTimeMillis) - 1).toISOString();
+    yield* f.fs.makeDirectory(sessions, { recursive: true });
+    yield* f.fs.writeFileString(
+      transcript,
+      [
+        { type: "session_meta", timestamp: at, payload: { id: "cleanup", cwd: f.root } },
+        {
+          type: "response_item",
+          timestamp: at,
+          payload: {
+            type: "function_call",
+            name: "exec_command",
+            call_id: "read-beta",
+            arguments: JSON.stringify({ cmd: `cat ${join(f.destination, "beta", "SKILL.md")}` }),
+          },
+        },
+      ]
+        .map((record) => JSON.stringify(record))
+        .join("\n") + "\n",
+    );
     let loads = 0;
     let capturedReads: number | undefined;
     const observed = {
       ...f.fs,
+      stream: (path: string, options?: Parameters<typeof f.fs.stream>[1]) =>
+        Stream.unwrap(
+          Effect.sync(() => {
+            if (path === transcript) {
+              assert.strictEqual(capturedReads, undefined);
+              capturedReads = loads;
+              assert.isAbove(capturedReads, 0);
+            }
+            return f.fs.stream(path, options);
+          }),
+        ),
       readFileString: (...args: Parameters<typeof f.fs.readFileString>) =>
         Effect.suspend(() => {
           if (args[0] === f.home.statePath) loads++;
           return f.fs.readFileString(...args);
         }),
     };
-    const scanner = Layer.succeed(
-      SkillUsage,
-      SkillUsage.of({
-        scan: (options) =>
-          Effect.sync(() => {
-            assert.strictEqual(capturedReads, undefined);
-            capturedReads = loads;
-            assert.isAbove(capturedReads, 0);
-            assert.strictEqual(options.days, 14);
-            assert.ok(options.installedSkills?.some((p) => p.name === "alpha"));
-            return f.usage;
-          }),
-      }),
-    );
     const selection = yield* openDoctorCleanupSelection(
       [f.budget],
       f.home.installOptions,
       14,
       () => Effect.void,
     ).pipe(
-      Effect.provide(scanner),
+      Effect.provide(
+        ConfigProvider.layer(
+          ConfigProvider.fromUnknown({
+            CODEX_HOME: join(f.root, "cleanup-codex"),
+            CLAUDE_CONFIG_DIR: join(f.root, "cleanup-claude"),
+          }),
+        ),
+      ),
       Effect.provideService(FileSystem.FileSystem, observed),
       (effect) => f.home.owned(effect),
     );
     assert.strictEqual(loads, capturedReads);
-    assert.strictEqual(selection.candidates.length, 2);
+    assert.deepStrictEqual(
+      selection.candidates.map((candidate) => candidate.name),
+      ["alpha"],
+    );
+    assert.strictEqual(
+      Date.parse(selection.usage.window.end) - Date.parse(selection.usage.window.start),
+      14 * 86400000,
+    );
+    assert.ok(selection.usage.rows.some((row) => row.name === "beta" && row.reads === 1));
     const plan = yield* selection.preview(selection.candidates.map((c) => c.id));
     assert.strictEqual(loads, capturedReads);
     assert.strictEqual(plan.changes.length, 1);
     yield* f.home.owned(applySetEnabledPlan(plan));
-    assert.deepStrictEqual((yield* f.home.durable).enabled, []);
+    const after = yield* f.home.durable;
+    const beta = after.skills.find((skill) => skill.name === "beta");
+    assert.ok(beta);
+    assert.deepStrictEqual(after.enabled, [{ skill: beta.skill_id }]);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -639,7 +684,6 @@ for (const mode of ["dry-run", "decline", "apply", "cancel"] as const) {
       );
       const changed = yield* f.home.owned(
         presentDoctorCleanup([f.budget], f.home.installOptions, 30, mode === "dry-run").pipe(
-          Effect.provide(skillUsageLayer),
           Effect.catchTag("PromptCancelled", () => Effect.succeed(false)),
           Effect.provide(prompt),
           Effect.provide(
@@ -1216,10 +1260,20 @@ it.effect(
             rename: (from, to) =>
               Effect.gen(function* () {
                 yield* f.fs.rename(from, to);
-                if (!changed && to === f.home.statePath) {
-                  changed = true;
+                if (to === f.home.statePath) {
                   const next = JSON.parse(yield* f.fs.readFileString(to));
-                  yield* f.fs.writeFileString(to, JSON.stringify({ ...next, ownershipIssues: [] }));
+                  if (changed) {
+                    // Recovery/history bookkeeping may advance, but installed rows must not
+                    // be published on the foreign state or erase its metadata.
+                    assert.deepStrictEqual(next.ownershipIssues, []);
+                    assert.deepStrictEqual(next.installed_skills, []);
+                  } else if (next.enabled.length > 0) {
+                    changed = true;
+                    yield* f.fs.writeFileString(
+                      to,
+                      JSON.stringify({ ...next, ownershipIssues: [] }),
+                    );
+                  }
                 }
               }),
           }),
@@ -1232,7 +1286,7 @@ it.effect(
       const current = yield* f.home.durable;
       assert.deepStrictEqual(current.ownershipIssues, []);
       assert.deepStrictEqual(current.installed_skills, []);
-      assert.notStrictEqual(failed.results[0]?.application.revision, libraryStateRevision(current));
+      assert.strictEqual(failed.results[0]?.application.revision, libraryStateRevision(current));
       assert.strictEqual(failed.results[0]?.application.status, "incomplete");
       const enabled = enabledAt(current, { kind: "global" });
       assert.ok(enabled);
@@ -1403,7 +1457,7 @@ it.effect(
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("Library owner refuses an unwritable root before saving intent", () =>
+it.effect("an unwritable root keeps bindings unchanged and records its stopped attempt", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
     const selection = yield* f.home.owned(
@@ -1425,7 +1479,13 @@ it.effect("Library owner refuses an unwritable root before saving intent", () =>
     const before = yield* f.home.durable;
     const error = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
     assert.instanceOf(error, SkillsDirectoryNotWritable);
-    assert.deepStrictEqual(yield* f.home.durable, before);
+    const after = yield* f.home.durable;
+    assert.deepStrictEqual({ ...after, operations: before.operations }, before);
+    const attempt = after.operations.find(
+      (item) => !before.operations.some((prior) => prior.operationId === item.operationId),
+    );
+    assert.ok(attempt);
+    assert.strictEqual(attempt._tag, "Stopped");
     assert.strictEqual(yield* f.fs.exists(f.destination), false);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

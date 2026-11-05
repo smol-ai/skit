@@ -42,8 +42,8 @@ import {
   type Scope,
   type InvocationOption,
 } from "@smolai/skit-core/library/session";
-import { errorMessage, auditLocalCapabilitiesV1Alpha4 } from "../../cli/src/front-end";
 import {
+  errorMessage,
   HarnessName,
   Library,
   SkitConfiguration,
@@ -53,11 +53,13 @@ import {
   readListingBudgets,
   type ListingBudget,
 } from "@smolai/skit-core";
-import { budgetDetails } from "./budget/details";
-import { createLibraryHost } from "./library-host";
-import { createRenderer, writeFrame } from "./snapshot";
-import { createInteractionController, type Overlay, type ScrollKey } from "./interaction";
-import { copySelectedText, isCopySelectionKey } from "./selection-copy";
+import { auditLocalCapabilitiesV1Alpha4 } from "@smolai/skit-core/audit";
+
+import { budgetDetails } from "./harness/budget-details";
+import { createLibraryHost } from "./library/host";
+import { createRenderer, writeFrame } from "./shell/render";
+import { createInteractionController, type Overlay, type ScrollKey } from "./shell/interaction";
+import { copySelectedText, isCopySelectionKey } from "./shell/selection-copy";
 import {
   chip,
   ink,
@@ -70,8 +72,8 @@ import {
   sep,
   surface,
   tone,
-} from "./theme";
-import { groupForSkill } from "./skill-groups";
+} from "./shell/theme";
+import { groupForSkill } from "./audit/skill-groups";
 import {
   auditPresentation,
   inventoryPresentation,
@@ -84,7 +86,7 @@ import {
   type LibraryCollectionRow,
   type SkillNavigation,
   type DetailField,
-} from "./presentation";
+} from "./shell/presentation";
 
 let libraryCollectionId: string | undefined;
 

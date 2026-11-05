@@ -14,7 +14,6 @@ export default defineConfig({
       "test/library-sync-local-bytes.e2e.test.ts",
       "test/explicit-binding-command.test.ts",
       "test/harness-probe.test.ts",
-      "test/native-probes.test.ts",
       "test/server-bootstrap-process.test.ts",
       "test/single-machine-journey.test.ts",
       "test/import-source.test.ts",

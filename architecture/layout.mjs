@@ -23,6 +23,7 @@ export const layout = {
       "machine-settings",
       "author",
       "artifact",
+      "auditing",
       "sources",
       "harnesses",
       "history",
@@ -47,7 +48,6 @@ export const layout = {
 export const undecided = [
   // Core folders the work item does not place.
   "packages/skit/src/invocation/",
-  "packages/skit/src/auditing/",
   // Package export entry points (./universal/consumer, ./universal/authoring); the work item keeps
   // today's runtime-neutral entry points as compatibility exports.
   "packages/skit/src/universal-consumer.ts",

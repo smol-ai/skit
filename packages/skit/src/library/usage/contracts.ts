@@ -1,6 +1,6 @@
 import { Data, Schema } from "effect";
-import { HarnessName } from "../vocabulary.js";
-import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
+import { HarnessName } from "../../vocabulary.js";
+import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 
 /** The Harnesses whose transcripts SKIT reads; each one's driver carries the grammar. */
 export const UsageHarness = HarnessName.pick(["codex", "claude-code"]);

@@ -1,5 +1,5 @@
 import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
-import { Library, emptyLibraryState, UsageHarness, skillUsageLayer } from "@smolai/skit-core";
+import { Library, emptyLibraryState, UsageHarness } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { Command, Flag } from "effect/cli";
 import { scanLocalUsage } from "../library/application/local-usage.js";
@@ -60,7 +60,7 @@ export const usageCliCommand = Command.make(
             }),
           );
           yield* renderer.result(result("usage", report));
-        }).pipe(Effect.provide(skillUsageLayer)),
+        }),
       );
     }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
