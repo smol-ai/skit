@@ -1,4 +1,4 @@
-import { Library } from "../../library.js";
+import * as Library from "../../library.js";
 import { canonicalJson } from "../../../shared/json.js";
 import { deterministicTreeHash } from "../../../artifact/skit.js";
 import { inspectOwnershipMarker } from "../../../installed-skills/files.js";

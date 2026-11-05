@@ -1,7 +1,7 @@
 import { basename } from "node:path";
 import { Data, Effect } from "effect";
 import { hashParts } from "../../artifact/descriptor.js";
-import { Library } from "../library.js";
+import * as Library from "../library.js";
 import { changeWrites } from "../installed-update.js";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 import { emptyLibraryState } from "../library-state.js";

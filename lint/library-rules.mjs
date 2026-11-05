@@ -460,7 +460,16 @@ export const libraryRules = {
               specifier.type === "ImportNamespaceSpecifier" ||
               specifier.type === "ExportNamespaceSpecifier",
           );
-        const selfNamespace = file === `${library}library.ts` && target === `${library}library`;
+        // The existing Library namespace is assembled at its two public entries, not by
+        // re-exporting the defining module from itself. All other whole-module exports fail.
+        const publicOwnerNamespace =
+          exporting &&
+          ["packages/skit/src/index.ts", `${library}index.ts`].includes(file) &&
+          target === `${library}library` &&
+          (nameOf(node.exported) === "Library" ||
+            (node.specifiers?.length === 1 &&
+              node.specifiers[0].type === "ExportNamespaceSpecifier" &&
+              nameOf(node.specifiers[0].exported) === "Library"));
         if (
           storage ||
           (whole &&
@@ -473,7 +482,7 @@ export const libraryRules = {
                   "packages/skit/src/installed-skills/writable",
                 ].includes(target)) ||
               target.startsWith(`${library}internal/`) ||
-              (exporting && publicSource && !selfNamespace)))
+              (exporting && publicSource && !publicOwnerNamespace)))
         ) {
           context.report({ node, messageId: "wildcard", data: { name: node.source.value } });
           return;

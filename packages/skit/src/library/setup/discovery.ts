@@ -1,4 +1,4 @@
-import { Library } from "../library.js";
+import * as Library from "../library.js";
 import { basename, join, posix, relative, resolve, sep } from "node:path";
 import { Effect, FileSystem, Result, Schema } from "effect";
 import { LinkStat } from "../../platform/link-stat.js";

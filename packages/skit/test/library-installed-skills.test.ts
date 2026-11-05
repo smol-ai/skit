@@ -20,7 +20,7 @@ import type { LibraryState, InstalledSkill } from "../src/library/library-state.
 import { LibraryWriter, loadLibrary } from "../src/library/store/library-store.js";
 
 import { skitLayer } from "../src/platform/layer.js";
-import { Library } from "../src/library/library.js";
+import * as Library from "../src/library/library.js";
 import { losslessTree, installedSkillStagingDirectory } from "../src/installed-skills/backups.js";
 import { inspectOwnershipMarker } from "../src/installed-skills/files.js";
 

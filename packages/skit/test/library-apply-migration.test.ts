@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Schema } from "effect";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Library } from "../src/library/library.js";
+import * as Library from "../src/library/library.js";
 import { InstalledSkill } from "../src/library/device-state.js";
 import { OperationStatus } from "../src/library/store/state-schema.js";
 import { loadLibrary } from "../src/library/store/library-store.js";

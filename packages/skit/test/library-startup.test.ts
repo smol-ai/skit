@@ -4,7 +4,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { observePathEvidence } from "../src/library/folder-evidence.js";
-import { Library } from "../src/library/library.js";
+import * as Library from "../src/library/library.js";
 import { OperationStatus } from "../src/library/store/state-schema.js";
 import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
 import { acquireFileLock } from "../src/platform/file-lock.js";

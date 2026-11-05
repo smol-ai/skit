@@ -5,7 +5,7 @@ import { Data, Effect } from "effect";
 import { canonicalJson } from "../../shared/json.js";
 import { Hash } from "../../shared/hash.js";
 import { hashParts } from "../../artifact/descriptor.js";
-import { Library } from "../library.js";
+import * as Library from "../library.js";
 import { libraryStateRevision } from "../library-state.js";
 import { isEntryLink, findDuplicates } from "../routing/duplicates.js";
 import {

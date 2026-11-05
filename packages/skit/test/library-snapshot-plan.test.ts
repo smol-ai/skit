@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { expectTypeOf } from "vitest";
 import { Effect, FileSystem, Schema } from "effect";
 import { join } from "node:path";
-import { Library } from "../src/library/library.js";
+import * as Library from "../src/library/library.js";
 import { emptyLibraryState } from "../src/library/library-state.js";
 import { skitLayer } from "../src/platform/layer.js";
 

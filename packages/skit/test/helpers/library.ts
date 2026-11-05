@@ -1,6 +1,6 @@
 import { Context, Effect, FileSystem, Layer } from "effect";
 import { join, resolve } from "node:path";
-import { Library } from "../../src/library/library.js";
+import * as Library from "../../src/library/library.js";
 import { CollectionRemovalMissing } from "../../src/library/installation/remove.js";
 import {
   emptyLibraryState,

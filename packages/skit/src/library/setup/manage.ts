@@ -2,7 +2,7 @@ import { Data, Effect, Option, Schema } from "effect";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 import { observePathEvidence } from "../folder-evidence.js";
 import { type Hash } from "../../shared/hash.js";
-import { type Library } from "../library.js";
+import type * as Library from "../library.js";
 import { type MachineId } from "../entity-ids.js";
 import { localImportRequest } from "./local-import.js";
 import { StalePlan } from "../library-plan.js";

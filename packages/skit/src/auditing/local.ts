@@ -1,6 +1,6 @@
 import { Clock, Effect } from "effect";
 import type { Digest } from "effect/crypto";
-import { Library } from "../library/library.js";
+import * as Library from "../library/library.js";
 
 import {
   configurationForHome,

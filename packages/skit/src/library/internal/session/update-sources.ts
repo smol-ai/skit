@@ -1,7 +1,7 @@
 import { Cause, Effect, FileSystem, Predicate } from "effect";
 import { isPlatformError } from "effect/PlatformError";
 import { dirname, join, resolve } from "node:path";
-import { Library } from "../../library.js";
+import * as Library from "../../library.js";
 import { emptyLibraryState, type LibraryState } from "../../library-state.js";
 import { loadLibrary, writeLibrary } from "../../store/library-store.js";
 import { latestSourceImport, type LibrarySubject } from "../../subject-resolution.js";

@@ -10,7 +10,7 @@ import {
 } from "../../library-contracts.js";
 import { removalSummary } from "./remove.js";
 import { securityReview } from "../security/review.js";
-import { Library } from "../../library.js";
+import * as Library from "../../library.js";
 import { emptyLibraryState, type LibraryState } from "../../library-state.js";
 import { join } from "node:path";
 

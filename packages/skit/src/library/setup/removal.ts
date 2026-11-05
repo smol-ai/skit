@@ -3,7 +3,7 @@ import { Effect, Option } from "effect";
 import { LinkStat } from "../../platform/link-stat.js";
 import { observePathEvidence } from "../folder-evidence.js";
 import { pathIsWithin } from "../../platform/path-identity.js";
-import { type Library } from "../library.js";
+import type * as Library from "../library.js";
 import { StalePlan } from "../library-plan.js";
 import type { SetupOptions } from "./scan.js";
 import { collectSkillsDirectories } from "./discovery.js";

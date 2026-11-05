@@ -10,7 +10,7 @@ import { planCollectionVersions } from "../src/library/collection-version-plan.j
 
 import { collectionVersionPath } from "../src/library/collection-version.js";
 import { readSnapshotArchive } from "../src/library/snapshot-archive.js";
-import { Library } from "../src/library/library.js";
+import * as Library from "../src/library/library.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 const machineId = migratedMachineId("019950c0-4c00-7000-8000-000000000001", "portable-local-test");

@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { Library } from "../../library.js";
+import * as Library from "../../library.js";
 import { emptyLibraryState, type LibraryState } from "../../library-state.js";
 import { resolveLibrarySubject } from "../../subject-resolution.js";
 import { enabledSkillIds } from "../../library-contracts.js";

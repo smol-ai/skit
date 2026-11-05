@@ -218,13 +218,29 @@ describe("skit/library-private-api", () => {
         "library-private-api",
         `${library}library.ts`,
         `
-      export * as Library from "./library.js";
       export { OperationStatus } from "./store/state-schema.js";
       export type { SetupStep } from "./store/state-schema.js";
       export { type LibraryStateReadError } from "./store/library-store.js";
     `,
       ),
     ).toEqual([]);
+  });
+
+  test.each([
+    ["packages/skit/src/index.ts", `export * as Library from "./library/library.js";`],
+    [`${library}index.ts`, `export * as Library from "./library.js";`],
+  ])("only public entries assemble the Library namespace: %s", async (filename, source) => {
+    expect(await reported("library-private-api", filename, source)).toEqual([]);
+  });
+
+  test.each([
+    [`${library}library.ts`, `export * as Library from "./library.js";`],
+    ["packages/skit/src/index.ts", `export * as implementation from "./library/library.js";`],
+    ["packages/skit/src/index.ts", `export * from "./library/library.js";`],
+    ["packages/skit/src/author/index.ts", `export * as Library from "../library/library.js";`],
+    ["packages/skit/src/index.ts", `export * as Library from "./library/internal/runtime.js";`],
+  ])("other namespace exports cannot reopen implementation: %s", async (filename, source) => {
+    expect(await reported("library-private-api", filename, source)).toHaveLength(1);
   });
 
   test("ordinary callers can use the public owner and read-only facts", async () => {

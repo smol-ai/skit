@@ -5,7 +5,7 @@ import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 import { type Hash } from "../../shared/hash.js";
 import * as MachineSettings from "../machine-settings.js";
 import { stepRouting } from "../routing/step.js";
-import { Library } from "../library.js";
+import * as Library from "../library.js";
 import type { ManageOptions } from "./manage-existing.js";
 import { revalidateSetupPlan, type SetupOptions } from "./scan.js";
 import { saveSetupMachineConfig } from "./discovery.js";

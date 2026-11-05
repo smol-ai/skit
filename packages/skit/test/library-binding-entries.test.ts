@@ -1,4 +1,4 @@
-import type { Library } from "../src/library/library.js";
+import type * as Library from "../src/library/library.js";
 import { openLibrary } from "./helpers/library-store.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";

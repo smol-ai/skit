@@ -4,7 +4,7 @@ import { hashParts } from "../../artifact/descriptor.js";
 import * as MachineSettings from "../machine-settings.js";
 import { RecoveryInvalid } from "../recovery-facts.js";
 import { StalePlan } from "../library-plan.js";
-import { Library } from "../library.js";
+import * as Library from "../library.js";
 
 /** A combined review of two independently durable owner operations. No store or writer is opened. */
 export const prepareSetupUndo = Effect.fn("SetupUndo.prepare")(function* (

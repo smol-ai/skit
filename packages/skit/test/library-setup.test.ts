@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
 import { observePathEvidence } from "../src/library/folder-evidence.js";
-import { Library } from "../src/library/library.js";
+import * as Library from "../src/library/library.js";
 import { OperationStatus, type SetupStep } from "../src/library/store/state-schema.js";
 import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
 import { skitLayer } from "../src/platform/layer.js";

@@ -1,5 +1,5 @@
 import { Context, Effect, Layer } from "effect";
-import { Library } from "../../src/library/library.js";
+import * as Library from "../../src/library/library.js";
 import {
   inspectLocalLibraryState,
   LibraryWriter,

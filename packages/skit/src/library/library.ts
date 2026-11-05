@@ -361,4 +361,3 @@ export const layer = (
   config: Config,
 ): Layer.Layer<Service, LibraryLayerError, TreeRequirements | Digest.Digest> =>
   Layer.effect(Service, makeOwner(config));
-export * as Library from "./library.js";

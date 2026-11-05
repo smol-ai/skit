@@ -20,7 +20,7 @@ import {
 } from "../src/library/library-state.js";
 import { inspectLibrary, libraryLayer, saveLibrary } from "./helpers/library-store.js";
 import { migrateLocalLibraryState } from "../src/library/store/library-store.js";
-import { Library } from "../src/library/library.js";
+import * as Library from "../src/library/library.js";
 import { acquireFileLock } from "../src/platform/file-lock.js";
 
 /** The state a Library opened at `home` reads: a legacy state.json is migrated first. */

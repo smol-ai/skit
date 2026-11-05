@@ -6,7 +6,7 @@ import { migratedMachineId } from "../src/library/entity-ids.js";
 import { observePathEvidence } from "../src/library/folder-evidence.js";
 import { reviewInstalledSkillChanges } from "../src/library/installed-skill-review.js";
 import { LibraryState } from "../src/library/library-state.js";
-import { Library } from "../src/library/library.js";
+import * as Library from "../src/library/library.js";
 import {
   OperationStatus,
   type FolderEvidence,

@@ -4,7 +4,7 @@ import { type LibraryState } from "../../library-state.js";
 import { type InstallScope } from "../../scope.js";
 import { type ManageApproval } from "../../../installed-skills/files.js";
 import { Effect } from "effect";
-import { Library } from "../../library.js";
+import * as Library from "../../library.js";
 import type { InvocationOption } from "./invocation-option.js";
 import { OptionCombinationInvalid } from "../../../shared/input-failures.js";
 import { resolveLibrarySubject } from "../../subject-resolution.js";

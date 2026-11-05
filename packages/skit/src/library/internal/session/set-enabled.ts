@@ -1,5 +1,5 @@
 import { join, resolve } from "node:path";
-import { Library } from "../../library.js";
+import * as Library from "../../library.js";
 import { FailureTypeId, type SkitFailure } from "../../../shared/failure.js";
 import { Effect, Schema } from "effect";
 import { type InventoryRootOptions } from "../../routing/roots.js";

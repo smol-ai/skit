@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Option, Schema } from "effect";
 import { join } from "node:path";
-import { Library } from "../src/library/library.js";
+import * as Library from "../src/library/library.js";
 import { LibraryState, libraryStateRevision } from "../src/library/library-state.js";
 import { OperationStatus } from "../src/library/store/state-schema.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";

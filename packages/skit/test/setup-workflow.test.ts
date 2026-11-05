@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { runSetup, openSetupReview, prepareSetupUndo } from "../src/library/setup.js";
-import { Library } from "../src/library/library.js";
+import * as Library from "../src/library/library.js";
 import { inLibrary, libraryLayer } from "./helpers/library-store.js";
 import { skitLayer } from "../src/platform/layer.js";
 

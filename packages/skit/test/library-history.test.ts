@@ -3,7 +3,7 @@ import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem } from "effect";
 import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
-import { Library } from "../src/library/library.js";
+import * as Library from "../src/library/library.js";
 
 import { classifyLibraryAuditEvent } from "../src/library/audit/state-diff.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";

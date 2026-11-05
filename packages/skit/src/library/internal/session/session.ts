@@ -1,4 +1,4 @@
-import { Library } from "../../library.js";
+import * as Library from "../../library.js";
 import { emptyLibraryState } from "../../library-state.js";
 import { InstalledSkillWouldDuplicate } from "../../library-plan.js";
 import type { SkillMetadata } from "./skill-metadata.js";

@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { join } from "node:path";
-import { Library } from "../src/library/library.js";
+import * as Library from "../src/library/library.js";
 import { observePathEvidence } from "../src/library/folder-evidence.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { libraryLayer } from "./helpers/library-store.js";
