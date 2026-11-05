@@ -58,6 +58,7 @@ describe("skit/owner-boundaries", () => {
       `import { makePublication } from "../skits/internal/publication.js";`,
       `import { verifyReleaseArchive } from "../skits/internal/release-archive.js";`,
       `import { makeReleaseReads } from "../skits/internal/releases.js";`,
+      `import { makeList } from "../skits/internal/list.js";`,
     ]) {
       expect(
         await reported(

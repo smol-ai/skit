@@ -1,13 +1,18 @@
+import { BrowserCrypto } from "@effect/platform-browser";
 import { env } from "cloudflare:test";
 import { D1Client } from "@effect/sql-d1";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
-import { AuthorInventory, layer as authorInventoryLayer } from "../src/author-inventory/service.js";
+import { Skits, layer as skitsLayer } from "../src/skits/service.js";
 import { layer as authorizationLayer } from "../src/authorization/service.js";
-import { databaseLayer } from "../src/platform/cloudflare.js";
+import { databaseLayer, blobStoreLayer } from "../src/platform/cloudflare.js";
 
-const platformLayer = databaseLayer(env.DB);
-const testLayer = authorInventoryLayer.pipe(
+const platformLayer = Layer.mergeAll(
+  databaseLayer(env.DB),
+  blobStoreLayer(env.SKIT_BLOBS),
+  BrowserCrypto.layer,
+);
+const testLayer = skitsLayer.pipe(
   Layer.provideMerge(authorizationLayer.pipe(Layer.provideMerge(platformLayer))),
 );
 const principal = {
@@ -44,7 +49,7 @@ describe("author inventory", () => {
   it.effect("merges owned and granted skits into a stable cursor page", () =>
     Effect.gen(function* () {
       yield* prepareDatabase;
-      const inventory = yield* AuthorInventory;
+      const skits = yield* Skits;
       yield* Effect.flatMap(D1Client.D1Client, (sql) =>
         sql.batch([
           sql`INSERT INTO namespaces VALUES ('tim', 'principal', 'principal_test')`,
@@ -58,8 +63,8 @@ describe("author inventory", () => {
         ]),
       );
 
-      const first = yield* inventory.read(principal, { limit: "2" });
-      const second = yield* inventory.read(principal, { limit: "2", cursor: "tim/tools" });
+      const first = yield* skits.list(principal, { limit: "2" });
+      const second = yield* skits.list(principal, { limit: "2", cursor: "tim/tools" });
 
       expect(first).toEqual({
         outcome: "page",
@@ -97,7 +102,7 @@ describe("author inventory", () => {
         ],
         next_cursor: null,
       });
-      expect(yield* inventory.read(principal, { cursor: "invalid" })).toEqual({
+      expect(yield* skits.list(principal, { cursor: "invalid" })).toEqual({
         outcome: "invalid_cursor",
       });
     }).pipe(Effect.provide(testLayer)),
@@ -106,9 +111,9 @@ describe("author inventory", () => {
   it.effect("returns an empty page when the principal has no author access", () =>
     Effect.gen(function* () {
       yield* prepareDatabase;
-      const inventory = yield* AuthorInventory;
+      const skits = yield* Skits;
 
-      expect(yield* inventory.read(principal)).toEqual({
+      expect(yield* skits.list(principal)).toEqual({
         outcome: "page",
         skits: [],
         next_cursor: null,

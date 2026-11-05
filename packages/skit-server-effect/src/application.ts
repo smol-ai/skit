@@ -6,7 +6,6 @@ import {
 } from "./auth/authentication.js";
 import { layer as betterAuthLayer } from "./auth/better-auth.js";
 import { layer as passwordHasherLayer } from "./auth/password.js";
-import { layer as authorInventoryLayer } from "./author-inventory/service.js";
 import { layer as authorizationLayer } from "./authorization/service.js";
 import { layer as bootstrapServiceLayer } from "./bootstrap/service.js";
 import { ServerConfiguration } from "./configuration.js";
@@ -81,7 +80,8 @@ export const applicationLayers = (
     nativeCryptoLayer,
     nativeClockLayer,
   );
-  const release = skitsLayer.pipe(Layer.provide(platform));
+  const authorization = authorizationLayer.pipe(Layer.provideMerge(platform));
+  const release = skitsLayer.pipe(Layer.provide(authorization));
   // Feedback does not wait for authentication to be configured: reports can always be anonymous.
   const feedback =
     env.FEEDBACK_MODE === "open"
@@ -100,7 +100,6 @@ export const applicationLayers = (
     librarySnapshotsLayer,
     librarySyncLayer,
     readinessLayer(env),
-    authorInventoryLayer,
     skitsLayer,
     patRateLimiterLayer(env.PAT_RATE_LIMITER),
     Layer.succeed(ServerConfiguration, { publicAppOrigin: configured.publicAppOrigin }),
@@ -116,7 +115,7 @@ export const applicationLayers = (
           env.EMAIL && env.EMAIL_FROM ? { binding: env.EMAIL, from: env.EMAIL_FROM } : undefined,
       }).pipe(Layer.provideMerge(platform)),
     ),
-    Layer.provideMerge(authorizationLayer.pipe(Layer.provideMerge(platform))),
+    Layer.provideMerge(authorization),
     Layer.provideMerge(passwordHasher),
   );
   const bootstrap = env.SKIT_BOOTSTRAP_SECRET

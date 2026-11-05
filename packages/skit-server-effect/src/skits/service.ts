@@ -1,3 +1,5 @@
+import { makeList, type List } from "./internal/list.js";
+import { Authorization } from "../authorization/service.js";
 import { makeReleaseReads, type Releases } from "./internal/releases.js";
 import { makePublication, type Publication } from "./internal/publication.js";
 import { makeDeletion, type Deletion } from "./internal/deletion.js";
@@ -83,6 +85,8 @@ export type ReadError =
   | RevisionTooLarge;
 
 export interface SkitService {
+  /** Accessible authored SKITs, filtered and paginated within this owner. */
+  readonly list: List;
   /** Selected releases expose archive reads, never blob keys or arbitrary storage access. */
   readonly releases: Releases;
   /** Publish the current revision after checking the complete release archive. */
@@ -172,6 +176,7 @@ export const layer = Layer.effect(
   Skits,
   Effect.gen(function* () {
     const blobs = yield* BlobStore;
+    const authorization = yield* Authorization;
     const sql: DatabaseSqlClient = yield* D1Client.D1Client;
     const digests = yield* Digest.Digest;
     const random = yield* SecureRandom.SecureRandom;
@@ -527,6 +532,7 @@ export const layer = Layer.effect(
       move,
       revision,
       ancestors,
+      list: makeList(sql, authorization),
       releases: makeReleaseReads(sql, blobs),
       ...makeDeletion(sql, blobs),
       ...makePublication(sql, blobs, digests, random, current),

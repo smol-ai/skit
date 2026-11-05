@@ -6,7 +6,7 @@ import { CurrentPrincipal, PrincipalAuthentication } from "../src/api/authentica
 import { authorInventoryHandlers } from "../src/api/author-inventory-http.js";
 import { AuthoringAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import { requestDecodingLayer } from "../src/api/request-decoding.js";
-import { AuthorInventory, type AuthorInventoryService } from "../src/author-inventory/service.js";
+import { Skits } from "../src/skits/service.js";
 import type { Principal } from "../src/auth/authentication.js";
 import { History } from "@smolai/skit-core/universal/authoring";
 import { Schema } from "effect";
@@ -27,29 +27,33 @@ const middleware = (current: Principal) =>
     ),
   );
 
-const inventory = Layer.succeed(
-  AuthorInventory,
-  AuthorInventory.of({
-    read: (_principal, query) =>
-      Effect.succeed(
-        query?.cursor === "invalid"
-          ? { outcome: "invalid_cursor" as const }
-          : {
-              outcome: "page" as const,
-              skits: [
-                {
-                  skit_id: "tim/tools",
-                  visibility: "private" as const,
-                  current_revision_id: revisionId,
-                  current_revision_published: false,
-                  most_recent_release_version: "1.2.3",
-                },
-              ],
-              next_cursor: null,
-            },
-      ),
-  } satisfies AuthorInventoryService),
-);
+const unexpectedReleaseRead = () => Effect.die("Inventory HTTP must not read release archives");
+const inventory = Layer.mock(Skits, {
+  releases: {
+    findLatestPublic: unexpectedReleaseRead,
+    findAnonymousDownload: unexpectedReleaseRead,
+    findExactDownload: unexpectedReleaseRead,
+    listLatestDownloads: unexpectedReleaseRead,
+  },
+  list: (_principal, query) =>
+    Effect.succeed(
+      query?.cursor === "invalid"
+        ? { outcome: "invalid_cursor" as const }
+        : {
+            outcome: "page" as const,
+            skits: [
+              {
+                skit_id: "tim/tools",
+                visibility: "private" as const,
+                current_revision_id: revisionId,
+                current_revision_published: false,
+                most_recent_release_version: "1.2.3",
+              },
+            ],
+            next_cursor: null,
+          },
+    ),
+});
 
 const makeClient = HttpApiTest.groups(AuthoringAuthenticatedApi, ["authorInventory"]);
 const handlers = (current: Principal) =>
