@@ -256,13 +256,6 @@ export * as InstalledSkills from "./library/installed-skills.js";
 export * as InstalledSkillStatus from "./library/installed-skill-status.js";
 export * as Library from "./library/library.js";
 export {
-  type LibrarySubjectNotFound,
-  type LibrarySubjectAmbiguous,
-  librarySubjects,
-  matchingLibrarySubjects,
-} from "./library/subject-resolution.js";
-
-export {
   type AddNoSkills,
   leaveResolvedPnpmSkills,
   describeSourceSkills,

@@ -2,19 +2,11 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import {
-  deterministicTreeHash,
-  makeCollectionId,
-  makeSkillId,
-  type ImportRequestSkill,
-} from "@smolai/skit-core";
+import { deterministicTreeHash, type ImportRequestSkill } from "@smolai/skit-core";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { isolatedRoots } from "./helpers/isolated-library.js";
 import { setLibraryEnabled, planLibraryEnabled } from "./helpers/set-enabled.js";
-import { calculateSetEnabled } from "@smolai/skit-core/library/session";
 import { applySetEnabledPlan } from "./helpers/set-enabled.js";
-import { libraryView } from "@smolai/skit-core/library/session";
-import { matchingLibrarySubjects } from "@smolai/skit-core";
 import {
   initializeLibraryMachine,
   importCollectionIn,
@@ -87,68 +79,6 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       enabled: true,
       dryRun: true,
     };
-    const member = state.skills.find((skill) => skill.name === "review");
-    assert.ok(member);
-    assert.deepStrictEqual(
-      matchingLibrarySubjects(state, member.skill_id).map((subject) => subject.kind),
-      ["skill"],
-    );
-    assert.strictEqual(
-      (yield* libraryView(state, "unused").removalSummary(member.skill_id).pipe(Effect.flip))._tag,
-      "Library.SkillRemovalRequiresCollection",
-    );
-    const sameNamed = {
-      ...state,
-      collections: state.collections.map((candidate) => ({ ...candidate, label: "review" })),
-    };
-    assert.deepStrictEqual(
-      matchingLibrarySubjects(sameNamed, "review").map((subject) => subject.kind),
-      ["collection"],
-    );
-    assert.strictEqual(
-      (yield* libraryView(sameNamed, "unused").removalSummary("review")).subject_kind,
-      "collection",
-    );
-    const secondCollectionId = makeCollectionId();
-    const ambiguous = {
-      ...sameNamed,
-      collections: [
-        ...sameNamed.collections,
-        { ...sameNamed.collections[0]!, collection_id: secondCollectionId },
-      ],
-      skills: [
-        ...sameNamed.skills,
-        { ...member, skill_id: makeSkillId(), collection_id: secondCollectionId },
-      ],
-    };
-    assert.strictEqual(matchingLibrarySubjects(ambiguous, "review").length, 2);
-    assert.strictEqual(
-      (yield* libraryView(ambiguous, "unused").removalSummary("review").pipe(Effect.flip))._tag,
-      "Library.SubjectAmbiguous",
-    );
-    assert.strictEqual(
-      (yield* libraryView(ambiguous, "unused")
-        .previewSourceUpdates("review", () => Effect.die("ambiguous query must not fetch a Source"))
-        .pipe(Effect.flip))._tag,
-      "Library.SubjectAmbiguous",
-    );
-    assert.strictEqual(
-      (yield* libraryView(ambiguous, "unused")
-        .checkSubjects("review", {
-          inspectSource: () => Effect.die("ambiguous query must not fetch a Source"),
-        })
-        .pipe(Effect.provide(layer), Effect.flip))._tag,
-      "Library.SubjectAmbiguous",
-    );
-    assert.strictEqual(
-      (yield* calculateSetEnabled(ambiguous, {
-        ...base,
-        query: "review",
-        scope: invocation.scope,
-        enabled: invocation.enabled,
-      }).pipe(Effect.flip))._tag,
-      "Library.SubjectAmbiguous",
-    );
     const planned = yield* setLibraryEnabled({
       ...base,
       invocation,

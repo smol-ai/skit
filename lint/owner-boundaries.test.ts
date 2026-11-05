@@ -191,6 +191,26 @@ describe("skit/owner-boundaries", () => {
     }
   });
 
+  test.each(["libraryView", "calculateSetEnabled", "matchingLibrarySubjects", "librarySubjects"])(
+    "raw-state %s cannot reopen through a public entry",
+    async (name) => {
+      expect(
+        await reported(
+          `export { ${name} } from "./internal/session/library-view.js";`,
+          "library-private-api",
+          "packages/skit/src/library/session.ts",
+        ),
+      ).toEqual([name]);
+      expect(
+        await reported(
+          `import { ${name} } from "@smolai/skit-core/library/session";`,
+          "owner-boundaries",
+          "packages/cli/test/library-view.test.ts",
+        ),
+      ).toEqual([name]);
+    },
+  );
+
   test("sync derivation stays behind the Library session", async () => {
     for (const name of [
       "mergeLibraryManifests",

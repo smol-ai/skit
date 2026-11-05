@@ -5,7 +5,6 @@ import {
   libraryManifestFromLocalState,
   deterministicTreeHash,
   collectionVersionPath,
-  librarySubjects,
 } from "@smolai/skit-core";
 import { Library } from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
@@ -19,7 +18,7 @@ import { importSource, previewLibrarySource } from "../src/library/source.js";
 import { planUpdates, updateSubjects } from "../src/library/update/operation.js";
 import { checkSubjects } from "../src/library/check/operation.js";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
-import { openSyncSession } from "@smolai/skit-core/library/session";
+import { openLibraryView, openSyncSession } from "@smolai/skit-core/library/session";
 import { executeRemove } from "../src/library/remove/operation.js";
 
 import {
@@ -323,8 +322,10 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     assert.strictEqual(before.collections.length, 1);
     const skill = before.skills[0]!;
     assert.strictEqual(skill.collection_id, before.collections[0]?.collection_id);
+    const view = yield* run(openLibraryView(home));
+    const subjects = yield* run(view.readSubjects());
     assert.deepStrictEqual(
-      librarySubjects(before).map((subject) => [subject.kind, subject.subjectId, subject.label]),
+      subjects.map((subject) => [subject.kind, subject.id, subject.label]),
       [["collection", before.collections[0]?.collection_id, base]],
     );
     const enableInput = (enabled: boolean) => ({

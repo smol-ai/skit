@@ -29,29 +29,6 @@ export interface SetEnabledRequest {
   readonly manage?: ManageApproval;
 }
 
-/** Legacy text/option compatibility. Binding policy is shared with the Library owner. */
-export const calculateSetEnabled = Effect.fn("SetEnabled.calculate")(function* (
-  state: LibraryState,
-  options: SetEnabledRequest,
-) {
-  if (options.invocation !== undefined && !options.enabled)
-    return yield* new OptionCombinationInvalid({
-      detail: "--invocation applies only when enabling a skill",
-    });
-  const subject = yield* resolveLibrarySubject(state, options.query);
-  return yield* Library.calculateEnabled(state, {
-    ...options,
-    subject:
-      subject.kind === "collection"
-        ? { _tag: "Collection", id: subject.collection.collection_id }
-        : { _tag: "Skill", id: subject.skill.skill_id },
-  }).pipe(
-    Effect.catchTag("Library.InvalidIntent", (error) =>
-      Effect.fail(new OptionCombinationInvalid({ detail: error.detail })),
-    ),
-  );
-});
-
 /** User intent, independent of the per-Scope requests needed to implement it. */
 export interface SetEnabledIntent {
   readonly subject: string;
