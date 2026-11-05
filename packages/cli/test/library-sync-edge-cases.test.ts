@@ -608,8 +608,8 @@ it.effect(
       const secondSkill = second.skills[0];
       assert.ok(secondSkill);
       const scope = { kind: "repository" as const, root: join(b.home, "repo") };
-      const repositoryRoot = join(scope.root, "skills");
-      yield* fs.makeDirectory(scope.root, { recursive: true });
+      const repositoryRoot = join(scope.root, ".agents", "skills");
+      yield* fs.makeDirectory(join(scope.root, ".agents"), { recursive: true });
       yield* fs.makeDirectory(b.root, { recursive: true });
       yield* fs.symlink(b.root, repositoryRoot);
       yield* b.edit((state) => ({
@@ -619,6 +619,15 @@ it.effect(
       }));
       yield* b.project(scope, repositoryRoot);
       const before = yield* b.state;
+      const installed = before.installed_skills.find(
+        (copy) => copy.skill_id === secondSkill.skill_id,
+      );
+      assert.strictEqual(installed?.root, repositoryRoot);
+      assert.strictEqual(yield* fs.realPath(repositoryRoot), yield* fs.realPath(b.root));
+      assert.strictEqual(
+        yield* fs.readFileString(join(repositoryRoot, "review", "SKILL.md")),
+        "second\n",
+      );
       const head = yield* remote;
       const result = yield* b.sync();
       assert.equal(result.status, "conflicted");
