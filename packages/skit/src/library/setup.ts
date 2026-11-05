@@ -1,3 +1,4 @@
+import { runUndo } from "./internal/setup/undo-execution.js";
 // Setup: steps saved in state.json before any runs, run in order, each marked Done as it ends
 // (decisions.md D4, "Crash halfway" and "Setup records"). Never rolls back on its own.
 
@@ -58,6 +59,7 @@ import {
 
 /** One finished step, by step tag. */
 export type SetupStepResult =
+  | { readonly _tag: "Undo"; readonly operationId: string; readonly backupId: string }
   | {
       readonly _tag: "Restore";
       readonly after: typeof import("./recovery-facts.js").RecoveryInspection.Type;
@@ -111,6 +113,7 @@ const observed = (paths: readonly string[]) =>
  */
 const recordedStep = Effect.fn("Library.setup.recordedStep")(function* (step: SetupStep) {
   switch (step._tag) {
+    case "Undo":
     case "Restore":
     case "LegacyApply":
     case "Apply":
@@ -188,6 +191,7 @@ const importsUsedBy = (step: SetupStep): readonly number[] =>
 
 /** Every folder a step may move aside. */
 const removedBy = (step: SetupStep): readonly (FolderEvidence | LinkEvidence)[] => {
+  if (step._tag === "Undo") return step.program.preserve;
   if (step._tag === "Remove") return step.folders;
   if (step._tag !== "Manage") return [];
   const selections: readonly (ManageExistingSelection | ManageNewSelection)[] = step.selections;
@@ -201,6 +205,18 @@ export const checkSteps = (home: string, steps: readonly SetupStep[]) => {
     const source = steps[step.sourceStep];
     if (step.sourceStep >= index || source?._tag !== "Sync" || source.phase !== "retire")
       return Option.some(`Sync step ${index + 1} has no earlier recorded program`);
+  }
+  for (const step of steps) {
+    if (step._tag !== "Undo") continue;
+    for (const { path } of step.program.actions)
+      if (
+        !isAbsolute(path) ||
+        resolve(path) !== path ||
+        path === resolve(home) ||
+        pathIsWithin(path, resolve(home)) ||
+        pathIsWithin(resolve(home), path)
+      )
+        return Option.some(`Undo cannot replace Library storage or a non-normalized path: ${path}`);
   }
   const firstRemove = steps.findIndex((step) => step._tag === "Remove");
   if (firstRemove >= 0 && steps.slice(firstRemove).some((step) => step._tag !== "Remove"))
@@ -282,6 +298,17 @@ const runStep = Effect.fn("Library.setup.step")(function* (
   const { home } = yield* LibraryWriter;
   const step = steps[index]!.step;
   switch (step._tag) {
+    case "Undo":
+      yield* runUndo(operationId, index, step.program);
+      return {
+        _tag: "Ran",
+        result: {
+          _tag: "Undo",
+          operationId: step.program.operationId,
+          backupId: step.program.backupId,
+        },
+        after: [],
+      } satisfies StepOutcome;
     case "Restore":
       return {
         _tag: "Ran",

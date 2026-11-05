@@ -278,7 +278,11 @@ describe("skit/library-recorded-execution", () => {
     `export * from "../apply-plan.js";`,
   ])("the public runtime cannot call or relay the folder executor: %s", async (source) => {
     expect(
-      await reported("library-recorded-execution", `${library}internal/runtime.ts`, source),
+      await reported(
+        "library-recorded-execution",
+        `${library}internal/runtime.ts`,
+        `import { runUndo } from "./setup/undo-execution.js";`,
+      ),
     ).toHaveLength(1);
   });
 
@@ -315,6 +319,18 @@ describe("skit/library-recorded-execution", () => {
     `,
       ),
     ).toHaveLength(1);
+  });
+
+  test("Undo execution is reachable only from the recorded runner", async () => {
+    const source = `import { runUndo } from "./internal/setup/undo-execution.js";`;
+    expect(
+      await reported(
+        "library-recorded-execution",
+        `${library}internal/runtime.ts`,
+        `import { runUndo } from "./setup/undo-execution.js";`,
+      ),
+    ).toHaveLength(1);
+    expect(await reported("library-recorded-execution", `${library}setup.ts`, source)).toEqual([]);
   });
 
   test("best-effort audit delivery is rejected at the writer; audit reads and types stay legal", async () => {

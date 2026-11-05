@@ -1,7 +1,7 @@
+import type { LibraryState } from "../../library-state.js";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { canonicalJson } from "../../../shared/json.js";
-import { copyLocalTree } from "../../../platform/copy-tree.js";
 import { deterministicTreeHash } from "../../../artifact/skit.js";
 import { globalEnabled } from "../../enabled.js";
 import { inspectOwnershipMarker, prepareInstalledSkillRebuild } from "../../../install/files.js";
@@ -12,11 +12,9 @@ import { pathIsWithin } from "../../../platform/path-identity.js";
 import { collectionVersionPath } from "../../collection-version.js";
 import { versionBacking } from "../../library-contracts.js";
 import { writeRawAtomic } from "../../../platform/atomic-write.js";
-import { type LibraryState } from "../../library-state.js";
 import { type InstalledSkill } from "../../device-state.js";
-import { StalePlan } from "../../library-plan.js";
 import { readSkillPathDetails } from "./journal.js";
-import { inspectRecoveryOperation, prepareOwnedRecoveryMoves } from "../recovery/moves.js";
+import { inspectRecoveryOperation } from "../recovery/moves.js";
 import { checkSetupGlobalContent } from "./protection.js";
 import { recoveryFingerprint, RecoveryInvalid } from "../recovery/evidence.js";
 
@@ -27,26 +25,9 @@ type SkillPathDetails = Effect.Success<ReturnType<typeof readSkillPathDetails>>;
  * entry, or null for nothing there. `unmarked` identifies its bytes without SKIT's marker, by the
  * hash the record kept: a recovery fingerprint (old journals) or a tree hash (state.json records).
  */
-export interface SetupFile {
-  readonly path: string;
-  readonly anchor: {
-    readonly path: string;
-    readonly physicalPath: string;
-    readonly dev: bigint;
-    readonly ino: bigint;
-  };
-  readonly entry: {
-    readonly dev: bigint;
-    readonly ino: bigint;
-    readonly type: string;
-    readonly hash: string;
-    readonly unmarked: { readonly by: "fingerprint" | "tree"; readonly hash: string };
-    readonly marker: string | null;
-    readonly markerType?: string | null | undefined;
-    readonly markerMode?: number | null | undefined;
-    readonly linkTarget: string | null;
-  } | null;
-}
+export type { UndoFile as SetupFile } from "./undo-evidence.js";
+import type { UndoFile as SetupFile } from "./undo-evidence.js";
+import { observePathEvidence } from "../../folder-evidence.js";
 
 /** What a setup changed and recorded, as undo needs it from either kind of record. */
 export interface SetupChanges {
@@ -88,7 +69,7 @@ export const installedSkillChoice = (installedSkill: InstalledSkill | undefined)
 const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
 
 /** Check the original namespace anchor, even when today's nearest existing parent has changed. */
-const checkAnchor = Effect.fn("SetupUndo.checkAnchor")(function* (file: SetupFile) {
+export const checkAnchor = Effect.fn("SetupUndo.checkAnchor")(function* (file: SetupFile) {
   const links = yield* LinkStat;
   const physical = yield* links.realPathNative(file.anchor.path);
   const anchor = yield* links.identity.lstat(physical);
@@ -118,7 +99,7 @@ const checkAnchor = Effect.fn("SetupUndo.checkAnchor")(function* (file: SetupFil
     });
 });
 
-const restoreMarker = Effect.fn("SetupUndo.restoreMarker")(function* (
+export const restoreMarker = Effect.fn("SetupUndo.restoreMarker")(function* (
   path: string,
   entry: NonNullable<SetupFile["entry"]>,
 ) {
@@ -147,12 +128,11 @@ const restoreMarker = Effect.fn("SetupUndo.restoreMarker")(function* (
 });
 
 /** File effects are prepared from immutable before evidence, never inferred from desired bindings. */
-export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(function* (
+export const planUndoFiles = Effect.fn("SetupUndo.planFiles")(function* (
   home: string,
   operationId: string,
   setup: SetupChanges,
   state: LibraryState,
-  backupDirectory: string,
   priorBackups: readonly string[],
   restoredState: LibraryState,
 ) {
@@ -172,10 +152,6 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
     transfer?: "move" | "copy" | "rebuild";
   }[] = [];
   const moves: { name: string; installedSkill: InstalledSkill }[] = [];
-  const rebuilds = new Map<
-    string,
-    Effect.Success<ReturnType<typeof prepareInstalledSkillRebuild>>
-  >();
   const affected = new Set<string>();
   const physicalPaths: string[] = [];
   const physicalHome = yield* links.realPathNative(home);
@@ -361,7 +337,6 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
         ),
       );
       if (rebuilt._tag === "Success") {
-        rebuilds.set(file.path, rebuilt.success);
         actions.push({
           path: file.path,
           kind: "restore",
@@ -388,7 +363,14 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
     }
     actions.push({ path: file.path, kind: "restore", source, transfer });
   }
-  const backup = yield* prepareOwnedRecoveryMoves(home, moves, backupDirectory);
+  const preserve = yield* Effect.forEach(moves, ({ installedSkill }) =>
+    Effect.gen(function* () {
+      const evidence = yield* observePathEvidence(installedSkill.path);
+      if (evidence._tag === "None")
+        return yield* new RecoveryInvalid({ detail: `Missing successor: ${installedSkill.path}` });
+      return evidence.value;
+    }),
+  );
   const sourceEvidence = yield* Effect.forEach(
     actions.filter((action) => action.source !== undefined),
     (action) => readSkillPathDetails(action.source!),
@@ -399,74 +381,6 @@ export const prepareSetupUndoFiles = Effect.fn("SetupUndo.prepareFiles")(functio
     actions,
     affected: [...affected],
     sourceEvidence,
-    apply: Effect.fn("SetupUndo.applyFiles")(function* () {
-      // Stage and verify every reconstruction before displacing the first live successor.
-      yield* Effect.scoped(
-        Effect.gen(function* () {
-          const staged = new Map<string, string>();
-          for (const action of actions) {
-            const file = setup.files.find((item) => item.path === action.path)!;
-            yield* checkSetupGlobalContent(file.path);
-            yield* checkAnchor(file);
-            if (action.kind !== "restore" || action.source === undefined || file.entry === null)
-              continue;
-            if (action.transfer === "move") continue;
-            const directory = yield* fs.makeTempDirectoryScoped({
-              directory: dirname(file.path),
-              prefix: ".skit-undo-",
-            });
-            const path = join(directory, basename(file.path));
-            if (action.transfer === "rebuild") yield* rebuilds.get(file.path)!.build(path);
-            else yield* copyLocalTree(action.source, path, undefined, true);
-            if (file.entry.type === "Directory") yield* restoreMarker(path, file.entry);
-            if ((yield* recoveryFingerprint(path)) !== file.entry.hash)
-              return yield* new RecoveryInvalid({
-                detail: `Reconstruction differs from original: ${file.path}`,
-              });
-            staged.set(file.path, path);
-          }
-          yield* backup.apply();
-          for (const action of actions) {
-            const file = setup.files.find((item) => item.path === action.path)!;
-            yield* checkSetupGlobalContent(file.path);
-            yield* checkAnchor(file);
-            if (action.kind === "release-ownership") {
-              const before = pathDetails.find((item) => item.path === file.path)!;
-              if (!equal(yield* readSkillPathDetails(file.path), before))
-                return yield* new StalePlan({
-                  message: "The Library changed since this was previewed",
-                });
-              yield* restoreMarker(file.path, file.entry!);
-            } else if (action.kind === "restore") {
-              if ((yield* readSkillPathDetails(file.path)).entry !== null)
-                return yield* new StalePlan({
-                  message: "The Library changed since this was previewed",
-                });
-              if (
-                action.transfer === "move" &&
-                !equal(
-                  yield* readSkillPathDetails(action.source!),
-                  sourceEvidence.find((entry) => entry.path === action.source),
-                )
-              )
-                return yield* new StalePlan({
-                  message: "The Library changed since this was previewed",
-                });
-              yield* fs
-                .rename(
-                  action.transfer === "move" ? action.source! : staged.get(file.path)!,
-                  file.path,
-                )
-                .pipe(Effect.uninterruptible);
-            }
-            const actual = (yield* readSkillPathDetails(file.path)).entry;
-            if (file.entry === null ? actual !== null : actual?.hash !== file.entry.hash)
-              return yield* new RecoveryInvalid({
-                detail: `Original restoration incomplete: ${file.path}`,
-              });
-          }
-        }),
-      );
-    }),
+    preserve,
   };
 });

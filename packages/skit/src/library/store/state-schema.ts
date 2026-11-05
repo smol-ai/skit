@@ -35,6 +35,7 @@ import {
   InvocationPolicies,
   Repository,
 } from "../device-state.js";
+import { UndoFile, UndoPath, UndoAction } from "../internal/setup/undo-evidence.js";
 import { RecoveryInspection } from "../recovery-facts.js";
 import { EnabledChange } from "../enabled-change.js";
 import { Destination } from "../installed-skill-facts.js";
@@ -434,7 +435,24 @@ export const RecoveryRestore = Schema.Struct({
 });
 export type RecoveryRestore = typeof RecoveryRestore.Type;
 
+/** Reviewed inverse data. Publications never embed operation history. */
+export const UndoProgram = Schema.Struct({
+  operationId: Schema.String,
+  backupId: Schema.String.check(Schema.isUUID(4)),
+  before: SyncPublication,
+  after: SyncPublication,
+  files: Schema.Array(UndoFile),
+  paths: Schema.Array(UndoPath),
+  sources: Schema.Array(UndoPath),
+  sourceImports: Schema.Array(Schema.Struct({ path: Schema.String, hash: Hash })),
+  actions: Schema.Array(UndoAction),
+  preserve: Schema.Array(Schema.Union([FolderEvidence, LinkEvidence])),
+  preserved: Schema.Boolean,
+});
+export type UndoProgram = typeof UndoProgram.Type;
+
 export const SetupStep = Schema.Union([
+  Schema.TaggedStruct("Undo", { program: UndoProgram }),
   Schema.TaggedStruct("Restore", { program: RecoveryRestore }),
   InstalledApply,
   Schema.TaggedStruct("LegacyApply", { detail: Schema.String, document: Schema.Json }),

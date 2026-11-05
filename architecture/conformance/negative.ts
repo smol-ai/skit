@@ -38,3 +38,12 @@ export type AcceptsConforming = [
   Assert<Equal<MissingMethods<Library, Library>, never>>,
   Assert<Equal<UndeclaredRequirements<typeof conforming, LibraryRequires>, never>>,
 ];
+
+// The approved public error boundary translates storage revision conflicts to StalePlan.
+// Concrete vocabulary must not reintroduce LibraryChanged through an imported error union.
+import type { LibraryChanged } from "../../packages/skit/src/failures.js";
+import type { TargetApplyError, TargetPlanError } from "../library-results.js";
+export type RejectsPublicStorageConflict = [
+  Assert<Equal<Extract<TargetPlanError, LibraryChanged>, never>>,
+  Assert<Equal<Extract<TargetApplyError, LibraryChanged>, never>>,
+];

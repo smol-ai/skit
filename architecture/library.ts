@@ -86,6 +86,7 @@ import type {
   InstallDestination,
   InstallScope,
 } from "../packages/skit/src/vocabulary.js";
+import type { SkillsDirectoryOverrides } from "../packages/skit/src/harnesses/contracts.js";
 import type { LinkStat } from "../packages/skit/src/platform/link-stat.js";
 import type { SourceProcess } from "../packages/skit/src/platform/source-process.js";
 
@@ -378,7 +379,23 @@ export type RecordedInstalledChange =
   | { readonly _tag: "Forget"; readonly id: InstalledSkillId; readonly keep: boolean }
   | { readonly _tag: "Fail"; readonly path: string; readonly reason: string };
 
+/** Fixed inverse data; staged identities are bound before replacing live destinations. */
+export interface UndoProgram {
+  readonly operationId: string;
+  readonly backupId: string;
+  readonly before: Omit<LibraryState, "operations">;
+  readonly after: Omit<LibraryState, "operations">;
+  readonly files: readonly import("../packages/skit/src/library/internal/setup/undo-evidence.js").UndoFile[];
+  readonly paths: readonly import("../packages/skit/src/library/internal/setup/undo-evidence.js").UndoPath[];
+  readonly sources: readonly import("../packages/skit/src/library/internal/setup/undo-evidence.js").UndoPath[];
+  readonly sourceImports: readonly { readonly path: string; readonly hash: Hash }[];
+  readonly actions: readonly import("../packages/skit/src/library/internal/setup/undo-evidence.js").UndoAction[];
+  readonly preserve: readonly (FolderEvidence | LinkEvidence)[];
+  readonly preserved: boolean;
+}
+
 export type SetupStep =
+  | { readonly _tag: "Undo"; readonly program: UndoProgram }
   | {
       readonly _tag: "Restore";
       readonly program: {
@@ -612,8 +629,8 @@ export type Routing =
       readonly _tag: "Configured";
       readonly home: string;
       readonly configHome: string;
-      readonly overrides: unknown;
-    }; // FROM CODE: cli/install/installed-skills.ts:27-31; OPEN: overrides type
+      readonly overrides: SkillsDirectoryOverrides;
+    };
 
 /**
  * Library.layer({ home, routing }). Under the home lock it migrates state.json once, then runs

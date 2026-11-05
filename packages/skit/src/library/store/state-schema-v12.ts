@@ -48,8 +48,8 @@ const V12Sync = Schema.TaggedStruct("Sync", {
     issues: Schema.Array(Schema.String),
   }),
 });
-// All remaining step variants have unchanged storage fields (publish/install Sync starts at index 4).
-const V12Step = Schema.Union([V12Apply, V12Sync, ...SetupStep.members.slice(4)]);
+// All remaining step variants have unchanged storage fields (publish/install Sync starts at index 5).
+const V12Step = Schema.Union([V12Apply, V12Sync, ...SetupStep.members.slice(5)]);
 const V12RecordedStep = Schema.Struct({
   step: V12Step,
   applies: Schema.optionalKey(Schema.Array(Schema.Struct({ key: Schema.String, apply: V12Apply }))),

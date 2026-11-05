@@ -86,11 +86,25 @@ const executionEdges = [
   {
     module: `${library}setup-moves`,
     names: ["moveAside"],
-    callers: [`${library}setup.ts`, `${library}setup-manage.ts`],
+    callers: [
+      `${library}setup.ts`,
+      `${library}setup-manage.ts`,
+      `${library}internal/setup/undo-execution.ts`,
+    ],
   },
   {
     module: `${library}internal/setup/undo-files`,
     names: ["prepareSetupUndoFiles"],
+    callers: [`${library}setup.ts`],
+  },
+  {
+    module: `${library}internal/setup/undo-files`,
+    names: ["restoreMarker"],
+    callers: [`${library}internal/setup/undo-execution.ts`],
+  },
+  {
+    module: `${library}internal/setup/undo-execution`,
+    names: ["runUndo"],
     callers: [`${library}setup.ts`],
   },
   {

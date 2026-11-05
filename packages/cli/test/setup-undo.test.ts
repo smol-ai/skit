@@ -6,6 +6,7 @@ import { systemError } from "effect/PlatformError";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import {
+  Library,
   hashParts,
   LinkStat,
   MachineSettings,
@@ -197,6 +198,8 @@ it.effect.each([3, 2] as const)(
         join(directory, "complete.json"),
         JSON.stringify({ schemaVersion: 2, intent, settings, installedSkills: [] }),
       );
+      // The v2 journal also covers a Library with no state.json: Undo records its first state.
+      if (version === 2) yield* fs.remove(home.statePath);
       expect(yield* fs.exists(source)).toBe(false);
       yield* home.owned(
         Effect.gen(function* () {
@@ -274,10 +277,8 @@ it.effect("an inverse record must save before any copy or intent changes", () =>
         const state = yield* f.home.durable;
         const faultFs: typeof f.fs = {
           ...f.fs,
-          link: (from, to) =>
-            to.includes("/undo/") && to.endsWith(".json")
-              ? refusedPublication(to)
-              : f.fs.link(from, to),
+          rename: (from, to) =>
+            to === f.home.statePath ? refusedPublication(to) : f.fs.rename(from, to),
         };
         const plan = yield* prepareSetupUndo(f.operationId);
         expect(
@@ -315,38 +316,54 @@ it.effect("a symlink replacing setup's marker never grants ownership of its targ
   }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect(
-  "an interrupted inverse after file effects is inspectable and can finish only after a fresh review",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      yield* f.home.owned(
-        Effect.gen(function* () {
-          const before = yield* f.home.durable;
-          const interrupted = yield* prepareSetupUndo(f.operationId);
-          const failure = yield* Effect.flip(
-            interrupted.apply().pipe(
-              withLibraryOwner,
-              Effect.provideService(FileSystem.FileSystem, {
-                ...f.fs,
-                rename: (from, to) =>
-                  to === f.home.statePath ? refusedPublication(to) : f.fs.rename(from, to),
-              }),
-            ),
-          );
-          expect(failure._tag).toBe("PlatformError");
-          expect(yield* f.home.durable).toEqual(before);
-          expect(yield* f.fs.exists(f.successor)).toBe(false);
-          expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(false);
-          expect((yield* Effect.flip(interrupted.apply()))._tag).toBe("Library.StalePlan");
-          const refreshed = yield* prepareSetupUndo(f.operationId);
-          expect(refreshed.summary.conflicts).toEqual([]);
-          expect((yield* refreshed.apply()).status).toBe("undone");
-          expect((yield* f.home.durable).enabled).toEqual([]);
-          expect((yield* MachineSettings.read(f.home.home)).discoveryRoots).toEqual([]);
-        }),
-      );
-    }).pipe(Effect.provide(skitLayer)),
+it.effect("a cold owner finishes a recorded inverse interrupted before Library publication", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    yield* f.home.owned(
+      Effect.gen(function* () {
+        const before = yield* f.home.durable;
+        const reviewed = yield* prepareSetupUndo(f.operationId);
+        let interrupted = false;
+        const exit = yield* Effect.exit(
+          reviewed.apply().pipe(
+            withLibraryOwner,
+            Effect.provideService(FileSystem.FileSystem, {
+              ...f.fs,
+              rename: (from, to) =>
+                Effect.gen(function* () {
+                  if (to === f.home.statePath) {
+                    const next = JSON.parse(yield* f.fs.readFileString(from));
+                    if (next.enabled.length === 0) {
+                      interrupted = true;
+                      return yield* Effect.die("Process exited before Undo publication");
+                    }
+                  }
+                  yield* f.fs.rename(from, to);
+                }),
+            }),
+          ),
+        );
+        expect(exit._tag).toBe("Failure");
+        expect(interrupted).toBe(true);
+        const pending = JSON.parse(yield* f.fs.readFileString(f.home.statePath));
+        expect(pending.enabled).toEqual(before.enabled);
+        expect(pending.operations.at(-1)._tag).toBe("Pending");
+        expect(yield* f.fs.exists(f.successor)).toBe(false);
+        expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(false);
+      }),
+    );
+    yield* f.home.owned(
+      Effect.gen(function* () {
+        const owner = yield* Library.Service;
+        expect(owner.startup.finished.length).toBe(1);
+        const repeated = yield* prepareSetupUndo(f.operationId);
+        expect(repeated.summary.intentChanged).toBe(false);
+        expect((yield* repeated.apply()).status).toBe("undone");
+        expect((yield* f.home.durable).enabled).toEqual([]);
+        expect((yield* MachineSettings.read(f.home.home)).discoveryRoots).toEqual([]);
+      }),
+    );
+  }).pipe(Effect.provide(skitLayer)),
 );
 
 it.effect(
@@ -372,9 +389,14 @@ it.effect(
           expect((yield* f.home.durable).enabled).toEqual([]);
           // Library completed independently. Retrying settings must preserve new file edits and
           // later repository choices, without creating another Library inverse attempt.
-          const undoDirectory = join(f.home.home, "removed", f.operationId, "undo");
-          const recorded = (yield* f.fs.readDirectory(undoDirectory)).sort();
-          expect(recorded.some((name) => name.endsWith(".done.json"))).toBe(true);
+          const recorded = (yield* f.home.durable).operations;
+          expect(
+            recorded.some(
+              (operation) =>
+                operation._tag === "Done" &&
+                operation.steps.some(({ step }) => step._tag === "Undo"),
+            ),
+          ).toBe(true);
           yield* f.fs.writeFileString(
             join(f.source, "SKILL.md"),
             "Independent edit after Library undo",
@@ -384,7 +406,7 @@ it.effect(
           expect(refreshed.summary.intentChanged).toBe(false);
           expect(refreshed.summary.settingsChanged).toBe(true);
           expect((yield* refreshed.apply()).status).toBe("undone");
-          expect((yield* f.fs.readDirectory(undoDirectory)).sort()).toEqual(recorded);
+          expect((yield* f.home.durable).operations).toEqual(recorded);
           expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe(
             "Independent edit after Library undo",
           );
@@ -556,22 +578,34 @@ it.effect(
       yield* f.home.owned(prepared.apply());
       const settingsAfter = yield* MachineSettings.read(f.home.home);
       const undoDirectory = join(f.home.home, "removed", f.operationId, "undo");
-      const attemptName = (yield* f.fs.readDirectory(undoDirectory)).find(
-        (name) => !name.endsWith(".done.json"),
+      const state = yield* f.home.durable;
+      const operation = state.operations.find((item) =>
+        item.steps.some(({ step }) => step._tag === "Undo"),
       );
-      if (attemptName === undefined) return yield* Effect.die("Missing inverse record");
-      const attemptPath = join(undoDirectory, attemptName);
-      const attempt = JSON.parse(yield* f.fs.readFileString(attemptPath));
-      // V2 completion acknowledged both Library and settings. It predates machine.json's marker.
+      if (!operation) return yield* Effect.die("Missing recorded inverse");
+      // Construct the immutable pre-split evidence explicitly; new Undo writes no attempt files.
+      const attemptName = "10000000-0000-4000-8000-000000000001";
+      yield* f.fs.makeDirectory(undoDirectory, { recursive: true });
       yield* f.fs.writeFileString(
-        attemptPath,
+        join(undoDirectory, `${attemptName}.json`),
         JSON.stringify({
-          ...attempt,
           schemaVersion: 2,
+          planId: prepared.summary.planId,
+          backupId: "10000000-0000-4000-8000-000000000002",
+          before: setupIntent(state),
+          after: setupIntent(state),
           settingsBefore: setupDiscoverySettings(settingsBefore),
           settingsAfter: setupDiscoverySettings(settingsAfter),
         }),
       );
+      yield* f.fs.writeFileString(
+        join(undoDirectory, `${attemptName}.done.json`),
+        JSON.stringify({ schemaVersion: 1, planId: prepared.summary.planId }),
+      );
+      yield* f.home.writeDurable({
+        ...state,
+        operations: state.operations.filter((item) => item.operationId !== operation.operationId),
+      });
       const path = join(f.home.home, "machine.json");
       const { undoneSetups: _completed, ...machine } = JSON.parse(yield* f.fs.readFileString(path));
       const later = JSON.stringify({

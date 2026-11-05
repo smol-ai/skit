@@ -19,90 +19,81 @@
  * 8. Manage "new": in setup the Import step runs first, so its subject exists when Manage plans;
  *    a standalone Manage "new" carries its own import source (library.ts ManageNewSource).
  * 9. RefreshInventory reports backups promoted to kept in its result.
- * 10. Setup Stopped is new behaviour (decided crash rule); no current code produces it.
+ * 10. A failure after recording a setup returns Stopped; interruption leaves Pending for startup.
  */
 /**
  * Approved: per-intent plan previews, outcomes and errors for architecture/library.ts's NEW intents.
  * Types only. Every field cites where today's code produces it. Paths are relative to packages/.
  * `// OPEN:` marks anything no current code settles.
  *
- * Vocabulary from the implementation is declared as `Ref<"where it is defined">`; each Ref is an
- * `import type` in the real contract. Vocabulary this contract itself declares comes from
- * ./library.js, so the two files share one Intent, evidence and Revision.
+ * Domain vocabulary and existing errors are imported from their core definitions. Owner method
+ * signatures and result shapes remain independently declared here; implementation changes do not
+ * silently change this contract.
  */
 import type { Option, PlatformError as PlatformErrors } from "effect";
 import type { FolderEvidence, Intent, LinkEvidence, OperationId, Revision } from "./library.js";
 import type {
+  AcceptanceIncomplete,
+  ContentAddressCollision,
   InvalidLibraryState as StoredInvalidLibraryState,
   LibraryBusy as StoredLibraryBusy,
   LibraryChanged as StoredLibraryChanged,
+  SecurityFindingAbsent,
+  UnknownInstalledSkill,
 } from "../packages/skit/src/failures.js";
-import type { TreeError as StoredTreeError } from "../packages/skit/src/shared/tree-error.js";
+import type { TreeError } from "../packages/skit/src/shared/tree-error.js";
+import type { Hash } from "../packages/skit/src/vocabulary.js";
+import type {
+  DeviceSkillSelection,
+  InstalledSkill,
+  LibraryState,
+  SyncAncestry,
+} from "../packages/skit/src/library/library-state.js";
+import type {
+  CollectionId,
+  CollectionVersionId,
+  InstalledSkillId,
+} from "../packages/skit/src/library/entity-ids.js";
+import type { InventoryScanRoot } from "../packages/skit/src/library/inventory/roots.js";
+import type {
+  InventoryScanIssue,
+  OwnershipIssue,
+  SkillAssessmentAcceptance,
+} from "../packages/skit/src/library/store/state-schema.js";
+import type { SkillSecurityReview } from "../packages/skit/src/contracts.js";
+import type { SyncConflictDetail } from "../packages/skit/src/library/internal/sync/conflict.js";
+import type { SetEnabledResult } from "../packages/skit/src/library/internal/session/set-enabled-contract.js";
+import type { UpdatedCopy } from "../packages/skit/src/library/installed-update.js";
+import type { ImportedCollection } from "../packages/skit/src/library/import-collection.js";
+import type { Backup } from "../packages/skit/src/library/installed-skills.js";
+import type {
+  ApplyError as StoredExistingApplyError,
+  Outcome as ExistingOutcome,
+  Plan as ExistingPlan,
+  PlanError as ExistingPlanError,
+  StalePlan,
+} from "../packages/skit/src/library/library-plan.js";
+export type { StalePlan } from "../packages/skit/src/library/library-plan.js";
+import type {
+  LibraryStateReadError,
+  LibraryStateWriteError as StoredLibraryStateWriteError,
+} from "../packages/skit/src/library/store/library-store.js";
+import type { InvalidIntent } from "../packages/skit/src/library/enabled-plan.js";
+import type { RecoveryInvalid } from "../packages/skit/src/library/internal/recovery/evidence.js";
+import type { RestoreInvalid } from "../packages/skit/src/library/internal/content/restore.js";
+import type { SetupManageSelectionInvalid } from "../packages/skit/src/library/setup/setup-manage.js";
+import type { SetEnabledIncomplete } from "../packages/skit/src/library/internal/session/set-enabled.js";
+import type { ChangeChoiceRequired } from "../packages/skit/src/library/setup/setup-installed-skills.js";
 
-interface Ref<Where extends string> {
-  readonly __ref: Where;
-}
-
-// ── Referenced vocabulary (would be `import type`) ───────────────────────────────────────────────
-type Hash = Ref<"skit/src/vocabulary.ts Hash">;
-type LibraryState = Ref<"skit/src/library/library-state.ts:168">;
-type InstalledSkill = Ref<"skit/src/library/library-state.ts:92">;
-type InstalledSkillId = Ref<"skit/src/library/entity-ids.ts InstalledSkillId">;
-type CollectionId = Ref<"skit/src/library/entity-ids.ts:33-36 CollectionId">;
-type CollectionVersionId = Ref<"skit/src/library/entity-ids.ts:43-46 CollectionVersionId">;
-type SyncAncestry = Ref<"skit/src/library/library-state.ts:102-108">;
-type DeviceSkillSelection = Ref<"skit/src/library/library-state.ts:111-119">;
-type InventoryScanRoot = Ref<"skit/src/library/inventory/refresh.ts:17-20">;
-type InventoryScanIssue = Ref<"skit/src/library/store/state-schema.ts:27">;
-type OwnershipIssue = Ref<"skit/src/library/store/state-schema.ts:64">;
-type UnmanagedEntry =
-  Ref<"LibraryState['unmanaged'][number]; skit/src/library/store/state-schema.ts:66">;
-/** SkillAssessmentAcceptance (state-schema.ts:28-37) minus acceptedAt (:35), which apply stamps. */
-type PlannedAcceptance =
-  Ref<"Omit<SkillAssessmentAcceptance, 'acceptedAt'>, skit/src/library/store/state-schema.ts:28-37">;
-type SkillAssessmentAcceptance = Ref<"skit/src/library/store/state-schema.ts:28-38">;
-type SkillSecurityReview = Ref<"skit/src/contracts.ts:256">;
-type SyncConflictDetail = Ref<"cli/src/workflows/library/library-sync-contract.ts:8">;
-type SetEnabledResult = Ref<"cli/src/workflows/library/set-enabled-contract.ts:62">;
-type InstalledSkillChangeResult = Ref<"cli/src/library/setup/setup-contract.ts:240-255">;
-type ImportedCollection = Ref<"skit/src/library/import-collection.ts:77">;
-type Backup = Ref<"skit/src/library/installed-skills.ts Backup">;
-type ExistingPlan = Ref<"Plan, skit/src/library/library-plan.ts:219-230">;
-type ExistingOutcome = Ref<"Outcome, skit/src/library/library-plan.ts:251-263">;
-type ExistingPlanError = Ref<"PlanError, skit/src/library/library-plan.ts:265-271">; // includes StalePlan
-type ExistingApplyError = Ref<"ApplyError, skit/src/library/library-plan.ts:272-278">;
-type ExistingIntentTag = "Enabled" | "Remove" | "Update" | "Uninstall"; // library-plan.ts:40
+type UnmanagedEntry = LibraryState["unmanaged"][number];
+/** Apply stamps acceptedAt; a preview cannot claim the acceptance already happened. */
+type PlannedAcceptance = Omit<SkillAssessmentAcceptance, "acceptedAt">;
+type ExistingIntentTag = "Enabled" | "Remove" | "Update" | "Uninstall";
 type IntentOf<Tag extends Intent["_tag"]> = Extract<Intent, { readonly _tag: Tag }>;
-
-// Errors that exist today (Data/Schema tagged errors), referenced by name.
-type PlatformError = Ref<"effect PlatformError">;
-type LibraryStateReadError = Ref<"skit/src/library/store/library-store.ts:18">;
-type LibraryStateWriteError = Ref<"skit/src/library/store/library-store.ts:21-25">; // minus LibraryChanged, which becomes StalePlan
-/**
- * RESHAPE of skit/src/library/library-plan.ts:61-62, which carries only a message. The single
- * "the Library moved on" error: replaces PlanIsStale (cli/src/library/failures.ts:11),
- * SyncLocalChanged (cli/src/workflows/library/library-sync.ts:60-70) and LibraryChanged
- * (skit/src/failures.ts:607).
- */
-export interface StalePlan {
-  readonly _tag: "Library.StalePlan";
-  // Present when a base revision moved; absent when folder evidence changed (apply-plan), where
-  // no revision applies (decided 2026-11-04, step 2 of setup).
-  readonly expected?: Revision;
-  readonly actual?: Revision;
-}
-type InvalidIntent = Ref<"skit/src/library/enabled-plan.ts:49">;
-type RecoveryInvalid = Ref<"skit/src/library/internal/recovery/evidence.ts">;
-type RestoreInvalid = Ref<"skit/src/library/library-restore.ts:28">;
-type ContentAddressCollision = Ref<"skit/src/failures.ts:335">;
-type AcceptanceIncomplete = Ref<"skit/src/failures.ts:457-460">;
-type SecurityFindingAbsent = Ref<"skit/src/failures.ts:442-445">;
-type UnknownInstalledSkill = Ref<"skit/src/failures.ts:349-352">;
-type TreeError = Ref<"skit/src/shared/tree-error.ts:56">;
-type ManageInvalid = Ref<"cli/src/workflows/library/manage-existing.ts:250-254">;
-type SetupManageSelectionInvalid = Ref<"cli/src/library/setup/setup-manage.ts:9-25">;
-type SetEnabledIncomplete = Ref<"cli/src/library-application/set-enabled.ts:41-42">;
-type ChangeChoiceRequired = Ref<"cli/src/library/setup/setup-installed-skills.ts:21">;
+type PlatformError = PlatformErrors.PlatformError;
+/** Public failures use StalePlan; LibraryChanged stays private to storage and saved step errors. */
+type LibraryStateWriteError = Exclude<StoredLibraryStateWriteError, StoredLibraryChanged>;
+type ExistingApplyError = Exclude<StoredExistingApplyError, StoredLibraryChanged>;
 
 // ── Undo ────────────────────────────────────────────────────────────────────────────────────────
 // Source: skit/src/library/internal/setup/{undo,undo-plan,undo-files}.ts.
@@ -160,9 +151,8 @@ export type UndoError =
 // OPEN: inspectSetupOperation / prepareSetupSourceUndo error channels not traced.
 
 // ── Restore ─────────────────────────────────────────────────────────────────────────────────────
-// Source: cli/src/library-application/recovery-moves.ts, cli/src/handlers/library/recovery.ts.
-// Resolution 1: apply's one atomic state.json write is the operation record itself; today the
-// renames run under withHomeLock only (recovery-moves.ts:557-591).
+// Source: skit/src/library/internal/recovery/{moves,restore}.ts.
+// Restore is recorded before renames and runs through Library's existing operation runner.
 
 /** One saved entry. RecoveryFact, recovery-moves.ts:76-83; status :492-500, reason :501-511. */
 export interface RecoveryEntry {
@@ -203,7 +193,7 @@ export type RestoreError =
   | LibraryStateWriteError;
 
 // ── AcceptFinding ───────────────────────────────────────────────────────────────────────────────
-// Source: skit/src/library/security/review.ts:101-147, cli/src/library/security.ts.
+// Source: skit/src/library/internal/security/{accept,review}.ts.
 
 /** Preview: the one acceptance apply appends, without acceptedAt (resolution 5). review.ts:132-145. */
 export interface AcceptFindingChange {
@@ -227,9 +217,8 @@ export type AcceptFindingError =
   | LibraryStateWriteError;
 
 // ── RefreshInventory ────────────────────────────────────────────────────────────────────────────
-// Source: skit/src/library/inventory/refresh.ts, cli/src/handlers/library/inventory.ts.
-// Today scan and save are one step (refresh.ts:232-233); there is no preview. The preview below
-// is what scanInventory computes before the save.
+// Source: skit/src/library/internal/inventory/refresh.ts and library/inventory/refresh.ts.
+// Planning observes the roots; applying rechecks the observations before saving them.
 
 /** Preview. refresh.ts:226-233. */
 export interface RefreshInventoryChange {
@@ -250,7 +239,7 @@ export interface RefreshInventoryChange {
 export interface RefreshInventoryResult {
   readonly roots: readonly InventoryScanRoot[]; // refresh.ts:246
   readonly state: LibraryState; // refresh.ts:246
-  /** Pending backups promoted to kept after a verified install (refresh.ts:236-245); not reported today (resolution 9). */
+  /** Pending backups promoted to kept after a verified install (refresh.ts:236-245); reported by apply (resolution 9). */
   readonly keptBackups: readonly Backup[];
 }
 
@@ -269,19 +258,19 @@ export interface StagedContent {
   readonly manifestDigest: Hash;
   /** Already in originals/, verified (collection-version-plan.ts:30-31). */
   readonly reusable: readonly Hash[];
-  /** Downloaded and retained in originals/ by this call (collection-version-plan.ts:32, library-restore.ts:328-334). */
+  /** Downloaded and retained in originals/ by this call (collection-version-plan.ts:32, internal/content/restore.ts:328-334). */
   readonly retained: readonly Hash[];
   /**
    * Required but neither local nor downloadable (collection-version-plan.ts:33 reacquire;
-   * library-restore.ts "not downloaded" RestoreInvalid). Reported, not thrown; plan(Sync)
+   * internal/content/restore.ts "not downloaded" RestoreInvalid). Reported, not thrown; plan(Sync)
    * refuses a non-empty list.
    */
   readonly missing: readonly CollectionVersionId[];
-  /** The restored portable state blended in at save (library-restore.ts:391-407). */
+  /** The restored portable state blended in at save (internal/content/restore.ts:391-407). */
   readonly state: LibraryState;
 }
 
-/** library-restore.ts RestoreInvalid; :59 collision; originals writes. Download failures are the caller's E. */
+/** internal/content/restore.ts RestoreInvalid; :59 collision; originals writes. Download failures are the caller's E. */
 export type ContentStageError =
   | RestoreInvalid
   | ContentAddressCollision
@@ -367,9 +356,8 @@ export type SyncError =
 // resolution_invalid are returned as values before the local plan exists; they stay in sync.
 
 // ── Manage ──────────────────────────────────────────────────────────────────────────────────────
-// Source: cli/src/workflows/library/manage-existing.ts (+ setup-manage.ts, its only caller).
-// Today Manage is an Enabled plan with a Manage approval (manage-existing.ts:485-522) wrapped by
-// import (:366-370, :410-417) and duplicate backup (:425-431, :541).
+// Source: skit/src/library/internal/manage/manage.ts and library/setup-manage.ts.
+// Standalone Manage coordinates imports, enablement and duplicate recovery through recorded steps.
 
 /** Duplicates moved to recovery after install. prepareRecoveryMoves, recovery-moves.ts:187-190. */
 export interface ManageBackupPreview {
@@ -419,11 +407,11 @@ export interface ManageResult {
   readonly warnings: readonly { readonly name: string; readonly message: string }[];
 }
 
-/** manage-existing.ts:362, :378, :386, :564-595 stale; :373, :394, :399, :402 ManageInvalid; :534 SetEnabledIncomplete. */
+/** manage-existing.ts:362, :378, :386, :564-595 stale; :373, :394, :399, :402 InvalidIntent; :534 SetEnabledIncomplete. */
 export type ManageError =
   | StalePlan
-  | ManageInvalid
-  | SetupManageSelectionInvalid // setup-manage.ts:51-70, :128-132 (wraps ManageInvalid)
+  | InvalidIntent
+  | SetupManageSelectionInvalid // setup-manage.ts:51-70, :128-132 (selection validation)
   | SetEnabledIncomplete
   | RecoveryInvalid // prepareRecoveryMoves, recovery-moves.ts:119-169
   | ExistingApplyError
@@ -432,13 +420,29 @@ export type ManageError =
 // OPEN: importSource's error channel (manage-existing.ts:371, :410) not traced.
 
 // ── Setup ───────────────────────────────────────────────────────────────────────────────────────
-// Source: cli/src/library/setup/setup-apply.ts:70-285. The one SetupResult; library.ts uses it.
+// Source: skit/src/library/setup.ts. The one SetupResult; library.ts uses it.
 
-/** One finished step, by step tag. */
+/** One finished step, by step tag. Apply, Sync and Restore use the same recorded runner. */
 export type SetupStepResult =
+  | { readonly _tag: "Undo"; readonly operationId: OperationId; readonly backupId: string }
+  | { readonly _tag: "Restore"; readonly after: RestoreChange }
+  | { readonly _tag: "Apply"; readonly outcome: ExistingOutcome }
+  | {
+      readonly _tag: "Sync";
+      readonly phase: "retire" | "publish" | "install";
+      readonly installed: number;
+      readonly uninstalled: number;
+      readonly issues: readonly string[];
+    }
   | { readonly _tag: "Import"; readonly imported: ImportedCollection } // import-collection.ts:77, setup-apply.ts imports stage
-  | { readonly _tag: "Manage"; readonly result: ManageResult } // setup-apply.ts:201-214
-  | { readonly _tag: "Update"; readonly changes: readonly InstalledSkillChangeResult[] } // setup-apply.ts:226-251
+  | {
+      // An earlier Import step reports its own imports; a Manage step reports only its folder work.
+      readonly _tag: "Manage";
+      readonly results: readonly SetEnabledResult[];
+      readonly recoveryDirectories: readonly string[];
+      readonly warnings: readonly { readonly name: string; readonly message: string }[];
+    }
+  | { readonly _tag: "Update"; readonly changes: readonly UpdatedCopy[] }
   | {
       readonly _tag: "Remove";
       readonly recoveryDirectory: string;
@@ -478,7 +482,7 @@ export type SetupStopReason =
  */
 type StoredPlatformError = PlatformErrors.PlatformError;
 export type StepError =
-  | StoredTreeError
+  | TreeError
   | StoredLibraryBusy
   | StoredLibraryChanged
   | StoredInvalidLibraryState
@@ -577,7 +581,7 @@ export type TargetPlanError =
   | UnknownInstalledSkill
   | RecoveryInvalid
   | RestoreInvalid
-  | ManageInvalid
+  | InvalidIntent
   | SetupManageSelectionInvalid;
 
 export type TargetApplyError =
