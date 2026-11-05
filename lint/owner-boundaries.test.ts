@@ -53,6 +53,9 @@ describe("skit/owner-boundaries", () => {
   test("server adapters use Identity instead of its SDK or credential implementation", async () => {
     for (const statement of [
       `import { makeBetterAuth } from "../identity/internal/better-auth.js";`,
+      `import { makeBootstrap } from "../identity/internal/bootstrap.js";`,
+      `import { provisionPrincipal } from "../identity/internal/provisioning.js";`,
+      `import { hashPassword } from "../identity/internal/password.js";`,
       `export * from "../identity/internal/credentials.js";`,
       `const loading = import("../identity/internal/credentials.js");`,
     ]) {

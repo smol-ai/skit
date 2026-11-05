@@ -2,7 +2,6 @@ import { BrowserCrypto } from "@effect/platform-browser";
 import { Layer } from "effect";
 import { layer as identityLayer, type Scope as AuthenticationScope } from "./identity/service.js";
 import { layer as authorizationLayer } from "./authorization/service.js";
-import { layer as bootstrapServiceLayer } from "./bootstrap/service.js";
 import { ServerConfiguration } from "./configuration.js";
 import { layer as skitsLayer } from "./skits/service.js";
 import { layer as feedbackServiceLayer } from "./feedback/service.js";
@@ -69,8 +68,7 @@ export const applicationLayers = (
   // Feedback does not wait for authentication to be configured: reports can always be anonymous.
   const feedback =
     env.FEEDBACK_MODE === "open" ? feedbackServiceLayer.pipe(Layer.provide(platform)) : undefined;
-  if (configured === undefined)
-    return { release, feedback, authenticated: undefined, bootstrap: undefined };
+  if (configured === undefined) return { release, feedback, authenticated: undefined };
 
   const authenticated = Layer.mergeAll(
     identityLayer(
@@ -84,17 +82,12 @@ export const applicationLayers = (
           env.EMAIL && env.EMAIL_FROM ? { binding: env.EMAIL, from: env.EMAIL_FROM } : undefined,
       },
       supportedScopes,
+      env.SKIT_BOOTSTRAP_SECRET || undefined,
     ),
     teamsLayer,
     serverLibraryLayer,
     skitsLayer,
     Layer.succeed(ServerConfiguration, { publicAppOrigin: configured.publicAppOrigin }),
   ).pipe(Layer.provideMerge(authorization));
-  const bootstrap = env.SKIT_BOOTSTRAP_SECRET
-    ? Layer.mergeAll(
-        bootstrapServiceLayer(env.SKIT_BOOTSTRAP_SECRET),
-        Layer.succeed(ServerConfiguration, { publicAppOrigin: configured.publicAppOrigin }),
-      ).pipe(Layer.provideMerge(platform))
-    : undefined;
-  return { release, feedback, authenticated, bootstrap };
+  return { release, feedback, authenticated };
 };

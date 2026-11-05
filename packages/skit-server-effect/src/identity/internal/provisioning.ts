@@ -1,4 +1,4 @@
-import type { DatabaseSqlClient } from "../platform/cloudflare.js";
+import type { DatabaseSqlClient } from "../../platform/cloudflare.js";
 
 export interface PrincipalProvisioning {
   readonly userId: string;

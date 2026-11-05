@@ -227,6 +227,7 @@ export const owners = {
       "session",
       "verification",
       "deviceCode",
+      "personal_access_tokens",
       "principals",
       "namespaces",
       "server_operators",
@@ -242,8 +243,8 @@ export const owners = {
     ],
     removes: [
       "Authentication and BetterAuth providers (done: one Identity provider owns both implementations)",
-      "auth/provisioning.ts helper written from two services",
-      "Bootstrap as a separate writer: its atomic claim batch moves into Identity.createOperator unchanged (self-hosting.md:261,269)",
+      "shared provisioning helper outside Identity (done: private to Identity's SDK and bootstrap implementations)",
+      "Bootstrap as a separate writer (done: Identity.createOperator owns the unchanged atomic claim batch and post-commit verification email)",
       "NativeClock service (done: Better Auth captures the built-in Clock)",
       "nested runPromise in Better Auth hooks (the Promise boundary itself stays; keep the hook invariants at better-auth.ts:264,286,325)",
       "rateLimit table (Better Auth rate limiting disabled)",

@@ -1,8 +1,7 @@
 import { Effect } from "effect";
 import { HttpEffect, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
-import { Bootstrap, BootstrapInput, type CreateError } from "../bootstrap/service.js";
-import { Identity } from "../identity/service.js";
+import { Identity, BootstrapInput, type CreateError } from "../identity/service.js";
 import { ServerConfiguration } from "../configuration.js";
 import type { RateLimiter } from "../platform/rate-limiter.js";
 import { BootstrapApi } from "./bootstrap.js";
@@ -39,13 +38,12 @@ const mapCreateError = (error: CreateError) => {
 export const bootstrapHandlers = (rateLimiter: RateLimiter) =>
   HttpApiBuilder.group(BootstrapApi, "bootstrap", (handlers) =>
     Effect.gen(function* () {
-      const bootstrap = yield* Bootstrap;
       const authentication = yield* Identity;
       const configuration = yield* ServerConfiguration;
 
       return handlers
         .handle("status", () =>
-          bootstrap.isNeeded().pipe(
+          authentication.isBootstrapNeeded().pipe(
             Effect.tapError((error) => Effect.logError("bootstrap status failed", error)),
             Effect.mapError(() => storageFailureResponse),
             Effect.tap(() => noStore),
@@ -70,7 +68,7 @@ export const bootstrapHandlers = (rateLimiter: RateLimiter) =>
               BootstrapInput,
               MAX_BOOTSTRAP_REQUEST_BYTES,
             ).pipe(Effect.mapError(() => invalidRequestResponse));
-            return yield* bootstrap.createInitialOperator(input).pipe(
+            return yield* authentication.createOperator(input).pipe(
               Effect.tapError((error) =>
                 error._tag === "Bootstrap.SecretComparisonError" ||
                 error._tag === "PasswordHasher.PasswordHashError" ||
@@ -79,21 +77,6 @@ export const bootstrapHandlers = (rateLimiter: RateLimiter) =>
                   : Effect.void,
               ),
               Effect.mapError(mapCreateError),
-              Effect.flatMap(({ email, username }) =>
-                authentication.sendVerificationEmail(email).pipe(
-                  Effect.tapError((error) =>
-                    Effect.logError("bootstrap verification email failed", error),
-                  ),
-                  Effect.match({
-                    onFailure: () => ({ email, username, verificationEmailSent: false }),
-                    onSuccess: (verificationEmailSent) => ({
-                      email,
-                      username,
-                      verificationEmailSent,
-                    }),
-                  }),
-                ),
-              ),
               Effect.tap(() => noStore),
             );
           }),

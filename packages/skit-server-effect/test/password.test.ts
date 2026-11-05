@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { hashPassword, passwordCallbacks } from "../src/auth/password.js";
+import { hashPassword, passwordCallbacks } from "../src/identity/internal/password.js";
 import { WebCrypto } from "effect/crypto";
 
 const LEGACY_FIXTURE = "AAECAwQFBgcICQoLDA0OD0nUnCX1l4RiCfDZLndwq2Thx16UtM5sUJJl7mcXXSoe";

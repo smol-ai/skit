@@ -6,8 +6,8 @@ import { Clock, Effect, Option, Schema } from "effect";
 import { normalizeNamespace } from "../../domain/identifiers.js";
 import type { DatabaseSqlClient } from "../../platform/cloudflare.js";
 import { SecureRandom, WebCrypto } from "effect/crypto";
-import { passwordCallbacks } from "../../auth/password.js";
-import { provisionPrincipal } from "../../auth/provisioning.js";
+import { passwordCallbacks } from "./password.js";
+import { provisionPrincipal } from "./provisioning.js";
 
 const AUTH_BASE_PATH = "/api/auth";
 // Read a Bearer session token as the session cookie, but drop the plugin's response hook: it copies

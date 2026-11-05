@@ -3,7 +3,7 @@ import { D1Client } from "@effect/sql-d1";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { makeWebHandler } from "../src/http.js";
-import { passwordCallbacks } from "../src/auth/password.js";
+import { passwordCallbacks } from "../src/identity/internal/password.js";
 import { databaseLayer } from "../src/platform/cloudflare.js";
 
 const platformLayer = databaseLayer(env.DB);
@@ -65,6 +65,97 @@ const prepareIdentityDatabase = Effect.flatMap(D1Client.D1Client, (sql) =>
 );
 
 describe("bootstrap status", () => {
+  it.effect("commits one complete identity when operator claims race", () =>
+    Effect.gen(function* () {
+      yield* prepareIdentityDatabase;
+      const responses = yield* Effect.all(
+        ["first", "second"].map((name, index) =>
+          webPromise(() =>
+            web.handler(
+              new Request("https://registry.test/api/bootstrap", {
+                method: "POST",
+                headers: {
+                  "content-type": "application/json",
+                  origin: "https://registry.test",
+                  "cf-connecting-ip": `192.0.2.${90 + index}`,
+                },
+                body: JSON.stringify({
+                  token: "skit-bootstrap-test-secret-that-is-at-least-thirty-two-characters",
+                  username: name,
+                  email: `${name}@example.test`,
+                  password: "correct horse battery staple",
+                }),
+              }),
+            ),
+          ),
+        ),
+        { concurrency: "unbounded" },
+      );
+      expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
+      const sql = yield* D1Client.D1Client;
+      for (const table of [
+        "user",
+        "account",
+        "principals",
+        "namespaces",
+        "server_operators",
+        "server_bootstrap",
+      ])
+        expect(
+          (yield* sql.unsafe<{ count: number }>(`SELECT COUNT(*) count FROM ${table}`))[0]?.count,
+        ).toBe(1);
+      const rows = yield* sql`SELECT u.username FROM server_bootstrap b
+        JOIN server_operators o ON o.principal_id = b.claimed_by
+        JOIN principals p ON p.principal_id = o.principal_id
+        JOIN user u ON u.id = p.better_auth_user_id
+        JOIN account a ON a.userId = u.id
+        JOIN namespaces n ON n.subject_id = p.principal_id AND n.namespace_slug = u.username`;
+      expect(rows).toHaveLength(1);
+      expect(["first", "second"]).toContain(rows[0]?.username);
+    }).pipe(Effect.provide(platformLayer)),
+  );
+
+  it.effect("rolls back the whole identity when the final claim statement fails", () =>
+    Effect.gen(function* () {
+      yield* prepareIdentityDatabase;
+      const sql = yield* D1Client.D1Client;
+      yield* sql.unsafe(`CREATE TRIGGER refuse_bootstrap BEFORE INSERT ON server_bootstrap
+        BEGIN SELECT RAISE(ABORT, 'claim storage unavailable'); END`);
+      const response = yield* webPromise(() =>
+        web.handler(
+          new Request("https://registry.test/api/bootstrap", {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              origin: "https://registry.test",
+              "cf-connecting-ip": "192.0.2.92",
+            },
+            body: JSON.stringify({
+              token: "skit-bootstrap-test-secret-that-is-at-least-thirty-two-characters",
+              username: "operator",
+              email: "operator@example.test",
+              password: "correct horse battery staple",
+            }),
+          }),
+        ),
+      );
+      expect(response.status).toBe(500);
+      for (const table of [
+        "user",
+        "account",
+        "principals",
+        "namespaces",
+        "server_operators",
+        "server_bootstrap",
+      ])
+        expect(
+          (yield* sql.unsafe<{ count: number }>(`SELECT COUNT(*) count FROM ${table}`))[0]?.count,
+        ).toBe(0);
+      const status = yield* requestStatus();
+      expect(yield* webPromise(() => status.json())).toEqual({ needed: true });
+    }).pipe(Effect.provide(platformLayer)),
+  );
+
   it.effect("reports that an unclaimed server needs bootstrap", () =>
     Effect.gen(function* () {
       yield* prepareDatabase;

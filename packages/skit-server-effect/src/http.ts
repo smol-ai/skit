@@ -39,7 +39,6 @@ import { makeServerDiscovery, type ServerCapabilities } from "./discovery.js";
 type ApplicationLayers = ReturnType<typeof applicationLayers>;
 type ReleaseApplication = ApplicationLayers["release"];
 type AuthenticatedApplication = NonNullable<ApplicationLayers["authenticated"]>;
-type BootstrapApplication = NonNullable<ApplicationLayers["bootstrap"]>;
 type FeedbackApplication = NonNullable<ApplicationLayers["feedback"]>;
 
 const allServerCapabilities: ServerCapabilities = {
@@ -155,14 +154,11 @@ const uiConfigurationRoutes = (env: RuntimeEnv) =>
   );
 
 const configuredBootstrapRoutes = (
-  application: BootstrapApplication,
   authentication: AuthenticatedApplication,
   limiter: RateLimiter,
 ) =>
   HttpApiBuilder.layer(BootstrapApi).pipe(
-    Layer.provide(
-      bootstrapHandlers(limiter).pipe(Layer.provide(Layer.merge(application, authentication))),
-    ),
+    Layer.provide(bootstrapHandlers(limiter).pipe(Layer.provide(authentication))),
     Layer.provide(HttpServer.layerServices),
   );
 
@@ -266,12 +262,8 @@ const routeLayer = (env: RuntimeEnv, capabilities: ServerCapabilities) => {
         );
   const bootstrap = env.SKIT_BOOTSTRAP_SECRET
     ? configured._tag === "Configured"
-      ? application.bootstrap && authentication
-        ? configuredBootstrapRoutes(
-            application.bootstrap,
-            authentication,
-            makeRateLimiter(env.BOOTSTRAP_RATE_LIMITER),
-          )
+      ? authentication
+        ? configuredBootstrapRoutes(authentication, makeRateLimiter(env.BOOTSTRAP_RATE_LIMITER))
         : Layer.empty
       : invalidBootstrapRoutes(configured.detail)
     : Layer.empty;
