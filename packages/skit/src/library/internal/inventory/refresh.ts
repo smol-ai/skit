@@ -2,7 +2,7 @@ import { Revision } from "../../snapshot.js";
 import { Clock, Effect, Schema } from "effect";
 import { Hash, HarnessName } from "../../../vocabulary.js";
 import { InvalidLibraryState } from "../../../failures.js";
-import { OwnershipMarkerInspection } from "../../../install/files.js";
+import { OwnershipMarkerInspection } from "../../../installed-skills/files.js";
 import { InstalledSkills } from "../../installed-skills.js";
 import { emptyLibraryState, InstalledSkill, LibraryState } from "../../library-state.js";
 import { InventoryScanIssue, OwnershipIssue } from "../../store/state-schema.js";

@@ -2,7 +2,7 @@ import { Cause, Effect, Layer } from "effect";
 import { registryHttpLayer } from "./registry/registry-http.js";
 import { registryAuthLayer } from "./registry/auth-service.js";
 import { skitLayer } from "@smolai/skit-core";
-import { libraryApplicationLayer } from "./library-application/layers.js";
+import { libraryApplicationLayer } from "./library/application/layers.js";
 import { skitConfigurationLayer, SkitConfiguration } from "@smolai/skit-core";
 import { commandFailure } from "./failure-classification.js";
 import { Renderer, consoleRendererLayer } from "./presentation/renderer.js";
@@ -75,4 +75,4 @@ export function handleSourceCommand<E, R>(program: Effect.Effect<void, E, R>) {
 }
 
 export { commandFailure } from "./failure-classification.js";
-export { libraryApplicationLayer } from "./library-application/layers.js";
+export { libraryApplicationLayer } from "./library/application/layers.js";

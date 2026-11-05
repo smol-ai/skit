@@ -1,3 +1,4 @@
+import { recoveryInspection, recoveryList } from "./helpers/recovery.js";
 import { withLibraryOwner } from "./helpers/library-owner.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { LinkStat, MachineSettings } from "@smolai/skit-core";
@@ -7,7 +8,7 @@ import { recordDuplicateSymlinks } from "@smolai/skit-core/library/setup";
 import { applySetupSelections } from "./helpers/setup-apply.js";
 import { copyConflict } from "@smolai/skit-core/library/setup";
 import type { DuplicateScanError } from "@smolai/skit-core/library/routing";
-import { codexSkillAliases } from "../src/workflows/library/doctor-codex.js";
+import { codexSkillAliases } from "../src/library/workflows/doctor-codex.js";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
@@ -17,13 +18,12 @@ import {
   scanSkillsDirectory,
   readableSkillsDirectories,
 } from "@smolai/skit-core/library/routing";
-import { importSource } from "../src/library-application/import-source.js";
+import { importSource } from "../src/library/application/import-source.js";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { runSetup, revalidateSetupPlan } from "@smolai/skit-core/library/setup";
 import { setupCommand } from "../src/library/setup/command.js";
 import { Renderer } from "../src/presentation/renderer.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
-import { inspectRecoveryOperation, listRecoveryOperations } from "@smolai/skit-core";
 import {
   libraryHome,
   scratch,
@@ -137,8 +137,8 @@ it.effect("guided setup preserves an individual link to the selected source with
     const prompts = yield* interaction.prompts;
     expect(prompts).toHaveLength(2);
     expect(prompts[0].choices[0].selected).toBe(false);
-    const [operationId] = yield* listRecoveryOperations(f.home.home);
-    const recovery = yield* inspectRecoveryOperation(f.home.home, operationId);
+    const [operationId] = yield* recoveryList(f.home.home);
+    const recovery = yield* recoveryInspection(f.home.home, operationId);
     expect(recovery.entries).toEqual([
       expect.objectContaining({ path: f.alias, type: "SymbolicLink", status: "saved" }),
     ]);
@@ -449,9 +449,9 @@ it.effect("guided setup preserves every selected individual link in one operatio
     for (const path of [f.alias, alias]) expect(yield* f.fs.exists(path)).toBe(false);
     for (const name of ["review", "later"])
       expect(yield* f.fs.exists(join(f.root, ".agents", "skills", name, "SKILL.md"))).toBe(true);
-    const operations = yield* listRecoveryOperations(f.home.home);
+    const operations = yield* recoveryList(f.home.home);
     expect(operations).toHaveLength(1);
-    const recovery = yield* inspectRecoveryOperation(f.home.home, operations[0]);
+    const recovery = yield* recoveryInspection(f.home.home, operations[0]);
     expect(recovery.entries.map((entry) => entry.path).sort()).toEqual([alias, f.alias].sort());
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
@@ -538,8 +538,8 @@ it.effect("preserves selected links and equal copies automatically across add an
       expect(yield* f.fs.exists(join(f.root, ".codex", "skills", name))).toBe(false);
       expect(yield* f.fs.exists(join(f.root, ".agents", "skills", name, "SKILL.md"))).toBe(true);
     }
-    const [operationId] = yield* listRecoveryOperations(f.home.home);
-    const recovery = yield* inspectRecoveryOperation(f.home.home, operationId);
+    const [operationId] = yield* recoveryList(f.home.home);
+    const recovery = yield* recoveryInspection(f.home.home, operationId);
     expect(recovery.entries.map((entry) => [entry.name, entry.type, entry.status]).sort()).toEqual([
       ["later", "SymbolicLink", "saved"],
       ["ordinary-one", "Directory", "saved"],

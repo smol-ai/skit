@@ -10,7 +10,7 @@ import { sourceIdentityLabel } from "../source-identity.js";
 import { ownershipAt, type SetupEvidence } from "./setup-discovery.js";
 import { lockMatches } from "./skills-sh-lock-source.js";
 import { classifyOwner } from "./setup-onboarding.js";
-import { makePnpmSkillCheck, pnpmSkillOwner } from "../../install/pnpm-skills.js";
+import { makePnpmSkillCheck, pnpmSkillOwner } from "../../installed-skills/pnpm-skills.js";
 import { probeHarnesses } from "../../harnesses/probe.js";
 import type {
   SetupAuthoredCollection,

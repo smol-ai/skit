@@ -9,7 +9,7 @@ import {
 import type { LibraryState } from "../../library-state.js";
 import { SkillId } from "../../entity-ids.js";
 import type { InstallDestination } from "../../../vocabulary.js";
-import { installedSkillName } from "../../../install/files.js";
+import { installedSkillName } from "../../../installed-skills/files.js";
 import { installDestinationPathIdentity } from "../../../platform/path-identity.js";
 import { existingRepositorySkillsDirectory } from "../../routing/roots.js";
 import { SyncConflictDetail } from "./conflict.js";

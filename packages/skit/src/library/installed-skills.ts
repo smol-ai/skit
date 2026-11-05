@@ -9,16 +9,16 @@ export { Destination, Duplicate, DuplicateScanIncomplete } from "./installed-ski
 import { Context, Data, Effect, FileSystem, Layer, Option, Path, Schema, Scope } from "effect";
 import { dirname, join, resolve } from "node:path";
 import { Digest } from "effect/crypto";
-import * as InstalledSkillFiles from "../install/files.js";
-import * as InstalledSkillBackups from "../install/backups.js";
+import * as InstalledSkillFiles from "../installed-skills/files.js";
+import * as InstalledSkillBackups from "../installed-skills/backups.js";
 import { LinkStat } from "../platform/link-stat.js";
 import { SourceProcess } from "../platform/source-process.js";
-import { TreeHasher } from "../artifact/tree-hasher.js";
+import { digestTreeHash } from "../artifact/skit.js";
 import { deterministicTreeHash } from "../artifact/skit.js";
-import { ensureSkillsDirectoryWritable } from "../install/writable.js";
+import { ensureSkillsDirectoryWritable } from "../installed-skills/writable.js";
 import { installDestinationPathIdentity } from "../platform/path-identity.js";
 import { sha256Hash } from "../shared/hash.js";
-import { pnpmSkillOwner } from "../install/pnpm-skills.js";
+import { pnpmSkillOwner } from "../installed-skills/pnpm-skills.js";
 import type { TreeRequirements } from "../platform/tree-requirements.js";
 import type { PlatformError } from "effect/PlatformError";
 import { Hash, InstallDestination, type InstallScope } from "../vocabulary.js";
@@ -30,10 +30,10 @@ import {
   type InstalledSkillMutationError,
   type reproducible,
   type StagedInstalledSkill,
-} from "../install/files.js";
+} from "../installed-skills/files.js";
 import { InstalledSkillInvalid } from "./installation/install-enabled.js";
 import { installedSkillSource } from "./installation/installed-skill-source.js";
-import { declaredInvocationIntent, overrideInvocationIntent } from "../install/policy.js";
+import { declaredInvocationIntent, overrideInvocationIntent } from "../installed-skills/policy.js";
 import type { Invocation } from "./enabled-plan.js";
 import type { SkitFailure } from "../shared/failure.js";
 import { FailureTypeId } from "../shared/failure.js";
@@ -235,15 +235,8 @@ export const make = Effect.fn("make")(function* (configuration?: Routing | Inven
     Effect.fail(
       new InstalledSkillInvalid({ detail: "This device's install destinations are unknown" }),
     );
-  const context = (yield* Effect.context<TreeRequirements | TreeHasher | Digest.Digest>()).pipe(
-    Context.pick(
-      FileSystem.FileSystem,
-      Path.Path,
-      LinkStat,
-      SourceProcess,
-      TreeHasher,
-      Digest.Digest,
-    ),
+  const context = (yield* Effect.context<TreeRequirements | Digest.Digest>()).pipe(
+    Context.pick(FileSystem.FileSystem, Path.Path, LinkStat, SourceProcess, Digest.Digest),
   );
   let routing: Routing | undefined;
   if (configuration === undefined || !("home" in configuration)) routing = configuration;
@@ -276,7 +269,6 @@ export const make = Effect.fn("make")(function* (configuration?: Routing | Inven
   }
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
-  const hasher = yield* TreeHasher;
 
   /** The entry's own identity, and where a link points. Never follows a link to inspect it. */
   const identity = Effect.fn("identity")(function* (path: string) {
@@ -454,7 +446,7 @@ export const make = Effect.fn("make")(function* (configuration?: Routing | Inven
         Effect.provide(context),
       ),
     inspect: (path) => inspect(path).pipe(Effect.provide(context)),
-    hash: (path) => hasher.hash(path).pipe(Effect.provide(context)),
+    hash: (path) => digestTreeHash(path).pipe(Effect.provide(context)),
     check: Effect.fn("check")(function* (folders) {
       for (const expected of folders) {
         const current = yield* inspect(expected.path).pipe(Effect.provide(context));

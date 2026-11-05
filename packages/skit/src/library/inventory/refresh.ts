@@ -11,7 +11,7 @@ import {
   installedSkillDisplaced,
   readOwnershipMarker,
   inspectOwnershipMarker,
-} from "../../install/files.js";
+} from "../../installed-skills/files.js";
 import { type InventoryScanRoot } from "./roots.js";
 export { deduplicateInventoryRoots, type InventoryScanRoot } from "./roots.js";
 

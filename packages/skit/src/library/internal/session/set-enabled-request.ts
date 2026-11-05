@@ -2,7 +2,7 @@ import { enabledAt } from "../../enabled.js";
 import { enabledSkillIds } from "../../library-contracts.js";
 import { type LibraryState } from "../../library-state.js";
 import { type InstallScope } from "../../../vocabulary.js";
-import { type ManageApproval } from "../../../install/files.js";
+import { type ManageApproval } from "../../../installed-skills/files.js";
 import { Effect } from "effect";
 import { Library } from "../../library.js";
 import type { InvocationOption } from "./invocation-option.js";

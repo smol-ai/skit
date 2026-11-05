@@ -1,8 +1,9 @@
+import { recoveryList } from "./helpers/recovery.js";
 import { withLibraryOwner } from "./helpers/library-owner.js";
 import { installEnabledSkills } from "./helpers/installed-skills.js";
 import { join } from "node:path";
 import { systemError } from "effect/PlatformError";
-import { Clock, Effect, FileSystem } from "effect";
+import { Clock, Effect, FileSystem, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
@@ -13,8 +14,7 @@ import { setupCommand } from "../src/library/setup/command.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import type { CommandAction } from "../src/commands/command-actions.js";
-import { readSkillPathDetails } from "@smolai/skit-core";
-import { listRecoveryOperations } from "@smolai/skit-core";
+import { observePathEvidence } from "@smolai/skit-core";
 import { prepareSetupUndo } from "../src/library/setup/setup-undo.js";
 import { runSetup } from "@smolai/skit-core/library/setup";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
@@ -220,7 +220,7 @@ it.effect("competing changes fail usefully before any update or inverse record i
     yield* f.update;
     yield* f.fs.writeFileString(join(f.copy, "SKILL.md"), document("Competing user edits"));
     const before = yield* f.home.durable;
-    const removed = yield* listRecoveryOperations(f.home.home);
+    const removed = yield* recoveryList(f.home.home);
     const failed = yield* Effect.flip(f.apply);
     expect(failed._tag).toBe("ChangeChoiceRequired");
     expect(yield* f.home.durable).toEqual(before);
@@ -230,7 +230,7 @@ it.effect("competing changes fail usefully before any update or inverse record i
     expect(yield* f.fs.readFileString(join(f.claude, "review", "SKILL.md"))).toBe(
       document("Original baseline"),
     );
-    expect(yield* listRecoveryOperations(f.home.home)).toEqual(removed);
+    expect(yield* recoveryList(f.home.home)).toEqual(removed);
   }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -617,15 +617,17 @@ it.effect("metadata-only alignment keeps the directory and excluded user content
     yield* f.fs.writeFileString(join(f.copy, "SKILL.md"), document("Incoming retained update"));
     yield* f.fs.writeFileString(join(f.copy, ".DS_Store"), "Keep this control entry");
     yield* f.fs.makeDirectory(join(f.copy, "empty"));
-    const before = yield* readSkillPathDetails(f.copy);
+    const before = Option.getOrThrow(yield* observePathEvidence(f.copy));
+    if (before._tag !== "Directory") return yield* Effect.die("Expected installed directory");
     const fact = (yield* f.observe).changes!.find((item) => item.path === f.copy)!;
     expect(fact.status).toBe("unchanged");
     expect(fact.metadataChanged).toBe(true);
     yield* f.apply;
-    const after = yield* readSkillPathDetails(f.copy);
-    expect(after.entry?.ino).toBe(before.entry?.ino);
-    expect(after.entry?.unstampedHash).toBe(before.entry?.unstampedHash);
-    expect(after.entry?.marker).not.toBe(before.entry?.marker);
+    const after = Option.getOrThrow(yield* observePathEvidence(f.copy));
+    if (after._tag !== "Directory") return yield* Effect.die("Expected installed directory");
+    expect(after.ino).toBe(before.ino);
+    expect(after.treeHash).toBe(before.treeHash);
+    expect(Option.getOrNull(after.marker)).not.toBe(Option.getOrNull(before.marker));
     expect(yield* f.fs.readFileString(join(f.copy, ".DS_Store"))).toBe("Keep this control entry");
     expect(yield* f.fs.readDirectory(join(f.copy, "empty"))).toEqual([]);
   }).pipe(Effect.provide(skitLayer)),
@@ -710,6 +712,7 @@ it.effect(
         ),
       );
       // The refused move stops the setup; undo reverses what it did, by its operation ID.
+      expect(failed._tag, `moves=${moves}: ${String(failed)}`).toBe("Failure");
       if (failed._tag !== "Failure" || failed.failure._tag !== "SetupStopped")
         return yield* Effect.die(new Error("Expected the setup to stop"));
       expect(moves).toBe(1);
@@ -807,13 +810,13 @@ it.effect(
       expect(rendered).toContain("Install selected version");
       expect(rendered).not.toContain("choose the active version");
       const before = yield* f.home.durable;
-      const operations = yield* listRecoveryOperations(f.home.home);
+      const operations = yield* recoveryList(f.home.home);
       yield* f.fs.writeFileString(join(f.copy, ".DS_Store"), "Control bytes changed after review");
       const stale = yield* invoke(actionFor(reviewed.data.actions, "apply").argv);
       expect(stale.contract).toBe("setupFailed");
       expect(stale.exitCode).not.toBe(0);
       expect(yield* f.home.durable).toEqual(before);
-      expect(yield* listRecoveryOperations(f.home.home)).toEqual(operations);
+      expect(yield* recoveryList(f.home.home)).toEqual(operations);
       const refreshed = yield* invoke(argv);
       if (refreshed.contract !== "setup")
         return yield* Effect.die(new Error("Expected fresh discovery"));

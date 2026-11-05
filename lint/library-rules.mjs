@@ -446,7 +446,7 @@ export const libraryRules = {
                 [
                   "packages/skit/src/platform/atomic-write",
                   "packages/skit/src/platform/copy-tree",
-                  "packages/skit/src/install/writable",
+                  "packages/skit/src/installed-skills/writable",
                 ].includes(target)) ||
               target.startsWith(`${library}internal/`) ||
               (exporting && publicSource && !selfNamespace)))

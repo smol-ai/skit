@@ -1,4 +1,5 @@
-import { ListResult } from "../src/workflows/library/list-contract.js";
+import { SkitConfiguration } from "@smolai/skit-core";
+import { ListResult } from "../src/library/workflows/list-contract.js";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { Effect, FileSystem, Schema } from "effect";
@@ -6,12 +7,12 @@ import { join } from "node:path";
 import { deterministicTreeHash, skitLayer, type SkillsShLockFileEntry } from "@smolai/skit-core";
 import { Library } from "@smolai/skit-core/library";
 import { readLibrarySkillMetadata, skillModificationTime } from "@smolai/skit-core/library/session";
-import { inventoryCommand } from "../src/handlers/library/inventory.js";
+import { inventoryCommand } from "../src/library/commands/inventory.js";
 import { renderMachineSkills } from "../src/presentation/inventory.js";
 import { renderLibraryList } from "../src/presentation/library-list.js";
-import { presentListCommand } from "../src/handlers/library/list.js";
-import { openLibraryView } from "../src/library-application/library-view.js";
-import { openLibrarySession } from "../src/library-application/session.js";
+import { presentListCommand } from "../src/library/commands/list.js";
+import { openLibraryView } from "@smolai/skit-core/library/session";
+import { openLibrarySession } from "@smolai/skit-core/library/session";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import {
   libraryHome,
@@ -86,7 +87,9 @@ it.effect(
         })),
       };
       yield* home.writeDurable(selected);
-      const view = yield* home.owned(openLibraryView());
+      const view = yield* home.owned(
+        Effect.flatMap(SkitConfiguration, (paths) => openLibraryView(paths.skitHome)),
+      );
       const interaction = yield* makeScriptedInteraction([]);
       yield* home.owned(presentListCommand().pipe(Effect.provide(interaction.layer)));
       const listing = yield* Schema.decodeUnknownEffect(ListResult)(
@@ -106,7 +109,11 @@ it.effect(
           },
         ],
       });
-      const session = yield* home.owned(openLibrarySession(home.installOptions));
+      const session = yield* home.owned(
+        Effect.flatMap(SkitConfiguration, (paths) =>
+          openLibrarySession(paths.skitHome, home.installOptions),
+        ),
+      );
       expect(session.skills[0]).toMatchObject({
         revision: "1".repeat(40),
         source_updated_at: "2026-04-20T00:00:00.000Z",
@@ -150,7 +157,9 @@ it.effect(
       view.collections.length = 0;
       expect((yield* view.readSubjects())[0]?.skills[0]?.revision).toBe("1".repeat(40));
       expect((yield* view.readSkills())[0]?.revision).toBe("1".repeat(40));
-      const fresh = yield* home.owned(openLibraryView());
+      const fresh = yield* home.owned(
+        Effect.flatMap(SkitConfiguration, (paths) => openLibraryView(paths.skitHome)),
+      );
       expect((yield* fresh.readSkills())[0]?.revision).toBe("2".repeat(40));
       expect(yield* home.durable).toEqual(state);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),

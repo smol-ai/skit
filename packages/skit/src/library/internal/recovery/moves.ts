@@ -1,5 +1,5 @@
-import { RecoveryInvalid, recoveryFingerprint as fingerprint } from "./evidence.js";
-export { RecoveryInvalid } from "./evidence.js";
+import { recoveryFingerprint as fingerprint } from "./evidence.js";
+import { RecoveryInvalid } from "../../recovery-facts.js";
 import { createHash, randomUUID } from "node:crypto";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { Effect, FileSystem, Schema, SchemaGetter } from "effect";
@@ -12,13 +12,13 @@ import {
 } from "../../../platform/link-stat.js";
 import { loadLibrary, type LibraryStateReadError } from "../../store/library-store.js";
 import { canonicalJson } from "../../../shared/json.js";
-import { inspectOwnershipMarker } from "../../../install/files.js";
+import { inspectOwnershipMarker } from "../../../installed-skills/files.js";
 import { type InstalledSkill } from "../../device-state.js";
 import { pathIsWithin } from "../../../platform/path-identity.js";
 import { withLock as withHomeLock } from "../../../platform/home-lock.js";
 import { writeJsonExclusive } from "../../../platform/atomic-write.js";
 import { StalePlan } from "../../library-plan.js";
-import { leavePnpmSkill } from "../../../install/pnpm-skills.js";
+import { leavePnpmSkill } from "../../../installed-skills/pnpm-skills.js";
 
 /** Entry shapes for one saved format of device and inode numbers. */
 const recordSchemas = <Number extends Schema.Codec<bigint, unknown>>(number: Number) => {

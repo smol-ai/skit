@@ -1,3 +1,4 @@
+import { SkitConfiguration } from "@smolai/skit-core";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { Effect, FileSystem, Result } from "effect";
@@ -17,7 +18,7 @@ import {
   proposeLibraryDisable,
   proposeLibraryEnable,
   proposeLibraryInvocation,
-} from "../src/library-application/session.js";
+} from "@smolai/skit-core/library/session";
 import { invocationBriefing, invocationRowSummary } from "@smolai/skit-core/library/session";
 import {
   initializeLibraryMachine,
@@ -26,7 +27,7 @@ import {
   writingTo,
 } from "./helpers/library-home.js";
 
-import { openLibraryView } from "../src/library-application/library-view.js";
+import { openLibraryView } from "@smolai/skit-core/library/session";
 
 const text = (explicit: boolean) => `---
 name: review
@@ -85,7 +86,11 @@ it.effect(
       // The working source is not the authority for a Library row.
       yield* fs.writeFileString(join(source, "SKILL.md"), text(false));
       const before = yield* home.durable;
-      const session = yield* home.owned(openLibrarySession(home.installOptions));
+      const session = yield* home.owned(
+        Effect.flatMap(SkitConfiguration, (paths) =>
+          openLibrarySession(paths.skitHome, home.installOptions),
+        ),
+      );
       const row = session.skills[0]!;
       expect(row.skillId).toBe(before.skills[0]?.skill_id);
       expect(Result.getOrThrow(row.authorInvocation)["claude-code"].policy).toBe("explicit");
@@ -158,7 +163,11 @@ it.effect(
         })),
       });
       const selected = yield* home.durable;
-      const session = yield* home.owned(openLibrarySession(home.installOptions));
+      const session = yield* home.owned(
+        Effect.flatMap(SkitConfiguration, (paths) =>
+          openLibrarySession(paths.skitHome, home.installOptions),
+        ),
+      );
       expect(Result.getOrThrow(session.skills[0]!.authorInvocation)["claude-code"].policy).toBe(
         "explicit",
       );
@@ -202,7 +211,11 @@ Tools
           ),
         ),
       );
-      const session = yield* home.owned(openLibrarySession(home.installOptions));
+      const session = yield* home.owned(
+        Effect.flatMap(SkitConfiguration, (paths) =>
+          openLibrarySession(paths.skitHome, home.installOptions),
+        ),
+      );
       expect(
         Object.values(Result.getOrThrow(session.skills[0]!.authorInvocation)).every(
           (agent) => agent.source.kind === "skit-declaration",
@@ -216,7 +229,11 @@ Tools
       const state = yield* home.durable;
       const imported = collectionVersionPath(home.originals, state.collection_versions[0]!.hash);
       yield* fs.writeFileString(join(imported, "agents", "openai.yaml"), "policy: [\n");
-      const broken = yield* home.owned(openLibrarySession(home.installOptions));
+      const broken = yield* home.owned(
+        Effect.flatMap(SkitConfiguration, (paths) =>
+          openLibrarySession(paths.skitHome, home.installOptions),
+        ),
+      );
       expect(Result.isFailure(broken.skills[0]!.authorInvocation)).toBe(true);
       expect(broken.skills[0]?.invocationWarning).toContain("Retained copy for review changed");
       expect(yield* home.durable).toEqual(state);
@@ -258,7 +275,11 @@ Tools
         ),
       ),
     );
-    const session = yield* home.owned(openLibrarySession(home.installOptions));
+    const session = yield* home.owned(
+      Effect.flatMap(SkitConfiguration, (paths) =>
+        openLibrarySession(paths.skitHome, home.installOptions),
+      ),
+    );
     expect(Result.getOrThrow(session.skills[0]!.authorInvocation).codex.policy).toBe("implicit");
     expect(Result.getOrThrow(session.skills[0]!.authorInvocation)["claude-code"].policy).toBe(
       "explicit",
@@ -311,7 +332,11 @@ for (const problem of ["missing-skill", "malformed-metadata"] as const)
         ...state,
         enabled: [{ skill: badState.skills[0]!.skill_id }],
       });
-      const session = yield* home.owned(openLibrarySession(home.installOptions));
+      const session = yield* home.owned(
+        Effect.flatMap(SkitConfiguration, (paths) =>
+          openLibrarySession(paths.skitHome, home.installOptions),
+        ),
+      );
       const bad = session.skills.find((row) => row.name === "review")!;
       const good = session.skills.find((row) => row.name === "healthy")!;
       expect(Result.isFailure(bad.authorInvocation)).toBe(true);
@@ -403,7 +428,9 @@ Tools
             ),
           ),
       };
-      const view = yield* home.owned(openLibraryView());
+      const view = yield* home.owned(
+        Effect.flatMap(SkitConfiguration, (paths) => openLibraryView(paths.skitHome)),
+      );
       const read = home
         .owned(view.readSkills())
         .pipe(Effect.provideService(FileSystem.FileSystem, recordingFs));

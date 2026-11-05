@@ -151,15 +151,24 @@ it.effect("empty R and empty L without ancestry: clean, anchoring only local anc
     const unchanged = yield* unwritten(homes, a);
     assert.strictEqual((yield* a.sync({ apply: false })).status, "clean");
     yield* unchanged;
-    const saves = a.saves;
+    const operations = (yield* a.state).operations;
     const writeRequests = server.writeRequests;
     assert.strictEqual((yield* a.sync()).status, "clean");
-    // Pending, three phase checkpoints, publication, and Done; no Registry write.
-    assert.strictEqual(a.saves, saves + 6);
-    assert.strictEqual((yield* a.state).operations.at(-1)?._tag, "Done");
+    const anchored = yield* a.state;
+    assert.strictEqual(anchored.operations.length, operations.length + 1);
+    assert.deepStrictEqual(anchored.operations.slice(0, -1), operations);
+    assert.strictEqual(anchored.operations.at(-1)?._tag, "Done");
+    assert.deepStrictEqual(
+      anchored.operations.at(-1)?.steps.map((step) => step.status),
+      ["Done", "Done", "Done"],
+    );
     assert.strictEqual(server.writeRequests, writeRequests);
     assert.strictEqual((yield* a.state).sync_ancestry?.revision_id, head.revision_id);
     assert.strictEqual(server.writes, 1);
+    const saves = a.saves;
+    assert.strictEqual((yield* a.sync()).status, "clean");
+    assert.strictEqual(a.saves, saves);
+    assert.deepStrictEqual(yield* a.state, anchored);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 

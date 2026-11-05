@@ -2,18 +2,18 @@ import { Library, SkitConfiguration } from "@smolai/skit-core";
 import { updateSources } from "@smolai/skit-core/library/session";
 import { Effect } from "effect";
 import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
-import type { UpdateResult } from "../workflows/library/update-contract.js";
+import type { UpdateResult } from "../workflows/update-contract.js";
 import { importSource, inspectLibrarySource } from "./import-source.js";
-import { openLibraryView } from "./library-view.js";
+import { openLibraryView } from "@smolai/skit-core/library/session";
 import { LibraryProgress } from "./progress.js";
-import { commandFailure } from "../failure-classification.js";
+import { commandFailure } from "../../failure-classification.js";
 export { CollectionNotUpdatable } from "@smolai/skit-core/library/session";
 export interface UpdateOptions {
   readonly roots: InventoryRootOptions;
 }
 
 export const planUpdates = Effect.fn("CLI.planUpdates")(function* (query?: string) {
-  const view = yield* openLibraryView();
+  const view = yield* Effect.flatMap(SkitConfiguration, (paths) => openLibraryView(paths.skitHome));
   return yield* view.previewSourceUpdates(query, inspectLibrarySource);
 });
 

@@ -1,5 +1,5 @@
 import { Library } from "@smolai/skit-core/library";
-import { officialRegistryOrigin } from "../registry/accounts.js";
+import { officialRegistryOrigin } from "../../registry/accounts.js";
 import {
   describeSourceSkills,
   inspectResolvedSource,
@@ -11,7 +11,7 @@ import {
   type SkitSource,
 } from "@smolai/skit-core";
 import { Clock, Effect } from "effect";
-import { RegistryAuth } from "../registry/auth-service.js";
+import { RegistryAuth } from "../../registry/auth-service.js";
 import { leavePnpmSkill } from "@smolai/skit-core";
 
 export { AddNoSkills } from "@smolai/skit-core";

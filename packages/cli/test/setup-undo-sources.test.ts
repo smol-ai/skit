@@ -27,7 +27,7 @@ import { runSetup } from "@smolai/skit-core/library/setup";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import { renderContract } from "../src/presentation/contract-presenters.js";
-import { mergeLibraryManifests } from "../src/workflows/library/library-merge.js";
+import { mergeLibraryManifests } from "../src/library/workflows/library-merge.js";
 import {
   deterministicTreeHash,
   libraryHome,

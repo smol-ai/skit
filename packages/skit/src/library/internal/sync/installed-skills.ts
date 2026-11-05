@@ -5,7 +5,7 @@ import { InstalledSkill } from "../../library-state.js";
 import type { LibraryState } from "../../library-state.js";
 import { InstalledSkillId } from "../../entity-ids.js";
 import type { InstallDestination } from "../../../vocabulary.js";
-import { inspectInstalledSkill } from "../../../install/files.js";
+import { inspectInstalledSkill } from "../../../installed-skills/files.js";
 import { installDestinationPathIdentity } from "../../../platform/path-identity.js";
 import { repositorySelectsInstalledSkill } from "../../installation/uninstall.js";
 import { SyncConflictDetail } from "./conflict.js";

@@ -7,10 +7,9 @@ import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { recoveryActions } from "../../commands/recovery-contract.js";
 import { homeFlag, jsonFlag, optionalString } from "../../commands/parameters.js";
-import { inspectRecoveryOperation, listRecoveryOperations } from "@smolai/skit-core";
 import { Library } from "@smolai/skit-core/library";
 import { Renderer } from "../../presentation/renderer.js";
-import { result } from "../contracts.js";
+import { result } from "../../handlers/contracts.js";
 
 const flags = { home: homeFlag, json: jsonFlag };
 const operation = Argument.String("operation");
@@ -24,7 +23,8 @@ const list = Command.make("list", flags, (input) =>
     Effect.gen(function* () {
       const configuration = yield* SkitConfiguration;
       const home = configuration.skitHome;
-      const operations = yield* listRecoveryOperations(home);
+      const library = yield* Library.Service;
+      const operations = yield* library.recovery.list;
       const renderer = yield* Renderer;
       yield* renderer.result(
         result("recoveryList", {
@@ -55,7 +55,8 @@ const inspect = Command.make("inspect", { operation, ...flags }, (input) =>
     Effect.gen(function* () {
       const configuration = yield* SkitConfiguration;
       const home = configuration.skitHome;
-      const inspection = yield* inspectRecoveryOperation(home, input.operation);
+      const library = yield* Library.Service;
+      const inspection = yield* library.recovery.inspect(input.operation);
       const renderer = yield* Renderer;
       yield* renderer.result(
         result("recovery", {
@@ -121,7 +122,7 @@ const restore = Command.make("restore", { operation, apply, ...flags }, (input) 
       const inspection =
         applied._tag === "Success"
           ? applied.success.result.after
-          : yield* inspectRecoveryOperation(home, input.operation);
+          : yield* library.recovery.inspect(input.operation);
       const failed =
         applied._tag === "Failure" ? commandFailure(Cause.fail(applied.failure)) : undefined;
       const allRestored = inspection.entries.every((entry) => entry.status === "at-original");

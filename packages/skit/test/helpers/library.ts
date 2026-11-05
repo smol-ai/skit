@@ -7,7 +7,7 @@ import { emptyLibraryState } from "../../src/library/library-state.js";
 import { inspectLocalLibraryState, LibraryWriter } from "../../src/library/store/library-store.js";
 import { snapshotOf } from "../../src/library/snapshot.js";
 import type { LibraryState, InstalledSkill } from "../../src/library/library-state.js";
-import type { ManageApproval } from "../../src/install/files.js";
+import type { ManageApproval } from "../../src/installed-skills/files.js";
 import type { OwnershipMarker } from "../../src/contracts.js";
 import type { Hash, InstallDestination, InstallScope } from "../../src/vocabulary.js";
 import { canonicalJson } from "../../src/shared/json.js";

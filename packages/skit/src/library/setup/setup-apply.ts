@@ -1,7 +1,7 @@
 import { Clock, Effect, Option, Predicate, Schema } from "effect";
 import { canonicalJson } from "../../shared/json.js";
 import { currentSkillVersion } from "../library-contracts.js";
-import { ensureSkillsDirectoryWritable } from "../../install/writable.js";
+import { ensureSkillsDirectoryWritable } from "../../installed-skills/writable.js";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 import { type Hash } from "../../vocabulary.js";
 import * as MachineSettings from "../machine-settings.js";

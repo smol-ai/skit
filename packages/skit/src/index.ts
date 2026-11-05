@@ -31,7 +31,7 @@ export * from "./platform/file-lock.js";
 export * from "./platform/source-process.js";
 export * from "./platform/layer.js";
 export * from "./platform/path-identity.js";
-export * from "./install/policy.js";
+export * from "./installed-skills/policy.js";
 export {
   InstalledSkillFailure,
   inspectOwnershipMarker,
@@ -41,15 +41,13 @@ export {
   prepareInstalledSkillRebuild,
   type InstalledSkillMutationError,
   type ManageApproval,
-} from "./install/files.js";
-export { inspectInstalledSkillBackups } from "./install/backups.js";
-export { copyLocalTree } from "./platform/copy-tree.js";
-export * from "./install/pnpm-skills.js";
+} from "./installed-skills/files.js";
+export { inspectInstalledSkillBackups } from "./installed-skills/backups.js";
+export * from "./installed-skills/pnpm-skills.js";
 export { discoveryPathExcluded } from "./sources/discovery-exclusions.js";
 export * from "./distribution/registry-identity.js";
 export * from "./artifact/descriptor.js";
 export * from "./artifact/skit.js";
-export * from "./artifact/tree-hasher.js";
 export * from "./sources/resolve.js";
 export * from "./platform/tree-requirements.js";
 export * from "./shared/tree-error.js";
@@ -60,12 +58,11 @@ export {
   authorIgnoreRepositoryLayer,
 } from "./artifact/plain-author-ignore.js";
 
-export { LibraryActor } from "./library/actor.js";
 export type {
   LibraryLayerError,
   LibraryStateReadError,
   LibraryStateWriteError,
-} from "./library/store/library-store.js";
+} from "./library/library.js";
 export {
   scanInventory,
   deduplicateInventoryRoots,
@@ -78,13 +75,7 @@ export { skillsShLockFileEntry } from "./library/skills-sh-lock-file.js";
 export * from "./library/library-state.js";
 export * from "./library/setup-intent.js";
 export * from "./library/enabled.js";
-export {
-  RestoreInvalid,
-  SourceRestoreInvalid,
-  strandedByRestore,
-  blendRestoredState,
-  type RestoreOptions,
-} from "./library/internal/content/restore.js";
+export { RestoreInvalid, SourceRestoreInvalid } from "./library/library.js";
 export * from "./library/collection-version-plan.js";
 export * from "./library/restore-progress.js";
 export {
@@ -169,18 +160,8 @@ export { InstalledSkillWouldReplaceLink, InstalledSkillWouldDuplicate } from "./
 export { DuplicateScanIncomplete } from "./library/installed-skills.js";
 export { InvalidIntent, StalePlan, DestinationsIncomplete } from "./library/library.js";
 
-// Recovery facts are public; restore and folder mutations belong to Library.
-export {
-  RecoveryInspection,
-  recoveryOperationDirectory,
-  inspectRecoveryOperation,
-  listRecoveryOperations,
-} from "./library/internal/recovery/moves.js";
-export {
-  RecoveryInvalid,
-  recoveryFingerprint as setupRecoveryFingerprint,
-} from "./library/internal/recovery/evidence.js";
-export { readSkillPathDetails } from "./library/internal/setup/journal.js";
+// Recovery vocabulary is public; reading and mutating recovery evidence belongs to Library.
+export { RecoveryInspection, RecoveryInvalid } from "./library/recovery-facts.js";
 
 export { OptionCombinationInvalid } from "./shared/input-failures.js";
 

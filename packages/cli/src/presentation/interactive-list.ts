@@ -16,7 +16,7 @@ import {
   invocationBriefing,
   invocationRowSummary,
 } from "@smolai/skit-core/library/session";
-import type { InstalledSkillOptions } from "../workflows/library/installed-skill-options.js";
+import type { InstalledSkillOptions } from "../library/workflows/installed-skill-options.js";
 import {
   cancelLibraryChange,
   confirmLibraryChange,
@@ -29,7 +29,7 @@ import {
   type LibrarySessionState,
   type LibrarySkillRow,
   type PendingLibraryChange,
-} from "../library-application/session.js";
+} from "@smolai/skit-core/library/session";
 import { Prompter, PromptCancelled } from "./prompter.js";
 import { Renderer } from "./renderer.js";
 import { promptForScope } from "./scope-prompt.js";

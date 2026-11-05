@@ -13,7 +13,7 @@ import {
   SnapshotArchive,
   StorageFailureResponse,
 } from "@smolai/skit-core/universal/api";
-import { librarySyncCommand } from "../handlers/library/sync.js";
+import { librarySyncCommand } from "../library/commands/sync.js";
 import { result } from "../handlers/contracts.js";
 import { commandFailure } from "../application.js";
 import { Renderer } from "../presentation/renderer.js";

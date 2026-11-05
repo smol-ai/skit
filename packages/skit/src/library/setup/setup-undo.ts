@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { canonicalJson } from "../../shared/json.js";
 import { hashParts } from "../../artifact/descriptor.js";
 import * as MachineSettings from "../machine-settings.js";
-import { RecoveryInvalid } from "../internal/recovery/evidence.js";
+import { RecoveryInvalid } from "../recovery-facts.js";
 import { StalePlan } from "../library-plan.js";
 import { Library } from "../library.js";
 

@@ -1,16 +1,17 @@
+import { skitLayer } from "../src/platform/layer.js";
 import { it } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem } from "effect";
 import { loadLibrary } from "../src/library/store/library-store.js";
 import { join } from "node:path";
 import { expect } from "vitest";
 import { readClaudeListingSnapshot } from "../src/harnesses/skill-listing/claude.js";
-import { NativeLibraryFixture, nativeLibraryLayer } from "./helpers/listing-fixture.js";
+import { nativeLibraryFixture } from "./helpers/listing-fixture.js";
 
 it.effect(
   "Claude discovery reads settings once, follows scope, excludes explicit-only and remains independent of native CLI",
   () =>
     Effect.gen(function* () {
-      const f = yield* NativeLibraryFixture;
+      const f = yield* nativeLibraryFixture;
       const fs = yield* FileSystem.FileSystem;
       const state = yield* loadLibrary(f.home);
       const root = join(f.home, ".claude");
@@ -116,13 +117,14 @@ it.effect(
       expect(malformed.budget).toMatchObject({ _tag: "Unavailable" });
     }).pipe(
       Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
-      Effect.provide(nativeLibraryLayer),
+      Effect.scoped,
+      Effect.provide(skitLayer),
     ),
 );
 
 it.effect("nested discovery uses root shared settings, then local settings and alias pins", () =>
   Effect.gen(function* () {
-    const f = yield* NativeLibraryFixture;
+    const f = yield* nativeLibraryFixture;
     const fs = yield* FileSystem.FileSystem;
     const state = yield* loadLibrary(f.home);
     const project = join(f.root, "project");
@@ -167,6 +169,7 @@ it.effect("nested discovery uses root shared settings, then local settings and a
     );
   }).pipe(
     Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
-    Effect.provide(nativeLibraryLayer),
+    Effect.scoped,
+    Effect.provide(skitLayer),
   ),
 );

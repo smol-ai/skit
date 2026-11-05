@@ -77,6 +77,8 @@ export const approvedServices = [
   "skit/library/Library",
   // Present only inside writeLibrary, which holds the home lock: the capability to save state.
   "skit/library/LibraryWriter",
+  // Private scoped capability over HomeLock's OS lock; nested leases drain before release.
+  "skit/platform/HomeLockLease",
   "skit/library/InstalledSkills",
   "skit/Renderer",
   "skit/Prompter",

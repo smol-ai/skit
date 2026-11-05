@@ -1,3 +1,4 @@
+import { skitLayer } from "@smolai/skit-core";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
@@ -6,8 +7,8 @@ import {
   codexDuplicateFindings,
   readCodexSkills,
   type CodexDoctorInstance,
-} from "../src/workflows/library/doctor-codex.js";
-import { NativeLibraryFixture, nativeLibraryLayer } from "./helpers/native-library.js";
+} from "../src/library/workflows/doctor-codex.js";
+import { nativeLibraryFixture } from "./helpers/native-library.js";
 
 const instance = (path: string, extra: Partial<CodexDoctorInstance> = {}): CodexDoctorInstance => ({
   name: "review",
@@ -68,7 +69,7 @@ it.effect(
   "reads the native response without creating a thread, preserving disabled skills and discovery errors",
   () =>
     Effect.gen(function* () {
-      const f = yield* NativeLibraryFixture;
+      const f = yield* nativeLibraryFixture;
       const fs = yield* FileSystem.FileSystem;
       // Node treats app-server as the script path. The fake checks the actual request protocol.
       yield* fs.writeFileString(
@@ -92,14 +93,14 @@ it.effect(
       expect(response.skills[0].enabled).toBe(false);
       expect(response.errors).toEqual([{ path: "/bad/SKILL.md", message: "invalid metadata" }]);
       // Server would remain alive reading stdin; successful completion requires scope cleanup.
-    }).pipe(Effect.provide(nativeLibraryLayer)),
+    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 it.effect.each(["error", "malformed", "omitted-cwd"])(
   "fails explicitly on native %s responses",
   (kind) =>
     Effect.gen(function* () {
-      const f = yield* NativeLibraryFixture;
+      const f = yield* nativeLibraryFixture;
       const fs = yield* FileSystem.FileSystem;
       const response =
         kind === "error"
@@ -115,7 +116,7 @@ it.effect.each(["error", "malformed", "omitted-cwd"])(
       );
       const result = yield* Effect.result(readCodexSkills(process.execPath, f.root));
       expect(Result.isFailure(result)).toBe(true);
-    }).pipe(Effect.provide(nativeLibraryLayer)),
+    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 test("preserves every observed alias when native entries share a canonical document", () => {

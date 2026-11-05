@@ -2,7 +2,7 @@ import { Library } from "../../library.js";
 import { ownerLayer } from "../runtime.js";
 import { canonicalJson } from "../../../shared/json.js";
 import { deterministicTreeHash } from "../../../artifact/skit.js";
-import { inspectOwnershipMarker } from "../../../install/files.js";
+import { inspectOwnershipMarker } from "../../../installed-skills/files.js";
 import type { OwnershipMarker } from "../../../contracts.js";
 import { libraryOriginalsPath, loadLibrary, writeLibrary } from "../../store/library-store.js";
 import {
@@ -24,7 +24,6 @@ import type { EditImportPlan, EditImportResult } from "./edit-contract.js";
 import { FailureTypeId, type SkitFailure } from "../../../shared/failure.js";
 import type { TreeRequirements } from "../../../platform/tree-requirements.js";
 import type { Digest } from "effect/crypto";
-import type { TreeHasher } from "../../../artifact/tree-hasher.js";
 export class EditImportMissing
   extends Data.TaggedError("Library.EditImportMissing")<{ message: string }>
   implements SkitFailure
@@ -167,9 +166,7 @@ export const openEditImport = Effect.fn("Library.openEditImport")(
     const library = yield* Library.Service;
     const snapshot = yield* library.read;
     const initial = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
-    const context = yield* Effect.context<
-      Library.Service | TreeRequirements | Digest.Digest | TreeHasher
-    >();
+    const context = yield* Effect.context<Library.Service | TreeRequirements | Digest.Digest>();
     const preview = yield* planEditImport(home, initial, query, selector);
     return {
       preview: structuredClone(preview),

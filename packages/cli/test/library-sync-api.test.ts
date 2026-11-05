@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { assert, it } from "@effect/vitest";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
-import { librarySyncApi } from "../src/workflows/library/library-sync-api.js";
+import { librarySyncApi } from "../src/library/workflows/library-sync-api.js";
 import { testHttpClientLayer } from "./helpers/http-test-client.js";
 
 it.effect("retains an undeclared response status without inventing an error code", () =>

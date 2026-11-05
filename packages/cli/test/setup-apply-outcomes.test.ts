@@ -1,3 +1,4 @@
+import { recoveryInspection, recoveryList } from "./helpers/recovery.js";
 import { withLibraryOwner } from "./helpers/library-owner.js";
 import { basename, join, relative } from "node:path";
 import { Effect, Exit, FileSystem, Option, Schema } from "effect";
@@ -13,7 +14,6 @@ import {
 } from "../src/presentation/interaction-recorder.js";
 import { Prompter } from "../src/presentation/prompter.js";
 import { setupPrompts } from "../src/library/setup/setup-steps.js";
-import { inspectRecoveryOperation, listRecoveryOperations } from "@smolai/skit-core";
 import { SetupPlanStale } from "@smolai/skit-core/library/setup";
 import { SetupStopped } from "@smolai/skit-core/library/setup";
 import { captureDisk, diskChanges, noDiskChanges, type DiskDiff } from "./helpers/disk-snapshot.js";
@@ -418,11 +418,8 @@ it.effect("a removal selection edited after the steps are recorded stays in plac
     });
     assert.instanceOf(failure(exit), SetupStopped);
     assert.strictEqual(yield* f.fs.readFileString(join(f.path("gamma"), "SKILL.md")), changed);
-    for (const operationId of yield* listRecoveryOperations(f.home.home))
-      assert.deepStrictEqual(
-        (yield* inspectRecoveryOperation(f.home.home, operationId)).entries,
-        [],
-      );
+    for (const operationId of yield* recoveryList(f.home.home))
+      assert.deepStrictEqual((yield* recoveryInspection(f.home.home, operationId)).entries, []);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -441,11 +438,8 @@ it.effect("a removal selection that gains an ownership marker after the scan sta
       skillBytes("gamma"),
     );
     assert.strictEqual(yield* f.fs.readFileString(marker), "{}");
-    for (const operationId of yield* listRecoveryOperations(f.home.home))
-      assert.deepStrictEqual(
-        (yield* inspectRecoveryOperation(f.home.home, operationId)).entries,
-        [],
-      );
+    for (const operationId of yield* recoveryList(f.home.home))
+      assert.deepStrictEqual((yield* recoveryInspection(f.home.home, operationId)).entries, []);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -464,11 +458,8 @@ it.effect(
       });
       assert.instanceOf(failure(exit), SetupStopped);
       assert.deepStrictEqual(yield* captureDisk([copy], { identity: true }), before);
-      for (const operationId of yield* listRecoveryOperations(f.home.home))
-        assert.deepStrictEqual(
-          (yield* inspectRecoveryOperation(f.home.home, operationId)).entries,
-          [],
-        );
+      for (const operationId of yield* recoveryList(f.home.home))
+        assert.deepStrictEqual((yield* recoveryInspection(f.home.home, operationId)).entries, []);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -495,8 +486,8 @@ it.effect("a removal entry replaced during an earlier move stays untouched", () 
     });
     assert.instanceOf(failure(exit), SetupStopped);
     const moveRecord = yield* readMoveRecord(f.home.home);
-    const [operation] = yield* listRecoveryOperations(f.home.home);
-    const inspection = yield* inspectRecoveryOperation(f.home.home, operation!);
+    const [operation] = yield* recoveryList(f.home.home);
+    const inspection = yield* recoveryInspection(f.home.home, operation!);
     assert.deepStrictEqual(
       inspection.entries.map((entry) => entry.status),
       ["saved", "conflict"],
@@ -528,10 +519,9 @@ it.effect("a failed removal move leaves a moved prefix, the rest in place, and a
     assert.instanceOf(failure(exit), SetupStopped);
     const moveRecord = yield* readMoveRecord(f.home.home);
     assert.deepStrictEqual(
-      (yield* inspectRecoveryOperation(
-        f.home.home,
-        (yield* listRecoveryOperations(f.home.home))[0]!,
-      )).entries.map((entry) => entry.status),
+      (yield* recoveryInspection(f.home.home, (yield* recoveryList(f.home.home))[0]!)).entries.map(
+        (entry) => entry.status,
+      ),
       ["saved", "at-original"],
     );
     const [moved, kept] = moveRecord.entries;

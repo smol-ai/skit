@@ -1,3 +1,4 @@
+import { listRecoveryOperations, inspectRecoveryOperation } from "./recovery/moves.js";
 import { resolve } from "node:path";
 import { planRestore, applyRestore } from "./recovery/restore.js";
 import { planSync, applySync, type SyncApplyRequest } from "./sync/sync.js";
@@ -20,7 +21,6 @@ import {
 import type { LibraryManifest } from "../library-contracts.js";
 import { Digest } from "effect/crypto";
 import { InstalledSkills } from "../installed-skills.js";
-import { treeHasherLayer } from "../../artifact/tree-hasher.js";
 import {
   LibraryWriter,
   libraryStatePath,
@@ -65,7 +65,7 @@ export const make = Effect.fn("Library.make")(function* (
   const activeWriter = yield* Effect.serviceOption(LibraryWriter);
   if (Option.isNone(activeWriter) || activeWriter.value.home !== resolve(home))
     yield* recoverLibraryHistory(home);
-  const startup = yield* recover(home).pipe(Effect.provide(treeHasherLayer));
+  const startup = yield* recover(home);
   const files = yield* InstalledSkills.Service;
   // Only the platform services: an owner built inside a write must never carry that writer out.
   const writer = Context.pick(FileSystem.FileSystem)(
@@ -118,17 +118,14 @@ export const make = Effect.fn("Library.make")(function* (
     // The plan owns its Snapshot from the call, not from when its Effect runs.
     const base = structuredClone(options.base);
     if (intent._tag === "Restore")
-      return planRestore(home, structuredClone(intent), { base }).pipe(
-        Effect.provide(importing),
-        Effect.provide(treeHasherLayer),
-      );
+      return planRestore(home, structuredClone(intent), { base }).pipe(Effect.provide(importing));
     const planning = Effect.provideService(InstalledSkills.Service, files);
     if (intent._tag === "Sync")
       return planSync(home, intent, {
         base,
         none: configuration._tag === "None",
         ...(configuration._tag === "Configured" ? { roots: configuration } : {}),
-      }).pipe(planning, Effect.provide(importing), Effect.provide(treeHasherLayer));
+      }).pipe(planning, Effect.provide(importing));
     if (intent._tag === "Manage")
       return Effect.gen(function* () {
         const state = yield* planningState(home, base);
@@ -201,7 +198,7 @@ export const make = Effect.fn("Library.make")(function* (
       applySync(home, request, {
         none: configuration._tag === "None",
         ...(configuration._tag === "Configured" ? { roots: configuration } : {}),
-      }).pipe(applying, Effect.provide(treeHasherLayer));
+      }).pipe(applying);
     if (request._tag === "ApplySynced") return syncing(request);
     const plan = request.plan;
     if (plan._tag === "Sync") return syncing({ _tag: "Apply", plan });
@@ -247,7 +244,12 @@ export const make = Effect.fn("Library.make")(function* (
           steps: steps.map(({ applies: _applies, ...step }) => step),
         })),
       } satisfies History;
-    }).pipe(Effect.provide(writer)),
+    }).pipe(Effect.provide(writer), Effect.provide(importing)),
+    recovery: {
+      list: listRecoveryOperations(home).pipe(Effect.provide(importing)),
+      inspect: (operationId) =>
+        inspectRecoveryOperation(home, operationId).pipe(Effect.provide(importing)),
+    },
     plan: planFor,
     apply: applyFor,
     import: {
@@ -274,7 +276,7 @@ export const make = Effect.fn("Library.make")(function* (
         Effect.provide(importing),
       ),
   });
-}, Effect.provide(treeHasherLayer));
+});
 
 /** Routes installed skills as `config.routing` says; recorded routing is read after migration. */
 export const ownerLayer = (config: Config) =>
@@ -291,6 +293,6 @@ export const ownerLayer = (config: Config) =>
             yield* InstalledSkills.recordedRouting(yield* loadLibrary(config.home)),
           );
         }),
-      ).pipe(Layer.provide(treeHasherLayer)),
+      ),
     ),
   );

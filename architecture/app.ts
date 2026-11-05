@@ -37,8 +37,9 @@ export const owners = {
       "plan(intent, { base }) / apply(plan)",
       "import.{collection, authored, edit} (additive)",
       "setup(steps, { base }): saved before running; finishes or stops, never auto-rollback", // D4
-      "content.{inspect, pack} for sync",
+      "content.{plan, inspect, pack, stage} for sync",
       "history",
+      "recovery.{list, inspect} (passive, independent of audit-log validity)",
     ],
     migrations: "once, during Library.layer construction, under the home lock; reads never write", // D2
     intents: [
@@ -58,7 +59,8 @@ export const owners = {
       "LibraryStore service → private functions inside Library (tests that counted saves through it are rewritten)",
       "LibraryStore.inspect, .home/.originalsPath/.variantsPath/.statePath fields",
       "withLibraryWriter / lastSavedLibraryState exports; withHomeLock export removed (shared HomeLock grants no writer)",
-      "CurrentLibraryAction / CurrentLibraryWriter as cross-module references",
+      "CurrentLibraryAction / CurrentLibraryWriter as cross-module references (removed; HomeLock provides its private scoped HomeLockLease capability)",
+      "LibraryActor reference (removed; front ends annotate skit.library.workflow through Effect log annotations)",
       "exported importCollection/importEdit/importAuthoredCollection/prepareImport",
       "exported refreshLibraryInventory, acceptSecurityFindingFromState, prepareRestore",
       "exported writeCollectionVersion",

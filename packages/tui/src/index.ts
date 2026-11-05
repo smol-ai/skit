@@ -48,7 +48,6 @@ import {
   Library,
   SkitConfiguration,
   skitConfigurationLayer,
-  LibraryActor,
   skitLayer,
   emptyLibraryState,
   readListingBudgets,
@@ -104,7 +103,6 @@ const libraryHost = createLibraryHost(
   ).pipe(
     Layer.provideMerge(skitLayer),
     Layer.provideMerge(skitConfigurationLayer(flag("--skit-home"))),
-    Layer.provideMerge(Layer.succeed(LibraryActor)("tui")),
   ),
   Effect.flatMap(SkitConfiguration, (paths) =>
     openLibrarySession(paths.skitHome, libraryConfiguration),

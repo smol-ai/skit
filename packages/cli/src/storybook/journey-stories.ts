@@ -1,6 +1,7 @@
+import { SkitConfiguration } from "@smolai/skit-core";
 import { Library } from "@smolai/skit-core/library";
 import { skitConfigurationLayer } from "@smolai/skit-core";
-import { presentDoctorCleanup } from "../workflows/library/doctor-cleanup.js";
+import { presentDoctorCleanup } from "../library/workflows/doctor-cleanup.js";
 import { syncJourney } from "./sync-journey.js";
 import { join } from "node:path";
 import { ConfigProvider, Effect, FileSystem, Option } from "effect";
@@ -15,7 +16,7 @@ import { presentSetEnabled } from "../library/enable/command.js";
 import type { Prompter } from "../presentation/prompter.js";
 import type { Renderer } from "../presentation/renderer.js";
 import type { ScriptedAnswer } from "../presentation/interaction-recorder.js";
-import { openLibrarySession } from "../library-application/session.js";
+import { openLibrarySession } from "@smolai/skit-core/library/session";
 
 export interface JourneyStory<A, E, R> {
   readonly name: string;
@@ -87,7 +88,9 @@ const previewEnable = Effect.scoped(
         (yield* fs.readDirectory(codexRoot)).length !== 0
       )
         return yield* Effect.die("The enable preview changed the Library or installed files");
-      return yield* openLibrarySession(configuration.pull.installOptions);
+      return yield* Effect.flatMap(SkitConfiguration, (paths) =>
+        openLibrarySession(paths.skitHome, configuration.pull.installOptions),
+      );
     }).pipe(
       Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
       Effect.provide(skitConfigurationLayer(home)),

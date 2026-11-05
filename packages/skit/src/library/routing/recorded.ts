@@ -1,7 +1,5 @@
 import { Effect, FileSystem, Schema } from "effect";
 import { Digest } from "effect/crypto";
-import { digestTreeHash } from "../../artifact/skit.js";
-import { TreeHasher } from "../../artifact/tree-hasher.js";
 import { LinkStat } from "../../platform/link-stat.js";
 import { InstallScope } from "../../vocabulary.js";
 import { findDuplicates, type DuplicateScanError } from "../duplicates.js";
@@ -17,17 +15,11 @@ export const readableIn = (routing: StepRouting, scope: InstallScope) =>
     .filter((root) => sameScope(root.scope, scope))
     .map(({ harness, root }) => ({ harness, root }));
 
-/** The tree hash over Digest, so setup needs no TreeHasher service. */
-export const digestTreeHasher = Effect.map(Digest.Digest, (digest) => ({
-  hash: (path: string) => digestTreeHash(path).pipe(Effect.provideService(Digest.Digest, digest)),
-}));
-
 /** This device's skill folders, routed only by what the step recorded. */
 export const routedInstalledSkills = Effect.fn("Library.setup.routedInstalledSkills")(function* (
   routing: StepRouting,
 ) {
   const context = yield* Effect.context<FileSystem.FileSystem | LinkStat | Digest.Digest>();
-  const hasher = yield* digestTreeHasher;
   return yield* InstalledSkills.make({
     active: Effect.succeed(routing.active),
     destinations: (scope) => Effect.succeed(destinationsIn(routing, scope)),
@@ -46,5 +38,5 @@ export const routedInstalledSkills = Effect.fn("Library.setup.routedInstalledSki
           return { copies, warnings, roots: readable.map(({ root }) => root) };
         }).pipe(Effect.provide(context)),
     },
-  }).pipe(Effect.provideService(TreeHasher, hasher));
+  });
 });

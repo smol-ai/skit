@@ -4,18 +4,12 @@
 import { snapshotOf } from "./snapshot.js";
 import { Effect, FileSystem, Option } from "effect";
 import { dirname, join, resolve } from "node:path";
-import { TreeHasher } from "../artifact/tree-hasher.js";
 import { hasHarnessProfile } from "../harnesses/catalog.js";
-import { inspectInstalledSkill } from "../install/files.js";
+import { inspectInstalledSkill } from "../installed-skills/files.js";
 import { LinkStat } from "../platform/link-stat.js";
 import { InstallScope } from "../vocabulary.js";
 import type { OperationScope } from "./internal/operations/operations.js";
-import {
-  routedInstalledSkills,
-  destinationsIn,
-  readableIn,
-  digestTreeHasher,
-} from "./routing/recorded.js";
+import { routedInstalledSkills, destinationsIn, readableIn } from "./routing/recorded.js";
 import { InvalidIntent } from "./enabled-plan.js";
 import type { CollectionId, OperationId } from "./entity-ids.js";
 import { absentUnder, holdsEvidence, parentIsAsRecorded } from "./folder-evidence.js";
@@ -107,9 +101,7 @@ const reviewedOrManaged = Effect.fn("Library.setup.reviewedOrManaged")(function*
     info.value.ino !== evidence.ino
   )
     return "differs" as const;
-  const ownership = yield* inspectInstalledSkill(recorded).pipe(
-    Effect.provideService(TreeHasher, yield* digestTreeHasher),
-  );
+  const ownership = yield* inspectInstalledSkill(recorded);
   if (
     ownership.kind !== "intact" ||
     ownership.marker.installed_skill_id !== recorded.installed_skill_id ||
@@ -280,11 +272,7 @@ const replacementMissing = Effect.fn("Library.setup.replacementMissing")(functio
         `Bound ${name}; existing copies were left in place because the replacement at ${path} is not installed. Run skit doctor to inspect the conflict.`,
       );
     const installed = candidates.find((candidate) => candidate.path === path);
-    const ownership = installed
-      ? yield* inspectInstalledSkill(installed).pipe(
-          Effect.provideService(TreeHasher, yield* digestTreeHasher),
-        )
-      : undefined;
+    const ownership = installed ? yield* inspectInstalledSkill(installed) : undefined;
     if (
       !installed ||
       ownership?.kind !== "intact" ||

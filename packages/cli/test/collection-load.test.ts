@@ -1,3 +1,4 @@
+import { SkitConfiguration } from "@smolai/skit-core";
 import { Library } from "@smolai/skit-core/library";
 import { it as effectIt } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
@@ -8,9 +9,9 @@ import {
   emptyLibraryState,
   type ImportRequestSkill,
 } from "@smolai/skit-core";
-import { readDescriptionLoad } from "../src/workflows/library/collection-load.js";
-import { importSource } from "../src/library-application/import-source.js";
-import { openLibraryView } from "../src/library-application/library-view.js";
+import { readDescriptionLoad } from "../src/library/workflows/collection-load.js";
+import { importSource } from "../src/library/application/import-source.js";
+import { openLibraryView } from "@smolai/skit-core/library/session";
 import {
   initializeLibraryMachine,
   libraryHome,
@@ -26,7 +27,7 @@ import { describe, expect, it } from "vitest";
 import {
   descriptionLoadMessage,
   largeCollectionWarning,
-} from "../src/workflows/library/collection-load.js";
+} from "../src/library/workflows/collection-load.js";
 
 describe("collection load warning", () => {
   it("warns strictly above 100 and renders actionable guidance", () => {
@@ -86,7 +87,9 @@ effectIt.effect(
         members.filter((member) => member.name === "keep"),
         "2026-10-13T00:00:00.000Z",
       );
-      const view = yield* home.owned(openLibraryView());
+      const view = yield* home.owned(
+        Effect.flatMap(SkitConfiguration, (paths) => openLibraryView(paths.skitHome)),
+      );
       expect(yield* view.descriptionLoad({ collection: first.collection.collection_id })).toEqual({
         skills: 1,
         characters: 3,

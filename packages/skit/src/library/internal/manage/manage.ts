@@ -3,7 +3,7 @@ import { Effect, Option, Schema, Struct } from "effect";
 import { join } from "node:path";
 import { FailureTypeId, type SkitFailure } from "../../../shared/failure.js";
 import { Hash } from "../../../vocabulary.js";
-import { leavePnpmSkill } from "../../../install/pnpm-skills.js";
+import { leavePnpmSkill } from "../../../installed-skills/pnpm-skills.js";
 import { InvalidIntent } from "../../enabled-plan.js";
 import { makeOperationId, OperationId } from "../../entity-ids.js";
 import { holdsEvidence, parentIsAsRecorded } from "../../folder-evidence.js";

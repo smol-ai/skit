@@ -5,7 +5,7 @@ import { Effect, FileSystem, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
-import { LibraryActor, MachineSettings, collectionVersionPath, skitLayer } from "@smolai/skit-core";
+import { MachineSettings, collectionVersionPath, skitLayer } from "@smolai/skit-core";
 import { setupCommand } from "../src/library/setup/command.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { setupPrompts } from "../src/library/setup/setup-steps.js";
@@ -235,7 +235,7 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
         applySetupSelections(setup, preview, home.installOptions, {
           imports: [{ name: candidate.name, paths: candidate.paths, groupKey: candidate.groupKey }],
         }),
-      ).pipe(Effect.provideService(LibraryActor, "setup")),
+      ).pipe(Effect.annotateLogs({ "skit.library.workflow": "setup" })),
     );
     const history = yield* home.owned(
       Effect.flatMap(Library.Service, (owner) =>

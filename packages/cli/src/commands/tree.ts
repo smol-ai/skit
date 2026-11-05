@@ -1,29 +1,29 @@
 import { usageCliCommand } from "../handlers/usage.js";
 import { Command } from "effect/cli";
-import { checkCliCommand } from "../handlers/library/check.js";
+import { checkCliCommand } from "../library/commands/check.js";
 import { serverBootstrapCliCommand } from "../bootstrap/server-bootstrap.js";
 import { authLogoutCliCommand } from "../handlers/auth/logout.js";
 import { authLoginCliCommand } from "../handlers/auth/login.js";
 import { authStatusCliCommand } from "../handlers/auth/status.js";
-import { listCliCommand } from "../handlers/library/list.js";
-import { addCliCommand } from "../handlers/library/add.js";
-import { removeCliCommand } from "../handlers/library/remove.js";
-import { updateCliCommand } from "../handlers/library/update.js";
-import { librarySyncCliCommand } from "../handlers/library/sync.js";
+import { listCliCommand } from "../library/commands/list.js";
+import { addCliCommand } from "../library/commands/add.js";
+import { removeCliCommand } from "../library/commands/remove.js";
+import { updateCliCommand } from "../library/commands/update.js";
+import { librarySyncCliCommand } from "../library/commands/sync.js";
 import { disableCliCommand, enableCliCommand } from "../library/enable/command.js";
 import { securityAcceptCliCommand } from "../handlers/security/accept.js";
 import { securityReviewCliCommand } from "../handlers/security/review.js";
 import { setupCliCommand } from "../library/setup/command.js";
-import { doctorCliCommand, inventoryCliCommand } from "../handlers/library/inventory.js";
+import { doctorCliCommand, inventoryCliCommand } from "../library/commands/inventory.js";
 import {
   repositoryForgetCliCommand,
   repositoryIgnoreCliCommand,
   repositoryListCliCommand,
   repositoryWatchCliCommand,
 } from "../handlers/repository.js";
-import { libraryRecoveryCliCommand } from "../handlers/library/recovery.js";
+import { libraryRecoveryCliCommand } from "../library/commands/recovery.js";
 import { librarySetupUndoCliCommand } from "../library/setup/undo-command.js";
-import { libraryHistoryCliCommand } from "../handlers/library/history.js";
+import { libraryHistoryCliCommand } from "../library/commands/history.js";
 import { versionCliCommand } from "../handlers/version.js";
 import { feedbackSendCliCommand } from "../handlers/feedback.js";
 import {

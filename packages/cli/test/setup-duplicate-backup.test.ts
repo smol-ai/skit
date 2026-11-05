@@ -1,3 +1,4 @@
+import { recoveryInspection } from "./helpers/recovery.js";
 import { withLibraryOwner } from "./helpers/library-owner.js";
 import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
@@ -8,7 +9,6 @@ import type { PlatformError } from "effect/PlatformError";
 import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply-command.js";
 import { runSetup } from "@smolai/skit-core/library/setup";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
-import { inspectRecoveryOperation } from "@smolai/skit-core";
 import { prepareSetupUndo } from "../src/library/setup/setup-undo.js";
 import { libraryHome, scratch } from "./helpers/library-home.js";
 
@@ -145,7 +145,7 @@ it.effect(
         ),
       ).toBe(true);
       if (!applied.operationId) return yield* Effect.die(new Error("Missing operation ID"));
-      const recovery = yield* inspectRecoveryOperation(f.home.home, applied.operationId);
+      const recovery = yield* recoveryInspection(f.home.home, applied.operationId);
       expect(recovery.entries).toHaveLength(1);
       expect(recovery.entries[0].status).toBe("saved");
       expect(yield* f.fs.readFileString(join(recovery.entries[0].recoveryPath, ".DS_Store"))).toBe(

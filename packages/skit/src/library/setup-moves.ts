@@ -6,7 +6,7 @@ import { basename, join, resolve } from "node:path";
 import { InvalidLibraryState } from "../failures.js";
 import { writeJsonExclusive } from "../platform/atomic-write.js";
 import { FileIdentityNumber, LinkStat } from "../platform/link-stat.js";
-import { leavePnpmSkill } from "../install/pnpm-skills.js";
+import { leavePnpmSkill } from "../installed-skills/pnpm-skills.js";
 import type { OperationId } from "./entity-ids.js";
 import {
   absentUnder,

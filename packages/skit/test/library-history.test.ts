@@ -1,4 +1,3 @@
-import { LibraryActor } from "../src/library/actor.js";
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem } from "effect";
 import { join } from "node:path";
@@ -88,7 +87,7 @@ it.effect("records one event for one action, however many writers it nests", () 
         const state = yield* loadLibrary(home);
         yield* writeLibrary(home, writer.save({ ...state, enabled: globalEnabled(state) }, state));
       }),
-    ).pipe(Effect.provideService(LibraryActor, "test-front-end"));
+    ).pipe(Effect.annotateLogs({ "skit.library.workflow": "test-front-end" }));
 
     const events = yield* history;
     assert.strictEqual(events.length, 1);
@@ -277,5 +276,46 @@ it.effect("owner history preserves a malformed audit line's path and number", ()
       assert.strictEqual(failure.line, 1);
     }
     assert.strictEqual(yield* fs.readFileString(path), "{}\n");
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("owner recovery lists legacy folders without rewriting their evidence", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-history-recovery-" });
+    const legacyId = "0f0e0d0c-0b0a-4908-8706-050403020100";
+    const legacy = join(home, "removed", legacyId);
+    yield* fs.makeDirectory(legacy, { recursive: true });
+    const evidencePath = join(legacy, "setup.json");
+    const evidence = "Historical evidence, inspected only when its operation is selected.\n";
+    yield* fs.writeFileString(evidencePath, evidence);
+    yield* Effect.gen(function* () {
+      const owner = yield* Library.Service;
+      for (let read = 0; read < 2; read++) {
+        assert.deepStrictEqual(yield* owner.recovery.list, [legacyId]);
+      }
+      assert.strictEqual(yield* fs.readFileString(evidencePath), evidence);
+      assert.isFalse(yield* fs.exists(join(home, "state.json")));
+      assert.isFalse(yield* fs.exists(join(home, "audit.jsonl")));
+    }).pipe(Effect.provide(libraryLayer(home)));
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("owner recovery refuses a redirected directory", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-history-recovery-link-" });
+    const home = join(root, "home");
+    const outside = join(root, "outside");
+    yield* fs.makeDirectory(home);
+    yield* fs.makeDirectory(outside);
+    yield* fs.symlink(outside, join(home, "removed"));
+    const error = yield* Effect.flatMap(Library.Service, (owner) => owner.recovery.list).pipe(
+      Effect.provide(libraryLayer(home)),
+      Effect.flip,
+    );
+    assert.strictEqual(error._tag, "RecoveryInvalid");
+    assert.deepStrictEqual(yield* fs.readDirectory(outside), []);
+    assert.isFalse(yield* fs.exists(join(home, "state.json")));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

@@ -1,7 +1,8 @@
+import { recoveryInspection } from "./helpers/recovery.js";
 import { saveRecoveryFiles } from "./helpers/recovery-files.js";
 import { withLibraryOwner } from "./helpers/library-owner.js";
-import { join } from "node:path";
-import { Effect, FileSystem } from "effect";
+import { dirname, join } from "node:path";
+import { Effect, FileSystem, Option } from "effect";
 import { systemError } from "effect/PlatformError";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
@@ -14,15 +15,14 @@ import {
   setupIntent,
   skitLayer,
 } from "@smolai/skit-core";
-import { readSkillPathDetails } from "@smolai/skit-core";
+import { observePathEvidence } from "@smolai/skit-core";
 const { setupDiscoverySettings } = MachineSettings;
-import { setupRecoveryFingerprint as recoveryFingerprint } from "@smolai/skit-core";
+import { recoveryFingerprint } from "@smolai/skit-core";
 import { prepareSetupUndo } from "../src/library/setup/setup-undo.js";
 import { setupResultActions } from "../src/library/setup/actions.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import { renderContract } from "../src/presentation/contract-presenters.js";
-import { inspectRecoveryOperation } from "@smolai/skit-core";
 import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply-command.js";
 import { runSetup } from "@smolai/skit-core/library/setup";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
@@ -118,7 +118,7 @@ it.effect("undo of an explicit removal restores the original inode and move reco
     yield* f.home.owned(
       Effect.gen(function* () {
         const links = yield* LinkStat;
-        const recovery = yield* inspectRecoveryOperation(f.home.home, f.operationId);
+        const recovery = yield* recoveryInspection(f.home.home, f.operationId);
         expect(recovery.entries[0].status).toBe("saved");
         const identity = yield* links.identity.lstat(recovery.entries[0].recoveryPath);
         const preview = yield* prepareSetupUndo(f.operationId);
@@ -126,9 +126,9 @@ it.effect("undo of an explicit removal restores the original inode and move reco
         expect(preview.summary.files).toEqual([{ path: f.source, kind: "restore" }]);
         expect((yield* preview.apply()).status).toBe("undone");
         expect(yield* links.identity.lstat(f.source)).toEqual(identity);
-        expect(
-          (yield* inspectRecoveryOperation(f.home.home, f.operationId)).entries[0].status,
-        ).toBe("at-original");
+        expect((yield* recoveryInspection(f.home.home, f.operationId)).entries[0].status).toBe(
+          "at-original",
+        );
         expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe(f.markdown);
       }),
     );
@@ -151,7 +151,30 @@ it.effect.each([3, 2] as const)(
       const operationId = "0f0e0d0c-0b0a-4908-8706-050403020100";
       const directory = join(home.home, "removed", operationId);
       const identity = (value: bigint) => (version === 3 ? String(value) : Number(value));
-      const file = yield* readSkillPathDetails(source);
+      const observed = Option.getOrThrow(yield* observePathEvidence(source));
+      if (observed._tag !== "Directory")
+        return yield* Effect.die("Expected legacy source directory");
+      // Build the released journal format from public filesystem evidence, not its private reader.
+      const file = {
+        path: source,
+        anchor: {
+          path: dirname(source),
+          physicalPath: observed.parent.path,
+          dev: observed.parent.dev,
+          ino: observed.parent.ino,
+        },
+        entry: {
+          type: "Directory",
+          dev: observed.dev,
+          ino: observed.ino,
+          hash: observed.contentHash,
+          unstampedHash: yield* recoveryFingerprint(source, "exclude"),
+          marker: null,
+          markerType: null,
+          markerMode: null,
+          linkTarget: null,
+        },
+      };
       const moves = yield* saveRecoveryFiles(home.home, [source]);
       yield* fs.rename(moves.operationDirectory, directory);
       // This fixture represents the older UUID journal layout, including its receipt paths.
@@ -489,7 +512,7 @@ it.effect(
           expect(settings.machineId).toBeDefined();
           if (!("backupId" in undone))
             return yield* Effect.die(new Error("Missing preservation identity"));
-          const recovery = yield* inspectRecoveryOperation(f.home.home, undone.backupId);
+          const recovery = yield* recoveryInspection(f.home.home, undone.backupId);
           expect(recovery.entries).toHaveLength(1);
           expect(recovery.entries[0].status).toBe("saved");
           expect((yield* prepareSetupUndo(f.operationId)).summary.status).toBe("already-undone");
@@ -514,7 +537,7 @@ it.effect(
           const undone = yield* reviewed.apply();
           if (!("backupId" in undone))
             return yield* Effect.die(new Error("Missing preservation identity"));
-          const recovery = yield* inspectRecoveryOperation(f.home.home, undone.backupId);
+          const recovery = yield* recoveryInspection(f.home.home, undone.backupId);
           expect(
             yield* f.fs.readFileString(join(recovery.entries[0].recoveryPath, "notes.txt")),
           ).toBe("Later user edits");

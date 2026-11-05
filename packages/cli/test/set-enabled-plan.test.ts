@@ -1,3 +1,4 @@
+import { SkitConfiguration } from "@smolai/skit-core";
 import { assert, it } from "@effect/vitest";
 import { systemError } from "effect/PlatformError";
 import { Cause, Clock, ConfigProvider, Effect, Exit, FileSystem, Layer, Option } from "effect";
@@ -25,13 +26,13 @@ import {
   proposeLibraryEnable,
   proposeLibraryCollectionChange,
   confirmLibraryChange,
-} from "../src/library-application/session.js";
+} from "@smolai/skit-core/library/session";
 import { type ListingBudget, type UsageReport } from "@smolai/skit-core";
-import { presentDoctorCleanup } from "../src/workflows/library/doctor-cleanup.js";
+import { presentDoctorCleanup } from "../src/library/workflows/doctor-cleanup.js";
 import {
   suggestDoctorCleanup,
   openDoctorCleanupSelection,
-} from "../src/library-application/doctor-cleanup.js";
+} from "../src/library/application/doctor-cleanup.js";
 import { usageStory } from "../src/storybook/usage-stories.js";
 import { presentSetEnabled } from "../src/library/enable/command.js";
 import { libraryCommandConfiguration } from "../src/commands/library-configuration.js";
@@ -381,7 +382,11 @@ it.effect("derives placements and filters multi-Scope disable intent to enabled 
 it.effect("a TUI proposal keeps the revision displayed before the proposal was made", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    const displayed = yield* f.home.owned(openLibrarySession(f.home.installOptions));
+    const displayed = yield* f.home.owned(
+      Effect.flatMap(SkitConfiguration, (paths) =>
+        openLibrarySession(paths.skitHome, f.home.installOptions),
+      ),
+    );
     yield* Effect.flatMap(f.home.durable, (state) =>
       f.home.writeDurable({ ...state, ownershipIssues: [] }),
     );
@@ -1016,7 +1021,11 @@ it.effect(
       const path = join(f.destination, "alpha");
       yield* f.fs.makeDirectory(path, { recursive: true });
       yield* f.fs.writeFileString(join(path, "SKILL.md"), "Foreign copy must remain\n");
-      const opened = yield* f.home.owned(openLibrarySession(f.home.installOptions));
+      const opened = yield* f.home.owned(
+        Effect.flatMap(SkitConfiguration, (paths) =>
+          openLibrarySession(paths.skitHome, f.home.installOptions),
+        ),
+      );
       const row = opened.skills.find((skill) => skill.name === "alpha");
       assert.ok(row);
       const proposed = yield* f.home.owned(

@@ -2,7 +2,6 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Option, Schema } from "effect";
 import { join } from "node:path";
 import { Library } from "../src/library/library.js";
-import { LibraryActor } from "../src/library/actor.js";
 import { LibraryState } from "../src/library/library-state.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { StateEnvelope } from "../src/library/store/history-delivery.js";
@@ -162,7 +161,7 @@ it.effect("resumes a Pending operation into its original action event", () =>
     };
     const exit = yield* Effect.exit(
       Effect.flatMap(Library.Service, (owner) => owner.apply({ _tag: "Apply", plan: plan })).pipe(
-        Effect.provideService(LibraryActor, "test-apply"),
+        Effect.annotateLogs({ "skit.library.workflow": "test-apply" }),
         Effect.provide(f.layer.pipe(Layer.provide(Layer.succeed(FileSystem.FileSystem, files)))),
       ),
     );

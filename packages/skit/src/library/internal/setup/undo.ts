@@ -26,7 +26,7 @@ import { sourceImports } from "../../library-contracts.js";
 import { makeOperationId, type CollectionId, type OperationId } from "../../entity-ids.js";
 import * as MachineSettings from "../../machine-settings.js";
 import { recoveryOperationDirectory } from "../recovery/moves.js";
-import { RecoveryInvalid } from "../recovery/evidence.js";
+import { RecoveryInvalid } from "../../recovery-facts.js";
 import { inspectSetupOperation } from "./journal.js";
 import {
   planUndoFiles,
@@ -508,7 +508,7 @@ export const applyUndo = Effect.fn("Library.applyUndo")(function* (home: string,
         });
         if (result._tag === "Stopped")
           return yield* new RecoveryInvalid({
-            detail: `Recorded Undo ${result.operationId} stopped; review Library history before trying again`,
+            detail: `Recorded Undo ${result.operationId} stopped: ${result.reason._tag === "StepFailed" ? result.reason.error.message : result.reason._tag}. Review Library history before trying again`,
           });
         return { _tag: "Undone", change, backupId: approved.backupId } satisfies UndoResult;
       }),

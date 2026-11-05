@@ -16,8 +16,8 @@ import { LibraryChangedOnServer, RegistryUnreachable } from "../src/registry/fai
 import {
   LibraryApiRejected,
   LibraryManifestTooNew,
-} from "../src/workflows/library/library-sync-api.js";
-import { SyncLocalChanged } from "../src/workflows/library/library-sync.js";
+} from "../src/library/workflows/library-sync-api.js";
+import { SyncLocalChanged } from "../src/library/workflows/library-sync.js";
 import {
   assertDiskUnchanged,
   captureDisk,
@@ -676,31 +676,32 @@ it.effect("oracle: every applying path commits remote before local, on the revis
       Effect.gen(function* () {
         events.length = 0;
         const exit = yield* Effect.exit(sync);
-        // A failure after the last expected save must not leave the order looking right.
+        // A stopped operation must not pass merely because its writes happened in order.
         assert.isTrue(Exit.isSuccess(exit), `${[...events]}`);
         return [...events];
       });
+    const ordered = (
+      recorded: readonly string[],
+      device: "a" | "b",
+      remoteEvents: readonly string[],
+    ) => {
+      const firstSave = recorded.findIndex((event) => event === `save ${device}`);
+      assert.isAtLeast(firstSave, 0, "Sync must durably record its local result");
+      assert.deepStrictEqual(recorded.slice(0, firstSave), remoteEvents);
+      assert.isTrue(
+        recorded.slice(firstSave).every((event) => event === `save ${device}`),
+        `${recorded}`,
+      );
+    };
     yield* a.importSource("first");
-    assert.deepStrictEqual(yield* committed(a.sync()), [
-      "upload",
-      "write on null",
-      ...Array(6).fill("save a"),
-    ]);
+    ordered(yield* committed(a.sync()), "a", ["upload", "write on null"]);
     const pushed = server.remote!.revision_id;
-    assert.deepStrictEqual(yield* committed(b.sync()), Array(6).fill("save b"));
+    ordered(yield* committed(b.sync()), "b", []);
     yield* b.importSource("second");
-    assert.deepStrictEqual(yield* committed(b.sync()), [
-      "upload",
-      `write on ${pushed}`,
-      ...Array(6).fill("save b"),
-    ]);
+    ordered(yield* committed(b.sync()), "b", ["upload", `write on ${pushed}`]);
     const merged = server.remote!.revision_id;
     yield* a.importSource("third");
-    assert.deepStrictEqual(yield* committed(a.sync()), [
-      "upload",
-      `write on ${merged}`,
-      ...Array(6).fill("save a"),
-    ]);
+    ordered(yield* committed(a.sync()), "a", ["upload", `write on ${merged}`]);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 

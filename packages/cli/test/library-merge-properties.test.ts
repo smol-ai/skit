@@ -16,7 +16,7 @@ import {
 import {
   mergeLibraryManifests,
   normalizeLibraryManifest,
-} from "../src/workflows/library/library-merge.js";
+} from "../src/library/workflows/library-merge.js";
 
 const machineId = makeMachineId();
 /** A fixed pool of one-Skill Collections; every side of a merge is drawn from the same records. */

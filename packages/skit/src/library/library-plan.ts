@@ -7,7 +7,7 @@ import { Intent as EnabledIntent, Invocation, type InvalidIntent } from "./enabl
 import type { InstalledSkillInvalid } from "./installation/install-enabled.js";
 import type { CollectionRemovalMissing } from "./installation/remove.js";
 import { CollectionId, InstalledSkillId, SkillId, SkillVersionId } from "./entity-ids.js";
-import { ManageApproval } from "../install/files.js";
+import { ManageApproval } from "../installed-skills/files.js";
 import { OwnershipMarker } from "../contracts.js";
 import { Hash, InstallDestination, InstallScope } from "../vocabulary.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";

@@ -1,3 +1,4 @@
+import { recoveryInspection } from "./helpers/recovery.js";
 import { join } from "node:path";
 import { Effect, Exit, FileSystem, Option } from "effect";
 import { assert, it } from "@effect/vitest";
@@ -12,7 +13,6 @@ import { makeScriptedInteraction } from "../src/presentation/interaction-recorde
 import { SetupPlanStale } from "@smolai/skit-core/library/setup";
 import { OptionCombinationInvalid } from "../src/workflows/failures.js";
 import type { SetupDuplicateAction } from "@smolai/skit-core/library/setup";
-import { inspectRecoveryOperation } from "@smolai/skit-core";
 import { prepareSetupUndo } from "../src/library/setup/setup-undo.js";
 import { captureDisk, diskChanges, noDiskChanges } from "./helpers/disk-snapshot.js";
 import { libraryHome, scratch } from "./helpers/library-home.js";
@@ -28,9 +28,16 @@ const fixture = Effect.fn("Test.setupApplyReviewedPlan")(function* (input: {
   identical?: boolean;
   linked?: boolean;
   skillsSh?: boolean;
+  parentAlias?: boolean;
 }) {
   const fs = yield* FileSystem.FileSystem;
-  const root = yield* scratch("skit-setup-reviewed-");
+  const workspace = yield* scratch("skit-setup-reviewed-");
+  const root = input.parentAlias ? join(workspace, "alias") : workspace;
+  if (input.parentAlias) {
+    const physical = join(workspace, "physical");
+    yield* fs.makeDirectory(physical);
+    yield* fs.symlink(physical, root);
+  }
   const claudeRoot = join(root, ".claude", "skills");
   const write = (path: string, name: string) =>
     Effect.andThen(
@@ -122,7 +129,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const f = yield* fixture({ alias: true });
+      const f = yield* fixture({ alias: true, parentAlias: true });
       // Leave only the duplicate copy whose approved action is retention without enabling.
       yield* fs.remove(join(f.root, ".claude", "skills", "beta"), { recursive: true });
       const reviewed = yield* f.review;
@@ -259,7 +266,7 @@ it.effect(
       const operationId = applied.value.operationId;
       assert.isFalse(yield* fs.exists(alias));
       assert.strictEqual(yield* fs.readFileString(join(source, "SKILL.md")), skillBytes("alpha"));
-      const recovery = yield* inspectRecoveryOperation(f.home.home, operationId);
+      const recovery = yield* recoveryInspection(f.home.home, operationId);
       const saved = recovery.entries.find((entry) => entry.path === alias);
       assert.strictEqual(saved?.status, "saved");
       assert.strictEqual(yield* fs.readLink(saved!.recoveryPath), originalLink);
@@ -334,7 +341,7 @@ it.effect(
         "delta",
       );
 
-      const retired = yield* fixture({ alias: false, linked: true });
+      const retired = yield* fixture({ alias: false, linked: true, parentAlias: true });
       const retiredPlan = (yield* retired.review).onboarding.planId;
       const replaced = yield* retired.run({ planId: retiredPlan });
       assert.isTrue(Exit.isSuccess(replaced));

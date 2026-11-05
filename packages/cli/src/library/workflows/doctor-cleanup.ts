@@ -1,10 +1,7 @@
 import { SkitConfiguration, type ListingBudget } from "@smolai/skit-core";
 import { Effect } from "effect";
 import { applySetEnabledPlan } from "@smolai/skit-core/library/session";
-import {
-  openDoctorCleanupSelection,
-  overBudget,
-} from "../../library-application/doctor-cleanup.js";
+import { openDoctorCleanupSelection, overBudget } from "../application/doctor-cleanup.js";
 import { type InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { renderDoctorBudgetSelection } from "../../presentation/doctor-listing-budget.js";
 import { Renderer } from "../../presentation/renderer.js";

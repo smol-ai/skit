@@ -9,8 +9,8 @@ import {
 } from "@smolai/skit-core";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
 import { holdHomeLock } from "./helpers/home-lock.js";
-import { importSource } from "../src/library-application/import-source.js";
-import { executeRemove } from "../src/workflows/library/remove.js";
+import { importSource } from "../src/library/application/import-source.js";
+import { executeRemove } from "../src/library/workflows/remove.js";
 import { authorInitCommand } from "../src/workflows/author/initialization.js";
 import { AuthorWorkspace } from "../src/author/workspace.js";
 import {

@@ -1,3 +1,4 @@
+import { skitLayer } from "@smolai/skit-core";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { Effect, Fiber, FileSystem, Layer, Result, Schedule, Schema } from "effect";
@@ -23,8 +24,8 @@ import {
   nativeDiscovery,
   inspectNativeDiscovery,
   DoctorReport,
-} from "../src/workflows/library/doctor-harnesses.js";
-import { NativeLibraryFixture, nativeLibraryLayer } from "./helpers/native-library.js";
+} from "../src/library/workflows/doctor-harnesses.js";
+import { nativeLibraryFixture } from "./helpers/native-library.js";
 
 import { skitConfigurationLayer } from "@smolai/skit-core";
 import { captureDisk } from "./helpers/disk-snapshot.js";
@@ -33,7 +34,7 @@ it.effect.each([false, true])(
   "assembles native diagnostics without probes for custom roots (unreadable alias: %s)",
   (unreadable) =>
     Effect.gen(function* () {
-      const f = yield* NativeLibraryFixture;
+      const f = yield* nativeLibraryFixture;
       const fs = yield* FileSystem.FileSystem;
       const cwd = join(f.root, "project");
       const globalCopy = join(f.root, "claude", "global-review");
@@ -106,7 +107,7 @@ it.effect.each([false, true])(
         ).toBe(unreadable);
       }
       expect(yield* captureDisk([f.root])).toEqual(before);
-    }).pipe(Effect.provide(nativeLibraryLayer)),
+    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 const processLayer = (stdout: unknown, exitCode = 0, stderr = "") =>
@@ -198,7 +199,7 @@ it.effect(
   "Claude initializes without a user prompt, disables hooks/MCP, and closes the waiting subprocess",
   () =>
     Effect.gen(function* () {
-      const f = yield* NativeLibraryFixture;
+      const f = yield* nativeLibraryFixture;
       const fs = yield* FileSystem.FileSystem;
       const executable = join(f.root, "fake-claude");
       yield* fs.writeFileString(
@@ -224,12 +225,12 @@ require('node:readline').createInterface({input:process.stdin}).on('line', line 
       expect(yield* readClaudeCommands(executable, f.root)).toEqual([
         { name: "review", description: "Review" },
       ]);
-    }).pipe(Effect.provide(nativeLibraryLayer)),
+    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 it.effect.each(["error", "malformed", "eof"])("reports Claude %s initialization failure", (kind) =>
   Effect.gen(function* () {
-    const f = yield* NativeLibraryFixture;
+    const f = yield* nativeLibraryFixture;
     const fs = yield* FileSystem.FileSystem;
     const executable = join(f.root, "fake-claude");
     const response =
@@ -248,12 +249,12 @@ require('node:readline').createInterface({input:process.stdin}).on('line', () =>
     expect(Result.isFailure(yield* Effect.result(readClaudeCommands(executable, f.root)))).toBe(
       true,
     );
-  }).pipe(Effect.provide(nativeLibraryLayer)),
+  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 it.effect("captures large OpenCode responses before its early exit and excludes bodies", () =>
   Effect.gen(function* () {
-    const f = yield* NativeLibraryFixture;
+    const f = yield* nativeLibraryFixture;
     const fs = yield* FileSystem.FileSystem;
     const executable = join(f.root, "fake-opencode");
     yield* fs.writeFileString(
@@ -268,7 +269,7 @@ process.exit(0);
     expect(result.skills).toEqual([
       { name: "large", description: "Large", path: "/large/SKILL.md", warnings: [], errors: [] },
     ]);
-  }).pipe(Effect.provide(nativeLibraryLayer)),
+  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 it.live.each([
@@ -282,7 +283,7 @@ it.live.each([
   "OpenCode v2 %s uses authenticated inventory after activation and closes its stdin lease",
   (kind) =>
     Effect.gen(function* () {
-      const f = yield* NativeLibraryFixture;
+      const f = yield* nativeLibraryFixture;
       const fs = yield* FileSystem.FileSystem;
       const executable = join(f.root, "fake-opencode-v2");
       const closed = join(f.root, "closed");
@@ -343,7 +344,7 @@ process.stdin.on('end', () => { if (${JSON.stringify(kind)} === 'success') asser
         }
       } else expect(Result.isFailure(result)).toBe(true);
       expect(yield* fs.readFileString(closed)).toBe("closed");
-    }).pipe(Effect.provide(nativeLibraryLayer)),
+    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 const collisionFixture = () => {

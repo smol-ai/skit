@@ -89,7 +89,7 @@ import type {
   LibraryStateWriteError as StoredLibraryStateWriteError,
 } from "../packages/skit/src/library/store/library-store.js";
 import type { InvalidIntent } from "../packages/skit/src/library/enabled-plan.js";
-import type { RecoveryInvalid } from "../packages/skit/src/library/internal/recovery/evidence.js";
+import type { RecoveryInvalid } from "../packages/skit/src/library/recovery-facts.js";
 import type {
   RestoreInvalid,
   SourceRestoreInvalid,
@@ -577,7 +577,7 @@ export interface RefreshInventoryPlan extends PlanBase<"RefreshInventory", Refre
   readonly backups: readonly {
     readonly backup: {
       readonly path: string;
-      readonly marker: import("../packages/skit/src/install/files.js").OwnershipMarkerInspection;
+      readonly marker: import("../packages/skit/src/installed-skills/files.js").OwnershipMarkerInspection;
     };
     readonly copy: import("../packages/skit/src/library/installed-skills.js").Folder;
     readonly folder: import("../packages/skit/src/library/installed-skills.js").Folder;
@@ -642,7 +642,7 @@ export type TargetPlanError =
   | import("../packages/skit/src/library/installed-skill-hash.js").SkillMaterializationInvalid
   | import("../packages/skit/src/library/subject-resolution.js").LibrarySubjectAmbiguous
   | import("../packages/skit/src/library/subject-resolution.js").LibrarySubjectNotFound
-  | import("../packages/skit/src/install/pnpm-skills.js").PnpmSkillManaged
+  | import("../packages/skit/src/installed-skills/pnpm-skills.js").PnpmSkillManaged
   | import("../packages/skit/src/sources/resolve.js").ParseSourceFailure
   | import("../packages/skit/src/sources/resolve.js").CommandFailed
   | import("../packages/skit/src/sources/resolve.js").SourcePolicyViolation

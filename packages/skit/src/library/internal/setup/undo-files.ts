@@ -4,8 +4,11 @@ import { Effect, FileSystem } from "effect";
 import { canonicalJson } from "../../../shared/json.js";
 import { deterministicTreeHash } from "../../../artifact/skit.js";
 import { globalEnabled } from "../../enabled.js";
-import { inspectOwnershipMarker, prepareInstalledSkillRebuild } from "../../../install/files.js";
-import { inspectInstalledSkillBackups } from "../../../install/backups.js";
+import {
+  inspectOwnershipMarker,
+  prepareInstalledSkillRebuild,
+} from "../../../installed-skills/files.js";
+import { inspectInstalledSkillBackups } from "../../../installed-skills/backups.js";
 import { libraryOriginalsPath } from "../../store/library-store.js";
 import { LinkStat } from "../../../platform/link-stat.js";
 import { pathIsWithin } from "../../../platform/path-identity.js";
@@ -16,7 +19,8 @@ import { type InstalledSkill } from "../../device-state.js";
 import { readSkillPathDetails } from "./journal.js";
 import { inspectRecoveryOperation } from "../recovery/moves.js";
 import { checkSetupGlobalContent } from "./protection.js";
-import { recoveryFingerprint, RecoveryInvalid } from "../recovery/evidence.js";
+import { recoveryFingerprint } from "../recovery/evidence.js";
+import { RecoveryInvalid } from "../../recovery-facts.js";
 
 type SkillPathDetails = Effect.Success<ReturnType<typeof readSkillPathDetails>>;
 

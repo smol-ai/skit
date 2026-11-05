@@ -16,7 +16,8 @@ import { MachineId } from "../../entity-ids.js";
 import { SetupIntent } from "../../setup-intent.js";
 import * as MachineSettings from "../../machine-settings.js";
 import { recoveryOperationPath } from "../recovery/moves.js";
-import { RecoveryInvalid, recoveryFingerprint } from "../recovery/evidence.js";
+import { recoveryFingerprint } from "../recovery/evidence.js";
+import { RecoveryInvalid } from "../../recovery-facts.js";
 const SetupDiscoverySettings = MachineSettings.SetupDiscoverySettings;
 
 const DevicePath = AbsoluteDevicePath.check(

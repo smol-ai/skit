@@ -1,3 +1,4 @@
+import { skitLayer } from "@smolai/skit-core";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { systemError } from "effect/PlatformError";
@@ -12,13 +13,13 @@ import {
   makeSkillVersionId,
   scanInventory,
 } from "@smolai/skit-core";
-import { NativeLibraryFixture, nativeLibraryLayer } from "./helpers/native-library.js";
+import { nativeLibraryFixture } from "./helpers/native-library.js";
 
 it.effect(
   "reports skill copies, shared symlinks and scan gaps without counting arbitrary directories",
   () =>
     Effect.gen(function* () {
-      const f = yield* NativeLibraryFixture;
+      const f = yield* nativeLibraryFixture;
       const fs = yield* FileSystem.FileSystem;
       const root = join(f.root, "codex");
       const claude = join(f.root, "claude");
@@ -75,14 +76,14 @@ it.effect(
       ]);
       expect(yield* fs.exists(join(f.home, "state.json"))).toBe(false);
       expect(yield* fs.readFileString(join(skill, "SKILL.md"))).toBe("review");
-    }).pipe(Effect.provide(nativeLibraryLayer)),
+    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 it.effect.each([true, false])(
   "observes a symlinked ownership claim without SKILL.md (valid: %s)",
   (valid) =>
     Effect.gen(function* () {
-      const f = yield* NativeLibraryFixture;
+      const f = yield* nativeLibraryFixture;
       const fs = yield* FileSystem.FileSystem;
       const root = join(f.root, "codex");
       const target = join(f.root, "claimed");
@@ -112,14 +113,14 @@ it.effect.each([true, false])(
         { path, code: valid ? "ORPHANED_OWNERSHIP_MARKER" : "INVALID_OWNERSHIP_MARKER" },
       ]);
       expect(yield* fs.readFileString(join(target, ".skit-ownership.json"))).toBe(marker);
-    }).pipe(Effect.provide(nativeLibraryLayer)),
+    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 it.effect(
   "preserves scan issues outside a refreshed root and clears resolved issues inside it",
   () =>
     Effect.gen(function* () {
-      const f = yield* NativeLibraryFixture;
+      const f = yield* nativeLibraryFixture;
       const fs = yield* FileSystem.FileSystem;
       const root = join(f.root, "codex");
       yield* fs.makeDirectory(root);
@@ -137,5 +138,5 @@ it.effect(
           { root, harness: "codex" },
         ])).scanIssues,
       ).toBeUndefined();
-    }).pipe(Effect.provide(nativeLibraryLayer)),
+    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );

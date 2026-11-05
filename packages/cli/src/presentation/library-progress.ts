@@ -4,7 +4,7 @@ import {
   type LibraryProgressCompletion,
   type LibraryProgressReporter,
   type LibraryProgressStage,
-} from "../library-application/progress.js";
+} from "../library/application/progress.js";
 import { Renderer } from "./renderer.js";
 
 const pendingMessage = (stage: LibraryProgressStage) =>

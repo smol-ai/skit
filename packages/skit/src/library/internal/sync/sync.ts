@@ -477,7 +477,9 @@ export const applySync = Effect.fn("Library.applySync")(function* (
           { ...syncPublication(current), installed_skills: [] },
           { ...next, installed_skills: [] },
         );
-        if (sameMetadata && !work)
+        const preview = Option.getOrUndefined(fresh.change.installedSkills);
+        const retirement = (preview?.retire.length ?? 0) > 0 || (preview?.remove.length ?? 0) > 0;
+        if (sameMetadata && !work && !retirement)
           return {
             _tag: "Sync" as const,
             result: {
@@ -487,7 +489,6 @@ export const applySync = Effect.fn("Library.applySync")(function* (
               ancestry: Option.fromUndefinedOr(ancestry),
             },
           } satisfies SyncOutcome;
-        const preview = Option.getOrUndefined(fresh.change.installedSkills);
         const program: SyncProgram = {
           before: syncPublication(current),
           after: next,

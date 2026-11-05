@@ -6,7 +6,7 @@ import {
   DedicatedInstallerRequired,
   dedicatedInstallerForSource,
   rejectDedicatedInstallerSource,
-} from "../src/workflows/library/dedicated-installer-catalog.js";
+} from "../src/library/workflows/dedicated-installer-catalog.js";
 
 it.effect("rejects known GitHub Sources with their dedicated installer guidance", () =>
   Effect.gen(function* () {

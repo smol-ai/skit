@@ -1,3 +1,5 @@
+import type { PlatformError } from "effect/PlatformError";
+import type { RecoveryInvalid, RecoveryInspection } from "./recovery-facts.js";
 import type { LibraryChanged } from "../failures.js";
 import type {
   RestoreIntent,
@@ -142,7 +144,13 @@ export {
 export type { Subject, Invocation, EnabledCollection, SetupApproval } from "./enabled-plan.js";
 
 export { Revision, type Snapshot } from "./snapshot.js";
+export type {
+  LibraryLayerError,
+  LibraryStateReadError,
+  LibraryStateWriteError,
+} from "./store/library-store.js";
 export type { SetupError, SetupResult, SetupStepResult, StartupRecovery } from "./setup.js";
+export { RestoreInvalid, SourceRestoreInvalid } from "./internal/content/restore.js";
 export type {
   StagedContent,
   ContentSource,
@@ -317,6 +325,13 @@ export interface Interface {
   };
   /** Audit events and recorded operations, including Pending and Stopped setup. Never writes. */
   readonly history: Effect.Effect<History, LibraryStateReadError | LibraryAuditInvalid>;
+  /** Passive recovery facts; malformed audit history must not hide saved files. */
+  readonly recovery: {
+    readonly list: Effect.Effect<readonly string[], PlatformError | RecoveryInvalid>;
+    readonly inspect: (
+      operationId: string,
+    ) => Effect.Effect<RecoveryInspection, PlatformError | RecoveryInvalid>;
+  };
   /** What startup recovery did when the layer was built. */
   readonly startup: StartupRecovery;
 }

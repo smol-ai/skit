@@ -16,8 +16,8 @@ import {
   overrideInvocationIntent,
   type InvocationIntent,
 } from "./policy.js";
-import { deterministicTreeHash } from "../artifact/skit.js";
-import { TreeHasher } from "../artifact/tree-hasher.js";
+import { deterministicTreeHash, digestTreeHash } from "../artifact/skit.js";
+import { Digest } from "effect/crypto";
 import type { HarnessInvocationWriteFailure } from "../harnesses/write-invocation.js";
 import type { TreeRequirements } from "../platform/tree-requirements.js";
 import type { TreeError } from "../shared/tree-error.js";
@@ -289,7 +289,7 @@ export const commitInstalledSkill = Effect.fn("Install.commit")(function* (
     return yield* new InstalledSkillFailure({
       message: `Installed skill identity or marker changed during commit: ${destination}`,
     });
-  const hash = yield* (yield* TreeHasher).hash(destination);
+  const hash = yield* digestTreeHash(destination);
   if (hash !== staged.hash)
     return yield* new InstalledSkillFailure({
       message: `Post-${options.verification} hash verification failed for ${marker.skill_id} at ${destination}`,
@@ -340,12 +340,12 @@ export const inspectInstalledSkill = Effect.fn("Install.inspectInstalledSkill")(
   | { kind: "intact"; currentHash: Hash; marker: OwnershipMarker }
   | { kind: "conflicted"; currentHash: Hash },
   OwnershipMarkerDisagrees | TreeError | PlatformError,
-  TreeRequirements | TreeHasher
+  TreeRequirements | Digest.Digest
 > {
   const destination = installedSkill.path;
   if (!(yield* exists(destination))) return { kind: "absent" as const };
   const marker = yield* readOwnershipMarker(destination);
-  const currentHash = yield* (yield* TreeHasher).hash(destination);
+  const currentHash = yield* digestTreeHash(destination);
   if (
     !marker ||
     marker.skill_id !== installedSkill.skill_id ||

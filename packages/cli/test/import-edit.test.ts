@@ -4,7 +4,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { deterministicTreeHash, skitLayer } from "@smolai/skit-core";
-import { prepareEditImport } from "../src/workflows/library/import-edit.js";
+import { prepareEditImport } from "../src/library/workflows/import-edit.js";
 import {
   initializeLibraryMachine,
   importCollectionIn,

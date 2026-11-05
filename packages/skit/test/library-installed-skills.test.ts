@@ -4,7 +4,6 @@ import { systemError } from "effect/PlatformError";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
-import { treeHasherLayer } from "../src/artifact/tree-hasher.js";
 import { makeSkillVersionId, migratedMachineId } from "../src/library/entity-ids.js";
 import { currentSkillVersion, versionBacking } from "../src/library/library-contracts.js";
 import { collectionVersionPath } from "../src/library/collection-version.js";
@@ -25,8 +24,8 @@ import {
   backUpInstalledSkill,
   losslessTree,
   installedSkillStagingDirectory,
-} from "../src/install/backups.js";
-import { inspectOwnershipMarker } from "../src/install/files.js";
+} from "../src/installed-skills/backups.js";
+import { inspectOwnershipMarker } from "../src/installed-skills/files.js";
 
 const machineId = migratedMachineId(
   "019950c0-4c00-7000-8000-000000000001",
@@ -152,7 +151,7 @@ it.effect(
       assert.strictEqual(yield* fs.exists(target), false);
       const retired = yield* loadLibrary(home);
       assert.deepStrictEqual(retired.installed_skills, []);
-    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("records no installed copy when its written bytes fail verification", () =>
@@ -478,7 +477,7 @@ it.effect("checks every retained input before relocating any installed copy", ()
     assert.isFalse(yield* fs.exists(join(newRoot, "review")));
     assert.deepStrictEqual(withoutOperations(after), withoutOperations(before));
     assert.strictEqual(after.operations.at(-1)?._tag, "Stopped");
-  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("retires a bound Skill's copies at a target that is no longer active", () =>
@@ -643,7 +642,7 @@ it.effect(
       assert.strictEqual((yield* inspectOwnershipMarker(target)).kind, "valid");
       assert.strictEqual((yield* load).installed_skills[0]?.status, "installed");
       assert.deepStrictEqual(yield* backupsBeside(targetRoot), []);
-    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect(
@@ -688,7 +687,7 @@ it.effect(
       assert.strictEqual((yield* load).installed_skills[0]?.status, "installed");
       // The retained original and the recorded declared policy restage the original exactly.
       assert.deepStrictEqual(yield* backupsBeside(targetRoot), []);
-    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 for (const content of ["reproducible", "git-bytes", "empty-directory"] as const)
@@ -733,7 +732,7 @@ for (const content of ["reproducible", "git-bytes", "empty-directory"] as const)
         }
         if (content === "empty-directory")
           assert.deepStrictEqual(yield* fs.readDirectory(join(backups[0]!.path, "my-notes")), []);
-      }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+      }).pipe(Effect.provide(skitLayer), Effect.scoped),
     );
 
 for (const change of ["entry-name", "link-target", "root-mode"] as const)
@@ -761,7 +760,7 @@ for (const change of ["entry-name", "link-target", "root-mode"] as const)
         (yield* backupsBeside(targetRoot)).map((backup) => backup.disposition),
         ["kept"],
       );
-    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
 
 it.effect("retire discards a reproducible copy with empty directories", () =>
@@ -771,7 +770,7 @@ it.effect("retire discards a reproducible copy with empty directories", () =>
     yield* edit(unbound);
     yield* retire;
     assert.deepStrictEqual(yield* backupsBeside(targetRoot), []);
-  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 for (const original of ["intact", "missing", "corrupt"] as const)
@@ -834,7 +833,7 @@ for (const original of ["intact", "missing", "corrupt"] as const)
           );
           if (original !== "intact")
             assert.strictEqual(yield* fs.readFileString(join(backups[0]!.path, "SKILL.md")), bytes);
-        }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+        }).pipe(Effect.provide(skitLayer), Effect.scoped),
     );
 
 for (const batch of ["uninstall", "remove-collection"] as const)
@@ -884,7 +883,7 @@ for (const batch of ["uninstall", "remove-collection"] as const)
             [second.installed_skill_id, "installed"],
           ],
         );
-      }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+      }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
 
 it.effect(
@@ -907,7 +906,7 @@ it.effect(
       yield* refresh;
       const deleted = (yield* load).installed_skills[0];
       assert.strictEqual(deleted?.status, "suppressed");
-    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 for (const stale of ["observed-successor", "settle-failure"] as const)
@@ -942,7 +941,7 @@ for (const stale of ["observed-successor", "settle-failure"] as const)
       yield* fs.remove(installedSkill.path, { recursive: true });
       yield* refresh;
       assert.strictEqual((yield* load).installed_skills[0]?.status, "suppressed");
-    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
 
 /** The identity of the file `state.json` is: every save replaces it with a new one. */
@@ -962,7 +961,7 @@ it.effect("a batch that changes nothing on disk or in state saves nothing", () =
     assert.deepStrictEqual(yield* stateFile(home), file);
     assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), bytes);
     assert.deepStrictEqual(yield* load, before);
-  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("an unchanged batch still saves onto its loaded state before settling a backup", () =>
@@ -977,7 +976,7 @@ it.effect("an unchanged batch still saves onto its loaded state before settling 
     // The publication proves the state the backup is judged against is still the Library's.
     assert.notDeepEqual(yield* stateFile(home), file);
     assert.deepStrictEqual(yield* backupsBeside(targetRoot), []);
-  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("a backup is never settled against a state the Library has moved on from", () =>
@@ -997,7 +996,7 @@ it.effect("a backup is never settled against a state the Library has moved on fr
       (yield* backupsBeside(targetRoot)).map((backup) => backup.disposition),
       ["pending"],
     );
-  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("keeps Library rows and records a stop when a replacement fails verification", () =>
@@ -1016,7 +1015,7 @@ it.effect("keeps Library rows and records a stop when a replacement fails verifi
       (yield* backupsBeside(targetRoot)).map((backup) => backup.disposition),
       ["pending"],
     );
-  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("records an earlier verified write when a later item's successor diverges", () =>
@@ -1036,7 +1035,7 @@ it.effect("records an earlier verified write when a later item's successor diver
     assert.strictEqual(row(after, review)?.status, "installed");
     assert.notStrictEqual(row(after, review)?.expected_hash, row(before, review)?.expected_hash);
     assert.deepStrictEqual(row(after, second), row(before, second));
-  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 for (const path of ["equivalent-version", "accepted-observation"] as const)
@@ -1088,7 +1087,7 @@ for (const path of ["equivalent-version", "accepted-observation"] as const)
       assert.strictEqual((yield* fs.readLink(target).pipe(Effect.result))._tag, "Failure");
       assert.strictEqual((yield* inspectOwnershipMarker(target)).kind, "valid");
       assert.strictEqual((yield* load).installed_skills[0]?.status, "installed");
-    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
 
 it.effect("backs up beside a symlinked root's real directory, on the copy's own device", () =>
@@ -1106,7 +1105,7 @@ it.effect("backs up beside a symlinked root's real directory, on the copy's own 
       ["kept"],
     );
     assert.strictEqual(yield* fs.exists(join(home, ".skit-backups")), false);
-  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 for (const planted of [
@@ -1147,7 +1146,7 @@ for (const planted of [
         "raw Skill bytes\n",
       );
       assert.strictEqual((yield* load).installed_skills[0]?.status, "installed");
-    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
 
 for (const location of ["beside", "inside"] as const)
@@ -1180,7 +1179,7 @@ for (const location of ["beside", "inside"] as const)
 
           assert.ok(before);
           assert.strictEqual(yield* losslessTree(outside), before);
-        }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+        }).pipe(Effect.provide(skitLayer), Effect.scoped),
     );
 
 it.effect(
@@ -1236,7 +1235,7 @@ for (const protection of [
         assert.strictEqual(yield* fs.exists(join(target, protection.marker)), true);
         assert.deepStrictEqual((yield* load).installed_skills, recorded);
         assert.deepStrictEqual(yield* backupsBeside(targetRoot), []);
-      }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+      }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
 
 it.effect("still updates a copy inside a repository whose root is above the skills folder", () =>
@@ -1256,7 +1255,7 @@ it.effect("still updates a copy inside a repository whose root is above the skil
     assert.strictEqual(updated?.status, "installed");
     assert.strictEqual(updated?.installed_skill_id, recorded?.installed_skill_id);
     assert.notStrictEqual(updated?.expected_hash, recorded?.expected_hash);
-  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("replaces an edited copy only as approved, keeping the edit in recovery", () =>
@@ -1319,5 +1318,5 @@ it.effect("replaces an edited copy only as approved, keeping the edit in recover
       ["kept"],
     );
     assert.strictEqual(yield* fs.readFileString(join(backups[0]!.path, "SKILL.md")), "my edit\n");
-  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

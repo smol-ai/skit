@@ -1,7 +1,7 @@
 import { basename } from "node:path";
 import { Effect } from "effect";
 import { InstalledSkills } from "../../installed-skills.js";
-import { installedSkillVariantPath } from "../../../install/files.js";
+import { installedSkillVariantPath } from "../../../installed-skills/files.js";
 import { InstalledSkillInvalid } from "../../installation/install-enabled.js";
 import { StalePlan } from "../../library-plan.js";
 import type { LibraryState } from "../../library-state.js";

@@ -1,7 +1,6 @@
 import type { HistoryAction } from "./history-delivery.js";
 import type { OperationId } from "../entity-ids.js";
-import { LibraryActor } from "../actor.js";
-import { Context, Effect, FileSystem, Option } from "effect";
+import { Context, Effect, FileSystem, Option, References } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { join, resolve } from "node:path";
 import type { InvalidLibraryState, LibraryBusy, LibraryChanged } from "../../failures.js";
@@ -63,6 +62,12 @@ export class LibraryWriter extends Context.Service<
   }
 >()("skit/library/LibraryWriter") {}
 
+/** Front ends annotate their workflow; attribution carries no resource or write authority. */
+const historyWorkflow = Effect.map(References.CurrentLogAnnotations, (annotations) => {
+  const workflow = annotations["skit.library.workflow"];
+  return typeof workflow === "string" ? workflow : "unattributed";
+});
+
 /** Retry is safe: undelivered events remain in the same durable file as the Library state. */
 export const recoverLibraryHistory = (home: string, actionId?: OperationId) =>
   deliverLibraryHistory(home, actionId).pipe(
@@ -92,7 +97,7 @@ export const writeLibrary = <A, E, R>(
     return yield* withHomeLock(
       root,
       Effect.gen(function* () {
-        const action = yield* libraryHistoryAction(root, yield* LibraryActor, options.resume);
+        const action = yield* libraryHistoryAction(root, yield* historyWorkflow, options.resume);
         currentAction = action;
         const writer = LibraryWriter.of({
           home: root,
@@ -104,7 +109,7 @@ export const writeLibrary = <A, E, R>(
               yield* withHomeLock(
                 root,
                 Effect.gen(function* () {
-                  late = yield* libraryHistoryAction(root, yield* LibraryActor);
+                  late = yield* libraryHistoryAction(root, yield* historyWorkflow);
                   yield* saveLibraryState(root, next, base, late);
                 }),
               ).pipe(

@@ -14,14 +14,13 @@ import {
   LibraryManifest,
   LibraryState,
   makeInstalledSkillId,
-  strandedByRestore,
 } from "@smolai/skit-core";
 import {
   normalizeLibraryManifest,
   mergeLibraryManifests,
   prepareLibraryMerge,
-} from "../src/workflows/library/library-merge.js";
-import { planLibrarySync } from "../src/workflows/library/library-sync-plan.js";
+} from "../src/library/workflows/library-merge.js";
+import { planLibrarySync } from "../src/library/workflows/library-sync-plan.js";
 
 import { alignLibrary, aliasManifest } from "@smolai/skit-core/library/session";
 
@@ -457,10 +456,14 @@ it.effect(
       assert.strictEqual(merged.manifest.imports.length, local.imports.length);
       assert.deepEqual(local, original);
       const device = merged.device;
-      assert.deepEqual(
-        strandedByRestore(device, { ...merged.manifest, enabled: state.enabled }),
-        [],
-      );
+      // The public state codec proves every installed copy still names a retained Version.
+      yield* LibraryState.makeEffect({
+        ...device,
+        collections: merged.manifest.collections,
+        skills: merged.manifest.skills,
+        collection_versions: merged.manifest.collection_versions,
+        imports: merged.manifest.imports,
+      });
       assert.strictEqual(device.installed_skills[0]?.skill_version_id, second);
       assert.strictEqual(device.installed_skills[0]?.expected_hash, hashB);
       assert.strictEqual(device.assessmentAcceptances?.[0]?.skill_version_id, second);

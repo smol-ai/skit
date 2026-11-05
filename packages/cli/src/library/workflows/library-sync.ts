@@ -22,7 +22,7 @@ import { previewSyncInstalledSkills } from "@smolai/skit-core/library/session";
 import { SyncConflictDetail } from "./library-sync-contract.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 import { selectDeviceSkills } from "./device-selection.js";
-import { OptionCombinationInvalid } from "../failures.js";
+import { OptionCombinationInvalid } from "../../workflows/failures.js";
 import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 
 const conflicted = (details: readonly SyncConflictDetail[], revision_id?: string) => ({

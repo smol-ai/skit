@@ -1,9 +1,9 @@
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { Effect, FileSystem, Schema } from "effect";
 import { canonicalJson } from "../../../shared/json.js";
 import { copyLocalTree } from "../../../platform/copy-tree.js";
 import { LinkStat } from "../../../platform/link-stat.js";
-import { prepareInstalledSkillRebuild } from "../../../install/files.js";
+import { prepareInstalledSkillRebuild } from "../../../installed-skills/files.js";
 import { originalTreeHash } from "../../collection-version.js";
 import { globalEnabled } from "../../enabled.js";
 import { holdsEvidence, parentIsAsRecorded, recoveryEntryPath } from "../../folder-evidence.js";
@@ -14,7 +14,7 @@ import { LibraryWriter, libraryOriginalsPath, loadLibrary } from "../../store/li
 import { OperationStatus, type UndoProgram } from "../../store/state-schema.js";
 import type { OperationId } from "../../entity-ids.js";
 import { ensureRecoveryOperation } from "../recovery/moves.js";
-import { RecoveryInvalid } from "../recovery/evidence.js";
+import { RecoveryInvalid } from "../../recovery-facts.js";
 import { readSkillPathDetails } from "./journal.js";
 import { checkSetupGlobalContent } from "./protection.js";
 import { checkAnchor, restoreMarker } from "./undo-files.js";
@@ -76,20 +76,32 @@ export const runUndo = Effect.fn("Library.runUndo")(function* (
       folder !== undefined && (yield* holdsEvidence(folder, recoveryEntryPath(directory, at, path)))
     );
   });
+  // Recorded lexical aliases share one destination, but each keeps its own checked parent.
+  const coordinate = (path: UndoPath) =>
+    join(path.anchor.physicalPath, relative(path.anchor.path, path.path));
+  const actionAt = (path: UndoPath) =>
+    program.actions.find((action) => {
+      const before = program.paths.find((item) => item.path === action.path);
+      return before !== undefined && coordinate(before) === coordinate(path);
+    });
   const check = Effect.fn("Library.checkUndoFiles")(function* () {
     yield* publication();
     for (const source of program.sourceImports)
       if ((yield* originalTreeHash(source.path)) !== source.hash)
         return yield* new RecoveryInvalid({ detail: `Undo source changed: ${source.path}` });
     for (const before of program.paths) {
-      const action = program.actions.find((item) => item.path === before.path);
+      const action = actionAt(before);
       const actual = yield* readSkillPathDetails(before.path);
       if (action) {
         const file = program.files.find((item) => item.path === before.path);
         if (!file) return yield* new RecoveryInvalid({ detail: "Missing Undo file evidence" });
         yield* checkAnchor(file);
         yield* checkSetupGlobalContent(file.path);
-        if (isAfter(action, actual)) continue;
+        if (
+          action.after &&
+          equal(actual, { ...action.after, path: before.path, anchor: before.anchor })
+        )
+          continue;
         if (
           actual.entry === null &&
           (yield* preserved(before.path)) &&

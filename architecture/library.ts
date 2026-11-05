@@ -1,3 +1,8 @@
+import type { PlatformError as PlatformErrors } from "effect";
+import type {
+  RecoveryInvalid,
+  RecoveryInspection,
+} from "../packages/skit/src/library/recovery-facts.js";
 /**
  * Architecture contract: the Library slice, target API. Approved; enforced by
  * architecture/conformance/library.ts and lint.
@@ -73,7 +78,7 @@ import type {
   Installed,
   Warning,
 } from "../packages/skit/src/library/installed-skills.js";
-import type { StagedInstalledSkill } from "../packages/skit/src/install/files.js";
+import type { StagedInstalledSkill } from "../packages/skit/src/installed-skills/files.js";
 import type { Invocation } from "../packages/skit/src/library/enabled-plan.js";
 import type {
   CollectionId,
@@ -512,7 +517,7 @@ export type OperationStatus =
 
 export interface History {
   readonly events: readonly LibraryAuditEvent[]; // audit.jsonl, as today
-  readonly operations: readonly OperationStatus[]; // PROPOSED: from state.json operation records
+  readonly operations: readonly OperationStatus[];
 }
 
 /** What startup did with operations it found unfinished. Also visible through history. */
@@ -636,6 +641,13 @@ export interface Library {
    * reading history must never silently discard evidence or repair the log.
    */
   readonly history: Effect.Effect<History, LibraryStateReadError | LibraryAuditInvalid>;
+  /** Passive recovery facts; malformed audit history must not hide saved files. */
+  readonly recovery: {
+    readonly list: Effect.Effect<readonly string[], PlatformErrors.PlatformError | RecoveryInvalid>;
+    readonly inspect: (
+      operationId: string,
+    ) => Effect.Effect<RecoveryInspection, PlatformErrors.PlatformError | RecoveryInvalid>;
+  };
   /** What startup recovery did when the layer was built. */
   readonly startup: StartupRecovery;
 }

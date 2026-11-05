@@ -34,6 +34,7 @@ export type Checks = [
   Assert<Equal<Library["setup"], Implementation.Interface["setup"]>>,
   Assert<Equal<Library["content"], Implementation.Interface["content"]>>,
   Assert<Equal<Library["history"], Implementation.Interface["history"]>>,
+  Assert<Equal<Library["recovery"], Implementation.Interface["recovery"]>>,
   Assert<Equal<Library["startup"], Implementation.Interface["startup"]>>,
   Assert<
     Equal<Exclude<Layer.Services<ReturnType<typeof Implementation.layer>>, LibraryRequires>, never>

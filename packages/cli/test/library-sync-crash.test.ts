@@ -277,8 +277,10 @@ for (const ancestry of ["missing", "stale"] as const)
         assert.deepStrictEqual(yield* a.state, before);
 
         assert.strictEqual((yield* a.sync()).status, "clean");
-        assert.strictEqual(a.saves, saves + 6);
-        const record = (yield* a.state).operations.at(-1);
+        const after = yield* a.state;
+        assert.strictEqual(after.operations.length, before.operations.length + 1);
+        assert.deepStrictEqual(after.operations.slice(0, -1), before.operations);
+        const record = after.operations.at(-1);
         assert.strictEqual(record?._tag, "Done");
         assert.deepStrictEqual(
           record?.steps.map((step) => step.status),
@@ -287,6 +289,10 @@ for (const ancestry of ["missing", "stale"] as const)
         const anchored = yield* a.state;
         assert.isFalse(Object.hasOwn(anchored, "extension"));
         assert.strictEqual(anchored.sync_ancestry?.revision_id, head.revision_id);
+        const saved = a.saves;
+        assert.strictEqual((yield* a.sync()).status, "clean");
+        assert.strictEqual(a.saves, saved);
+        assert.deepStrictEqual(yield* a.state, anchored);
       }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
   );
 

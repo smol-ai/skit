@@ -1,13 +1,9 @@
+import { SkitConfiguration } from "@smolai/skit-core";
 import { Library } from "@smolai/skit-core/library";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import {
-  deterministicTreeHash,
-  LibraryActor,
-  skitLayer,
-  type LibraryState,
-} from "@smolai/skit-core";
+import { deterministicTreeHash, skitLayer, type LibraryState } from "@smolai/skit-core";
 import {
   confirmLibraryChange,
   openLibrarySession,
@@ -16,7 +12,7 @@ import {
   proposeLibraryDisable,
   proposeLibraryCollectionChange,
   libraryCollectionScopes,
-} from "../src/library-application/session.js";
+} from "@smolai/skit-core/library/session";
 import {
   initializeLibraryMachine,
   libraryHome,
@@ -61,7 +57,11 @@ it.effect("a front end that confirms a Library session change leaves attributed 
     );
     const importedEvents = (yield* history).length;
 
-    const session = yield* home.owned(openLibrarySession(home.installOptions));
+    const session = yield* home.owned(
+      Effect.flatMap(SkitConfiguration, (paths) =>
+        openLibrarySession(paths.skitHome, home.installOptions),
+      ),
+    );
     const proposed = yield* home.owned(
       proposeLibraryEnable(session, home.installOptions, session.skills[0]!, {
         scope: { kind: "global" },
@@ -69,7 +69,7 @@ it.effect("a front end that confirms a Library session change leaves attributed 
     );
     const confirmed = yield* home
       .owned(confirmLibraryChange(proposed))
-      .pipe(Effect.provideService(LibraryActor, "tui"));
+      .pipe(Effect.annotateLogs({ "skit.library.workflow": "tui" }));
     assert.notStrictEqual(confirmed.outcome?.kind, "failed");
 
     const events = yield* history;
@@ -115,7 +115,11 @@ it.effect("Collection actions preview and apply all Skills together", () =>
         }),
       ),
     );
-    const session = yield* home.owned(openLibrarySession(home.installOptions));
+    const session = yield* home.owned(
+      Effect.flatMap(SkitConfiguration, (paths) =>
+        openLibrarySession(paths.skitHome, home.installOptions),
+      ),
+    );
     const collectionId = (yield* home.durable).collections[0]!.collection_id;
     assert.strictEqual(session.skills.length, 2);
     assert.ok(session.skills.every((row) => row.collectionId === collectionId));
@@ -127,7 +131,11 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     yield* fs.writeFileString(join(source, "alpha", "SKILL.md"), "changed native source\n");
     const alpha = session.skills.find((row) => row.name === "alpha")!;
     assert.strictEqual(
-      yield* home.owned(readLibrarySkillContent(alpha.skillVersionId)),
+      yield* home.owned(
+        Effect.flatMap(SkitConfiguration, (paths) =>
+          readLibrarySkillContent(paths.skitHome, alpha.skillVersionId),
+        ),
+      ),
       "# alpha\n",
     );
     const scopes = [{ kind: "global" } as const];
@@ -137,9 +145,11 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     assert.strictEqual(proposed.outcome.kind, "preview");
     assert.deepStrictEqual(proposed.pending?.facts[0]?.skills.slice().sort(), ["alpha", "beta"]);
     assert.ok(
-      (yield* home.owned(openLibrarySession(home.installOptions))).skills.every(
-        (row) => row.scopes.length === 0,
-      ),
+      (yield* home.owned(
+        Effect.flatMap(SkitConfiguration, (paths) =>
+          openLibrarySession(paths.skitHome, home.installOptions),
+        ),
+      )).skills.every((row) => row.scopes.length === 0),
     );
     const enabled = yield* home.owned(confirmLibraryChange(proposed));
     assert.strictEqual(enabled.outcome?.kind, "applied");
@@ -170,7 +180,11 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     const alphaRow = repaired.skills.find((row) => row.name === "alpha")!;
     const cleanup = yield* home.owned(
       proposeLibraryDisable(
-        yield* home.owned(openLibrarySession(home.installOptions)),
+        yield* home.owned(
+          Effect.flatMap(SkitConfiguration, (paths) =>
+            openLibrarySession(paths.skitHome, home.installOptions),
+          ),
+        ),
         home.installOptions,
         alphaRow,
         alphaRow.scopes,
@@ -229,7 +243,11 @@ const twoScopeProposal = (scopeCount = 2) =>
         }),
       ),
     );
-    const session = yield* home.owned(openLibrarySession(home.installOptions));
+    const session = yield* home.owned(
+      Effect.flatMap(SkitConfiguration, (paths) =>
+        openLibrarySession(paths.skitHome, home.installOptions),
+      ),
+    );
     const proposed = yield* home.owned(
       proposeLibraryCollectionChange(
         session,

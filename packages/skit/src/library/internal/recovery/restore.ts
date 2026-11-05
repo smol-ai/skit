@@ -7,7 +7,7 @@ import type { Snapshot } from "../../snapshot.js";
 
 import { planningState, applyReviewed } from "../../reviewed-plan.js";
 import { captureRecoveryRestore, inspectRecoveryOperation } from "./moves.js";
-import { RecoveryInvalid } from "./evidence.js";
+import { RecoveryInvalid } from "../../recovery-facts.js";
 import { setupOperation } from "../../setup.js";
 import { makeOperationId } from "../../entity-ids.js";
 

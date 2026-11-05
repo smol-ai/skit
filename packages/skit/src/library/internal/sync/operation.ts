@@ -4,8 +4,7 @@ import { normalizeLibraryManifest } from "../../manifest.js";
 import { inspectContent } from "../content/content.js";
 import { snapshotOf } from "../../snapshot.js";
 import { canonicalJson } from "../../../shared/json.js";
-import { inspectInstalledSkill } from "../../../install/files.js";
-import { treeHasherLayer } from "../../../artifact/tree-hasher.js";
+import { inspectInstalledSkill } from "../../../installed-skills/files.js";
 import * as InstalledSkillStatus from "../../installed-skill-status.js";
 import { InstalledSkills } from "../../installed-skills.js";
 import { operationScope } from "../operations/operations.js";
@@ -283,7 +282,6 @@ export const runSyncStep = Effect.fn("Library.sync.recordedStep")(function* (
     };
   }).pipe(
     Effect.provideService(InstalledSkills.Service, files),
-    Effect.provide(treeHasherLayer),
     Effect.catchTag("Library.InstalledSkillsChanged", (error) =>
       Effect.succeed({
         _tag: "Stop" as const,

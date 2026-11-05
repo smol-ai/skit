@@ -1,19 +1,6 @@
-import { Effect, Schema } from "effect";
-import { FailureTypeId, type SkitFailure } from "../../../shared/failure.js";
+import { RecoveryInvalid } from "../../recovery-facts.js";
+import { Effect } from "effect";
 import { recoveryFingerprint as libraryFingerprint } from "../../folder-evidence.js";
-
-export class RecoveryInvalid
-  extends Schema.TaggedError<RecoveryInvalid>()("RecoveryInvalid", { detail: Schema.String })
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  get message() {
-    return `Recovery cannot proceed: ${this.detail}`;
-  }
-  readonly remediation =
-    "Inspect the saved files and their move record; keep both before resolving the conflict.";
-}
 
 /** Includes control files, empty directories and link text; never follows symlinks. */
 export const recoveryFingerprint = (root: string, ownership: "include" | "exclude" = "include") =>

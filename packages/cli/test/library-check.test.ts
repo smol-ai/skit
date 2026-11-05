@@ -4,8 +4,8 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Ref } from "effect";
 import { join } from "node:path";
 import { collectionVersionPath, skitLayer } from "@smolai/skit-core";
-import { checkSubjects } from "../src/workflows/library/check.js";
-import { importSource } from "../src/library-application/import-source.js";
+import { checkSubjects } from "../src/library/workflows/check.js";
+import { importSource } from "../src/library/application/import-source.js";
 import { initializeLibraryMachine } from "./helpers/library-home.js";
 
 it.effect("checks retained files without treating an observed local copy as an upstream", () =>

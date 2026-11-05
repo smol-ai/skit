@@ -9,7 +9,7 @@ import {
 } from "@smolai/skit-core";
 import { harnessLabel } from "@smolai/skit-core/harnesses";
 import { conditionHeadline, installedSkillStatusLabel } from "./condition-language.js";
-import type { MachineInventoryResult } from "../workflows/library/machine-inventory-contract.js";
+import type { MachineInventoryResult } from "../library/workflows/machine-inventory-contract.js";
 
 type MachineInstance = MachineInventoryResult["machine"]["instances"][number];
 

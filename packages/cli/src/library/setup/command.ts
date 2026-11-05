@@ -37,7 +37,7 @@ import {
 import { emptyLibraryState } from "@smolai/skit-core";
 import { OptionCombinationInvalid } from "../../workflows/failures.js";
 import { SetupDuplicateAction } from "@smolai/skit-core/library/setup";
-import { checkSubjects } from "../../workflows/library/check.js";
+import { checkSubjects } from "../workflows/check.js";
 import { renderCheck } from "../../presentation/check.js";
 import { setupReviewSkillChoices } from "./setup-skills.js";
 

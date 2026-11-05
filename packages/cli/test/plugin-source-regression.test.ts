@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { collectionVersionPath, skitLayer } from "@smolai/skit-core";
 import { Library } from "@smolai/skit-core/library";
-import { importSource, previewLibrarySource } from "../src/library-application/import-source.js";
+import { importSource, previewLibrarySource } from "../src/library/application/import-source.js";
 import { gitBlobHash } from "./helpers/collection-import.js";
 import { writingTo } from "./helpers/library-home.js";
 import manifest from "./fixtures/source-regressions/humanlayer.json" with { type: "json" };

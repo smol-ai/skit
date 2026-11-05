@@ -1,4 +1,4 @@
-import { Library, LibraryActor, skitConfigurationLayer, skitLayer } from "@smolai/skit-core";
+import { Library, skitConfigurationLayer, skitLayer } from "@smolai/skit-core";
 import { join } from "node:path";
 import { Effect, FileSystem, Layer } from "effect";
 import { deterministicTreeHash, LinkStat, makeMachineId } from "@smolai/skit-core";
@@ -73,7 +73,6 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
   const application = Library.layer({ home: skitHome, routing: { _tag: "None" } }).pipe(
     Layer.provideMerge(skitLayer),
     Layer.provideMerge(skitConfigurationLayer(skitHome)),
-    Layer.provideMerge(Layer.succeed(LibraryActor)("tui")),
   );
   return {
     root,

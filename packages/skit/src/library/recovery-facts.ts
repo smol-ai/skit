@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 import { Hash } from "../vocabulary.js";
 
 export const RecoveryFact = Schema.Struct({
@@ -16,3 +17,18 @@ export const RecoveryInspection = Schema.Struct({
   entries: Schema.Array(RecoveryFact),
   legacy: Schema.Boolean,
 });
+
+export type RecoveryInspection = typeof RecoveryInspection.Type;
+
+export class RecoveryInvalid
+  extends Schema.TaggedError<RecoveryInvalid>()("RecoveryInvalid", { detail: Schema.String })
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "CONFLICT" as const;
+  get message() {
+    return `Recovery cannot proceed: ${this.detail}`;
+  }
+  readonly remediation =
+    "Inspect the saved files and their move record; keep both before resolving the conflict.";
+}

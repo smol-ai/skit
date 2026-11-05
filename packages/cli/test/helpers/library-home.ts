@@ -7,8 +7,6 @@ import {
   createSkitArchive,
   deterministicTreeHash,
   initSkit,
-  treeHasherLayer,
-  TreeHasher,
   readSkitDescriptor,
   validateSkitDirectory,
   type HarnessName,
@@ -18,7 +16,7 @@ import {
   emptyLibraryState,
   type ImportRequest,
 } from "@smolai/skit-core";
-import type { InstalledSkillOptions } from "../../src/workflows/library/installed-skill-options.js";
+import type { InstalledSkillOptions } from "../../src/library/workflows/installed-skill-options.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./http-test-client.js";
 import { registryAuthAccessLayer } from "../../src/registry/auth-service.js";
 import { RegistryHttp, registryHttpLayer } from "../../src/registry/registry-http.js";
@@ -106,16 +104,12 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
           transport,
           registryHttpLayer(transport),
           registryAuth,
-          treeHasherLayer,
         ),
       ),
     ) as Effect.Effect<
       A,
       E,
-      | Exclude<
-          R,
-          SkitConfiguration | Library.Service | HttpClient.HttpClient | RegistryHttp | TreeHasher
-        >
+      | Exclude<R, SkitConfiguration | Library.Service | HttpClient.HttpClient | RegistryHttp>
       | FileSystem.FileSystem
     >;
   const durable = owned(

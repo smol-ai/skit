@@ -6,8 +6,8 @@ import { handleSourceCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags } from "../../commands/parameters.js";
-import { result } from "../contracts.js";
-import { checkSubjects } from "../../workflows/library/check.js";
+import { result } from "../../handlers/contracts.js";
+import { checkSubjects } from "../workflows/check.js";
 
 const subject = Argument.String("skill-or-collection").pipe(Argument.optional);
 

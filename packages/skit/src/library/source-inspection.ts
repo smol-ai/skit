@@ -6,7 +6,7 @@ import {
   validateSkitDirectory,
 } from "../artifact/skit.js";
 import { parseSkillFrontmatter } from "../harnesses/frontmatter.js";
-import { leavePnpmSkill } from "../install/pnpm-skills.js";
+import { leavePnpmSkill } from "../installed-skills/pnpm-skills.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 import { sourceLocator, type ResolvedSkitSource } from "../sources/resolve.js";
 import { originalTreeHash } from "./collection-version.js";

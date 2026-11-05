@@ -9,7 +9,10 @@ import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { systemError } from "effect/PlatformError";
 import { LinkStat, skitLayer, deterministicTreeHash } from "../src/index.js";
-import { listRecoveryOperations, inspectRecoveryOperation } from "../src/index.js";
+import {
+  listRecoveryOperations,
+  inspectRecoveryOperation,
+} from "../src/library/internal/recovery/moves.js";
 const scratch = (prefix: string) =>
   Effect.flatMap(FileSystem.FileSystem, (fs) => fs.makeTempDirectoryScoped({ prefix }));
 

@@ -1,18 +1,19 @@
+import { SkitConfiguration } from "@smolai/skit-core";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem, Option, Result, Schema } from "effect";
 import { join } from "node:path";
 import { deterministicTreeHash, StalePlan } from "@smolai/skit-core";
-import { presentListCommand } from "../src/handlers/library/list.js";
+import { presentListCommand } from "../src/library/commands/list.js";
 import { browseLibrary } from "../src/presentation/interactive-list.js";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
 import { renderLibraryList } from "../src/presentation/library-list.js";
-import { ListResult } from "../src/workflows/library/list-contract.js";
+import { ListResult } from "../src/library/workflows/list-contract.js";
 import {
   confirmLibraryChange,
   openLibrarySession,
   proposeLibraryEnable,
-} from "../src/library-application/session.js";
+} from "@smolai/skit-core/library/session";
 import { rendererTestLayer } from "./helpers/renderer.js";
 import { homeLockIsFree } from "./helpers/home-lock.js";
 import {
@@ -83,7 +84,11 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
     assert.deepStrictEqual(listing.enabled, []);
     assert.strictEqual(JSON.stringify(listing).includes("release"), false);
 
-    const session = yield* home.owned(openLibrarySession(home.installOptions));
+    const session = yield* home.owned(
+      Effect.flatMap(SkitConfiguration, (paths) =>
+        openLibrarySession(paths.skitHome, home.installOptions),
+      ),
+    );
     const row = session.skills[0];
     assert.ok(row);
     const proposed = yield* home.owned(
@@ -103,7 +108,11 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
     const interaction = yield* makeScriptedInteraction(["Done"]);
     yield* home.owned(
       browseLibrary(
-        yield* home.owned(openLibrarySession(home.installOptions)),
+        yield* home.owned(
+          Effect.flatMap(SkitConfiguration, (paths) =>
+            openLibrarySession(paths.skitHome, home.installOptions),
+          ),
+        ),
         home.installOptions,
       ).pipe(Effect.provide(interaction.layer)),
     );
@@ -227,7 +236,12 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     yield* home.owned(
       browseLibrary(
         yield* home.owned(
-          openLibrarySession({ ...home.installOptions, ...configuration.inventory }),
+          Effect.flatMap(SkitConfiguration, (paths) =>
+            openLibrarySession(paths.skitHome, {
+              ...home.installOptions,
+              ...configuration.inventory,
+            }),
+          ),
         ),
         { ...home.installOptions, ...configuration.inventory },
       ).pipe(Effect.provide(unchangedBrowse.layer)),
@@ -259,7 +273,11 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     ]);
     yield* home.owned(
       browseLibrary(
-        yield* home.owned(openLibrarySession(home.installOptions)),
+        yield* home.owned(
+          Effect.flatMap(SkitConfiguration, (paths) =>
+            openLibrarySession(paths.skitHome, home.installOptions),
+          ),
+        ),
         home.installOptions,
       ).pipe(Effect.provide(browseCancel.layer)),
     );
@@ -273,7 +291,11 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     ]);
     yield* home.owned(
       browseLibrary(
-        yield* home.owned(openLibrarySession(home.installOptions)),
+        yield* home.owned(
+          Effect.flatMap(SkitConfiguration, (paths) =>
+            openLibrarySession(paths.skitHome, home.installOptions),
+          ),
+        ),
         home.installOptions,
       ).pipe(Effect.provide(browseDisable.layer)),
     );

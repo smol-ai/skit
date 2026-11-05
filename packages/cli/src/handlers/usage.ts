@@ -2,7 +2,7 @@ import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
 import { Library, emptyLibraryState, UsageHarness, skillUsageLayer } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { Command, Flag } from "effect/cli";
-import { scanLocalUsage } from "../library-application/local-usage.js";
+import { scanLocalUsage } from "../library/application/local-usage.js";
 import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";

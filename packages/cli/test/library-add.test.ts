@@ -13,12 +13,12 @@ import {
   deterministicTreeHash,
   collectionVersionPath,
 } from "@smolai/skit-core";
-import { importSource, previewLibrarySource } from "../src/library-application/import-source.js";
-import { planUpdates, updateSubjects } from "../src/library-application/update.js";
-import { checkSubjects } from "../src/workflows/library/check.js";
+import { importSource, previewLibrarySource } from "../src/library/application/import-source.js";
+import { planUpdates, updateSubjects } from "../src/library/application/update.js";
+import { checkSubjects } from "../src/library/workflows/check.js";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
-import { planLibrarySync } from "../src/workflows/library/library-sync-plan.js";
-import { executeRemove } from "../src/workflows/library/remove.js";
+import { planLibrarySync } from "../src/library/workflows/library-sync-plan.js";
+import { executeRemove } from "../src/library/workflows/remove.js";
 import { librarySubjects } from "@smolai/skit-core";
 import {
   archiveBytes,

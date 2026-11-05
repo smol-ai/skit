@@ -8,7 +8,7 @@ import {
 } from "../entity-ids.js";
 import { Hash, HarnessName } from "../../vocabulary.js";
 import { Schema } from "effect";
-import { PnpmSkillOwner } from "../../install/pnpm-skills.js";
+import { PnpmSkillOwner } from "../../installed-skills/pnpm-skills.js";
 
 export const SetupVersionChoice = Schema.Struct({
   skillId: SkillId,

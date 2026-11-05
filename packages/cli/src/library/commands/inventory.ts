@@ -4,7 +4,7 @@ import { skillModificationTime } from "@smolai/skit-core/library/session";
 import { Option, Effect } from "effect";
 import { Command, Flag } from "effect/cli";
 import { terminalPrompterLayer } from "../../presentation/prompter.js";
-import { presentDoctorCleanup } from "../../workflows/library/doctor-cleanup.js";
+import { presentDoctorCleanup } from "../workflows/doctor-cleanup.js";
 import {
   libraryDoctorReport,
   Library,
@@ -19,9 +19,9 @@ import { handleLibraryCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { inventoryRootOptions, localFlags } from "../../commands/parameters.js";
-import { result } from "../contracts.js";
+import { result } from "../../handlers/contracts.js";
 import { runSetup } from "@smolai/skit-core/library/setup";
-import { inspectNativeDiscovery } from "../../workflows/library/doctor-harnesses.js";
+import { inspectNativeDiscovery } from "../workflows/doctor-harnesses.js";
 import { promptsAllowed } from "../../presentation/interactivity.js";
 
 export type CliInventoryOptions = InventoryRootOptions & { readonly libraryHome: string };

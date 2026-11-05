@@ -2,14 +2,14 @@ import { Library } from "@smolai/skit-core/library";
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem } from "effect";
 import { join } from "node:path";
-import { createSkitArchive, LibraryActor, skitLayer } from "@smolai/skit-core";
+import { createSkitArchive, skitLayer } from "@smolai/skit-core";
 import {
   LibraryProgress,
   libraryProgressLayer,
   type LibraryProgressEvent,
-} from "../src/library-application/progress.js";
-import { updateSubjects } from "../src/library-application/update.js";
-import { importSource } from "../src/library-application/import-source.js";
+} from "../src/library/application/progress.js";
+import { updateSubjects } from "../src/library/application/update.js";
+import { importSource } from "../src/library/application/import-source.js";
 import { copySkitFixtureEffect, libraryHome } from "./helpers/library-home.js";
 import { homeLockIsFree } from "./helpers/home-lock.js";
 
@@ -61,7 +61,7 @@ it.effect("a headless update emits domain progress and records one attributed tr
           ),
         ),
       )
-      .pipe(Effect.provideService(LibraryActor, "headless"));
+      .pipe(Effect.annotateLogs({ "skit.library.workflow": "headless" }));
     assert.strictEqual(results.length, 1);
     assert.isTrue("changed" in results[0]! && results[0].changed);
     assert.deepStrictEqual(

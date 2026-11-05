@@ -15,7 +15,10 @@ export function createLibraryHost<R, E, OpenError>(
   const run = <A, Error>(effect: Effect.Effect<A, Error, R>): Promise<A> => {
     if (closing) return Promise.reject(new Error("Library host is disposed"));
     const controller = new AbortController();
-    const operation = runtime.runPromise(effect, { signal: controller.signal });
+    const operation = runtime.runPromise(
+      effect.pipe(Effect.annotateLogs({ "skit.library.workflow": "tui" })),
+      { signal: controller.signal },
+    );
     active.set(controller, operation);
     const finished = () => {
       active.delete(controller);

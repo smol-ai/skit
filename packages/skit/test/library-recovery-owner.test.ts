@@ -131,3 +131,25 @@ for (const diverge of [false, true])
           assert.isTrue(yield* f.fs.exists(f.plan.program.summary.entries[1]!.recoveryPath));
       }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
+
+it.effect("recovery facts stay readable when audit history is malformed", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const auditPath = join(f.home, "audit.jsonl");
+    const malformed = "{ malformed history\n";
+    yield* f.fs.writeFileString(auditPath, malformed);
+    const state = yield* f.fs.readFileString(join(f.home, "state.json"));
+    yield* Effect.gen(function* () {
+      const owner = yield* Library.Service;
+      const history = yield* Effect.result(owner.history);
+      assert.strictEqual(history._tag, "Failure");
+      if (history._tag === "Failure")
+        assert.strictEqual(history.failure._tag, "LibraryAuditInvalid");
+      assert.deepStrictEqual(yield* owner.recovery.list, [f.plan.intent.operationId]);
+      const inspected = yield* owner.recovery.inspect(f.plan.intent.operationId);
+      assert.deepStrictEqual(inspected, f.plan.change);
+      assert.strictEqual(yield* f.fs.readFileString(auditPath), malformed);
+      assert.strictEqual(yield* f.fs.readFileString(join(f.home, "state.json")), state);
+    }).pipe(Effect.provide(f.layer));
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);

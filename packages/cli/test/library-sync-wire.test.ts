@@ -7,7 +7,7 @@ import { registryHttpLayer } from "../src/registry/registry-http.js";
 import {
   LibraryManifestTooNew,
   librarySyncApi,
-} from "../src/workflows/library/library-sync-api.js";
+} from "../src/library/workflows/library-sync-api.js";
 import { testHttpClientLayer } from "./helpers/http-test-client.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 

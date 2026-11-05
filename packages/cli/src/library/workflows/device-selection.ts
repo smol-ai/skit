@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import type { DeviceSkillSelection, Enabled, LibraryManifest } from "@smolai/skit-core";
-import { OptionCombinationInvalid } from "../failures.js";
+import { OptionCombinationInvalid } from "../../workflows/failures.js";
 
 /** Resolve explicit names once to stable identities; collection items continue to follow membership. */
 export const selectDeviceSkills = Effect.fn("Library.selectDeviceSkills")(function* (

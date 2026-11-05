@@ -1,6 +1,5 @@
 import { passiveCheckEnabled } from "./releases/policy.js";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { LibraryActor } from "@smolai/skit-core";
 import { Effect, Fiber, Runtime } from "effect";
 import { commandActor } from "./commands/actor.js";
 import { skitCommand } from "./commands/tree.js";
@@ -41,7 +40,7 @@ const program = (
       ).pipe(Effect.provide(releaseCheckerLive))
     : command
 ).pipe(
-  Effect.provideService(LibraryActor, commandActor(skitCommand, argv)),
+  Effect.annotateLogs({ "skit.library.workflow": commandActor(skitCommand, argv) }),
   Effect.provide(consoleRendererLayer(json)),
   Effect.provide(NodeServices.layer),
 );

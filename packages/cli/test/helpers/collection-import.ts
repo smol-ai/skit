@@ -3,7 +3,7 @@ import { Effect, FileSystem } from "effect";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { collectionVersionPath, Library } from "@smolai/skit-core";
-import { importSource, previewLibrarySource } from "../../src/library-application/import-source.js";
+import { importSource, previewLibrarySource } from "../../src/library/application/import-source.js";
 import { writingTo } from "./library-home.js";
 
 export const gitBlobHash = (bytes: Uint8Array) =>

@@ -1,5 +1,6 @@
+import { SkitConfiguration } from "@smolai/skit-core";
 import { skitConfigurationLayer } from "@smolai/skit-core";
-import { openLibraryView } from "../../library-application/library-view.js";
+import { openLibraryView } from "@smolai/skit-core/library/session";
 import { Option, Effect } from "effect";
 import { Command } from "effect/cli";
 import { handleLibraryCommand } from "../../application.js";
@@ -7,15 +8,15 @@ import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
-import { result } from "../contracts.js";
+import { result } from "../../handlers/contracts.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import { terminalPrompterLayer } from "../../presentation/prompter.js";
 import { promptsAllowed } from "../../presentation/interactivity.js";
 import { browseLibrary } from "../../presentation/interactive-list.js";
-import { openLibrarySession } from "../../library-application/session.js";
+import { openLibrarySession } from "@smolai/skit-core/library/session";
 
 export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
-  const view = yield* openLibraryView();
+  const view = yield* Effect.flatMap(SkitConfiguration, (paths) => openLibraryView(paths.skitHome));
   const subjects = yield* view.readSubjects();
   const value = {
     subjects: subjects.map((subject) => ({
@@ -50,7 +51,9 @@ export const listCliCommand = Command.make("list", localFlags, (input) =>
       Effect.gen(function* () {
         if (!interactive) return yield* presentListCommand();
         const configuration = yield* libraryCommandConfiguration(input);
-        const session = yield* openLibrarySession(configuration.pull.installOptions);
+        const session = yield* Effect.flatMap(SkitConfiguration, (paths) =>
+          openLibrarySession(paths.skitHome, configuration.pull.installOptions),
+        );
         yield* browseLibrary(session, configuration.pull.installOptions).pipe(
           Effect.provide(terminalPrompterLayer),
         );

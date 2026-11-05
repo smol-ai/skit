@@ -26,10 +26,7 @@ import {
   type SetEnabledIntent,
   type EnabledCollection,
 } from "@smolai/skit-core/library/session";
-import {
-  largeCollectionWarning,
-  descriptionLoadMessage,
-} from "../../workflows/library/collection-load.js";
+import { largeCollectionWarning, descriptionLoadMessage } from "../workflows/collection-load.js";
 
 const subject = Argument.String("skill-or-collection").pipe(Argument.optional);
 const repo = optionalString("repo", "Use repository scope.");

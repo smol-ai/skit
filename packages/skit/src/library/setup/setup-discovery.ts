@@ -4,7 +4,7 @@ import { Effect, FileSystem, Result, Schema } from "effect";
 import { LinkStat } from "../../platform/link-stat.js";
 import { emptyLibraryState, type LibraryState } from "../library-state.js";
 import { harnessProfile, resolveSkillsDirectory } from "../../harnesses/catalog.js";
-import { inspectOwnershipMarker } from "../../install/files.js";
+import { inspectOwnershipMarker } from "../../installed-skills/files.js";
 import { scanInventory } from "../inventory/refresh.js";
 import { parseSkillFrontmatter } from "../../harnesses/frontmatter.js";
 import { pathIsWithin } from "../../platform/path-identity.js";

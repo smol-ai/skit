@@ -26,17 +26,17 @@ import { AuditReportV1Alpha4 } from "../audit/schema.js";
 import { HarnessProbeReport } from "@smolai/skit-core/harnesses";
 import { RegistryRemoteChange, RegistryRemoteList } from "../registry/contracts.js";
 import { AuthorSyncResult } from "../workflows/author/sync-contract.js";
-import { RemovePlan, RemoveResult } from "../workflows/library/remove-contract.js";
-import { CheckResult } from "../workflows/library/check-contract.js";
-import { AddPreview, AddResult } from "../workflows/library/add-contract.js";
-import { UpdatePlan, UpdateResult } from "../workflows/library/update-contract.js";
-import { SyncResult } from "../workflows/library/library-sync-contract.js";
-import { ListResult } from "../workflows/library/list-contract.js";
+import { RemovePlan, RemoveResult } from "../library/workflows/remove-contract.js";
+import { CheckResult } from "../library/workflows/check-contract.js";
+import { AddPreview, AddResult } from "../library/workflows/add-contract.js";
+import { UpdatePlan, UpdateResult } from "../library/workflows/update-contract.js";
+import { SyncResult } from "../library/workflows/library-sync-contract.js";
+import { ListResult } from "../library/workflows/list-contract.js";
 import { SetEnabledChange, SetEnabledResult } from "@smolai/skit-core/library/session";
 import { RepositoryPolicyResult } from "@smolai/skit-core/library/setup";
 import { EditImportPlan, EditImportResult } from "@smolai/skit-core/library/session";
-import { MachineInventoryResult } from "../workflows/library/machine-inventory-contract.js";
-import { DoctorReport } from "../workflows/library/doctor-harnesses.js";
+import { MachineInventoryResult } from "../library/workflows/machine-inventory-contract.js";
+import { DoctorReport } from "../library/workflows/doctor-harnesses.js";
 
 function effectOutput<
   const TId extends string,

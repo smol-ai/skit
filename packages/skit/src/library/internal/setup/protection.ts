@@ -1,7 +1,7 @@
 import { dirname, join, relative, resolve } from "node:path";
 import { Effect } from "effect";
 import { LinkStat } from "../../../platform/link-stat.js";
-import { leavePnpmSkill } from "../../../install/pnpm-skills.js";
+import { leavePnpmSkill } from "../../../installed-skills/pnpm-skills.js";
 import { StalePlan } from "../../library-plan.js";
 
 /** A registered marker cannot override repository, authored or package-manager ownership. */

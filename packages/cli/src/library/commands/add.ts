@@ -1,7 +1,8 @@
+import { SkitConfiguration } from "@smolai/skit-core";
 import { skitConfigurationLayer } from "@smolai/skit-core";
 import { Effect, Option, Result } from "effect";
-import { descriptionLoadMessage } from "../../workflows/library/collection-load.js";
-import { openLibraryView } from "../../library-application/library-view.js";
+import { descriptionLoadMessage } from "../workflows/collection-load.js";
+import { openLibraryView } from "@smolai/skit-core/library/session";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleSourceCommand } from "../../application.js";
 import { MissingRequirement } from "../../workflows/failures.js";
@@ -13,10 +14,10 @@ import {
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags, optionalString } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
-import { result } from "../contracts.js";
+import { result } from "../../handlers/contracts.js";
 import { RegistryAuth, type RegistryAuthAccess } from "../../registry/auth-service.js";
-import { importSource, previewLibrarySource } from "../../library-application/import-source.js";
-import { rejectDedicatedInstallerSource } from "../../workflows/library/dedicated-installer-catalog.js";
+import { importSource, previewLibrarySource } from "../application/import-source.js";
+import { rejectDedicatedInstallerSource } from "../workflows/dedicated-installer-catalog.js";
 
 const source = Argument.String("source");
 const registry = optionalString("registry", "Resolve a Registry source through a name or URL.");
@@ -94,7 +95,9 @@ export const addCliCommand = Command.make(
           }),
         );
         const measurement = yield* Effect.gen(function* () {
-          const view = yield* openLibraryView();
+          const view = yield* Effect.flatMap(SkitConfiguration, (paths) =>
+            openLibraryView(paths.skitHome),
+          );
           const load = yield* view.descriptionLoad({ skills: imported.skill_ids });
           return descriptionLoadMessage(load);
         }).pipe(Effect.orElseSucceed(() => "Description size unavailable."));

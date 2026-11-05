@@ -1,6 +1,6 @@
 import { Effect, Option } from "effect";
 import { resolveSkitSource } from "../../sources/resolve.js";
-import { leavePnpmSkill } from "../../install/pnpm-skills.js";
+import { leavePnpmSkill } from "../../installed-skills/pnpm-skills.js";
 import { describeSourceSkills, leaveResolvedPnpmSkills } from "../source-inspection.js";
 import type { ImportRequest } from "../import-collection.js";
 

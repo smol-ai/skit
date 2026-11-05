@@ -1,4 +1,4 @@
-import { syncLibraryApplicationLayer } from "../../library-application/layers.js";
+import { syncLibraryApplicationLayer } from "../application/layers.js";
 import { skitConfigurationLayer } from "@smolai/skit-core";
 import { RegistryAuth } from "../../registry/auth-service.js";
 import { Option, Effect, Result } from "effect";
@@ -13,12 +13,12 @@ import {
 } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags, optionalString, optionValue } from "../../commands/parameters.js";
-import { syncLibrary } from "../../workflows/library/library-sync.js";
-import type { LibraryInstallationConfiguration } from "../../library/installation-configuration.js";
+import { syncLibrary } from "../workflows/library-sync.js";
+import type { LibraryInstallationConfiguration } from "../installation-configuration.js";
 import { officialRegistryOrigin } from "../../registry/accounts.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { createColors } from "picocolors";
-import { result } from "../contracts.js";
+import { result } from "../../handlers/contracts.js";
 import { terminalSyncProgress } from "../../presentation/sync-progress.js";
 import { renderLibrarySyncPlan } from "../../presentation/library-sync.js";
 import { terminalData } from "../../presentation/terminal-text.js";

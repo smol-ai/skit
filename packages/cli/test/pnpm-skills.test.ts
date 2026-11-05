@@ -13,7 +13,7 @@ import { SetupResult } from "@smolai/skit-core/library/setup";
 import { setupDiscoveredSkillChoices } from "../src/library/setup/setup-skills.js";
 import { setupRemovablePaths } from "@smolai/skit-core/library/setup";
 import { applySetupSelections } from "./helpers/setup-apply.js";
-import { importSource, inspectLibrarySource } from "../src/library-application/import-source.js";
+import { importSource, inspectLibrarySource } from "../src/library/application/import-source.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 const fixture = Effect.fn("Test.pnpmFixture")(function* (yaml = false) {

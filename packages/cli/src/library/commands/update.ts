@@ -12,9 +12,9 @@ import {
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
-import { result } from "../contracts.js";
-import { planUpdates, updateSubjects, updateExitCode } from "../../library-application/update.js";
-import { prepareEditImport, EditImportMissing } from "../../workflows/library/import-edit.js";
+import { result } from "../../handlers/contracts.js";
+import { planUpdates, updateSubjects, updateExitCode } from "../application/update.js";
+import { prepareEditImport, EditImportMissing } from "../workflows/import-edit.js";
 
 const subject = Argument.String("skill-or-collection").pipe(Argument.optional);
 const dryRun = Flag.Boolean("dry-run").pipe(
