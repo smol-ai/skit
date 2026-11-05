@@ -54,8 +54,11 @@ describe("skit/owner-boundaries", () => {
     for (const statement of [
       'import { InstalledSkills } from "@smolai/skit-core";',
       'import { InstalledSkillStatus } from "@smolai/skit-core";',
+      'import { prepareInstalledSkillRebuild } from "@smolai/skit-core";',
       'import * as Files from "../../../skit/src/library/installed-skills.js";',
       'import * as Status from "../../../skit/src/library/installed-skill-status.js";',
+      'import * as Files from "../../../skit/src/installed-skills/files.js";',
+      'const files = import("../../../skit/src/installed-skills/files.js");',
       'export * from "../../../skit/src/library/installed-skills.js";',
     ])
       expect(
@@ -66,6 +69,20 @@ describe("skit/owner-boundaries", () => {
         'import * as Files from "../src/library/installed-skills.js";',
         "owner-boundaries",
         "packages/skit/test/library-configured-routing.test.ts",
+      ),
+    ).toEqual([]);
+    expect(
+      await reported(
+        'import { inspectOwnershipMarker } from "@smolai/skit-core/library/inventory";',
+        "owner-boundaries",
+        "packages/cli/test/helpers/installed.ts",
+      ),
+    ).toEqual([]);
+    expect(
+      await reported(
+        'import { prepareInstalledSkillRebuild } from "../src/installed-skills/files.js";',
+        "owner-boundaries",
+        "packages/skit/test/installed-skill-rebuild.test.ts",
       ),
     ).toEqual([]);
   });

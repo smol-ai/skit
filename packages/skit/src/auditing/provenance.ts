@@ -1,5 +1,5 @@
 import { artifactUsesSymlink } from "../platform/path-identity.js";
-import { inspectOwnershipMarker } from "../installed-skills/files.js";
+import { inspectOwnershipMarker } from "../installed-skills/marker-inspection.js";
 import { isJsonObject, stringAt, type JsonObject } from "../shared/json.js";
 import { dirname, join, normalize, sep } from "node:path";
 import { Effect } from "effect";

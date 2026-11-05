@@ -10,7 +10,6 @@ import { Library } from "@smolai/skit-core/library";
 import {
   hashParts,
   LinkStat,
-  prepareInstalledSkillRebuild,
   setupIntent,
   observePathEvidence,
   recoveryFingerprint,
@@ -85,34 +84,6 @@ const fixture = Effect.fn("Test.setupUndoFixture")(function* (removeOnly = false
     operationId: applied.operationId,
   };
 });
-
-it.effect(
-  "the installed-skill byte owner reconstructs a former independent copy from retained artifacts",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      yield* f.home.owned(
-        Effect.gen(function* () {
-          const state = yield* f.home.durable;
-          const prior = state.installed_skills.find(
-            (installedSkill) => installedSkill.path === f.successor,
-          );
-          if (prior === undefined) return yield* Effect.die("Missing installed successor");
-          const rebuilt = yield* prepareInstalledSkillRebuild(state, f.home.originals, prior, {
-            source: "declared",
-          });
-          const stage = join(f.root, "reconstructed");
-          yield* rebuilt.build(stage);
-          expect(yield* recoveryFingerprint(stage, "exclude")).toBe(
-            yield* recoveryFingerprint(f.successor, "exclude"),
-          );
-          expect(yield* f.fs.exists(join(stage, ".skit-ownership.json"))).toBe(false);
-          yield* f.fs.writeFileString(join(stage, "SKILL.md"), "Independent writable copy");
-          expect(yield* f.fs.readFileString(join(f.successor, "SKILL.md"))).toBe(f.markdown);
-        }),
-      );
-    }).pipe(Effect.provide(skitLayer)),
-);
 
 it.effect("undo of an explicit removal restores the original inode and move record state", () =>
   Effect.gen(function* () {

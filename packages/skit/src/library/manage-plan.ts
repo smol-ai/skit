@@ -3,7 +3,7 @@ import { HttpClient, HttpClientError } from "effect/http";
 import { dirname, join, resolve } from "node:path";
 import { deterministicTreeHash } from "../artifact/skit.js";
 import { inspectNormalizedTree, walkTree } from "../artifact/tree.js";
-import { inspectOwnershipMarker } from "../installed-skills/files.js";
+import { inspectOwnershipMarker } from "../installed-skills/marker-inspection.js";
 import { leavePnpmSkill } from "../installed-skills/pnpm-skills.js";
 import { resolveSkitSource } from "../sources/resolve.js";
 import { Hash as HashSchema } from "../shared/hash.js";

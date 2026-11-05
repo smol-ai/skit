@@ -1,7 +1,7 @@
 import * as Library from "../../library.js";
 import { canonicalJson } from "../../../shared/json.js";
 import { deterministicTreeHash } from "../../../artifact/skit.js";
-import { inspectOwnershipMarker } from "../../../installed-skills/files.js";
+import { inspectOwnershipMarker } from "../../../installed-skills/marker-inspection.js";
 import type { OwnershipMarker } from "../../../installed-skills/ownership-marker.js";
 import { libraryOriginalsPath, loadLibrary, writeLibrary } from "../../store/library-store.js";
 import { libraryStateRevision, emptyLibraryState, type LibraryState } from "../../library-state.js";

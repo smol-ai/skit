@@ -3,7 +3,7 @@ import { Clock, Effect, Schema } from "effect";
 import { Hash } from "../../../shared/hash.js";
 import { HarnessName } from "../../../harnesses/contracts.js";
 import { InvalidLibraryState } from "../../failures.js";
-import { OwnershipMarkerInspection } from "../../../installed-skills/files.js";
+import { OwnershipMarkerInspection } from "../../../installed-skills/marker-inspection.js";
 import * as InstalledSkills from "../../installed-skills.js";
 import { emptyLibraryState, LibraryState, type LibraryInventory } from "../../library-state.js";
 import { InstalledSkill } from "../../device-state.js";

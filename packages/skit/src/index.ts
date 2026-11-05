@@ -99,11 +99,6 @@ export {
 export { type SkitServices, skitLayer } from "./platform/layer.js";
 export { pathIsWithin } from "./platform/path-identity.js";
 export { applyInvocationPolicy } from "./installed-skills/policy.js";
-export {
-  type InstalledSkillFailure,
-  inspectOwnershipMarker,
-  prepareInstalledSkillRebuild,
-} from "./installed-skills/files.js";
 
 export {
   hashParts,

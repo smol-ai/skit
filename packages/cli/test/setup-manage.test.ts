@@ -3,11 +3,8 @@ import { Effect, FileSystem } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
-import {
-  inspectOwnershipMarker,
-  libraryManifestFromLocalState,
-  collectionVersionPath,
-} from "@smolai/skit-core";
+import { libraryManifestFromLocalState, collectionVersionPath } from "@smolai/skit-core";
+import { inspectOwnershipMarker } from "@smolai/skit-core/library/inventory";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { importSource } from "../src/library/source.js";
 import { setupCommand } from "../src/library/setup.js";

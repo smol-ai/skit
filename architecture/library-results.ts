@@ -575,7 +575,7 @@ export interface RefreshInventoryPlan extends PlanBase<"RefreshInventory", Refre
   readonly backups: readonly {
     readonly backup: {
       readonly path: string;
-      readonly marker: import("../packages/skit/src/installed-skills/files.js").OwnershipMarkerInspection;
+      readonly marker: import("../packages/skit/src/installed-skills/marker-inspection.js").OwnershipMarkerInspection;
     };
     readonly copy: import("../packages/skit/src/library/installed-skills.js").Folder;
     readonly folder: import("../packages/skit/src/library/installed-skills.js").Folder;

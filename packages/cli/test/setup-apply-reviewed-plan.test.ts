@@ -2,7 +2,7 @@ import { recoveryInspection } from "./helpers/recovery.js";
 import { join } from "node:path";
 import { Effect, Exit, FileSystem, Option } from "effect";
 import { assert, it } from "@effect/vitest";
-import { inspectOwnershipMarker } from "@smolai/skit-core";
+import { inspectOwnershipMarker } from "@smolai/skit-core/library/inventory";
 import * as MachineSettings from "@smolai/skit-core/machine-settings";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { setupApplyCommand, setupCommand } from "../src/library/setup.js";

@@ -1,12 +1,12 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import {
   LibraryState,
-  inspectOwnershipMarker,
   libraryStateRevision,
   enabledAt,
   enabledSkillIds,
   SkillsDirectoryNotWritable,
 } from "@smolai/skit-core";
+import { inspectOwnershipMarker } from "@smolai/skit-core/library/inventory";
 import { type UsageReport } from "@smolai/skit-core/library/usage";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { type ListingBudget } from "@smolai/skit-core/harnesses";

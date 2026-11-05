@@ -21,3 +21,8 @@ export const refreshInventory = Effect.fn("Library.refreshInventory")(function* 
   const outcome = yield* library.apply({ _tag: "Apply", plan });
   return outcome.result.inventory;
 });
+
+export {
+  inspectOwnershipMarker,
+  OwnershipMarkerInspection,
+} from "../installed-skills/marker-inspection.js";

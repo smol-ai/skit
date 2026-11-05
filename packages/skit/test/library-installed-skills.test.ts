@@ -23,7 +23,7 @@ import { LibraryWriter, loadLibrary } from "../src/library/store/library-store.j
 import { skitLayer } from "../src/platform/layer.js";
 import * as Library from "../src/library/library.js";
 import { losslessTree, installedSkillStagingDirectory } from "../src/installed-skills/backups.js";
-import { inspectOwnershipMarker } from "../src/installed-skills/files.js";
+import { inspectOwnershipMarker } from "../src/installed-skills/marker-inspection.js";
 
 const machineId = migratedMachineId(
   "019950c0-4c00-7000-8000-000000000001",

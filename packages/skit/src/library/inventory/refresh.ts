@@ -10,9 +10,11 @@ import { physicalPath, pathIsWithin } from "../../platform/path-identity.js";
 import {
   expectedInstalledSkillHashResult,
   installedSkillDisplaced,
+} from "../../installed-skills/files.js";
+import {
   readOwnershipMarker,
   inspectOwnershipMarker,
-} from "../../installed-skills/files.js";
+} from "../../installed-skills/marker-inspection.js";
 import { type InventoryScanRoot } from "./roots.js";
 export { deduplicateInventoryRoots, type InventoryScanRoot } from "./roots.js";
 

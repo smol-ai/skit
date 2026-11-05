@@ -35,11 +35,14 @@ import type { OwnershipMarker } from "../installed-skills/ownership-marker.js";
 import type { LibraryState } from "./library-state.js";
 import type { InstalledSkillId, SkillId, SkillVersionId } from "./entity-ids.js";
 import {
-  OwnershipMarkerInspection,
   type InstalledSkillMutationError,
   type reproducible,
   type StagedInstalledSkill,
 } from "../installed-skills/files.js";
+import {
+  inspectOwnershipMarker,
+  OwnershipMarkerInspection,
+} from "../installed-skills/marker-inspection.js";
 import { InstalledSkillInvalid } from "./installation/install-enabled.js";
 import { installedSkillSource } from "./installation/installed-skill-source.js";
 import { declaredInvocationIntent, overrideInvocationIntent } from "../installed-skills/policy.js";
@@ -319,7 +322,7 @@ export const make = Effect.fn("make")(function* (configuration?: Routing | Inven
           ? "package-manager"
           : null;
     return {
-      marker: yield* InstalledSkillFiles.inspectOwnershipMarker(path),
+      marker: yield* inspectOwnershipMarker(path),
       hash: yield* deterministicTreeHash(path).pipe(
         Effect.map((hash): Facts["hash"] => hash),
         Effect.catchTag("TreeError", (error) =>
@@ -405,7 +408,7 @@ export const make = Effect.fn("make")(function* (configuration?: Routing | Inven
         "replace",
       ).pipe(
         Effect.flatMap((path) =>
-          Effect.map(InstalledSkillFiles.inspectOwnershipMarker(path), (marker) => {
+          Effect.map(inspectOwnershipMarker(path), (marker) => {
             displaced = Option.some({ path, marker });
           }),
         ),
@@ -491,9 +494,7 @@ export const make = Effect.fn("make")(function* (configuration?: Routing | Inven
       ).pipe(Effect.provide(context));
       return {
         path: backup,
-        marker: yield* InstalledSkillFiles.inspectOwnershipMarker(backup).pipe(
-          Effect.provide(context),
-        ),
+        marker: yield* inspectOwnershipMarker(backup).pipe(Effect.provide(context)),
       };
     }),
     duplicates: {
@@ -508,7 +509,7 @@ export const make = Effect.fn("make")(function* (configuration?: Routing | Inven
         }).pipe(
           Effect.flatMap((paths) =>
             Effect.forEach(paths, (path) =>
-              Effect.map(InstalledSkillFiles.inspectOwnershipMarker(path), (marker) => ({
+              Effect.map(inspectOwnershipMarker(path), (marker) => ({
                 path,
                 marker,
               })),

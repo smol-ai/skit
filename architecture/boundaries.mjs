@@ -77,6 +77,7 @@ export const owners = [
       "packages/skit/src/library/source-inspection.",
       "packages/skit/src/library/installed-skills.",
       "packages/skit/src/library/installed-skill-status.",
+      "packages/skit/src/installed-skills/files.",
     ],
     testOwner: "packages/skit/test/",
     private: [
@@ -114,6 +115,7 @@ export const owners = [
       "refreshLibraryInventory",
       "acceptSecurityFindingFromState",
       "prepareRestore",
+      "prepareInstalledSkillRebuild",
       "keepInstalledSkillBackup",
       "backUpInstalledSkill",
       "commitInstalledSkill",

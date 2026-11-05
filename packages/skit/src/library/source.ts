@@ -108,3 +108,5 @@ export const importSource = Effect.fn("Library.importSource")(function* (request
     }),
   );
 });
+
+export type { InstalledSkillFailure } from "../installed-skills/files.js";

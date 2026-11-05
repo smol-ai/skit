@@ -1,9 +1,9 @@
+import { readOwnershipMarker } from "./marker-inspection.js";
 import { copyLocalTree } from "../platform/copy-tree.js";
 import { Data, Effect, FileSystem, Result, Schema } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { dirname, join, relative, resolve } from "node:path";
 import { OwnershipMarker } from "./ownership-marker.js";
-import { StoredOwnershipMarker } from "./ownership-marker-compat.js";
 import { type InstallDestination } from "./destination.js";
 import { Hash } from "../shared/hash.js";
 import { type InvocationPolicy } from "../artifact/invocation-policy.js";
@@ -40,8 +40,6 @@ import {
   installedSkillStagingDirectory,
 } from "./backups.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
-
-const OwnershipMarkerDocument = Schema.fromJsonString(Schema.Unknown);
 
 /** Where one copy's bytes come from, and how its Harness reads invocation metadata. */
 export interface SkillSource {
@@ -143,29 +141,6 @@ export const prepareInstalledSkillRebuild = Effect.fn("Install.prepareRebuild")(
   };
 });
 
-export function readOwnershipMarker(
-  path: string,
-): Effect.Effect<OwnershipMarker | null, PlatformError, FileSystem.FileSystem> {
-  return inspectOwnershipMarker(path).pipe(
-    Effect.map((inspected) => (inspected.kind === "valid" ? inspected.marker : null)),
-  );
-}
-
-export const OwnershipMarkerInspection = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal("absent") }),
-  Schema.Struct({ kind: Schema.Literal("invalid"), detail: Schema.String }),
-  Schema.Struct({ kind: Schema.Literal("valid"), marker: OwnershipMarker }),
-]);
-export type OwnershipMarkerInspection = typeof OwnershipMarkerInspection.Type;
-
-export function parseOwnershipMarker(value: unknown): OwnershipMarkerInspection {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    return { kind: "invalid", detail: "Ownership marker must be a JSON object" };
-  const decoded = Schema.decodeUnknownOption(StoredOwnershipMarker)(value);
-  if (decoded._tag === "Some") return { kind: "valid", marker: decoded.value };
-  return { kind: "invalid", detail: "Ownership marker has invalid typed fields" };
-}
-
 const markerExpectedHash = (marker: OwnershipMarker): Hash => marker.expected_hash;
 
 const sameMarker = (left: OwnershipMarker, right: OwnershipMarker) =>
@@ -173,23 +148,6 @@ const sameMarker = (left: OwnershipMarker, right: OwnershipMarker) =>
   left.skill_id === right.skill_id &&
   left.skill_version_id === right.skill_version_id &&
   left.expected_hash === right.expected_hash;
-
-export function inspectOwnershipMarker(
-  path: string,
-): Effect.Effect<OwnershipMarkerInspection, PlatformError, FileSystem.FileSystem> {
-  return Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    // A missing marker is absent; unreadable is a real failure; unparseable is invalid.
-    const text = yield* fs
-      .readFileString(join(path, ".skit-ownership.json"))
-      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
-    if (text === undefined) return { kind: "absent" as const };
-    const parsed = Schema.decodeUnknownOption(OwnershipMarkerDocument)(text);
-    return parsed._tag === "Some"
-      ? parseOwnershipMarker(parsed.value)
-      : ({ kind: "invalid", detail: "Ownership marker is invalid JSON" } as const);
-  });
-}
 
 /** Pure hash policy: disagreement is data, not a thrown domain exception. */
 export function expectedInstalledSkillHashResult(

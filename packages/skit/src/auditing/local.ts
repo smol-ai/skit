@@ -8,7 +8,7 @@ import {
   type ResolvedSkitConfiguration,
 } from "../platform/configuration.js";
 import { dirname, join, resolve } from "node:path";
-import { inspectOwnershipMarker } from "../installed-skills/files.js";
+import { inspectOwnershipMarker } from "../installed-skills/marker-inspection.js";
 import { objectAt } from "../shared/json.js";
 import { physicalPath } from "../platform/path-identity.js";
 import { type TreeRequirements } from "../platform/tree-requirements.js";

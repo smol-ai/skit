@@ -2,12 +2,8 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, Exit } from "effect";
 import { join } from "node:path";
-import {
-  currentSkillVersion,
-  inspectOwnershipMarker,
-  scanInventory,
-  collectionVersionPath,
-} from "@smolai/skit-core";
+import { currentSkillVersion, scanInventory, collectionVersionPath } from "@smolai/skit-core";
+import { inspectOwnershipMarker } from "@smolai/skit-core/library/inventory";
 import { makeImportId, type SkillId } from "@smolai/skit-core/universal/consumer";
 import { RegistryUnreachable } from "../src/registry/failures.js";
 import { captureDisk, assertDiskUnchanged } from "./helpers/disk-snapshot.js";
