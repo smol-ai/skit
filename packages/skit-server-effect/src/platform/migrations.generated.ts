@@ -13,4 +13,5 @@ export const expectedMigrations = [
   "0010_draft_revisions.sql",
   "0011_skit_revisions.sql",
   "0012_skit_creation_request.sql",
+  "0013_remove_resource_grants.sql",
 ] as const;

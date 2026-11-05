@@ -79,6 +79,8 @@ pnpm skit server bootstrap \
 
 Cloudflare documents `workers.dev` as an evaluation and personal-project endpoint. SKIT supports it as the first canonical origin, while recommending a Custom Domain for production.
 
+For an existing server upgrading past migration `0012`, first deploy compatibility revision `858184158`, which no longer reads or deletes resource grants. Then deploy the revision containing `0013_remove_resource_grants.sql`, which removes the obsolete rows and indexes. This order is required because deployment applies migrations before switching Workers; the compatibility Worker must already be serving requests when the table is dropped. Namespace ownership, current team membership, operator capability and credential state/generation are retained.
+
 ## Promote to a custom domain
 
 The domain must already belong to a zone on the same Cloudflare account. Promote it with:

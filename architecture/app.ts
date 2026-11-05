@@ -318,7 +318,7 @@ export const owners = {
     ],
     removes: [
       "per-handler origin checks (done: 9 copies and credentialOriginAllowed removed)",
-      "resource_grants table, its indexes and every grant query (decisions.md: No per-SKIT grants)",
+      "resource_grants table, its indexes and every grant query (done: owner checks replaced grant reads; deletion no longer touches grants; forward migration 0013 drops the obsolete table/indexes)",
       "Authorization service and its single-caller can*/has*/scope methods (done: role checks live in owners; namespace reads use Identity with Teams membership reads)",
       "authorization checks split between handlers and services",
       "Readiness.isServerOperator (done: auth owns operator lookup); Teams' private ownedTeam SQL",
