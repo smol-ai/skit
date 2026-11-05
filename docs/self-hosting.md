@@ -279,7 +279,7 @@ Session creation can occur after the identity transaction. If session creation f
 
 Server operation and content ownership are separate authority domains. Bootstrap grants a server-operator capability; it does not grant ownership of every Namespace, SKIT, Library, Draft, or Release.
 
-Bootstrap currently records one binary operator capability separately from content grants. Operator-management routes are not implemented yet. When added, they may use that capability for narrowly defined operations such as account provisioning, suspension, operator promotion or demotion, and recovery rather than introducing a general administrative RBAC system. Content access continues to use ordinary Namespace, team, and resource grants.
+Bootstrap currently records one binary operator capability separately from content ownership. Operator-management routes are not implemented yet. When added, they may use that capability for narrowly defined operations such as account provisioning, suspension, operator promotion or demotion, and recovery rather than introducing a general administrative RBAC system. Content operations use Namespace ownership and current team membership; author inventory also recognizes per-SKIT grants.
 
 Future operator-management routes must require a browser session. A `skit_pat_` Personal Access Token must not provision accounts, promote operators, perform recovery, or change server configuration regardless of its product scopes. The server must also prevent deletion, suspension, or demotion of the last active operator.
 

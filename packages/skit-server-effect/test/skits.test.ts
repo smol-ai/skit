@@ -2,13 +2,14 @@
 import { BrowserCrypto } from "@effect/platform-browser";
 import { applyD1Migrations, env, reset, SELF } from "cloudflare:test";
 import { expect, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import { zipSync } from "fflate";
 import {
   AuthoringAuthenticatedApi,
   PublicationAuthenticatedApi,
+  CreatedPat,
 } from "@smolai/skit-core/universal/api";
 import { History } from "@smolai/skit-core/universal/authoring";
 import { sha256Hash } from "@smolai/skit-core/universal/consumer";
@@ -167,6 +168,44 @@ it.effect("creates an empty SKIT whose current is null, once", () =>
       expect(yield* Effect.flip(skits.current({ params: { owner, slug: "missing" } }))).toEqual({
         error: "skit_not_found",
       });
+    }),
+  ),
+);
+
+it.effect("records the posting credential captured by the authoring owner", () =>
+  withRegistry(({ skits, cookie }) =>
+    Effect.gen(function* () {
+      yield* skits.create({ payload: { ...params, visibility: "private" } });
+      const response = yield* Effect.promise(() =>
+        SELF.fetch(`${origin}/api/tokens`, {
+          method: "POST",
+          headers: { cookie, origin, "content-type": "application/json" },
+          body: JSON.stringify({ name: "authoring provenance", scopes: ["authoring:write"] }),
+        }),
+      );
+      expect(response.status).toBe(201);
+      const credential = Schema.decodeUnknownSync(CreatedPat)(
+        yield* Effect.promise(() => response.json()),
+      );
+      const httpClient = (yield* HttpClient.HttpClient).pipe(
+        HttpClient.mapRequest(
+          HttpClientRequest.setHeaders({ authorization: `Bearer ${credential.token}` }),
+        ),
+      );
+      const authoring = yield* HttpApiClient.makeWith(AuthoringAuthenticatedApi, {
+        httpClient,
+        baseUrl: origin,
+      });
+      const posted = yield* revisionRequest();
+      yield* authoring.skits.post({ params, payload: posted });
+      const revision = yield* Effect.promise(() =>
+        env.DB.prepare(
+          "SELECT credential_id FROM revisions WHERE owner_slug = ? AND skit_slug = ? AND revision_id = ?",
+        )
+          .bind(owner, params.slug, posted.id)
+          .first(),
+      );
+      expect(revision).toEqual({ credential_id: credential.token_id });
     }),
   ),
 );
@@ -505,6 +544,56 @@ it.effect("refuses publication grants before decoding an unauthorized archive", 
       }
       expect(yield* countRows("releases")).toBe(0);
       expect(yield* countRows("resource_grants")).toBe(1);
+    }),
+  ),
+);
+
+it.effect("authoring ignores legacy admin grants and preserves read/write denial ordering", () =>
+  withRegistry(({ skits, cookie }) =>
+    Effect.gen(function* () {
+      yield* skits.create({ payload: { ...params, visibility: "private" } });
+      const posted = yield* revisionRequest();
+      yield* skits.post({ params, payload: posted });
+      yield* Effect.promise(() =>
+        env.DB.batch([
+          env.DB.prepare(`INSERT INTO resource_grants
+          (grant_id, subject_kind, subject_id, resource_kind, resource_id, permission, created_at)
+          SELECT 'author_admin_probe', 'principal', subject_id, 'skit', ?, 'admin', '2026-11-05'
+          FROM namespaces WHERE namespace_slug = ?`).bind(`${owner}/tools`, owner),
+          env.DB.prepare(
+            "UPDATE namespaces SET subject_id = 'principal_elsewhere' WHERE namespace_slug = ?",
+          ).bind(owner),
+        ]),
+      );
+      const path = `/api/skits/${owner}/tools`;
+      const attempts = [
+        ["GET", `${path}/current`, undefined, 404],
+        ["GET", `${path}/revisions/${posted.id}`, undefined, 404],
+        ["GET", `${path}/revisions?ancestors=${posted.id}&cursor=invalid`, undefined, 404],
+        ["POST", `${path}/revisions`, "{", 403],
+        ["PUT", `${path}/current`, JSON.stringify({ expected: null, id: posted.id }), 403],
+        [
+          "POST",
+          "/api/skits",
+          JSON.stringify({ owner, slug: "another", visibility: "private" }),
+          403,
+        ],
+      ] as const;
+      for (const [method, url, body, status] of attempts) {
+        const response = yield* Effect.promise(() =>
+          SELF.fetch(`${origin}${url}`, {
+            method,
+            body,
+            headers: { cookie, origin, "content-type": "application/json" },
+          }),
+        );
+        expect(response.status).toBe(status);
+        expect(yield* Effect.promise(() => response.json())).toEqual({
+          error: status === 404 ? "skit_not_found" : "forbidden",
+        });
+      }
+      expect(yield* countRows("skits")).toBe(1);
+      expect(yield* countRows("revisions")).toBe(1);
     }),
   ),
 );

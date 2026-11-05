@@ -2,7 +2,7 @@ import { Clock, Effect, Schema } from "effect";
 import { D1Client } from "@effect/sql-d1";
 import { Digest, SecureRandom } from "effect/crypto";
 import type { Principal } from "../../identity/service.js";
-import type { SkitService } from "../service.js";
+import type { SkitCurrentResponse } from "@smolai/skit-core/universal/authoring";
 import { verifyReleaseArchive } from "./release-archive.js";
 import { type Hash, sha256Hash } from "@smolai/skit-core/universal/consumer";
 import { IntegrityError, ValidationDiagnostic } from "../../integrity/contracts.js";
@@ -80,7 +80,10 @@ export const makePublication = (
   blobs: BlobStoreService,
   digests: Digest.Digest["Service"],
   random: SecureRandom.SecureRandom["Service"],
-  currentSkit: SkitService["current"],
+  currentSkit: (
+    owner: string,
+    slug: string,
+  ) => Effect.Effect<SkitCurrentResponse | undefined, DatabaseError>,
   ownsNamespace: (principal: Principal, namespace: string) => Effect.Effect<boolean, DatabaseError>,
 ): Publication => {
   const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>

@@ -33,7 +33,7 @@ const prepareDatabase = Effect.flatMap(D1Client.D1Client, (sql) =>
 );
 
 describe("authorization", () => {
-  it.effect("combines principal and team ownership with implied grants", () =>
+  it.effect("checks principal and current team namespace ownership", () =>
     Effect.gen(function* () {
       yield* prepareDatabase;
       const authorization = yield* Authorization;
@@ -42,23 +42,12 @@ describe("authorization", () => {
           sql`INSERT INTO team_memberships (team_id, principal_id) VALUES ('team_tools', 'principal_test')`,
           sql`INSERT INTO namespaces (namespace_slug, subject_kind, subject_id) VALUES ('personal', 'principal', 'principal_test')`,
           sql`INSERT INTO namespaces (namespace_slug, subject_kind, subject_id) VALUES ('teamspace', 'team', 'team_tools')`,
-          sql`INSERT INTO resource_grants
-             (grant_id, subject_kind, subject_id, resource_kind, resource_id, permission)
-             VALUES ('grant_admin', 'team', 'team_tools', 'skit', 'external/tool', 'admin')`,
-          sql`INSERT INTO resource_grants
-             (grant_id, subject_kind, subject_id, resource_kind, resource_id, permission)
-             VALUES ('grant_publish', 'principal', 'principal_test', 'namespace', 'partner', 'publish')`,
-          sql`INSERT INTO resource_grants
-             (grant_id, subject_kind, subject_id, resource_kind, resource_id, permission)
-             VALUES ('grant_release', 'principal', 'principal_test', 'release', 'rel_secret', 'read')`,
         ]),
       );
 
       expect(yield* authorization.ownsNamespace(principal, "PERSONAL")).toBe(true);
       expect(yield* authorization.ownsNamespace(principal, "teamspace")).toBe(true);
       expect(yield* authorization.ownsNamespace(principal, "admin")).toBe(false);
-      expect(yield* authorization.canAuthor(principal, "external", "tool", "read")).toBe(true);
-      expect(yield* authorization.canAuthor(principal, "external", "tool", "advance")).toBe(true);
     }).pipe(Effect.provide(testLayer)),
   );
 

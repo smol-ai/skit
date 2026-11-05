@@ -332,7 +332,7 @@ Exact release downloads are immutable. Public and unlisted Releases can be downl
 
 Better Auth owns email/password accounts and secure browser sessions. CLI automation uses separately revocable `skit_pat_` credentials whose hashes, scopes, expiry, generation, and last-use evidence are stored in D1. Both credential kinds normalize to an opaque SKIT Principal before domain authorization; route handlers do not treat a username, namespace string, descriptor ID, or bearer possession as authority by itself.
 
-Namespaces are controlled by an individual Principal or a registry-local team. Current team membership participates in Authorship, Publication, Library, and private Release access, so removing a membership removes authority on the next request. Authorship and author inventory still support per-SKIT grants. Suspending a Principal or advancing its authorization generation invalidates previously issued credentials without rewriting every PAT.
+Namespaces are controlled by an individual Principal or a registry-local team. Current team membership participates in Authorship, Publication, Library, and private Release access, so removing a membership removes authority on the next request. Author inventory still supports per-SKIT grants. Suspending a Principal or advancing its authorization generation invalidates previously issued credentials without rewriting every PAT.
 
 The server retains immutable revisions of each principal's portable Library Manifest using optimistic concurrency. These revisions contain Library Entries and Bindings only. In accordance with ADR-0001 they reject device-local Projection, Custody, paths, observations, ownership markers, drift, conflicts, suppression, and audit history rather than importing those fields into portable intent.
 
@@ -347,6 +347,8 @@ Skits selects private Release downloads using the same Namespace ownership or cu
 ### Draft synchronization
 
 Remote drafts are immutable revisions behind one guarded current-draft head. Draft files are content-addressed in R2; D1 records revision ancestry, metadata, manifests, and the selected head.
+
+Skits prepares authoring operations for one Principal and one Namespace/SKIT target, checking Namespace ownership or current team membership before preparation and again on every operation. Per-SKIT grants do not authorize authoring. The owner records the posting Principal's credential ID; HTTP retains scope checks and conceals unauthorized reads as 404 while refusing writes with 403.
 
 `sync` records the common revision and per-file baseline in the local SKIT home. It compares that baseline with the local working tree and current remote draft, then either reports a clean state, produces a read-only merge plan, or surfaces conflicts. `--apply` rechecks the local tree, validates the merged descriptor, advances the remote head only when `expected_revision_id` still matches, and updates local files only after the remote write succeeds.
 

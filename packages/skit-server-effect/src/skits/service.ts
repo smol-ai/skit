@@ -1,3 +1,4 @@
+import type { Principal } from "../identity/service.js";
 import { makeList, type List } from "./internal/list.js";
 import { Authorization } from "../authorization/service.js";
 import { makeReleaseReads, type Releases } from "./internal/releases.js";
@@ -33,6 +34,8 @@ import {
   databaseError,
   type DatabaseSqlClient,
 } from "../platform/cloudflare.js";
+
+class SkitForbidden extends Schema.TaggedError<SkitForbidden>()("SKIT.Forbidden", {}) {}
 
 export class SkitExists extends Schema.TaggedError<SkitExists>()("SKIT.Exists", {}) {}
 
@@ -84,6 +87,45 @@ export type ReadError =
   | RevisionBlobCorrupt
   | RevisionTooLarge;
 
+interface SkitAuthoring {
+  /** Create an empty SKIT, or replay its saved creation request without changing it. */
+  readonly create: (
+    visibility: SkitCurrentResponse["visibility"],
+    requestId?: string,
+  ) => Effect.Effect<void, SkitExists | DatabaseError | SkitForbidden>;
+  readonly current: () => Effect.Effect<
+    SkitCurrentResponse | undefined,
+    DatabaseError | SkitForbidden
+  >;
+  /**
+   * Record a revision after checking its identity. Recording one the SKIT already holds returns
+   * it unchanged. Invalid content is accepted with diagnostics. It never moves `current`.
+   */
+  readonly post: (
+    request: RevisionPostRequest,
+  ) => Effect.Effect<RevisionPostResponse, PostError | SkitForbidden>;
+  /** Point `current` at `id`, only if it still points at `expected`. */
+  readonly move: (
+    expected: History.RevisionId | null,
+    id: History.RevisionId,
+  ) => Effect.Effect<
+    void,
+    SkitNotFound | InvalidRevision | CurrentMoved | DatabaseError | SkitForbidden
+  >;
+  readonly revision: (
+    id: History.RevisionId,
+  ) => Effect.Effect<RevisionReadResponse | undefined, ReadError | SkitForbidden>;
+  /**
+   * The revisions reachable from `id`, `id` included, newest first. That set never changes, so
+   * `offset` is a stable cursor.
+   */
+  readonly ancestors: (
+    id: History.RevisionId,
+    limit: number,
+    offset: number,
+  ) => Effect.Effect<RevisionPage | undefined, DatabaseError | SkitForbidden>;
+}
+
 export interface SkitService {
   /** Accessible authored SKITs, filtered and paginated within this owner. */
   readonly list: List;
@@ -95,50 +137,11 @@ export interface SkitService {
   readonly planDelete: Deletion["planDelete"];
   /** Delete private lifecycle state atomically, then clean up release archives. */
   readonly delete: Deletion["delete"];
-  /** Create an empty SKIT, or replay its saved creation request without changing it. */
-  readonly create: (
-    owner: string,
-    slug: string,
-    visibility: SkitCurrentResponse["visibility"],
-    requestId?: string,
-  ) => Effect.Effect<void, SkitExists | DatabaseError>;
-  readonly current: (
-    owner: string,
-    slug: string,
-  ) => Effect.Effect<SkitCurrentResponse | undefined, DatabaseError>;
-  /**
-   * Record a revision after checking its identity. Recording one the SKIT already holds returns
-   * it unchanged. Invalid content is accepted with diagnostics. It never moves `current`.
-   */
-  readonly post: (
-    owner: string,
-    slug: string,
-    request: RevisionPostRequest,
-    credentialId: string | undefined,
-  ) => Effect.Effect<RevisionPostResponse, PostError>;
-  /** Point `current` at `id`, only if it still points at `expected`. */
-  readonly move: (
-    owner: string,
-    slug: string,
-    expected: History.RevisionId | null,
-    id: History.RevisionId,
-  ) => Effect.Effect<void, SkitNotFound | InvalidRevision | CurrentMoved | DatabaseError>;
-  readonly revision: (
-    owner: string,
-    slug: string,
-    id: History.RevisionId,
-  ) => Effect.Effect<RevisionReadResponse | undefined, ReadError>;
-  /**
-   * The revisions reachable from `id`, `id` included, newest first. That set never changes, so
-   * `offset` is a stable cursor.
-   */
-  readonly ancestors: (
-    owner: string,
-    slug: string,
-    id: History.RevisionId,
-    limit: number,
-    offset: number,
-  ) => Effect.Effect<RevisionPage | undefined, DatabaseError>;
+  /** Authoring authority bound to one caller and target; every operation checks current ownership. */
+  readonly prepareAuthoring: (
+    principal: Principal,
+    target: { readonly owner: string; readonly slug: string },
+  ) => Effect.Effect<SkitAuthoring, DatabaseError | SkitForbidden>;
 }
 
 export class Skits extends Context.Service<Skits, SkitService>()("@skit-server-effect/Skits") {}
@@ -525,13 +528,33 @@ export const layer = Layer.effect(
       };
     });
 
+    const prepareAuthoring = Effect.fn("SKIT.prepareAuthoring")(function* (
+      principal: Principal,
+      target: { readonly owner: string; readonly slug: string },
+    ) {
+      const { owner, slug } = target;
+      const credentialId = principal.tokenId;
+      const requireOwner = authorization
+        .ownsNamespace(principal, owner)
+        .pipe(
+          Effect.flatMap((allowed) => (allowed ? Effect.void : Effect.fail(new SkitForbidden()))),
+        );
+      yield* requireOwner;
+      return {
+        create: (visibility, requestId) =>
+          requireOwner.pipe(Effect.andThen(create(owner, slug, visibility, requestId))),
+        current: () => requireOwner.pipe(Effect.andThen(current(owner, slug))),
+        post: (request) =>
+          requireOwner.pipe(Effect.andThen(post(owner, slug, request, credentialId))),
+        move: (expected, id) => requireOwner.pipe(Effect.andThen(move(owner, slug, expected, id))),
+        revision: (id) => requireOwner.pipe(Effect.andThen(revision(owner, slug, id))),
+        ancestors: (id, limit, offset) =>
+          requireOwner.pipe(Effect.andThen(ancestors(owner, slug, id, limit, offset))),
+      } satisfies SkitAuthoring;
+    });
+
     return Skits.of({
-      create,
-      current,
-      post,
-      move,
-      revision,
-      ancestors,
+      prepareAuthoring,
       list: makeList(sql, authorization),
       releases: makeReleaseReads(sql, blobs, authorization.ownsNamespace),
       ...makeDeletion(sql, blobs, authorization.ownsNamespace),

@@ -4,21 +4,13 @@ import type { Principal } from "../identity/service.js";
 import { normalizeNamespace } from "../domain/identifiers.js";
 import { DatabaseError, databaseError, type DatabaseSqlClient } from "../platform/cloudflare.js";
 
-const IMPLIED_PERMISSIONS = {
-  read: ["read", "change", "advance", "admin"],
-  change: ["change", "advance", "admin"],
-  advance: ["advance", "admin"],
-  publish: ["publish", "admin"],
-  admin: ["admin"],
-} as const;
+const READ_PERMISSIONS = ["read", "change", "advance", "admin"] as const;
 const SUBJECT_BATCH_SIZE = 40;
 const SUBREQUEST_CONCURRENCY = 4;
 const TeamMembership = Schema.Struct({ team_id: Schema.String });
 const NamespaceRow = Schema.Struct({ namespace_slug: Schema.String });
 const ResourceRow = Schema.Struct({ resource_id: Schema.String });
 
-type Permission = keyof typeof IMPLIED_PERMISSIONS;
-type ResourceKind = "namespace" | "skit" | "library" | "release";
 interface AuthorizationSubject {
   readonly kind: "principal" | "team";
   readonly id: string;
@@ -36,12 +28,6 @@ export interface AuthorizationService {
   readonly ownsNamespace: (
     principal: Principal,
     namespace: string,
-  ) => Effect.Effect<boolean, DatabaseError>;
-  readonly canAuthor: (
-    principal: Principal,
-    owner: string,
-    slug: string,
-    permission: "read" | "change" | "advance",
   ) => Effect.Effect<boolean, DatabaseError>;
 }
 
@@ -118,48 +104,11 @@ export const layer = Layer.effect(
       return yield* ownsForSubjects(yield* subjects(principal), namespace);
     });
 
-    const hasGrantForSubjects = Effect.fn("Authorization.hasGrantForSubjects")(function* (
-      candidates: ReadonlyArray<AuthorizationSubject>,
-      resourceKind: ResourceKind,
-      resourceId: string,
-      permission: Permission,
-    ) {
-      const allowed = IMPLIED_PERMISSIONS[permission];
-      const placeholders = allowed.map(() => "?").join(", ");
-      const rows = yield* Effect.all(
-        batches(candidates).map((batch) => {
-          const where = predicate(batch);
-          return db(
-            "check resource grant",
-            sql.unsafe(
-              `SELECT 1 allowed FROM resource_grants
-               WHERE (${where.sql}) AND resource_kind = ? AND resource_id = ?
-                 AND permission IN (${placeholders}) LIMIT 1`,
-              [...where.bindings, resourceKind, resourceId, ...allowed],
-            ),
-          );
-        }),
-        { concurrency: SUBREQUEST_CONCURRENCY },
-      );
-      return rows.some((row) => row.length !== 0);
-    });
-
-    const canAuthor = Effect.fn("Authorization.canAuthor")(function* (
-      principal: Principal,
-      owner: string,
-      slug: string,
-      permission: "read" | "change" | "advance",
-    ) {
-      const candidates = yield* subjects(principal);
-      if (yield* ownsForSubjects(candidates, owner)) return true;
-      return yield* hasGrantForSubjects(candidates, "skit", `${owner}/${slug}`, permission);
-    });
-
     const authorInventoryScope = Effect.fn("Authorization.authorInventoryScope")(function* (
       principal: Principal,
     ) {
       const candidates = yield* subjects(principal);
-      const allowed = IMPLIED_PERMISSIONS.read;
+      const allowed = READ_PERMISSIONS;
       const placeholders = allowed.map(() => "?").join(", ");
       const rows = yield* Effect.all(
         batches(candidates).map((batch) => {
@@ -206,7 +155,6 @@ export const layer = Layer.effect(
     return Authorization.of({
       authorInventoryScope,
       ownsNamespace,
-      canAuthor,
     });
   }),
 );
