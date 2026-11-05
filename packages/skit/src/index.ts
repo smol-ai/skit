@@ -84,15 +84,19 @@ export {
   generateInvocationMetadata,
   InvocationMetadataGeneration,
   type InvocationMetadataGenerationFailure,
-} from "./authoring/invocation/generation.js";
+} from "./author/invocation/generation.js";
 export { defaultSkillsRoot } from "./harnesses/default-roots.js";
 export { installDestinationHarnesses } from "./harnesses/install-destinations.js";
 export { libraryDoctorReport, LibraryDoctorReport } from "./library/inventory/doctor-report.js";
-export { createSkitArchive } from "./authoring/archive.js";
-export { type InitSkitResult, initSkit } from "./authoring/scaffold.js";
+export { createSkitArchive } from "./artifact/archive.js";
+export { type InitSkitResult, initSkit } from "./author/scaffold.js";
 export { LinkStat } from "./platform/link-stat.js";
 export { type FileLockBusy, type FileLockFailed, acquireFileLock } from "./platform/file-lock.js";
-export { type SourceProcessResult, SourceProcess, sourceProcessLayer } from "./platform/source-process.js";
+export {
+  type SourceProcessResult,
+  SourceProcess,
+  sourceProcessLayer,
+} from "./platform/source-process.js";
 export { type SkitServices, skitLayer } from "./platform/layer.js";
 export { pathIsWithin } from "./platform/path-identity.js";
 export { applyInvocationPolicy } from "./installed-skills/policy.js";

@@ -91,7 +91,9 @@ function sourceImports(directory: string): Array<{ file: string; dependency: str
 describe("optional capability boundaries", () => {
   test("the consumer universal surface does not reach Authoring protocol modules", () => {
     const path = offendingPathFrom(consumerEntry, (dependency) =>
-      /\/authoring\/|\/api\/authoring(?:-contracts)?\.ts$/.test(dependency),
+      /\/authoring\/|\/author\/(?:scaffold\.ts$|invocation\/)|\/api\/authoring(?:-contracts)?\.ts$/.test(
+        dependency,
+      ),
     );
     expect(
       path?.map((step) => (step.startsWith("/") ? relative(coreRoot, step) : step)).join(" -> "),
@@ -108,7 +110,9 @@ describe("optional capability boundaries", () => {
     const offending = roots
       .flatMap(sourceImports)
       .filter(({ dependency }) =>
-        /\/authoring\/|\/api\/authoring(?:-contracts)?\.ts$|\/workflows\/author\//.test(dependency),
+        /\/authoring\/|\/author\/(?:scaffold\.ts$|invocation\/)|\/api\/authoring(?:-contracts)?\.ts$|\/workflows\/author\//.test(
+          dependency,
+        ),
       );
     expect(
       offending.map(

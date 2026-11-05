@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { originalTreeHash } from "../src/library/collection-version.js";
 import { writeCollectionVersion } from "../src/library/internal/content/collection-version.js";
-import { initSkit } from "../src/authoring/scaffold.js";
+import { initSkit } from "../src/author/scaffold.js";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { skitLayer } from "../src/platform/layer.js";
 
