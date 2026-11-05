@@ -1,10 +1,9 @@
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
-import { importDebt, layout, layoutDebt, undecided } from "../architecture/layout.mjs";
 
 const root = join(import.meta.dirname, "..");
 const pluginPath = join(import.meta.dirname, "oxlint-plugin-skit.mjs");
@@ -14,13 +13,32 @@ const oxlintPath = fileURLToPath(new URL("bin/oxlint", import.meta.resolve("oxli
  * Writes a probe file at `path` in the real tree (the rules judge repository paths), lints it with
  * `rule` alone, removes it, and returns the line of each report.
  */
-async function reported(path: string, source: string, rule: string): Promise<number[]> {
+async function reported(
+  path: string,
+  source: string,
+  rule: string,
+  filename?: string,
+): Promise<number[]> {
   const file = join(root, path.replace("PROBE", `layout-probe-${process.pid}-${Date.now()}`));
   const directory = await mkdtemp(join(tmpdir(), "skit-directory-layout-"));
   const config = join(directory, ".oxlintrc.json");
+  const configuredPlugin = filename ? join(directory, "plugin.mjs") : pluginPath;
+  if (filename)
+    await writeFile(
+      configuredPlugin,
+      `
+    import plugin from ${JSON.stringify(pluginPath)};
+    const rule = plugin.rules[${JSON.stringify(rule)}];
+    export default { meta: plugin.meta, rules: { ${JSON.stringify(rule)}: {
+      ...rule, create(context) { return rule.create({
+        filename: ${JSON.stringify(join(root, filename))}, report: context.report.bind(context),
+      }); },
+    } } };
+  `,
+    );
   await writeFile(
     config,
-    JSON.stringify({ jsPlugins: [pluginPath], rules: { [`skit/${rule}`]: "error" } }),
+    JSON.stringify({ jsPlugins: [configuredPlugin], rules: { [`skit/${rule}`]: "error" } }),
   );
   await writeFile(file, source);
   try {
@@ -44,16 +62,6 @@ async function reported(path: string, source: string, rule: string): Promise<num
   }
 }
 
-const inTarget = (file: string) => {
-  const source = Object.keys(layout).find((path) => file.startsWith(path));
-  if (source === undefined) return false;
-  const target = layout[source as keyof typeof layout];
-  const [top = "", ...rest] = file.slice(source.length).split("/");
-  return rest.length === 0 ? target.files.includes(top) : target.folders.includes(top);
-};
-const isUndecided = (file: string) =>
-  undecided.some((path) => (path.endsWith("/") ? file.startsWith(path) : file === path));
-
 describe("skit/directory-layout", () => {
   test("a new file in a legacy folder is flagged once, at the top", async () => {
     expect(
@@ -75,19 +83,15 @@ describe("skit/directory-layout", () => {
     ).toEqual([]);
   });
 
-  test("debt only shrinks: every listed file exists and is still outside the target", async () => {
-    const stale: string[] = [];
-    for (const file of layoutDebt) {
-      const exists = await stat(join(root, file)).then(
-        () => true,
-        () => false,
-      );
-      if (!exists) stale.push(`${file}: no longer exists`);
-      else if (inTarget(file)) stale.push(`${file}: now in the target`);
-      else if (isUndecided(file)) stale.push(`${file}: undecided, not debt`);
-    }
-    if (new Set(layoutDebt).size !== layoutDebt.length) stale.push("duplicate entries");
-    expect(stale, "Remove these from layoutDebt in architecture/layout.mjs").toEqual([]);
+  test("an existing legacy filename has no layout exemption", async () => {
+    expect(
+      await reported(
+        "packages/cli/src/library/PROBE.ts",
+        "export const probe = 1;",
+        "directory-layout",
+        "packages/cli/src/workflows/library/library-sync.ts",
+      ),
+    ).toEqual([1]);
   });
 });
 
@@ -142,19 +146,28 @@ describe("skit/import-direction", () => {
     ).toEqual([1]);
   });
 
-  test("debt only shrinks: every listed import still exists", async () => {
-    const stale: string[] = [];
-    for (const [file, targets] of Object.entries(importDebt)) {
-      const text = await readFile(join(root, file), "utf8").catch(() => "");
-      const imported = [...text.matchAll(/(?:from|import\()\s*["']([^"']+)["']/g)]
-        .map((match) => match[1] ?? "")
-        .filter((source) => source.startsWith("."))
-        .map((source) =>
-          relative(root, resolve(dirname(join(root, file)), source)).replace(/\.js$/, ""),
-        );
-      for (const target of targets)
-        if (!imported.includes(target)) stale.push(`${file}: ${target}`);
-    }
-    expect(stale, "Remove these from importDebt in architecture/layout.mjs").toEqual([]);
+  test.each(["packages/tui/src/index.ts", "packages/storybook/src/browser.ts"])(
+    "a previously exempt frontend import fails: %s",
+    async (filename) => {
+      expect(
+        await reported(
+          "packages/cli/src/library/PROBE.ts",
+          `import { Library } from "../../cli/src/front-end"; export const probe = Library;`,
+          "import-direction",
+          filename,
+        ),
+      ).toEqual([1]);
+    },
+  );
+
+  test("the core barrel cannot forward another owner's internal implementation", async () => {
+    expect(
+      await reported(
+        "packages/skit/test/PROBE.ts",
+        `export { privateFunction } from "./library/internal/private";`,
+        "import-direction",
+        "packages/skit/src/index.ts",
+      ),
+    ).toEqual([1]);
   });
 });

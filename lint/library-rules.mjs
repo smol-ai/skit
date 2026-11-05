@@ -329,8 +329,8 @@ export const libraryRules = {
           if (file.startsWith("architecture/library") && node.id.name === "Ref")
             context.report({ node, messageId: "placeholder" });
           if (
-            file.startsWith("architecture/conformance/library") &&
-            ["MissingDebt", "ExtraDebt", "ChangedDebt", "RequirementDebt"].includes(node.id.name) &&
+            file.startsWith("architecture/conformance/") &&
+            node.id.name.endsWith("Debt") &&
             node.typeAnnotation.type !== "TSNeverKeyword"
           )
             context.report({ node, messageId: "debt", data: { name: node.id.name } });
@@ -427,6 +427,13 @@ export const libraryRules = {
           storage ||
           (whole &&
             (privateExportModules.has(target) ||
+              (file === "packages/skit/src/index.ts" &&
+                exporting &&
+                [
+                  "packages/skit/src/platform/atomic-write",
+                  "packages/skit/src/platform/copy-tree",
+                  "packages/skit/src/install/writable",
+                ].includes(target)) ||
               target.startsWith(`${library}internal/`) ||
               (exporting && publicSource && !selfNamespace)))
         ) {
@@ -438,6 +445,20 @@ export const libraryRules = {
         for (const specifier of node.specifiers ?? []) {
           if (typeOnly(node, specifier)) continue;
           const name = nameOf(specifier.imported ?? specifier.local ?? specifier.exported);
+          if (
+            file === "packages/skit/src/index.ts" &&
+            exporting &&
+            [
+              "writeRawAtomic",
+              "writeJsonAtomic",
+              "writeJsonExclusive",
+              "copyLocalTree",
+              "ensureSkillsDirectoryWritable",
+            ].includes(name)
+          ) {
+            context.report({ node: specifier, messageId: "private", data: { name } });
+            continue;
+          }
           if (
             privateNames.has(name) ||
             (name === "make" && publicSource && target !== "packages/skit/src/index")

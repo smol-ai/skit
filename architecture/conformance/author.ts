@@ -2,8 +2,7 @@
  * AuthorWorkspace and AuthorHistory conformance: the real owners checked against
  * architecture/author.ts.
  *
- * Same rules as library.ts: each gap between today's code and the approved API is listed as
- * debt, NOT approved, and the checks are exact, so debt only shrinks, in the change that closes it.
+ * Every method and constructor requirement must match exactly. No migration exemptions.
  */
 import type { Layer } from "effect";
 import type * as BuiltHistory from "../../packages/skit/dist/history/history.js";
@@ -41,29 +40,15 @@ type ImplementationMethods = Omit<AuthorHistoryShape, "engineStore">;
 type HistorySyncState = AuthorHistory["syncState"];
 type ImplementationSyncState = AuthorHistoryShape["syncState"];
 
-// ── Debt: today's gaps, to be closed by migration ─────────────────────────────────────────────
-type MissingDebt = never;
-type ExtraDebt = never;
-type ChangedDebt = never;
-type RequirementDebt = never;
-
-/**
- * HomeLock.withLock supplies the shared home lock (D3): capture
- * (through MachineSettings.ensureIdentity) and every checkpoint step fail LibraryBusy where the
- * contract has HomeBusy, or nothing for capture.
- */
-type HistoryChangedDebt = "capture" | "syncState";
-type SyncStateChangedDebt = "save" | "prepareWrite";
-
 export type Checks = [
-  Assert<Equal<MissingMethods<AuthorWorkspace, AuthorWorkspaceShape>, MissingDebt>>,
-  Assert<Equal<ExtraMethods<AuthorWorkspace, AuthorWorkspaceShape>, ExtraDebt>>,
-  Assert<Equal<ChangedMethods<AuthorWorkspace, AuthorWorkspaceShape>, ChangedDebt>>,
+  Assert<Equal<MissingMethods<AuthorWorkspace, AuthorWorkspaceShape>, never>>,
+  Assert<Equal<ExtraMethods<AuthorWorkspace, AuthorWorkspaceShape>, never>>,
+  Assert<Equal<ChangedMethods<AuthorWorkspace, AuthorWorkspaceShape>, never>>,
   // The lease is checked method by method too, so a gap names the method rather than `acquire`.
   Assert<Equal<MissingMethods<WorkspaceLease, ImplementationLease>, never>>,
   Assert<Equal<ExtraMethods<WorkspaceLease, ImplementationLease>, never>>,
   Assert<Equal<ChangedMethods<WorkspaceLease, ImplementationLease>, never>>,
-  Assert<Equal<Exclude<Layer.Services<Layered>, AuthorWorkspaceRequires>, RequirementDebt>>,
+  Assert<Equal<Exclude<Layer.Services<Layered>, AuthorWorkspaceRequires>, never>>,
   // Services.AuthorWorkspace is the real tag: same key, and the layer builds exactly it.
   Assert<Equal<typeof Implementation.key, Services.AuthorWorkspace["_contract"]>>,
   Assert<Equal<Layer.Success<Layered>, Implementation>>,
@@ -72,12 +57,12 @@ export type Checks = [
 
   Assert<Equal<MissingMethods<AuthorHistory, AuthorHistoryShape>, never>>,
   Assert<Equal<ExtraMethods<AuthorHistory, AuthorHistoryShape>, never>>,
-  Assert<Equal<ChangedMethods<HistoryMethods, ImplementationMethods>, HistoryChangedDebt>>,
+  Assert<Equal<ChangedMethods<HistoryMethods, ImplementationMethods>, never>>,
   Assert<Equal<AuthorHistoryShape["engineStore"], BuiltHistory.Store>>,
   // syncState is checked method by method, so the debt names the steps rather than syncState.
   Assert<Equal<MissingMethods<HistorySyncState, ImplementationSyncState>, never>>,
   Assert<Equal<ExtraMethods<HistorySyncState, ImplementationSyncState>, never>>,
-  Assert<Equal<ChangedMethods<HistorySyncState, ImplementationSyncState>, SyncStateChangedDebt>>,
+  Assert<Equal<ChangedMethods<HistorySyncState, ImplementationSyncState>, never>>,
   // AuthorWorkspace is the one owner AuthorHistory may require; the stand-in names the real tag.
   Assert<
     Equal<

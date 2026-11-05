@@ -6,9 +6,9 @@
  * `sources`: modules whose exports carry the owner's private names (default: core). AuthorWorkspace
  * and AuthorHistory are checked by architecture/conformance/author.ts, as library.ts is checked.
  *
- * `private`: names only code under `owner` may import. `debt`: today's violations, NOT approved.
- * The debt list may only shrink: lint/owner-boundaries.test.ts fails on a stale entry, and the
- * rule fails on any import not listed here.
+ * `private`: names only code under `owner` may import. Every caller is checked; there are no
+ * per-file migration exemptions. Package-local tests may exercise private modules, but may not
+ * import private names through compatibility APIs.
  */
 export const owners = [
   {
@@ -22,8 +22,6 @@ export const owners = [
       "packages/skit/src/library/internal/",
     ],
     testOwner: "packages/skit/test/",
-    // The barrel re-exports these today; that export is itself debt, removed as callers migrate.
-    allow: ["packages/skit/src/index.ts"],
     private: [
       "prepareRecoveryMoves",
       "prepareOwnedRecoveryMoves",
@@ -74,34 +72,7 @@ export const owners = [
   },
 ];
 
-export const debt = {
-  // The existing recovery-internals tests moved from CLI to their state owner.
-  "packages/skit/test/recovery-moves.test.ts": ["prepareRecoveryMoves"],
-  "packages/skit/test/collection-import-result.test.ts": [
-    "importAuthoredCollection",
-    "importCollection",
-  ],
-  "packages/skit/test/import-collection-errors.test.ts": ["prepareImport"],
-  "packages/skit/test/library-binding-entries.test.ts": ["importCollection"],
-  "packages/skit/test/library-history.test.ts": ["importCollection"],
-  "packages/skit/test/library-installed-skills.test.ts": [
-    "backUpInstalledSkill",
-    "importCollection",
-    "importEdit",
-  ],
-  "packages/skit/test/library-local-journey.test.ts": ["importCollection", "prepareRestore"],
-  "packages/skit/test/library-moved-skill.test.ts": ["importCollection"],
-  "packages/skit/test/library-restore-content.test.ts": ["importCollection", "prepareRestore"],
-  "packages/skit/test/library-store.test.ts": ["importCollection"],
-  "packages/skit/test/local-retention.test.ts": ["writeCollectionVersion"],
-  "packages/skit/test/sources.test.ts": ["prepareImport"],
-};
-
-/**
- * Services the model approves (app.ts owners and platform). Any other Context.Service or
- * Context.Reference fails lint (skit/approved-services) unless listed in serviceDebt, which is
- * today's unapproved services with what replaces them. serviceDebt only shrinks.
- */
+/** Only the services approved by the ownership model may be declared. No migration exemptions. */
 export const approvedServices = [
   "skit/library/Library",
   // Present only inside writeLibrary, which holds the home lock: the capability to save state.
@@ -124,31 +95,3 @@ export const approvedServices = [
   "skit/author/AuthorWorkspace",
   "skit/author/AuthorHistory",
 ];
-
-export const serviceDebt = {
-  "@smolai/skit/CurrentLibraryWriter": "becomes HomeLock",
-  "skit/library/LibraryActor": "OPEN: history attribution; not in the model yet",
-  "skit/artifact/TreeHasher": "plain function over Digest",
-  "skit/SkillUsage": "plain scanUsage()",
-  "skit/services/RegistryAuth": "becomes the Registry owner",
-  "skit/ReleaseChecker": "plain functions (ReleaseNotice)",
-  "@skit-server-effect/Authentication": "becomes Identity",
-  "@skit-server-effect/BetterAuth": "becomes Identity",
-  "@skit-server-effect/Bootstrap": "becomes Identity.createOperator",
-  "@skit-server-effect/PasswordHasher": "plain function shared with Better Auth",
-  "@skit-server-effect/AuthorInventory": "becomes Skits.list",
-  "@skit-server-effect/Authorization": "becomes HttpApi middleware + owner checks",
-  "@skit-server-effect/LibrarySync": "merges into ServerLibrary",
-  "@skit-server-effect/LibrarySnapshots": "merges into ServerLibrary",
-  "@skit-server-effect/NativeClock": "use Clock",
-  "@skit-server-effect/NativeCrypto": "use SecureRandom + Digest",
-  "@skit-server-effect/PatRateLimiter": "one RateLimiter shape",
-  "@skit-server-effect/BootstrapRateLimiter": "one RateLimiter shape",
-  "@skit-server-effect/FeedbackRateLimiter": "one RateLimiter shape",
-  "@skit-server-effect/Publication": "folds into Skits",
-  "@skit-server-effect/ReadinessInspector": "plain inspect()",
-  "@skit-server-effect/ReleaseStore": "folds into Skits",
-  "@skit-server-effect/SkitDeletion": "folds into Skits.delete",
-  "test/ListingFixture": "test-only service; tests change, not the model",
-  "test/NativeLibraryFixture": "test-only service; tests change, not the model",
-};

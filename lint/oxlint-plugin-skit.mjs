@@ -1,11 +1,6 @@
 import { dirname, relative, resolve } from "node:path";
-import {
-  approvedServices,
-  owners as boundaryOwners,
-  debt as boundaryDebt,
-  serviceDebt,
-} from "../architecture/boundaries.mjs";
-import { importDebt, layout, layoutDebt, undecided } from "../architecture/layout.mjs";
+import { approvedServices, owners as boundaryOwners } from "../architecture/boundaries.mjs";
+import { layout, undecided } from "../architecture/layout.mjs";
 import { libraryRules } from "./library-rules.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
@@ -502,19 +497,16 @@ const effectRules = {
       docs: { description: "Only an owner may use its private storage and writers" },
       messages: {
         forbidden:
-          "{{name}} is private to {{owner}} (architecture/boundaries.mjs). Call {{owner}} instead. Existing violations are listed as debt there; new ones are not allowed.",
+          "{{name}} is private to {{owner}} (architecture/boundaries.mjs). Call {{owner}} instead.",
       },
     },
     create(context) {
       const file = relative(repositoryRoot, context.filename);
       const fileDirectory = dirname(context.filename);
       const owners = boundaryOwners.filter(
-        (owner) =>
-          ![owner.owner].flat().some((path) => file.startsWith(path)) &&
-          !(owner.allow ?? []).includes(file),
+        (owner) => ![owner.owner].flat().some((path) => file.startsWith(path)),
       );
       if (owners.length === 0) return {};
-      const allowed = new Set(boundaryDebt[file] ?? []);
       // An owner's names arrive through core (default) or through the modules listed in `sources`.
       const carries = (owner, source) => {
         if (owner.sources === undefined) return carriesCoreNames(fileDirectory, source);
@@ -548,7 +540,7 @@ const effectRules = {
         for (const specifier of node.specifiers ?? []) {
           const imported = specifier.imported ?? specifier.local;
           const name = imported?.type === "Identifier" ? imported.name : imported?.value;
-          if (typeof name !== "string" || allowed.has(name)) continue;
+          if (typeof name !== "string") continue;
           const owner = reachable.find((candidate) => candidate.private.includes(name));
           if (owner)
             context.report({
@@ -577,7 +569,7 @@ const effectRules = {
       },
     },
     create(context) {
-      const known = new Set([...approvedServices, ...Object.keys(serviceDebt)]);
+      const known = new Set(approvedServices);
       const isContext = (callee, member) =>
         callee?.type === "MemberExpression" &&
         !callee.computed &&
@@ -604,14 +596,13 @@ const effectRules = {
       docs: { description: "Source files live in the target folder layout" },
       messages: {
         forbidden:
-          "{{file}} is outside the target layout for {{package}} (architecture/layout.mjs). Put it in one of: {{allowed}}. Existing files are listed as debt there; new ones are not allowed.",
+          "{{file}} is outside the target layout for {{package}} (architecture/layout.mjs). Put it in one of: {{allowed}}.",
       },
     },
     create(context) {
       const file = relative(repositoryRoot, context.filename);
       const source = Object.keys(layout).find((path) => file.startsWith(path));
       if (source === undefined) return {};
-      if (layoutDebt.includes(file)) return {};
       if (undecided.some((path) => (path.endsWith("/") ? file.startsWith(path) : file === path)))
         return {};
       const target = layout[source];
@@ -641,7 +632,7 @@ const effectRules = {
       docs: { description: "Imports follow the target layout's direction" },
       messages: {
         frontend:
-          "{{target}} is CLI source. The TUI and Storybook import core subpath exports, not CLI source (architecture/layout.mjs). Existing imports are listed as debt there; new ones are not allowed.",
+          "{{target}} is CLI source. The TUI and Storybook import core subpath exports, not CLI source (architecture/layout.mjs).",
         internal:
           "{{target}} is internal to {{owner}}. Only code under {{owner}} may import it; call the owner's public module instead (architecture/layout.mjs).",
       },
@@ -651,7 +642,6 @@ const effectRules = {
       const fileDirectory = dirname(context.filename);
       const frontend =
         file.startsWith("packages/tui/src/") || file.startsWith("packages/storybook/");
-      const allowed = new Set(importDebt[file] ?? []);
       const check = (node, sourceNode) => {
         const source = sourceNode?.value;
         if (typeof source !== "string") return;
@@ -661,24 +651,12 @@ const effectRules = {
             ? `packages/skit/src/${source.slice("@smolai/skit-core/".length)}`
             : undefined;
         if (target === undefined) return;
-        if (
-          frontend &&
-          source.startsWith(".") &&
-          target.startsWith("packages/cli/src/") &&
-          !allowed.has(target)
-        )
+        if (frontend && source.startsWith(".") && target.startsWith("packages/cli/src/"))
           context.report({ node: sourceNode, messageId: "frontend", data: { target } });
         const internal = /^(packages\/skit\/src\/[^/]+\/)internal(?:\/|$)/.exec(target);
-        // Package-local unit tests can exercise private implementation code. A compatibility
-        // barrel is allowed only when the owner already lists that exact entry point.
+        // Package-local unit tests may exercise their owner's private implementation.
         const packageTest = file.startsWith("packages/skit/test/");
-        const entry =
-          internal &&
-          boundaryOwners.some(
-            (owner) =>
-              [owner.owner].flat().includes(internal[1]) && (owner.allow ?? []).includes(file),
-          );
-        if (internal && !file.startsWith(internal[1]) && !packageTest && !entry)
+        if (internal && !file.startsWith(internal[1]) && !packageTest)
           context.report({
             node: sourceNode,
             messageId: "internal",

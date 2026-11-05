@@ -1,6 +1,7 @@
 /**
  * Whole-app ownership model. Approved; enforced by lint (architecture/boundaries.mjs) and
- * conformance types (architecture/conformance/).
+ * conformance types (architecture/conformance/). Existing violations fail those checks directly;
+ * migration debt never authorizes a service, API difference, file placement or import.
  * Target folder layout: architecture/layout.mjs (Arc work_01m6jatvy5f21a7x5q214td7a3).
  * Setup CLI commands, planning, undo and presentation now live in cli/src/library/setup/.
  * This placement does not transfer their remaining store/writer access into Library.

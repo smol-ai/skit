@@ -86,6 +86,16 @@ describe("skit/library-contract-complete", () => {
     expect(messages[1]).toContain("RequirementDebt");
   });
 
+  test("Author method exemptions cannot hide API differences", async () => {
+    expect(
+      await reported(
+        "library-contract-complete",
+        "architecture/conformance/author.ts",
+        `type HistoryChangedDebt = "capture" | "syncState"; type SyncStateChangedDebt = "save";`,
+      ),
+    ).toHaveLength(2);
+  });
+
   test("complete conformance is allowed", async () => {
     expect(
       await reported(
@@ -156,6 +166,13 @@ describe("skit/library-private-api", () => {
 
   test.each([
     `export * from "./library/import-collection.js";`,
+    `export { writeRawAtomic as write } from "./platform/atomic-write.js";`,
+    `export * from "./platform/atomic-write.js";`,
+    `export * as writes from "./platform/atomic-write.js";`,
+    `export * from "./platform/copy-tree.js";`,
+    `export { writeJsonAtomic } from "./platform/atomic-write.js";`,
+    `export { writeJsonExclusive } from "./platform/atomic-write.js";`,
+    `export { copyLocalTree } from "./platform/copy-tree.js";`,
     `export * as InstalledSkillFiles from "./install/files.js";`,
     `export * as InstalledSkillBackups from "./install/backups.js";`,
     `export * as imports from "./library/import-collection.js";`,

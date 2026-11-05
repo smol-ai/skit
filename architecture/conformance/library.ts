@@ -1,9 +1,7 @@
 /**
  * Library conformance: the real implementation checked against architecture/library.ts.
  *
- * Each gap between today's code and the approved API is listed as debt, NOT approved. The checks
- * are exact: closing a gap without removing its debt entry fails, and so does opening a new one.
- * So debt only shrinks, and only in the same change that closes it.
+ * Every method and constructor requirement must match exactly. No migration exemptions.
  */
 import type { Effect, Layer } from "effect";
 import type { Library as Implementation } from "../../packages/skit/src/library/library.js";
@@ -25,32 +23,19 @@ export type ChangedMethods<Contract, Actual> = {
 /** Services the constructor requires that the approved API does not allow. */
 export type UndeclaredRequirements<Make, Allowed> = Exclude<Effect.Services<Make>, Allowed>;
 
-// ── Debt: today's gaps, to be closed by migration ─────────────────────────────────────────────
-type MissingDebt = never;
-type ExtraDebt = never;
-// plan/apply now include Undo; their legacy plan shapes and recovery UUIDs still differ from the
-// target generic signatures. The journal's machine evidence is compatibility data, not an owner write.
-// setup: core result and error types (the contract's are Ref placeholders).
-// startup: a stopped reason's StepFailed error is saved as JSON (Schema.Defect), so it reads back
-// as unknown, not the contract's error union.
-// history retains the existing audit reader's LibraryAuditInvalid failure (path + line).
-// The target omits that failure; keep the mismatch explicit pending contract review.
-// content is implemented: its concrete restoration errors replace Ref placeholders; it also
-// preserves restore progress and offers a passive availability plan for sync's preview count.
-// Those signature differences require explicit target review, not casts or a relaxed assertion.
-type ChangedDebt = "plan" | "apply" | "setup" | "history" | "content";
-// The public layer constructs InstalledSkills internally.
-type RequirementDebt = never;
-
 export type Checks = [
   Assert<Equal<Extract<keyof typeof Implementation, "make">, never>>,
-  Assert<Equal<MissingMethods<Library, Implementation.Interface>, MissingDebt>>,
-  Assert<Equal<ExtraMethods<Library, Implementation.Interface>, ExtraDebt>>,
-  Assert<Equal<ChangedMethods<Library, Implementation.Interface>, ChangedDebt>>,
+  Assert<Equal<MissingMethods<Library, Implementation.Interface>, never>>,
+  Assert<Equal<ExtraMethods<Library, Implementation.Interface>, never>>,
+  Assert<Equal<Library["read"], Implementation.Interface["read"]>>,
+  Assert<Equal<Library["plan"], Implementation.Interface["plan"]>>,
+  Assert<Equal<Library["apply"], Implementation.Interface["apply"]>>,
+  Assert<Equal<Library["import"], Implementation.Interface["import"]>>,
+  Assert<Equal<Library["setup"], Implementation.Interface["setup"]>>,
+  Assert<Equal<Library["content"], Implementation.Interface["content"]>>,
+  Assert<Equal<Library["history"], Implementation.Interface["history"]>>,
+  Assert<Equal<Library["startup"], Implementation.Interface["startup"]>>,
   Assert<
-    Equal<
-      Exclude<Layer.Services<ReturnType<typeof Implementation.layer>>, LibraryRequires>,
-      RequirementDebt
-    >
+    Equal<Exclude<Layer.Services<ReturnType<typeof Implementation.layer>>, LibraryRequires>, never>
   >,
 ];
