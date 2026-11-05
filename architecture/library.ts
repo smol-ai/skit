@@ -583,6 +583,9 @@ export interface Library {
    * either with StalePlan. Then one atomic state.json write, including this change's record; then
    * folder work, each move rechecked, idempotent by installed-skill id; then the record is marked
    * done. One history event.
+   * Per-request results carry owner-attributed failure: compare recorded intended rows with
+   * saved rows and scope a copy failure by its recorded path. Shared publication failures apply
+   * to every accepted request. Frontends format these facts without positional attribution.
    */
   readonly apply: <Request extends ApplyRequest>(
     request: Request,

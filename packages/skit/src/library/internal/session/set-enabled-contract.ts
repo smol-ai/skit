@@ -68,15 +68,9 @@ export type SetEnabledResult = typeof SetEnabledResult.Type;
 
 /** One shared result view preserves partial application details for every enable caller. */
 export const setEnabledResults = (outcome: Outcome): SetEnabledResult[] => {
-  return outcome.results.map((result, index): SetEnabledResult => {
+  return outcome.results.map((result): SetEnabledResult => {
     const { _tag, ...change } = result.change;
-    // Incomplete where it left paths unresolved; else the last one carries the failure.
-    const failed =
-      outcome._tag === "Incomplete" &&
-      (result.unresolved.length > 0 ||
-        (index === outcome.results.length - 1 &&
-          outcome.results.every((other) => other.unresolved.length === 0)));
-    const failure = failed ? failureDetails(outcome.cause) : undefined;
+    const failure = result.failure === null ? undefined : failureDetails(result.failure);
     return {
       ...change,
       installed_skills: result.installedSkills.map(({ destination, path, status }) => ({
@@ -87,7 +81,7 @@ export const setEnabledResults = (outcome: Outcome): SetEnabledResult[] => {
       application: {
         intent: result.intent,
         revision: result.revision,
-        status: failed ? "incomplete" : "complete",
+        status: failure === undefined ? "complete" : "incomplete",
         ...(failure === undefined
           ? {}
           : {

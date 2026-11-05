@@ -1,5 +1,6 @@
 import {
   SkitConfiguration,
+  LibraryState,
   deterministicTreeHash,
   inspectOwnershipMarker,
   libraryStateRevision,
@@ -20,6 +21,7 @@ import {
   FileSystem,
   Layer,
   Option,
+  Schema,
   Stream,
 } from "effect";
 import { join } from "node:path";
@@ -1712,3 +1714,168 @@ for (const extras of ["reproducible", "empty-directory"] as const)
       }
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
   );
+
+for (const reverse of [false, true])
+  it.effect(
+    `failed metadata updates are attributed to their scope, independent of request order (${reverse})`,
+    () =>
+      Effect.gen(function* () {
+        const f = yield* fixture;
+        const project = join(f.root, "project");
+        yield* f.fs.makeDirectory(project);
+        const repository = yield* f.fs.realPath(project);
+        const local: SetEnabledRequest = {
+          ...f.request,
+          scope: { kind: "repository", root: repository },
+        };
+        yield* f.home.owned(
+          applySetEnabledPlan(
+            yield* f.home.owned(planSetEnabled([f.request, local], f.home.installOptions)),
+          ),
+        );
+        const alpha = (yield* f.home.durable).skills.find((skill) => skill.name === "alpha");
+        assert.ok(alpha);
+        const path = join(repository, ".agents", "skills", "alpha");
+        const original = yield* f.fs.readFileString(join(path, "SKILL.md"));
+        const marker = yield* f.fs.readFileString(join(path, ".skit-ownership.json"));
+        let accepted = false;
+        let failed = false;
+        const requests = [{ ...local, invocation: "explicit" as const }, f.request];
+        if (reverse) requests.reverse();
+        const plan = yield* f.home.owned(
+          planSetEnabled(requests, f.home.installOptions).pipe(
+            Effect.provideService(FileSystem.FileSystem, {
+              ...f.fs,
+              rename: (from, to) =>
+                Effect.gen(function* () {
+                  yield* f.fs.rename(from, to);
+                  if (to === f.home.statePath) {
+                    const state = yield* Schema.decodeUnknownEffect(
+                      Schema.fromJsonString(LibraryState),
+                    )(yield* f.fs.readFileString(to)).pipe(Effect.orDie);
+                    accepted ||=
+                      enabledAt(state, local.scope)?.invocation_policies?.[alpha.skill_id] ===
+                      "explicit";
+                  }
+                }),
+              makeTempDirectoryScoped: (options) => {
+                if (
+                  accepted &&
+                  options?.prefix === ".skit-stage-" &&
+                  options.directory?.startsWith(repository)
+                ) {
+                  failed = true;
+                  return Effect.fail(
+                    systemError({
+                      _tag: "PermissionDenied",
+                      module: "FileSystem",
+                      method: "makeTempDirectoryScoped",
+                      pathOrDescriptor: path,
+                    }),
+                  );
+                }
+                return f.fs.makeTempDirectoryScoped(options);
+              },
+            }),
+          ),
+        );
+        const error = yield* Effect.flip(f.home.owned(applySetEnabledPlan(plan)));
+        assert.instanceOf(error, SetEnabledIncomplete);
+        assert.isTrue(accepted);
+        assert.isTrue(failed);
+        assert.strictEqual(
+          error.results.find((result) => result.scope.kind === "repository")?.application.status,
+          "incomplete",
+        );
+        assert.strictEqual(
+          error.results.find((result) => result.scope.kind === "global")?.application.status,
+          "complete",
+        );
+        assert.strictEqual(yield* f.fs.readFileString(join(path, "SKILL.md")), original);
+        assert.strictEqual(yield* f.fs.readFileString(join(path, ".skit-ownership.json")), marker);
+        assert.strictEqual(
+          (yield* f.home.durable).installed_skills.find((copy) => copy.path === path)?.status,
+          "installed",
+        );
+        const retry = yield* f.home.owned(planSetEnabled(requests, f.home.installOptions));
+        assert.isTrue(
+          (yield* f.home.owned(applySetEnabledPlan(retry))).every(
+            (result) => result.value.application.status === "complete",
+          ),
+        );
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+  );
+
+it.effect("a shared final publication failure belongs to every accepted request", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const doneApply = Schema.Struct({
+      _tag: Schema.Literal("Pending"),
+      steps: Schema.Array(
+        Schema.Struct({
+          step: Schema.Struct({
+            _tag: Schema.Literal("Apply"),
+            phase: Schema.Struct({ _tag: Schema.Literal("Done") }),
+          }),
+        }),
+      ),
+    });
+    let refused = false;
+    const plan = yield* f.home.owned(
+      planSetEnabled(
+        [f.request, { ...f.request, selectedSkills: ["beta"] }],
+        f.home.installOptions,
+      ).pipe(
+        Effect.provideService(FileSystem.FileSystem, {
+          ...f.fs,
+          rename: (from, to) =>
+            Effect.gen(function* () {
+              if (to === f.home.statePath) {
+                const state = yield* Schema.decodeUnknownEffect(
+                  Schema.fromJsonString(LibraryState),
+                )(yield* f.fs.readFileString(from)).pipe(Effect.orDie);
+                if (state.operations.some(Schema.is(doneApply))) {
+                  refused = true;
+                  return yield* Effect.fail(
+                    systemError({
+                      _tag: "PermissionDenied",
+                      module: "FileSystem",
+                      method: "rename",
+                      pathOrDescriptor: to,
+                    }),
+                  );
+                }
+              }
+              yield* f.fs.rename(from, to);
+            }),
+        }),
+      ),
+    );
+    const error = yield* Effect.flip(f.home.owned(applySetEnabledPlan(plan)));
+    assert.instanceOf(error, SetEnabledIncomplete);
+    assert.isTrue(refused);
+    assert.deepStrictEqual(
+      error.results.map((result) => result.application.status),
+      ["incomplete", "incomplete"],
+    );
+    assert.isTrue(
+      error.results.every((result) => result.application.failure?.code === "OPERATION_FAILED"),
+    );
+    for (const name of ["alpha", "beta"])
+      assert.strictEqual(
+        yield* f.fs.readFileString(join(f.destination, name, "SKILL.md")),
+        `# ${name}\n`,
+      );
+    const retry = yield* f.home.owned(
+      planSetEnabled(
+        [f.request, { ...f.request, selectedSkills: ["beta"] }],
+        f.home.installOptions,
+      ),
+    );
+    assert.isTrue(
+      (yield* f.home.owned(applySetEnabledPlan(retry))).every(
+        (result) => result.value.application.status === "complete",
+      ),
+    );
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);

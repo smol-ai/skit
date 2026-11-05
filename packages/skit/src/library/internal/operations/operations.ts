@@ -24,19 +24,27 @@ export const runApply = Effect.fn("Library.recordedApplyStep")(function* (
   const attempt = yield* Effect.result(
     apply(step, operationId, index, batch).pipe(
       Effect.provideService(InstalledSkills.Service, files),
-      Effect.catchTag("Library.InstalledSkillsChanged", (error) =>
-        Effect.fail(new StalePlan({ message: error.message })),
-      ),
     ),
   );
-  return attempt._tag === "Success"
-    ? attempt.success
-    : applyOutcome(step, yield* loadLibrary((yield* LibraryWriter).home), {
-        _tag: "Incomplete",
-        results: [],
-        reason: "update",
-        cause: attempt.failure,
-      });
+  if (attempt._tag === "Success") return attempt.success;
+  const failure = attempt.failure;
+  const cause = failure._tag === "Library.InstalledChangeFailed" ? failure.cause : failure;
+  const path =
+    failure._tag === "Library.InstalledChangeFailed"
+      ? failure.path
+      : cause._tag === "Library.InstalledSkillsChanged"
+        ? cause.path
+        : undefined;
+  return applyOutcome(step, yield* loadLibrary((yield* LibraryWriter).home), {
+    _tag: "Incomplete",
+    results: [],
+    reason: "update",
+    cause:
+      cause._tag === "Library.InstalledSkillsChanged"
+        ? new StalePlan({ message: cause.message })
+        : cause,
+    failedPaths: path === undefined ? null : [path],
+  });
 });
 
 /** A batch is named by domain identity, never by the number of calls reached on replay. */

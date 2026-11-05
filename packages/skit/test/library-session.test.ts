@@ -52,5 +52,40 @@ it.effect(
       );
       assert.strictEqual(snapshot._tag, "Present");
       if (snapshot._tag === "Present") assert.strictEqual(snapshot.state.enabled.length, 1);
+      if (snapshot._tag !== "Present" || !snapshot.state.skills[0])
+        return assert.fail("No imported Skill");
+      const collectionId = snapshot.state.skills[0].collection_id;
+      const repository = join(root, "project");
+      yield* Effect.gen(function* () {
+        const library = yield* Library.Service;
+        const plan = yield* library.plan(
+          {
+            _tag: "Enabled",
+            changes: [
+              {
+                _tag: "Enable",
+                subject: { _tag: "Collection", id: collectionId },
+                members: "whole",
+                where: [{ kind: "repository", root: repository }],
+              },
+            ],
+          },
+          { base: yield* library.read },
+        );
+        const outcome = (yield* library.apply({ _tag: "Apply", plan })).result;
+        assert.strictEqual(outcome._tag, "Applied");
+        assert.strictEqual(outcome.results.length, 1);
+        assert.strictEqual(outcome.results[0]?.failure, null);
+        assert.strictEqual(outcome.results[0]?.copies.length, 1);
+        assert.isTrue(
+          outcome.results[0]?.copies.every(
+            (copy) =>
+              copy._tag !== "Failed" && copy.copy.root === join(repository, ".agents", "skills"),
+          ),
+        );
+        assert.strictEqual(outcome._tag === "Applied" && outcome.copies.length, 2);
+      }).pipe(
+        Effect.provide(Library.layer({ home, routing: { _tag: "Configured", ...configuration } })),
+      );
     }).pipe(Effect.provide(skitLayer)),
 );

@@ -241,6 +241,8 @@ export interface AppliedChange {
   readonly installedSkills: readonly InstalledSkill[];
   readonly copies: readonly InstalledSkillResult[];
   readonly unresolved: readonly string[];
+  /** Owner-attributed failure; null when this request reached its recorded result. */
+  readonly failure: ApplyError | null;
 }
 export type Outcome =
   | {
@@ -254,6 +256,8 @@ export type Outcome =
       readonly results: readonly AppliedChange[];
       readonly reason: "destinations" | "update";
       readonly cause: ApplyError;
+      /** Exact failing copy paths, or null for a shared operation failure. */
+      readonly failedPaths: readonly string[] | null;
     };
 
 export type PlanError =

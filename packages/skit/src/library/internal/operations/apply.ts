@@ -1,5 +1,6 @@
 import { samePathChain } from "../../../platform/path-evidence.js";
-import { Effect } from "effect";
+import { Data, Effect } from "effect";
+import type { ApplyError } from "../../library-plan.js";
 import * as InstalledSkills from "../../installed-skills.js";
 import * as Status from "../../installed-skill-status.js";
 import {
@@ -25,6 +26,12 @@ import {
   type ApplyStep,
 } from "./program.js";
 import { applyOutcome } from "./result.js";
+
+/** Private execution context, unwrapped before any public outcome or durable error is made. */
+export class InstalledChangeFailed extends Data.TaggedError("Library.InstalledChangeFailed")<{
+  readonly path: string;
+  readonly cause: ApplyError | InstalledSkills.Changed;
+}> {}
 
 const pathOf = (step: ApplyStep, change: RecordedInstalledChange) =>
   change._tag === "Install" || change._tag === "Save"
@@ -211,14 +218,22 @@ export const apply = Effect.fn("Library.applyRecordedChanges")(function* (
     }
     for (const change of step.changes) {
       const path = pathOf(step, change);
-      const folder = path === undefined ? undefined : yield* files.inspect(path);
+      const folder =
+        path === undefined
+          ? undefined
+          : yield* files
+              .inspect(path)
+              .pipe(Effect.mapError((cause) => new InstalledChangeFailed({ path, cause })));
       const alreadyWritten = change._tag === "Install" && folder && matchesRow(folder, change.row);
       const alreadyAbsent = change._tag === "Uninstall" && folder?.entry._tag === "Absent";
       const before =
         path === undefined ? undefined : step.folders.find((item) => item.path === path);
       if (folder && before) {
         if (!ancestorsMatch(before, folder, false))
-          return yield* new InstalledSkills.Changed({ path: folder.path });
+          return yield* new InstalledChangeFailed({
+            path: folder.path,
+            cause: new InstalledSkills.Changed({ path: folder.path }),
+          });
         if (!alreadyWritten && before.evidence !== folder.evidence) {
           const prior = step.before.installed_skills.find((row) => row.path === folder.path);
           const displaced =
@@ -226,7 +241,11 @@ export const apply = Effect.fn("Library.applyRecordedChanges")(function* (
             prior &&
             (change._tag === "Install" || change._tag === "Uninstall") &&
             (yield* backedUp(before, prior));
-          if (!displaced) return yield* new InstalledSkills.Changed({ path: folder.path });
+          if (!displaced)
+            return yield* new InstalledChangeFailed({
+              path: folder.path,
+              cause: new InstalledSkills.Changed({ path: folder.path }),
+            });
         }
       }
       if (!alreadyWritten && !alreadyAbsent) {
@@ -268,6 +287,9 @@ export const apply = Effect.fn("Library.applyRecordedChanges")(function* (
                 ),
               ),
             ),
+          ),
+          Effect.mapError((cause) =>
+            path === undefined ? cause : new InstalledChangeFailed({ path, cause }),
           ),
         );
       }
