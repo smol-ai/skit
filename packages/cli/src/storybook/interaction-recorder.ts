@@ -52,7 +52,7 @@ export type InteractionEvent = Data.TaggedEnum<{
 
 export const InteractionEvent = Data.taggedEnum<InteractionEvent>();
 
-export interface ScriptedInteraction {
+interface ScriptedInteraction {
   readonly layer: Layer.Layer<Prompter | Renderer>;
   readonly events: Effect.Effect<ReadonlyArray<InteractionEvent>>;
   readonly remaining: Effect.Effect<number>;

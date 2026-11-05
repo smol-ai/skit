@@ -58,7 +58,7 @@ export interface Clean<A> {
 }
 
 /** Conflicts the chooser left undecided. There is no merged value until they are decided. */
-export interface Conflicts<A> {
+interface Conflicts<A> {
   readonly _tag: "Conflicts";
   readonly conflicts: Array.NonEmptyReadonlyArray<Conflict>;
   readonly choices: ReadonlyArray<Choice>;

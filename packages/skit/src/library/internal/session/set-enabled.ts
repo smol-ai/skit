@@ -8,11 +8,7 @@ import {
   type SetEnabledIntent,
   type SetEnabledRequest,
 } from "./set-enabled-request.js";
-export type {
-  SetEnabledIntent,
-  SetEnabledRequest,
-  EnabledCollection,
-} from "./set-enabled-request.js";
+export type { SetEnabledIntent, SetEnabledRequest } from "./set-enabled-request.js";
 import { failureDetails } from "../../../shared/failure.js";
 import { setEnabledResults, SetEnabledChange, SetEnabledResult } from "./set-enabled-contract.js";
 
@@ -66,7 +62,7 @@ export type SelectionError =
   | import("../../subject-resolution.js").LibrarySubjectNotFound
   | import("../../subject-resolution.js").LibrarySubjectAmbiguous
   | import("../../../shared/input-failures.js").OptionCombinationInvalid;
-export type SelectionRequirements = never;
+type SelectionRequirements = never;
 export interface LibraryChangeSelection {
   readonly configuration: SetEnabledConfiguration;
   readonly home: string;

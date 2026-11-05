@@ -43,7 +43,7 @@ export interface LibrarySkillRow extends SkillMetadata {
   readonly scopes: readonly ScopeRow[];
 }
 
-export interface PreviewFacts {
+interface PreviewFacts {
   readonly action: "enable" | "disable";
   readonly skills: readonly string[];
   readonly scope: Scope;

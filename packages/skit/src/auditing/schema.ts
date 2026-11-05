@@ -6,7 +6,6 @@ import { Schema } from "effect";
 const StringArray = Schema.Array(Schema.String);
 const AuditScope = Schema.Literals(["user", "project", "legacy"]);
 const AuditKind = Schema.Literals(["skill", "rule", "plugin", "mcp-server", "marketplace"]);
-export type AuditKind = typeof AuditKind.Type;
 
 const AuditDocumentation = Schema.Struct({
   id: Schema.String,

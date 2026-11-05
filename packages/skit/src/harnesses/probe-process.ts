@@ -7,11 +7,6 @@
 import { Effect } from "effect";
 import { SourceProcess } from "../platform/source-process.js";
 
-export interface BoundedCapture {
-  readonly output: string;
-  readonly exitCode: number;
-}
-
 /**
  * Run a probe, returning its output and exit status.
  *

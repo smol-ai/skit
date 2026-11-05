@@ -17,8 +17,6 @@ import { harnessLabel } from "../../../harnesses/discovery.js";
 import type { InvocationOption } from "./invocation-option.js";
 import { type InstallScope as Scope } from "../../scope.js";
 
-export type { ResolvedDeclaredPolicy };
-
 export const AuthorInvocation = Schema.Record(HarnessName, DeclaredInvocationResolution);
 export type AuthorInvocation = typeof AuthorInvocation.Type;
 

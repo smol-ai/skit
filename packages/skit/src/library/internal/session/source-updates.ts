@@ -12,7 +12,7 @@ import { sourceFromUpstream } from "./upstream-source.js";
 import type { inspectResolvedSource } from "../../source-inspection.js";
 export type SourceInspection = Effect.Success<ReturnType<typeof inspectResolvedSource>>;
 
-export interface LibraryProgressSubject {
+interface LibraryProgressSubject {
   readonly id: string;
   readonly label: string;
 }
