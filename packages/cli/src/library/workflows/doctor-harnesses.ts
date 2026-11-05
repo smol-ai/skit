@@ -22,7 +22,7 @@ import { CodexDoctorCheck, doctorCodexCheck } from "./doctor-codex.js";
 import { readOpenCodeV2Skills } from "./doctor-opencode-v2.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
-export class HarnessDiscoveryFailure
+class HarnessDiscoveryFailure
   extends Data.TaggedError("HarnessDiscoveryFailure")<{
     message: string;
   }>
@@ -33,7 +33,7 @@ export class HarnessDiscoveryFailure
   readonly remediation = "Check that the Harness runs, then retry.";
 }
 
-export const HarnessDoctorSkill = Schema.Struct({
+const HarnessDoctorSkill = Schema.Struct({
   id: Schema.optionalKey(Schema.String),
   name: Schema.String,
   description: Schema.optionalKey(Schema.String),
@@ -44,7 +44,7 @@ export const HarnessDoctorSkill = Schema.Struct({
   warnings: Schema.Array(Schema.String),
   errors: Schema.Array(Schema.String),
 });
-export type HarnessDoctorSkill = typeof HarnessDoctorSkill.Type;
+type HarnessDoctorSkill = typeof HarnessDoctorSkill.Type;
 /** The Harnesses doctor checks through their own discovery; Codex has its own check. */
 const NativeDoctorHarness = HarnessName.pick(["claude-code", "opencode", "devin"]);
 type NativeDoctorHarness = typeof NativeDoctorHarness.Type;
@@ -101,10 +101,8 @@ const ClaudeEnvelope = Schema.Struct({
   ),
 });
 
-export const decodeOpenCodeSkills = Schema.decodeUnknownEffect(
-  Schema.fromJsonString(OpenCodeSkills),
-);
-export const decodeDevinSkills = Schema.decodeUnknownEffect(Schema.fromJsonString(DevinSkills));
+const decodeOpenCodeSkills = Schema.decodeUnknownEffect(Schema.fromJsonString(OpenCodeSkills));
+const decodeDevinSkills = Schema.decodeUnknownEffect(Schema.fromJsonString(DevinSkills));
 
 /** SDK initialize only. No user message, model turn, hooks, or MCP server startup. */
 export const readClaudeCommands = Effect.fn("Doctor.readClaudeCommands")(function* (
@@ -223,7 +221,7 @@ const nativeListWarnings = (output: SourceProcessResult) =>
   output.stderr.trim() ? [output.stderr.trim()] : [];
 
 /** OpenCode V1's resolved skill list. */
-export const readOpenCodeSkills = Effect.fn("Doctor.readOpenCodeSkills")(function* (
+const readOpenCodeSkills = Effect.fn("Doctor.readOpenCodeSkills")(function* (
   executable: string,
   cwd: string,
 ) {
@@ -256,7 +254,7 @@ export const readOpenCodeSkills = Effect.fn("Doctor.readOpenCodeSkills")(functio
 });
 
 /** Devin's own skill list, with its per-skill diagnostics. */
-export const readDevinSkills = Effect.fn("Doctor.readDevinSkills")(function* (
+const readDevinSkills = Effect.fn("Doctor.readDevinSkills")(function* (
   executable: string,
   cwd: string,
 ) {
@@ -345,7 +343,7 @@ export const nativeDiscovery: Record<NativeDoctorHarness, NativeDiscovery> = {
   },
 };
 
-export const doctorHarnessCheck = Effect.fn("Doctor.harness")(function* (
+const doctorHarnessCheck = Effect.fn("Doctor.harness")(function* (
   harness: NativeDoctorHarness,
   cwd: string,
   overrides?: readonly string[],

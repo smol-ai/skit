@@ -8,7 +8,7 @@ import { registryApiFailure, registryApiFailureMessage } from "../registry/api-c
 import { Registry } from "../registry/index.js";
 import { isRegistryTransportError, RegistryHttp } from "../registry/registry-http.js";
 
-export class FeedbackInputInvalid
+class FeedbackInputInvalid
   extends Data.TaggedError("FeedbackInputInvalid")<{ readonly message: string }>
   implements SkitFailure
 {
@@ -18,7 +18,7 @@ export class FeedbackInputInvalid
     'Pass one message, either as an argument or with --message: skit feedback send "what slowed you down".';
 }
 
-export class FeedbackNotSent
+class FeedbackNotSent
   extends Data.TaggedError("FeedbackNotSent")<{ readonly message: string }>
   implements SkitFailure
 {
@@ -28,7 +28,7 @@ export class FeedbackNotSent
     "Nothing was sent. Retry the same command; feedback is not saved for later.";
 }
 
-export class FeedbackUnconfirmed
+class FeedbackUnconfirmed
   extends Data.TaggedError("FeedbackUnconfirmed")<{ readonly message: string }>
   implements SkitFailure
 {
@@ -38,7 +38,7 @@ export class FeedbackUnconfirmed
     "The report may have arrived. Do not send it again; carry on with the task.";
 }
 
-export class FeedbackSignInRequired
+class FeedbackSignInRequired
   extends Data.TaggedError("FeedbackSignInRequired")<{
     readonly message: string;
     readonly origin: string;
@@ -156,3 +156,6 @@ export const sendFeedback = Effect.fn("Feedback.send")(function* (
     }),
   );
 });
+
+// Required to name inferred command errors in generated declarations.
+export type { FeedbackInputInvalid, FeedbackNotSent, FeedbackUnconfirmed, FeedbackSignInRequired };
