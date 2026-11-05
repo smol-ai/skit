@@ -10,10 +10,8 @@ import {
   FileIdentityNumber,
   LegacyFileIdentityNumber,
 } from "../../../platform/link-stat.js";
-import { loadLibrary, type LibraryStateReadError } from "../../store/library-store.js";
+import type { LibraryStateReadError } from "../../store/library-store.js";
 import { canonicalJson } from "../../../shared/json.js";
-import { inspectOwnershipMarker } from "../../../installed-skills/files.js";
-import { type InstalledSkill } from "../../device-state.js";
 import { pathIsWithin } from "../../../platform/path-identity.js";
 import { withLock as withHomeLock } from "../../../platform/home-lock.js";
 import { writeJsonExclusive } from "../../../platform/atomic-write.js";
@@ -189,55 +187,6 @@ export const prepareRecoveryMoves = (
   requests: readonly RecoveryMoveRequest[],
   operationDirectory = recoveryOperationDirectory(home),
 ) => prepareMoves(home, requests, operationDirectory);
-
-/** Preserve exactly reviewed, registered installed skills; marker text alone never grants ownership. */
-export const prepareOwnedRecoveryMoves = Effect.fn("RecoveryMoves.prepareOwned")(function* (
-  home: string,
-  requests: readonly { name: string; installedSkill: InstalledSkill }[],
-  operationDirectory?: string,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const owned = new Map<
-    string,
-    { marker: string; check: Effect.Effect<void, StalePlan | LibraryStateReadError> }
-  >();
-  const moves: RecoveryMoveRequest[] = [];
-  for (const request of requests) {
-    const expected = structuredClone(request.installedSkill);
-    const path = resolve(expected.path);
-    const check = Effect.gen(function* () {
-      const state = yield* loadLibrary(home);
-      const current = state.installed_skills.find(
-        (installedSkill) => installedSkill.installed_skill_id === expected.installed_skill_id,
-      );
-      if (canonicalJson(current ?? null) !== canonicalJson(expected))
-        return yield* new StalePlan({ message: "The Library changed since this was previewed" });
-    }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
-    yield* check;
-    const observed = yield* inspectOwnershipMarker(path);
-    if (
-      observed.kind !== "valid" ||
-      observed.marker.installed_skill_id !== expected.installed_skill_id ||
-      observed.marker.skill_id !== expected.skill_id ||
-      observed.marker.skill_version_id !== expected.skill_version_id ||
-      observed.marker.expected_hash !== expected.expected_hash
-    )
-      return yield* new StalePlan({ message: "The Library changed since this was previewed" });
-    const marker = yield* fs.readFileString(join(path, ".skit-ownership.json"));
-    owned.set(path, { marker, check });
-    moves.push({
-      name: request.name,
-      path,
-      currentHash: yield* deterministicTreeHash(path),
-    });
-  }
-  return yield* prepareMoves(
-    home,
-    moves,
-    operationDirectory ?? recoveryOperationDirectory(home),
-    owned,
-  );
-});
 
 export type PreparedRecoveryMoves = Effect.Success<ReturnType<typeof prepareRecoveryMoves>>;
 
