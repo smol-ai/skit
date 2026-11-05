@@ -1346,27 +1346,3 @@ export function resolveSkitSource(
     return resolved;
   });
 }
-
-/** Resolve the default remote commit without acquiring a worktree. Explicit refs retain the
- * full fetch path because tags and arbitrary object IDs need Git's exact revision semantics. */
-export const resolveUnpinnedGitHead = Effect.fn("Source.resolveGitHead")(function* (
-  source: SkitSource,
-) {
-  if (source.type !== "git" && source.type !== "github") return undefined;
-  if (source.ref !== undefined) return undefined;
-  const cloneUrl =
-    source.type === "github"
-      ? `https://github.com/${source.owner}/${source.repository}`
-      : source.remote;
-  const output = yield* commandOutputEffect("git", [
-    "ls-remote",
-    "--exit-code",
-    "--",
-    cloneUrl,
-    "HEAD",
-  ]);
-  const commit = output.trim().split(/\s+/, 1)[0];
-  if (!commit || !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(commit))
-    return yield* sourcePinMismatch(`Git returned no commit for ${cloneUrl} HEAD`);
-  return commit;
-});
