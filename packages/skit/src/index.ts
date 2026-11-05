@@ -10,14 +10,7 @@ export * from "./api/consumer-contracts.js";
 export * from "./api/authoring-contracts.js";
 export * from "./auditing/skill-audit.js";
 export * from "./artifact/control-files.js";
-export {
-  type RegistrySkitDescriptor,
-  type SkitFileRecord,
-  type SyncConflict,
-  type SkillExampleRecord,
-  type ValidatedSkit,
-  type SkitReleaseIdentity,
-} from "./artifact/contracts.js";
+
 export { OwnershipMarker } from "./installed-skills/ownership-marker.js";
 export {
   SkillAudit,
@@ -30,13 +23,7 @@ export { InvocationPolicy } from "./artifact/invocation-policy.js";
 export { InstallDestination } from "./installed-skills/destination.js";
 export { InstallScope } from "./library/scope.js";
 export { SkitValidationDiagnostic } from "./artifact/validation-diagnostic.js";
-export {
-  type ContainedSkillDescriptor,
-  type SharedMapping,
-  type SkillExampleManifest,
-  type SkitDescriptor,
-} from "./artifact/schemas.js";
-export { type HarnessInstallStatus, type OwnershipIssue } from "./installed-skills/metadata.js";
+
 export * from "./shared/failure.js";
 export {
   ReadmeFrontmatterMissing,
@@ -74,7 +61,6 @@ export {
   type InstalledSkillFailure,
   inspectOwnershipMarker,
   prepareInstalledSkillRebuild,
-  type InstalledSkillMutationError,
   type ManageApproval,
 } from "./installed-skills/files.js";
 
@@ -90,11 +76,7 @@ export * from "./artifact/tree.js";
 export * from "./artifact/tree-entry.js";
 export { type AuthorIgnoreRepository } from "./artifact/plain-author-ignore.js";
 
-export type {
-  LibraryLayerError,
-  LibraryStateReadError,
-  LibraryStateWriteError,
-} from "./library/library.js";
+export type { LibraryLayerError, LibraryStateReadError } from "./library/library.js";
 export { scanInventory, type InventoryScanRoot } from "./library/inventory/refresh.js";
 export { collectionVersionPath } from "./library/collection-version.js";
 export * from "./library/library-contracts.js";
@@ -120,13 +102,7 @@ export type {
   ImportRequestSkill,
   ImportRequest,
   ImportedCollection,
-  EditImport,
   ImportedEdit,
-  ImportedSkillFact,
-  AuthoredImport,
-  ImportCollectionError,
-  ImportAuthoredCollectionError,
-  ImportEditError,
 } from "./library/import-collection.js";
 export { type InstalledSkillInvalid } from "./library/installation/install-enabled.js";
 export * from "./library/snapshot-archive.js";
@@ -144,10 +120,7 @@ export * as Merge from "./sync/merge.js";
 export * as History from "./history/history.js";
 export * as Sync from "./sync/sync.js";
 export { mergeAuthorTree, conflictKind } from "./author/merge/files.js";
-export {
-  type Unusable as MachineSettingsUnusable,
-  type Settings as MachineSettingsSnapshot,
-} from "./library/machine-settings.js";
+export { type Unusable as MachineSettingsUnusable } from "./library/machine-settings.js";
 
 export { InstalledSkills } from "./library/installed-skills.js";
 export * as InstalledSkillStatus from "./library/installed-skill-status.js";
@@ -155,17 +128,9 @@ export { Library } from "./library/library.js";
 export * from "./library/subject-resolution.js";
 export * from "./library/duplicates.js";
 export * from "./library/source-inspection.js";
-export {
-  type ReviewedChange,
-  type UpdateChoice,
-  type UpdatedCopy,
-} from "./library/installed-update.js";
-export type { ManagePlan } from "./library/manage-plan.js";
+
 export { observePathEvidence, recoveryFingerprint } from "./library/folder-evidence.js";
-export type {
-  PlanError as LibraryPlanError,
-  ApplyError as LibraryApplyError,
-} from "./library/library.js";
+export type { ApplyError as LibraryApplyError } from "./library/library.js";
 
 export {
   type InstalledSkillWouldReplaceLink,
@@ -191,10 +156,6 @@ export {
 export { normalizeLibraryManifest } from "./library/manifest.js";
 
 export { type ManageStopped, type SyncStopped } from "./library/library.js";
-export type {
-  SyncProgram,
-  StoredSyncProgram,
-  SyncPublication,
-} from "./library/store/state-schema.js";
+export type { StoredSyncProgram } from "./library/store/state-schema.js";
 
 export { HomeLock } from "./platform/home-lock.js";
