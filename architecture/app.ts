@@ -126,7 +126,13 @@ export const owners = {
       "logout",
       "status",
     ],
-    requires: ["FileSystem", "ChildProcessSpawner", "RegistryHttp", "SkitConfiguration"],
+    requires: [
+      "FileSystem",
+      "ChildProcessSpawner",
+      "RegistryHttp",
+      "SkitConfiguration",
+      "HomeLock",
+    ],
     removes: [
       "RegistryAuth Context.Reference with a 'no access' default (removed; Registry.credentials/source are plain owner operations over required configuration)",
       "exported resolveAuth / resolveAuthForOrigin (7 bypassing callers)",
@@ -341,6 +347,12 @@ export const owners = {
  * The root export is an aggregate compatibility surface, not a subpath.
  */
 export const coreExports = {
+  "./platform/home-lock": {
+    kind: "shared",
+    purpose:
+      "Same-home serialization for Library, MachineSettings, AuthorHistory and Registry owners; grants no owner writer access.",
+    source: "packages/skit/src/platform/home-lock.ts",
+  },
   "./machine-settings": {
     kind: "owner",
     owners: ["MachineSettings"],

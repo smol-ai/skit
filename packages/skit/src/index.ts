@@ -282,5 +282,3 @@ export {
 export { normalizeLibraryManifest } from "./library/manifest.js";
 
 export { type ManageStopped, type SyncStopped } from "./library/library.js";
-
-export * as HomeLock from "./platform/home-lock.js";

@@ -50,6 +50,49 @@ async function reported(
 }
 
 describe("skit/owner-boundaries", () => {
+  test("home-lock authority is restricted to the owners, including direct package namespace imports", async () => {
+    for (const statement of [
+      'import { HomeLock } from "@smolai/skit-core";',
+      'import { withLock as lock } from "@smolai/skit-core/platform/home-lock";',
+      'import * as Locked from "@smolai/skit-core/platform/home-lock";',
+      'export * from "@smolai/skit-core/platform/home-lock";',
+      'const locked = import("@smolai/skit-core/platform/home-lock");',
+      'import * as Locked from "../../../skit/src/platform/home-lock.js";',
+    ])
+      expect(
+        await reported(statement, "owner-boundaries", "packages/cli/src/commands/handler.ts"),
+      ).toHaveLength(1);
+
+    for (const filename of [
+      "packages/cli/src/registry/auth.ts",
+      "packages/skit/src/library/machine-settings.ts",
+      "packages/skit/src/author/history.ts",
+      "packages/skit/src/platform/home-lock.ts",
+    ])
+      expect(
+        await reported(
+          'import * as Locked from "@smolai/skit-core/platform/home-lock";',
+          "owner-boundaries",
+          filename,
+        ),
+      ).toEqual([]);
+
+    expect(
+      await reported(
+        'import { withLock } from "../src/platform/home-lock.js";',
+        "owner-boundaries",
+        "packages/skit/test/library-writer-lock.test.ts",
+      ),
+    ).toEqual([]);
+    expect(
+      await reported(
+        'import * as Locked from "@smolai/skit-core/platform/home-lock";',
+        "owner-boundaries",
+        "packages/skit/test/library-writer-lock.test.ts",
+      ),
+    ).toHaveLength(1);
+  });
+
   test("only Teams may compose Identity's team namespace claim into a commit", async () => {
     for (const statement of [
       `import { prepareTeamNamespaceClaim } from "../identity/team-namespace.js";`,

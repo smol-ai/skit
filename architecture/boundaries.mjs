@@ -12,6 +12,18 @@
  */
 export const owners = [
   {
+    name: "Home lock owners",
+    owner: [
+      "packages/skit/src/platform/",
+      "packages/skit/src/library/",
+      "packages/skit/src/author/",
+      "packages/cli/src/registry/",
+    ],
+    privateModules: ["packages/skit/src/platform/home-lock."],
+    testOwner: "packages/skit/test/",
+    private: ["HomeLock", "withLock"],
+  },
+  {
     // Identity defines namespace SQL; only Teams may compose this claim with its own atomic write.
     name: "Identity team namespace commit",
     owner: "packages/skit-server-effect/src/teams/",

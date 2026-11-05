@@ -89,6 +89,10 @@
     "./machine-settings": {
       "types": "./dist/library/machine-settings.d.ts",
       "import": "./dist/library/machine-settings.js"
+    },
+    "./platform/home-lock": {
+      "types": "./dist/platform/home-lock.d.ts",
+      "import": "./dist/platform/home-lock.js"
     }
   },
   "scripts": {

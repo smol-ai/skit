@@ -1,5 +1,6 @@
 import { dirname, relative, resolve } from "node:path";
 import { approvedServices, owners as boundaryOwners } from "../architecture/boundaries.mjs";
+import { coreExports } from "../architecture/app.ts";
 import { layout, undecided } from "../architecture/layout.mjs";
 import { libraryRules } from "./library-rules.mjs";
 import { structureRules } from "./structure-rules.mjs";
@@ -519,13 +520,16 @@ const effectRules = {
         const source = node.source?.value;
         if (typeof source !== "string") return;
         // Whole modules can be private: renaming an exported helper must not open a new bypass.
+        const declared = source.startsWith("@smolai/skit-core/")
+          ? coreExports[`./${source.slice("@smolai/skit-core/".length)}`]
+          : undefined;
         const target = source.startsWith(".")
           ? relative(repositoryRoot, resolve(fileDirectory, source))
-          : undefined;
+          : declared?.source;
         const moduleOwner = owners.find(
           (owner) =>
             target !== undefined &&
-            !file.startsWith(owner.testOwner ?? "\0") &&
+            !(source.startsWith(".") && file.startsWith(owner.testOwner ?? "\0")) &&
             owner.privateModules?.some((prefix) => target.startsWith(prefix)),
         );
         if (moduleOwner) {
@@ -543,6 +547,7 @@ const effectRules = {
             carries(owner, source) &&
             !(
               target !== undefined &&
+              source.startsWith(".") &&
               file.startsWith(owner.testOwner ?? "\0") &&
               owner.privateModules?.some((prefix) => target.startsWith(prefix))
             ),
