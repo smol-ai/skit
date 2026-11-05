@@ -1,5 +1,6 @@
 import { expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect } from "effect";
+import { NodeServices } from "@effect/platform-node";
 import { Command } from "effect/cli";
 import { SkitConfiguration, resolveSkitConfiguration } from "@smolai/skit-core";
 import { runCommandTree } from "../src/commands/runtime.js";
@@ -21,6 +22,7 @@ it.effect("standalone commands resolve configuration and preserve a supplied sna
     yield* runCommandTree(command, [], "0.0.0");
     expect(seen).toEqual(["/supplied/state", "/environment/state"]);
   }).pipe(
+    Effect.provide(NodeServices.layer),
     Effect.provide(rendererTestLayer()),
     Effect.provide(
       ConfigProvider.layer(ConfigProvider.fromUnknown({ XDG_STATE_HOME: "/environment/state" })),
