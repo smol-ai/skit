@@ -9,6 +9,5 @@ export {
   probeRequestedHarnesses,
   HarnessProbeResult,
   HarnessProbeReport,
-  type HarnessProbeOptions,
 } from "./probe.js";
-export { captureBounded, type BoundedCapture } from "./probe-process.js";
+export { captureBounded } from "./probe-process.js";

@@ -31,15 +31,8 @@ export function parseWireDescriptor(value: unknown): SkitWireDescriptor | null {
   const result = Schema.decodeUnknownResult(skitDescriptorWireSchema)(value);
   return Result.isSuccess(result) ? { ...result.success } : null;
 }
-export type { SkitWireDescriptor };
 export const skitValidationDiagnosticsSchema = Schema.Array(skitValidationDiagnosticSchema);
 export const skitDescriptorRequestSchema = skitDescriptorWireSchema;
-const skitApiErrorSchema = Schema.Struct({
-  error: apiNonEmptyString,
-  request_id: Schema.optional(Schema.String),
-  details: Schema.optional(Schema.Unknown),
-});
-export type SkitApiError = typeof skitApiErrorSchema.Type;
 
 /** A Registry response that does not match the SKIT API contract it claims. */
 export class SkitContractError

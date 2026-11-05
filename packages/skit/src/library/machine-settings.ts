@@ -16,7 +16,6 @@ import {
   CurrentMachineDocument,
   type DiscoveryEvidence,
   type MachineRepositoryDecision,
-  type MachineSettingsSetupRecord,
 } from "./machine-document.js";
 import { withLock as withHomeLock } from "../platform/home-lock.js";
 import { withLibraryStateReplacement } from "./store/writer-lock.js";
@@ -298,8 +297,6 @@ export const restoreSetupDiscovery = Effect.fn("MachineSettings.restoreSetupDisc
     }),
   );
 });
-
-export type { MachineSettingsSetupRecord };
 
 export const SetupDiscoverySettings = Schema.Struct({
   discoveryRoots: CurrentMachineDocument.fields.discoveryRoots,

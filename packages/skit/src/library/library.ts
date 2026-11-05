@@ -117,14 +117,9 @@ export {
 export type { SetupApproval } from "./enabled-plan.js";
 
 export { Revision, type Snapshot } from "./snapshot.js";
-export type {
-  LibraryLayerError,
-  LibraryStateReadError,
-  LibraryStateWriteError,
-} from "./store/library-store.js";
-export type { SetupResult } from "./internal/setup/run.js";
+export type { LibraryLayerError, LibraryStateReadError } from "./store/library-store.js";
 export { RestoreInvalid, SourceRestoreInvalid } from "./internal/content/restore.js";
-export type { StagedContent, ContentStageError } from "./internal/content/content.js";
+export type { StagedContent } from "./internal/content/content.js";
 export type {
   FolderEvidence,
   LinkEvidence,
@@ -140,7 +135,7 @@ type ReportedOperation<O> = {
     ? readonly Omit<RecordedSetupStep, "applies">[]
     : O[K];
 };
-export type OperationStatus = ReportedOperation<StoredOperationStatus>;
+type OperationStatus = ReportedOperation<StoredOperationStatus>;
 
 export interface History {
   readonly events: readonly LibraryAuditEvent[];
@@ -148,23 +143,25 @@ export interface History {
 }
 
 /** The operation applied, with its complete or partial result kept intact. */
-export interface EnabledOutcome {
+interface EnabledOutcome {
   readonly _tag: "Enabled";
   readonly result: ExistingOutcome;
 }
+
 export interface RemoveOutcome {
   readonly _tag: "Remove";
   readonly result: ExistingOutcome;
 }
+
 export interface UpdateOutcome {
   readonly _tag: "Update";
   readonly result: ExistingOutcome;
 }
-export interface UninstallOutcome {
+interface UninstallOutcome {
   readonly _tag: "Uninstall";
   readonly result: ExistingOutcome;
 }
-export interface UndoOutcome {
+interface UndoOutcome {
   readonly _tag: "Undo";
   readonly result: UndoResult;
 }
@@ -320,3 +317,9 @@ export const layer = (
   config: Config,
 ): Layer.Layer<Service, LibraryLayerError, TreeRequirements | Digest.Digest> =>
   Layer.effect(Service, makeOwner(config));
+
+export type { LibraryStateWriteError } from "./store/library-store.js";
+
+export type { SetupResult } from "./internal/setup/run.js";
+
+export type { ContentStageError } from "./internal/content/content.js";

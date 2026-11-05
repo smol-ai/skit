@@ -51,14 +51,11 @@ export const DiscoveryEvidence = Schema.Struct({
 export interface DiscoveryEvidence extends Schema.Schema.Type<typeof DiscoveryEvidence> {}
 
 /** The discovery folders one setup changed: before, and what it saved. Undo restores `before`. */
-export const MachineSettingsSetupRecord = Schema.Struct({
+const MachineSettingsSetupRecord = Schema.Struct({
   operationId: OperationId,
   before: DiscoveryEvidence,
   expectedAfter: DiscoveryEvidence,
 });
-export interface MachineSettingsSetupRecord extends Schema.Schema.Type<
-  typeof MachineSettingsSetupRecord
-> {}
 
 /**
  * V6 keeps the record of the setup that last saved discovery folders, so undo can restore them; an

@@ -1,16 +1,9 @@
 import { Schema } from "effect";
 import { Hash } from "../shared/hash.js";
-import {
-  apiSemverPattern,
-  parseContract,
-  semver,
-  SkitContractError,
-  type SkitApiError,
-  type SkitWireDescriptor,
-} from "./contracts.js";
+import { apiSemverPattern, parseContract, semver, SkitContractError } from "./contracts.js";
 
 /** Consumer-facing Registry contracts: Distribution reads and Server discovery. */
-export { parseContract, semver, SkitContractError, type SkitApiError, type SkitWireDescriptor };
+export { parseContract, semver, SkitContractError };
 
 export const releaseSchema = Schema.Struct({
   release_id: Schema.NonEmptyString,
@@ -19,7 +12,6 @@ export const releaseSchema = Schema.Struct({
   archive_digest: Hash,
   download_path: Schema.String.check(Schema.isStartingWith("/api/skits/")),
 });
-export type Release = typeof releaseSchema.Type;
 
 export const serverDiscoverySchema = Schema.Struct({
   schema: Schema.Literal("skit.server.v1"),
