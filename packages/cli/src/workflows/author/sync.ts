@@ -64,7 +64,7 @@ import {
 import { MissingRequirement } from "../../commands/input-failures.js";
 
 /** A SKIT request the Registry answered, with its own words for why it refused. */
-export class SyncRejected
+class SyncRejected
   extends Data.TaggedError("SyncRejected")<{ message: string }>
   implements SkitFailure
 {

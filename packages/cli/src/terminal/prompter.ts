@@ -48,7 +48,7 @@ export interface Choice<Value> {
   preview?: () => Effect.Effect<string>;
 }
 
-export interface MultiselectOptions<Value> {
+interface MultiselectOptions<Value> {
   /** Maximum visible choices; all choices remain searchable and selectable. */
   readonly maxItems?: number;
   /** Live context derived from every selected value, including off-screen choices. */
@@ -102,7 +102,7 @@ export interface PrompterShape {
 export class Prompter extends Context.Service<Prompter, PrompterShape>()("skit/Prompter") {}
 
 /** How many choices a scrolling prompt shows at once. */
-export const AUTOCOMPLETE_MAX_ITEMS = 20;
+const AUTOCOMPLETE_MAX_ITEMS = 20;
 
 const PromptAction = Data.taggedEnum<Prompt.ActionDefinition>();
 

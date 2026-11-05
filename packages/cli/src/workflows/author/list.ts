@@ -40,7 +40,7 @@ import { result } from "../../commands/result.js";
 
 export type AuthorSkitInventory = typeof outputContracts.authorList.schema.Type;
 
-export class AuthorListResponseError
+class AuthorListResponseError
   extends Data.TaggedError("AuthorListResponseError")<{
     message: string;
   }>
@@ -50,7 +50,7 @@ export class AuthorListResponseError
   readonly code = "OPERATION_FAILED" as const;
   readonly remediation = "Check the Registry's reason, then retry.";
 }
-export class AuthorListPaginationError
+class AuthorListPaginationError
   extends Data.TaggedError("AuthorListPaginationError")<{
     origin: string;
   }>

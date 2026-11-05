@@ -19,7 +19,7 @@ class UpdateCheckTimedOut
 }
 
 const DAY = 86_400_000;
-export const DistTags = Schema.Record(Schema.String, Schema.String);
+const DistTags = Schema.Record(Schema.String, Schema.String);
 export const ReleaseCheck = Schema.Struct({
   status: Schema.Literals([
     "current",

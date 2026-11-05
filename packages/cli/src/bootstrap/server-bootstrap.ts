@@ -52,7 +52,7 @@ export interface BootstrapResult {
   readonly status: "complete" | "already_complete";
 }
 
-export class BootstrapOriginInvalid
+class BootstrapOriginInvalid
   extends Data.TaggedError("BootstrapOriginInvalid")<{
     readonly origin: string;
   }>
