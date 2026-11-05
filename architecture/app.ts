@@ -383,9 +383,14 @@ export const coreExports = {
       "Runtime-neutral authoring/publication protocols and history algorithms over the consumer surface.",
     source: "packages/skit/src/universal-authoring.ts",
   },
+  "./api": {
+    kind: "shared",
+    purpose: "HTTP endpoint definitions, middleware contracts and domain schemas.",
+    source: "packages/skit/src/api/index.ts",
+  },
   "./universal/api": {
     kind: "shared",
-    purpose: "Shared HTTP endpoint definitions, middleware contracts and domain schemas.",
+    purpose: "Compatibility entry for the canonical runtime-neutral HTTP API.",
     source: "packages/skit/src/api/index.ts",
   },
 } as const satisfies {

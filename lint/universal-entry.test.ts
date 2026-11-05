@@ -3,7 +3,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 
 /**
- * The `@smolai/skit-core/universal/*` entries are what the Registry Worker imports, so their
+ * The core HTTP API and `@smolai/skit-core/universal/*` entries serve the Registry Worker, so their
  * import graphs must never reach the Node platform layer. The Worker runs on workerd, where
  * `@effect/platform-node` cannot load; the whole graph is evaluated on import, so one stray
  * re-export anywhere below the entry breaks the Worker even if nothing calls it.

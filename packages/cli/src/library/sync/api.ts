@@ -7,7 +7,7 @@ import {
   UnauthorizedResponse,
   type LibraryManifest,
   type SnapshotArchive,
-} from "@smolai/skit-core/universal/api";
+} from "@smolai/skit-core/api";
 import { Data, Effect, Option, Predicate, Schema } from "effect";
 import { HttpClient } from "effect/http";
 import { HttpApiClient } from "effect/http-api";

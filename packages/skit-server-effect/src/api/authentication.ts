@@ -1,4 +1,4 @@
-import { CurrentPrincipal, PrincipalAuthentication } from "@smolai/skit-core/universal/api";
+import { CurrentPrincipal, PrincipalAuthentication } from "@smolai/skit-core/api";
 import { Effect, Layer } from "effect";
 import { HttpServerRequest } from "effect/http";
 import { Identity, type Principal, type Scope } from "../identity/service.js";

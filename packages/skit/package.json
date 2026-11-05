@@ -30,6 +30,10 @@
       "types": "./dist/universal-authoring.d.ts",
       "import": "./dist/universal-authoring.js"
     },
+    "./api": {
+      "types": "./dist/api/index.d.ts",
+      "import": "./dist/api/index.js"
+    },
     "./universal/api": {
       "types": "./dist/api/index.d.ts",
       "import": "./dist/api/index.js"
