@@ -12,6 +12,7 @@ import { RevisionConflictResponse } from "@smolai/skit-core/universal/api";
 import { commitLibraryRevision, LibraryRevisionConflict } from "../src/library/internal/sync.js";
 import { databaseLayer } from "../src/platform/cloudflare.js";
 import { BrowserCrypto } from "@effect/platform-browser";
+import { legacyGrantsTable } from "./fixtures/legacy-grants.js";
 import { D1Client } from "@effect/sql-d1";
 import archiveFixture from "./fixtures/library-sync/archive.json" with { type: "json" };
 import manifestFixture from "./fixtures/library-sync/manifest.json" with { type: "json" };
@@ -175,6 +176,7 @@ describe("Library sync Worker persistence", () => {
         yield* sql.batch([
           sql`UPDATE libraries SET owner_subject_id = 'principal_someone_else'
           WHERE library_id = ${uploaded.library_id}`,
+          sql.unsafe(legacyGrantsTable),
           sql`INSERT INTO resource_grants
           (grant_id, subject_kind, subject_id, resource_kind, resource_id, permission, created_at)
           VALUES ('library_read_probe', 'principal', ${callerId}, 'library', ${uploaded.library_id}, 'read', '2026-11-05')`,

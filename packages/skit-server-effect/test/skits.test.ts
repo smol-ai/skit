@@ -13,6 +13,7 @@ import {
 } from "@smolai/skit-core/universal/api";
 import { History } from "@smolai/skit-core/universal/authoring";
 import { sha256Hash } from "@smolai/skit-core/universal/consumer";
+import { legacyGrantsTable } from "./fixtures/legacy-grants.js";
 import { revisionRequest, skillTree } from "./fixtures/revision-request.js";
 
 // Real worker HTTP, authentication, D1 and R2. No mocked service or transport.
@@ -491,6 +492,7 @@ it.effect("conceals deletion and previews from a non-owner despite a legacy admi
       yield* skits.create({ payload: { ...params, visibility: "private" } });
       yield* Effect.promise(() =>
         env.DB.batch([
+          env.DB.prepare(legacyGrantsTable),
           env.DB.prepare(`INSERT INTO resource_grants
           (grant_id, subject_kind, subject_id, resource_kind, resource_id, permission, created_at)
           SELECT 'delete_admin_probe', 'principal', subject_id, 'skit', ?, 'admin', '2026-11-05'
@@ -522,6 +524,7 @@ it.effect("refuses publication grants before decoding an unauthorized archive", 
       yield* skits.create({ payload: { ...params, visibility: "private" } });
       yield* Effect.promise(() =>
         env.DB.batch([
+          env.DB.prepare(legacyGrantsTable),
           env.DB.prepare(`INSERT INTO resource_grants
           (grant_id, subject_kind, subject_id, resource_kind, resource_id, permission, created_at)
           SELECT 'publish_probe', 'principal', subject_id, 'namespace', ?, 'publish', '2026-11-05'
@@ -556,6 +559,7 @@ it.effect("authoring ignores legacy admin grants and preserves read/write denial
       yield* skits.post({ params, payload: posted });
       yield* Effect.promise(() =>
         env.DB.batch([
+          env.DB.prepare(legacyGrantsTable),
           env.DB.prepare(`INSERT INTO resource_grants
           (grant_id, subject_kind, subject_id, resource_kind, resource_id, permission, created_at)
           SELECT 'author_admin_probe', 'principal', subject_id, 'skit', ?, 'admin', '2026-11-05'

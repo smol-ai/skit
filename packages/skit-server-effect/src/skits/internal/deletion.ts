@@ -134,20 +134,9 @@ export const makeDeletion = (
     WHERE owner_slug = ? AND skit_slug = ? AND visibility != 'private'
   )`;
     const guardBindings = [owner, slug, owner, slug];
-    const results = yield* db(
+    const [, deletedRevisions, , , deletedReleases, deletedSkit] = yield* db(
       "delete private skit",
       sql.batch([
-        sql.unsafe(
-          `DELETE FROM resource_grants WHERE resource_kind = 'release' AND resource_id IN
-           (SELECT release_id FROM releases WHERE owner_slug = ? AND skit_slug = ?)
-           AND ${guard}`,
-          [owner, slug, ...guardBindings],
-        ),
-        sql.unsafe(
-          `DELETE FROM resource_grants WHERE resource_kind = 'skit' AND resource_id = ?
-           AND ${guard}`,
-          [`${owner}/${slug}`, ...guardBindings],
-        ),
         sql.unsafe(
           `DELETE FROM revision_parents WHERE owner_slug = ? AND skit_slug = ?
            AND ${guard}`,
@@ -176,7 +165,6 @@ export const makeDeletion = (
            ) RETURNING owner_slug`,
       ]),
     );
-    const deletedSkit = results[7];
     if (deletedSkit?.length !== 1) {
       const remains = yield* db(
         "check failed skit deletion",
@@ -193,14 +181,14 @@ export const makeDeletion = (
       };
     }
     const revisions = yield* Schema.decodeUnknownEffect(Schema.Array(RevisionRow))(
-      results[3] ?? [],
+      deletedRevisions ?? [],
     ).pipe(
       Effect.mapError(
         (cause) => new DatabaseError({ operation: "decode deleted revisions", cause }),
       ),
     );
     const releases = yield* Schema.decodeUnknownEffect(Schema.Array(DeletedReleaseRow))(
-      results[6] ?? [],
+      deletedReleases ?? [],
     ).pipe(
       Effect.mapError(
         (cause) => new DatabaseError({ operation: "decode deleted releases", cause }),

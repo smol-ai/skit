@@ -56,9 +56,6 @@ const prepareDatabase = Effect.flatMap(D1Client.D1Client, (sql) =>
       published_at TEXT NOT NULL, visibility TEXT NOT NULL,
       PRIMARY KEY (owner_slug, skit_slug, version)
     )`),
-    sql.unsafe(`CREATE TABLE resource_grants (
-      grant_id TEXT PRIMARY KEY, resource_kind TEXT NOT NULL, resource_id TEXT NOT NULL
-    )`),
   ]),
 );
 
@@ -109,8 +106,6 @@ describe("private SKIT deletion", () => {
              ('tim', 'tools', '1.0.0', 'rel_one', 'releases/one.zip',
               '2026-01-01T00:00:00Z', 'private')`,
           ),
-          sql.unsafe("INSERT INTO resource_grants VALUES ('grant_release', 'release', 'rel_one')"),
-          sql.unsafe("INSERT INTO resource_grants VALUES ('grant_skit', 'skit', 'tim/tools')"),
         ]),
       );
       const blobs = yield* BlobStore;
@@ -149,7 +144,7 @@ describe("private SKIT deletion", () => {
       expect(yield* remaining("SELECT tree_hash FROM revision_tree_entries")).toEqual([
         { tree_hash: "tree_shared" },
       ]);
-      for (const table of ["revision_parents", "releases", "resource_grants"]) {
+      for (const table of ["revision_parents", "releases"]) {
         const rows = yield* remaining(`SELECT COUNT(*) count FROM ${table}`);
         expect(rows[0]).toEqual({ count: 0 });
       }
