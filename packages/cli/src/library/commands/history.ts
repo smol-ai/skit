@@ -6,8 +6,8 @@ import { handleLibraryCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homeFlag, jsonFlag } from "../../commands/parameters.js";
-import { Renderer } from "../../presentation/renderer.js";
-import { result } from "../../handlers/contracts.js";
+import { Renderer } from "../../terminal/renderer.js";
+import { result } from "../../commands/result.js";
 
 export const libraryHistoryCliCommand = Command.make(
   "history",

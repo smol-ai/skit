@@ -1,13 +1,18 @@
 import { Effect, FileSystem, Schema } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
-import type { DescriptorFailure } from "../failures.js";
-import { DuplicateSkillNames, SkillDiscoveryLimitExceeded, SkillNameInvalid } from "../failures.js";
+import {
+  type DescriptorFailure,
+  DuplicateSkillNames,
+  SkillDiscoveryLimitExceeded,
+  SkillNameInvalid,
+} from "../artifact/failures.js";
+
 import { parseSkillFrontmatter } from "../harnesses/frontmatter.js";
 import { writeRawAtomic } from "../platform/atomic-write.js";
 import { LinkStat } from "../platform/link-stat.js";
 import { readSkitDescriptor } from "../artifact/skit.js";
-import { kebabNameSchema } from "../schemas.js";
+import { kebabNameSchema } from "../artifact/schemas.js";
 
 const isKebabName = Schema.is(kebabNameSchema);
 

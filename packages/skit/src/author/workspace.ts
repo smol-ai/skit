@@ -29,7 +29,7 @@ import { AuthorIgnoreRepository } from "../artifact/plain-author-ignore.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 import * as History from "../history/history.js";
 import { LinkStat } from "../platform/link-stat.js";
-import { type SkitContractError } from "../protocol/api-contracts.js";
+import { type SkitContractError } from "../api/contracts.js";
 import { SourceProcess } from "../platform/source-process.js";
 import { type TreeError } from "../shared/tree-error.js";
 import { acquireFileLock } from "../platform/file-lock.js";

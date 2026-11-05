@@ -4,7 +4,7 @@ import { basename, dirname, join } from "node:path";
 import { deterministicTreeHash } from "../artifact/skit.js";
 import { LinkStat } from "../platform/link-stat.js";
 import { TreeError } from "../shared/tree-error.js";
-import type { Hash } from "../vocabulary.js";
+import type { Hash } from "../shared/hash.js";
 import type {
   AbsentEvidence,
   FileIdentity,

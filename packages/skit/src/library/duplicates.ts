@@ -4,7 +4,7 @@ import { Effect, FileSystem, Schema } from "effect";
 import { parseSkillFrontmatter } from "../harnesses/frontmatter.js";
 import { LinkStat } from "../platform/link-stat.js";
 import { sha256Hash } from "../shared/hash.js";
-import type { HarnessName } from "../vocabulary.js";
+import type { HarnessName } from "../harnesses/contracts.js";
 import { Duplicate, DuplicateScanIncomplete, type Destination } from "./installed-skill-facts.js";
 
 /** Another copy of a skill, as an agent reads it, and every path it is reached by. */

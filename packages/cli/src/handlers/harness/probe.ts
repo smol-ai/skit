@@ -5,8 +5,8 @@ import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { jsonFlag } from "../../commands/parameters.js";
 import { probeRequestedHarnesses } from "@smolai/skit-core/harnesses";
-import { Renderer } from "../../presentation/renderer.js";
-import { result } from "../contracts.js";
+import { Renderer } from "../../terminal/renderer.js";
+import { result } from "../../commands/result.js";
 
 const harness = Argument.String("harness").pipe(Argument.optional);
 

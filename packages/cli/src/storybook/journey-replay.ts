@@ -1,15 +1,12 @@
 import { stripVTControlCharacters } from "node:util";
 import { createColors } from "picocolors";
-import {
-  InteractionEvent,
-  type InteractionEvent as Event,
-} from "../presentation/interaction-recorder.js";
+import { InteractionEvent, type InteractionEvent as Event } from "./interaction-recorder.js";
 import {
   renderFailureFrame,
   renderNoteFrame,
   renderResultFrame,
   type TerminalEnvironment,
-} from "../presentation/output-frame.js";
+} from "../commands/output-frame.js";
 import type { RecordedJourney } from "./journey-runner.js";
 
 import type { ReplayFrame } from "./contracts.js";

@@ -1,9 +1,10 @@
-import { skitConfigurationLayer } from "@smolai/skit-core";
+import { testPlatformLayer } from "./helpers/platform.js";
+import { skitConfigurationLayer, collectionVersionPath } from "@smolai/skit-core";
 import { Library } from "@smolai/skit-core/library";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Ref } from "effect";
 import { join } from "node:path";
-import { collectionVersionPath, skitLayer } from "@smolai/skit-core";
+
 import { checkSubjects } from "../src/library/workflows/check.js";
 import { importSource } from "../src/library/application/import-source.js";
 import { initializeLibraryMachine } from "./helpers/library-home.js";
@@ -70,5 +71,5 @@ it.effect("checks retained files without treating an observed local copy as an u
       reloaded.state.collection_versions[0]?.hash,
       loaded.state.collection_versions[0]?.hash,
     );
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

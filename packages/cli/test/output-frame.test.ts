@@ -1,12 +1,12 @@
 import { Effect } from "effect";
 import { it } from "@effect/vitest";
 import { describe, expect } from "vitest";
-import { result } from "../src/handlers/contracts.js";
+import { result } from "../src/commands/result.js";
 import {
   defaultTerminalEnvironment,
   renderFailureFrame,
   renderResultFrame,
-} from "../src/presentation/output-frame.js";
+} from "../src/commands/output-frame.js";
 
 describe("terminal output frames", () => {
   it.effect("renders human and JSON output from the same command result", () =>

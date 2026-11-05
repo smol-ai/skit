@@ -5,7 +5,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { expect } from "vitest";
 import { skitLayer } from "@smolai/skit-core";
 import { setupCommand } from "../src/library/setup/command.js";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import { setupPrompts } from "../src/library/setup/setup-steps.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 

@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import { SkillId } from "../entity-ids.js";
-import { HarnessName, InstallDestination } from "../../vocabulary.js";
+import { HarnessName } from "../../harnesses/contracts.js";
+import { InstallDestination } from "../../installed-skills/destination.js";
 import type { LibraryState } from "../library-state.js";
 
 /** One diagnostic report over an observed inventory snapshot. Pure: the caller does the reading. */

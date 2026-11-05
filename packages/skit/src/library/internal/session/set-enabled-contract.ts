@@ -1,7 +1,9 @@
 import type { Outcome } from "../../library-plan.js";
 import { failureDetails } from "../../../shared/failure.js";
 import { Enabled } from "../../library-contracts.js";
-import { InstallScope, InvocationPolicy, InstallDestination } from "../../../vocabulary.js";
+import { InstallScope } from "../../scope.js";
+import { InvocationPolicy } from "../../../artifact/invocation-policy.js";
+import { InstallDestination } from "../../../installed-skills/destination.js";
 import { Schema } from "effect";
 import { DuplicateCopy, DuplicateScanError } from "../../duplicates.js";
 

@@ -5,7 +5,7 @@ import { SecureRandom } from "effect/crypto";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { TestClock } from "effect/testing";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
-import { consoleRendererLayer } from "../src/presentation/renderer.js";
+import { consoleRendererLayer } from "../src/terminal/renderer.js";
 import { BootstrapExternalFailure, bootstrapServer } from "../src/bootstrap/server-bootstrap.js";
 
 it.effect("terminates a real Wrangler substitute that ignores SIGTERM", () =>

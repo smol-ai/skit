@@ -1,4 +1,5 @@
-import type { DescriptorFailure } from "../../failures.js";
+import { type DescriptorFailure } from "../../artifact/failures.js";
+import { NotAnAuthorWorkspace } from "../../author/failures.js";
 import { Effect, FileSystem, Schema } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { join, posix, resolve } from "node:path";
@@ -6,7 +7,7 @@ import {
   COLLECTION_CONTROL_DIRECTORY,
   AUTHOR_WORKSPACE_METADATA_FILE,
 } from "../../artifact/control-files.js";
-import { InvocationPolicy } from "../../contracts.js";
+import { InvocationPolicy } from "../../artifact/invocation-policy.js";
 import {
   applyHarnessInvocationPolicy,
   type HarnessInvocationWriteFailure,
@@ -16,7 +17,6 @@ import {
   invocationMetadataAdapters,
 } from "../../harnesses/invocation-metadata.js";
 import { readSkitDescriptor } from "../../artifact/skit.js";
-import { NotAnAuthorWorkspace } from "../../failures.js";
 
 export const InvocationMetadataGeneration = Schema.Struct({
   skill: Schema.String,

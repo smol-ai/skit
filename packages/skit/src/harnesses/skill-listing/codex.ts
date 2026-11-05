@@ -1,6 +1,6 @@
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { dirname, join, resolve } from "node:path";
-import { modelContextWindow } from "../../models/model-context-windows.js";
+import { modelContextWindow } from "../model-context-windows.js";
 import type { LibraryState } from "../../library/library-state.js";
 import type { SkillsDirectoryOverrides } from "../contracts.js";
 import { invocationMetadataAdapters } from "../invocation-metadata.js";

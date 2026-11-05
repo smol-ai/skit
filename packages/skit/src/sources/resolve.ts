@@ -1,5 +1,5 @@
-import type { DescriptorFailure } from "../failures.js";
-import { semver } from "../distribution/api-contracts.js";
+import type { DescriptorFailure } from "../artifact/failures.js";
+import { semver } from "../api/consumer-contracts.js";
 import { Data, Effect, FileSystem, Path, Predicate, Schema, Scope, Stream } from "effect";
 import { HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/http";
 import type { PlatformError } from "effect/PlatformError";
@@ -12,14 +12,14 @@ import {
   DirectSkillDocumentInvalid,
   InsecureSourceUrl,
   NoSkitDescriptorFound,
-  RegistryNotConfigured,
   SourceNotFound,
   SourceRequired,
   UnsafeArchivePath,
   GitSourceFragment,
   UnsafeGitSubpath,
   UnsafeSourceUrl,
-} from "../failures.js";
+} from "./failures.js";
+import { RegistryNotConfigured } from "../shared/input-failures.js";
 import { LinkStat } from "../platform/link-stat.js";
 import { copyLocalTree } from "../platform/copy-tree.js";
 import { TreeError } from "../shared/tree-error.js";

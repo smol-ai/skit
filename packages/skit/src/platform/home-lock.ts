@@ -1,7 +1,7 @@
 import { Context, Deferred, Effect, Exit, FileSystem, Scope, Semaphore, Option } from "effect";
 import { systemError, type PlatformError } from "effect/PlatformError";
 import { join, resolve } from "node:path";
-import { LibraryBusy } from "../failures.js";
+import { LibraryBusy } from "./lock-failures.js";
 import { acquireFileLock } from "./file-lock.js";
 
 /**

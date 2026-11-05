@@ -16,7 +16,8 @@ import {
   SourceRelativePath,
   SourceTracking,
 } from "../library-contracts.js";
-import { Hash, HarnessName } from "../../vocabulary.js";
+import { Hash } from "../../shared/hash.js";
+import { HarnessName } from "../../harnesses/contracts.js";
 import { LibraryManifestFromV6, type LibraryManifestV6 } from "./manifest-v6.js";
 import {
   type BindingEntryV7,

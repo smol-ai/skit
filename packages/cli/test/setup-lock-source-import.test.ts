@@ -7,13 +7,18 @@ import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import { MachineSettings, collectionVersionPath, skitLayer } from "@smolai/skit-core";
 import { setupCommand } from "../src/library/setup/command.js";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import { setupPrompts } from "../src/library/setup/setup-steps.js";
-import { runSetup } from "@smolai/skit-core/library/setup";
-import { setupImportRequests } from "@smolai/skit-core/library/setup";
+import {
+  runSetup,
+  setupImportRequests,
+  SetupLockMatch,
+  type SetupOnboardingCandidate,
+  resolveSkillsShSelectedSource,
+} from "@smolai/skit-core/library/setup";
+
 import { applySetupSelections } from "./helpers/setup-apply.js";
-import { SetupLockMatch, type SetupOnboardingCandidate } from "@smolai/skit-core/library/setup";
-import { resolveSkillsShSelectedSource } from "@smolai/skit-core/library/setup";
+
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 const skillDocument = (body: string) =>

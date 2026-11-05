@@ -1,31 +1,34 @@
-import { OptionCombinationInvalid } from "../../workflows/failures.js";
-import { promptsAllowed } from "../../presentation/interactivity.js";
-import { skitConfigurationLayer } from "@smolai/skit-core";
-import type { InstallScope as Scope } from "@smolai/skit-core";
+import { OptionCombinationInvalid, MissingRequirement } from "../../commands/input-failures.js";
+import { promptsAllowed } from "../../terminal/interactivity.js";
+import { skitConfigurationLayer, type InstallScope as Scope } from "@smolai/skit-core";
+
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { resolve } from "node:path";
 import { handleLibraryCommand } from "../../application.js";
-import { MissingRequirement } from "../../workflows/failures.js";
-import { NothingToSelect } from "../../presentation/interaction-failures.js";
+
+import { NothingToSelect } from "../../terminal/interaction-failures.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags, optionalString } from "../../commands/parameters.js";
-import { invocationOptions, type InvocationOption } from "@smolai/skit-core/library/session";
-import { scopeChoices } from "@smolai/skit-core/library/session";
-import { Prompter, terminalPrompterLayer } from "../../presentation/prompter.js";
-import { Renderer } from "../../presentation/renderer.js";
-import { promptForScope } from "../../presentation/scope-prompt.js";
-import { failureExitCodes } from "../../failure-classification.js";
-import { result } from "../../handlers/contracts.js";
 import {
+  invocationOptions,
+  type InvocationOption,
+  scopeChoices,
   applySetEnabledPlan,
   SetEnabledIncomplete,
   openSetEnabledSession,
   type SetEnabledIntent,
   type EnabledCollection,
 } from "@smolai/skit-core/library/session";
+
+import { Prompter, terminalPrompterLayer } from "../../terminal/prompter.js";
+import { Renderer } from "../../terminal/renderer.js";
+import { promptForScope } from "../presentation/scope-prompt.js";
+import { failureExitCodes } from "../../commands/failure-classification.js";
+import { result } from "../../commands/result.js";
+
 import { largeCollectionWarning, descriptionLoadMessage } from "../workflows/collection-load.js";
 
 const subject = Argument.String("skill-or-collection").pipe(Argument.optional);

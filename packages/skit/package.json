@@ -31,8 +31,8 @@
       "import": "./dist/universal-authoring.js"
     },
     "./universal/api": {
-      "types": "./dist/universal/api/index.d.ts",
-      "import": "./dist/universal/api/index.js"
+      "types": "./dist/api/index.d.ts",
+      "import": "./dist/api/index.js"
     },
     "./library/setup": {
       "types": "./dist/library/setup/index.d.ts",

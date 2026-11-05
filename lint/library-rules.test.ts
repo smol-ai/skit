@@ -127,7 +127,7 @@ describe("skit/library-contract-complete", () => {
         "library-contract-complete",
         "architecture/library-results.ts",
         `
-      import type { Hash } from "../packages/skit/src/vocabulary.js";
+      import type { Hash } from "../packages/skit/src/shared/hash.js";
       export interface Change { readonly hash: Hash }
     `,
       ),

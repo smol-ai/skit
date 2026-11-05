@@ -1,16 +1,22 @@
-import { SkitConfiguration } from "@smolai/skit-core";
+import {
+  SkitConfiguration,
+  skitConfigurationLayer,
+  deterministicTreeHash,
+  makeMachineId,
+  skitLayer,
+} from "@smolai/skit-core";
 import { Library } from "@smolai/skit-core/library";
-import { skitConfigurationLayer } from "@smolai/skit-core";
+
 import { presentDoctorCleanup } from "../library/workflows/doctor-cleanup.js";
 import { syncJourney } from "./sync-journey.js";
 import { join } from "node:path";
 import { ConfigProvider, Effect, FileSystem, Option } from "effect";
-import { deterministicTreeHash, makeMachineId, skitLayer } from "@smolai/skit-core";
+
 import { libraryCommandConfiguration } from "../commands/library-configuration.js";
 import { presentSetEnabled } from "../library/enable/command.js";
-import type { Prompter } from "../presentation/prompter.js";
-import type { Renderer } from "../presentation/renderer.js";
-import type { ScriptedAnswer } from "../presentation/interaction-recorder.js";
+import type { Prompter } from "../terminal/prompter.js";
+import type { Renderer } from "../terminal/renderer.js";
+import type { ScriptedAnswer } from "./interaction-recorder.js";
 import { openLibrarySession } from "@smolai/skit-core/library/session";
 
 export interface JourneyStory<A, E, R> {

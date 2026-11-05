@@ -1,11 +1,13 @@
-import { Revision } from "../../snapshot.js";
+import { Revision, snapshotOf, type Snapshot } from "../../snapshot.js";
 import { Effect, Option, Schema, type SchemaIssue } from "effect";
 import { isPlatformError } from "effect/PlatformError";
-import { Hash, type InstallScope } from "../../../vocabulary.js";
+import { Hash, sha256Hash } from "../../../shared/hash.js";
+import { type InstallScope } from "../../scope.js";
 import { canonicalJson } from "../../../shared/json.js";
-import { sha256Hash } from "../../../shared/hash.js";
+
 import { FailureTypeId } from "../../../shared/failure.js";
-import { InvalidLibraryState, LibraryBusy, LibraryChanged } from "../../../failures.js";
+import { InvalidLibraryState, LibraryChanged } from "../../failures.js";
+import { LibraryBusy } from "../../../platform/lock-failures.js";
 import { TreeError } from "../../../shared/tree-error.js";
 import { InstalledSkills } from "../../installed-skills.js";
 import { InvalidIntent } from "../../enabled-plan.js";
@@ -23,7 +25,7 @@ import {
 } from "../../library-state.js";
 import { DeviceSkillSelection } from "../../device-state.js";
 import { makeOperationId, OperationId, CollectionVersionId } from "../../entity-ids.js";
-import { snapshotOf, type Snapshot } from "../../snapshot.js";
+
 import { applyReviewed } from "../../reviewed-plan.js";
 import {
   StepRouting,

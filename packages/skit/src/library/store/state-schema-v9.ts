@@ -3,7 +3,9 @@ import { CollectionId, InstalledSkillId, SkillId, SkillVersionId } from "../enti
 import { Collection } from "../library-contracts.js";
 import { AbsoluteDevicePath } from "../library-state.js";
 import { LibraryStateFromV10 } from "./state-schema-v10.js";
-import { Hash, HarnessName, InvocationPolicy } from "../../vocabulary.js";
+import { Hash } from "../../shared/hash.js";
+import { HarnessName } from "../../harnesses/contracts.js";
+import { InvocationPolicy } from "../../artifact/invocation-policy.js";
 import {
   BindingEntryV7,
   BindingV7,
@@ -17,12 +19,9 @@ import {
   skillFromV7,
   SkillV7,
 } from "./manifest-v7.js";
-import {
-  HarnessInstallStatus,
-  InventoryScanIssue,
-  SkillAssessmentAcceptance,
-  RecordedInstallDestination,
-} from "./state-schema.js";
+import { HarnessInstallStatus } from "../../installed-skills/metadata.js";
+import { InventoryScanIssue, RecordedInstallDestination } from "./state-schema.js";
+import { SkillAssessmentAcceptance } from "../assessment-acceptance.js";
 
 /** An assessment acceptance as v9 stored it: the content hash was `artifactContentDigest`. */
 const { artifactContentHash: _contentHash, ...acceptanceFields } = SkillAssessmentAcceptance.fields;

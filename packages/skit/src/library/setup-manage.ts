@@ -7,7 +7,7 @@ import { dirname, join, resolve } from "node:path";
 import { hasHarnessProfile } from "../harnesses/catalog.js";
 import { inspectInstalledSkill } from "../installed-skills/files.js";
 import { LinkStat } from "../platform/link-stat.js";
-import { InstallScope } from "../vocabulary.js";
+import { InstallScope } from "./scope.js";
 import type { OperationScope } from "./internal/operations/operations.js";
 import { routedInstalledSkills, destinationsIn, readableIn } from "./routing/recorded.js";
 import { InvalidIntent } from "./enabled-plan.js";

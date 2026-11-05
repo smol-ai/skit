@@ -6,16 +6,15 @@ import { PlatformError, systemError } from "effect/PlatformError";
 import { assert, it } from "@effect/vitest";
 import { SkillsDirectoryNotWritable, StalePlan, skitLayer } from "@smolai/skit-core";
 import { withSandboxDenying } from "./helpers/sandbox.js";
-import { SetupResult } from "@smolai/skit-core/library/setup";
+import { SetupResult, SetupPlanStale, SetupStopped } from "@smolai/skit-core/library/setup";
 import { setupCommand } from "../src/library/setup/command.js";
 import {
   makeScriptedInteraction,
   type ScriptedAnswer,
-} from "../src/presentation/interaction-recorder.js";
-import { Prompter } from "../src/presentation/prompter.js";
+} from "../src/storybook/interaction-recorder.js";
+import { Prompter } from "../src/terminal/prompter.js";
 import { setupPrompts } from "../src/library/setup/setup-steps.js";
-import { SetupPlanStale } from "@smolai/skit-core/library/setup";
-import { SetupStopped } from "@smolai/skit-core/library/setup";
+
 import { captureDisk, diskChanges, noDiskChanges, type DiskDiff } from "./helpers/disk-snapshot.js";
 import {
   deterministicTreeHash,

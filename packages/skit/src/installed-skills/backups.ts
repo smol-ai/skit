@@ -2,7 +2,7 @@ import { Clock, Effect, FileSystem } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { createHash } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path";
-import { UnsafeInstalledSkillBackups } from "../failures.js";
+import { UnsafeInstalledSkillBackups } from "./failures.js";
 import { makeOperationId } from "../library/entity-ids.js";
 import type { InstalledSkill } from "../library/library-state.js";
 import { LinkStat } from "../platform/link-stat.js";

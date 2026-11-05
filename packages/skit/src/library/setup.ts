@@ -8,11 +8,12 @@ import { isPlatformError } from "effect/PlatformError";
 import { TreeError } from "../shared/tree-error.js";
 import { isSkitFailure } from "../shared/failure.js";
 import { isAbsolute, resolve } from "node:path";
-import { InvalidLibraryState, LibraryBusy, LibraryChanged } from "../failures.js";
+import { InvalidLibraryState, LibraryChanged } from "./failures.js";
+import { LibraryBusy } from "../platform/lock-failures.js";
 import { pathIsWithin } from "../platform/path-identity.js";
 import { InvalidIntent } from "./enabled-plan.js";
 import { makeOperationId, type OperationId } from "./entity-ids.js";
-import type { UpdatedCopy } from "./installed-update.js";
+import { type UpdatedCopy, changeWrites } from "./installed-update.js";
 import {
   duplicatesToMove,
   installedPaths,
@@ -21,7 +22,7 @@ import {
   type ManageResult,
 } from "./setup-manage.js";
 import { absentEvidence, observePathEvidence } from "./folder-evidence.js";
-import { changeWrites } from "./installed-update.js";
+
 import { recordedLibrary } from "./setup-intent.js";
 import { restoreRecorded } from "./internal/recovery/moves.js";
 import { moveAside, recoveryDirectory } from "./setup-moves.js";

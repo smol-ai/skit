@@ -16,9 +16,8 @@ import { Array, Effect, Option, Order, Schema, Stream } from "effect";
 import { Digest } from "effect/crypto";
 import { TreeEntry } from "../artifact/tree-entry.js";
 import { MachineId } from "../library/entity-ids.js";
-import { sha256Hash } from "../shared/hash.js";
+import { sha256Hash, Hash } from "../shared/hash.js";
 import { canonicalJson } from "../shared/json.js";
-import { Hash } from "../vocabulary.js";
 
 export const TreeHash = Hash.pipe(Schema.brand("TreeHash"));
 export type TreeHash = typeof TreeHash.Type;

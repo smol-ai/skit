@@ -1,6 +1,6 @@
 import type { PlatformError } from "effect/PlatformError";
 import type { RecoveryInvalid, RecoveryInspection } from "./recovery-facts.js";
-import type { LibraryChanged } from "../failures.js";
+import type { LibraryChanged } from "./failures.js";
 import type {
   RestoreIntent,
   RestorePlan,
@@ -105,11 +105,12 @@ import type { LibraryLayerError, LibraryStateReadError } from "./store/library-s
 import type {
   OperationStatus as StoredOperationStatus,
   RecordedSetupStep,
+  SetupStep,
 } from "./store/state-schema.js";
 import { type LibraryAuditEvent, type LibraryAuditInvalid } from "./audit/audit-log.js";
 import { type Snapshot } from "./snapshot.js";
 import { type SetupError, type SetupResult, type StartupRecovery } from "./setup.js";
-import type { SetupStep } from "./store/state-schema.js";
+
 import {
   type AuthoredImport,
   type EditImport,
@@ -312,7 +313,7 @@ export interface Interface {
       snapshot: Snapshot,
     ) => Effect.Effect<
       | { readonly _tag: "Intact" }
-      | { readonly _tag: "Changed"; readonly hash: import("../vocabulary.js").Hash },
+      | { readonly _tag: "Changed"; readonly hash: import("../shared/hash.js").Hash },
       LibraryStateReadError | StalePlan
     >;
     readonly pack: (

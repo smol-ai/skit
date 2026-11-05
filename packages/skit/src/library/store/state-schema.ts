@@ -1,3 +1,5 @@
+import { OwnershipIssue } from "../../installed-skills/metadata.js";
+import { SkillAssessmentAcceptance } from "../assessment-acceptance.js";
 import { Schema, SchemaGetter } from "effect";
 import {
   badArgument,
@@ -5,7 +7,8 @@ import {
   systemError,
   type PlatformError,
 } from "effect/PlatformError";
-import { InvalidLibraryState, LibraryBusy, LibraryChanged } from "../../failures.js";
+import { InvalidLibraryState, LibraryChanged } from "../failures.js";
+import { LibraryBusy } from "../../platform/lock-failures.js";
 import { TreeError } from "../../shared/tree-error.js";
 import {
   CollectionId,
@@ -39,7 +42,10 @@ import { UndoFile, UndoPath, UndoAction } from "../internal/setup/undo-evidence.
 import { RecoveryInspection } from "../recovery-facts.js";
 import { EnabledChange } from "../enabled-change.js";
 import { Destination } from "../installed-skill-facts.js";
-import { Hash, HarnessName, InstallDestination, InstallScope } from "../../vocabulary.js";
+import { Hash } from "../../shared/hash.js";
+import { HarnessName } from "../../harnesses/contracts.js";
+import { InstallDestination } from "../../installed-skills/destination.js";
+import { InstallScope } from "../scope.js";
 
 // Decoded state is readonly except where the transaction API revises a candidate in place.
 // Each Schema.mutableKey below marks one such field; every other field stays readonly, so
@@ -64,43 +70,9 @@ export const InventoryScanIssue = Schema.Union([
   }),
 ]);
 export type InventoryScanIssue = typeof InventoryScanIssue.Type;
-export const SkillAssessmentAcceptance = Schema.Struct({
-  fingerprint: Hash,
-  artifactContentHash: Hash,
-  skill_version_id: SkillVersionId,
-  context: Schema.Literal("project"),
-  principal: Schema.String,
-  rationale: Schema.String,
-  acceptedAt: Schema.String,
-  expiresAt: Schema.optionalKey(Schema.String),
-});
-export type SkillAssessmentAcceptance = typeof SkillAssessmentAcceptance.Type;
-export const HarnessInstallStatus = Schema.Literals([
-  "pending",
-  "installed",
-  "drifted",
-  "conflicted",
-  "unsupported",
-  "suppressed",
-]);
-export type HarnessInstallStatus = typeof HarnessInstallStatus.Type;
 /** Where states before v11 recorded a copy, including former per-Harness folders. */
 export const RecordedInstallDestination = Schema.Literals(["agents", "claude", "legacy"]);
 export type RecordedInstallDestination = typeof RecordedInstallDestination.Type;
-export const OwnershipIssue = Schema.Struct({
-  code: Schema.Literals(["ORPHANED_OWNERSHIP_MARKER", "INVALID_OWNERSHIP_MARKER"]),
-  path: Schema.String,
-  canonicalPath: Schema.String,
-  harnesses: Schema.mutable(Schema.Array(HarnessName)),
-  currentHash: Hash,
-  detail: Schema.optional(Schema.String),
-  collectionId: Schema.optional(CollectionId),
-  skillId: Schema.optional(SkillId),
-  installedSkillId: Schema.optional(InstalledSkillId),
-  expectedHash: Schema.optional(Hash),
-  matchesExpectedHash: Schema.optional(Schema.Boolean),
-});
-export type OwnershipIssue = typeof OwnershipIssue.Type;
 export const LibraryDeviceStateFields = {
   unmanaged: Schema.mutableKey(
     Schema.mutable(

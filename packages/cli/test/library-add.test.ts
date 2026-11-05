@@ -1,25 +1,27 @@
-import { skitConfigurationLayer } from "@smolai/skit-core";
-import { Library } from "@smolai/skit-core/library";
-import { testPlatformLayer } from "./helpers/platform.js";
-import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem, Result } from "effect";
-import { createHash } from "node:crypto";
-import { join } from "node:path";
-import { HttpClient, HttpClientResponse } from "effect/http";
 import {
+  skitConfigurationLayer,
   currentSkillVersion,
   emptyLibraryState,
   libraryManifestFromLocalState,
   deterministicTreeHash,
   collectionVersionPath,
+  librarySubjects,
 } from "@smolai/skit-core";
+import { Library } from "@smolai/skit-core/library";
+import { testPlatformLayer } from "./helpers/platform.js";
+import { assert, it } from "@effect/vitest";
+import { Effect, FileSystem } from "effect";
+import { createHash } from "node:crypto";
+import { join } from "node:path";
+import { HttpClient, HttpClientResponse } from "effect/http";
+
 import { importSource, previewLibrarySource } from "../src/library/application/import-source.js";
 import { planUpdates, updateSubjects } from "../src/library/application/update.js";
 import { checkSubjects } from "../src/library/workflows/check.js";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { planLibrarySync } from "../src/library/workflows/library-sync-plan.js";
 import { executeRemove } from "../src/library/workflows/remove.js";
-import { librarySubjects } from "@smolai/skit-core";
+
 import {
   archiveBytes,
   boundSkit,
@@ -27,7 +29,6 @@ import {
   importCollectionIn,
   writingTo,
 } from "./helpers/library-home.js";
-import { registryAuthAccessLayer } from "../src/registry/auth-service.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 import { homeLockIsFree } from "./helpers/home-lock.js";
 
@@ -544,12 +545,7 @@ it.effect("records the Registry Release a Collection is added from, so sync can 
       version: "1.2.3",
     }).pipe(
       Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
-      Effect.provide(
-        registryAuthAccessLayer({
-          authState: Result.succeed({ source: "none" }),
-          origin: "https://registry.example",
-        }),
-      ),
+      Effect.provide(skitConfigurationLayer(home)),
       Effect.provideService(HttpClient.HttpClient, client),
     );
     const state = yield* stateAt(home);

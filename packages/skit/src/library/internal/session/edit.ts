@@ -3,7 +3,7 @@ import { ownerLayer } from "../runtime.js";
 import { canonicalJson } from "../../../shared/json.js";
 import { deterministicTreeHash } from "../../../artifact/skit.js";
 import { inspectOwnershipMarker } from "../../../installed-skills/files.js";
-import type { OwnershipMarker } from "../../../contracts.js";
+import type { OwnershipMarker } from "../../../installed-skills/ownership-marker.js";
 import { libraryOriginalsPath, loadLibrary, writeLibrary } from "../../store/library-store.js";
 import {
   libraryStateRevision,
@@ -15,7 +15,8 @@ import { enabledByScope } from "../../enabled.js";
 import { enabledSkillIds, currentSkillVersion, versionBacking } from "../../library-contracts.js";
 import { prepareImport } from "../../import-collection.js";
 import { collectionVersionPath } from "../../collection-version.js";
-import type { Hash, InstallScope } from "../../../vocabulary.js";
+import type { Hash } from "../../../shared/hash.js";
+import type { InstallScope } from "../../scope.js";
 import type { InstalledSkillId } from "../../entity-ids.js";
 import { Data, Clock, Effect } from "effect";
 import { StalePlan } from "../../library-plan.js";

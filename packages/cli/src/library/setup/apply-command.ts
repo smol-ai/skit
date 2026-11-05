@@ -2,15 +2,20 @@ import { resolve } from "node:path";
 import { Effect, Option, Schema } from "effect";
 import { Hash, emptyLibraryState } from "@smolai/skit-core";
 import { Library } from "@smolai/skit-core/library";
-import { Renderer } from "../../presentation/renderer.js";
-import { OptionCombinationInvalid } from "../../workflows/failures.js";
-import { runSetup, SetupPlanStale, type SetupOptions } from "@smolai/skit-core/library/setup";
-import { openSetupReview } from "@smolai/skit-core/library/setup";
-import type { ManageOptions } from "@smolai/skit-core/library/setup";
-import type { SetupDuplicateAction as SetupDuplicateActionType } from "@smolai/skit-core/library/setup";
-import type { SetupApplied } from "@smolai/skit-core/library/setup";
+import { Renderer } from "../../terminal/renderer.js";
+import { OptionCombinationInvalid } from "../../commands/input-failures.js";
+import {
+  runSetup,
+  SetupPlanStale,
+  type SetupOptions,
+  openSetupReview,
+  type ManageOptions,
+  type SetupDuplicateAction as SetupDuplicateActionType,
+  type SetupApplied,
+  changeResults,
+} from "@smolai/skit-core/library/setup";
+
 import type { SetupCommandSelection } from "./actions.js";
-import { changeResults } from "@smolai/skit-core/library/setup";
 
 /**
  * `skit setup --apply`: the non-interactive apply. The plan ID is the caller's consent: it must

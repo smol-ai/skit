@@ -12,7 +12,7 @@ import {
 import { basename, dirname, join } from "node:path";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { canonicalJson } from "../../../shared/json.js";
-import { Hash } from "../../../vocabulary.js";
+import { Hash } from "../../../shared/hash.js";
 import { hashParts } from "../../../artifact/descriptor.js";
 import { emptyLibraryState, libraryStateRevision, type LibraryState } from "../../library-state.js";
 import {

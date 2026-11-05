@@ -5,9 +5,9 @@ import { handleLibraryCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags } from "../../commands/parameters.js";
-import { Renderer } from "../../presentation/renderer.js";
+import { Renderer } from "../../terminal/renderer.js";
 import { executeRemove } from "../workflows/remove.js";
-import { result } from "../../handlers/contracts.js";
+import { result } from "../../commands/result.js";
 
 const subject = Argument.String("skill-or-collection");
 const dryRun = Flag.Boolean("dry-run").pipe(

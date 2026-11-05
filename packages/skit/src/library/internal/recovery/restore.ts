@@ -1,13 +1,12 @@
 import { Effect, Schema } from "effect";
-import { Revision } from "../../snapshot.js";
-import { Hash } from "../../../vocabulary.js";
-import { RecoveryInspection } from "../../recovery-facts.js";
+import { Revision, type Snapshot } from "../../snapshot.js";
+import { Hash } from "../../../shared/hash.js";
+import { RecoveryInspection, RecoveryInvalid } from "../../recovery-facts.js";
 import { RecoveryRestore } from "../../store/state-schema.js";
-import type { Snapshot } from "../../snapshot.js";
 
 import { planningState, applyReviewed } from "../../reviewed-plan.js";
 import { captureRecoveryRestore, inspectRecoveryOperation } from "./moves.js";
-import { RecoveryInvalid } from "../../recovery-facts.js";
+
 import { setupOperation } from "../../setup.js";
 import { makeOperationId } from "../../entity-ids.js";
 

@@ -8,11 +8,10 @@ import { assert, describe, it } from "@effect/vitest";
 import { Cause, Effect, Layer, Option, Queue, Terminal } from "effect";
 import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { afterEach, beforeEach, expect, vi, type MockInstance } from "vitest";
-import { Prompter, terminalPrompterLayer, type Choice } from "../src/presentation/prompter.js";
+import { Prompter, terminalPrompterLayer, type Choice } from "../src/terminal/prompter.js";
 
 import { setupDiscoveredSkillChoices } from "../src/library/setup/setup-skills.js";
-import { classifySetupOnboarding } from "@smolai/skit-core/library/setup";
-import type { SetupSkillInstance } from "@smolai/skit-core/library/setup";
+import { classifySetupOnboarding, type SetupSkillInstance } from "@smolai/skit-core/library/setup";
 
 type Key =
   | "up"

@@ -5,8 +5,8 @@ import { expect } from "vitest";
 import { skitLayer } from "@smolai/skit-core";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
-import { renderContract } from "../src/presentation/contract-presenters.js";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+import { renderContract } from "../src/commands/output-presenters.js";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import { saveRecoveryFiles } from "./helpers/recovery-files.js";
 import { scratch } from "./helpers/library-home.js";
 

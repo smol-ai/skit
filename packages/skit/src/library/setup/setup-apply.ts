@@ -3,7 +3,7 @@ import { canonicalJson } from "../../shared/json.js";
 import { currentSkillVersion } from "../library-contracts.js";
 import { ensureSkillsDirectoryWritable } from "../../installed-skills/writable.js";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
-import { type Hash } from "../../vocabulary.js";
+import { type Hash } from "../../shared/hash.js";
 import * as MachineSettings from "../machine-settings.js";
 import { stepRouting } from "../routing/step.js";
 import { activeInstallDestinations, skillsDirectoryFor } from "../routing/roots.js";

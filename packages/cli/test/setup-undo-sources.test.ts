@@ -21,12 +21,12 @@ import {
 import { skillsDirectoryFor } from "@smolai/skit-core/library/routing";
 import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply-command.js";
 import { prepareSetupUndo } from "../src/library/setup/setup-undo.js";
-import { setupSourceChoiceId } from "@smolai/skit-core/library/setup";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
-import { runSetup } from "@smolai/skit-core/library/setup";
+import { setupSourceChoiceId, runSetup } from "@smolai/skit-core/library/setup";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
+
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
-import { renderContract } from "../src/presentation/contract-presenters.js";
+import { renderContract } from "../src/commands/output-presenters.js";
 import { mergeLibraryManifests } from "../src/library/workflows/library-merge.js";
 import {
   deterministicTreeHash,

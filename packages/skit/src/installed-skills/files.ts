@@ -2,13 +2,11 @@ import { copyLocalTree } from "../platform/copy-tree.js";
 import { Data, Effect, FileSystem, Result, Schema } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { dirname, join, relative, resolve } from "node:path";
-import {
-  OwnershipMarker,
-  StoredOwnershipMarker,
-  type InstallDestination,
-  Hash,
-  type InvocationPolicy,
-} from "../contracts.js";
+import { OwnershipMarker } from "./ownership-marker.js";
+import { StoredOwnershipMarker } from "./ownership-marker-compat.js";
+import { type InstallDestination } from "./destination.js";
+import { Hash } from "../shared/hash.js";
+import { type InvocationPolicy } from "../artifact/invocation-policy.js";
 import { LinkStat } from "../platform/link-stat.js";
 import {
   applyInvocationPolicy,
@@ -30,9 +28,9 @@ import {
   SkillsDirectoryNotWritable,
   UnsafeInstalledSkillBackups,
   UnsafeInstalledSkillName,
-} from "../failures.js";
-import type { InstalledSkill } from "../library/library-state.js";
-import { globalEnabled, type LibraryState } from "../library/library-state.js";
+} from "./failures.js";
+import { type InstalledSkill, globalEnabled, type LibraryState } from "../library/library-state.js";
+
 import { installedSkillSource } from "../library/installation/installed-skill-source.js";
 import {
   losslessTree,

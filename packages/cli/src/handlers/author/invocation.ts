@@ -6,8 +6,8 @@ import { handlePlatformCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { jsonFlag } from "../../commands/parameters.js";
-import { Renderer } from "../../presentation/renderer.js";
-import { result } from "../contracts.js";
+import { Renderer } from "../../terminal/renderer.js";
+import { result } from "../../commands/result.js";
 import { AuthorWorkspace } from "@smolai/skit-core/author";
 
 export const authorInvocationCommand = Effect.fn("CLI.authorInvocation")(function* (

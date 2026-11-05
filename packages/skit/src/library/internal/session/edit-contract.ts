@@ -1,4 +1,5 @@
-import { Hash, InstallDestination } from "../../../vocabulary.js";
+import { Hash } from "../../../shared/hash.js";
+import { InstallDestination } from "../../../installed-skills/destination.js";
 import { InstalledSkillId, SkillId, SkillVersionId } from "../../entity-ids.js";
 import { Schema } from "effect";
 

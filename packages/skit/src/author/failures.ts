@@ -147,3 +147,20 @@ export class AuthorNonNfcPathUnsupported
     return `Receiving a non-NFC native path is unsupported on this filesystem: ${this.nativePath}`;
   }
 }
+
+// -- Authoring and Harness metadata -------------------------------------------------------------
+
+export class NotAnAuthorWorkspace
+  extends Data.TaggedError("NotAnAuthorWorkspace")<{
+    path: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "INVALID_ARGUMENT" as const;
+  readonly remediation =
+    "Run the command in an Author Workspace, the source directory you author a SKIT in.";
+  get message(): string {
+    return `${this.path} is not an Author Workspace; invocation metadata is generated only for author-owned source, never for acquired or retained content`;
+  }
+}

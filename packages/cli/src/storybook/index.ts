@@ -4,7 +4,7 @@ import { OutputStory, outputStories as outputs, outputStoryKey } from "./output-
 import { journeyStories as journeys } from "./journey-stories.js";
 import { recordJourney, renderRecordedJourney } from "./journey-runner.js";
 import { journeyFrames } from "./journey-replay.js";
-import { renderFailureFrame, renderResultFrame } from "../presentation/output-frame.js";
+import { renderFailureFrame, renderResultFrame } from "../commands/output-frame.js";
 import type { TerminalFrame, TerminalEnvironment } from "../terminal/contracts.js";
 import type { Journey, JourneyRecording, Output } from "./contracts.js";
 

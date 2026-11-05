@@ -1,7 +1,7 @@
 import { Data, Effect, FileSystem, Schema, SchemaIssue } from "effect";
 import { dirname, join } from "node:path";
 import { deterministicTreeHash, validateSkitDirectory } from "../artifact/skit.js";
-import { InvalidLibraryState } from "../failures.js";
+import { InvalidLibraryState } from "./failures.js";
 import { copyLocalTree } from "../platform/copy-tree.js";
 import {
   makeImportId,
@@ -44,7 +44,7 @@ import {
   sourceIdentityFromSource,
   type SourceDeclaration,
 } from "./source-identity.js";
-import type { Hash } from "../vocabulary.js";
+import type { Hash } from "../shared/hash.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 export class ImportRequestInvalid

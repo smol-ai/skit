@@ -1,10 +1,9 @@
 import { Effect } from "effect";
 import { LinkStat } from "../platform/link-stat.js";
 import { dirname } from "node:path";
-import { HarnessName } from "../vocabulary.js";
+import { HarnessName, type SkillsDirectoryOverrides } from "./contracts.js";
 import { harnessDrivers } from "./drivers.js";
 import { resolveSkillsDirectory } from "./catalog.js";
-import { type SkillsDirectoryOverrides } from "./contracts.js";
 
 export function harnessLabel(harness: HarnessName): string {
   return harnessDrivers[harness].label;

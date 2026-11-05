@@ -6,9 +6,9 @@ import { describe, expect, test } from "vitest";
 import { commandContractArtifacts } from "../src/commands/artifacts.js";
 import { outputContracts } from "../src/commands/output-contracts.js";
 import { commandApplicationLayer } from "../src/application.js";
-import { result } from "../src/handlers/contracts.js";
-import { renderContract } from "../src/presentation/contract-presenters.js";
-import { defaultTerminalEnvironment, renderResultFrame } from "../src/presentation/output-frame.js";
+import { result } from "../src/commands/result.js";
+import { renderContract } from "../src/commands/output-presenters.js";
+import { defaultTerminalEnvironment, renderResultFrame } from "../src/commands/output-frame.js";
 import { writeCommandContractArtifacts } from "../src/commands/contract-writer.js";
 
 const contractsRoot = resolve(import.meta.dirname, "../contracts");

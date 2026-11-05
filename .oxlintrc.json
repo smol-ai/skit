@@ -43,13 +43,17 @@
     },
     {
       "files": ["packages/cli/src/**/*.ts"],
-      "excludeFiles": ["packages/cli/src/dispatch.ts", "packages/cli/src/presentation/prompter.ts"],
+      "excludeFiles": ["packages/cli/src/terminal/renderer.ts", "packages/cli/src/terminal/prompter.ts"],
       "rules": {
         "skit/no-direct-cli-output": "error"
       }
     },
     {
-      "files": ["packages/cli/src/handlers/**/*.ts"],
+      "files": [
+        "packages/cli/src/handlers/**/*.ts",
+        "packages/cli/src/**/commands/**/*.ts",
+        "packages/cli/src/**/*command.ts"
+      ],
       "rules": {
         "skit/no-member-access-on-yield": "error"
       }

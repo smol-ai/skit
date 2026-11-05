@@ -1,10 +1,10 @@
 import { recoveryFingerprint as fingerprint } from "./evidence.js";
-import { RecoveryInvalid } from "../../recovery-facts.js";
+import { RecoveryInvalid, RecoveryFact } from "../../recovery-facts.js";
 import { createHash, randomUUID } from "node:crypto";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { Effect, FileSystem, Schema, SchemaGetter } from "effect";
 import { deterministicTreeHash } from "../../../artifact/skit.js";
-import { Hash } from "../../../vocabulary.js";
+import { Hash } from "../../../shared/hash.js";
 import {
   LinkStat,
   FileIdentityNumber,
@@ -72,7 +72,6 @@ const MoveRecord = Schema.Union([
   CurrentMoveRecord,
 ]);
 
-import { RecoveryFact } from "../../recovery-facts.js";
 export { RecoveryFact, RecoveryInspection } from "../../recovery-facts.js";
 
 export interface RecoveryMoveRequest {

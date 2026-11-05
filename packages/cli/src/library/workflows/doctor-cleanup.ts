@@ -3,11 +3,11 @@ import { Effect } from "effect";
 import { applySetEnabledPlan } from "@smolai/skit-core/library/session";
 import { openDoctorCleanupSelection, overBudget } from "../application/doctor-cleanup.js";
 import { type InventoryRootOptions } from "@smolai/skit-core/library/routing";
-import { renderDoctorBudgetSelection } from "../../presentation/doctor-listing-budget.js";
-import { Renderer } from "../../presentation/renderer.js";
-import { terminalColorEnabled } from "../../presentation/terminal-style.js";
-import { Prompter } from "../../presentation/prompter.js";
-import { result } from "../../handlers/contracts.js";
+import { renderDoctorBudgetSelection } from "../presentation/listing-budget.js";
+import { Renderer } from "../../terminal/renderer.js";
+import { terminalColorEnabled } from "../../terminal/style.js";
+import { Prompter } from "../../terminal/prompter.js";
+import { result } from "../../commands/result.js";
 
 export const presentDoctorCleanup = Effect.fn("Doctor.cleanup")(function* (
   budgets: readonly ListingBudget[],

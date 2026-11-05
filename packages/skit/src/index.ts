@@ -4,15 +4,99 @@ export * from "./harnesses/skill-listing/discovery.js";
 export * from "./harnesses/skill-listing/claude.js";
 export * from "./harnesses/skill-listing/codex.js";
 export * from "./harnesses/skill-listing/codex-allocation.js";
-export * from "./models/model-context-windows.js";
-export * from "./build-info.js";
-export * from "./distribution/api-contracts.js";
-export * from "./authoring/api-contracts.js";
+export * from "./harnesses/model-context-windows.js";
+export * from "./shared/build-info.js";
+export * from "./api/consumer-contracts.js";
+export * from "./api/authoring-contracts.js";
 export * from "./auditing/skill-audit.js";
 export * from "./artifact/control-files.js";
-export * from "./contracts.js";
+export { LibraryInvocationOption } from "./library/invocation-option.js";
+export {
+  type RegistrySkitDescriptor,
+  type SkitFileRecord,
+  type SyncConflict,
+  type SkillExampleRecord,
+  type ValidatedSkit,
+  type SkitReleaseIdentity,
+} from "./artifact/contracts.js";
+export { OwnershipMarker } from "./installed-skills/ownership-marker.js";
+export {
+  SkillAuditFinding,
+  SkillAudit,
+  SkillAssessmentContext,
+  SkillAssessmentOutcome,
+  SkillAssessmentReason,
+  SkillAcceptanceReviewRecord,
+  SkillFindingDecision,
+  SkillAssessmentDecision,
+  SkillSecurityReview,
+} from "./auditing/skill-contracts.js";
+export { Hash } from "./shared/hash.js";
+export { HarnessName } from "./harnesses/contracts.js";
+export { InvocationPolicy } from "./artifact/invocation-policy.js";
+export { InstallDestination } from "./installed-skills/destination.js";
+export { InstallScope } from "./library/scope.js";
+export { SkitValidationDiagnostic } from "./artifact/validation-diagnostic.js";
+export {
+  SKILL_EXAMPLE_SCHEMA_VERSION,
+  SKIT_DESCRIPTOR_VERSION,
+  type ContainedSkillDescriptor,
+  type SharedMapping,
+  type SkillExampleManifest,
+  type SkitDescriptor,
+} from "./artifact/schemas.js";
+export { SkillAssessmentAcceptance } from "./library/assessment-acceptance.js";
+export { type HarnessInstallStatus, type OwnershipIssue } from "./installed-skills/metadata.js";
 export * from "./shared/failure.js";
-export * from "./failures.js";
+export {
+  DuplicateSkillNames,
+  DuplicateSkillPaths,
+  ConflictingInvocationDeclaration,
+  ReadmeFrontmatterMissing,
+  DescriptorMalformed,
+  SkillDiscoveryLimitExceeded,
+  SkillNameInvalid,
+  SkitValidationFailed,
+  type DescriptorFailure,
+} from "./artifact/failures.js";
+export {
+  SourceRequired,
+  UnsafeSourceUrl,
+  InsecureSourceUrl,
+  ArchiveEntryLimitExceeded,
+  UnsafeArchivePath,
+  SourceNotFound,
+  UnsafeGitSubpath,
+  GitSourceFragment,
+  DirectSkillDocumentInvalid,
+  NoSkitDescriptorFound,
+} from "./sources/failures.js";
+export {
+  UnsafeInstalledSkillName,
+  UnsafeInstalledSkillBackups,
+  SharedTargetCollision,
+  InstalledPathCollision,
+  NoSkillsDirectory,
+  SkillsDirectoryNotWritable,
+  OwnershipMarkerDisagrees,
+  ManageTargetChanged,
+  ManageContentMismatch,
+  InstalledSkillFileMissing,
+  UninstallConflict,
+} from "./installed-skills/failures.js";
+export {
+  ContentAddressCollision,
+  UnknownInstalledSkill,
+  SecurityFindingAbsent,
+  AcceptanceIncomplete,
+  ImportContentInvalid,
+  InvalidLibraryState,
+  LibraryChanged,
+} from "./library/failures.js";
+export { LibraryBusy } from "./platform/lock-failures.js";
+export { NotAnAuthorWorkspace } from "./author/failures.js";
+export { HarnessMetadataInvalid } from "./harnesses/metadata-failures.js";
+export { RegistryNotConfigured } from "./shared/input-failures.js";
 export * from "./harnesses/contracts.js";
 export * from "./harnesses/catalog.js";
 export * from "./harnesses/drivers.js";
@@ -45,7 +129,7 @@ export {
 export { inspectInstalledSkillBackups } from "./installed-skills/backups.js";
 export * from "./installed-skills/pnpm-skills.js";
 export { discoveryPathExcluded } from "./sources/discovery-exclusions.js";
-export * from "./distribution/registry-identity.js";
+export * from "./artifact/registry-identity.js";
 export * from "./artifact/descriptor.js";
 export * from "./artifact/skit.js";
 export * from "./sources/resolve.js";
@@ -117,10 +201,10 @@ export * from "./library/usage/contracts.js";
 export { scanUsage } from "./library/usage/scanner.js";
 
 export * as MachineSettings from "./library/machine-settings.js";
-export * as Merge from "./merge/merge.js";
+export * as Merge from "./sync/merge.js";
 export * as History from "./history/history.js";
 export * as Sync from "./sync/sync.js";
-export { mergeAuthorTree, conflictKind } from "./merge/files.js";
+export { mergeAuthorTree, conflictKind } from "./author/merge/files.js";
 export {
   Unusable as MachineSettingsUnusable,
   type Settings as MachineSettingsSnapshot,

@@ -1,19 +1,21 @@
 import { Effect } from "effect";
-import type { InstalledSkillChange, SetupVersionChoice } from "@smolai/skit-core/library/setup";
-import type { SetupReviewSummary } from "@smolai/skit-core/library/setup";
 import {
+  type InstalledSkillChange,
+  type SetupVersionChoice,
+  type SetupReviewSummary,
   setupDuplicateActions,
   setupDuplicateChoiceRequired,
   type SetupCopyChoice,
   type SetupDuplicateAction,
   type SetupSelectedCopy,
 } from "@smolai/skit-core/library/setup";
-import { Prompter, type Choice } from "../../presentation/prompter.js";
-import { Renderer } from "../../presentation/renderer.js";
+
+import { Prompter, type Choice } from "../../terminal/prompter.js";
+import { Renderer } from "../../terminal/renderer.js";
 import {
   renderSetupVersionChoice,
   renderReviewedChanges,
-} from "../../presentation/installed-skill-changes.js";
+} from "../presentation/installed-skill-changes.js";
 
 const skillCount = (count: number) => `${count} skill${count === 1 ? "" : "s"}`;
 

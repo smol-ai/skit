@@ -1,7 +1,7 @@
 import type { CollectionVersionPlan } from "../../collection-version-plan.js";
 import type { RestoreProgress, RestorePhase } from "../../restore-progress.js";
-import type { Hash } from "../../../contracts.js";
-import { ContentAddressCollision } from "../../../failures.js";
+import type { Hash } from "../../../shared/hash.js";
+import { ContentAddressCollision } from "../../failures.js";
 import { collectionVersionPath, originalTreeHash } from "../../collection-version.js";
 import { resolveSkitSource } from "../../../sources/resolve.js";
 import { deterministicTreeHash } from "../../../artifact/skit.js";

@@ -1,8 +1,9 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { skitLayer } from "@smolai/skit-core";
+
 import { previewLibrarySource } from "../src/library/application/import-source.js";
 import { assertCollectionImport, gitBlobHash } from "./helpers/collection-import.js";
 import manifest from "./fixtures/collections/manifest.json" with { type: "json" };
@@ -49,6 +50,6 @@ for (const collection of manifest) {
         const explicit = yield* previewLibrarySource(join(source, selected.path));
         assert.deepStrictEqual(explicit.skills, [{ name: selected.name, verbatim_path: "." }]);
       }
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
   );
 }

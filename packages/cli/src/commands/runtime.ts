@@ -1,11 +1,11 @@
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 import { Data, Console, Effect } from "effect";
-import { CliError, CliOutput, Command } from "effect/cli";
+import { CliError, CliOutput, Command, type HelpDoc } from "effect/cli";
 import { skitCliConfigLayer } from "./parameters.js";
-import type { HelpDoc } from "effect/cli";
+
 import { renderCommandFailures } from "../application.js";
-import { Renderer } from "../presentation/renderer.js";
-import { result } from "../handlers/contracts.js";
+import { Renderer } from "../terminal/renderer.js";
+import { result } from "./result.js";
 
 /** The command line did not parse; the parser's own sentences are the message. */
 export class CommandLineInvalid

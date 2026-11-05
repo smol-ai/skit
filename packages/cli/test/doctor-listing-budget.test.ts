@@ -3,7 +3,7 @@ import type { ListingBudget } from "@smolai/skit-core";
 import {
   renderDoctorListingBudget,
   renderDoctorBudgetSelection,
-} from "../src/presentation/doctor-listing-budget.js";
+} from "../src/library/presentation/listing-budget.js";
 
 const budget: Extract<ListingBudget, { _tag: "Estimated" }> = {
   _tag: "Estimated",

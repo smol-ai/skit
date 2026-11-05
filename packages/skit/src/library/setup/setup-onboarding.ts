@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import { Schema } from "effect";
 import { SourceIdentity } from "../library-contracts.js";
 import { sourceIdentityFromSource } from "../source-identity.js";
-import { type HarnessName as Harness } from "../../vocabulary.js";
+import { type HarnessName as Harness } from "../../harnesses/contracts.js";
 import { pathIsWithin } from "../../platform/path-identity.js";
 import {
   indexSetupOnboardingEvidence,
@@ -11,9 +11,12 @@ import {
   type SetupOnboardingEvidence,
   type SetupImportEvidence,
 } from "./setup-evidence.js";
-import type { SetupLockMatch } from "./setup-contract.js";
+import type {
+  SetupLockMatch,
+  SetupOnboardingCandidate,
+  SetupSkillInstance,
+} from "./setup-contract.js";
 import { setupLockCollection, setupLockGroupKey } from "./skills-sh-lock-source.js";
-import type { SetupOnboardingCandidate, SetupSkillInstance } from "./setup-contract.js";
 
 export const classifyOwner = (input: {
   readonly canonicalPath: string;

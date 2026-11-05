@@ -1,3 +1,4 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
@@ -5,7 +6,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
-import { skitLayer, type LibraryState } from "@smolai/skit-core";
+import { type LibraryState } from "@smolai/skit-core";
 import { Library } from "@smolai/skit-core/library";
 import { runSetup } from "@smolai/skit-core/library/setup";
 import { applySetupSelections } from "./helpers/setup-apply.js";
@@ -227,5 +228,5 @@ it.effect("checks skills.sh status against real Git history without saving Libra
     });
     // Checking only reports: the Library it read is left exactly as it was.
     expect(yield* fs.readFileString(home.statePath)).toBe(beforeState);
-  }).pipe(Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(testPlatformLayer)),
 );

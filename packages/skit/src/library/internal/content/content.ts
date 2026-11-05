@@ -2,18 +2,15 @@ import { Effect, FileSystem, Option, Schema } from "effect";
 import type { Digest } from "effect/crypto";
 import type { HttpClient } from "effect/http";
 import type { TreeRequirements } from "../../../platform/tree-requirements.js";
-import {
-  InvalidLibraryState,
-  type LibraryBusy,
-  type ContentAddressCollision,
-} from "../../../failures.js";
+import { InvalidLibraryState, type ContentAddressCollision } from "../../failures.js";
+import { type LibraryBusy } from "../../../platform/lock-failures.js";
 import type { PlatformError } from "effect/PlatformError";
 import type { TreeError } from "../../../shared/tree-error.js";
 import type { SnapshotArchiveInvalid } from "../../snapshot-archive-universal.js";
 import { withLock as withHomeLock } from "../../../platform/home-lock.js";
 import { canonicalJson } from "../../../shared/json.js";
-import { sha256Hash } from "../../../shared/hash.js";
-import type { Hash } from "../../../vocabulary.js";
+import { sha256Hash, type Hash } from "../../../shared/hash.js";
+
 import { collectionVersionPath, originalTreeHash } from "../../collection-version.js";
 import {
   planCollectionVersions,

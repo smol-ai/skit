@@ -2,7 +2,7 @@ import { Effect, FileSystem, Path, Schema } from "effect";
 import { COLLECTION_CONTROL_DIRECTORY } from "../artifact/control-files.js";
 import * as History from "../history/history.js";
 import { LinkStat } from "../platform/link-stat.js";
-import { SkitContractError } from "../protocol/api-contracts.js";
+import { SkitContractError } from "../api/contracts.js";
 import { TreeEntry } from "../artifact/tree-entry.js";
 import { syncPaths } from "../platform/atomic-write.js";
 import { LocalFilesChangedDuringSync } from "./failures.js";

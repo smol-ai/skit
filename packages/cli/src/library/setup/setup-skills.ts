@@ -1,10 +1,11 @@
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { HarnessName } from "@smolai/skit-core";
-import { compactHomePath } from "../../presentation/home-path.js";
-import type { Choice } from "../../presentation/prompter.js";
-import type { SetupOnboardingCandidate, SetupSkillInstance } from "@smolai/skit-core/library/setup";
+import { compactHomePath } from "../../terminal/home-path.js";
+import type { Choice } from "../../terminal/prompter.js";
 import {
+  type SetupOnboardingCandidate,
+  type SetupSkillInstance,
   recommendedSetupSelection,
   setupReviewCopies,
   type SetupRecommendation,

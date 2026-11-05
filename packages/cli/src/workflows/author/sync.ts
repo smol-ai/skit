@@ -45,7 +45,7 @@ import {
   CredentialLacksScope,
   PrincipalNotAuthorized,
 } from "../../registry/failures.js";
-import { resolveAuth, resolveAuthForOrigin } from "../../registry/auth.js";
+import { Registry } from "../../registry/index.js";
 import type { AuthorSyncResult } from "./sync-contract.js";
 
 import { authorDecider, authorTree } from "./device-view.js";
@@ -61,7 +61,7 @@ import {
   FailureTypeId,
   type SkitFailure,
 } from "@smolai/skit-core";
-import { MissingRequirement } from "../failures.js";
+import { MissingRequirement } from "../../commands/input-failures.js";
 
 /** A SKIT request the Registry answered, with its own words for why it refused. */
 export class SyncRejected
@@ -163,7 +163,7 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
       const concrete = /^(?:skit:\/\/|https?:\/\/)/.test(to);
       return yield* parseAuthorDestination(
         to,
-        concrete ? undefined : (yield* resolveAuth(options.home)).origin,
+        concrete ? undefined : (yield* Registry.credentials({ home: options.home })).origin,
       );
     });
   // A first sync names its destination and visibility; a synced workspace has its remote home.
@@ -209,7 +209,7 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
       reason: `it names ${skitLocator(connection.leftover.checkpoint.remote)}, not ${locator}`,
     });
   // Only this destination's credential: an environment token for another Registry is never sent.
-  const credentials = yield* resolveAuthForOrigin(remote.origin, options.home);
+  const credentials = yield* Registry.credentials({ origin: remote.origin, home: options.home });
   if (options.to !== undefined && !credentials.token)
     return yield* new AuthenticationRequired({
       origin: remote.origin,

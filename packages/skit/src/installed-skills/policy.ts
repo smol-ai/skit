@@ -1,4 +1,5 @@
-import type { InvocationPolicy, InstallDestination } from "../contracts.js";
+import type { InvocationPolicy } from "../artifact/invocation-policy.js";
+import type { InstallDestination } from "./destination.js";
 import { Effect, FileSystem } from "effect";
 import {
   applyHarnessInvocationPolicy,

@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { Hash } from "../../vocabulary.js";
+import { Hash } from "../../shared/hash.js";
 import { hashParts } from "../../artifact/descriptor.js";
 import { type DuplicateCopy } from "../duplicates.js";
 import type {

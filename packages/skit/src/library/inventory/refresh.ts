@@ -1,6 +1,6 @@
 import { Clock, Effect, FileSystem, Result } from "effect";
 import { dirname, join, resolve } from "node:path";
-import type { HarnessName } from "../../contracts.js";
+import type { HarnessName } from "../../harnesses/contracts.js";
 import type { InstalledSkill, LibraryState } from "../library-state.js";
 import * as InstalledSkillStatus from "../installed-skill-status.js";
 import { LinkStat } from "../../platform/link-stat.js";

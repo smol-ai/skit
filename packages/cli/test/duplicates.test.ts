@@ -3,27 +3,35 @@ import { withLibraryOwner } from "./helpers/library-owner.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { LinkStat, MachineSettings } from "@smolai/skit-core";
 import { systemError } from "effect/PlatformError";
-import { setupExistingSelections, setupNewSelections } from "@smolai/skit-core/library/setup";
-import { recordDuplicateSymlinks } from "@smolai/skit-core/library/setup";
+import {
+  setupExistingSelections,
+  setupNewSelections,
+  recordDuplicateSymlinks,
+  copyConflict,
+  runSetup,
+  revalidateSetupPlan,
+} from "@smolai/skit-core/library/setup";
+
 import { applySetupSelections } from "./helpers/setup-apply.js";
-import { copyConflict } from "@smolai/skit-core/library/setup";
-import type { DuplicateScanError } from "@smolai/skit-core/library/routing";
+
+import {
+  type DuplicateScanError,
+  findDuplicates,
+  scanSkillsDirectory,
+  readableSkillsDirectories,
+} from "@smolai/skit-core/library/routing";
 import { codexSkillAliases } from "../src/library/workflows/doctor-codex.js";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
 import { expect } from "vitest";
-import {
-  findDuplicates,
-  scanSkillsDirectory,
-  readableSkillsDirectories,
-} from "@smolai/skit-core/library/routing";
+
 import { importSource } from "../src/library/application/import-source.js";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
-import { runSetup, revalidateSetupPlan } from "@smolai/skit-core/library/setup";
+
 import { setupCommand } from "../src/library/setup/command.js";
-import { Renderer } from "../src/presentation/renderer.js";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+import { Renderer } from "../src/terminal/renderer.js";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import {
   libraryHome,
   scratch,

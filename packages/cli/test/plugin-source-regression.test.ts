@@ -1,8 +1,9 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { collectionVersionPath, skitLayer } from "@smolai/skit-core";
+import { collectionVersionPath } from "@smolai/skit-core";
 import { Library } from "@smolai/skit-core/library";
 import { importSource, previewLibrarySource } from "../src/library/application/import-source.js";
 import { gitBlobHash } from "./helpers/collection-import.js";
@@ -52,5 +53,5 @@ it.effect(
           file.path,
         );
       }
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

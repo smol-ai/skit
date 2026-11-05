@@ -1,14 +1,14 @@
-import { Effect, FileSystem, Schema } from "effect";
+import { Effect, FileSystem, Schema, Result } from "effect";
 import { captureBounded } from "./probe-process.js";
 import { delimiter, join } from "node:path";
 // Probing is one Effect workflow. The PATH search and the `--version` subprocess are real I/O and
 // belong to the caller's fiber, so an interrupted probe kills the child. The TUI composes
 // `probeHarness` on its own host runtime; the command table, install-method
 // classification, version parsing and result shape are shared and pure.
-import { HarnessName } from "../vocabulary.js";
+import { HarnessName } from "./contracts.js";
 import { LinkStat } from "../platform/link-stat.js";
 import { harnessDrivers, harnessFromAlias } from "./drivers.js";
-import { Result } from "effect";
+
 import { UnknownHarness } from "./probe-failures.js";
 
 export const HarnessProbeResult = Schema.Struct({

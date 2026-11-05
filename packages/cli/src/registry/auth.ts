@@ -46,7 +46,7 @@ import {
   removeStoredToken,
   writeStoredToken,
 } from "./credential-store.js";
-import { Renderer } from "../presentation/renderer.js";
+import { Renderer } from "../terminal/renderer.js";
 
 const withConfigurationWriter = <A, E, R>(
   home: string | undefined,

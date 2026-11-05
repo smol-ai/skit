@@ -7,17 +7,17 @@ import { Clock, Effect, FileSystem, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import { libraryStateRevision, skitLayer } from "@smolai/skit-core";
+import { libraryStateRevision, skitLayer, observePathEvidence } from "@smolai/skit-core";
 import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply-command.js";
-import { renderContract } from "../src/presentation/contract-presenters.js";
+import { renderContract } from "../src/commands/output-presenters.js";
 import { setupCommand } from "../src/library/setup/command.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import type { CommandAction } from "../src/commands/command-actions.js";
-import { observePathEvidence } from "@smolai/skit-core";
+
 import { prepareSetupUndo } from "../src/library/setup/setup-undo.js";
 import { runSetup } from "@smolai/skit-core/library/setup";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import {
   deterministicTreeHash,
   libraryHome,

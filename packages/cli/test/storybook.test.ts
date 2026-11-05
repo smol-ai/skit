@@ -1,12 +1,12 @@
 import { Effect, Result } from "effect";
 import { it } from "@effect/vitest";
 import { describe, expect } from "vitest";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import {
   defaultTerminalEnvironment,
   renderFailureFrame,
   renderResultFrame,
-} from "../src/presentation/output-frame.js";
+} from "../src/commands/output-frame.js";
 import { journeyStories } from "../src/storybook/journey-stories.js";
 import { renderJourney } from "../src/storybook/journey-runner.js";
 import { OutputStory, outputStories, outputStoryKey } from "../src/storybook/output-stories.js";

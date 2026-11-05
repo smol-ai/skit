@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { Effect } from "effect";
-import { HarnessName, type InstallScope } from "../../vocabulary.js";
+import { HarnessName } from "../../harnesses/contracts.js";
+import { type InstallScope } from "../scope.js";
 import { findDuplicates as findDuplicatesIn, type DuplicateScanError } from "../duplicates.js";
 import { harnessDrivers } from "../../harnesses/drivers.js";
 import { resolveSkillsDirectory } from "../../harnesses/catalog.js";

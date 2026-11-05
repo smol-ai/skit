@@ -9,7 +9,7 @@ import { latestSourceImport, type LibrarySubject } from "../../subject-resolutio
 import { sourceLocator } from "../../../sources/resolve.js";
 import { isSkitFailure } from "../../../shared/failure.js";
 import type { InventoryRootOptions } from "../../routing/roots.js";
-import type { Hash } from "../../../vocabulary.js";
+import type { Hash } from "../../../shared/hash.js";
 import type { SkitSource } from "../../library-contracts.js";
 import type { SourceDiscoveryDiagnostic } from "../../../sources/source-diagnostics.js";
 import {

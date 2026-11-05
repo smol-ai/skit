@@ -1,13 +1,15 @@
-import { Revision } from "../../snapshot.js";
+import { Revision, type Snapshot } from "../../snapshot.js";
 import { Clock, Effect, Option, Schema, Struct } from "effect";
-import { Hash, SkillAssessmentAcceptance, type SkillSecurityReview } from "../../../contracts.js";
-import { AcceptanceIncomplete, SecurityFindingAbsent } from "../../../failures.js";
+import { Hash } from "../../../shared/hash.js";
+import { SkillAssessmentAcceptance } from "../../assessment-acceptance.js";
+import { type SkillSecurityReview } from "../../../auditing/skill-contracts.js";
+import { AcceptanceIncomplete, SecurityFindingAbsent } from "../../failures.js";
 import { InstalledSkills } from "../../installed-skills.js";
 import { collectionVersionPath } from "../../collection-version.js";
 import { InvalidIntent } from "../../enabled-plan.js";
 import { StalePlan } from "../../library-plan.js";
 import { emptyLibraryState } from "../../library-state.js";
-import type { Snapshot } from "../../snapshot.js";
+
 import { applyReviewed, planIdOf, planningState } from "../../reviewed-plan.js";
 import { LibraryWriter, libraryOriginalsPath } from "../../store/library-store.js";
 import { securityReview, securitySkill } from "./review.js";

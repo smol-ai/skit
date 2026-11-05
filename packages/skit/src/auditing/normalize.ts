@@ -1,6 +1,5 @@
-import type { HarnessName } from "../vocabulary.js";
-import type { AuditEntry, AuditReport } from "./schema.js";
-import type { AuditEntryV1Alpha4, AuditReportV1Alpha4 } from "./schema.js";
+import type { HarnessName } from "../harnesses/contracts.js";
+import type { AuditEntry, AuditReport, AuditEntryV1Alpha4, AuditReportV1Alpha4 } from "./schema.js";
 
 type IndexedEntry = AuditEntryV1Alpha4 & {
   sourceKind: AuditEntry["kind"];

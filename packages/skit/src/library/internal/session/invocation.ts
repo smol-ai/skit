@@ -8,13 +8,14 @@ import {
   InvocationConformance,
   ResolvedDeclaredPolicy,
 } from "../../../invocation/conformance.js";
-import { HarnessName, InvocationPolicy } from "../../../vocabulary.js";
+import { HarnessName } from "../../../harnesses/contracts.js";
+import { InvocationPolicy } from "../../../artifact/invocation-policy.js";
 import { invocationMetadataAdapters } from "../../../harnesses/invocation-metadata.js";
-import { LibraryInvocationOption } from "../../../contracts.js";
+import { LibraryInvocationOption } from "../../invocation-option.js";
 import { Record, Schema } from "effect";
 import { harnessLabel } from "../../../harnesses/discovery.js";
 import type { InvocationOption } from "./invocation-option.js";
-import { type InstallScope as Scope } from "../../../vocabulary.js";
+import { type InstallScope as Scope } from "../../scope.js";
 
 export type { ResolvedDeclaredPolicy };
 

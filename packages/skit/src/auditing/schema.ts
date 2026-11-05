@@ -1,6 +1,6 @@
 import { FrontmatterCompatibilityResult } from "../harnesses/frontmatter.js";
-import { HarnessName } from "../vocabulary.js";
-import { SkillAudit } from "../contracts.js";
+import { HarnessName } from "../harnesses/contracts.js";
+import { SkillAudit } from "./skill-contracts.js";
 import { Schema } from "effect";
 
 const StringArray = Schema.Array(Schema.String);

@@ -6,7 +6,8 @@ import {
   SkillId,
   SkillVersionId,
 } from "../entity-ids.js";
-import { Hash, HarnessName } from "../../vocabulary.js";
+import { Hash } from "../../shared/hash.js";
+import { HarnessName } from "../../harnesses/contracts.js";
 import { Schema } from "effect";
 import { PnpmSkillOwner } from "../../installed-skills/pnpm-skills.js";
 

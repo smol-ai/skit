@@ -13,8 +13,8 @@ import {
   savePendingLogin,
   startDeviceLogin,
 } from "../src/registry/auth.js";
-import { authLoginCommand } from "../src/handlers/auth/login.js";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+import { authLoginCommand } from "../src/registry/commands/login.js";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { skitConfigurationLayer } from "@smolai/skit-core";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";

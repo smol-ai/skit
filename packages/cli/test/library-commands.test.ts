@@ -1,13 +1,13 @@
-import { SkitConfiguration } from "@smolai/skit-core";
+import { SkitConfiguration, deterministicTreeHash, StalePlan } from "@smolai/skit-core";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem, Option, Result, Schema } from "effect";
 import { join } from "node:path";
-import { deterministicTreeHash, StalePlan } from "@smolai/skit-core";
+
 import { presentListCommand } from "../src/library/commands/list.js";
-import { browseLibrary } from "../src/presentation/interactive-list.js";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
-import { renderLibraryList } from "../src/presentation/library-list.js";
+import { browseLibrary } from "../src/library/presentation/browse.js";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
+import { renderLibraryList } from "../src/library/presentation/list.js";
 import { ListResult } from "../src/library/workflows/list-contract.js";
 import {
   confirmLibraryChange,

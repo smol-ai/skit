@@ -1,4 +1,4 @@
-import type { Hash } from "../vocabulary.js";
+import type { Hash } from "../shared/hash.js";
 import type {
   InstalledSkill,
   InstalledSkillConflicted,

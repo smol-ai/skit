@@ -30,7 +30,7 @@ import {
   migrateLocalLibraryState,
   recoverLibraryHistory,
 } from "../store/library-store.js";
-import { InvalidLibraryState, type LibraryChanged } from "../../failures.js";
+import { InvalidLibraryState, type LibraryChanged } from "../failures.js";
 import { type StepRouting, OperationStatus } from "../store/state-schema.js";
 import { readLibraryAudit } from "../audit/audit-log.js";
 import { snapshotOf, type Snapshot } from "../snapshot.js";
@@ -101,7 +101,7 @@ export const make = Effect.fn("Library.make")(function* (
       ...(download === undefined
         ? {}
         : {
-            download: (hash: import("../../vocabulary.js").Hash) =>
+            download: (hash: import("../../shared/hash.js").Hash) =>
               download(hash).pipe(Effect.provide(caller)),
           }),
     }).pipe(Effect.provide(writer), Effect.provide(importing), Effect.provide(contentHttp));

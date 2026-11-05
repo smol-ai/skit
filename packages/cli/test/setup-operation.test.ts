@@ -7,7 +7,7 @@ import { systemError, type PlatformError } from "effect/PlatformError";
 import { MachineSettings, skitLayer, type LibraryState } from "@smolai/skit-core";
 import { setupApplyCommand } from "../src/library/setup/apply-command.js";
 import { runSetup } from "@smolai/skit-core/library/setup";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import { libraryHome, scratch } from "./helpers/library-home.js";
 import { homeLockIsFree } from "./helpers/home-lock.js";
 

@@ -1,6 +1,6 @@
 import { openSetupCommandReview, prepareSetupCommand, setupApplyCommand } from "./apply-command.js";
 export { setupApplyCommand } from "./apply-command.js";
-import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
+import { SkitConfiguration, skitConfigurationLayer, emptyLibraryState } from "@smolai/skit-core";
 import { skillModificationTime } from "@smolai/skit-core/library/session";
 import { Cause, Effect, FileSystem, Option } from "effect";
 import { Command, Flag } from "effect/cli";
@@ -10,21 +10,27 @@ import { libraryCommandConfiguration } from "../../commands/library-configuratio
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { inventoryRootOptions, localFlags, optionalString } from "../../commands/parameters.js";
-import { Prompter, terminalPrompterLayer } from "../../presentation/prompter.js";
-import { promptsAllowed } from "../../presentation/interactivity.js";
-import { compactHomePath } from "../../presentation/home-path.js";
+import { Prompter, terminalPrompterLayer } from "../../terminal/prompter.js";
+import { promptsAllowed } from "../../terminal/interactivity.js";
+import { compactHomePath } from "../../terminal/home-path.js";
 import { Library } from "@smolai/skit-core/library";
-import { Renderer } from "../../presentation/renderer.js";
+import { Renderer } from "../../terminal/renderer.js";
 import {
   setupOverviewTitle,
   setupPrompts,
   setupStepPlan,
   type SetupStepPlan,
 } from "./setup-steps.js";
-import { runSetup, type SetupOptions } from "@smolai/skit-core/library/setup";
-import { openSetupReview, type SetupReview } from "@smolai/skit-core/library/setup";
-import type { ManageOptions } from "@smolai/skit-core/library/setup";
-import { result } from "../../handlers/contracts.js";
+import {
+  runSetup,
+  type SetupOptions,
+  openSetupReview,
+  type SetupReview,
+  type ManageOptions,
+  SetupDuplicateAction,
+} from "@smolai/skit-core/library/setup";
+
+import { result } from "../../commands/result.js";
 import {
   setupDiscoveryOutput,
   setupScanAction,
@@ -34,14 +40,14 @@ import {
   setupApplyAction,
   setupReviewSummary,
 } from "./actions.js";
-import { emptyLibraryState } from "@smolai/skit-core";
-import { OptionCombinationInvalid } from "../../workflows/failures.js";
-import { SetupDuplicateAction } from "@smolai/skit-core/library/setup";
+
+import { OptionCombinationInvalid } from "../../commands/input-failures.js";
+
 import { checkSubjects } from "../workflows/check.js";
-import { renderCheck } from "../../presentation/check.js";
+import { renderCheck } from "../presentation/check.js";
 import { setupReviewSkillChoices } from "./setup-skills.js";
 
-import { renderChangeResult } from "../../presentation/installed-skill-changes.js";
+import { renderChangeResult } from "../presentation/installed-skill-changes.js";
 import {
   chooseSetupCopyDecisions,
   chooseSetupVersions,

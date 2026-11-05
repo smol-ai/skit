@@ -5,7 +5,9 @@ import { Schema } from "effect";
 import { isAbsolute } from "node:path";
 import { InstalledSkillId, SkillId, SkillVersionId } from "./entity-ids.js";
 import { Enabled } from "./library-contracts.js";
-import { Hash, InstallDestination, InvocationPolicy } from "../vocabulary.js";
+import { Hash } from "../shared/hash.js";
+import { InstallDestination } from "../installed-skills/destination.js";
+import { InvocationPolicy } from "../artifact/invocation-policy.js";
 
 export const AbsoluteDevicePath = Schema.String.check(
   Schema.makeFilter(isAbsolute, { message: "Expected an absolute device path" }),

@@ -1,10 +1,10 @@
 import { syncLibraryApplicationLayer } from "../application/layers.js";
 import { skitConfigurationLayer } from "@smolai/skit-core";
-import { RegistryAuth } from "../../registry/auth-service.js";
+import { Registry, type ResolvedAuth } from "../../registry/index.js";
 import { Option, Effect, Result } from "effect";
 import { Command, Flag } from "effect/cli";
 import { handleRegistryCommand } from "../../application.js";
-import type { ResolvedAuth } from "../../registry/auth.js";
+
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import {
   CommandMetadata,
@@ -16,13 +16,13 @@ import { localFlags, optionalString, optionValue } from "../../commands/paramete
 import { syncLibrary } from "../workflows/library-sync.js";
 import type { LibraryInstallationConfiguration } from "../installation-configuration.js";
 import { officialRegistryOrigin } from "../../registry/accounts.js";
-import { Renderer } from "../../presentation/renderer.js";
+import { Renderer } from "../../terminal/renderer.js";
 import { createColors } from "picocolors";
-import { result } from "../../handlers/contracts.js";
-import { terminalSyncProgress } from "../../presentation/sync-progress.js";
-import { renderLibrarySyncPlan } from "../../presentation/library-sync.js";
-import { terminalData } from "../../presentation/terminal-text.js";
-import { OptionCombinationInvalid } from "../../workflows/failures.js";
+import { result } from "../../commands/result.js";
+import { terminalSyncProgress } from "../presentation/sync-progress.js";
+import { renderLibrarySyncPlan } from "../presentation/sync.js";
+import { terminalData } from "../../terminal/text.js";
+import { OptionCombinationInvalid } from "../../commands/input-failures.js";
 import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 
 export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthError>(options: {
@@ -138,8 +138,10 @@ export const librarySyncCliCommand = Command.make(
             detail: "Changing device selection requires --apply.",
           });
         const configuration = yield* libraryCommandConfiguration(input);
-        const registryAuth = yield* RegistryAuth;
-        const { authState } = yield* registryAuth.resolve(optionValue(input.registry), "skit sync");
+        const authState = yield* Registry.credentials({
+          registry: optionValue(input.registry),
+          command: "skit sync",
+        }).pipe(Effect.result);
         const value = yield* librarySyncCommand({
           authState,
           apply: input.apply,

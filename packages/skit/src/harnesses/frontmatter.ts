@@ -1,13 +1,14 @@
 import { parse as parseYaml } from "yaml";
 import { Schema } from "effect";
-import { HarnessName } from "../vocabulary.js";
-import type { YamlMapping } from "../shared/json.js";
-import type {
-  FrontmatterConstraint,
-  FrontmatterValueType,
-  HarnessFrontmatterContract,
-  HarnessFrontmatterField,
+import {
+  HarnessName,
+  type FrontmatterConstraint,
+  type FrontmatterValueType,
+  type HarnessFrontmatterContract,
+  type HarnessFrontmatterField,
 } from "./contracts.js";
+import type { YamlMapping } from "../shared/json.js";
+
 import { harnessProfile } from "./catalog.js";
 
 export const FrontmatterCompatibilityIssue = Schema.Struct({

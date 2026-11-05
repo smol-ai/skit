@@ -1,6 +1,8 @@
-import { Effect } from "effect";
+import { Schema, Effect } from "effect";
 import { Digest } from "effect/crypto";
-import type { Hash } from "../vocabulary.js";
+// Domain vocabulary shared by the Library store, the wire contracts, and Harness code.
+export const Hash = Schema.String.check(Schema.isPattern(/^sha256:[a-f0-9]{64}$/u));
+export type Hash = typeof Hash.Type;
 
 /**
  * Length-framed digest input: each part is `<byte length>:<bytes>\0`, so `["ab", "c"]` and

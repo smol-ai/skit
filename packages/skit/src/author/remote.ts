@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect";
 import {
   normalizeRegistryNamespace,
   normalizeRegistrySkitSlug,
-} from "../distribution/registry-identity.js";
+} from "../artifact/registry-identity.js";
 import {
   AuthorDestinationInvalid,
   AuthorDestinationMalformed,

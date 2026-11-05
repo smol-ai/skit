@@ -1,4 +1,6 @@
-import type { HarnessName } from "../contracts.js";
+import { Schema } from "effect";
+export const HarnessName = Schema.Literals(["codex", "claude-code", "opencode", "devin"]);
+export type HarnessName = typeof HarnessName.Type;
 
 export type SkillsDirectoryBase = "home" | "config" | "repository";
 export type SkillsDirectoryRole = "native" | "compatibility";

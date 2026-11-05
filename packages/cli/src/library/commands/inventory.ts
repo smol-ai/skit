@@ -1,10 +1,6 @@
-import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
-import { skillModificationTime } from "@smolai/skit-core/library/session";
-import { Option, Effect } from "effect";
-import { Command, Flag } from "effect/cli";
-import { terminalPrompterLayer } from "../../presentation/prompter.js";
-import { presentDoctorCleanup } from "../workflows/doctor-cleanup.js";
 import {
+  SkitConfiguration,
+  skitConfigurationLayer,
   libraryDoctorReport,
   Library,
   emptyLibraryState,
@@ -12,16 +8,22 @@ import {
   pathIsWithin,
   type LibraryState,
 } from "@smolai/skit-core";
+import { skillModificationTime } from "@smolai/skit-core/library/session";
+import { Option, Effect } from "effect";
+import { Command, Flag } from "effect/cli";
+import { terminalPrompterLayer } from "../../terminal/prompter.js";
+import { presentDoctorCleanup } from "../workflows/doctor-cleanup.js";
+
 import { selectInventoryRoots, type InventoryRootOptions } from "@smolai/skit-core/library/routing";
-import { Renderer } from "../../presentation/renderer.js";
+import { Renderer } from "../../terminal/renderer.js";
 import { handleLibraryCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { inventoryRootOptions, localFlags } from "../../commands/parameters.js";
-import { result } from "../../handlers/contracts.js";
+import { result } from "../../commands/result.js";
 import { runSetup } from "@smolai/skit-core/library/setup";
 import { inspectNativeDiscovery } from "../workflows/doctor-harnesses.js";
-import { promptsAllowed } from "../../presentation/interactivity.js";
+import { promptsAllowed } from "../../terminal/interactivity.js";
 
 export type CliInventoryOptions = InventoryRootOptions & { readonly libraryHome: string };
 

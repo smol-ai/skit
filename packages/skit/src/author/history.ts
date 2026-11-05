@@ -24,15 +24,15 @@ import { SqlClient, SqlSchema } from "effect/sql";
 import { isSqlError } from "effect/sql/SqlError";
 import { AuthorIgnoreRepository } from "../artifact/plain-author-ignore.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
-import { Hash } from "../vocabulary.js";
+import { Hash, sha256Hash } from "../shared/hash.js";
 import * as History from "../history/history.js";
-import { type LibraryBusy } from "../failures.js";
+import { type LibraryBusy } from "../platform/lock-failures.js";
 import { LinkStat } from "../platform/link-stat.js";
 import * as MachineSettings from "../library/machine-settings.js";
 import { SourceProcess } from "../platform/source-process.js";
 import * as Sync from "../sync/sync.js";
 import { type TreeError } from "../shared/tree-error.js";
-import { sha256Hash } from "../shared/hash.js";
+
 import { syncPaths } from "../platform/atomic-write.js";
 import { walkAuthorTree } from "../artifact/tree.js";
 import { HomeLock } from "../platform/home-lock.js";

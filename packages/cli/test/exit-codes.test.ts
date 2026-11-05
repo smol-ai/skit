@@ -22,7 +22,7 @@ import { productionUrlTestClient } from "./helpers/http-test-client.js";
 import { commandApplicationLayer } from "../src/application.js";
 import { commandDescriptions } from "../src/commands/manifest.js";
 import { skitCommand } from "../src/commands/tree.js";
-import { classifyFailure, failureExitCodes } from "../src/failure-classification.js";
+import { classifyFailure, failureExitCodes } from "../src/commands/failure-classification.js";
 import { SourceRestoreInvalid } from "@smolai/skit-core";
 import { NoStoredCredentials, RegistryUnreachable } from "../src/registry/failures.js";
 

@@ -10,8 +10,10 @@ import {
 import { snapshotOf } from "../../src/library/snapshot.js";
 
 import type { ManageApproval } from "../../src/installed-skills/files.js";
-import type { OwnershipMarker } from "../../src/contracts.js";
-import type { Hash, InstallDestination, InstallScope } from "../../src/vocabulary.js";
+import type { OwnershipMarker } from "../../src/installed-skills/ownership-marker.js";
+import type { Hash } from "../../src/shared/hash.js";
+import type { InstallDestination } from "../../src/installed-skills/destination.js";
+import type { InstallScope } from "../../src/library/scope.js";
 
 /** Real public owner construction; fixture options supply device roots, never adapters. */
 const library = (

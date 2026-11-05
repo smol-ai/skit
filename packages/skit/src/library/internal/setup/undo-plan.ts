@@ -1,6 +1,6 @@
 import { Revision } from "../../snapshot.js";
 import { Schema } from "effect";
-import { Hash } from "../../../vocabulary.js";
+import { Hash } from "../../../shared/hash.js";
 import { CollectionId, ImportId } from "../../entity-ids.js";
 import { LibraryState } from "../../library-state.js";
 import { LegacySetupDiscovery } from "../../machine-settings.js";

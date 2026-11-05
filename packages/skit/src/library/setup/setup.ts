@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 import { Data, Effect } from "effect";
 import { canonicalJson } from "../../shared/json.js";
-import { Hash } from "../../vocabulary.js";
+import { Hash } from "../../shared/hash.js";
 import { hashParts } from "../../artifact/descriptor.js";
 import { Library } from "../library.js";
 import { libraryStateRevision } from "../library-state.js";

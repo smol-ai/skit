@@ -1,11 +1,11 @@
-import { SkitConfiguration } from "@smolai/skit-core";
-import { skitConfigurationLayer } from "@smolai/skit-core";
-import { Effect, Option, Result } from "effect";
+import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
+
+import { Effect, Option } from "effect";
 import { descriptionLoadMessage } from "../workflows/collection-load.js";
 import { openLibraryView } from "@smolai/skit-core/library/session";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleSourceCommand } from "../../application.js";
-import { MissingRequirement } from "../../workflows/failures.js";
+import { MissingRequirement } from "../../commands/input-failures.js";
 import {
   CommandMetadata,
   credentialStoreReadSubprocesses,
@@ -13,9 +13,9 @@ import {
 } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags, optionalString } from "../../commands/parameters.js";
-import { Renderer } from "../../presentation/renderer.js";
-import { result } from "../../handlers/contracts.js";
-import { RegistryAuth, type RegistryAuthAccess } from "../../registry/auth-service.js";
+import { Renderer } from "../../terminal/renderer.js";
+import { result } from "../../commands/result.js";
+import { Registry, type ResolvedAuth } from "../../registry/index.js";
 import { importSource, previewLibrarySource } from "../application/import-source.js";
 import { rejectDedicatedInstallerSource } from "../workflows/dedicated-installer-catalog.js";
 
@@ -33,30 +33,18 @@ export const addCliCommand = Command.make(
     handleSourceCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
-        const registryAuth = yield* RegistryAuth;
         const locator = input.source
-          ? yield* registryAuth.resolveLocator(input.source, Option.getOrUndefined(input.registry))
+          ? yield* Registry.source(input.source, {
+              registry: Option.getOrUndefined(input.registry),
+            })
           : undefined;
-        // An explicit Registry selection replaces an ambient configuration failure because it
-        // supplies the concrete origin (and any credential stored for that origin) directly.
-        const selectedAccess: RegistryAuthAccess | undefined = locator?.origin
+        const selectedRegistry: ResolvedAuth | undefined = locator?.origin
           ? {
-              authState: Result.succeed({
-                origin: locator.origin,
-                ...(locator.token === undefined ? {} : { token: locator.token }),
-                source: locator.token === undefined ? "none" : "stored",
-              }),
               origin: locator.origin,
-              ...(locator.token === undefined ? {} : { token: locator.token }),
+              token: locator.token,
+              source: locator.token === undefined ? "none" : "stored",
             }
           : undefined;
-        const withSelectedRegistry = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-          selectedAccess === undefined
-            ? effect
-            : Effect.provideService(effect, RegistryAuth, {
-                ...registryAuth,
-                resolve: () => Effect.succeed(selectedAccess),
-              });
         const selectedSource = locator?.input ?? input.source;
         if (!selectedSource)
           return yield* new MissingRequirement({
@@ -68,13 +56,13 @@ export const addCliCommand = Command.make(
         if (input.preview) {
           const value = yield* renderer.withStatus(
             `Inspecting ${selectedSource}`,
-            withSelectedRegistry(previewLibrarySource(selectedSource)),
+            previewLibrarySource(selectedSource, selectedRegistry),
           );
           return yield* renderer.result(result("addPreview", value));
         }
         const imported = yield* renderer.withStatus(
           "Retaining source",
-          withSelectedRegistry(importSource(selectedSource)),
+          importSource(selectedSource, undefined, selectedRegistry),
         );
         yield* renderer.result(
           result("add", {

@@ -3,7 +3,7 @@ import { Effect, FileSystem, Option, Schema } from "effect";
 import { systemError } from "effect/PlatformError";
 import { TestClock } from "effect/testing";
 import { join } from "node:path";
-import { Hash } from "../src/contracts.js";
+import { Hash } from "../src/shared/hash.js";
 import { Library } from "../src/library/library.js";
 import { openLibraryView } from "../src/library/internal/session/library-view.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";

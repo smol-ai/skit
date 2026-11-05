@@ -6,7 +6,7 @@ import { MachineSettings, skitLayer } from "@smolai/skit-core";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import type { CommandAction } from "../src/commands/command-actions.js";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import { scratch } from "./helpers/library-home.js";
 
 const invoke = Effect.fn("Test.setupAction")(function* (argv: readonly string[]) {

@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import type { InstallScope } from "../../vocabulary.js";
+import type { InstallScope } from "../scope.js";
 import type { LibraryState } from "../library-state.js";
 import type { StepRouting } from "../store/state-schema.js";
 import { readableSkillsDirectories } from "./duplicates.js";

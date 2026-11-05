@@ -1,8 +1,9 @@
 import { Schema, SchemaGetter } from "effect";
 import { InstalledSkillId, SkillId, SkillVersionId } from "../entity-ids.js";
 import { AbsoluteDevicePath, type InstalledSkill } from "../library-state.js";
-import { Hash } from "../../vocabulary.js";
-import { HarnessInstallStatus, RecordedInstallDestination } from "./state-schema.js";
+import { Hash } from "../../shared/hash.js";
+import { HarnessInstallStatus } from "../../installed-skills/metadata.js";
+import { RecordedInstallDestination } from "./state-schema.js";
 import { LibraryStateFromV11, LibraryStateV11 } from "./state-schema-v11.js";
 
 // Frozen v10 state. Every older state migrates through these shapes, so they stay as v10 defined

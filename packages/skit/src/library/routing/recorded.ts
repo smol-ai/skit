@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Schema } from "effect";
 import { Digest } from "effect/crypto";
 import { LinkStat } from "../../platform/link-stat.js";
-import { InstallScope } from "../../vocabulary.js";
+import { InstallScope } from "../scope.js";
 import { findDuplicates, type DuplicateScanError } from "../duplicates.js";
 import { InstalledSkills } from "../installed-skills.js";
 import type { StepRouting } from "../store/state-schema.js";

@@ -3,8 +3,8 @@ import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { commandFailure, renderCommandFailures } from "../src/application.js";
 import { RegistryRejectedWrite } from "../src/registry/failures.js";
-import { Renderer, consoleRenderer } from "../src/presentation/renderer.js";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+import { Renderer, consoleRenderer } from "../src/terminal/renderer.js";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 
 it.effect("presentation retains primary and cleanup failures", () =>
   Effect.gen(function* () {

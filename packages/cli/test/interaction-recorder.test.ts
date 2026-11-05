@@ -1,9 +1,9 @@
 import { Cause, Effect, Exit } from "effect";
 import { it } from "@effect/vitest";
 import { describe, expect } from "vitest";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
-import { Prompter } from "../src/presentation/prompter.js";
-import { Renderer } from "../src/presentation/renderer.js";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
+import { Prompter } from "../src/terminal/prompter.js";
+import { Renderer } from "../src/terminal/renderer.js";
 
 describe("interactive journey recorder", () => {
   it.effect("resolves visible labels to current choice values and records those values", () =>

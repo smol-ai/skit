@@ -3,7 +3,8 @@ import type { OperationId } from "../entity-ids.js";
 import { Context, Effect, FileSystem, Option, References } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { join, resolve } from "node:path";
-import type { InvalidLibraryState, LibraryBusy, LibraryChanged } from "../../failures.js";
+import type { InvalidLibraryState, LibraryChanged } from "../failures.js";
+import type { LibraryBusy } from "../../platform/lock-failures.js";
 import { emptyLibraryState, type LibraryState } from "../library-state.js";
 import {
   inspectLocalLibraryState,

@@ -4,7 +4,7 @@ import { expect } from "vitest";
 import { journeyStories } from "../src/storybook/journey-stories.js";
 import { recordJourney } from "../src/storybook/journey-runner.js";
 import { journeyFrames, renderReplayFrame } from "../src/storybook/journey-replay.js";
-import { defaultTerminalEnvironment } from "../src/presentation/output-frame.js";
+import { defaultTerminalEnvironment } from "../src/commands/output-frame.js";
 
 it.effect("replays a real fresh-device sync from a single captured run", () =>
   Effect.gen(function* () {

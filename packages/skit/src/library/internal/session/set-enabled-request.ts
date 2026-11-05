@@ -1,7 +1,7 @@
 import { enabledAt } from "../../enabled.js";
 import { enabledSkillIds } from "../../library-contracts.js";
 import { type LibraryState } from "../../library-state.js";
-import { type InstallScope } from "../../../vocabulary.js";
+import { type InstallScope } from "../../scope.js";
 import { type ManageApproval } from "../../../installed-skills/files.js";
 import { Effect } from "effect";
 import { Library } from "../../library.js";

@@ -1,6 +1,6 @@
 import { Effect, FileSystem, Predicate } from "effect";
 import type { PlatformError } from "effect/PlatformError";
-import { SkillsDirectoryNotWritable } from "../failures.js";
+import { SkillsDirectoryNotWritable } from "./failures.js";
 import { installedSkillStagingDirectory } from "./backups.js";
 
 /**

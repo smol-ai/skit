@@ -8,10 +8,15 @@ import {
   makeScriptedInteraction,
   type InteractionEvent,
   type ScriptedAnswer,
-} from "../src/presentation/interaction-recorder.js";
+} from "../src/storybook/interaction-recorder.js";
 import { setupPrompts, setupStepTitles } from "../src/library/setup/setup-steps.js";
-import { runSetup, revalidateSetupPlan } from "@smolai/skit-core/library/setup";
-import { planSetupRemovals, setupRemovablePaths } from "@smolai/skit-core/library/setup";
+import {
+  runSetup,
+  revalidateSetupPlan,
+  planSetupRemovals,
+  setupRemovablePaths,
+} from "@smolai/skit-core/library/setup";
+
 import { Library } from "@smolai/skit-core/library";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 

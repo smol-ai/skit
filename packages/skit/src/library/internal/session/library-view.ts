@@ -1,21 +1,22 @@
 import { previewSourceUpdates, type SourceInspection } from "./source-updates.js";
 import { checkLibrarySubjects } from "./check.js";
-import type { Hash } from "../../../vocabulary.js";
-import type { SkitSource } from "../../library-contracts.js";
-import { removalSummary } from "./remove.js";
-import { securityReview } from "../security/review.js";
-import { Library } from "../../library.js";
-import { emptyLibraryState } from "../../library-state.js";
-import { join } from "node:path";
+import type { Hash } from "../../../shared/hash.js";
 import {
+  type SkitSource,
   currentCollectionSkills,
   currentSkillVersion,
   enabledSkillIds,
   type Enabled,
 } from "../../library-contracts.js";
+import { removalSummary } from "./remove.js";
+import { securityReview } from "../security/review.js";
+import { Library } from "../../library.js";
+import { emptyLibraryState, type LibraryState } from "../../library-state.js";
+import { join } from "node:path";
+
 import { globalEnabled } from "../../enabled.js";
-import { type LibraryState } from "../../library-state.js";
-import { type InstallScope } from "../../../vocabulary.js";
+
+import { type InstallScope } from "../../scope.js";
 import { Effect } from "effect";
 import {
   enabledCollections,

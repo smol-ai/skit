@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
+import type { Hash } from "../shared/hash.js";
+import type { SkillAssessmentAcceptance } from "../library/assessment-acceptance.js";
 import type {
-  Hash,
-  SkillAssessmentAcceptance,
   SkillAssessmentContext,
   SkillAssessmentDecision,
   SkillAudit,
   SkillAuditFinding,
-} from "../contracts.js";
+} from "./skill-contracts.js";
 
 const MAX_FINDINGS = 100;
 const MAX_EXCERPT_CODE_POINTS = 160;

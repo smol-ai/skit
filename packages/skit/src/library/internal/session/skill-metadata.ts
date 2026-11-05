@@ -4,7 +4,7 @@ import { currentSkillVersion, versionBacking } from "../../library-contracts.js"
 import { readSkitDescriptor } from "../../../artifact/skit.js";
 import { collectionVersionPath } from "../../collection-version.js";
 import { type LibraryState } from "../../library-state.js";
-import { type SkitDescriptor } from "../../../schemas.js";
+import { type SkitDescriptor } from "../../../artifact/schemas.js";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { join } from "node:path";
 

@@ -3,7 +3,8 @@ import { SkillId, CollectionId } from "./entity-ids.js";
 import { Invocation, InvocationPolicies } from "./device-state.js";
 import { Enabled as EnabledItem } from "./library-contracts.js";
 import { Duplicate, Warning } from "./installed-skill-facts.js";
-import { InstallScope, InstallDestination } from "../vocabulary.js";
+import { InstallScope } from "./scope.js";
+import { InstallDestination } from "../installed-skills/destination.js";
 
 /** One enabled change at one scope, with what a review of it shows. */
 export const EnabledChange = Schema.Struct({

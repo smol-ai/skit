@@ -6,7 +6,7 @@ import {
   type InvocationPolicyChoice,
   type InvocationReadModel,
 } from "./invocation.js";
-import { type InstallScope as Scope } from "../../../vocabulary.js";
+import { type InstallScope as Scope } from "../../scope.js";
 
 export interface ScopeChoice {
   value: "global" | "repository";
@@ -59,4 +59,4 @@ export function scopeRowLabel(scopeRow: InvocationScopeRow): string {
 
 export { destinationLabel, invocationBriefing, invocationRowSummary };
 
-export { type InstallScope as Scope } from "../../../vocabulary.js";
+export { type InstallScope as Scope } from "../../scope.js";

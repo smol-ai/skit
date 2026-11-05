@@ -1,7 +1,8 @@
 import { Record, Result, Schema } from "effect";
 import { isAlias, isMap, isScalar, parseDocument, type Document } from "yaml";
-import type { HarnessName, InvocationPolicy } from "../contracts.js";
-import { HarnessMetadataInvalid } from "../failures.js";
+import type { HarnessName } from "./contracts.js";
+import type { InvocationPolicy } from "../artifact/invocation-policy.js";
+import { HarnessMetadataInvalid } from "./metadata-failures.js";
 
 /**
  * The policy a native field can state: the model may choose the Skill on its own (`implicit`), or

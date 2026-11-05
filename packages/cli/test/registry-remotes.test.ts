@@ -1,3 +1,4 @@
+import { Registry } from "../src/registry/index.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { join } from "node:path";
 import { it } from "@effect/vitest";
@@ -8,7 +9,6 @@ import {
   defaultRegistryRemote,
   listRegistryRemotes,
   removeRegistryRemote,
-  resolveAuth,
   resolveRegistryLocator,
 } from "../src/registry/auth.js";
 import { scratch } from "./helpers/library-home.js";
@@ -51,7 +51,7 @@ it.effect("resolves local Registry names without persisting them as authorities"
         }),
       ),
     ).toMatchObject({ _tag: "RegistryAliasNotFound", name: "wrok" });
-    expect(yield* resolveAuth(home)).toMatchObject({
+    expect(yield* Registry.credentials({ home })).toMatchObject({
       origin: "https://registry.example",
     });
 

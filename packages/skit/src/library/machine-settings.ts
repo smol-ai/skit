@@ -3,9 +3,9 @@ import { hostname } from "node:os";
 import { join, resolve } from "node:path";
 import { writeJsonAtomic } from "../platform/atomic-write.js";
 import { hashParts } from "../artifact/descriptor.js";
-import { Hash } from "../vocabulary.js";
+import { Hash } from "../shared/hash.js";
 import { canonicalJson } from "../shared/json.js";
-import { LibraryChanged } from "../failures.js";
+import { LibraryChanged } from "./failures.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 import { MachineId, makeMachineId, type OperationId } from "./entity-ids.js";
 import {

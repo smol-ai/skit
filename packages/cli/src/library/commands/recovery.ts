@@ -1,15 +1,15 @@
 import { Cause, Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
-import { SkitConfiguration } from "@smolai/skit-core";
+import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
 import { handleLibraryCommand, commandFailure } from "../../application.js";
-import { skitConfigurationLayer } from "@smolai/skit-core";
+
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { recoveryActions } from "../../commands/recovery-contract.js";
 import { homeFlag, jsonFlag, optionalString } from "../../commands/parameters.js";
 import { Library } from "@smolai/skit-core/library";
-import { Renderer } from "../../presentation/renderer.js";
-import { result } from "../../handlers/contracts.js";
+import { Renderer } from "../../terminal/renderer.js";
+import { result } from "../../commands/result.js";
 
 const flags = { home: homeFlag, json: jsonFlag };
 const operation = Argument.String("operation");

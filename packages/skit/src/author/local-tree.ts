@@ -10,7 +10,7 @@ import {
   scanAuthorTree,
   type NativeTreeIdentity,
 } from "../artifact/tree.js";
-import { SkitContractError } from "../protocol/api-contracts.js";
+import { SkitContractError } from "../api/contracts.js";
 import {
   AuthorLocalPathNotObserved,
   AuthorNonNfcPathUnsupported,

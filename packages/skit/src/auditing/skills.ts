@@ -2,14 +2,15 @@ import { basename, dirname, join } from "node:path";
 import { auditSkill } from "./skill-audit.js";
 import { evaluateSkillFrontmatter } from "../harnesses/frontmatter.js";
 import { harnessDrivers } from "../harnesses/drivers.js";
-import { HarnessName } from "../vocabulary.js";
-import { physicalPath } from "../platform/path-identity.js";
-import { resolveSkillsDirectory } from "../harnesses/catalog.js";
 import {
+  HarnessName,
   type HarnessProfile,
   type SkillsDirectory,
   type SkillsDirectoryRole,
 } from "../harnesses/contracts.js";
+import { physicalPath } from "../platform/path-identity.js";
+import { resolveSkillsDirectory } from "../harnesses/catalog.js";
+
 import { type JsonObject } from "../shared/json.js";
 import { Effect } from "effect";
 import { canonical, read, walk } from "./io.js";

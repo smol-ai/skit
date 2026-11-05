@@ -11,8 +11,9 @@ import { collectionVersionPath } from "./collection-version.js";
 import { InstalledSkillInvalid } from "./installation/install-enabled.js";
 import type { SkillId } from "./entity-ids.js";
 import { installedSkillName } from "../installed-skills/files.js";
-import { OwnershipMarker } from "../contracts.js";
-import { InstallScope, type InstallDestination } from "../vocabulary.js";
+import { OwnershipMarker } from "../installed-skills/ownership-marker.js";
+import { InstallScope } from "./scope.js";
+import { type InstallDestination } from "../installed-skills/destination.js";
 import type { Request } from "./enabled-plan.js";
 import type {
   Approval,

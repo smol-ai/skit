@@ -8,7 +8,7 @@ import {
   SkillId,
   SkillVersionId,
 } from "./entity-ids.js";
-import { Hash } from "../vocabulary.js";
+import { Hash } from "../shared/hash.js";
 
 export const SourceRelativePath = Schema.String.check(
   Schema.makeFilter(

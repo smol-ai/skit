@@ -1,15 +1,20 @@
-import { SkitConfiguration } from "@smolai/skit-core";
-import { Library } from "@smolai/skit-core/library";
-import { it as effectIt } from "@effect/vitest";
-import { Effect, FileSystem, Option } from "effect";
-import { join } from "node:path";
 import {
+  SkitConfiguration,
   deterministicTreeHash,
   collectionVersionPath,
   emptyLibraryState,
   type ImportRequestSkill,
 } from "@smolai/skit-core";
-import { readDescriptionLoad } from "../src/library/workflows/collection-load.js";
+import { Library } from "@smolai/skit-core/library";
+import { it as effectIt } from "@effect/vitest";
+import { Effect, FileSystem, Option } from "effect";
+import { join } from "node:path";
+
+import {
+  readDescriptionLoad,
+  descriptionLoadMessage,
+  largeCollectionWarning,
+} from "../src/library/workflows/collection-load.js";
 import { importSource } from "../src/library/application/import-source.js";
 import { openLibraryView } from "@smolai/skit-core/library/session";
 import {
@@ -20,14 +25,10 @@ import {
 } from "./helpers/library-home.js";
 import { presentSetEnabled } from "../src/library/enable/command.js";
 import { libraryCommandConfiguration } from "../src/commands/library-configuration.js";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
 import { describe, expect, it } from "vitest";
-import {
-  descriptionLoadMessage,
-  largeCollectionWarning,
-} from "../src/library/workflows/collection-load.js";
 
 describe("collection load warning", () => {
   it("warns strictly above 100 and renders actionable guidance", () => {

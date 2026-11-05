@@ -1,11 +1,10 @@
 import { Cause, Effect, Layer } from "effect";
 import { registryHttpLayer } from "./registry/registry-http.js";
-import { registryAuthLayer } from "./registry/auth-service.js";
 import { skitLayer, skitConfigurationLayer, SkitConfiguration } from "@smolai/skit-core";
 import { libraryApplicationLayer } from "./library/application/layers.js";
 
-import { commandFailure } from "./failure-classification.js";
-import { Renderer, consoleRendererLayer } from "./presentation/renderer.js";
+import { commandFailure } from "./commands/failure-classification.js";
+import { Renderer, consoleRendererLayer } from "./terminal/renderer.js";
 import { AuthorWorkspace, AuthorHistory } from "@smolai/skit-core/author";
 
 export function renderCommandFailures<A, E, R>(program: Effect.Effect<A, E, R>) {
@@ -24,7 +23,6 @@ export const registryApplicationLayer = Layer.unwrap(
   Effect.map(SkitConfiguration, (paths) =>
     Layer.mergeAll(
       registryHttpLayer(),
-      registryAuthLayer(paths.skitHome),
       // One author layer per runtime: AuthorHistory over AuthorWorkspace, built once, so one
       // journal permit guards this home (A9).
       AuthorHistory.layer({ home: paths.skitHome }).pipe(Layer.provideMerge(AuthorWorkspace.layer)),
@@ -73,5 +71,5 @@ export function handleSourceCommand<E, R>(program: Effect.Effect<void, E, R>) {
   return renderCommandFailures(Effect.scoped(program).pipe(Effect.provide(sourceApplicationLayer)));
 }
 
-export { commandFailure } from "./failure-classification.js";
+export { commandFailure } from "./commands/failure-classification.js";
 export { libraryApplicationLayer } from "./library/application/layers.js";

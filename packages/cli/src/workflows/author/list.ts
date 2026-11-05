@@ -1,4 +1,11 @@
-import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
+import {
+  SkitConfiguration,
+  skitConfigurationLayer,
+  SkitContractError,
+  type AuthorSkitListResponse,
+  FailureTypeId,
+  type SkitFailure,
+} from "@smolai/skit-core";
 import {
   AuthoringAuthenticatedApi,
   InsufficientScopeResponse,
@@ -7,8 +14,8 @@ import {
 import { Data, Effect, Option, Result, Schema, Scope } from "effect";
 import { HttpApiClient } from "effect/http-api";
 import { Command } from "effect/cli";
-import { SkitContractError, type AuthorSkitListResponse } from "@smolai/skit-core";
-import type { ResolvedAuth } from "../../registry/auth.js";
+
+import { Registry, type ResolvedAuth } from "../../registry/index.js";
 import {
   authenticatedApiMiddleware,
   isSuccessfulResponseDecodeFailure,
@@ -16,7 +23,7 @@ import {
   registryApiFailureMessage,
 } from "../../registry/api-client.js";
 import { isRegistryTransportError, RegistryHttp } from "../../registry/registry-http.js";
-import { Renderer } from "../../presentation/renderer.js";
+import { Renderer } from "../../terminal/renderer.js";
 import { skitLocator } from "./sync.js";
 import {
   AuthenticationRequired,
@@ -25,12 +32,11 @@ import {
   RegistryUnreachable,
 } from "../../registry/failures.js";
 import { handleRegistryCommand } from "../../application.js";
-import { resolveAuth } from "../../registry/auth.js";
+
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homeFlag, jsonFlag, optionalString } from "../../commands/parameters.js";
-import { result } from "../../handlers/contracts.js";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { result } from "../../commands/result.js";
 
 export type AuthorSkitInventory = typeof outputContracts.authorList.schema.Type;
 
@@ -191,12 +197,11 @@ export const authorListCliCommand = Command.make(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
           const selectedRegistry = Option.getOrUndefined(registry);
-          const authState = yield* resolveAuth(
-            selectedHome,
-            selectedRegistry,
-            undefined,
-            "skit author list",
-          ).pipe(Effect.result);
+          const authState = yield* Registry.credentials({
+            home: selectedHome,
+            registry: selectedRegistry,
+            command: "skit author list",
+          }).pipe(Effect.result);
           const value = yield* authorListCommand({
             authState,
             registry: selectedRegistry,

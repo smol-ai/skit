@@ -1,7 +1,7 @@
 import { Effect } from "effect";
-import { HarnessName } from "../../vocabulary.js";
+import { HarnessName, type SkillsDirectoryOverrides } from "../contracts.js";
 import type { LibraryState } from "../../library/library-state.js";
-import type { SkillsDirectoryOverrides } from "../contracts.js";
+
 import { harnessDrivers } from "../drivers.js";
 
 export interface ListingOptions {

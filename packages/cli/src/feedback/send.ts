@@ -5,7 +5,7 @@ import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 import { FeedbackApi, FeedbackInput } from "@smolai/skit-core/universal/api";
 import { officialRegistryOrigin, parseOrigin } from "../registry/accounts.js";
 import { registryApiFailure, registryApiFailureMessage } from "../registry/api-client.js";
-import { resolveAuth } from "../registry/auth.js";
+import { Registry } from "../registry/index.js";
 import { isRegistryTransportError, RegistryHttp } from "../registry/registry-http.js";
 
 export class FeedbackInputInvalid
@@ -71,7 +71,7 @@ export const feedbackSigningToken = Effect.fn("Feedback.signingToken")(function*
   origin: string,
   home: string,
 ) {
-  const { token } = yield* resolveAuth(home, origin);
+  const { token } = yield* Registry.credentials({ home, registry: origin });
   if (token === undefined)
     return yield* new FeedbackSignInRequired({
       message: `This machine is not signed in to ${origin}.`,

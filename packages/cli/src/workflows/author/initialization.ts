@@ -12,8 +12,8 @@ import { handleLibraryCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags } from "../../commands/parameters.js";
-import { result } from "../../handlers/contracts.js";
-import { Renderer } from "../../presentation/renderer.js";
+import { result } from "../../commands/result.js";
+import { Renderer } from "../../terminal/renderer.js";
 import {
   AuthorWorkspaceAlreadyRegistered,
   AuthorWorkspace,

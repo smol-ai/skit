@@ -72,7 +72,7 @@ import type { LinkStat } from "../packages/skit/src/platform/link-stat.js";
 import type { SourceProcess } from "../packages/skit/src/platform/source-process.js";
 import type { AuthorIgnoreRepository } from "../packages/skit/src/artifact/plain-author-ignore.js";
 import type { TreeError } from "../packages/skit/src/shared/tree-error.js";
-import type { SkitContractError } from "../packages/skit/src/protocol/api-contracts.js";
+import type { SkitContractError } from "../packages/skit/src/api/contracts.js";
 import type { Unusable as MachineSettingsUnusable } from "../packages/skit/src/library/machine-settings.js";
 import type {
   AuthorRemoteHome,

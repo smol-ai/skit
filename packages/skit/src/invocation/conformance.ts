@@ -1,8 +1,9 @@
 import { posix } from "node:path";
 import { Record, Result, Schema } from "effect";
-import type { SkitDescriptor } from "../contracts.js";
-import type { HarnessMetadataInvalid } from "../failures.js";
-import { HarnessName, InvocationPolicy } from "../vocabulary.js";
+import type { SkitDescriptor } from "../artifact/schemas.js";
+import type { HarnessMetadataInvalid } from "../harnesses/metadata-failures.js";
+import { HarnessName } from "../harnesses/contracts.js";
+import { InvocationPolicy } from "../artifact/invocation-policy.js";
 import {
   AuthoredInvocationHarness,
   invocationMetadataAdapters,

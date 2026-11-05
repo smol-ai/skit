@@ -1,4 +1,4 @@
-import { SourceNotFound } from "../src/failures.js";
+import { SourceNotFound } from "../src/sources/failures.js";
 import { openLibrary, inspectLibrary } from "./helpers/library-store.js";
 
 import { assert, it } from "@effect/vitest";

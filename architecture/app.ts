@@ -65,6 +65,7 @@ export const owners = {
       "exported refreshLibraryInventory, acceptSecurityFindingFromState, prepareRestore",
       "exported writeCollectionVersion",
       "legacy v7/v9 schema exports (0 external users)",
+      "root contracts.ts/vocabulary.ts/schemas.ts/failures.ts (removed; canonical declarations live with their owners)",
       "localLibrary / recordedLibrary / 6 raw Library.make sites (routing modes move into Library.layer)",
       "setup-apply's LibraryStore substitution (done: setup-apply builds SetupStep[] and calls Library.setup)",
       "configuration-writer.ts (removed; Registry auth owns its write under HomeLock.withLock)",
@@ -87,6 +88,7 @@ export const owners = {
     requires: ["FileSystem", "Path", "LinkStat", "SourceProcess", "Digest"],
     removes: [
       "InstalledSkillFiles / InstalledSkillBackups namespace exports",
+      "StoredOwnershipMarker public migration schema (private installed-skills compatibility boundary)",
       "exported writeRawAtomic/writeJsonAtomic/writeJsonExclusive/copyLocalTree/ensureSkillsDirectoryWritable",
       "inventory/refresh.ts calling keepInstalledSkillBackup directly → InstalledSkills.backups.keep after a verified successor (architecture.md:223)",
       "TreeHasher service (one impl; tests inject a failing hash — decisions.md: When something is a Context.Service)",
@@ -123,7 +125,7 @@ export const owners = {
     ],
     requires: ["FileSystem", "ChildProcessSpawner", "RegistryHttp", "SkitConfiguration"],
     removes: [
-      "RegistryAuth Context.Reference with a 'no access' default (hides a missing layer)",
+      "RegistryAuth Context.Reference with a 'no access' default (removed; Registry.credentials/source are plain owner operations over required configuration)",
       "exported resolveAuth / resolveAuthForOrigin (7 bypassing callers)",
       "credential-store.ts as a public module (private to Registry)",
       "borrowing the Library lock via withConfigurationWriter (removed; takes HomeLock.withLock)",
@@ -351,7 +353,7 @@ export const platform = [
   "AuthorIgnoreRepository (runtime-scoped resource; author-sync-testing.md:1117-1135)",
 
   "Renderer",
-  "Prompter (second real implementation: the storybook journey recorder, presentation/interaction-recorder.ts)",
+  "Prompter (second real implementation: the storybook journey recorder, storybook/interaction-recorder.ts)",
   "LibraryProgress (Context.Reference, silent by default; front ends provide a reporter)",
   "RegistryHttp",
   "SkitConfiguration",

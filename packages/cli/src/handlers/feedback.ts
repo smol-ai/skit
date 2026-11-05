@@ -11,9 +11,9 @@ import {
   feedbackSigningToken,
   sendFeedback,
 } from "../feedback/send.js";
-import { Renderer } from "../presentation/renderer.js";
+import { Renderer } from "../terminal/renderer.js";
 import { registryHttpLayer } from "../registry/registry-http.js";
-import { result } from "./contracts.js";
+import { result } from "../commands/result.js";
 
 const text = Argument.String("message").pipe(
   Argument.withDescription("What surprised you or slowed you down."),

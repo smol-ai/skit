@@ -1,10 +1,11 @@
+import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { skitLayer } from "@smolai/skit-core";
+
 import { previewLibrarySource } from "../src/library/application/import-source.js";
 import { assertCollectionImport } from "./helpers/collection-import.js";
 import manifest from "./fixtures/collections/full-manifest.json" with { type: "json" };
@@ -28,7 +29,7 @@ for (const collection of manifest) {
         execFileSync("tar", ["-xzf", archive, "--strip-components=1", "-C", source]),
       );
       yield* assertCollectionImport(source, collection.skillPaths);
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
   );
 }
 
@@ -48,7 +49,7 @@ it.effect.skipIf(process.env.SKIT_COLLECTIONS_GITHUB !== "1")(
         preview.skills.map((skill) => skill.verbatim_path).toSorted(),
         collection.skillPaths,
       );
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
 it.effect.skipIf(process.env.SKIT_COLLECTIONS_GITHUB !== "1")(
@@ -73,5 +74,5 @@ it.effect.skipIf(process.env.SKIT_COLLECTIONS_GITHUB !== "1")(
           },
         ]);
       }
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

@@ -8,10 +8,12 @@ import type { InstalledSkillInvalid } from "./installation/install-enabled.js";
 import type { CollectionRemovalMissing } from "./installation/remove.js";
 import { CollectionId, InstalledSkillId, SkillId, SkillVersionId } from "./entity-ids.js";
 import { ManageApproval } from "../installed-skills/files.js";
-import { OwnershipMarker } from "../contracts.js";
-import { Hash, InstallDestination, InstallScope } from "../vocabulary.js";
+import { OwnershipMarker } from "../installed-skills/ownership-marker.js";
+import { Hash } from "../shared/hash.js";
+import { InstallDestination } from "../installed-skills/destination.js";
+import { InstallScope } from "./scope.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
-import type { UninstallConflict } from "../failures.js";
+import type { UninstallConflict } from "../installed-skills/failures.js";
 
 // ── Intents ──────────────────────────────────────────────────────────────────────────────────────
 // Each intent says how the Library should change. Which Installed Skills to install or uninstall is

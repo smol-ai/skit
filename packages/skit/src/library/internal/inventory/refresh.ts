@@ -1,15 +1,17 @@
-import { Revision } from "../../snapshot.js";
+import { Revision, type Snapshot } from "../../snapshot.js";
 import { Clock, Effect, Schema } from "effect";
-import { Hash, HarnessName } from "../../../vocabulary.js";
-import { InvalidLibraryState } from "../../../failures.js";
+import { Hash } from "../../../shared/hash.js";
+import { HarnessName } from "../../../harnesses/contracts.js";
+import { InvalidLibraryState } from "../../failures.js";
 import { OwnershipMarkerInspection } from "../../../installed-skills/files.js";
 import { InstalledSkills } from "../../installed-skills.js";
 import { emptyLibraryState, InstalledSkill, LibraryState } from "../../library-state.js";
-import { InventoryScanIssue, OwnershipIssue } from "../../store/state-schema.js";
+import { InventoryScanIssue } from "../../store/state-schema.js";
+import { OwnershipIssue } from "../../../installed-skills/metadata.js";
 import { LibraryWriter, libraryStatePath } from "../../store/library-store.js";
 import { StalePlan } from "../../library-plan.js";
 import { InvalidIntent } from "../../enabled-plan.js";
-import type { Snapshot } from "../../snapshot.js";
+
 import { applyReviewed, planIdOf, planningState } from "../../reviewed-plan.js";
 import { scanInventory, deduplicateInventoryRoots } from "../../inventory/refresh.js";
 

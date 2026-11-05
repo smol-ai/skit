@@ -1,4 +1,14 @@
-import { SkitConfiguration } from "@smolai/skit-core";
+import {
+  SkitConfiguration,
+  deterministicTreeHash,
+  inspectOwnershipMarker,
+  libraryStateRevision,
+  enabledAt,
+  enabledSkillIds,
+  SkillsDirectoryNotWritable,
+  type ListingBudget,
+  type UsageReport,
+} from "@smolai/skit-core";
 import { assert, it } from "@effect/vitest";
 import { systemError } from "effect/PlatformError";
 import {
@@ -13,14 +23,7 @@ import {
   Stream,
 } from "effect";
 import { join } from "node:path";
-import {
-  deterministicTreeHash,
-  inspectOwnershipMarker,
-  libraryStateRevision,
-  enabledAt,
-  enabledSkillIds,
-  SkillsDirectoryNotWritable,
-} from "@smolai/skit-core";
+
 import { withSandboxDenying } from "./helpers/sandbox.js";
 import {
   applySetEnabledPlan,
@@ -35,7 +38,7 @@ import {
   proposeLibraryCollectionChange,
   confirmLibraryChange,
 } from "@smolai/skit-core/library/session";
-import { type ListingBudget, type UsageReport } from "@smolai/skit-core";
+
 import { presentDoctorCleanup } from "../src/library/workflows/doctor-cleanup.js";
 import {
   suggestDoctorCleanup,
@@ -46,9 +49,9 @@ import { presentSetEnabled } from "../src/library/enable/command.js";
 import { libraryCommandConfiguration } from "../src/commands/library-configuration.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
-import { renderContract } from "../src/presentation/contract-presenters.js";
-import { Prompter, PromptCancelled } from "../src/presentation/prompter.js";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
+import { renderContract } from "../src/commands/output-presenters.js";
+import { Prompter, PromptCancelled } from "../src/terminal/prompter.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import {

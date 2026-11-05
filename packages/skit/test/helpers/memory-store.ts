@@ -1,7 +1,7 @@
 import { NodeCrypto } from "@effect/platform-node";
 import { Array, Effect, Option, Order } from "effect";
 import { History } from "../../src/index.js";
-import type { Hash } from "../../src/vocabulary.js";
+import type { Hash } from "../../src/shared/hash.js";
 
 /** A History.Store held in memory. It verifies like a durable store. */
 export const memoryStore = Effect.suspend(() => {

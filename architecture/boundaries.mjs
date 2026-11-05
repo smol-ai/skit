@@ -55,6 +55,30 @@ export const owners = [
     private: [],
   },
   {
+    name: "InstalledSkills marker compatibility",
+    owner: "packages/skit/src/installed-skills/",
+    privateModules: ["packages/skit/src/installed-skills/ownership-marker-compat."],
+    testOwner: "packages/skit/test/",
+    private: ["StoredOwnershipMarker"],
+  },
+  {
+    name: "Registry credentials",
+    owner: "packages/cli/src/registry/",
+    privateModules: [
+      "packages/cli/src/registry/auth.",
+      "packages/cli/src/registry/credential-store.",
+    ],
+    testOwner: "packages/cli/test/",
+    sources: ["packages/cli/src/registry/"],
+    private: [
+      "resolveAuth",
+      "resolveAuthForOrigin",
+      "readStoredToken",
+      "writeStoredToken",
+      "removeStoredToken",
+    ],
+  },
+  {
     // NEW owner (architecture/author.ts). Callers use AuthorWorkspace and its lease; this export
     // serves the owner itself.
     name: "AuthorWorkspace",

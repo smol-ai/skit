@@ -1,6 +1,8 @@
 import { resolve } from "node:path";
 import { Effect, Record } from "effect";
-import { HarnessName, type InstallDestination, type InstallScope } from "../../vocabulary.js";
+import { HarnessName, type SkillsDirectoryOverrides } from "../../harnesses/contracts.js";
+import { type InstallDestination } from "../../installed-skills/destination.js";
+import { type InstallScope } from "../scope.js";
 import { harnessDrivers } from "../../harnesses/drivers.js";
 import { installSkillsDirectory, resolveSkillsDirectory } from "../../harnesses/catalog.js";
 import {
@@ -9,7 +11,7 @@ import {
 } from "../../harnesses/install-destinations.js";
 import { deduplicateInventoryRoots, type InventoryScanRoot } from "../inventory/roots.js";
 import { pathIsWithin } from "../../platform/path-identity.js";
-import { type SkillsDirectoryOverrides } from "../../harnesses/contracts.js";
+
 import { type LibraryState } from "../library-state.js";
 import { detectInstalledHarnesses } from "../../harnesses/discovery.js";
 export interface InventoryRootOptions {

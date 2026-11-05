@@ -1,6 +1,6 @@
 import { Schema } from "effect";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
-import { Hash } from "../vocabulary.js";
+import { Hash } from "../shared/hash.js";
 
 export const RecoveryFact = Schema.Struct({
   name: Schema.String,

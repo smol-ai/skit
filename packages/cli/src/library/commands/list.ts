@@ -1,19 +1,18 @@
-import { SkitConfiguration } from "@smolai/skit-core";
-import { skitConfigurationLayer } from "@smolai/skit-core";
-import { openLibraryView } from "@smolai/skit-core/library/session";
+import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
+
+import { openLibraryView, openLibrarySession } from "@smolai/skit-core/library/session";
 import { Option, Effect } from "effect";
 import { Command } from "effect/cli";
 import { handleLibraryCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags } from "../../commands/parameters.js";
-import { Renderer } from "../../presentation/renderer.js";
-import { result } from "../../handlers/contracts.js";
+import { Renderer } from "../../terminal/renderer.js";
+import { result } from "../../commands/result.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
-import { terminalPrompterLayer } from "../../presentation/prompter.js";
-import { promptsAllowed } from "../../presentation/interactivity.js";
-import { browseLibrary } from "../../presentation/interactive-list.js";
-import { openLibrarySession } from "@smolai/skit-core/library/session";
+import { terminalPrompterLayer } from "../../terminal/prompter.js";
+import { promptsAllowed } from "../../terminal/interactivity.js";
+import { browseLibrary } from "../presentation/browse.js";
 
 export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
   const view = yield* Effect.flatMap(SkitConfiguration, (paths) => openLibraryView(paths.skitHome));

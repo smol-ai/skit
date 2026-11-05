@@ -21,7 +21,7 @@ import {
   SkillsShLockFileEntry,
   SourceIdentity,
 } from "../library-contracts.js";
-import { Hash } from "../../vocabulary.js";
+import { Hash } from "../../shared/hash.js";
 
 // Frozen `skit.library.v7`. Every older manifest and Library state migrates through these shapes,
 // so they and the helpers below stay as v7 defined them while the current model moves on.

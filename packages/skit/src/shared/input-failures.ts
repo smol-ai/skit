@@ -14,3 +14,18 @@ export class OptionCombinationInvalid
     return this.detail;
   }
 }
+
+export class RegistryNotConfigured
+  extends Data.TaggedError("RegistryNotConfigured")<{}>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "INVALID_ARGUMENT" as const;
+  readonly remediation =
+    "For the simplest setup, run `skit auth login https://skit.smol.ai` to use our hosted reference server. " +
+    "You can also self-host the server: https://github.com/smol-ai/skit/tree/main/packages/skit-server-effect. " +
+    "Pass your own Registry URL or set SKIT_SERVER_URL, then retry.";
+  get message(): string {
+    return "No SKIT server is configured. SKIT leaves the server choice to you, including self-hosting.";
+  }
+}

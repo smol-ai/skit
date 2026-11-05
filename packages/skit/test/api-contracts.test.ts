@@ -1,16 +1,16 @@
 import { it } from "@effect/vitest";
 import { Effect, JsonSchema, Schema } from "effect";
 import { expect } from "vitest";
-import { parseContract } from "../src/distribution/api-contracts.js";
+import { parseContract } from "../src/api/consumer-contracts.js";
 
 import {
   apiSemverPattern,
   parseWireDescriptor,
   semver,
   skitDescriptorRequestSchema,
-} from "../src/protocol/api-contracts.js";
-import { Hash } from "../src/vocabulary.js";
-import { kebabNameSchema } from "../src/schemas.js";
+} from "../src/api/contracts.js";
+import { Hash } from "../src/shared/hash.js";
+import { kebabNameSchema } from "../src/artifact/schemas.js";
 
 const ExampleContract = Schema.Struct({
   name: Schema.String,

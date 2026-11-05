@@ -1,6 +1,6 @@
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
-import { Library } from "@smolai/skit-core";
+import { Library, skitConfigurationLayer } from "@smolai/skit-core";
 import { libraryApplicationLayer } from "../src/application.js";
 import { join } from "node:path";
 import { ConfigProvider, Effect, FileSystem, Layer, Result } from "effect";
@@ -9,11 +9,11 @@ import { authorSyncCommand } from "../src/handlers/author/sync.js";
 import { librarySyncCommand } from "../src/library/commands/sync.js";
 import { CredentialsUnusable } from "../src/registry/failures.js";
 import { RegistryHttp, registryClient, registryHttpLayer } from "../src/registry/registry-http.js";
-import { skitConfigurationLayer } from "@smolai/skit-core";
+
 import { testHttpClientLayer } from "./helpers/http-test-client.js";
 import { scratch } from "./helpers/library-home.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
-import { MissingRequirement } from "../src/workflows/failures.js";
+import { MissingRequirement } from "../src/commands/input-failures.js";
 import { authorLayer } from "./helpers/author-history.js";
 
 const failure = new CredentialsUnusable({ path: "/broken/auth.json", reason: "invalid" });

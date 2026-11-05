@@ -2,7 +2,7 @@ import { writeRawAtomic, syncPaths } from "../../platform/atomic-write.js";
 import { canonicalJson } from "../../shared/json.js";
 import { Data, Effect, FileSystem, Schema } from "effect";
 import { join } from "node:path";
-import { Hash } from "../../contracts.js";
+import { Hash } from "../../shared/hash.js";
 import { OperationId } from "../entity-ids.js";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 

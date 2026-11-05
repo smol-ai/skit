@@ -19,7 +19,7 @@ import {
   RegistryOriginInvalid,
   RegistryUnreachable,
 } from "../src/registry/failures.js";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 
 const listWithTransport = (input: { origin?: string; token?: string }, fetcher: TestHttpHandler) =>

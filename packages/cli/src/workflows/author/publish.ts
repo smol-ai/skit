@@ -1,5 +1,5 @@
 import type { PlatformError } from "effect/PlatformError";
-import { resolveAuthForOrigin } from "../../registry/auth.js";
+import { Registry } from "../../registry/index.js";
 import { type Config, Data, Effect, FileSystem, Predicate, Schema, Scope } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
 import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http";
@@ -138,7 +138,7 @@ export const publish = Effect.fn("publish")(function* (
   const slug = remote.skit;
   const base = remote.origin.replace(/\/$/, "");
   // Only this remote's credential: an environment token for another Registry is never sent.
-  const credentials = yield* resolveAuthForOrigin(remote.origin, options.home);
+  const credentials = yield* Registry.credentials({ origin: remote.origin, home: options.home });
   if (!credentials.token)
     return yield* new AuthenticationRequired({
       origin: remote.origin,

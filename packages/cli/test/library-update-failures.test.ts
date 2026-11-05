@@ -1,4 +1,8 @@
-import { skitConfigurationLayer } from "@smolai/skit-core";
+import {
+  skitConfigurationLayer,
+  emptyLibraryState,
+  collectionVersionPath,
+} from "@smolai/skit-core";
 import { Library } from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
@@ -7,15 +11,14 @@ import { systemError } from "effect/PlatformError";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
-import { emptyLibraryState } from "@smolai/skit-core";
-import { collectionVersionPath } from "@smolai/skit-core";
+
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { writingTo } from "./helpers/library-home.js";
 import { importSource } from "../src/library/application/import-source.js";
 import { updateSubjects, updateExitCode } from "../src/library/application/update.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
-import { defaultTerminalEnvironment, renderResultFrame } from "../src/presentation/output-frame.js";
-import { result } from "../src/handlers/contracts.js";
+import { defaultTerminalEnvironment, renderResultFrame } from "../src/commands/output-frame.js";
+import { result } from "../src/commands/result.js";
 
 const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;

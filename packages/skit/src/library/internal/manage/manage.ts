@@ -1,8 +1,8 @@
-import { Revision } from "../../snapshot.js";
+import { Revision, type Snapshot } from "../../snapshot.js";
 import { Effect, Option, Schema, Struct } from "effect";
 import { join } from "node:path";
 import { FailureTypeId, type SkitFailure } from "../../../shared/failure.js";
-import { Hash } from "../../../vocabulary.js";
+import { Hash } from "../../../shared/hash.js";
 import { leavePnpmSkill } from "../../../installed-skills/pnpm-skills.js";
 import { InvalidIntent } from "../../enabled-plan.js";
 import { makeOperationId, OperationId } from "../../entity-ids.js";
@@ -14,7 +14,7 @@ import { Plan, StalePlan } from "../../library-plan.js";
 import { planManageEnable, duplicatesToMove, installedPaths } from "../../setup-manage.js";
 import { recoveryDirectory } from "../../setup-moves.js";
 import { setupOperation, checkSteps } from "../../setup.js";
-import type { Snapshot } from "../../snapshot.js";
+
 import { applyReviewed, planIdOf, planningState } from "../../reviewed-plan.js";
 import {
   FolderEvidence,

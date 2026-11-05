@@ -1,4 +1,4 @@
-import { skitConfigurationLayer } from "@smolai/skit-core";
+import { skitConfigurationLayer, FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 import {
   Data,
   Cause,
@@ -25,13 +25,12 @@ import {
   isSuccessfulResponseDecodeFailure,
   registryApiFailureMessage,
 } from "../registry/api-client.js";
-import { Renderer } from "../presentation/renderer.js";
+import { Renderer } from "../terminal/renderer.js";
 import { handleRegistryCommand } from "../application.js";
 import { CommandMetadata } from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";
 import { jsonFlag, optionalString } from "../commands/parameters.js";
-import { result } from "../handlers/contracts.js";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { result } from "../commands/result.js";
 
 const SECRET_NAME = "SKIT_BOOTSTRAP_SECRET";
 

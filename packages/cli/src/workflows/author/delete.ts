@@ -1,4 +1,11 @@
-import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
+import {
+  SkitConfiguration,
+  skitConfigurationLayer,
+  AuthorSkitDeleteResponse,
+  SkitContractError,
+  FailureTypeId,
+  type SkitFailure,
+} from "@smolai/skit-core";
 import {
   AuthoringAuthenticatedApi,
   DeleteRequiresPrivateResponse,
@@ -9,12 +16,7 @@ import {
 import { Data, Option, Effect, Result, Schema, Scope } from "effect";
 import { HttpApiClient } from "effect/http-api";
 import { Argument, Command, Flag } from "effect/cli";
-import {
-  AuthorSkitDeleteResponse,
-  SkitContractError,
-  FailureTypeId,
-  type SkitFailure,
-} from "@smolai/skit-core";
+
 import type { AuthorRemoteHome } from "@smolai/skit-core/author";
 import { parseAuthorDestination } from "./sync.js";
 import {
@@ -23,20 +25,20 @@ import {
   DeleteRequiresPrivate,
   RegistryUnreachable,
 } from "../../registry/failures.js";
-import { resolveAuthForOrigin, type ResolvedAuth } from "../../registry/auth.js";
+import { Registry, type ResolvedAuth } from "../../registry/index.js";
 import {
   authenticatedApiMiddleware,
   isSuccessfulResponseDecodeFailure,
   registryApiFailureMessage,
 } from "../../registry/api-client.js";
 import { isRegistryTransportError, RegistryHttp } from "../../registry/registry-http.js";
-import { Renderer } from "../../presentation/renderer.js";
+import { Renderer } from "../../terminal/renderer.js";
 import { handleRegistryCommand } from "../../application.js";
-import { resolveAuth } from "../../registry/auth.js";
+
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homeFlag, jsonFlag } from "../../commands/parameters.js";
-import { result } from "../../handlers/contracts.js";
+import { result } from "../../commands/result.js";
 
 export class AuthorSkitNotFound
   extends Data.TaggedError("AuthorSkitNotFound")<{}>
@@ -135,7 +137,7 @@ export const authorDeleteCommand = Effect.fn("CLI.authorDelete")(function* <E>(
   const concrete = /^(?:skit:\/\/|https?:\/\/)/.test(destination);
   const startup = concrete ? undefined : yield* Effect.fromResult(options.authState);
   const remote = yield* parseAuthorDestination(destination, startup?.origin);
-  const credentials = yield* resolveAuthForOrigin(remote.origin, options.home);
+  const credentials = yield* Registry.credentials({ origin: remote.origin, home: options.home });
   const renderer = yield* Renderer;
   return yield* renderer.withStatus(
     options.dryRun ? "Planning private SKIT deletion" : "Deleting private SKIT",
@@ -160,7 +162,7 @@ export const authorDeleteCliCommand = Command.make(
       return yield* handleRegistryCommand(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
-          const authState = yield* resolveAuth(selectedHome).pipe(Effect.result);
+          const authState = yield* Registry.credentials({ home: selectedHome }).pipe(Effect.result);
           const value = yield* authorDeleteCommand(skit, {
             authState,
             home: selectedHome,

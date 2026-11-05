@@ -2,13 +2,13 @@ import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import type { AuthorVisibility } from "@smolai/skit-core/author";
 import { Argument, Command, Flag } from "effect/cli";
-import { Renderer } from "../../presentation/renderer.js";
+import { Renderer } from "../../terminal/renderer.js";
 import { syncAuthorWorkspace } from "../../workflows/author/sync.js";
 import { handleSourceCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homeFlag, jsonFlag, optionalString } from "../../commands/parameters.js";
-import { result } from "../contracts.js";
+import { result } from "../../commands/result.js";
 
 export const authorSyncCommand = Effect.fn("CLI.authorSync")(function* (options: {
   readonly root?: string;

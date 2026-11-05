@@ -4,7 +4,12 @@ import {
   type InventoryRootOptions,
 } from "./routing/roots.js";
 import { findDuplicates, readableSkillsDirectories } from "./routing/duplicates.js";
-import { Destination, Duplicate, DuplicateScanIncomplete } from "./installed-skill-facts.js";
+import {
+  Destination,
+  Duplicate,
+  DuplicateScanIncomplete,
+  Warning,
+} from "./installed-skill-facts.js";
 export { Destination, Duplicate, DuplicateScanIncomplete } from "./installed-skill-facts.js";
 import { Context, Data, Effect, FileSystem, Layer, Option, Path, Schema, Scope } from "effect";
 import { dirname, join, resolve } from "node:path";
@@ -13,16 +18,18 @@ import * as InstalledSkillFiles from "../installed-skills/files.js";
 import * as InstalledSkillBackups from "../installed-skills/backups.js";
 import { LinkStat } from "../platform/link-stat.js";
 import { SourceProcess } from "../platform/source-process.js";
-import { digestTreeHash } from "../artifact/skit.js";
-import { deterministicTreeHash } from "../artifact/skit.js";
+import { digestTreeHash, deterministicTreeHash } from "../artifact/skit.js";
+
 import { ensureSkillsDirectoryWritable } from "../installed-skills/writable.js";
 import { installDestinationPathIdentity } from "../platform/path-identity.js";
-import { sha256Hash } from "../shared/hash.js";
+import { sha256Hash, Hash } from "../shared/hash.js";
 import { pnpmSkillOwner } from "../installed-skills/pnpm-skills.js";
 import type { TreeRequirements } from "../platform/tree-requirements.js";
 import type { PlatformError } from "effect/PlatformError";
-import { Hash, InstallDestination, type InstallScope } from "../vocabulary.js";
-import type { OwnershipMarker } from "../contracts.js";
+
+import { InstallDestination } from "../installed-skills/destination.js";
+import { type InstallScope } from "./scope.js";
+import type { OwnershipMarker } from "../installed-skills/ownership-marker.js";
 import type { LibraryState } from "./library-state.js";
 import type { InstalledSkillId, SkillId, SkillVersionId } from "./entity-ids.js";
 import {
@@ -35,8 +42,8 @@ import { InstalledSkillInvalid } from "./installation/install-enabled.js";
 import { installedSkillSource } from "./installation/installed-skill-source.js";
 import { declaredInvocationIntent, overrideInvocationIntent } from "../installed-skills/policy.js";
 import type { Invocation } from "./enabled-plan.js";
-import type { SkitFailure } from "../shared/failure.js";
-import { FailureTypeId } from "../shared/failure.js";
+import { type SkitFailure, FailureTypeId } from "../shared/failure.js";
+
 import type { TreeError } from "../shared/tree-error.js";
 
 /**
@@ -106,7 +113,7 @@ export interface Installed {
   /** The predecessor this install moved to recovery, if there was one. */
   readonly replaced: Option.Option<Backup>;
 }
-import { Warning } from "./installed-skill-facts.js";
+
 export { Warning } from "./installed-skill-facts.js";
 
 export type Cause =

@@ -45,13 +45,13 @@ import type {
   AcceptanceIncomplete,
   ContentAddressCollision,
   InvalidLibraryState as StoredInvalidLibraryState,
-  LibraryBusy as StoredLibraryBusy,
   LibraryChanged as StoredLibraryChanged,
   SecurityFindingAbsent,
   UnknownInstalledSkill,
-} from "../packages/skit/src/failures.js";
+} from "../packages/skit/src/library/failures.js";
+import type { LibraryBusy as StoredLibraryBusy } from "../packages/skit/src/platform/lock-failures.js";
 import type { TreeError } from "../packages/skit/src/shared/tree-error.js";
-import type { Hash } from "../packages/skit/src/vocabulary.js";
+import type { Hash } from "../packages/skit/src/shared/hash.js";
 import type {
   DeviceSkillSelection,
   InstalledSkill,
@@ -65,12 +65,10 @@ import type {
   InstalledSkillId,
 } from "../packages/skit/src/library/entity-ids.js";
 import type { InventoryScanRoot } from "../packages/skit/src/library/inventory/roots.js";
-import type {
-  InventoryScanIssue,
-  OwnershipIssue,
-  SkillAssessmentAcceptance,
-} from "../packages/skit/src/library/store/state-schema.js";
-import type { SkillSecurityReview } from "../packages/skit/src/contracts.js";
+import type { InventoryScanIssue } from "../packages/skit/src/library/store/state-schema.js";
+import type { OwnershipIssue } from "../packages/skit/src/installed-skills/metadata.js";
+import type { SkillAssessmentAcceptance } from "../packages/skit/src/library/assessment-acceptance.js";
+import type { SkillSecurityReview } from "../packages/skit/src/auditing/skill-contracts.js";
 import type { SyncConflictDetail } from "../packages/skit/src/library/internal/sync/conflict.js";
 import type { SetEnabledResult } from "../packages/skit/src/library/internal/session/set-enabled-contract.js";
 import type { UpdatedCopy } from "../packages/skit/src/library/installed-update.js";
@@ -648,11 +646,11 @@ export type TargetPlanError =
   | import("../packages/skit/src/sources/resolve.js").SourcePolicyViolation
   | import("../packages/skit/src/sources/resolve.js").PluginManifestInvalid
   | import("../packages/skit/src/sources/resolve.js").PluginSkillConflict
-  | import("../packages/skit/src/failures.js").UnsafeArchivePath
-  | import("../packages/skit/src/failures.js").ArchiveEntryLimitExceeded
-  | import("../packages/skit/src/failures.js").DirectSkillDocumentInvalid
-  | import("../packages/skit/src/failures.js").NoSkitDescriptorFound
-  | import("../packages/skit/src/failures.js").RegistryNotConfigured;
+  | import("../packages/skit/src/sources/failures.js").UnsafeArchivePath
+  | import("../packages/skit/src/sources/failures.js").ArchiveEntryLimitExceeded
+  | import("../packages/skit/src/sources/failures.js").DirectSkillDocumentInvalid
+  | import("../packages/skit/src/sources/failures.js").NoSkitDescriptorFound
+  | import("../packages/skit/src/shared/input-failures.js").RegistryNotConfigured;
 
 export type TargetApplyError =
   | TargetPlanError

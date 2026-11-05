@@ -13,7 +13,8 @@ import {
 import { recordedLibrary } from "../src/library/setup-intent.js";
 import { readSnapshotArchive } from "../src/library/snapshot-archive.js";
 import { OperationStatus, type StepError } from "../src/library/store/state-schema.js";
-import { InvalidLibraryState, LibraryBusy, LibraryChanged } from "../src/failures.js";
+import { InvalidLibraryState, LibraryChanged } from "../src/library/failures.js";
+import { LibraryBusy } from "../src/platform/lock-failures.js";
 import { TreeError } from "../src/shared/tree-error.js";
 import { badArgument, systemError } from "effect/PlatformError";
 
@@ -23,7 +24,7 @@ import {
   loadLibrary,
   writeLibrary,
 } from "../src/library/store/library-store.js";
-import { Hash } from "../src/vocabulary.js";
+import { Hash } from "../src/shared/hash.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { acquireFileLock } from "../src/platform/file-lock.js";
 

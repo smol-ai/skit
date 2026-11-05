@@ -95,6 +95,50 @@ describe("skit/owner-boundaries", () => {
     ).toEqual(["prepareRecoveryMoves"]);
   });
 
+  test("old ownership-marker readers stay private to installed-skill inspection", async () => {
+    expect(
+      await reported(
+        `export { StoredOwnershipMarker } from "./installed-skills/ownership-marker-compat.js";`,
+        "owner-boundaries",
+        "packages/skit/src/index.ts",
+      ),
+    ).toHaveLength(1);
+    expect(await reported(`import { StoredOwnershipMarker } from "@smolai/skit-core";`)).toEqual([
+      "StoredOwnershipMarker",
+    ]);
+    expect(
+      await reported(
+        `import { StoredOwnershipMarker } from "./ownership-marker-compat.js";`,
+        "owner-boundaries",
+        "packages/skit/src/installed-skills/files.ts",
+      ),
+    ).toEqual([]);
+  });
+
+  test("Registry credential readers and OS-store access stay behind the owner", async () => {
+    expect(
+      await reported(
+        `import { resolveAuthForOrigin } from "../../registry/auth.js";`,
+        "owner-boundaries",
+        "packages/cli/src/library/commands/example.ts",
+      ),
+    ).toHaveLength(1);
+    expect(
+      await reported(
+        `import { readStoredToken } from "../../registry/credential-store.js";`,
+        "owner-boundaries",
+        "packages/cli/src/library/commands/example.ts",
+      ),
+    ).toHaveLength(1);
+    expect(
+      await reported(
+        `import { Registry } from "../../registry/index.js";`,
+        "owner-boundaries",
+        "packages/cli/src/library/commands/example.ts",
+      ),
+    ).toEqual([]);
+  });
+
   test("a handler cannot take the Library's home lock", async () => {
     expect(await reported(`import { withHomeLock } from "@smolai/skit-core";`)).toEqual([
       "withHomeLock",

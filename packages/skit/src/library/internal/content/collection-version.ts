@@ -2,9 +2,9 @@ import { copyLocalTree } from "../../../platform/copy-tree.js";
 import { dirname, join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { walkTree } from "../../../artifact/tree.js";
-import { ContentAddressCollision } from "../../../failures.js";
+import { ContentAddressCollision } from "../../failures.js";
 import { deterministicTreeHash } from "../../../artifact/skit.js";
-import type { Hash } from "../../../contracts.js";
+import type { Hash } from "../../../shared/hash.js";
 import { collectionVersionPath, originalTreeHash } from "../../collection-version.js";
 
 /** Materialize exactly the normalized inventory; excluded source residue never enters an object. */

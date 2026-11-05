@@ -1,10 +1,10 @@
 import { Effect, Schema } from "effect";
 import * as InstalledSkillStatus from "../../installed-skill-status.js";
 import { LibraryManifest, enabledSkillIds, currentSkillVersion } from "../../library-contracts.js";
-import { InstalledSkill } from "../../library-state.js";
-import type { LibraryState } from "../../library-state.js";
+import { InstalledSkill, type LibraryState } from "../../library-state.js";
+
 import { InstalledSkillId } from "../../entity-ids.js";
-import type { InstallDestination } from "../../../vocabulary.js";
+import type { InstallDestination } from "../../../installed-skills/destination.js";
 import { inspectInstalledSkill } from "../../../installed-skills/files.js";
 import { installDestinationPathIdentity } from "../../../platform/path-identity.js";
 import { repositorySelectsInstalledSkill } from "../../installation/uninstall.js";

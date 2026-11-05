@@ -1,4 +1,13 @@
-import type { PlatformError as PlatformErrors } from "effect";
+import type {
+  PlatformError as PlatformErrors,
+  Brand,
+  Effect,
+  FileSystem,
+  Option,
+  Path,
+  Scope,
+  Schema,
+} from "effect";
 import type {
   RecoveryInvalid,
   RecoveryInspection,
@@ -19,9 +28,14 @@ import type {
  * Markers: APPROVE marks today's boundary, unchanged, for approval as-is. PROPOSED marks a change
  * from today's code. DEBT marks today's code that breaks the contract and is not approved.
  */
-import type { Brand, Effect, FileSystem, Option, Path, Scope, Schema } from "effect";
+
 import type { Digest } from "effect/crypto";
-import type { InstalledSkill, LibraryState } from "../packages/skit/src/library/library-state.js";
+import type {
+  InstalledSkill,
+  LibraryState,
+  DeviceSkillSelection,
+  SyncAncestry,
+} from "../packages/skit/src/library/library-state.js";
 import type { SetupIntent } from "../packages/skit/src/library/setup-intent.js";
 import type {
   Approval,
@@ -39,8 +53,10 @@ import type {
   TargetOutcome,
   TargetPlan,
   TargetPlanError,
+  StalePlan,
 } from "./library-results.js";
-import type { InvalidLibraryState, LibraryBusy } from "../packages/skit/src/failures.js";
+import type { InvalidLibraryState } from "../packages/skit/src/library/failures.js";
+import type { LibraryBusy } from "../packages/skit/src/platform/lock-failures.js";
 import type {
   AuthoredImport,
   EditImport,
@@ -60,10 +76,7 @@ import type {
   LibraryAuditInvalid,
 } from "../packages/skit/src/library/audit/audit-log.js";
 import type { InventoryScanRoot } from "../packages/skit/src/library/inventory/refresh.js";
-import type {
-  DeviceSkillSelection,
-  SyncAncestry,
-} from "../packages/skit/src/library/library-state.js";
+
 import type {
   LibraryManifest,
   SnapshotArchive,
@@ -87,19 +100,19 @@ import type {
   SkillId,
   SkillVersionId,
 } from "../packages/skit/src/library/entity-ids.js";
-import type { OwnershipMarker } from "../packages/skit/src/contracts.js";
+import type { OwnershipMarker } from "../packages/skit/src/installed-skills/ownership-marker.js";
 import type {
   HarnessName,
-  Hash,
-  InstallDestination,
-  InstallScope,
-} from "../packages/skit/src/vocabulary.js";
-import type { SkillsDirectoryOverrides } from "../packages/skit/src/harnesses/contracts.js";
+  SkillsDirectoryOverrides,
+} from "../packages/skit/src/harnesses/contracts.js";
+import type { Hash } from "../packages/skit/src/shared/hash.js";
+import type { InstallDestination } from "../packages/skit/src/installed-skills/destination.js";
+import type { InstallScope } from "../packages/skit/src/library/scope.js";
+
 import type { LinkStat } from "../packages/skit/src/platform/link-stat.js";
 import type { SourceProcess } from "../packages/skit/src/platform/source-process.js";
 import type { CollectionVersionPlan } from "../packages/skit/src/library/collection-version-plan.js";
 import type { RestoreProgress } from "../packages/skit/src/library/restore-progress.js";
-import type { StalePlan } from "./library-results.js";
 
 // ── Library ────────────────────────────────────────────────────────────────────────────────────
 // The only writer of the Library: state.json, originals/, variants/, audit.jsonl and removed/.

@@ -701,8 +701,8 @@ export default {
     "no-direct-cli-output": {
       meta: {
         type: "problem",
-        docs: { description: "Keep CLI output writes inside the dispatcher" },
-        messages: { forbidden: "Write CLI output through dispatch.ts, not directly." },
+        docs: { description: "Keep CLI output writes inside Renderer and Prompter" },
+        messages: { forbidden: "Write CLI output through Renderer or Prompter, not directly." },
       },
       create(context) {
         return {

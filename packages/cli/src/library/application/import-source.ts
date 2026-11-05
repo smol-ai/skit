@@ -9,10 +9,10 @@ import {
   resolveSkitSource,
   type ResolvedSkitSource,
   type SkitSource,
+  leavePnpmSkill,
 } from "@smolai/skit-core";
-import { Clock, Effect } from "effect";
-import { RegistryAuth } from "../../registry/auth-service.js";
-import { leavePnpmSkill } from "@smolai/skit-core";
+import { Clock, Effect, Result } from "effect";
+import { Registry, type ResolvedAuth } from "../../registry/index.js";
 
 export { AddNoSkills } from "@smolai/skit-core";
 
@@ -26,21 +26,25 @@ const withResolvedSource = Effect.fn("SourceAcquisition.withResolvedSource")(fun
     historicalInput: string;
     registryOrigin: string | undefined;
   }) => Effect.Effect<A, E, R>,
+  selectedRegistry?: ResolvedAuth,
 ) {
-  const auth = yield* RegistryAuth;
-  const resolvedRegistry = yield* auth.resolve();
+  const authState =
+    selectedRegistry === undefined
+      ? yield* Registry.credentials().pipe(Effect.result)
+      : Result.succeed(selectedRegistry);
+  const resolvedRegistry = Result.isSuccess(authState) ? authState.success : undefined;
   const parsed = typeof input === "string" ? yield* parseSkitSource(input) : input;
   // `skit:` shorthand with no Registry configured means the hosted Registry, read anonymously.
-  const registry =
-    resolvedRegistry.origin === undefined && parsed.type === "registry"
-      ? { ...resolvedRegistry, origin: officialRegistryOrigin }
+  const registry: ResolvedAuth | undefined =
+    resolvedRegistry?.origin === undefined && parsed.type === "registry"
+      ? { origin: officialRegistryOrigin, source: "none" }
       : resolvedRegistry;
   if (parsed.type === "local") yield* leavePnpmSkill(parsed.path);
-  if (parsed.type === "registry" && registry.configurationError)
-    return yield* Effect.fail(registry.configurationError);
+  if (parsed.type === "registry" && Result.isFailure(authState))
+    return yield* Effect.fail(authState.failure);
   const resolved = yield* resolveSkitSource(input, {
-    registryBaseUrl: registry.origin,
-    registryToken: registry.token,
+    registryBaseUrl: registry?.origin,
+    registryToken: registry?.token,
     ...(previousSkillPaths === undefined ? {} : { previousSkillPaths }),
   });
   yield* leaveResolvedPnpmSkills(parsed, resolved);
@@ -48,23 +52,28 @@ const withResolvedSource = Effect.fn("SourceAcquisition.withResolvedSource")(fun
     parsed,
     resolved,
     historicalInput: typeof input === "string" ? input : sourceLocator(input),
-    registryOrigin: registry.origin,
+    registryOrigin: registry?.origin,
   });
 }, Effect.scoped);
 
 export const inspectLibrarySource = Effect.fn("Library.inspectSource")(function* (
   input: string | SkitSource,
   previousSkillPaths?: readonly string[],
+  registry?: ResolvedAuth,
 ) {
-  return yield* withResolvedSource(input, previousSkillPaths, ({ parsed, resolved }) =>
-    inspectResolvedSource(parsed, resolved),
+  return yield* withResolvedSource(
+    input,
+    previousSkillPaths,
+    ({ parsed, resolved }) => inspectResolvedSource(parsed, resolved),
+    registry,
   );
 });
 
 export const previewLibrarySource = Effect.fn("Library.previewSource")(function* (
   input: string | SkitSource,
+  registry?: ResolvedAuth,
 ) {
-  const inspected = yield* inspectLibrarySource(input);
+  const inspected = yield* inspectLibrarySource(input, undefined, registry);
   return {
     kind: inspected.kind,
     skills: inspected.skills,
@@ -76,6 +85,7 @@ export const previewLibrarySource = Effect.fn("Library.previewSource")(function*
 export const importSource = Effect.fn("Library.addSource")(function* (
   input: string | SkitSource,
   previousSkillPaths?: readonly string[],
+  registry?: ResolvedAuth,
 ) {
   return yield* withResolvedSource(
     input,
@@ -125,5 +135,6 @@ export const importSource = Effect.fn("Library.addSource")(function* (
           })),
         };
       }),
+    registry,
   );
 });

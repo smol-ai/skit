@@ -13,7 +13,8 @@ import {
   UpstreamV5,
 } from "./manifest-v5.js";
 import { CollectionVersionV7 } from "./manifest-v7.js";
-import { Hash, HarnessName } from "../../vocabulary.js";
+import { Hash } from "../../shared/hash.js";
+import { HarnessName } from "../../harnesses/contracts.js";
 
 export const RetainedCopyV4 = Schema.Struct({
   ...CollectionVersionV7.fields,

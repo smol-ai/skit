@@ -1,6 +1,6 @@
-import type { HarnessName, InstallDestination } from "../contracts.js";
+import type { HarnessName, SkillsDirectoryContext } from "./contracts.js";
+import type { InstallDestination } from "../installed-skills/destination.js";
 import { installSkillsDirectory } from "./catalog.js";
-import type { SkillsDirectoryContext } from "./contracts.js";
 
 /**
  * The Harnesses with dedicated invocation metadata carried by each target. Cursor and Pi also

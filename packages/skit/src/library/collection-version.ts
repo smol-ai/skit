@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { walkTree } from "../artifact/tree.js";
-import type { Hash } from "../contracts.js";
+import type { Hash } from "../shared/hash.js";
 
 export const collectionVersionPath = (objectsPath: string, hash: Hash) =>
   join(objectsPath, hash.slice(7, 9), hash.slice(7));

@@ -7,8 +7,8 @@ import { outputContracts } from "../../commands/output-contracts.js";
 import { homeFlag, jsonFlag, optionalString } from "../../commands/parameters.js";
 import { setupUndoActions } from "./undo-result.js";
 import { prepareSetupUndo } from "./setup-undo.js";
-import { Renderer } from "../../presentation/renderer.js";
-import { result } from "../../handlers/contracts.js";
+import { Renderer } from "../../terminal/renderer.js";
+import { result } from "../../commands/result.js";
 
 export const librarySetupUndoCliCommand = Command.make(
   "undo",

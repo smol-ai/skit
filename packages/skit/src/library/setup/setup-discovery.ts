@@ -12,7 +12,7 @@ import { readSkitDescriptor } from "../../artifact/skit.js";
 import { sourceLocator } from "../../sources/resolve.js";
 import { SourceIdentity } from "../library-contracts.js";
 import { SourceProcess } from "../../platform/source-process.js";
-import { HarnessName, type HarnessName as Harness } from "../../vocabulary.js";
+import { HarnessName, type HarnessName as Harness } from "../../harnesses/contracts.js";
 import { type OperationId } from "../entity-ids.js";
 import * as MachineSettings from "../machine-settings.js";
 import { readSkillsLock } from "./skills-sh-lock-source.js";

@@ -2,7 +2,7 @@
 // apply only while the Library is still that Snapshot and planning again gives the same plan.
 
 import { Effect } from "effect";
-import { InvalidLibraryState } from "../failures.js";
+import { InvalidLibraryState } from "./failures.js";
 import { sha256Hash } from "../shared/hash.js";
 import { canonicalJson } from "../shared/json.js";
 import { emptyLibraryState, LibraryState } from "./library-state.js";

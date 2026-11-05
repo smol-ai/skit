@@ -10,7 +10,8 @@ import {
   LinkStat,
 } from "../../../platform/link-stat.js";
 import { canonicalJson } from "../../../shared/json.js";
-import { Hash, InstallDestination } from "../../../vocabulary.js";
+import { Hash } from "../../../shared/hash.js";
+import { InstallDestination } from "../../../installed-skills/destination.js";
 import { hashParts } from "../../../artifact/descriptor.js";
 import { MachineId } from "../../entity-ids.js";
 import { SetupIntent } from "../../setup-intent.js";

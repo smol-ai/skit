@@ -3,13 +3,13 @@ import { systemError, type PlatformError } from "effect/PlatformError";
 import { dirname, join, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { ZipFile } from "yazl";
+import { type DescriptorFailure, SkitValidationFailed } from "../artifact/failures.js";
+import type { HarnessMetadataInvalid } from "../harnesses/metadata-failures.js";
 import type {
-  DescriptorFailure,
-  HarnessMetadataInvalid,
   InstalledPathCollision,
   SharedTargetCollision,
-} from "../failures.js";
-import { SkitValidationFailed } from "../failures.js";
+} from "../installed-skills/failures.js";
+
 import { validateSkitDirectory } from "../artifact/skit.js";
 import type { TreeRequirements } from "../platform/tree-requirements.js";
 import type { TreeError } from "../shared/tree-error.js";

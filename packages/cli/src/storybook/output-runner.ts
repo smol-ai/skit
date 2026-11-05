@@ -5,7 +5,7 @@ import {
   renderResultFrame,
   type TerminalEnvironment,
   type TerminalFrame,
-} from "../presentation/output-frame.js";
+} from "../commands/output-frame.js";
 import { OutputStory, outputStories, outputStoryKey } from "./output-stories.js";
 
 interface Options {

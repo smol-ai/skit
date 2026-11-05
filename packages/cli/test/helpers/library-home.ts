@@ -1,9 +1,6 @@
-import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
-import { Effect, FileSystem, Layer, Result } from "effect";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { FetchHttpClient, type HttpClient } from "effect/http";
 import {
+  SkitConfiguration,
+  skitConfigurationLayer,
   createSkitArchive,
   deterministicTreeHash,
   initSkit,
@@ -16,9 +13,13 @@ import {
   emptyLibraryState,
   type ImportRequest,
 } from "@smolai/skit-core";
+import { Effect, FileSystem, Layer } from "effect";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { FetchHttpClient, type HttpClient } from "effect/http";
+
 import type { InstalledSkillOptions } from "../../src/library/workflows/installed-skill-options.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./http-test-client.js";
-import { registryAuthAccessLayer } from "../../src/registry/auth-service.js";
 import { RegistryHttp, registryHttpLayer } from "../../src/registry/registry-http.js";
 
 import { Library } from "@smolai/skit-core/library";
@@ -86,15 +87,26 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
   const transport: Layer.Layer<HttpClient.HttpClient> = input.transport
     ? testHttpClientLayer(input.transport)
     : FetchHttpClient.layer;
-  const registryAuth = registryAuthAccessLayer({
-    authState: Result.succeed({
-      ...(input.registryBaseUrl === undefined ? {} : { origin: input.registryBaseUrl }),
-      ...(input.registryToken === undefined ? {} : { token: input.registryToken }),
-      source: input.registryToken === undefined ? "none" : "stored",
-    }),
-    ...(input.registryBaseUrl === undefined ? {} : { origin: input.registryBaseUrl }),
-    ...(input.registryToken === undefined ? {} : { token: input.registryToken }),
-  });
+  if (input.registryBaseUrl !== undefined) {
+    yield* fs.writeFileString(
+      join(home, "auth.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        activeOrigin: input.registryBaseUrl,
+        servers:
+          input.registryToken === undefined
+            ? {}
+            : {
+                [input.registryBaseUrl]: {
+                  token: input.registryToken,
+                  tokenId: "test-credential",
+                  tokenPrefix: "test",
+                  scopes: ["library:sync"],
+                },
+              },
+      }),
+    );
+  }
   const owned = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(
       Effect.provide(
@@ -103,7 +115,6 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
           Library.layer({ home, routing: { _tag: "Recorded" } }),
           transport,
           registryHttpLayer(transport),
-          registryAuth,
         ),
       ),
     ) as Effect.Effect<

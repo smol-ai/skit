@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import type { HarnessName } from "../../vocabulary.js";
+import type { HarnessName } from "../../harnesses/contracts.js";
 
 export interface InventoryScanRoot {
   readonly harness: HarnessName;

@@ -1,5 +1,5 @@
 import { Data, Schema } from "effect";
-import { InstallDestination } from "../vocabulary.js";
+import { InstallDestination } from "../installed-skills/destination.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 export const Destination = Schema.Struct({ destination: InstallDestination, root: Schema.String });

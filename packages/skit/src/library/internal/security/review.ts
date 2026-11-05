@@ -1,7 +1,7 @@
 import { Clock, Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import type { SkillSecurityReview } from "../../../contracts.js";
-import { ContentAddressCollision, UnknownInstalledSkill } from "../../../failures.js";
+import type { SkillSecurityReview } from "../../../auditing/skill-contracts.js";
+import { ContentAddressCollision, UnknownInstalledSkill } from "../../failures.js";
 import { auditSkill, evaluateSkillAudit } from "../../../auditing/skill-audit.js";
 import type { LibraryState } from "../../library-state.js";
 import {

@@ -5,11 +5,10 @@ import { commandActor } from "./commands/actor.js";
 import { skitCommand } from "./commands/tree.js";
 import { jsonRequested } from "./commands/parameters.js";
 import { runCommandTree } from "./commands/runtime.js";
-import { consoleRendererLayer } from "./presentation/renderer.js";
+import { consoleRendererLayer, Renderer } from "./terminal/renderer.js";
 
-import { cliBuild } from "./build-info.js";
+import { cliBuild } from "./commands/build-info.js";
 import { ReleaseChecker, releaseCheckerLive } from "./releases/checker.js";
-import { Renderer } from "./presentation/renderer.js";
 
 const argv = process.argv.slice(2);
 const json = jsonRequested(argv);

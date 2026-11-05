@@ -1,3 +1,4 @@
+import { Registry } from "../src/registry/index.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 // The two CLI readers of JSON this process did not write.
 //
@@ -8,7 +9,7 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, describe, it } from "@effect/vitest";
 import { Cause, Effect, Exit, FileSystem } from "effect";
 import { join } from "node:path";
-import { resolveAuth } from "../src/registry/auth.js";
+
 import { AuthorWorkspace } from "@smolai/skit-core/author";
 
 const ORIGIN = "https://registry.example";
@@ -18,7 +19,7 @@ const withAuth = Effect.fn("withAuth")(function* (config: string) {
   const fs = yield* FileSystem.FileSystem;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-auth-" });
   yield* fs.writeFileString(join(home, "auth.json"), config);
-  return yield* Effect.exit(resolveAuth(home));
+  return yield* Effect.exit(Registry.credentials({ home }));
 });
 
 const withRemote = Effect.fn("withRemote")(function* (document: string) {

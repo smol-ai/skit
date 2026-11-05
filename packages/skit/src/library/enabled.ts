@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { canonicalJson } from "../shared/json.js";
-import type { InstallScope } from "../vocabulary.js";
+import type { InstallScope } from "./scope.js";
 import type { Enabled, LibraryManifest } from "./library-contracts.js";
 import type { CollectionId, SkillId } from "./entity-ids.js";
 import type { DeviceSkillSelection, InvocationPolicies, LibraryState } from "./library-state.js";

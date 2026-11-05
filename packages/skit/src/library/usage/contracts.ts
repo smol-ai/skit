@@ -1,5 +1,5 @@
 import { Data, Schema } from "effect";
-import { HarnessName } from "../../vocabulary.js";
+import { HarnessName } from "../../harnesses/contracts.js";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 
 /** The Harnesses whose transcripts SKIT reads; each one's driver carries the grammar. */

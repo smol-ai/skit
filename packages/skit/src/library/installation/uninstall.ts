@@ -1,7 +1,7 @@
 import { pathIsWithin } from "../../platform/path-identity.js";
 import { globalEnabled, type LibraryState, type InstalledSkill } from "../library-state.js";
 import { enabledSkillIds, type Enabled } from "../library-contracts.js";
-import type { InstallDestination } from "../../vocabulary.js";
+import type { InstallDestination } from "../../installed-skills/destination.js";
 import type { SkillId } from "../entity-ids.js";
 
 /** A repository owns the installed skills it enables beneath it. */

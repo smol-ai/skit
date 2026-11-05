@@ -2,7 +2,7 @@ import { currentSkillVersion, versionBacking, type Skill } from "../../library-c
 import { invocationMetadataAdapters } from "../../../harnesses/invocation-metadata.js";
 import { readSkitDescriptor } from "../../../artifact/skit.js";
 import { originalTreeHash, collectionVersionPath } from "../../collection-version.js";
-import { ImportContentInvalid } from "../../../failures.js";
+import { ImportContentInvalid } from "../../failures.js";
 import { resolveDeclaredInvocation } from "../../../invocation/conformance.js";
 import { type LibraryState } from "../../library-state.js";
 import { Cache, Effect, FileSystem, Result } from "effect";

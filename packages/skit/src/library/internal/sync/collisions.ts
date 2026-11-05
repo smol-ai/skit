@@ -8,7 +8,7 @@ import {
 } from "../../library-contracts.js";
 import type { LibraryState } from "../../library-state.js";
 import { SkillId } from "../../entity-ids.js";
-import type { InstallDestination } from "../../../vocabulary.js";
+import type { InstallDestination } from "../../../installed-skills/destination.js";
 import { installedSkillName } from "../../../installed-skills/files.js";
 import { installDestinationPathIdentity } from "../../../platform/path-identity.js";
 import { existingRepositorySkillsDirectory } from "../../routing/roots.js";

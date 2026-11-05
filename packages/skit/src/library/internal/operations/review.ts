@@ -5,8 +5,8 @@ import { inspectLocalLibraryState } from "../../store/library-store.js";
 import { emptyLibraryState } from "../../library-state.js";
 import { Revision, snapshotOf } from "../../snapshot.js";
 import type { Request } from "../../enabled-plan.js";
-import { InstallScope } from "../../../vocabulary.js";
-import { UninstallConflict } from "../../../failures.js";
+import { InstallScope } from "../../scope.js";
+import { UninstallConflict } from "../../../installed-skills/failures.js";
 import {
   InstalledSkillWouldDuplicate,
   InstalledSkillWouldReplaceLink,

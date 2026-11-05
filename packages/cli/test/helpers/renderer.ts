@@ -1,6 +1,6 @@
-import { terminalLibraryProgressLayer } from "../../src/presentation/library-progress.js";
+import { terminalLibraryProgressLayer } from "../../src/library/presentation/progress.js";
 import { Effect, Layer } from "effect";
-import { Renderer, type RendererShape } from "../../src/presentation/renderer.js";
+import { Renderer, type RendererShape } from "../../src/terminal/renderer.js";
 
 const silent: RendererShape = {
   result: () => Effect.void,

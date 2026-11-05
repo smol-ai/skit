@@ -19,7 +19,7 @@
  */
 import { Clock, DateTime, Effect, Option, Schema, Stream } from "effect";
 import * as History from "../history/history.js";
-import * as Merge from "../merge/merge.js";
+import * as Merge from "./merge.js";
 import { TreeEntry } from "../artifact/tree-entry.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 

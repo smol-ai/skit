@@ -1,19 +1,28 @@
-import { SkitConfiguration } from "@smolai/skit-core";
+import {
+  SkitConfiguration,
+  deterministicTreeHash,
+  skitLayer,
+  type SkillsShLockFileEntry,
+} from "@smolai/skit-core";
 import { ListResult } from "../src/library/workflows/list-contract.js";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { Effect, FileSystem, Schema } from "effect";
 import { join } from "node:path";
-import { deterministicTreeHash, skitLayer, type SkillsShLockFileEntry } from "@smolai/skit-core";
+
 import { Library } from "@smolai/skit-core/library";
-import { readLibrarySkillMetadata, skillModificationTime } from "@smolai/skit-core/library/session";
+import {
+  readLibrarySkillMetadata,
+  skillModificationTime,
+  openLibraryView,
+  openLibrarySession,
+} from "@smolai/skit-core/library/session";
 import { inventoryCommand } from "../src/library/commands/inventory.js";
-import { renderMachineSkills } from "../src/presentation/inventory.js";
-import { renderLibraryList } from "../src/presentation/library-list.js";
+import { renderMachineSkills } from "../src/library/presentation/inventory.js";
+import { renderLibraryList } from "../src/library/presentation/list.js";
 import { presentListCommand } from "../src/library/commands/list.js";
-import { openLibraryView } from "@smolai/skit-core/library/session";
-import { openLibrarySession } from "@smolai/skit-core/library/session";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import {
   libraryHome,
   initializeLibraryMachine,

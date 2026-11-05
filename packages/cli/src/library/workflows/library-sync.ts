@@ -1,5 +1,8 @@
 import { Library } from "@smolai/skit-core/library";
-import { resolveSyncInstalledSkillCollisions } from "@smolai/skit-core/library/session";
+import {
+  resolveSyncInstalledSkillCollisions,
+  previewSyncInstalledSkills,
+} from "@smolai/skit-core/library/session";
 import { Data, Effect, Option } from "effect";
 import {
   canonicalJson,
@@ -10,6 +13,8 @@ import {
   type RestoreProgress,
   prepareDeviceInstallation,
   withDeviceSkillSelection,
+  FailureTypeId,
+  type SkitFailure,
 } from "@smolai/skit-core";
 import { inspectSyncSnapshots } from "./library-sync-inspection.js";
 import { prepareSyncTransfer } from "./library-sync-snapshots.js";
@@ -17,12 +22,10 @@ import { silentSyncProgress, type SyncProgress } from "./library-sync-progress.j
 import { librarySyncApi } from "./library-sync-api.js";
 import { prepareLibraryMerge, normalizeLibraryManifest } from "./library-merge.js";
 import { planLibrarySync } from "./library-sync-plan.js";
-import type { SyncPlan } from "./library-sync-contract.js";
-import { previewSyncInstalledSkills } from "@smolai/skit-core/library/session";
-import { SyncConflictDetail } from "./library-sync-contract.js";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { type SyncPlan, SyncConflictDetail } from "./library-sync-contract.js";
+
 import { selectDeviceSkills } from "./device-selection.js";
-import { OptionCombinationInvalid } from "../../workflows/failures.js";
+import { OptionCombinationInvalid } from "../../commands/input-failures.js";
 import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 
 const conflicted = (details: readonly SyncConflictDetail[], revision_id?: string) => ({

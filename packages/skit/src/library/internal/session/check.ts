@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { dirname } from "node:path";
 import { currentSkillVersion, type SkitSource } from "../../library-contracts.js";
 import type { LibraryState } from "../../library-state.js";
-import type { Hash } from "../../../vocabulary.js";
+import type { Hash } from "../../../shared/hash.js";
 import { originalTreeHash, collectionVersionPath } from "../../collection-version.js";
 import {
   latestSourceImport,

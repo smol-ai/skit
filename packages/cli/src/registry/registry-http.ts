@@ -1,4 +1,4 @@
-import { cliBuild } from "../build-info.js";
+import { cliBuild } from "../commands/build-info.js";
 import { Data, Context, Effect, Layer, Predicate, Scope } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest } from "effect/http";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";

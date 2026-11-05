@@ -1,18 +1,18 @@
-import { usageCliCommand } from "../handlers/usage.js";
+import { usageCliCommand } from "../library/commands/usage.js";
 import { Command } from "effect/cli";
 import { checkCliCommand } from "../library/commands/check.js";
 import { serverBootstrapCliCommand } from "../bootstrap/server-bootstrap.js";
-import { authLogoutCliCommand } from "../handlers/auth/logout.js";
-import { authLoginCliCommand } from "../handlers/auth/login.js";
-import { authStatusCliCommand } from "../handlers/auth/status.js";
+import { authLogoutCliCommand } from "../registry/commands/logout.js";
+import { authLoginCliCommand } from "../registry/commands/login.js";
+import { authStatusCliCommand } from "../registry/commands/status.js";
 import { listCliCommand } from "../library/commands/list.js";
 import { addCliCommand } from "../library/commands/add.js";
 import { removeCliCommand } from "../library/commands/remove.js";
 import { updateCliCommand } from "../library/commands/update.js";
 import { librarySyncCliCommand } from "../library/commands/sync.js";
 import { disableCliCommand, enableCliCommand } from "../library/enable/command.js";
-import { securityAcceptCliCommand } from "../handlers/security/accept.js";
-import { securityReviewCliCommand } from "../handlers/security/review.js";
+import { securityAcceptCliCommand } from "../library/commands/security-accept.js";
+import { securityReviewCliCommand } from "../library/commands/security-review.js";
 import { setupCliCommand } from "../library/setup/command.js";
 import { doctorCliCommand, inventoryCliCommand } from "../library/commands/inventory.js";
 import {
@@ -20,7 +20,7 @@ import {
   repositoryIgnoreCliCommand,
   repositoryListCliCommand,
   repositoryWatchCliCommand,
-} from "../handlers/repository.js";
+} from "../library/commands/repository.js";
 import { libraryRecoveryCliCommand } from "../library/commands/recovery.js";
 import { librarySetupUndoCliCommand } from "../library/setup/undo-command.js";
 import { libraryHistoryCliCommand } from "../library/commands/history.js";
@@ -31,7 +31,7 @@ import {
   registryDefaultCliCommand,
   registryListCliCommand,
   registryRemoveCliCommand,
-} from "../handlers/registry.js";
+} from "../registry/commands/remotes.js";
 import { JsonOutputFlag } from "./parameters.js";
 
 const authCommand = Command.make("auth").pipe(

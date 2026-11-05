@@ -8,7 +8,8 @@ import { makeOperationId, OperationId } from "../entity-ids.js";
 import { Clock, DateTime, Effect, FileSystem, Schema, SchemaIssue } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { dirname, join, resolve } from "node:path";
-import { InvalidLibraryState, LibraryBusy, LibraryChanged } from "../../failures.js";
+import { InvalidLibraryState, LibraryChanged } from "../failures.js";
+import { LibraryBusy } from "../../platform/lock-failures.js";
 import { writeJsonAtomic, writeRawAtomic, syncPaths } from "../../platform/atomic-write.js";
 import {
   decodeLibraryState,

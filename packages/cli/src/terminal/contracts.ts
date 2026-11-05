@@ -15,3 +15,5 @@ export const defaultTerminalEnvironment: TerminalEnvironment = {
   detail: "summary",
   format: "human",
 };
+
+export type RenderContext = Pick<TerminalEnvironment, "color" | "detail">;

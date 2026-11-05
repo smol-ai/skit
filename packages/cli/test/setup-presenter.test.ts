@@ -6,11 +6,10 @@ import {
   makeSkillId,
   makeSkillVersionId,
 } from "@smolai/skit-core";
-import { renderContract } from "../src/presentation/contract-presenters.js";
-import { result } from "../src/handlers/contracts.js";
-import { classifySetupOnboarding } from "@smolai/skit-core/library/setup";
+import { renderContract } from "../src/commands/output-presenters.js";
+import { result } from "../src/commands/result.js";
+import { classifySetupOnboarding, type SetupSkillInstance } from "@smolai/skit-core/library/setup";
 import { setupDiscoveredSkillChoices } from "../src/library/setup/setup-skills.js";
-import type { SetupSkillInstance } from "@smolai/skit-core/library/setup";
 
 it("shows all physical copies, groups actual sources, and leaves conflicts and Codex unchecked", () => {
   const instance = (name: string, path: string, hash = "a"): SetupSkillInstance => ({

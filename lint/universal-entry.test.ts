@@ -11,7 +11,7 @@ import { describe, expect, test } from "vitest";
 const coreRoot = resolve(import.meta.dirname, "../packages/skit/src");
 const authoringEntry = join(coreRoot, "universal-authoring.ts");
 const consumerEntry = join(coreRoot, "universal-consumer.ts");
-const consumerApiEntry = join(coreRoot, "universal/api/index.ts");
+const consumerApiEntry = join(coreRoot, "api/index.ts");
 
 /** Modules and packages the universal graph must not reach. */
 const forbidden = (specifier: string): boolean =>
@@ -90,7 +90,9 @@ function sourceImports(directory: string): Array<{ file: string; dependency: str
 
 describe("optional capability boundaries", () => {
   test("the consumer universal surface does not reach Authoring protocol modules", () => {
-    const path = offendingPathFrom(consumerEntry, (dependency) => /\/authoring\//.test(dependency));
+    const path = offendingPathFrom(consumerEntry, (dependency) =>
+      /\/authoring\/|\/api\/authoring(?:-contracts)?\.ts$/.test(dependency),
+    );
     expect(
       path?.map((step) => (step.startsWith("/") ? relative(coreRoot, step) : step)).join(" -> "),
     ).toBeUndefined();
@@ -100,15 +102,14 @@ describe("optional capability boundaries", () => {
     const roots = [
       "packages/skit/src/artifact",
       "packages/skit/src/library",
-      "packages/skit/src/install",
+      "packages/skit/src/installed-skills",
       "packages/cli/src/library",
-      "packages/cli/src/invocation",
-      "packages/cli/src/workflows/library",
-      "packages/cli/src/handlers/library",
     ].map((path) => join(repoRoot, path));
     const offending = roots
       .flatMap(sourceImports)
-      .filter(({ dependency }) => /\/authoring\/|\/workflows\/author\//.test(dependency));
+      .filter(({ dependency }) =>
+        /\/authoring\/|\/api\/authoring(?:-contracts)?\.ts$|\/workflows\/author\//.test(dependency),
+      );
     expect(
       offending.map(
         ({ file, dependency }) =>

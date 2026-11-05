@@ -1,7 +1,7 @@
 import { Effect, type FileSystem } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
-import type { HarnessName } from "../contracts.js";
+import type { HarnessName, HarnessProfile } from "./contracts.js";
 import type { LibraryState } from "../library/library-state.js";
 import type { UsageHarness } from "../library/usage/contracts.js";
 import {
@@ -10,7 +10,7 @@ import {
   type TranscriptGrammar,
 } from "../library/usage/events.js";
 import { harnessProfiles } from "./catalog.js";
-import type { HarnessProfile } from "./contracts.js";
+
 import {
   invocationMetadataAdapters,
   type InvocationMetadataAdapter,
