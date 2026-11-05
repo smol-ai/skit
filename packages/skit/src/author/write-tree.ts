@@ -5,7 +5,7 @@ import { LinkStat } from "../platform/link-stat.js";
 import { SkitContractError } from "../api/contracts.js";
 import { TreeEntry } from "../artifact/tree-entry.js";
 import { syncPaths } from "../platform/atomic-write.js";
-import { LocalFilesChangedDuringSync } from "./failures.js";
+import { AuthorLocalPathNotObserved, LocalFilesChangedDuringSync } from "./failures.js";
 import { scanWorkspaceWrite } from "./local-tree.js";
 
 /**
@@ -52,8 +52,37 @@ export const writeWorkspaceTree = Effect.fn("AuthorWorkspace.writeTree")(functio
   const removed = [...before.keys()].filter((target) => !kept.has(target));
   // Directories whose entries this write changes, flushed once at the end.
   const touched = new Set<string>();
-  // Check every target before writing any.
-  for (const entry of changed) yield* local.checkTarget(entry.path);
+  const removals = new Set(removed);
+  const overlaps = (left: string, right: string) =>
+    left.startsWith(`${right}/`) || right.startsWith(`${left}/`);
+  const blockers = removed.filter((target) =>
+    changed.some((entry) => overlaps(target, entry.path)),
+  );
+  const directories = new Set<string>();
+  // Preflight raw contents too: an ignored file is not a predecessor this write may remove.
+  for (const target of removed) yield* local.checkTarget(target);
+  for (const entry of changed) {
+    const absolute = yield* local.checkReplacement(entry.path, removals);
+    if (blockers.some((target) => entry.path.startsWith(`${target}/`))) continue;
+    const info = yield* links
+      .lstat(absolute)
+      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
+    if (info?.type !== "Directory") continue;
+    const pending = [entry.path];
+    while (pending.length > 0) {
+      const folder = pending.pop();
+      if (folder === undefined) break;
+      const native = yield* local.checkDirectory(folder);
+      for (const name of yield* fs.readDirectory(native)) {
+        const child = `${folder}/${name}`;
+        const childInfo = yield* links.lstat(path.join(native, name));
+        if (childInfo.type === "Directory") pending.push(child);
+        else if (childInfo.type === "File" && removals.has(child)) yield* local.checkTarget(child);
+        else return yield* new AuthorLocalPathNotObserved({ path: child });
+      }
+      directories.add(folder);
+    }
+  }
   yield* Effect.scoped(
     Effect.gen(function* () {
       const staging = yield* fs.makeTempDirectoryScoped({
@@ -72,11 +101,31 @@ export const writeWorkspaceTree = Effect.fn("AuthorWorkspace.writeTree")(functio
           }),
         );
       }
+      // Only verified source files are unlinked. Advance the scan's native authority after each
+      // successful mutation, so the following mkdir does not inherit the removed file's inode.
+      for (const target of blockers) {
+        const absolute = yield* local.removeFile(target);
+        touched.add(path.dirname(absolute));
+        yield* syncPaths([path.dirname(absolute)]);
+      }
+      for (const folder of [...directories].sort(
+        (left, right) => right.split("/").length - left.split("/").length,
+      )) {
+        const absolute = yield* local.removeDirectory(folder);
+        touched.delete(absolute);
+        touched.add(path.dirname(absolute));
+        yield* syncPaths([path.dirname(absolute)]);
+      }
       for (const entry of changed) {
-        const absolute = yield* local.checkTarget(entry.path);
-        yield* fs.makeDirectory(path.dirname(absolute), { recursive: true });
+        yield* local.makeParents(entry.path);
         const target = yield* local.checkTarget(entry.path);
-        yield* fs.rename(path.join(staging, ...entry.path.split("/")), target);
+        const staged = path.join(staging, ...entry.path.split("/"));
+        if (before.has(entry.path)) yield* fs.rename(staged, target);
+        else {
+          // Exclusive publication refuses an editor's new file at a target this write vacated.
+          yield* fs.link(staged, target);
+          yield* fs.remove(staged);
+        }
         // The rename changed its folder, and any folder it created changed its parent.
         for (
           let folder = path.dirname(target);
@@ -88,9 +137,8 @@ export const writeWorkspaceTree = Effect.fn("AuthorWorkspace.writeTree")(functio
       }
     }),
   );
-  for (const target of removed) {
-    const absolute = yield* local.checkTarget(target);
-    yield* fs.remove(absolute);
+  for (const target of removed.filter((target) => !blockers.includes(target))) {
+    const absolute = yield* local.removeFile(target);
     touched.add(path.dirname(absolute));
   }
   // Remove the folders those deletions emptied, deepest first. Each held a removed file, so none
@@ -106,7 +154,8 @@ export const writeWorkspaceTree = Effect.fn("AuthorWorkspace.writeTree")(functio
     ),
   ].sort((left, right) => right.split("/").length - left.split("/").length);
   for (const folder of folders) {
-    const absolute = path.join(root, ...folder.split("/"));
+    if (directories.has(folder)) continue;
+    const absolute = yield* local.checkDirectory(folder);
     if (yield* links.removeEmptyDirectory(absolute)) {
       touched.delete(absolute);
       touched.add(path.dirname(absolute));

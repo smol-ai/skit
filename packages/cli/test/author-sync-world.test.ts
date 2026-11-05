@@ -278,7 +278,7 @@ it.effect.each(["file", "dangling-symlink"] as const)(
 );
 
 it.effect.each(["atomic", "in-place"] as const)(
-  "an %s editor save during directory preparation is preserved and merges cleanly",
+  "an %s editor save during staging is preserved and merges cleanly",
   (kind) =>
     Effect.gen(function* () {
       const world = yield* makeAuthorSyncWorld();
@@ -294,23 +294,21 @@ it.effect.each(["atomic", "in-place"] as const)(
         world.b.sync().pipe(
           Effect.provideService(FileSystem.FileSystem, {
             ...fs,
-            makeDirectory: Effect.fn("Test.atomicEditorSaveBeforeRename")(
-              function* (path, options) {
-                yield* fs.makeDirectory(path, options);
-                if (path === join(world.b.workspace, "notes") && !replaced) {
-                  replaced = true;
-                  if (kind === "atomic") {
-                    const replacement = join(world.b.workspace, "notes/editor-save");
-                    yield* fs.writeFileString(replacement, "editor save during apply\n");
-                    yield* fs.rename(replacement, join(world.b.workspace, "notes/a.txt"));
-                  } else
-                    yield* fs.writeFileString(
-                      join(world.b.workspace, "notes/a.txt"),
-                      "editor save during apply\n",
-                    );
-                }
-              },
-            ),
+            chmod: Effect.fn("Test.atomicEditorSaveBeforeRename")(function* (path, mode) {
+              yield* fs.chmod(path, mode);
+              if (path.includes("/.skit/stage-") && path.endsWith("/notes/a.txt") && !replaced) {
+                replaced = true;
+                if (kind === "atomic") {
+                  const replacement = join(world.b.workspace, "notes/editor-save");
+                  yield* fs.writeFileString(replacement, "editor save during apply\n");
+                  yield* fs.rename(replacement, join(world.b.workspace, "notes/a.txt"));
+                } else
+                  yield* fs.writeFileString(
+                    join(world.b.workspace, "notes/a.txt"),
+                    "editor save during apply\n",
+                  );
+              }
+            }),
           }),
         ),
       );
@@ -901,12 +899,12 @@ it.effect("an interrupted pull sends nothing and the next sync pulls again", () 
     const interrupted = yield* world.a.startSync().pipe(
       Effect.provideService(FileSystem.FileSystem, {
         ...fs,
-        rename: Effect.fn("Test.pauseRemoteOnlyApplication")(function* (from, to) {
+        link: Effect.fn("Test.pauseRemoteOnlyApplication")(function* (from, to) {
           if (to.endsWith("/notes/new.txt")) {
             yield* Deferred.succeed(reachedApply, undefined);
             yield* Effect.never;
           }
-          yield* fs.rename(from, to);
+          yield* fs.link(from, to);
         }),
       }),
     );
@@ -1224,8 +1222,8 @@ it.effect.each(["pull", "merge"] as const)(
       const pending = yield* world.a.startSync().pipe(
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
-          rename: Effect.fn("Test.interruptPartialApplication")(function* (from, to) {
-            yield* fs.rename(from, to);
+          link: Effect.fn("Test.interruptPartialApplication")(function* (from, to) {
+            yield* fs.link(from, to);
             if (to.endsWith("/notes/1.txt")) {
               yield* Deferred.succeed(appliedFirst, undefined);
               yield* Effect.never;
@@ -1281,8 +1279,8 @@ it.effect("repeatedly interrupted pulls keep real edits and finish remote deleti
       const pending = yield* world.a.startSync().pipe(
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
-          rename: Effect.fn("Test.interruptRepeatedPull")(function* (from, to) {
-            yield* fs.rename(from, to);
+          link: Effect.fn("Test.interruptRepeatedPull")(function* (from, to) {
+            yield* fs.link(from, to);
             if (to === join(world.a.workspace, path)) {
               yield* Deferred.succeed(written, undefined);
               yield* Effect.never;

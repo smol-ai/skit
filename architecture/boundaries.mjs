@@ -113,7 +113,10 @@ export const owners = [
     // serves the owner itself.
     name: "AuthorWorkspace",
     owner: "packages/skit/src/author/",
-    privateModules: ["packages/skit/src/author/local-tree."],
+    privateModules: [
+      "packages/skit/src/author/local-tree.",
+      "packages/skit/src/author/write-tree.",
+    ],
     testOwner: "packages/skit/test/",
     sources: ["packages/skit/src/author/"],
     private: ["writeWorkspaceTree"],

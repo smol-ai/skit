@@ -1,7 +1,7 @@
 import { dirname, join } from "node:path";
 import { Effect, Exit, Fiber, FileSystem, Layer, Ref, Scope } from "effect";
 import { libraryApplicationLayer } from "../../src/application.js";
-import { skitConfigurationLayer } from "@smolai/skit-core";
+import { LinkStat, skitConfigurationLayer } from "@smolai/skit-core";
 import type { PlatformError } from "effect/PlatformError";
 import { syncAuthorWorkspace } from "../../src/author/sync/workflow.js";
 import { authorLayer, storedTreesAt } from "./author-history.js";
@@ -95,6 +95,7 @@ export const makeAuthorSyncWorld = Effect.fn("Test.makeAuthorSyncWorld")(functio
             Effect.provide(authorLayer(home)),
             // The Library's layer carries its own FileSystem; sync keeps the test's.
             Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem),
+            Effect.provideService(LinkStat, yield* LinkStat),
             // A first sync without workspace.json adopts an id from this home's Library (A3).
             Effect.provide(
               libraryApplicationLayer.pipe(Layer.provide(skitConfigurationLayer(home))),

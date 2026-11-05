@@ -1,4 +1,5 @@
 import { Effect, Equal, FileSystem, Option, Path, Stream } from "effect";
+import type { PlatformError } from "effect/PlatformError";
 import * as History from "../history/history.js";
 import { LinkStat } from "../platform/link-stat.js";
 import { isCanonicalRelativePath } from "../shared/relative-path.js";
@@ -62,7 +63,19 @@ export const scanWorkspaceWrite = Effect.fn("AuthorWorkspace.scanWriteTree")(fun
           Effect.fail(new LocalFilesChangedDuringSync()),
         ),
       );
-  const checkTarget = Effect.fn("Sync.checkNativeTarget")(function* (target: string) {
+  const checkPath = Effect.fn("AuthorWorkspace.checkNativePath")(function* (
+    target: string,
+    kind: "file" | "directory" | "replacement",
+    removals: ReadonlySet<string> = new Set(),
+  ): Effect.fn.Return<
+    string,
+    | PlatformError
+    | SkitContractError
+    | LocalFilesChangedDuringSync
+    | AuthorLocalPathNotObserved
+    | AuthorNonNfcPathUnsupported
+    | AuthorNormalizationTwin
+  > {
     const parts = target.split("/");
     if (
       target !== target.normalize("NFC") ||
@@ -140,10 +153,21 @@ export const scanWorkspaceWrite = Effect.fn("AuthorWorkspace.scanWriteTree")(fun
             });
         }
       }
-      if (!leaf && existing.type !== "Directory")
+      if (!leaf && existing.type !== "Directory") {
+        if (kind === "replacement" && removals.has(prefix) && contents.has(prefix)) {
+          yield* checkPath(prefix, "file");
+          return path.join(root, ...parts);
+        }
         return yield* new AuthorLocalPathNotObserved({ path: prefix || "." });
+      }
       if (leaf) {
+        if (existing.type === "Directory" && kind !== "file") {
+          if (observed === undefined)
+            return yield* new AuthorLocalPathNotObserved({ path: target });
+          return absolute;
+        }
         const expected = contents.get(target);
+        if (kind === "directory") return yield* new AuthorLocalPathNotObserved({ path: target });
         if (observed === undefined || expected === undefined || existing.type !== "File")
           return yield* new AuthorLocalPathNotObserved({ path: target });
         yield* Effect.scoped(
@@ -183,7 +207,49 @@ export const scanWorkspaceWrite = Effect.fn("AuthorWorkspace.scanWriteTree")(fun
     }
     return root;
   });
-  return { tree, verbatimHash: yield* History.treeHash(snapshot.entries), checkTarget };
+  const checkTarget = (target: string) => checkPath(target, "file");
+  const checkDirectory = (target: string) => checkPath(target, "directory");
+  // Only these mutations advance native authority. Never rescan an externally replaced inode
+  // and treat it as the entry the original scan authorized.
+  const removeFile = Effect.fn("AuthorWorkspace.removeFile")(function* (target: string) {
+    const absolute = yield* checkTarget(target);
+    yield* fs.remove(absolute);
+    targets.delete(target);
+    contents.delete(target);
+    return absolute;
+  });
+  const removeDirectory = Effect.fn("AuthorWorkspace.removeDirectory")(function* (target: string) {
+    const absolute = yield* checkDirectory(target);
+    if (!(yield* links.removeEmptyDirectory(absolute)))
+      return yield* new AuthorLocalPathNotObserved({ path: target });
+    targets.delete(target);
+    return absolute;
+  });
+  const makeParents = Effect.fn("AuthorWorkspace.makeParents")(function* (target: string) {
+    const parts = target.split("/").slice(0, -1);
+    for (let depth = 1; depth <= parts.length; depth++) {
+      const prefix = parts.slice(0, depth).join("/");
+      const absolute = yield* checkDirectory(prefix);
+      if (targets.has(prefix)) continue;
+      yield* fs.makeDirectory(absolute);
+      const info = yield* links.lstat(absolute);
+      const identity = nativeIdentityOf(info);
+      if (info.type !== "Directory" || Option.isNone(identity))
+        return yield* new LocalFilesChangedDuringSync();
+      targets.set(prefix, { ...identity.value, nativePath: prefix });
+    }
+  });
+  return {
+    tree,
+    verbatimHash: yield* History.treeHash(snapshot.entries),
+    checkTarget,
+    checkDirectory,
+    checkReplacement: (target: string, removals: ReadonlySet<string>) =>
+      checkPath(target, "replacement", removals),
+    removeFile,
+    removeDirectory,
+    makeParents,
+  };
 });
 
 interface SyncScan {
