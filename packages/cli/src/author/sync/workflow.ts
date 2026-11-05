@@ -1,21 +1,5 @@
-import {
-  AuthoringAuthenticatedApi,
-  CurrentMovedResponse,
-  SkitExistsResponse,
-  SkitNotFoundResponse,
-  ForbiddenOriginResponse,
-  ForbiddenResponse,
-  InsufficientScopeResponse,
-  UnauthorizedResponse,
-} from "@smolai/skit-core/universal/api";
-import { Data, Effect, Option, Ref, Result, Schema, Stream } from "effect";
-import { HttpApiClient } from "effect/http-api";
-import {
-  authenticatedApiMiddleware,
-  isSuccessfulResponseDecodeFailure,
-  registryApiFailureMessage,
-} from "../../registry/api-client.js";
-import { isRegistryTransportError, RegistryHttp } from "../../registry/registry-http.js";
+import { Effect, Option, Ref, Schema } from "effect";
+import { authorSyncApi } from "../../registry/author-sync.js";
 import { join } from "node:path";
 import {
   LocalFilesChangedDuringSync,
@@ -32,13 +16,8 @@ import {
 } from "@smolai/skit-core/author";
 import {
   AuthorRemoteAlreadyExists,
-  RemoteSkitUnavailable,
   VisibilityNotAccepted,
-  DestinationExistsWithoutHistory,
-  RegistryUnreachable,
   AuthenticationRequired,
-  CredentialLacksScope,
-  PrincipalNotAuthorized,
 } from "../../registry/failures.js";
 import { Registry } from "../../registry/index.js";
 import type { AuthorSyncResult } from "../contracts.js";
@@ -47,28 +26,10 @@ import { authorDecider, authorTree } from "../device-view.js";
 
 import { adoptFrom, collectionsAt } from "../library-claims.js";
 
-import {
-  Library,
-  History,
-  conflictKind,
-  SkitContractError,
-  Sync,
-  FailureTypeId,
-  type SkitFailure,
-} from "@smolai/skit-core";
+import { Library, History, conflictKind, Sync } from "@smolai/skit-core";
 import { MissingRequirement } from "../../commands/input-failures.js";
 
 import { parseAuthorDestination, skitLocator } from "../destination.js";
-
-/** A SKIT request the Registry answered, with its own words for why it refused. */
-class SyncRejected
-  extends Data.TaggedError("SyncRejected")<{ message: string }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Check the Registry's reason, then sync again.";
-}
 
 /** A first sync names its destination and visibility; it is persisted only once connecting. */
 type Destination =
@@ -143,7 +104,6 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
       return yield* new VisibilityNotAccepted({ reason: "already-synced" });
   }
   const { remote } = destination;
-  const base = remote.origin;
   const owner = remote.namespace;
   const slug = remote.skit;
   const locator = skitLocator(remote);
@@ -238,82 +198,8 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
       }),
     );
 
-  const transport = yield* (yield* RegistryHttp).client;
-  const client = yield* HttpApiClient.makeWith(AuthoringAuthenticatedApi, {
-    httpClient: transport,
-    baseUrl: base,
-  }).pipe(Effect.provide(authenticatedApiMiddleware(credentials.token)));
-  const failure = (context: string, successStatus: number) => (error: unknown) => {
-    if (isRegistryTransportError(error))
-      return new RegistryUnreachable({ origin: base, cause: error.cause });
-    if (Schema.is(UnauthorizedResponse)(error))
-      return new AuthenticationRequired({ scopes: "library:sync,authoring:write" });
-    if (Schema.is(InsufficientScopeResponse)(error))
-      return new CredentialLacksScope({
-        scope: "authoring:write",
-        scopes: "library:sync,authoring:write",
-      });
-    if (Schema.is(ForbiddenResponse)(error) || Schema.is(ForbiddenOriginResponse)(error))
-      return new PrincipalNotAuthorized({ action: "author this Namespace or SKIT" });
-    if (Schema.is(SkitNotFoundResponse)(error))
-      return new RemoteSkitUnavailable({ identity: locator });
-    if (isSuccessfulResponseDecodeFailure(error, [successStatus]))
-      return new SkitContractError({
-        contract: `${context} response`,
-        issues: [{ path: "", message: String(error) }],
-      });
-    return new SyncRejected({
-      message: registryApiFailureMessage(context, error, { defaultStatus: 400 }),
-    });
-  };
-  const params = { owner, slug };
-  // This SKIT on the Registry, for this command only. The transport never retries, so no retry
-  // delay waits while the lease is held.
-  const registry: Sync.Remote = {
-    current: client.skits.current({ params }).pipe(
-      Effect.map((skit) => skit.current),
-      Effect.mapError(failure("skit current", 200)),
-    ),
-    revision: (id) =>
-      client.skits.revision({ params: { ...params, id } }).pipe(
-        Effect.map(({ revision, tree }) => ({ revision, tree })),
-        Effect.mapError(failure("skit revision", 200)),
-      ),
-    ancestors: (id) =>
-      Stream.paginate(Option.none<string>(), (cursor) =>
-        client.skits
-          .ancestors({
-            params,
-            query: Option.match(cursor, {
-              onNone: () => ({ ancestors: id }),
-              onSome: (next) => ({ ancestors: id, cursor: next }),
-            }),
-          })
-          .pipe(
-            Effect.map(
-              (page) =>
-                [
-                  page.revisions.map(({ id, revision }) => ({ id, revision })),
-                  Option.map(Option.fromNullishOr(page.next_cursor), Option.some),
-                ] as const,
-            ),
-            Effect.mapError(failure("skit history", 200)),
-          ),
-      ),
-    post: (id, revision, tree) =>
-      client.skits
-        .post({ params, payload: { id, revision, tree } })
-        .pipe(Effect.asVoid, Effect.mapError(failure("skit revision", 200))),
-    move: (expected, id) =>
-      client.skits.move({ params, payload: { expected, id } }).pipe(
-        Effect.asVoid,
-        Effect.mapError((error) =>
-          Schema.is(CurrentMovedResponse)(error)
-            ? new Sync.Moved({ current: error.current })
-            : failure("skit move", 200)(error),
-        ),
-      ),
-  };
+  const api = yield* authorSyncApi({ remote, locator, token: credentials.token });
+  const registry = api.remote;
   // This workspace's checkpoint: none until it has an identity (A5). Decoding the saved
   // checkpoints comes before creating anything or replacing a base.
   const workspaceId = applying?.workspaceId ?? previewed?.workspaceId;
@@ -323,11 +209,7 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
       : yield* history.syncState.read({ workspaceId, locator });
   if (destination._tag !== "ConnectedRemote") {
     if (destination._tag === "NewRemote") {
-      const existing = yield* client.skits.current({ params }).pipe(Effect.result);
-      if (Result.isSuccess(existing))
-        return yield* new DestinationExistsWithoutHistory({ identity: locator });
-      if (!Schema.is(SkitNotFoundResponse)(existing.failure))
-        return yield* Effect.fail(failure("skit current", 200)(existing.failure));
+      yield* api.requireAvailable;
     }
     if (applying === undefined)
       return {
@@ -361,23 +243,14 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
                     ),
               ),
             );
-    yield* client.skits
-      .create({
-        payload: { owner, slug, visibility: pending.visibility, request_id: pending.requestId },
-      })
-      .pipe(
-        Effect.mapError((error) =>
-          Schema.is(SkitExistsResponse)(error)
-            ? new DestinationExistsWithoutHistory({ identity: locator })
-            : failure("skit create", 201)(error),
-        ),
-        // A definitive receipt mismatch proves this request did not create the destination.
-        Effect.catchTag("DestinationExistsWithoutHistory", (error) =>
-          applying.lease
-            .transition({ from: pending, to: { _tag: "Unconnected" } })
-            .pipe(Effect.andThen(Effect.fail(error))),
-        ),
-      );
+    yield* api.create(pending.visibility, pending.requestId).pipe(
+      // A definitive receipt mismatch proves this request did not create the destination.
+      Effect.catchTag("DestinationExistsWithoutHistory", (error) =>
+        applying.lease
+          .transition({ from: pending, to: { _tag: "Unconnected" } })
+          .pipe(Effect.andThen(Effect.fail(error))),
+      ),
+    );
     // No revision writes precede this commit point. A pending retry can safely start at no base.
     yield* history.syncState.save(
       applying.lease,
