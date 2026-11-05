@@ -255,7 +255,7 @@ export const owners = {
   Teams: {
     status: "EXISTS",
     owns: ["teams", "team_memberships"],
-    ops: ["create", "addMember", "removeMember"],
+    ops: ["create", "addMember", "removeMember", "isMember"],
     removes: [
       "direct INSERT into namespaces (via Identity)",
       "private ownedTeam SQL (via Authorization)",
@@ -302,6 +302,7 @@ export const owners = {
       "LibrarySnapshots + LibrarySync services (done: one ServerLibrary constructor and default-Library lookup)",
       "library/owner.ts helper (done: private internal/owned.ts, used only by ServerLibrary construction)",
       "public commitLibraryRevision export (done: private internal/sync.ts; only the owner and an atomic-guard unit test use it)",
+      "snapshot grant authorization (done: ServerLibrary requires the owning Principal or current membership checked by Teams)",
     ],
   },
 

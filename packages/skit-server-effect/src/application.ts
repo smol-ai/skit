@@ -84,10 +84,9 @@ export const applicationLayers = (
       supportedScopes,
       env.SKIT_BOOTSTRAP_SECRET || undefined,
     ),
-    teamsLayer,
     serverLibraryLayer,
     skitsLayer,
     Layer.succeed(ServerConfiguration, { publicAppOrigin: configured.publicAppOrigin }),
-  ).pipe(Layer.provideMerge(authorization));
+  ).pipe(Layer.provideMerge(teamsLayer), Layer.provideMerge(authorization));
   return { release, feedback, authenticated };
 };

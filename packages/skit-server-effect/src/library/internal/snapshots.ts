@@ -6,7 +6,7 @@ import {
   verifySnapshotArchive,
 } from "@smolai/skit-core/universal/consumer";
 import type { Principal } from "../../identity/service.js";
-import type { AuthorizationService } from "../../authorization/service.js";
+import type { TeamsService } from "../../teams/service.js";
 import {
   type BlobStoreService,
   type DatabaseSqlClient,
@@ -59,7 +59,7 @@ export interface Snapshots {
 export const makeSnapshots = (
   sql: DatabaseSqlClient,
   blobs: BlobStoreService,
-  authorization: AuthorizationService,
+  teams: Pick<TeamsService, "isMember">,
   digests: Digest.Digest["Service"],
   clock: Clock.Clock,
   own: FindLibrary,
@@ -145,10 +145,11 @@ export const makeSnapshots = (
     );
     if (rows[0] === undefined) return yield* new SnapshotMissing();
     const library = yield* decodeOwnedLibrary(rows[0]);
-    const owns =
-      library.owner_subject_kind === "principal" && library.owner_subject_id === principal.id;
-    if (!owns && !(yield* authorization.hasGrant(principal, "library", libraryId, "read")))
-      return yield* new SnapshotForbidden();
+    const allowed =
+      library.owner_subject_kind === "principal"
+        ? library.owner_subject_id === principal.id
+        : yield* teams.isMember(principal, library.owner_subject_id);
+    if (!allowed) return yield* new SnapshotForbidden();
     const snapshot = yield* snapshotRow(libraryId, digest);
     if (snapshot?.status !== "ready") return yield* new SnapshotMissing();
     const imported = yield* readObject(snapshot.r2_key);

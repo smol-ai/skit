@@ -27,6 +27,10 @@ export class OwnerRoleImmutable extends Schema.TaggedError<OwnerRoleImmutable>()
 ) {}
 
 export interface TeamsService {
+  readonly isMember: (
+    principal: Principal,
+    teamId: string,
+  ) => Effect.Effect<boolean, DatabaseError>;
   readonly create: (
     principal: Principal,
     input: { readonly slug: string; readonly name: string },
@@ -56,6 +60,15 @@ export const layer = Layer.effect(
     const clock = yield* Clock.Clock;
     const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
       effect.pipe(databaseError(operation));
+
+    const isMember = Effect.fn("Teams.isMember")(function* (principal: Principal, teamId: string) {
+      const rows = yield* db(
+        "check team membership",
+        sql`SELECT 1 member FROM team_memberships
+          WHERE team_id = ${teamId} AND principal_id = ${principal.id} LIMIT 1`,
+      );
+      return rows.length !== 0;
+    });
 
     const ownedTeam = Effect.fn("Teams.ownedTeam")(function* (principal: Principal, slug: string) {
       const rows = yield* db(
@@ -155,6 +168,6 @@ export const layer = Layer.effect(
       return rows.length === 1;
     });
 
-    return Teams.of({ create, addMember, removeMember });
+    return Teams.of({ isMember, create, addMember, removeMember });
   }),
 );

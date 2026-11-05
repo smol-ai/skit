@@ -37,12 +37,6 @@ export interface AuthorizationService {
     principal: Principal,
     namespace: string,
   ) => Effect.Effect<boolean, DatabaseError>;
-  readonly hasGrant: (
-    principal: Principal,
-    resourceKind: ResourceKind,
-    resourceId: string,
-    permission: Permission,
-  ) => Effect.Effect<boolean, DatabaseError>;
   readonly canAuthor: (
     principal: Principal,
     owner: string,
@@ -170,20 +164,6 @@ export const layer = Layer.effect(
         { concurrency: SUBREQUEST_CONCURRENCY },
       );
       return rows.some((row) => row.length !== 0);
-    });
-
-    const hasGrant = Effect.fn("Authorization.hasGrant")(function* (
-      principal: Principal,
-      resourceKind: ResourceKind,
-      resourceId: string,
-      permission: Permission,
-    ) {
-      return yield* hasGrantForSubjects(
-        yield* subjects(principal),
-        resourceKind,
-        resourceId,
-        permission,
-      );
     });
 
     const canAuthor = Effect.fn("Authorization.canAuthor")(function* (
@@ -341,7 +321,6 @@ export const layer = Layer.effect(
     return Authorization.of({
       authorInventoryScope,
       ownsNamespace,
-      hasGrant,
       canAuthor,
       canPublish,
       canDeleteSkit,

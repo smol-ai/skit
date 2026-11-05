@@ -336,6 +336,8 @@ Namespaces are controlled by an individual Principal or a registry-local team. C
 
 The server retains immutable revisions of each principal's portable Library Manifest using optimistic concurrency. These revisions contain Library Entries and Bindings only. In accordance with ADR-0001 they reject device-local Projection, Custody, paths, observations, ownership markers, drift, conflicts, suppression, and audit history rather than importing those fields into portable intent.
 
+Private Library snapshots require the Library's owning Principal or current membership in its owning team. Per-resource grants do not authorize Library snapshot reads. Removing team membership removes access on the next request.
+
 ### Draft synchronization
 
 Remote drafts are immutable revisions behind one guarded current-draft head. Draft files are content-addressed in R2; D1 records revision ancestry, metadata, manifests, and the selected head.
