@@ -85,6 +85,10 @@
     "./library/source": {
       "types": "./dist/library/source.d.ts",
       "import": "./dist/library/source.js"
+    },
+    "./machine-settings": {
+      "types": "./dist/library/machine-settings.d.ts",
+      "import": "./dist/library/machine-settings.js"
     }
   },
   "scripts": {

@@ -7,7 +7,7 @@ import { CommandMetadata } from "../commands/metadata.js";
 import { repositoryOutputContracts } from "./repository/output.js";
 import { homeFlag, jsonFlag } from "../commands/parameters.js";
 import { Renderer } from "../terminal/renderer.js";
-import { MachineSettings } from "@smolai/skit-core";
+import * as MachineSettings from "@smolai/skit-core/machine-settings";
 import { encodeResult as result } from "../commands/encode-result.js";
 
 const path = Argument.String("path");

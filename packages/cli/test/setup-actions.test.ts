@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import { MachineSettings } from "@smolai/skit-core";
+import * as MachineSettings from "@smolai/skit-core/machine-settings";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";

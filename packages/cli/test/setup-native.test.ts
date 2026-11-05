@@ -12,12 +12,12 @@ import {
   makeImportId,
   makeCollectionId,
   makeMachineId,
-  MachineSettings,
   makeInstalledSkillId,
   makeCollectionVersionId,
   makeSkillId,
   makeSkillVersionId,
 } from "@smolai/skit-core";
+import * as MachineSettings from "@smolai/skit-core/machine-settings";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { type Hash } from "@smolai/skit-core/shared";
 import { SourceProcess, skitConfigurationLayer } from "@smolai/skit-core/platform";

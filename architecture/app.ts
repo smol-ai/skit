@@ -341,6 +341,11 @@ export const owners = {
  * The root export is an aggregate compatibility surface, not a subpath.
  */
 export const coreExports = {
+  "./machine-settings": {
+    kind: "owner",
+    owners: ["MachineSettings"],
+    source: "packages/skit/src/library/machine-settings.ts",
+  },
   "./library/source": {
     kind: "owner",
     owners: ["Library"],

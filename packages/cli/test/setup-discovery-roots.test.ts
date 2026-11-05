@@ -4,7 +4,8 @@ import { Cause, Effect, Exit, FileSystem, Result } from "effect";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import { skitLayer } from "@smolai/skit-core/platform";
-import { MachineSettings, LinkStat } from "@smolai/skit-core";
+import { LinkStat } from "@smolai/skit-core";
+import * as MachineSettings from "@smolai/skit-core/machine-settings";
 import { setupCommand } from "../src/library/setup.js";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import {

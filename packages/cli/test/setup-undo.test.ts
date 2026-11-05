@@ -10,12 +10,12 @@ import { Library } from "@smolai/skit-core/library";
 import {
   hashParts,
   LinkStat,
-  MachineSettings,
   prepareInstalledSkillRebuild,
   setupIntent,
   observePathEvidence,
   recoveryFingerprint,
 } from "@smolai/skit-core";
+import * as MachineSettings from "@smolai/skit-core/machine-settings";
 import { skitLayer } from "@smolai/skit-core/platform";
 
 const { setupDiscoverySettings } = MachineSettings;

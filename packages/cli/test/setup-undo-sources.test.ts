@@ -13,10 +13,10 @@ import {
   type LibraryState,
   currentSkillVersion,
   libraryManifestFromLocalState,
-  MachineSettings,
   collectionVersionPath,
   sourceImports,
 } from "@smolai/skit-core";
+import * as MachineSettings from "@smolai/skit-core/machine-settings";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { skillsDirectoryFor } from "@smolai/skit-core/library/routing";
 import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply.js";
