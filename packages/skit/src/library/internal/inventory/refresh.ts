@@ -5,7 +5,7 @@ import { HarnessName } from "../../../harnesses/contracts.js";
 import { InvalidLibraryState } from "../../failures.js";
 import { OwnershipMarkerInspection } from "../../../installed-skills/files.js";
 import * as InstalledSkills from "../../installed-skills.js";
-import { emptyLibraryState, LibraryState } from "../../library-state.js";
+import { emptyLibraryState, LibraryState, type LibraryInventory } from "../../library-state.js";
 import { InstalledSkill } from "../../device-state.js";
 import { InventoryScanIssue } from "../../store/state-schema.js";
 import { OwnershipIssue } from "../../../installed-skills/metadata.js";
@@ -15,6 +15,8 @@ import { InvalidIntent } from "../../enabled-plan.js";
 
 import { applyReviewed, planIdOf, planningState } from "../../reviewed-plan.js";
 import { scanInventory, deduplicateInventoryRoots } from "../../inventory/refresh.js";
+
+import { inventoryForRoots } from "../../inventory/read-model.js";
 
 const ScanRoot = Schema.Struct({ harness: HarnessName, root: Schema.String });
 export const RefreshInventoryIntent = Schema.TaggedStruct("RefreshInventory", {
@@ -53,7 +55,7 @@ export const RefreshInventoryPlan = Schema.Unknown.pipe(
 export type RefreshInventoryPlan = typeof RefreshInventoryPlan.Type;
 interface RefreshInventoryResult {
   readonly roots: readonly (typeof ScanRoot.Type)[];
-  readonly state: LibraryState;
+  readonly inventory: LibraryInventory;
   /** The reviewed pending-backup records that were promoted; their paths identify the before state. */
   readonly keptBackups: readonly InstalledSkills.Backup[];
 }
@@ -149,7 +151,11 @@ export const applyInventory = Effect.fn("Library.applyInventory")(function* (
         }
         const outcome: RefreshInventoryOutcome = {
           _tag: "RefreshInventory",
-          result: { roots: again.change.roots, state: again.change.next, keptBackups },
+          result: {
+            roots: again.change.roots,
+            inventory: inventoryForRoots(again.change.next, again.change.roots),
+            keptBackups,
+          },
         };
         return outcome;
       }),

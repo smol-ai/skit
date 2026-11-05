@@ -2,7 +2,7 @@ import { Schema } from "effect";
 import { SkillId } from "../entity-ids.js";
 import { HarnessName } from "../../harnesses/contracts.js";
 import { InstallDestination } from "../../installed-skills/destination.js";
-import type { LibraryState } from "../library-state.js";
+import type { LibraryInventory } from "../library-state.js";
 
 /** One diagnostic report over an observed inventory snapshot. Pure: the caller does the reading. */
 const LibraryDoctorIssue = Schema.Struct({
@@ -20,7 +20,7 @@ export const LibraryDoctorReport = Schema.Struct({
 });
 export type LibraryDoctorReport = typeof LibraryDoctorReport.Type;
 
-export function libraryDoctorReport(state: LibraryState): LibraryDoctorReport {
+export function libraryDoctorReport(state: LibraryInventory): LibraryDoctorReport {
   const issues: LibraryDoctorIssue[] = state.installed_skills
     .filter((item) => item.status !== "installed")
     .map((item) => ({

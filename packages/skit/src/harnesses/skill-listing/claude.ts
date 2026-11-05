@@ -5,7 +5,7 @@ import { harnessProfiles, resolveSkillsDirectory } from "../catalog.js";
 import type { SkillsDirectoryOverrides, SkillListingContract } from "../contracts.js";
 import { parseSkillFrontmatter } from "../frontmatter.js";
 import { modelContextWindow } from "../model-context-windows.js";
-import type { LibraryState } from "../../library/library-state.js";
+import type { LibraryInventory } from "../../library/library-state.js";
 import type { YamlMapping } from "../../shared/json.js";
 import { ListingReadFailure, type ListingBudget, type ListingEntry } from "./contracts.js";
 export interface ClaudeListingOptions {
@@ -232,7 +232,7 @@ function resolveClaudeListingSettings(
 }
 
 export const readClaudeListingSnapshot = Effect.fn("Listing.claudeDiscovery")(function* (
-  state: LibraryState,
+  state: LibraryInventory,
   options: ClaudeListingOptions,
 ) {
   return yield* Effect.gen(function* () {

@@ -2,6 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { systemError } from "effect/PlatformError";
 import { join } from "node:path";
+import { refreshInventory } from "../src/library/inventory.js";
 import * as Library from "../src/library/library.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
@@ -38,13 +39,13 @@ it.effect(
           JSON.parse(JSON.stringify(plan)),
         );
         const applied = yield* library.apply({ _tag: "Apply", plan: portable });
-        assert.strictEqual(applied.result.state.unmanaged[0].path, join(f.skills, "review"));
+        assert.strictEqual(applied.result.inventory.unmanaged[0].path, join(f.skills, "review"));
         assert.deepStrictEqual(applied.result.keptBackups, []);
         assert.strictEqual(yield* f.fs.readFileString(f.path), f.bytes);
         const saved = yield* library.read;
         assert.strictEqual(saved._tag, "Present");
         if (saved._tag === "Present")
-          assert.deepStrictEqual(saved.state.unmanaged, applied.result.state.unmanaged);
+          assert.deepStrictEqual(saved.state.unmanaged, applied.result.inventory.unmanaged);
       }).pipe(Effect.provide(Library.layer({ home: f.home, routing: { _tag: "None" } })));
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
@@ -223,4 +224,62 @@ it.effect(
         }),
       );
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+);
+
+it.effect(
+  "refresh reports selected roots without losing saved observations outside them or exposing state",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* folder;
+      const other = join(f.root, "other-skills");
+      yield* f.fs.makeDirectory(join(other, "older"), { recursive: true });
+      yield* f.fs.writeFileString(
+        join(other, "older", "SKILL.md"),
+        "---\nname: older\ndescription: Other root.\n---\n# Older\n",
+      );
+      const roots = {
+        codex: [f.skills],
+        "claude-code": [join(f.root, "claude")],
+        opencode: [join(f.root, "opencode")],
+        devin: [join(f.root, "devin")],
+      };
+      for (const paths of Object.values(roots))
+        for (const path of paths) yield* f.fs.makeDirectory(path, { recursive: true });
+      yield* Effect.gen(function* () {
+        const library = yield* Library.Service;
+        yield* library.apply({
+          _tag: "Apply",
+          plan: yield* library.plan(
+            { _tag: "RefreshInventory", roots: [{ harness: "codex", root: other }] },
+            { base: yield* library.read },
+          ),
+        });
+        const report = yield* refreshInventory({
+          home: f.root,
+          configHome: join(f.root, "config"),
+          overrides: roots,
+        });
+        assert.deepStrictEqual(
+          report.unmanaged.map((item) => item.path),
+          [join(f.skills, "review")],
+        );
+        for (const field of [
+          "schemaVersion",
+          "collections",
+          "imports",
+          "repositories",
+          "operations",
+          "sync_ancestry",
+          "device_skill_selection",
+        ])
+          assert.isFalse(Object.hasOwn(report, field), `private field leaked: ${field}`);
+        const saved = yield* library.read;
+        assert.strictEqual(saved._tag, "Present");
+        if (saved._tag === "Present")
+          assert.deepStrictEqual(
+            saved.state.unmanaged.map((item) => item.path).sort(),
+            [join(other, "older"), join(f.skills, "review")].sort(),
+          );
+      }).pipe(Effect.provide(Library.layer({ home: f.home, routing: { _tag: "None" } })));
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

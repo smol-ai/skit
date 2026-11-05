@@ -1,3 +1,4 @@
+import type { LibraryInventory } from "@smolai/skit-core/library/inventory";
 import { configurationForHome } from "@smolai/skit-core/platform";
 import {
   SkillAlias,
@@ -9,12 +10,7 @@ import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { Effect, FileSystem, Schema } from "effect";
-import {
-  readCodexSkills,
-  readCodexListingBudget,
-  type ListingBudget,
-  type LibraryState,
-} from "@smolai/skit-core";
+import { readCodexSkills, readCodexListingBudget, type ListingBudget } from "@smolai/skit-core";
 export { readCodexSkills } from "@smolai/skit-core";
 import { probeHarness } from "@smolai/skit-core/harnesses";
 
@@ -124,7 +120,7 @@ export function codexDuplicateFindings(
 }
 
 export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
-  state: LibraryState,
+  state: LibraryInventory,
   cwd: string,
   overrideRoot?: string,
   inventoryRoots?: InventoryRootOptions,

@@ -65,6 +65,10 @@
     "./library/usage": {
       "types": "./dist/library/usage.d.ts",
       "import": "./dist/library/usage.js"
+    },
+    "./library/inventory": {
+      "types": "./dist/library/inventory.d.ts",
+      "import": "./dist/library/inventory.js"
     }
   },
   "scripts": {

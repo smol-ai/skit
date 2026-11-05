@@ -1,4 +1,4 @@
-import { libraryDoctorReport } from "@smolai/skit-core";
+import { libraryDoctorReport } from "@smolai/skit-core/library/inventory";
 import { Effect } from "effect";
 import { Renderer } from "../../terminal/renderer.js";
 import { refreshLibraryInventory, type CliInventoryOptions } from "../inventory.js";

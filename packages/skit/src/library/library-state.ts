@@ -75,20 +75,7 @@ export const libraryStateRevision = (state: LibraryState): string =>
   createHash("sha256").update(canonicalJson(state)).digest("hex");
 
 export const LibraryInventory = LibraryState.mapFields(
-  Struct.omit([
-    "schemaVersion",
-    "assessmentAcceptances",
-    "sync_ancestry",
-    "device_skill_selection",
-    "pending_device_selection_origin",
-    "collections",
-    "collection_versions",
-    "imports",
-    "enabled",
-    "invocation_policies",
-    "repositories",
-    "operations",
-  ]),
+  Struct.pick(["unmanaged", "ownershipIssues", "scanIssues", "skills", "installed_skills"]),
 );
 export type LibraryInventory = typeof LibraryInventory.Type;
 

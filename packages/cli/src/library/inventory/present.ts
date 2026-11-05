@@ -1,12 +1,9 @@
+import type { LibraryInventory } from "@smolai/skit-core/library/inventory";
 import { createColors } from "picocolors";
 import { metadataDate } from "../presentation/skill-metadata.js";
 import { basename, dirname, sep } from "node:path";
 import { compactHomePath } from "../../terminal/home-path.js";
-import {
-  installDestinationHarnesses,
-  type HarnessName,
-  type LibraryInventory,
-} from "@smolai/skit-core";
+import { installDestinationHarnesses, type HarnessName } from "@smolai/skit-core";
 import { harnessLabel } from "@smolai/skit-core/harnesses";
 import { conditionHeadline, installedSkillStatusLabel } from "../presentation/language.js";
 import type { MachineInventoryResult } from "./output.js";

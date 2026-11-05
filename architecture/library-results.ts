@@ -52,7 +52,7 @@ import type {
 import type { HomeBusy as StoredHomeBusy } from "../packages/skit/src/platform/lock-failures.js";
 import type { TreeError } from "../packages/skit/src/shared/tree-error.js";
 import type { Hash } from "../packages/skit/src/shared/hash.js";
-import type { LibraryState } from "../packages/skit/src/library/library-state.js";
+import type { LibraryState, LibraryInventory } from "../packages/skit/src/library/library-state.js";
 import type {
   InstalledSkill,
   DeviceSkillSelection,
@@ -242,12 +242,12 @@ export interface RefreshInventoryChange {
 }
 
 /**
- * Outcome. refresh.ts:246 returns { state, roots }; the CLI narrows observations to the roots
- * (handlers/library/inventory.ts:38-53) and doctor reports on it (:112-113).
+ * Refresh reports observations for the selected roots; Library saves the complete scan.
+ * Private operation/repository/device state never enters the read report.
  */
 export interface RefreshInventoryResult {
   readonly roots: readonly InventoryScanRoot[]; // refresh.ts:246
-  readonly state: LibraryState; // refresh.ts:246
+  readonly inventory: LibraryInventory;
   /** Pending backups promoted to kept after a verified install (refresh.ts:236-245); reported by apply (resolution 9). */
   readonly keptBackups: readonly Backup[];
 }

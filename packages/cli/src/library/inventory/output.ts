@@ -1,4 +1,4 @@
-import { LibraryInventory } from "@smolai/skit-core";
+import { LibraryInventory } from "@smolai/skit-core/library/inventory";
 import { Schema } from "effect";
 import { SetupSkillInstance, SetupResult } from "@smolai/skit-core/library/setup";
 

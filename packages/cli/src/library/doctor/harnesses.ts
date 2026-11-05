@@ -1,3 +1,4 @@
+import { type LibraryInventory, LibraryDoctorReport } from "@smolai/skit-core/library/inventory";
 import {
   DuplicateCopy,
   scanSkillsDirectory,
@@ -8,13 +9,7 @@ import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { Data, Effect, FileSystem, Option, Record, Schema, Stream } from "effect";
 import { dirname, join, resolve } from "node:path";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import {
-  HarnessName,
-  type LibraryState,
-  LibraryDoctorReport,
-  readClaudeListingSnapshot,
-  ListingBudget,
-} from "@smolai/skit-core";
+import { HarnessName, readClaudeListingSnapshot, ListingBudget } from "@smolai/skit-core";
 import { SourceProcess, type SourceProcessResult } from "@smolai/skit-core/platform";
 import { probeHarness } from "@smolai/skit-core/harnesses";
 import { CodexDoctorCheck, doctorCodexCheck } from "./codex.js";
@@ -314,7 +309,7 @@ export interface NativeDiscovery {
   /** Drop diagnostics that only restate SKIT's own expected installed skills. */
   readonly classifyWarnings?: (
     check: HarnessDoctorCheck,
-    state: LibraryState,
+    state: LibraryInventory,
   ) => HarnessDoctorCheck;
 }
 
@@ -411,7 +406,7 @@ const doctorHarnessCheck = Effect.fn("Doctor.harness")(function* (
 /** Remove only proven, expected shared/Claude collisions from the diagnostic warnings. */
 export function classifyOpenCodeWarnings(
   check: HarnessDoctorCheck,
-  state: LibraryState,
+  state: LibraryInventory,
 ): HarnessDoctorCheck {
   if (check.harness !== "opencode" || check.status !== "checked") return check;
   const lines = check.warnings.flatMap((warning) => warning.split("\n").filter(Boolean));
@@ -508,7 +503,7 @@ export function classifyOpenCodeWarnings(
 
 /** Diagnose native discovery against one already-refreshed Library observation. Does not acquire the writer. */
 export const inspectNativeDiscovery = Effect.fn("Doctor.inspectNativeDiscovery")(function* (
-  inventory: LibraryState,
+  inventory: LibraryInventory,
   options: InventoryRootOptions & { readonly cwd: string },
 ) {
   const { cwd } = options;
