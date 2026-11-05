@@ -4,7 +4,7 @@ import { pathIsWithin } from "../../../platform/path-identity.js";
 import { pathChain, samePathChain, pathEntryIdentity } from "../../../platform/path-evidence.js";
 import { ensureSkillsDirectoryWritable } from "../../../installed-skills/writable.js";
 import { LinkStat } from "../../../platform/link-stat.js";
-import { installedPaths } from "../../setup-manage.js";
+import { installedPaths } from "./steps.js";
 import { changeWrites } from "../../installed-update.js";
 import { InstalledSkills } from "../../installed-skills.js";
 import { absentEvidence, holdsEvidence, parentIsAsRecorded } from "../../folder-evidence.js";

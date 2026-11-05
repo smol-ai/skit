@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { discoveryPathExcluded } from "../../sources/discovery-exclusions.js";
 import { Effect, FileSystem, Result, Schema } from "effect";
-import type { SetupRepositoryConfig } from "./setup-contract.js";
+import type { SetupRepositoryConfig } from "./contract.js";
 
 const RepositoryRelativeGlob = Schema.String.check(
   Schema.isPattern(/^(?!\/)(?![A-Za-z]:)(?!.*\\)(?!.*(?:^|\/)\.\.(?:\/|$))(?!!).+$/u),

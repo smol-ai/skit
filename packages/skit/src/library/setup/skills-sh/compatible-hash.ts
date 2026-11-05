@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { join, posix, relative, sep } from "node:path";
 import { Effect, FileSystem, Result } from "effect";
-import { LinkStat } from "../../platform/link-stat.js";
+import { LinkStat } from "../../../platform/link-stat.js";
 
 /** Mirror skills.sh's computedHash byte stream for one Skill folder. */
 export const computeSkillsShCompatibleHash = Effect.fn("SkillsSh.computeCompatibleHash")(function* (

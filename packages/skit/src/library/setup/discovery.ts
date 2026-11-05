@@ -15,18 +15,18 @@ import { SourceProcess } from "../../platform/source-process.js";
 import { HarnessName, type HarnessName as Harness } from "../../harnesses/contracts.js";
 import { type OperationId } from "../entity-ids.js";
 import * as MachineSettings from "../machine-settings.js";
-import { readSkillsLock } from "./skills-sh-lock-source.js";
+import { readSkillsLock } from "./skills-sh/lock-source.js";
 import { readableSkillsDirectories } from "../routing/duplicates.js";
 import { type InventoryRootOptions } from "../routing/roots.js";
-import { readRepositoryConfig, repositoryPathExcluded } from "./setup-config.js";
-import type { SetupOptions } from "./setup.js";
+import { readRepositoryConfig, repositoryPathExcluded } from "./config.js";
+import type { SetupOptions } from "./scan.js";
 import type {
   SetupBrokenLink,
   SetupAuthoredCollection,
   SetupGitStatus,
   SetupRepositoryConfig,
   SetupSuppressed,
-} from "./setup-contract.js";
+} from "./contract.js";
 const SUPPRESSED_NAMES = new Map<string, SetupSuppressed["reason"]>([
   ["node_modules", "dependency"],
   [".venv", "dependency"],

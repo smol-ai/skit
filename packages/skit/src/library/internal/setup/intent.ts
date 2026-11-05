@@ -5,11 +5,11 @@ import {
   currentCollectionSkills,
   currentSkillVersion,
   sourceImports,
-} from "./library-contracts.js";
-import type { LibraryState } from "./library-state.js";
-import type { RecordedLibrary, SetupIntent } from "./store/state-schema.js";
+} from "../../library-contracts.js";
+import type { LibraryState } from "../../library-state.js";
+import type { RecordedLibrary, SetupIntent } from "../../store/state-schema.js";
 
-export { SetupIntent, RecordedLibrary } from "./store/state-schema.js";
+export { SetupIntent, RecordedLibrary } from "../../store/state-schema.js";
 
 const withPolicies = (invocation_policies: LibraryState["invocation_policies"]) =>
   invocation_policies === undefined ? {} : { invocation_policies };

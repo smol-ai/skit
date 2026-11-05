@@ -10,13 +10,9 @@ import {
   lockEvidenceKey,
   type SetupOnboardingEvidence,
   type SetupImportEvidence,
-} from "./setup-evidence.js";
-import type {
-  SetupLockMatch,
-  SetupOnboardingCandidate,
-  SetupSkillInstance,
-} from "./setup-contract.js";
-import { setupLockCollection, setupLockGroupKey } from "./skills-sh-lock-source.js";
+} from "./evidence.js";
+import type { SetupLockMatch, SetupOnboardingCandidate, SetupSkillInstance } from "./contract.js";
+import { setupLockCollection, setupLockGroupKey } from "./skills-sh/lock-source.js";
 
 export const classifyOwner = (input: {
   readonly canonicalPath: string;

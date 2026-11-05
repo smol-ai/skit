@@ -3,20 +3,20 @@
 
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { basename, join, resolve } from "node:path";
-import { InvalidLibraryState } from "./failures.js";
-import { writeJsonExclusive } from "../platform/atomic-write.js";
-import { FileIdentityNumber, LinkStat } from "../platform/link-stat.js";
-import { leavePnpmSkill } from "../installed-skills/pnpm-skills.js";
-import type { OperationId } from "./entity-ids.js";
+import { InvalidLibraryState } from "../../failures.js";
+import { writeJsonExclusive } from "../../../platform/atomic-write.js";
+import { FileIdentityNumber, LinkStat } from "../../../platform/link-stat.js";
+import { leavePnpmSkill } from "../../../installed-skills/pnpm-skills.js";
+import type { OperationId } from "../../entity-ids.js";
 import {
   absentUnder,
   holdsEvidence,
   parentIsAsRecorded,
   recoveryEntryPath,
-} from "./folder-evidence.js";
-import { LibraryWriter } from "./store/library-store.js";
-import type { FolderEvidence, LinkEvidence } from "./store/state-schema.js";
-import { Hash } from "../shared/hash.js";
+} from "../../folder-evidence.js";
+import { LibraryWriter } from "../../store/library-store.js";
+import type { FolderEvidence, LinkEvidence } from "../../store/state-schema.js";
+import { Hash } from "../../../shared/hash.js";
 
 /** One entry of a step's move receipt, in the format recovery reads (`removed/<id>/<batch>/`). */
 const ReceiptEntry = Schema.Struct({

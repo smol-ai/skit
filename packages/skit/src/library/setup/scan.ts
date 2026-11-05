@@ -13,31 +13,22 @@ import {
   skillsDirectoryFor,
   type InventoryRootOptions,
 } from "../routing/roots.js";
-import type { SetupResult } from "./setup-contract.js";
-import {
-  collectBrokenLinks,
-  collectSetupEvidence,
-  suggestRepositoryRoots,
-} from "./setup-discovery.js";
-import { scanSetupCopies } from "./setup-scan.js";
+import type { SetupResult } from "./contract.js";
+import { collectBrokenLinks, collectSetupEvidence, suggestRepositoryRoots } from "./discovery.js";
+import { scanSetupCopies } from "./copies.js";
 import {
   planInstalledSkillChanges,
   hasChangesToApply,
   changesNeedingChoice,
-} from "./setup-installed-skills.js";
-import { classifySetupOnboarding } from "./setup-onboarding.js";
+} from "./installed-skills.js";
+import { classifySetupOnboarding } from "./onboarding.js";
 import {
   copyConflict,
   recommendedSetupSelection,
   setupApplyCommandLine,
   setupDuplicateChoiceRequired,
-} from "./setup-decisions.js";
+} from "./decisions.js";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
-export { collectSkillsDirectories, saveSetupMachineConfig } from "./setup-discovery.js";
-export { classifyOwner, isSetupCandidateFromCodex } from "./setup-onboarding.js";
-export { classifySetupOnboarding, setupInstanceGroupKey } from "./setup-onboarding.js";
-export { setupLockCollection, setupLockGroupKey } from "./skills-sh-lock-source.js";
-export { computeSkillsShCompatibleHash as computeSkillsLockCompatibleHash } from "./skills-sh-compatible-hash.js";
 export class SetupPlanStale
   extends Data.TaggedError("SetupPlanStale")<{
     approvedPlanId: typeof Hash.Type;

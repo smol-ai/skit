@@ -7,16 +7,16 @@ import { deterministicTreeHash } from "../../artifact/skit.js";
 import { pathIsWithin } from "../../platform/path-identity.js";
 import { installDestinationHarnesses } from "../../harnesses/install-destinations.js";
 import { sourceIdentityLabel } from "../source-identity.js";
-import { ownershipAt, type SetupEvidence } from "./setup-discovery.js";
-import { lockMatches } from "./skills-sh-lock-source.js";
-import { classifyOwner } from "./setup-onboarding.js";
+import { ownershipAt, type SetupEvidence } from "./discovery.js";
+import { lockMatches } from "./skills-sh/lock-source.js";
+import { classifyOwner } from "./onboarding.js";
 import { makePnpmSkillCheck, pnpmSkillOwner } from "../../installed-skills/pnpm-skills.js";
 import { probeHarnesses } from "../../harnesses/probe.js";
 import type {
   SetupAuthoredCollection,
   SetupInstalledSkill,
   SetupSkillInstance,
-} from "./setup-contract.js";
+} from "./contract.js";
 const indexSetupLibrary = (
   library: LibraryState,
   authoredCollections: readonly SetupAuthoredCollection[],

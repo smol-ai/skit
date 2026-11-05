@@ -124,7 +124,7 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
                     if (to !== home.statePath) return yield* files.rename(from, to);
                     const state = yield* Schema.decodeUnknownEffect(
                       Schema.fromJsonString(LibraryState),
-                    )(yield* files.readFileString(from));
+                    )(yield* files.readFileString(from)).pipe(Effect.orDie);
                     if (gates.refusePublication?.(state)) return yield* refuseRename(to);
                     yield* files.rename(from, to);
                     if (!announcedPublication) {
@@ -453,7 +453,7 @@ it.effect("every destination directory write has its preparation recorded first"
             return yield* Effect.die("Unrecorded directory creation");
           assert.isTrue(operation.preparation?.roots.some((saved) => saved.path === root));
           observed++;
-        }),
+        }).pipe(Effect.orDie),
     });
     assert.strictEqual(exit._tag, "Success");
     assert.isAbove(observed, 0);

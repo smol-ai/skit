@@ -9,7 +9,7 @@ import { globalEnabled } from "../../enabled.js";
 import { holdsEvidence, parentIsAsRecorded, recoveryEntryPath } from "../../folder-evidence.js";
 import { LibraryState } from "../../library-state.js";
 import { StalePlan } from "../../library-plan.js";
-import { moveAside } from "../../setup-moves.js";
+import { moveAside } from "./moves.js";
 import { LibraryWriter, libraryOriginalsPath, loadLibrary } from "../../store/library-store.js";
 import { OperationStatus, type UndoProgram } from "../../store/state-schema.js";
 import type { OperationId } from "../../entity-ids.js";

@@ -7,24 +7,25 @@ import * as MachineSettings from "../machine-settings.js";
 import { stepRouting } from "../routing/step.js";
 import { Library } from "../library.js";
 import type { ManageOptions } from "./manage-existing.js";
-import { revalidateSetupPlan, saveSetupMachineConfig, type SetupOptions } from "./setup.js";
+import { revalidateSetupPlan, type SetupOptions } from "./scan.js";
+import { saveSetupMachineConfig } from "./discovery.js";
 import type {
   SetupKnownSourceSelection,
   InstalledSkillChange,
   SetupVersionChoice,
   InstalledSkillChangeResult,
-} from "./setup-contract.js";
-import { type SetupCopySelection } from "./setup-decisions.js";
-import { setupExistingSelections, setupNewSelections } from "./setup-manage.js";
-import { setupImportRequests } from "./setup-import.js";
-import type { SetupRemovals } from "./setup-removal.js";
+} from "./contract.js";
+import { type SetupCopySelection } from "./decisions.js";
+import { setupExistingSelections, setupNewSelections } from "./manage.js";
+import { setupImportRequests } from "./import.js";
+import type { SetupRemovals } from "./removal.js";
 import {
   changeResults,
   hasChangesToApply,
   ChangeChoiceRequired,
   changesNeedingChoice,
   setupVersionAlternatives,
-} from "./setup-installed-skills.js";
+} from "./installed-skills.js";
 import { StalePlan } from "../library-plan.js";
 
 /** What the user reviewed and approved: the plan ID they saw and the selections they made. */

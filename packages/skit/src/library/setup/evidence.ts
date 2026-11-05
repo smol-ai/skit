@@ -1,7 +1,7 @@
 import { type LibraryState } from "../library-state.js";
 import { type MachineId } from "../entity-ids.js";
-import { setupLockGroupKey, resolveSkillsShSelectedSource } from "./skills-sh-lock-source.js";
-import type { SetupSkillInstance } from "./setup-contract.js";
+import { setupLockGroupKey, resolveSkillsShSelectedSource } from "./skills-sh/lock-source.js";
+import type { SetupSkillInstance } from "./contract.js";
 export interface SetupImportEvidence {
   readonly library?: LibraryState;
   readonly machineId?: MachineId;

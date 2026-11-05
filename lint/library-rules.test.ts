@@ -318,9 +318,9 @@ describe("skit/library-recorded-execution", () => {
     expect(
       await reported(
         "library-recorded-execution",
-        `${library}setup.ts`,
+        `${library}internal/setup/run.ts`,
         `
-      import { runManage, runUpdate } from "./setup-manage.js";
+      import { runManage, runUpdate } from "./steps.js";
       export const execute = [runManage, runUpdate];
     `,
       ),
@@ -340,7 +340,7 @@ describe("skit/library-recorded-execution", () => {
   });
 
   test("Undo execution is reachable only from the recorded runner", async () => {
-    const source = `import { runUndo } from "./internal/setup/undo-execution.js";`;
+    const source = `import { runUndo } from "./undo-execution.js";`;
     expect(
       await reported(
         "library-recorded-execution",
@@ -348,7 +348,9 @@ describe("skit/library-recorded-execution", () => {
         `import { runUndo } from "./setup/undo-execution.js";`,
       ),
     ).toHaveLength(1);
-    expect(await reported("library-recorded-execution", `${library}setup.ts`, source)).toEqual([]);
+    expect(
+      await reported("library-recorded-execution", `${library}internal/setup/run.ts`, source),
+    ).toEqual([]);
   });
 
   test("best-effort audit delivery is rejected at the writer; audit reads and types stay legal", async () => {
@@ -380,7 +382,7 @@ describe("skit/library-recorded-execution", () => {
         "library-recorded-execution",
         `${library}new-helper.ts`,
         `
-      import { runManage } from "./setup-manage.js";
+      import { runManage } from "./internal/setup/steps.js";
       export { updateInstalledSkills } from "./installed-update.js";
     `,
       ),
@@ -390,15 +392,15 @@ describe("skit/library-recorded-execution", () => {
 
 describe("skit/library-operation-owner", () => {
   test.each([
-    `import { LibraryWriter as writer } from "./store/library-store.js";`,
-    `import * as store from "./store/library-store.js";`,
-    `export { writeLibrary } from "./store/library-store.js";`,
-    `const store = import("./store/library-store.js");`,
-    `import { saveLibraryState } from "./store/state-file.js";`,
-    `import { apply } from "./apply-plan.js";`,
+    `import { LibraryWriter as writer } from "../../store/library-store.js";`,
+    `import * as store from "../../store/library-store.js";`,
+    `export { writeLibrary } from "../../store/library-store.js";`,
+    `const store = import("../../store/library-store.js");`,
+    `import { saveLibraryState } from "../../store/state-file.js";`,
+    `import { apply } from "../../apply-plan.js";`,
   ])("adapters cannot reopen state or the old executor: %s", async (source) => {
     expect(
-      await reported("library-operation-owner", `${library}setup-manage.ts`, source),
+      await reported("library-operation-owner", `${library}internal/setup/steps.ts`, source),
     ).toHaveLength(1);
   });
   test.each([
@@ -408,19 +410,19 @@ describe("skit/library-operation-owner", () => {
     `const files = yield* Copies.Service; const { prepare: create } = files;`,
     `const files = yield* routed(); files.manage();`,
   ])("adapters cannot mutate installed files directly: %s", async (body) => {
-    const source = `import { InstalledSkills as Copies } from "./installed-skills.js";
-      import { routedInstalledSkills as routed } from "./routing/recorded.js";
+    const source = `import { InstalledSkills as Copies } from "../../installed-skills.js";
+      import { routedInstalledSkills as routed } from "../../routing/recorded.js";
       function* run() { ${body} }`;
     expect(
-      await reported("library-operation-owner", `${library}setup-manage.ts`, source),
+      await reported("library-operation-owner", `${library}internal/setup/steps.ts`, source),
     ).toHaveLength(1);
   });
   test("adapters cannot import the replacement executor or journal writer directly", async () => {
     expect(
       await reported(
         "library-recorded-execution",
-        `${library}setup-manage.ts`,
-        `import { apply } from "./internal/operations/apply.js";`,
+        `${library}internal/setup/steps.ts`,
+        `import { apply } from "../operations/apply.js";`,
       ),
     ).toHaveLength(1);
     expect(
@@ -449,8 +451,8 @@ describe("skit/library-operation-owner", () => {
     expect(
       await reported(
         "library-operation-owner",
-        `${library}setup-manage.ts`,
-        `import { loadLibrary, type LibraryWriter } from "./store/library-store.js";`,
+        `${library}internal/setup/steps.ts`,
+        `import { loadLibrary, type LibraryWriter } from "../../store/library-store.js";`,
       ),
     ).toEqual([]);
   });

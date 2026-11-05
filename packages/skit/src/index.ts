@@ -157,7 +157,7 @@ export * from "./library/library-contracts.js";
 export * from "./library/source-identity.js";
 export { skillsShLockFileEntry } from "./library/skills-sh-lock-file.js";
 export * from "./library/library-state.js";
-export * from "./library/setup-intent.js";
+export { setupIntent } from "./library/setup.js";
 export * from "./library/enabled.js";
 export { RestoreInvalid, SourceRestoreInvalid } from "./library/library.js";
 export * from "./library/collection-version-plan.js";

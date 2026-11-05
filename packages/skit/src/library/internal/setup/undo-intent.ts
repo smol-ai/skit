@@ -8,7 +8,7 @@ import { Enabled } from "../../library-contracts.js";
 import { InvocationPolicies, Repository } from "../../device-state.js";
 import { SkillId } from "../../entity-ids.js";
 import { type LibraryState } from "../../library-state.js";
-import { type SetupIntent } from "../../setup-intent.js";
+import { type SetupIntent } from "./intent.js";
 
 const withPolicies = (invocation_policies: InvocationPolicies | undefined) =>
   invocation_policies === undefined ? {} : { invocation_policies };

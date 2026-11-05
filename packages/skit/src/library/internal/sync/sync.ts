@@ -34,7 +34,7 @@ import {
   SetupStopReason,
   type SyncProgram,
 } from "../../store/state-schema.js";
-import { setupOperation } from "../../setup.js";
+import { setupOperation } from "../setup/run.js";
 import { planIntent } from "../../plan-changes.js";
 import { prepareDeviceInstallation, withDeviceSkillSelection } from "../../enabled.js";
 import {

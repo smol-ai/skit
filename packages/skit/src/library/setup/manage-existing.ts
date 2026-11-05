@@ -3,13 +3,13 @@ import { LinkStat } from "../../platform/link-stat.js";
 import { leavePnpmSkill } from "../../installed-skills/pnpm-skills.js";
 import { type DuplicateCopy } from "../duplicates.js";
 import { StalePlan } from "../library-plan.js";
-import { recordSetupCopies } from "./setup-copy-backup.js";
+import { recordSetupCopies } from "./copy-backup.js";
 import {
   duplicateSymlinksToBackUp,
   ApprovedSymlink,
   type SetupCopySelection,
   type SetupCopyConflict,
-} from "./setup-decisions.js";
+} from "./decisions.js";
 import type { InventoryRootOptions } from "../routing/roots.js";
 
 export interface ManageOptions {

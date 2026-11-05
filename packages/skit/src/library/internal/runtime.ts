@@ -34,7 +34,7 @@ import { InvalidLibraryState, type LibraryChanged } from "../failures.js";
 import { type StepRouting, OperationStatus } from "../store/state-schema.js";
 import { readLibraryAudit } from "../audit/audit-log.js";
 import { snapshotOf, type Snapshot } from "../snapshot.js";
-import { recover, setup, applyRecorded } from "../setup.js";
+import { recover, setup, applyRecorded } from "./setup/run.js";
 import { planningState } from "../reviewed-plan.js";
 import { importCollection, importAuthoredCollection, importEdit } from "../import-collection.js";
 import type { TreeRequirements } from "../../platform/tree-requirements.js";

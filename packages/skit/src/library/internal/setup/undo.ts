@@ -1,4 +1,4 @@
-import { setupOperation } from "../../setup.js";
+import { setupOperation } from "./run.js";
 import { snapshotOf, type Snapshot } from "../../snapshot.js";
 import { StalePlan } from "../../library-plan.js";
 import { UndoPlan, type UndoIntent, type UndoResult } from "./undo-plan.js";
@@ -21,7 +21,7 @@ import {
   inspectLocalLibraryState,
 } from "../../store/library-store.js";
 import { LinkStat } from "../../../platform/link-stat.js";
-import { setupIntent, SetupIntent } from "../../setup-intent.js";
+import { setupIntent, SetupIntent } from "./intent.js";
 import { sourceImports } from "../../library-contracts.js";
 import { makeOperationId, type CollectionId, type OperationId } from "../../entity-ids.js";
 import * as MachineSettings from "../../machine-settings.js";

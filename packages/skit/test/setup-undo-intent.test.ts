@@ -1,3 +1,4 @@
+import { setupIntent } from "../src/library/internal/setup/intent.js";
 import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { it } from "@effect/vitest";
@@ -6,7 +7,6 @@ import {
   enabledSkillIds,
   currentSkillVersion,
   MachineSettings,
-  setupIntent,
   skitLayer,
   type LibraryState,
   type Hash,

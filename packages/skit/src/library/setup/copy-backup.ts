@@ -5,7 +5,7 @@ import { LinkStat } from "../../platform/link-stat.js";
 import { type DuplicateCopy } from "../duplicates.js";
 import { checkSetupGlobalContent } from "../internal/setup/protection.js";
 import { StalePlan } from "../library-plan.js";
-import { SetupApprovedCopy } from "./setup-decisions.js";
+import { SetupApprovedCopy } from "./decisions.js";
 
 /** Only direct, equal global copies approved by review can enter automatic preservation. */
 export const recordSetupCopies = Effect.fn("Setup.captureCopies")(function* (

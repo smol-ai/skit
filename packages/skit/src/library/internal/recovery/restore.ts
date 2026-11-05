@@ -7,7 +7,7 @@ import { RecoveryRestore } from "../../store/state-schema.js";
 import { planningState, applyReviewed } from "../../reviewed-plan.js";
 import { captureRecoveryRestore, inspectRecoveryOperation } from "./moves.js";
 
-import { setupOperation } from "../../setup.js";
+import { setupOperation } from "../setup/run.js";
 import { makeOperationId } from "../../entity-ids.js";
 
 export const RestoreIntent = Schema.TaggedStruct("Restore", { operationId: Schema.NonEmptyString });

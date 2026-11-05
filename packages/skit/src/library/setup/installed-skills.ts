@@ -10,7 +10,7 @@ import type {
   InstalledSkillChange,
   InstalledSkillChangeResult,
   SetupVersionChoice,
-} from "./setup-contract.js";
+} from "./contract.js";
 
 export class ChangeChoiceRequired
   extends Data.TaggedError("ChangeChoiceRequired")<{

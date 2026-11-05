@@ -36,7 +36,7 @@ import type {
   DeviceSkillSelection,
   SyncAncestry,
 } from "../packages/skit/src/library/library-state.js";
-import type { SetupIntent } from "../packages/skit/src/library/setup-intent.js";
+import type { SetupIntent } from "../packages/skit/src/library/internal/setup/intent.js";
 import type {
   Approval,
   EnabledChange,

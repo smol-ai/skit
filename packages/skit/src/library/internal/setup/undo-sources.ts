@@ -3,7 +3,7 @@ import { makeImportId, type CollectionId, type MachineId } from "../../entity-id
 import { originalTreeHash, collectionVersionPath } from "../../collection-version.js";
 import { sourceImports, type Import } from "../../library-contracts.js";
 import { type LibraryState } from "../../library-state.js";
-import { type SetupIntent } from "../../setup-intent.js";
+import { type SetupIntent } from "./intent.js";
 
 export interface UndoSourceImport {
   readonly importId: Import["import_id"];

@@ -86,26 +86,26 @@ const executionEdges = [
   {
     module: `${library}installed-update`,
     names: ["updateInstalledSkills"],
-    callers: [`${library}setup-manage.ts`],
+    callers: [`${library}internal/setup/steps.ts`],
   },
   {
-    module: `${library}setup-manage`,
+    module: `${library}internal/setup/steps`,
     names: ["runManage", "runUpdate"],
-    callers: [`${library}setup.ts`],
+    callers: [`${library}internal/setup/run.ts`],
   },
   {
-    module: `${library}setup-moves`,
+    module: `${library}internal/setup/moves`,
     names: ["moveAside"],
     callers: [
-      `${library}setup.ts`,
-      `${library}setup-manage.ts`,
+      `${library}internal/setup/run.ts`,
+      `${library}internal/setup/steps.ts`,
       `${library}internal/setup/undo-execution.ts`,
     ],
   },
   {
     module: `${library}internal/setup/undo-files`,
     names: ["prepareSetupUndoFiles"],
-    callers: [`${library}setup.ts`],
+    callers: [`${library}internal/setup/run.ts`],
   },
   {
     module: `${library}internal/setup/undo-files`,
@@ -115,12 +115,12 @@ const executionEdges = [
   {
     module: `${library}internal/setup/undo-execution`,
     names: ["runUndo"],
-    callers: [`${library}setup.ts`],
+    callers: [`${library}internal/setup/run.ts`],
   },
   {
     module: `${library}internal/recovery/moves`,
     names: ["prepareRecoveryRestore", "restoreRecorded"],
-    callers: [`${library}setup.ts`],
+    callers: [`${library}internal/setup/run.ts`],
   },
   {
     module: `${library}audit/audit-log`,
@@ -228,9 +228,11 @@ export const libraryRules = {
     create(context) {
       const file = relative(root, context.filename);
       if (!file.startsWith(library) || !file.endsWith(".ts")) return {};
-      const adapter = ["setup-manage.ts", "installed-update.ts", "internal/sync/operation.ts"].some(
-        (path) => file === library + path,
-      );
+      const adapter = [
+        "internal/setup/steps.ts",
+        "installed-update.ts",
+        "internal/sync/operation.ts",
+      ].some((path) => file === library + path);
       const executor = file === library + "internal/operations/installed-changes.ts";
       const installed = new Set();
       const routing = new Set();

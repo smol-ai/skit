@@ -11,9 +11,9 @@ import type { ImportedCollection } from "../../import-collection.js";
 import { InstalledSkills } from "../../installed-skills.js";
 import { planManage } from "../../manage-plan.js";
 import { Plan, StalePlan } from "../../library-plan.js";
-import { planManageEnable, duplicatesToMove, installedPaths } from "../../setup-manage.js";
-import { recoveryDirectory } from "../../setup-moves.js";
-import { setupOperation, checkSteps } from "../../setup.js";
+import { planManageEnable, duplicatesToMove, installedPaths } from "../setup/steps.js";
+import { recoveryDirectory } from "../setup/moves.js";
+import { setupOperation, checkSteps } from "../setup/run.js";
 
 import { applyReviewed, planIdOf, planningState } from "../../reviewed-plan.js";
 import {

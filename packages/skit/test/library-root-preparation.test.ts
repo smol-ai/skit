@@ -80,7 +80,7 @@ const interrupt = Effect.fn("test.rootPreparation.interrupt")(function* (
     makeDirectory: (path, options) =>
       Effect.gen(function* () {
         if (path === f.claude) {
-          const state = yield* decode(yield* f.fs.readFileString(f.state));
+          const state = yield* decode(yield* f.fs.readFileString(f.state)).pipe(Effect.orDie);
           assert.isTrue(
             state.operations.some(
               (operation) =>
@@ -97,7 +97,10 @@ const interrupt = Effect.fn("test.rootPreparation.interrupt")(function* (
       }),
     rename: (from, to) =>
       Effect.gen(function* () {
-        const state = to === f.state ? yield* decode(yield* f.fs.readFileString(from)) : undefined;
+        const state =
+          to === f.state
+            ? yield* decode(yield* f.fs.readFileString(from)).pipe(Effect.orDie)
+            : undefined;
         yield* f.fs.rename(from, to);
         const pending = state?.operations.find((operation) => operation._tag === "Pending");
         if (

@@ -2,13 +2,9 @@ import { Schema } from "effect";
 import { Hash } from "../../shared/hash.js";
 import { hashParts } from "../../artifact/descriptor.js";
 import { type DuplicateCopy } from "../duplicates.js";
-import type {
-  SetupResult,
-  SetupSkillInstance,
-  SetupOnboardingCandidate,
-} from "./setup-contract.js";
+import type { SetupResult, SetupSkillInstance, SetupOnboardingCandidate } from "./contract.js";
 
-import { isSetupCandidateFromCodex, setupInstanceGroupKey } from "./setup-onboarding.js";
+import { isSetupCandidateFromCodex, setupInstanceGroupKey } from "./onboarding.js";
 
 export const SetupDuplicateAction = Schema.Literals([
   "retain-only",

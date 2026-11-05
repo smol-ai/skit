@@ -35,8 +35,8 @@
       "import": "./dist/api/index.js"
     },
     "./library/setup": {
-      "types": "./dist/library/setup/index.d.ts",
-      "import": "./dist/library/setup/index.js"
+      "types": "./dist/library/setup.d.ts",
+      "import": "./dist/library/setup.js"
     },
     "./library/session": {
       "types": "./dist/library/session.d.ts",

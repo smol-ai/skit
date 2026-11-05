@@ -2,7 +2,7 @@ import { dirname, join } from "node:path";
 import { Clock, Effect } from "effect";
 import { collectionVersionPath } from "../../collection-version.js";
 import type { LibraryState } from "../../library-state.js";
-import { computeSkillsShCompatibleHash } from "../../setup/skills-sh-compatible-hash.js";
+import { computeSkillsLockCompatibleHash } from "../../setup.js";
 import type { LibrarySubject } from "../../subject-resolution.js";
 import { inspectSkillsShGitEvidence } from "./skills-sh-git-evidence.js";
 export { GitInspectionFailed } from "./skills-sh-git-evidence.js";
@@ -152,7 +152,7 @@ export const checkSkillsShSubject = Effect.fn("SkillsSh.checkSubject")(function*
       });
       continue;
     }
-    const local = yield* computeSkillsShCompatibleHash(join(root, folder), join(root, folder));
+    const local = yield* computeSkillsLockCompatibleHash(join(root, folder), join(root, folder));
     if (!local) {
       members.push({
         ...base,

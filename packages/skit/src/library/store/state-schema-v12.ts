@@ -6,7 +6,7 @@ import * as Status from "../installed-skill-status.js";
 import { InstalledSkillId, OperationId } from "../entity-ids.js";
 import { Hash } from "../../shared/hash.js";
 import { LibraryState } from "../library-state.js";
-import { recordedLibrary } from "../setup-intent.js";
+import { recordedLibrary } from "../internal/setup/intent.js";
 import { compileApply, finalRows, same } from "../internal/operations/program.js";
 import {
   LibraryStateFields,

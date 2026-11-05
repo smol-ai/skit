@@ -1,34 +1,31 @@
 // Setup's Manage and Update steps. Each routes by the routing recorded in its step, never by this
 // machine's configuration, so a re-run after a crash installs exactly where the first run did.
 
-import { snapshotOf } from "./snapshot.js";
+import { snapshotOf } from "../../snapshot.js";
 import { Effect, FileSystem, Option } from "effect";
 import { dirname, join, resolve } from "node:path";
-import { hasHarnessProfile } from "../harnesses/catalog.js";
-import { inspectInstalledSkill } from "../installed-skills/files.js";
-import { LinkStat } from "../platform/link-stat.js";
-import { InstallScope } from "./scope.js";
-import type { OperationScope } from "./internal/operations/operations.js";
-import { routedInstalledSkills, destinationsIn, readableIn } from "./routing/recorded.js";
-import { InvalidIntent } from "./enabled-plan.js";
-import type { CollectionId, OperationId } from "./entity-ids.js";
-import { absentUnder, holdsEvidence, parentIsAsRecorded } from "./folder-evidence.js";
-import { importCollection } from "./import-collection.js";
-import { InstalledSkills } from "./installed-skills.js";
+import { hasHarnessProfile } from "../../../harnesses/catalog.js";
+import { inspectInstalledSkill } from "../../../installed-skills/files.js";
+import { LinkStat } from "../../../platform/link-stat.js";
+import { InstallScope } from "../../scope.js";
+import type { OperationScope } from "../operations/operations.js";
+import { routedInstalledSkills, destinationsIn, readableIn } from "../../routing/recorded.js";
+import { InvalidIntent } from "../../enabled-plan.js";
+import type { CollectionId, OperationId } from "../../entity-ids.js";
+import { absentUnder, holdsEvidence, parentIsAsRecorded } from "../../folder-evidence.js";
+import { importCollection } from "../../import-collection.js";
+import { InstalledSkills } from "../../installed-skills.js";
 import {
   ReviewedChangeDiffers,
   updateInstalledSkills,
   type ReviewedChange,
-} from "./installed-update.js";
-import type { LibraryState } from "./library-state.js";
-import {
-  setEnabledResults,
-  type SetEnabledResult,
-} from "./internal/session/set-enabled-contract.js";
-import { incompleteManageWarning, planManage } from "./manage-plan.js";
-import { planIntent } from "./plan-changes.js";
-import { moveAside, recoveryDirectory } from "./setup-moves.js";
-import { loadLibrary } from "./store/library-store.js";
+} from "../../installed-update.js";
+import type { LibraryState } from "../../library-state.js";
+import { setEnabledResults, type SetEnabledResult } from "../session/set-enabled-contract.js";
+import { incompleteManageWarning, planManage } from "../../manage-plan.js";
+import { planIntent } from "../../plan-changes.js";
+import { moveAside, recoveryDirectory } from "./moves.js";
+import { loadLibrary } from "../../store/library-store.js";
 import type {
   FolderEvidence,
   LinkEvidence,
@@ -40,8 +37,8 @@ import type {
   SetupStopReason,
   StepEvidence,
   StepRouting,
-} from "./store/state-schema.js";
-import { resolveLibrarySubject } from "./subject-resolution.js";
+} from "../../store/state-schema.js";
+import { resolveLibrarySubject } from "../../subject-resolution.js";
 
 /** What a Manage step did: each enable it applied, its warnings and where it moved duplicates. */
 export interface ManageResult {

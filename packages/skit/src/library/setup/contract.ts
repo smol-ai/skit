@@ -18,12 +18,11 @@ export const SetupVersionChoice = Schema.Struct({
 });
 export type SetupVersionChoice = typeof SetupVersionChoice.Type;
 
-export const SetupProbe = Schema.Struct({
+const SetupProbe = Schema.Struct({
   harness: HarnessName,
   status: Schema.Literals(["installed", "missing", "failed"]),
   command: Schema.String,
 });
-export type SetupProbe = typeof SetupProbe.Type;
 
 export const SetupGitStatus = Schema.Struct({
   status: Schema.Literals([
@@ -76,7 +75,7 @@ export const SetupLockMatch = Schema.Struct({
 });
 export type SetupLockMatch = typeof SetupLockMatch.Type;
 
-export const SetupContentIdentity = Schema.Struct({
+const SetupContentIdentity = Schema.Struct({
   status: Schema.Literals(["exact", "ambiguous", "none", "unhashable"]),
   currentHash: Schema.optionalKey(Hash),
   libraryMatches: Schema.Array(
@@ -88,9 +87,8 @@ export const SetupContentIdentity = Schema.Struct({
     }),
   ),
 });
-export type SetupContentIdentity = typeof SetupContentIdentity.Type;
 
-export const SetupManagedMembership = Schema.Union([
+const SetupManagedMembership = Schema.Union([
   Schema.Struct({
     kind: Schema.tag("in-library"),
     installedSkillId: InstalledSkillId,
@@ -108,9 +106,8 @@ export const SetupManagedMembership = Schema.Union([
     skillVersionId: SkillVersionId,
   }),
 ]);
-export type SetupManagedMembership = typeof SetupManagedMembership.Type;
 
-export const SetupInstanceOwner = Schema.Union([
+const SetupInstanceOwner = Schema.Union([
   PnpmSkillOwner,
   Schema.Struct({ kind: Schema.tag("skit"), membership: SetupManagedMembership }),
   Schema.Struct({ kind: Schema.tag("invalid-marker") }),
@@ -129,7 +126,6 @@ export const SetupInstanceOwner = Schema.Union([
   Schema.Struct({ kind: Schema.tag("repository"), repository: Schema.String }),
   Schema.Struct({ kind: Schema.tag("unknown") }),
 ]);
-export type SetupInstanceOwner = typeof SetupInstanceOwner.Type;
 
 export const SetupSkillInstance = Schema.Struct({
   name: Schema.String,
@@ -157,12 +153,11 @@ export const SetupSuppressed = Schema.Struct({
 });
 export type SetupSuppressed = typeof SetupSuppressed.Type;
 
-export const SetupRepository = Schema.Struct({
+const SetupRepository = Schema.Struct({
   path: Schema.String,
   skills: Schema.Array(Schema.String),
   status: Schema.Literals(["watched", "ignored", "undecided"]),
 });
-export type SetupRepository = typeof SetupRepository.Type;
 
 export const RepositoryPolicyResult = Schema.Struct({
   action: Schema.Literals(["list", "watch", "ignore", "forget"]),

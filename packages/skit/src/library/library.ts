@@ -109,7 +109,7 @@ import type {
 } from "./store/state-schema.js";
 import { type LibraryAuditEvent, type LibraryAuditInvalid } from "./audit/audit-log.js";
 import { type Snapshot } from "./snapshot.js";
-import { type SetupError, type SetupResult, type StartupRecovery } from "./setup.js";
+import { type SetupError, type SetupResult, type StartupRecovery } from "./internal/setup/run.js";
 
 import {
   type AuthoredImport,
@@ -150,7 +150,12 @@ export type {
   LibraryStateReadError,
   LibraryStateWriteError,
 } from "./store/library-store.js";
-export type { SetupError, SetupResult, SetupStepResult, StartupRecovery } from "./setup.js";
+export type {
+  SetupError,
+  SetupResult,
+  SetupStepResult,
+  StartupRecovery,
+} from "./internal/setup/run.js";
 export { RestoreInvalid, SourceRestoreInvalid } from "./internal/content/restore.js";
 export type {
   StagedContent,

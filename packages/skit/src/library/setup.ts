@@ -1,815 +1,624 @@
-import { recordPreparation, prepareRoots } from "./internal/setup/prepare-roots.js";
-import { withLock as withHomeLock } from "../platform/home-lock.js";
-import { runUndo } from "./internal/setup/undo-execution.js";
-// Setup: steps saved in state.json before any runs, run in order, each marked Done as it ends
-// (decisions.md D4, "Crash halfway" and "Setup records"). Never rolls back on its own.
-
-import { Effect, Option, Predicate, Schema } from "effect";
-import { isPlatformError } from "effect/PlatformError";
-import { TreeError } from "../shared/tree-error.js";
-import { isSkitFailure } from "../shared/failure.js";
-import { isAbsolute, resolve } from "node:path";
-import { InvalidLibraryState, LibraryChanged } from "./failures.js";
-import { HomeBusy } from "../platform/lock-failures.js";
-import { pathIsWithin } from "../platform/path-identity.js";
-import { InvalidIntent } from "./enabled-plan.js";
-import { makeOperationId, type OperationId } from "./entity-ids.js";
-import { type UpdatedCopy, changeWrites } from "./installed-update.js";
+import { join } from "node:path";
+import { Data, Effect, FileSystem } from "effect";
+import { deterministicTreeHash } from "../artifact/skit.js";
+import { canonicalJson } from "../shared/json.js";
+import { hashParts } from "../artifact/descriptor.js";
+import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
+import * as MachineSettings from "./machine-settings.js";
+import { OptionCombinationInvalid } from "../shared/input-failures.js";
+import { recordDuplicateSymlinks, type ManageOptions } from "./setup/manage-existing.js";
+import { applySetupPlan, type SetupApplyOptions, type SetupApproval } from "./setup/apply.js";
+import type { SetupOptions } from "./setup/scan.js";
+import type {
+  SetupResult,
+  SetupKnownSourceSelection,
+  SetupVersionChoice,
+} from "./setup/contract.js";
 import {
-  duplicatesToMove,
-  installedPaths,
-  runManage,
-  runUpdate,
-  type ManageResult,
-} from "./setup-manage.js";
-import { absentEvidence, observePathEvidence } from "./folder-evidence.js";
-
-import { recordedLibrary } from "./setup-intent.js";
-import { restoreRecorded } from "./internal/recovery/moves.js";
-import { moveAside, recoveryDirectory } from "./setup-moves.js";
-import { runSyncStep, type SyncStepResult } from "./internal/sync/operation.js";
-import { importCollection, type ImportedCollection } from "./import-collection.js";
-import { emptyLibraryState, type LibraryState } from "./library-state.js";
-import { StalePlan, type Plan, type Outcome } from "./library-plan.js";
-import { InstalledSkillInvalid } from "./installation/install-enabled.js";
-import { prepareApply } from "./internal/operations/recorded.js";
-import { copiesOf } from "./internal/operations/program.js";
-import { applyOutcome } from "./internal/operations/result.js";
-import { runApply, operationScope } from "./internal/operations/operations.js";
-import type { Routing } from "./library.js";
-import { snapshotOf, type Snapshot } from "./snapshot.js";
+  isSetupInstallDestination,
+  setupReviewCopies,
+  setupSelectedCopies,
+  setupSourceChoiceId,
+  setupDuplicateActions,
+  setupDuplicateChoiceRequired,
+  copyConflict,
+  type SetupExplicitSelection,
+  type SetupCopyDecision,
+  type SetupCopyChoice,
+  type SetupCopyConflict,
+  type SetupDuplicateAction,
+} from "./setup/decisions.js";
+import { planSetupRemovals, setupRemovablePaths } from "./setup/removal.js";
+import { recordSetupCopies } from "./setup/copy-backup.js";
 import {
-  LibraryWriter,
-  libraryStatePath,
-  loadLibrary,
-  writeLibrary,
-  type LibraryStateReadError,
-  type LibraryStateWriteError,
-  inspectLocalLibraryState,
-} from "./store/library-store.js";
-import {
-  OperationStatus,
-  type FolderEvidence,
-  type LinkEvidence,
-  type ManageExistingSelection,
-  type ManageNewSelection,
-  type RecordedSetupStep,
-  type SetupStep,
-  type SetupStopReason,
-  type StepError,
-  type StepEvidence,
-} from "./store/state-schema.js";
-
-/** One finished step, by step tag. */
-export type SetupStepResult =
-  | { readonly _tag: "Undo"; readonly operationId: string; readonly backupId: string }
-  | {
-      readonly _tag: "Restore";
-      readonly after: typeof import("./recovery-facts.js").RecoveryInspection.Type;
-    }
-  | { readonly _tag: "Apply"; readonly outcome: Outcome }
-  | SyncStepResult
-  | { readonly _tag: "Import"; readonly imported: ImportedCollection }
-  | ManageResult
-  | { readonly _tag: "Update"; readonly changes: readonly UpdatedCopy[] }
-  | {
-      readonly _tag: "Remove";
-      readonly recoveryDirectory: string;
-      readonly removed: readonly string[];
-    };
-
-export type SetupResult =
-  | {
-      readonly _tag: "Done";
-      readonly operationId: OperationId;
-      /** One per step this run ran, in order. */
-      readonly steps: readonly SetupStepResult[];
-      readonly warnings: readonly { readonly name: string; readonly message: string }[];
-      readonly recoveryDirectories: readonly string[];
-    }
-  | {
-      /** The user can undo by operationId; Library never rolls back on its own. */
-      readonly _tag: "Stopped";
-      readonly operationId: OperationId;
-      readonly completed: readonly SetupStepResult[];
-      readonly reason: SetupStopReason;
-    };
+  hasChangesToApply,
+  changesNeedingChoice,
+  setupVersionAlternatives,
+} from "./setup/installed-skills.js";
 
 /**
- * Failures before the operation is saved: nothing was written. Once state.json holds it, every
- * failure is a Stopped result; an interruption leaves it Pending.
+ * Applying the recommended plan would create another agent-visible copy of these skills, and
+ * nobody has said how to resolve that. Non-interactive setup never guesses.
  */
-export type SetupError =
-  | StalePlan
-  | InvalidIntent
-  | LibraryStateReadError
-  | Exclude<LibraryStateWriteError, LibraryChanged>;
-
-/** What is at each path, as evidence; a missing folder is recorded as "nothing here". */
-const observed = (paths: readonly string[]) =>
-  Effect.forEach([...new Set(paths)], (path) =>
-    Effect.flatMap(observePathEvidence(path), (evidence) =>
-      Option.isSome(evidence) ? Effect.succeed<StepEvidence>(evidence.value) : absentEvidence(path),
-    ),
-  );
-
-/**
- * What a step expects at each path it touches, before it runs and once it has. Where it installs
- * or updates copies, `before` also records what was there, so undo can tell its copies from the
- * user's.
- */
-const recordedStep = Effect.fn("Library.setup.recordedStep")(function* (step: SetupStep) {
-  switch (step._tag) {
-    case "Undo":
-    case "Restore":
-    case "LegacyApply":
-    case "Apply":
-      return { step, before: [], after: [], status: "Pending" } satisfies RecordedSetupStep;
-    case "Sync":
-      return { step, before: [], after: [], status: "Pending" } satisfies RecordedSetupStep;
-    // Import's retained Collection Version is known only once it runs; its Done write saves it,
-    // and saves it too in the `after` of each Manage step whose files it imports.
-    case "Import":
-      return { step, before: [], after: [], status: "Pending" } satisfies RecordedSetupStep;
-    case "Update":
-      return {
-        step,
-        before: yield* observed(
-          step.changes
-            .filter(
-              (change) =>
-                changeWrites(change) ||
-                (change.status !== "native-delete" &&
-                  step.versionChoices.some((choice) => choice.skillId === change.skillId)),
-            )
-            .map(({ path }) => path),
-        ),
-        after: [],
-        status: "Pending",
-      } satisfies RecordedSetupStep;
-    case "Remove":
-      return {
-        step,
-        before: step.folders,
-        after: step.folders.map((folder) => ({
-          _tag: "Absent",
-          path: folder.path,
-          parent: folder.parent,
-        })),
-        status: "Pending",
-      } satisfies RecordedSetupStep;
-    case "Manage": {
-      const selections: readonly (ManageExistingSelection | ManageNewSelection)[] = step.selections;
-      const reviewed = selections.flatMap((selection) => [
-        selection.source,
-        ...(selection.mode === "new" ? selection.equalCopies : []),
-        ...duplicatesToMove(step.routing, selection),
-      ]);
-      return {
-        step,
-        before: [
-          ...reviewed,
-          ...(yield* observed(
-            selections
-              .flatMap((selection) => installedPaths(step.routing, selection))
-              .filter((path) => !reviewed.some((evidence) => evidence.path === path)),
-          )),
-        ],
-        after: selections.flatMap((selection) =>
-          duplicatesToMove(step.routing, selection).map((folder) => ({
-            _tag: "Absent" as const,
-            path: folder.path,
-            parent: folder.parent,
-          })),
-        ),
-        status: "Pending",
-      } satisfies RecordedSetupStep;
-    }
+export class SetupDuplicateDecisionRequired
+  extends Data.TaggedError("SetupDuplicateDecisionRequired")<{
+    names: readonly string[];
+    retirable: boolean;
+    /** False when one of them is linked where SKIT writes its copy, so both cannot stay. */
+    keepBoth: boolean;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "INVALID_ARGUMENT" as const;
+  get remediation() {
+    return `Pass --duplicates retain-only to keep them in the Library without enabling${this.keepBoth ? ", --duplicates keep-both to enable them alongside the existing copies" : ""}${this.retirable ? ", or --duplicates retire-aliases to replace the redundant symlinks" : ""}.`;
   }
-});
-
-/** The Import steps whose result a step's "new" selections take their files from. */
-const importsUsedBy = (step: SetupStep): readonly number[] =>
-  step._tag === "Manage" && step.mode === "new"
-    ? step.selections.flatMap((selection) =>
-        selection.importFrom._tag === "Step" ? [selection.importFrom.step] : [],
-      )
-    : [];
-
-/** Every folder a step may move aside. */
-const removedBy = (step: SetupStep): readonly (FolderEvidence | LinkEvidence)[] => {
-  if (step._tag === "Undo") return step.program.preserve;
-  if (step._tag === "Remove") return step.folders;
-  if (step._tag !== "Manage") return [];
-  const selections: readonly (ManageExistingSelection | ManageNewSelection)[] = step.selections;
-  return selections.flatMap((selection) => duplicatesToMove(step.routing, selection));
-};
-
-/** Refuse steps setup could not run safely, before anything is written. */
-export const checkSteps = (home: string, steps: readonly SetupStep[]) => {
-  for (const [index, step] of steps.entries()) {
-    if (step._tag !== "Sync" || step.phase === "retire") continue;
-    const source = steps[step.sourceStep];
-    if (step.sourceStep >= index || source?._tag !== "Sync" || source.phase !== "retire")
-      return Option.some(`Sync step ${index + 1} has no earlier recorded program`);
+  get message() {
+    return `Enabling ${this.names.join(", ")} would create another copy agents already see`;
   }
-  for (const step of steps) {
-    if (step._tag !== "Undo") continue;
-    for (const { path } of step.program.actions)
-      if (
-        !isAbsolute(path) ||
-        resolve(path) !== path ||
-        path === resolve(home) ||
-        pathIsWithin(path, resolve(home)) ||
-        pathIsWithin(resolve(home), path)
-      )
-        return Option.some(`Undo cannot replace Library storage or a non-normalized path: ${path}`);
-  }
-  const firstRemove = steps.findIndex((step) => step._tag === "Remove");
-  if (firstRemove >= 0 && steps.slice(firstRemove).some((step) => step._tag !== "Remove"))
-    return Option.some("Setup removes folders only after every other step");
-  for (const [index, step] of steps.entries())
-    for (const source of importsUsedBy(step))
-      if (source >= index || steps[source]?._tag !== "Import")
-        return Option.some(`Setup step ${index + 1} takes its files from a step that imports none`);
-  const paths: string[] = [];
-  for (const { path } of steps.flatMap(removedBy)) {
-    if (!isAbsolute(path) || resolve(path) !== path)
-      return Option.some(`Setup removes only absolute, normalized paths: ${path}`);
-    if (
-      path === resolve(home) ||
-      pathIsWithin(path, resolve(home)) ||
-      pathIsWithin(resolve(home), path)
-    )
-      return Option.some(`Setup cannot remove the Library's own storage: ${path}`);
-    if (
-      paths.some(
-        (other) => other === path || pathIsWithin(other, path) || pathIsWithin(path, other),
-      )
-    )
-      return Option.some(`Setup removes each folder once, and never one inside another: ${path}`);
-    paths.push(path);
-  }
-  return Option.none<string>();
-};
-
-const decodeOperations = (state: LibraryState) =>
-  Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(state.operations);
-const encodeOperation = Schema.encodeEffect(OperationStatus);
-
-/** The decoded operation `operationId` names in `state`, if it records one. */
-const operationIn = Effect.fn("Library.setup.operationIn")(function* (
-  state: LibraryState,
-  operationId: OperationId,
-) {
-  return Option.fromUndefinedOr(
-    (yield* decodeOperations(state)).find((operation) => operation.operationId === operationId),
-  );
-});
-
-/** The steps an operation records, whatever its status, so undo keeps their evidence. */
-const stepsOf = (operation: Option.Option<OperationStatus>) =>
-  Option.match(operation, { onNone: () => [], onSome: ({ steps }) => steps });
-
-/** What the record saved of the Library before any step ran; `state` when it is gone. */
-const beforeOf = (operation: Option.Option<OperationStatus>, state: LibraryState) =>
-  Option.match(operation, { onNone: () => recordedLibrary(state), onSome: ({ before }) => before });
-
-/** Save `operation` in place of the record of the same id, or after the others. */
-const saveOperation = Effect.fn("Library.setup.saveOperation")(function* (
-  base: LibraryState,
-  operation: OperationStatus,
-) {
-  const writer = yield* LibraryWriter;
-  const encoded = yield* encodeOperation(operation);
-  const others = base.operations.filter((other) => other.operationId !== operation.operationId);
-  const index = base.operations.findIndex((other) => other.operationId === operation.operationId);
-  const operations =
-    index < 0 ? [...others, encoded] : [...others.slice(0, index), encoded, ...others.slice(index)];
-  yield* writer.save({ ...base, operations }, base);
-});
-
-type StepOutcome =
-  | {
-      readonly _tag: "Ran";
-      readonly result: SetupStepResult;
-      readonly after: readonly StepEvidence[];
-    }
-  | { readonly _tag: "Stop"; readonly reason: SetupStopReason; readonly result?: SetupStepResult };
-
-const runStep = Effect.fn("Library.setup.step")(function* (
-  operationId: OperationId,
-  index: number,
-  steps: readonly RecordedSetupStep[],
-) {
-  const { home } = yield* LibraryWriter;
-  const step = steps[index]!.step;
-  switch (step._tag) {
-    case "Undo":
-      yield* runUndo(operationId, index, step.program);
-      return {
-        _tag: "Ran",
-        result: {
-          _tag: "Undo",
-          operationId: step.program.operationId,
-          backupId: step.program.backupId,
-        },
-        after: [],
-      } satisfies StepOutcome;
-    case "Restore":
-      return {
-        _tag: "Ran",
-        result: { _tag: "Restore", after: yield* restoreRecorded(home, step.program) },
-        after: [],
-      } satisfies StepOutcome;
-    case "LegacyApply":
-      return {
-        _tag: "Stop",
-        reason: {
-          _tag: "StepFailed",
-          step: index,
-          error: {
-            _tag: "Library.ApplyMigrationStopped",
-            code: "CONFLICT",
-            message: step.detail,
-            remediation: "Review and apply the change again.",
-          },
-        },
-      } satisfies StepOutcome;
-    case "Apply": {
-      const outcome = yield* runApply(operationId, index, step);
-      const result: SetupStepResult = { _tag: "Apply", outcome };
-      if (outcome._tag === "Incomplete")
-        return {
-          _tag: "Stop",
-          reason: { _tag: "StepFailed", step: index, error: stepError(outcome.cause) },
-          result,
-        } satisfies StepOutcome;
-      return { _tag: "Ran", result, after: [] } satisfies StepOutcome;
-    }
-    case "Sync":
-      return yield* runSyncStep(operationId, index, steps, home);
-    case "Import": {
-      const imported = yield* Effect.scoped(importCollection(step.request));
-      return {
-        _tag: "Ran",
-        result: { _tag: "Import", imported },
-        after: [
-          {
-            _tag: "Retained",
-            hash: imported.snapshotDigest,
-            collectionId: imported.collection.collection_id,
-          },
-        ],
-      } satisfies StepOutcome;
-    }
-    case "Manage":
-      return yield* operationScope(operationId, index, step.routing).pipe(
-        Effect.flatMap((scope) => Effect.scoped(runManage(operationId, index, step, steps, scope))),
-        Effect.catchTag("Library.InstalledSkillsChanged", (error) =>
-          Effect.succeed({
-            _tag: "Stop" as const,
-            reason: {
-              _tag: "EvidenceDiffers" as const,
-              step: index,
-              path: error.path,
-              expected: { before: Option.none(), after: Option.none() },
-            },
-          }),
-        ),
-      );
-    case "Update":
-      return yield* operationScope(operationId, index, step.routing).pipe(
-        Effect.flatMap((scope) => Effect.scoped(runUpdate(index, step, scope))),
-        Effect.catchTag("Library.InstalledSkillsChanged", (error) =>
-          Effect.succeed({
-            _tag: "Stop" as const,
-            reason: {
-              _tag: "EvidenceDiffers" as const,
-              step: index,
-              path: error.path,
-              expected: { before: Option.none(), after: Option.none() },
-            },
-          }),
-        ),
-      );
-    case "Remove": {
-      const moved = yield* moveAside(
-        operationId,
-        recoveryDirectory(home, operationId, index),
-        step.folders,
-      );
-      if (moved._tag === "Differs")
-        return {
-          _tag: "Stop",
-          reason: {
-            _tag: "EvidenceDiffers",
-            step: index,
-            path: moved.folder.path,
-            // A removed folder's after is "nothing here", which is neither a folder nor a link.
-            expected: { before: Option.some(moved.folder), after: Option.none() },
-          },
-        } satisfies StepOutcome;
-      return {
-        _tag: "Ran",
-        result: {
-          _tag: "Remove",
-          recoveryDirectory: moved.directory,
-          removed: step.folders.map(({ path }) => path),
-        },
-        after: step.folders.map((folder) => ({
-          _tag: "Absent",
-          path: folder.path,
-          parent: folder.parent,
-        })),
-      } satisfies StepOutcome;
-    }
-  }
-});
-
-const storedInFull = Schema.is(
-  Schema.Union([TreeError, HomeBusy, LibraryChanged, InvalidLibraryState]),
-);
-
-/** The error a failed step stores: in full where it can be, otherwise what it says about itself. */
-const stepError = (error: unknown): StepError => {
-  if (storedInFull(error) || isPlatformError(error)) return error;
-  const tag =
-    Predicate.hasProperty(error, "_tag") && Predicate.isString(error._tag)
-      ? error._tag
-      : "UnknownFailure";
-  if (isSkitFailure(error))
-    return { _tag: tag, code: error.code, message: error.message, remediation: error.remediation };
-  return {
-    _tag: tag,
-    code: "OPERATION_FAILED",
-    message:
-      Predicate.hasProperty(error, "message") && Predicate.isString(error.message)
-        ? error.message
-        : String(error),
-    remediation: "Undo this setup, or run setup again once the cause is fixed.",
-  };
-};
-
-/**
- * Run the Pending steps of the operation `operationId` records, under the writer that saved it.
- * A step that differs from its record, fails, or finds the operation gone stops the operation;
- * nothing that ran is undone.
- */
-const runOperation = Effect.fn("Library.setup.run")(function* (operationId: OperationId) {
-  const { home } = yield* LibraryWriter;
-  const completed: SetupStepResult[] = [];
-  const stop = (reason: SetupStopReason) =>
-    Effect.gen(function* () {
-      const current = yield* loadLibrary(home);
-      const operation = yield* operationIn(current, operationId);
-      yield* saveOperation(
-        current,
-        OperationStatus.cases.Stopped.make({
-          operationId,
-          steps: stepsOf(operation),
-          reason,
-          before: beforeOf(operation, current),
-          after: recordedLibrary(current),
-        }),
-      );
-    }).pipe(
-      // Unsaved, the record stays Pending and the next run finds it.
-      Effect.catchCause((cause) =>
-        Effect.logWarning("Setup stopped, but could not record it", cause),
-      ),
-      Effect.map((): SetupResult => ({ _tag: "Stopped", operationId, completed, reason })),
-    );
-  const failed = (step: number) => (error: unknown) =>
-    stop({ _tag: "StepFailed", step, error: stepError(error) });
-
-  const loaded = yield* Effect.result(
-    Effect.flatMap(loadLibrary(home), (state) => operationIn(state, operationId)),
-  );
-  if (loaded._tag === "Failure") return yield* failed(0)(loaded.failure);
-  if (Option.isNone(loaded.success) || loaded.success.value._tag !== "Pending")
-    return yield* stop({
-      _tag: "LibraryChanged",
-      step: 0,
-      revision: yield* Effect.orElseSucceed(
-        Effect.map(inspectLocalLibraryState(home), (inspected) => snapshotOf(inspected).revision),
-        () => snapshotOf({ present: false }).revision,
-      ),
-    });
-  let pending = loaded.success.value;
-  if (pending.preparation) {
-    const prepared = yield* Effect.result(prepareRoots(pending.preparation, pending.steps));
-    if (prepared._tag === "Failure") {
-      const error = prepared.failure;
-      return yield* Predicate.isTagged(error, "Library.InstalledSkillsChanged")
-        ? stop({
-            _tag: "EvidenceDiffers",
-            step: 0,
-            path: error.path,
-            expected: { before: Option.none(), after: Option.none() },
-          })
-        : failed(0)(error);
-    }
-    if (!pending.preparation.done) {
-      pending = { ...pending, ...prepared.success };
-      const saved = yield* Effect.result(
-        Effect.flatMap(loadLibrary(home), (current) => saveOperation(current, pending)),
-      );
-      if (saved._tag === "Failure") return yield* failed(0)(saved.failure);
-    }
-  }
-  const recorded = pending.steps;
-
-  for (const [index, { status }] of recorded.entries()) {
-    if (status === "Done") continue;
-    // The record as saved now: an earlier step's Done write may have added this step's evidence.
-    const current = yield* Effect.result(
-      Effect.flatMap(loadLibrary(home), (state) => operationIn(state, operationId)),
-    );
-    if (current._tag === "Failure") return yield* failed(index)(current.failure);
-    const steps =
-      Option.isSome(current.success) && current.success.value._tag === "Pending"
-        ? current.success.value.steps
-        : recorded;
-    const outcome = yield* Effect.result(runStep(operationId, index, steps));
-    if (outcome._tag === "Failure") return yield* failed(index)(outcome.failure);
-    if (outcome.success._tag === "Stop") {
-      if ("result" in outcome.success && outcome.success.result)
-        completed.push(outcome.success.result);
-      return yield* stop(outcome.success.reason);
-    }
-    const { result, after } = outcome.success;
-    // Mark the step Done in the state as it is now: the step itself may have saved it.
-    const marked = yield* Effect.result(
-      Effect.gen(function* () {
-        const current = yield* loadLibrary(home);
-        const operation = yield* operationIn(current, operationId);
-        if (Option.isNone(operation) || operation.value._tag !== "Pending")
-          return Option.some(snapshotOf({ present: true, state: current }).revision);
-        yield* saveOperation(
-          current,
-          OperationStatus.cases.Pending.make({
-            ...operation.value,
-            operationId,
-            before: operation.value.before,
-            // A later step that takes its files from this one records what it retained.
-            steps: operation.value.steps.map((saved, at) =>
-              at === index
-                ? { ...saved, after, status: "Done" }
-                : importsUsedBy(saved.step).includes(index)
-                  ? { ...saved, after: [...saved.after, ...after] }
-                  : saved,
-            ),
-          }),
-        );
-        return Option.none();
-      }),
-    );
-    if (marked._tag === "Failure") return yield* failed(index)(marked.failure);
-    if (Option.isSome(marked.success))
-      return yield* stop({ _tag: "LibraryChanged", step: index, revision: marked.success.value });
-    completed.push(result);
-  }
-  const finished = yield* Effect.result(
-    Effect.gen(function* () {
-      const current = yield* loadLibrary(home);
-      const operation = yield* operationIn(current, operationId);
-      yield* saveOperation(
-        current,
-        OperationStatus.cases.Done.make({
-          operationId,
-          steps: stepsOf(operation),
-          before: beforeOf(operation, current),
-          after: recordedLibrary(current),
-        }),
-      );
-    }),
-  );
-  if (finished._tag === "Failure") return yield* failed(recorded.length - 1)(finished.failure);
-  return {
-    _tag: "Done",
-    operationId,
-    steps: completed,
-    warnings: completed.flatMap((step) => (step._tag === "Manage" ? step.warnings : [])),
-    recoveryDirectories: completed.flatMap((step) =>
-      step._tag === "Remove"
-        ? [step.recoveryDirectory]
-        : step._tag === "Manage"
-          ? step.recoveryDirectories
-          : [],
-    ),
-  } satisfies SetupResult;
-});
-
-/**
- * Save the steps as one Pending operation, then run them. Refuses with `StalePlan` unless the
- * Library is still `base`. A later setup replaces the records of earlier Done ones; Pending and
- * Stopped records stay until undone.
- */
-export const setupOperation = Effect.fn("Library.setupOperation")(function* (
-  steps: readonly SetupStep[],
-  options: {
-    readonly base: Snapshot;
-    readonly operationId: OperationId;
-    readonly replaceDone?: boolean;
-  },
-) {
-  const writer = yield* LibraryWriter;
-  const invalid = checkSteps(writer.home, steps);
-  if (Option.isSome(invalid)) return yield* new InvalidIntent({ detail: invalid.value });
-  const inspected = yield* inspectLocalLibraryState(writer.home);
-  const actual = snapshotOf(inspected).revision;
-  if (actual !== options.base.revision)
-    return yield* new StalePlan({
-      message: "The Library changed after setup was reviewed",
-      expected: options.base.revision,
-      actual,
-    });
-  const state = inspected.present ? inspected.state : emptyLibraryState();
-  const operationId = options.operationId;
-  if (state.operations.some((operation) => operation.operationId === operationId))
-    return yield* new StalePlan({ message: "This operation is already recorded" });
-  const preparation = yield* recordPreparation(steps);
-  const pending = yield* encodeOperation(
-    OperationStatus.cases.Pending.make({
-      operationId,
-      ...(preparation === undefined ? {} : { preparation }),
-      steps: yield* Effect.forEach(steps, recordedStep).pipe(
-        Effect.catchTag("TreeError", (error) =>
-          Effect.fail(new InvalidIntent({ detail: `Setup cannot record ${error.message}` })),
-        ),
-      ),
-      before: recordedLibrary(state),
-    }),
-  ).pipe(
-    Effect.mapError(
-      () =>
-        new InvalidLibraryState({
-          path: libraryStatePath(writer.home),
-          detail: "invalid setup record",
-        }),
-    ),
-  );
-  yield* writer
-    .save(
-      {
-        ...state,
-        operations: [
-          ...state.operations.filter(
-            (operation) => !options.replaceDone || operation._tag !== "Done",
-          ),
-          pending,
-        ],
-      },
-      state,
-    )
-    .pipe(
-      Effect.catchTag("LibraryChanged", () =>
-        Effect.fail(
-          new StalePlan({
-            message: "The Library changed before setup was recorded",
-            expected: options.base.revision,
-          }),
-        ),
-      ),
-    );
-  return yield* runOperation(operationId);
-});
-
-/** Public setup allocates its operation; standalone plans allocate one before their preview. */
-export const setup = Effect.fn("Library.setup")(function* (
-  steps: readonly SetupStep[],
-  options: { readonly base: Snapshot },
-) {
-  return yield* setupOperation(steps, {
-    ...options,
-    operationId: makeOperationId(),
-    replaceDone: true,
-  });
-});
-
-/** Keep the ordinary apply surface while the existing runner owns its durable lifecycle. */
-export const applyRecorded = Effect.fn("Library.applyRecorded")(function* (
-  plan: Plan,
-  routing: Routing,
-) {
-  const { home } = yield* LibraryWriter;
-  const prepared = yield* prepareApply(home, plan, routing);
-  if (prepared.noop) {
-    const copies = copiesOf(prepared.step);
-    return applyOutcome(
-      prepared.step,
-      prepared.snapshot._tag === "Present" ? prepared.snapshot.state : emptyLibraryState(),
-      { _tag: "Applied", results: [], copies },
-    );
-  }
-  const result = yield* setupOperation([prepared.step], {
-    base: prepared.snapshot,
-    operationId: makeOperationId(),
-  });
-  const steps = result._tag === "Done" ? result.steps : result.completed;
-  const applied = steps.find((step) => step._tag === "Apply");
-  if (applied?._tag !== "Apply")
-    return yield* new InstalledSkillInvalid({
-      detail: "Library apply stopped before its outcome could be recorded",
-    });
-  const outcome = applyOutcome(prepared.step, yield* loadLibrary(home), applied.outcome);
-  // A durable attempt is not saved enablement. Fail normally if root preparation stopped
-  // before any requested enablement was accepted; the stopped operation remains inspectable.
-  if (
-    outcome._tag === "Incomplete" &&
-    (plan.intent._tag !== "Enabled" || outcome.results.length === 0)
-  )
-    return yield* Effect.fail(outcome.cause);
-  return outcome;
-}, Effect.scoped);
-
-type StoppedOperation = Extract<OperationStatus, { readonly _tag: "Stopped" }>;
-/** Installed-change batches are private recovery state, not part of startup's operation report. */
-type StartupStoppedOperation = {
-  readonly [K in keyof StoppedOperation]: K extends "steps"
-    ? readonly Omit<RecordedSetupStep, "applies">[]
-    : StoppedOperation[K];
-};
-
-/** What startup recovery did with the operations it found unfinished. */
-export interface StartupRecovery {
-  /** Finished: only steps safe to repeat were run. */
-  readonly finished: readonly OperationId[];
-  /** Stopped instead, each with its reason; the user can undo them. */
-  readonly stopped: readonly StartupStoppedOperation[];
 }
 
-/**
- * Resume every Pending operation, as after a crash: a step whose effect is complete is skipped,
- * one still as recorded runs, and anything else stops its operation. Never rolls back. Reads
- * `state.json` without the lock first, and takes it only when an operation is Pending. Setups
- * interrupted before operations were recorded in `state.json` are not resumed.
- */
-export const recover = Effect.fn("Library.recover")(function* (home: string) {
-  const operations = Effect.flatMap(inspectLocalLibraryState(home), (inspected) =>
-    inspected.present
-      ? decodeOperations(inspected.state).pipe(
-          Effect.mapError(
-            () =>
-              new InvalidLibraryState({
-                path: libraryStatePath(home),
-                detail: "invalid setup record",
-              }),
+/** Hold the observed choices and their meaning through preparation and confirmation. */
+export const openSetupReview = Effect.fn("Setup.openReview")(function* (
+  options: SetupOptions,
+  lockFileEntry: SetupResult,
+  manage: ManageOptions,
+) {
+  const setup = structuredClone(options);
+  const manageOptions = structuredClone(manage);
+  const scan = structuredClone(lockFileEntry);
+  const configured = yield* MachineSettings.read(setup.libraryHome);
+  const previous = new Map(configured.repositories.map((item) => [item.path, item.status]));
+  const repositoryDecisions = setup.repositoryDecisions ?? [];
+  const persistRoots =
+    setup.persistRoots ||
+    repositoryDecisions.some((item) => previous.get(item.path) !== item.status);
+  const copies = setupReviewCopies(scan.instances, scan.onboarding.candidates);
+  const copyConflicts = new Map<string, SetupCopyConflict>();
+  for (const copy of copies) {
+    let conflict = copyConflict(scan, {
+      name: copy.instance.name,
+      sourcePath: copy.instance.path,
+    });
+    if (conflict.kind === "preservable") {
+      const checked = yield* Effect.result(
+        recordSetupCopies(copy.instance.path, conflict.duplicates),
+      );
+      if (checked._tag === "Failure") conflict = { ...conflict, kind: "preserve-copies" };
+    }
+    copyConflicts.set(copy.instance.path, conflict);
+  }
+  const removablePaths = yield* setupRemovablePaths(setup, scan);
+  const sources = new Map<
+    string,
+    {
+      key: string;
+      label: string;
+      candidates: Extract<
+        SetupResult["onboarding"]["candidates"][number],
+        { action: "import-observed-collection" }
+      >[];
+    }
+  >();
+  for (const candidate of scan.onboarding.candidates) {
+    if (candidate.action !== "import-observed-collection") continue;
+    const prior = sources.get(candidate.groupKey);
+    sources.set(candidate.groupKey, {
+      key: candidate.groupKey,
+      label: candidate.source,
+      candidates: [...(prior?.candidates ?? []), candidate],
+    });
+  }
+  const invalid = (detail: string) => new OptionCombinationInvalid({ detail });
+  const selectedCopies = Effect.fn("Setup.selectedCopies")(function* (values: readonly string[]) {
+    const add = [];
+    const bind = [];
+    for (const value of new Set(values)) {
+      const copy = copies.find((item) => item.value === value);
+      if (copy?.selectable && copy.candidate) {
+        const selection = { name: copy.instance.name, sourcePath: copy.instance.path };
+        if (copy.candidate.action === "bind-existing-entry") bind.push(selection);
+        else add.push(selection);
+        continue;
+      }
+      const removal = copies.find((item) => `remove\0${item.value}` === value);
+      if (removal && (removablePaths.get(removal.instance.path)?.length ?? 0) > 0) continue;
+      return yield* invalid("Choose an available setup action from the observed review");
+    }
+    return structuredClone(
+      setupSelectedCopies(scan, add, bind).map((copy) => ({
+        ...copy,
+        conflict: copyConflicts.get(copy.sourcePath) ?? copy.conflict,
+      })),
+    );
+  });
+  const prepare = Effect.fn("Setup.prepareReview")(function* (selection: {
+    readonly sources: readonly string[];
+    readonly copies: readonly string[];
+    readonly decisions: readonly SetupCopyChoice[];
+    readonly reconcileExisting?: boolean;
+    readonly reconciliationSkills?: readonly string[];
+    readonly versionChoices?: readonly SetupVersionChoice[];
+  }) {
+    const versionChoices = selection.versionChoices ?? [];
+    const alternatives = setupVersionAlternatives(scan.changes ?? []);
+    if (
+      new Set(versionChoices.map((choice) => choice.skillId)).size !== versionChoices.length ||
+      versionChoices.some(
+        (choice) =>
+          !alternatives.some((alternative) => canonicalJson(alternative) === canonicalJson(choice)),
+      )
+    )
+      return yield* invalid("Choose one available active version for each competing Skill");
+    const chosen = yield* selectedCopies(selection.copies);
+    if (chosen.length !== selection.decisions.length)
+      return yield* invalid("Review the duplicate-copy decisions for every selected setup copy");
+    const decisions: SetupCopyDecision[] = [];
+    for (const copy of chosen) {
+      const matches = selection.decisions.filter(
+        (item) => item.name === copy.name && item.sourcePath === copy.sourcePath,
+      );
+      const decision = matches[0];
+      if (matches.length !== 1 || decision === undefined)
+        return yield* invalid("Review the duplicate-copy decision for this setup copy");
+      // Front ends supply intent; only this owner captures filesystem approval evidence.
+      const action =
+        decision.duplicateAction ??
+        (copy.conflict.kind === "retirable"
+          ? "retire-aliases"
+          : copy.conflict.kind === "preservable"
+            ? "preserve-duplicates"
+            : undefined);
+      if (copy.conflict.kind === "none") {
+        decisions.push(action === "retain-only" ? { ...copy, duplicateAction: action } : copy);
+        continue;
+      }
+      if (action === undefined)
+        return yield* new SetupDuplicateDecisionRequired({
+          names: [copy.name],
+          retirable: false,
+          keepBoth: !copy.conflict.replacesLink,
+        });
+      if (action === "keep-both" && copy.conflict.replacesLink)
+        return yield* invalid(
+          `${copy.name} is linked where SKIT writes its copy, so both cannot stay`,
+        );
+      if (action === "preserve-duplicates") {
+        if (copy.conflict.kind !== "preservable")
+          return yield* invalid(`${copy.name} does not have eligible equal global copies`);
+        decisions.push({
+          ...copy,
+          duplicateAction: action,
+          approvedCopies: yield* recordSetupCopies(
+            copy.sourcePath,
+            copy.conflict.duplicates,
+            decision.approvedCopies,
+          ),
+        });
+        continue;
+      }
+      if (action !== "retire-aliases") {
+        decisions.push({ ...copy, duplicateAction: action });
+        continue;
+      }
+      if (copy.conflict.kind !== "retirable")
+        return yield* invalid(`${copy.name} has copies that are not individual symlinks`);
+      decisions.push({
+        ...copy,
+        duplicateAction: action,
+        approvedSymlinks: yield* recordDuplicateSymlinks(
+          copy.sourcePath,
+          copy.conflict.duplicates,
+          decision.approvedSymlinks,
+        ),
+      });
+    }
+    const imports: SetupKnownSourceSelection[] = [];
+    for (const key of new Set(selection.sources)) {
+      const source = sources.get(key);
+      if (source === undefined) return yield* invalid("Choose an observed setup Source");
+      imports.push(
+        ...source.candidates.map((candidate) => ({
+          name: candidate.name,
+          paths: candidate.paths,
+          groupKey: candidate.groupKey,
+        })),
+      );
+    }
+    imports.sort(
+      (left, right) =>
+        left.name.localeCompare(right.name) ||
+        left.paths.join("\0").localeCompare(right.paths.join("\0")),
+    );
+    const removals = copies
+      .filter((copy) => selection.copies.includes(`remove\0${copy.value}`))
+      .map((copy) => ({ name: copy.instance.name, paths: [copy.instance.path] }));
+    const selectedExistingSkills = new Set(
+      decisions
+        .filter((copy) => copy.operation === "bind")
+        .flatMap(
+          (copy) =>
+            scan.instances
+              .find((instance) => instance.path === copy.sourcePath)
+              ?.contentIdentity.libraryMatches.map((match) => match.skillId) ?? [],
+        ),
+    );
+    const approval: SetupApproval = {
+      setup,
+      planId: scan.onboarding.planId,
+      persistRoots,
+      imports,
+      bindings: decisions.filter((copy) => copy.operation === "bind"),
+      ownership: decisions.filter((copy) => copy.operation === "add"),
+      removals: yield* planSetupRemovals(scan, removals, removablePaths),
+      versionChoices: structuredClone(versionChoices),
+      changes: structuredClone(
+        (scan.changes ?? []).filter(
+          (fact) =>
+            selection.reconcileExisting !== false ||
+            selectedExistingSkills.has(fact.skillId) ||
+            selection.reconciliationSkills?.includes(fact.skillId) ||
+            versionChoices.some((choice) => choice.skillId === fact.skillId),
+        ),
+      ),
+    };
+    const repositoryCopies = approval.ownership.filter((copy) =>
+      scan.instances.some(
+        (instance) =>
+          instance.path === copy.sourcePath &&
+          (instance.git.repository !== undefined || !isSetupInstallDestination(instance)),
+      ),
+    );
+    const displayCopy = (copy: { readonly name: string; readonly sourcePath: string }) => ({
+      name: copy.name,
+      sourcePath: copy.sourcePath,
+    });
+    const summary = {
+      sourceUpdateMayNeedReview: imports.length > 0 && (scan.changes?.length ?? 0) > 0,
+      changes: approval.changes ?? [],
+      versionChoices,
+      persistRoots,
+      repositoryDecisions,
+      createsMachineIdentity:
+        (imports.length > 0 || approval.ownership.length > 0) && !scan.machineConfig.machineId,
+      sources: [...new Set(imports.map((item) => item.groupKey))].map((key) => {
+        const source = sources.get(key)?.candidates[0];
+        return {
+          source: source?.source ?? key,
+          lockContentHash: source?.lockContentHash ?? "",
+          names: imports
+            .filter((item) => item.groupKey === key)
+            .map((item) => item.name)
+            .sort(),
+        };
+      }),
+      enables: decisions
+        .filter(
+          (copy) =>
+            copy.duplicateAction !== "retain-only" &&
+            isSetupInstallDestination(
+              scan.instances.find((instance) => instance.path === copy.sourcePath),
+            ) &&
+            !scan.onboarding.candidates.some(
+              (candidate) =>
+                candidate.action === "repository-owned" &&
+                candidate.paths.includes(copy.sourcePath),
+            ),
+        )
+        .map(displayCopy),
+      importOnly: decisions
+        .filter(
+          (copy) =>
+            copy.duplicateAction === "retain-only" ||
+            !isSetupInstallDestination(
+              scan.instances.find((instance) => instance.path === copy.sourcePath),
+            ) ||
+            scan.onboarding.candidates.some(
+              (candidate) =>
+                candidate.action === "repository-owned" &&
+                candidate.paths.includes(copy.sourcePath),
+            ),
+        )
+        .map(displayCopy),
+      reconnects: approval.bindings
+        .filter((copy) => copy.duplicateAction !== "retain-only")
+        .map(displayCopy),
+      preserves: decisions.flatMap((copy) => [
+        ...(copy.approvedSymlinks ?? []).map((alias) => ({
+          name: copy.name,
+          path: alias.path,
+          kind: "symlink" as const,
+        })),
+        ...(copy.approvedCopies ?? []).map((entry) => ({
+          name: copy.name,
+          path: entry.path,
+          kind: "directory" as const,
+        })),
+      ]),
+      additions: approval.ownership.map(displayCopy),
+      manageCount: approval.ownership.filter(
+        (copy) => !repositoryCopies.includes(copy) && copy.duplicateAction !== "retain-only",
+      ).length,
+      repositoryCopiesRemain: repositoryCopies.length > 0,
+      authoritativeCopies: approval.ownership
+        .filter((copy) =>
+          scan.onboarding.candidates.some(
+            (candidate) =>
+              candidate.paths.includes(copy.sourcePath) &&
+              candidate.action === "blocked" &&
+              candidate.reason === "divergent-copies",
           ),
         )
-      : Effect.succeed([]),
-  );
-  // A state.json the store cannot read is left for reads to refuse, as they always have.
-  const found = yield* operations.pipe(
-    Effect.catchTag("InvalidLibraryState", () => Effect.succeed([])),
-  );
-  const migrationStopped = found.flatMap((operation) =>
-    operation._tag === "Stopped" && operation.steps.some((item) => item.step._tag === "LegacyApply")
-      ? [operation]
-      : [],
-  );
-  const reportStopped = (stopped: readonly StoppedOperation[]) =>
-    stopped.map(({ steps, ...operation }) => ({
-      ...operation,
-      steps: steps.map(({ applies: _applies, ...step }) => step),
-    }));
-  if (!found.some((operation) => operation._tag === "Pending"))
-    return { finished: [], stopped: reportStopped(migrationStopped) } satisfies StartupRecovery;
-  return yield* withHomeLock(
-    home,
-    Effect.gen(function* () {
-      const finished: OperationId[] = [];
-      const stopped: StoppedOperation[] = [...migrationStopped];
-      for (const operation of yield* operations) {
-        if (operation._tag !== "Pending") continue;
-        const result = yield* writeLibrary(home, runOperation(operation.operationId), {
-          resume: operation.operationId,
-        });
-        if (result._tag === "Done") {
-          finished.push(operation.operationId);
-          continue;
-        }
-        // As recorded; a stop that could not be saved still reports its steps and reason.
-        const saved = yield* Effect.flatMap(loadLibrary(home), (state) =>
-          operationIn(state, operation.operationId),
-        ).pipe(Effect.orElseSucceed(() => Option.none<OperationStatus>()));
-        stopped.push(
-          Option.isSome(saved) && saved.value._tag === "Stopped"
-            ? saved.value
-            : OperationStatus.cases.Stopped.make({
-                operationId: operation.operationId,
-                steps: operation.steps,
-                reason: result.reason,
-                before: operation.before,
-                after: operation.before,
-              }),
-        );
-      }
-      return {
-        finished,
-        stopped: reportStopped(stopped),
-      } satisfies StartupRecovery;
-    }),
-  );
+        .map(displayCopy),
+      duplicates: (
+        ["retain-only", "retire-aliases", "keep-both", "preserve-duplicates"] as const
+      ).flatMap((action) => {
+        const selected = decisions.filter((decision) => decision.duplicateAction === action);
+        return selected.length
+          ? [
+              {
+                action,
+                names: selected.map((copy) => copy.name),
+                aliasCount: new Set(
+                  selected.flatMap((copy) => [
+                    ...(copy.approvedSymlinks?.map((alias) => alias.path) ?? []),
+                    ...(copy.approvedCopies?.map((entry) => entry.path) ?? []),
+                  ]),
+                ).size,
+              },
+            ]
+          : [];
+      }),
+      removals: { entries: approval.removals.entries },
+    };
+    // Neither presentation facts nor caller-owned consent arrays may redirect confirmation.
+    const approved = {
+      ...approval,
+      setup: structuredClone(setup),
+      imports: structuredClone(imports),
+      bindings: structuredClone(approval.bindings),
+      custody: structuredClone(approval.ownership),
+    };
+    return {
+      canApply: !changesNeedingChoice(approval.changes ?? [], versionChoices).length,
+      reviewId: hashParts([
+        canonicalJson({
+          planId: scan.onboarding.planId,
+          setup,
+          changes: approval.changes,
+          versionChoices,
+          sources: [...selection.sources].sort(),
+          copies: [...selection.copies].sort(),
+          decisions: [...decisions].sort((a, b) => a.sourcePath.localeCompare(b.sourcePath)),
+        }),
+      ]),
+      hasChanges:
+        persistRoots ||
+        imports.length > 0 ||
+        decisions.length > 0 ||
+        approval.removals.entries.length > 0 ||
+        hasChangesToApply(approval.changes ?? [], versionChoices) ||
+        changesNeedingChoice(approval.changes ?? [], versionChoices).length > 0,
+      summary: structuredClone(summary),
+      apply: (withStatus: SetupApplyOptions["withStatus"]) =>
+        applySetupPlan({ manage: manageOptions, withStatus }, approved),
+    };
+  });
+  const recommended = scan.onboarding.recommended;
+  const recommendedValues: string[] = [];
+  for (const recommendation of recommended.copies) {
+    const copy = copies.find(
+      (item) =>
+        item.instance.name === recommendation.name &&
+        item.instance.path === recommendation.sourcePath,
+    );
+    if (copy === undefined) return yield* invalid("The recommended copy is not in the review");
+    recommendedValues.push(copy.value);
+  }
+  const prepareChoices = Effect.fn("Setup.prepareChoices")(function* (
+    sourceKeys: readonly string[],
+    values: readonly string[],
+    duplicates: SetupDuplicateAction | undefined,
+    reconcileExisting = true,
+    reconciliationSkills: readonly string[] = [],
+    versionChoices: readonly SetupVersionChoice[] = [],
+  ) {
+    const chosen = yield* selectedCopies(values);
+    const conflicting = chosen.filter(setupDuplicateChoiceRequired);
+    const alternatives = setupDuplicateActions(chosen);
+    if (conflicting.length && duplicates === undefined)
+      return yield* new SetupDuplicateDecisionRequired({
+        names: conflicting.map((copy) => copy.name),
+        retirable: alternatives.includes("retire-aliases"),
+        keepBoth: alternatives.includes("keep-both"),
+      });
+    return yield* prepare({
+      reconcileExisting,
+      reconciliationSkills,
+      versionChoices,
+      sources: sourceKeys,
+      copies: values,
+      decisions: chosen.map((copy) => ({
+        ...copy,
+        ...(duplicates === undefined ? {} : { duplicateAction: duplicates }),
+      })),
+    });
+  });
+  const explicitChoices = Effect.fn("Setup.explicitChoices")(function* (
+    selection: SetupExplicitSelection,
+  ) {
+    for (const id of selection.reconcileSkillIds ?? []) {
+      if (!(scan.changes ?? []).some((fact) => fact.skillId === id))
+        return yield* invalid("Choose an observed existing Skill identifier");
+    }
+    const sourceKeys: string[] = [];
+    for (const id of new Set(selection.sourceIds)) {
+      const source = [...sources.values()].find((item) => setupSourceChoiceId(item.key) === id);
+      if (!source) return yield* invalid("Choose an available setup source identifier");
+      sourceKeys.push(source.key);
+    }
+    const values: string[] = [];
+    for (const path of new Set(selection.copyPaths)) {
+      const copy = copies.find((item) => item.instance.path === path && item.selectable);
+      if (!copy) return yield* invalid("Choose an available setup copy path");
+      values.push(copy.value);
+    }
+    for (const path of new Set(selection.removePaths)) {
+      const copy = copies.find(
+        (item) => item.instance.path === path && (removablePaths.get(path)?.length ?? 0) > 0,
+      );
+      if (!copy || selection.copyPaths.includes(path))
+        return yield* invalid("Choose a removable copy without also selecting it for enablement");
+      values.push(`remove\0${copy.value}`);
+    }
+    const selected = yield* selectedCopies(values);
+    return { sourceKeys, values, duplicateActions: setupDuplicateActions(selected) };
+  });
+  const compareCopies = Effect.fn("Setup.compareCopies")(function* (paths: readonly string[]) {
+    const fs = yield* FileSystem.FileSystem;
+    const names = new Set<string>();
+    for (const path of paths) {
+      const copy = scan.instances.find((item) => item.path === path);
+      if (!copy) return yield* invalid("Choose an observed copy to compare");
+      names.add(copy.name);
+    }
+    if (!names.size) return yield* invalid("Choose at least one observed copy to compare");
+    const compared = [];
+    for (const instance of scan.instances.filter((item) => names.has(item.name))) {
+      const markdown = yield* fs.readFileString(join(instance.path, "SKILL.md"));
+      const currentHash = yield* deterministicTreeHash(instance.path);
+      if (currentHash !== instance.contentIdentity.currentHash)
+        return yield* invalid("This copy changed; observe setup again before comparing");
+      compared.push({
+        name: instance.name,
+        path: instance.path,
+        currentHash: currentHash,
+        markdown: markdown.slice(0, 65_536),
+        truncated: markdown.length > 65_536,
+      });
+    }
+    return compared.sort((left, right) => left.path.localeCompare(right.path));
+  });
+  const prepareExplicit = Effect.fn("Setup.prepareExplicit")(function* (
+    selection: SetupExplicitSelection,
+    duplicates: SetupDuplicateAction | undefined,
+  ) {
+    const chosen = yield* explicitChoices(selection);
+    const alternatives = setupVersionAlternatives(scan.changes ?? []);
+    const versionChoices: SetupVersionChoice[] = [];
+    for (const skillId of selection.useRetainedSkillIds ?? []) {
+      const choice = alternatives.find(
+        (item) => item.skillId === skillId && item.version === "retained",
+      );
+      if (!choice) return yield* invalid("Choose an available retained-version alternative");
+      versionChoices.push(choice);
+    }
+    for (const path of selection.useCopyPaths ?? []) {
+      const choice = alternatives.find((item) => item.version === "local" && item.path === path);
+      if (!choice) return yield* invalid("Choose an available current-copy alternative");
+      versionChoices.push(choice);
+    }
+    return yield* prepareChoices(
+      chosen.sourceKeys,
+      chosen.values,
+      duplicates,
+      false,
+      selection.reconcileSkillIds ?? [],
+      versionChoices,
+    );
+  });
+  const prepareRecommended = (duplicates: SetupDuplicateAction | undefined) =>
+    prepareChoices(
+      recommended.sources.map((source) => source.groupKey),
+      recommendedValues,
+      duplicates,
+    );
+  const recommendedChoices = setupDuplicateActions(yield* selectedCopies(recommendedValues));
+  return {
+    sources: [...sources.values()]
+      .sort((left, right) => left.key.localeCompare(right.key))
+      .map((source) => ({
+        key: source.key,
+        id: setupSourceChoiceId(source.key),
+        label: source.label,
+        skillCount: source.candidates.length,
+      })),
+    copies: structuredClone(
+      copies.map((copy) => ({
+        ...copy,
+        duplicateActions: setupDuplicateActions([
+          {
+            name: copy.instance.name,
+            sourcePath: copy.instance.path,
+            operation: copy.candidate?.action === "bind-existing-entry" ? "bind" : "add",
+            conflict: copyConflicts.get(copy.instance.path) ?? { kind: "none" },
+          },
+        ]),
+        ...((removablePaths.get(copy.instance.path)?.length ?? 0) > 0
+          ? { removeValue: `remove\0${copy.value}` }
+          : {}),
+      })),
+    ),
+    versionAlternatives: setupVersionAlternatives(scan.changes ?? []),
+    selectedCopies,
+    explicitChoices,
+    compareCopies,
+    prepareExplicit,
+    recommendedChoices,
+    recommended: structuredClone(recommended),
+    prepare,
+    prepareRecommended,
+  };
 });
+export type SetupReview = Effect.Success<ReturnType<typeof openSetupReview>>;
+export type SetupReviewSummary = Effect.Success<ReturnType<SetupReview["prepare"]>>["summary"];
+
+/** Reusable setup scan, reviewed choices and apply workflow. Owners retain their state. */
+export { recordDuplicateSymlinks, type ManageOptions } from "./setup/manage-existing.js";
+export { SetupStopped, applySetupPlan } from "./setup/apply.js";
+export {
+  InstalledSkillChange,
+  InstalledSkillChangeResult,
+  RepositoryPolicyResult,
+  SetupApplied,
+  SetupKnownSourceSelection,
+  SetupLockMatch,
+  SetupOnboardingCandidate,
+  SetupResult,
+  SetupSkillInstance,
+  SetupVersionChoice,
+} from "./setup/contract.js";
+export {
+  SetupCopySelection,
+  SetupDuplicateAction,
+  copyConflict,
+  recommendedSetupSelection,
+  setupApplyCommandLine,
+  setupDuplicateActions,
+  setupDuplicateChoiceRequired,
+  setupReviewCopies,
+  setupSourceChoiceId,
+  type SetupCopyChoice,
+  type SetupExplicitSelection,
+  type SetupRecommendation,
+  type SetupReviewCopy,
+  type SetupSelectedCopy,
+} from "./setup/decisions.js";
+export { collectSetupEvidence, ownershipAt } from "./setup/discovery.js";
+export { setupImportRequests } from "./setup/import.js";
+export { changeResults } from "./setup/installed-skills.js";
+export { setupExistingSelections, setupNewSelections } from "./setup/manage.js";
+export { classifyOwner, classifySetupOnboarding } from "./setup/onboarding.js";
+export { planSetupRemovals, setupRemovablePaths } from "./setup/removal.js";
+export { SetupPlanStale, revalidateSetupPlan, runSetup, type SetupOptions } from "./setup/scan.js";
+export { resolveSkillsShSelectedSource } from "./setup/skills-sh/lock-source.js";
+export { prepareSetupUndo } from "./setup/undo.js";
+export { computeSkillsShCompatibleHash as computeSkillsLockCompatibleHash } from "./setup/skills-sh/compatible-hash.js";
+// Inferred consumer declarations need public names for these nested choices and typed failures.
+export type { SetupCopyConflict } from "./setup/decisions.js";
+export { SetupImportInvalid } from "./setup/import.js";
+export { ChangeChoiceRequired } from "./setup/installed-skills.js";
+export { SetupManageSelectionInvalid } from "./setup/manage.js";
+// Legacy undo evidence still uses this read-only projection; recordedLibrary remains private.
+export { setupIntent } from "./internal/setup/intent.js";

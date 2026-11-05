@@ -1,4 +1,4 @@
-import { recordedLibrary } from "../src/library/setup-intent.js";
+import { recordedLibrary } from "../src/library/internal/setup/intent.js";
 import { emptyLibraryState } from "../src/library/library-state.js";
 import { assert, it } from "@effect/vitest";
 import { Context, Effect, Exit, FileSystem, Layer, Option, Schema } from "effect";

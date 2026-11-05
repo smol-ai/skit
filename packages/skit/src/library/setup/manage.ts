@@ -13,8 +13,8 @@ import {
   isSetupInstallDestination,
   type ApprovedSymlink,
   type SetupApprovedCopy,
-} from "./setup-decisions.js";
-import type { SetupResult } from "./setup-contract.js";
+} from "./decisions.js";
+import type { SetupResult } from "./contract.js";
 
 const SetupManageSelections = Schema.Array(SetupCopySelection);
 

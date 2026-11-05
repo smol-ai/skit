@@ -10,7 +10,7 @@ import {
   libraryManifestFromLocalState,
   type LibraryState,
 } from "../src/library/library-state.js";
-import { recordedLibrary } from "../src/library/setup-intent.js";
+import { recordedLibrary } from "../src/library/internal/setup/intent.js";
 import { readSnapshotArchive } from "../src/library/snapshot-archive.js";
 import { OperationStatus, StepError } from "../src/library/store/state-schema.js";
 import { InvalidLibraryState, LibraryChanged } from "../src/library/failures.js";

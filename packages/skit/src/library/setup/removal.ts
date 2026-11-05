@@ -5,8 +5,9 @@ import { observePathEvidence } from "../folder-evidence.js";
 import { pathIsWithin } from "../../platform/path-identity.js";
 import { type Library } from "../library.js";
 import { StalePlan } from "../library-plan.js";
-import { collectSkillsDirectories, type SetupOptions } from "./setup.js";
-import type { SetupResult } from "./setup-contract.js";
+import type { SetupOptions } from "./scan.js";
+import { collectSkillsDirectories } from "./discovery.js";
+import type { SetupResult } from "./contract.js";
 
 /** The copies setup removes, as reviewed: what to show, and the evidence its Remove step records. */
 export interface SetupRemovals {

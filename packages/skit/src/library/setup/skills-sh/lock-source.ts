@@ -1,18 +1,18 @@
 import { createHash } from "node:crypto";
 import { basename, dirname } from "node:path";
 import { Data, Effect, FileSystem, Result, Schema } from "effect";
-import { skillsShLockFileEntry } from "../skills-sh-lock-file.js";
-import { sourceLocator } from "../../sources/resolve.js";
-import { SkitSource } from "../library-contracts.js";
-import { type MachineId } from "../entity-ids.js";
-import { type SkillsShLockFileEntry } from "../library-contracts.js";
+import { skillsShLockFileEntry } from "../../skills-sh-lock-file.js";
+import { sourceLocator } from "../../../sources/resolve.js";
+import { SkitSource } from "../../library-contracts.js";
+import { type MachineId } from "../../entity-ids.js";
+import { type SkillsShLockFileEntry } from "../../library-contracts.js";
 import type {
   SetupLockMatch,
   SetupSkillsLock,
   SetupSkillsLockEntry,
   SetupSkillInstance,
-} from "./setup-contract.js";
-import { computeSkillsShCompatibleHash } from "./skills-sh-compatible-hash.js";
+} from "../contract.js";
+import { computeSkillsShCompatibleHash } from "./compatible-hash.js";
 
 const namePattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
@@ -50,7 +50,7 @@ function wellKnownBase(lock: SetupLockMatch): string | undefined {
 }
 
 /** Lock fields identify a candidate coordinate; this performs no upstream observation. */
-export function skillsShLockCoordinate(lock: SetupLockMatch): SkitSource | undefined {
+function skillsShLockCoordinate(lock: SetupLockMatch): SkitSource | undefined {
   const github = githubRepository(lock);
   if (github && safeSkillPath(lock.entry.skillPath)) return { type: "github", ...github };
   const wellKnown = wellKnownBase(lock);

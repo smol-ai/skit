@@ -14,7 +14,7 @@ import { Hash } from "../../../shared/hash.js";
 import { InstallDestination } from "../../../installed-skills/destination.js";
 import { hashParts } from "../../../artifact/descriptor.js";
 import { MachineId } from "../../entity-ids.js";
-import { SetupIntent } from "../../setup-intent.js";
+import { SetupIntent } from "./intent.js";
 import * as MachineSettings from "../../machine-settings.js";
 import { recoveryOperationPath } from "../recovery/moves.js";
 import { recoveryFingerprint } from "../recovery/evidence.js";
