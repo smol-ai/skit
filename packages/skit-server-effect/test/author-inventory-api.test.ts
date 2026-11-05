@@ -31,9 +31,7 @@ const unexpectedReleaseRead = () => Effect.die("Inventory HTTP must not read rel
 const inventory = Layer.mock(Skits, {
   releases: {
     findLatestPublic: unexpectedReleaseRead,
-    findAnonymousDownload: unexpectedReleaseRead,
-    findExactDownload: unexpectedReleaseRead,
-    listLatestDownloads: unexpectedReleaseRead,
+    findDownload: unexpectedReleaseRead,
   },
   list: (_principal, query) =>
     Effect.succeed(

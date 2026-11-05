@@ -43,18 +43,6 @@ export interface AuthorizationService {
     slug: string,
     permission: "read" | "change" | "advance",
   ) => Effect.Effect<boolean, DatabaseError>;
-  readonly canReadRelease: (
-    principal: Principal,
-    releaseId: string,
-    owner: string,
-    slug: string,
-  ) => Effect.Effect<boolean, DatabaseError>;
-  readonly readableReleaseIds: (
-    principal: Principal,
-    releaseIds: ReadonlyArray<string>,
-    owner: string,
-    slug: string,
-  ) => Effect.Effect<ReadonlySet<string>, DatabaseError>;
 }
 
 export class Authorization extends Context.Service<Authorization, AuthorizationService>()(
@@ -167,60 +155,6 @@ export const layer = Layer.effect(
       return yield* hasGrantForSubjects(candidates, "skit", `${owner}/${slug}`, permission);
     });
 
-    const canReadRelease = Effect.fn("Authorization.canReadRelease")(function* (
-      principal: Principal,
-      releaseId: string,
-      owner: string,
-      slug: string,
-    ) {
-      const candidates = yield* subjects(principal);
-      if (yield* ownsForSubjects(candidates, owner)) return true;
-      if (yield* hasGrantForSubjects(candidates, "skit", `${owner}/${slug}`, "read")) return true;
-      return yield* hasGrantForSubjects(candidates, "release", releaseId, "read");
-    });
-
-    const readableReleaseIds = Effect.fn("Authorization.readableReleaseIds")(function* (
-      principal: Principal,
-      releaseIds: ReadonlyArray<string>,
-      owner: string,
-      slug: string,
-    ) {
-      if (releaseIds.length === 0) return new Set<string>();
-      const candidates = yield* subjects(principal);
-      if (
-        (yield* ownsForSubjects(candidates, owner)) ||
-        (yield* hasGrantForSubjects(candidates, "skit", `${owner}/${slug}`, "read"))
-      )
-        return new Set(releaseIds);
-      const allowed = IMPLIED_PERMISSIONS.read;
-      const permissionPlaceholders = allowed.map(() => "?").join(", ");
-      const releasePlaceholders = releaseIds.map(() => "?").join(", ");
-      const rows = yield* Effect.all(
-        batches(candidates).map((batch) => {
-          const where = predicate(batch);
-          return db(
-            "list readable releases",
-            sql.unsafe(
-              `SELECT DISTINCT resource_id FROM resource_grants
-               WHERE (${where.sql}) AND resource_kind = 'release'
-                 AND resource_id IN (${releasePlaceholders})
-                 AND permission IN (${permissionPlaceholders})`,
-              [...where.bindings, ...releaseIds, ...allowed],
-            ),
-          );
-        }),
-        { concurrency: SUBREQUEST_CONCURRENCY },
-      );
-      const decoded = yield* Effect.forEach(rows, (result) =>
-        Schema.decodeUnknownEffect(Schema.Array(ResourceRow))(result).pipe(
-          Effect.mapError(
-            (cause) => new DatabaseError({ operation: "decode readable releases", cause }),
-          ),
-        ),
-      );
-      return new Set(decoded.flatMap((values) => values.map(({ resource_id }) => resource_id)));
-    });
-
     const authorInventoryScope = Effect.fn("Authorization.authorInventoryScope")(function* (
       principal: Principal,
     ) {
@@ -273,8 +207,6 @@ export const layer = Layer.effect(
       authorInventoryScope,
       ownsNamespace,
       canAuthor,
-      canReadRelease,
-      readableReleaseIds,
     });
   }),
 );

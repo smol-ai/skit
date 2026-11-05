@@ -1,7 +1,6 @@
 import { Effect, Option } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
-import { Identity, type IdentityService, type Principal } from "../identity/service.js";
-import { Authorization, type AuthorizationService } from "../authorization/service.js";
+import { Identity, type IdentityService } from "../identity/service.js";
 import { Skits } from "../skits/service.js";
 
 const errorResponse = (error: string, status: number) =>
@@ -9,71 +8,22 @@ const errorResponse = (error: string, status: number) =>
     Effect.orDie,
   );
 
-interface DownloadAccess {
-  readonly authentication: IdentityService;
-  readonly authorization: AuthorizationService;
-}
-
-const authenticationFailure = Symbol("ReleaseHttp.authenticationFailure");
-
-export const download = Effect.fn("ReleaseHttp.download")(function* (
+const download = Effect.fn("ReleaseHttp.download")(function* (
   target: { readonly owner: string; readonly slug: string; readonly version: string },
-  access?: DownloadAccess,
+  authentication?: IdentityService,
 ) {
   const releases = (yield* Skits).releases;
-  const authenticate = access
-    ? HttpServerRequest.HttpServerRequest.pipe(
-        Effect.flatMap(HttpServerRequest.toWeb),
-        Effect.flatMap(access.authentication.authenticate),
-        Effect.tapError((error) =>
-          Effect.logError("release download authentication failed", error),
-        ),
-        Effect.result,
-      )
-    : Effect.succeed(undefined);
-
-  const lookup = Effect.gen(function* () {
-    if (target.version !== "latest") {
-      const release = yield* releases.findExactDownload(target);
-      if (release === null || release.visibility !== "private") return release;
-      if (access === undefined) return null;
-      const authenticated = yield* authenticate;
-      if (authenticated === undefined || authenticated._tag === "Failure")
-        return authenticated === undefined ? null : authenticationFailure;
-      if (authenticated.success === undefined) return null;
-      return (yield* access.authorization.canReadRelease(
-        authenticated.success,
-        release.release_id,
-        target.owner,
-        target.slug,
-      ))
-        ? release
-        : null;
-    }
-    if (access === undefined) return yield* releases.findAnonymousDownload(target);
-    const candidates = yield* releases.listLatestDownloads(target);
-    const publicFallback = candidates.find((candidate) => candidate.visibility !== "private");
-    if (candidates[0] === publicFallback) return publicFallback;
-    const authenticated = yield* authenticate;
-    if (authenticated === undefined || authenticated._tag === "Failure") {
-      if (publicFallback !== undefined) return publicFallback;
-      return authenticated === undefined ? null : authenticationFailure;
-    }
-    const principal: Principal | undefined = authenticated.success;
-    if (principal === undefined) return publicFallback ?? null;
-    const privateCandidates = candidates.filter((candidate) => candidate.visibility === "private");
-    const readable = yield* access.authorization.readableReleaseIds(
-      principal,
-      privateCandidates.map(({ release_id }) => release_id),
-      target.owner,
-      target.slug,
-    );
-    for (const candidate of candidates) {
-      if (candidate.visibility !== "private") return candidate;
-      if (readable.has(candidate.release_id)) return candidate;
-    }
-    return null;
-  });
+  const request = authentication ? yield* HttpServerRequest.HttpServerRequest : undefined;
+  const authenticate =
+    authentication && request
+      ? HttpServerRequest.toWeb(request).pipe(
+          Effect.flatMap(authentication.authenticate),
+          Effect.tapError((error) =>
+            Effect.logError("release download authentication failed", error),
+          ),
+        )
+      : undefined;
+  const lookup = releases.findDownload(target, authenticate);
 
   return yield* lookup.pipe(
     Effect.matchEffect({
@@ -82,7 +32,6 @@ export const download = Effect.fn("ReleaseHttp.download")(function* (
           Effect.andThen(errorResponse("storage_failure", 500)),
         ),
       onSuccess: (release) => {
-        if (release === authenticationFailure) return errorResponse("storage_failure", 500);
         if (release === null) return errorResponse("release_not_found", 404);
         return release.archive.stream.pipe(
           Effect.matchEffect({
@@ -121,10 +70,7 @@ export const downloadRelease = Effect.fn("ReleaseHttp.downloadAuthenticated")(fu
   readonly slug: string;
   readonly version: string;
 }) {
-  return yield* download(target, {
-    authentication: yield* Identity,
-    authorization: yield* Authorization,
-  });
+  return yield* download(target, yield* Identity);
 });
 
 export const downloadReleaseAnonymous = Effect.fn("ReleaseHttp.downloadAnonymous")(

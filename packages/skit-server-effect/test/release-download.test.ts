@@ -87,6 +87,18 @@ const insertRelease = (input: {
   );
 
 describe("anonymous Release downloads", () => {
+  it.effect("returns 404 for an empty latest lookup without consulting credentials", () =>
+    Effect.gen(function* () {
+      yield* prepareDatabase;
+      yield* Effect.flatMap(D1Client.D1Client, (sql) => sql`DROP TABLE personal_access_tokens`);
+      const response = yield* request("/api/skits/tim/tools/releases/latest/download", {
+        headers: { authorization: "Bearer skit_pat_missing" },
+      });
+      expect(response.status).toBe(404);
+      expect(yield* webPromise(() => response.json())).toEqual({ error: "release_not_found" });
+    }).pipe(Effect.provide(platformLayer)),
+  );
+
   it.effect("serves an exact public Release as immutable", () =>
     Effect.gen(function* () {
       yield* prepareDatabase;
@@ -195,6 +207,17 @@ describe("anonymous Release downloads", () => {
       expect(response.headers.get("skit-release-version")).toBe("1.1.0");
       expect(response.headers.get("cache-control")).toBe("private, no-store");
       expect(yield* responseText(response)).toBe("unlisted archive");
+      yield* Effect.flatMap(D1Client.D1Client, (sql) => sql`DROP TABLE personal_access_tokens`);
+      const fallback = yield* request("/api/skits/tim/tools/releases/latest/download", {
+        headers: { authorization: "Bearer skit_pat_broken_storage" },
+      });
+      expect(fallback.status).toBe(200);
+      expect(fallback.headers.get("skit-release-version")).toBe("1.1.0");
+      expect(yield* responseText(fallback)).toBe("unlisted archive");
+      const failedExact = yield* request("/api/skits/tim/tools/releases/2.0.0/download", {
+        headers: { authorization: "Bearer skit_pat_broken_storage" },
+      });
+      expect(failedExact.status).toBe(500);
     }).pipe(Effect.provide(platformLayer)),
   );
 
@@ -230,64 +253,90 @@ describe("anonymous Release downloads", () => {
     }).pipe(Effect.provide(platformLayer)),
   );
 
-  it.effect("serves granted private Releases and selects the latest accessible candidate", () =>
-    Effect.gen(function* () {
-      yield* prepareDatabase;
-      const token = "skit_pat_private_download";
-      const tokenHash = yield* sha256(token);
-      yield* Effect.flatMap(D1Client.D1Client, (sql) =>
-        sql.batch([
-          sql.unsafe("INSERT INTO principals VALUES ('principal_reader', NULL, 'active', 1)"),
-          sql.unsafe(
-            `INSERT INTO personal_access_tokens
+  it.effect(
+    "requires namespace ownership or current team membership for private Releases, never grants",
+    () =>
+      Effect.gen(function* () {
+        yield* prepareDatabase;
+        const token = "skit_pat_private_download";
+        const tokenHash = yield* sha256(token);
+        yield* Effect.flatMap(D1Client.D1Client, (sql) =>
+          sql.batch([
+            sql.unsafe("INSERT INTO principals VALUES ('principal_reader', NULL, 'active', 1)"),
+            sql.unsafe(
+              `INSERT INTO personal_access_tokens
                (token_id, principal_id, token_hash, scopes_json, authorization_generation)
                VALUES ('pat_reader', 'principal_reader', ?, '["authoring:write"]', 1)`,
-            [tokenHash],
-          ),
-          sql.unsafe(
-            `INSERT INTO resource_grants VALUES
+              [tokenHash],
+            ),
+            sql.unsafe(
+              `INSERT INTO resource_grants VALUES
              ('grant_release', 'principal', 'principal_reader', 'release', 'rel_accessible', 'read')`,
+            ),
+          ]),
+        );
+        yield* insertRelease({
+          version: "1.0.0",
+          releaseId: "rel_accessible",
+          objectKey: "releases/private-accessible.zip",
+          publishedAt: "2026-09-11T01:00:00.000Z",
+          visibility: "private",
+        });
+        yield* insertRelease({
+          version: "2.0.0",
+          releaseId: "rel_inaccessible",
+          objectKey: "releases/private-inaccessible.zip",
+          publishedAt: "2026-09-11T02:00:00.000Z",
+          visibility: "private",
+        });
+        yield* Effect.flatMap(BlobStore, (blobs) =>
+          blobs.put(
+            "write private release fixture",
+            "releases/private-accessible.zip",
+            new TextEncoder().encode("private archive"),
           ),
-        ]),
-      );
-      yield* insertRelease({
-        version: "1.0.0",
-        releaseId: "rel_accessible",
-        objectKey: "releases/private-accessible.zip",
-        publishedAt: "2026-09-11T01:00:00.000Z",
-        visibility: "private",
-      });
-      yield* insertRelease({
-        version: "2.0.0",
-        releaseId: "rel_inaccessible",
-        objectKey: "releases/private-inaccessible.zip",
-        publishedAt: "2026-09-11T02:00:00.000Z",
-        visibility: "private",
-      });
-      yield* Effect.flatMap(BlobStore, (blobs) =>
-        blobs.put(
-          "write private release fixture",
-          "releases/private-accessible.zip",
-          new TextEncoder().encode("private archive"),
-        ),
-      );
+        );
 
-      const anonymous = yield* request("/api/skits/tim/tools/releases/1.0.0/download");
-      const exact = yield* request("/api/skits/tim/tools/releases/1.0.0/download", {
-        headers: { authorization: `Bearer ${token}` },
-      });
-      const latest = yield* request("/api/skits/tim/tools/releases/latest/download", {
-        headers: { authorization: `Bearer ${token}` },
-      });
-
-      expect(anonymous.status).toBe(404);
-      for (const response of [exact, latest]) {
-        expect(response.status).toBe(200);
-        expect(response.headers.get("skit-release-version")).toBe("1.0.0");
-        expect(response.headers.get("cache-control")).toBe("private, no-store");
-        expect(yield* responseText(response)).toBe("private archive");
-      }
-    }).pipe(Effect.provide(platformLayer)),
+        const blobs = yield* BlobStore;
+        yield* blobs.put(
+          "write newer private release fixture",
+          "releases/private-inaccessible.zip",
+          new TextEncoder().encode("newer private archive"),
+        );
+        const sql = yield* D1Client.D1Client;
+        const download = (version: string) =>
+          request(`/api/skits/tim/tools/releases/${version}/download`, {
+            headers: { authorization: `Bearer ${token}` },
+          });
+        expect((yield* request("/api/skits/tim/tools/releases/1.0.0/download")).status).toBe(404);
+        for (const version of ["1.0.0", "latest"])
+          expect((yield* download(version)).status).toBe(404);
+        yield* sql`INSERT INTO namespaces VALUES ('tim', 'principal', 'principal_reader')`;
+        for (const [version, selected, content] of [
+          ["1.0.0", "1.0.0", "private archive"],
+          ["latest", "2.0.0", "newer private archive"],
+        ]) {
+          const response = yield* download(version);
+          expect(response.status).toBe(200);
+          expect(response.headers.get("skit-release-version")).toBe(selected);
+          expect(response.headers.get("cache-control")).toBe("private, no-store");
+          expect(yield* responseText(response)).toBe(content);
+        }
+        yield* sql.batch([
+          sql`UPDATE namespaces SET subject_kind = 'team', subject_id = 'team_owner' WHERE namespace_slug = 'tim'`,
+          sql`INSERT INTO team_memberships VALUES ('team_other', 'principal_reader')`,
+        ]);
+        for (const version of ["1.0.0", "latest"])
+          expect((yield* download(version)).status).toBe(404);
+        yield* sql`INSERT INTO team_memberships VALUES ('team_owner', 'principal_reader')`;
+        for (const version of ["1.0.0", "latest"])
+          expect((yield* download(version)).status).toBe(200);
+        yield* sql`DROP TABLE resource_grants`;
+        expect((yield* download("latest")).status).toBe(200);
+        yield* sql`DELETE FROM team_memberships WHERE team_id = 'team_owner' AND principal_id = 'principal_reader'`;
+        for (const version of ["1.0.0", "latest"])
+          expect((yield* download(version)).status).toBe(404);
+      }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("rejects unsupported download methods", () =>

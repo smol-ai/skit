@@ -1,7 +1,6 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { Identity } from "../identity/service.js";
-import { Authorization } from "../authorization/service.js";
 import { downloadRelease, downloadReleaseAnonymous } from "./release-download.js";
 import { Skits } from "../skits/service.js";
 import { ReleaseApi } from "@smolai/skit-core/universal/api";
@@ -12,12 +11,10 @@ export const authenticatedReleaseHandlers = HttpApiBuilder.group(
   (handlers) =>
     Effect.gen(function* () {
       const authentication = yield* Identity;
-      const authorization = yield* Authorization;
       const skits = yield* Skits;
       return handlers.handle("download", ({ params }) =>
         downloadRelease(params).pipe(
           Effect.provideService(Identity, authentication),
-          Effect.provideService(Authorization, authorization),
           Effect.provideService(Skits, skits),
         ),
       );

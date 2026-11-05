@@ -1,3 +1,4 @@
+import type { Principal } from "../../identity/service.js";
 import { Effect, type Option, Schema } from "effect";
 import {
   type BlobStoreService,
@@ -30,29 +31,35 @@ class StoredReleaseInvalid extends Schema.TaggedError<StoredReleaseInvalid>()(
   { cause: Schema.Defect() },
 ) {}
 
+class DownloadAuthenticationFailed extends Schema.TaggedError<DownloadAuthenticationFailed>()(
+  "ReleaseStore.AuthenticationFailed",
+  { cause: Schema.Defect() },
+) {}
+
 export interface Releases {
   readonly findLatestPublic: (input: {
     readonly owner: string;
     readonly slug: string;
   }) => Effect.Effect<DownloadableRelease | null, DatabaseError | StoredReleaseInvalid>;
-  readonly findAnonymousDownload: (input: {
-    readonly owner: string;
-    readonly slug: string;
-    readonly version: string;
-  }) => Effect.Effect<DownloadableRelease | null, DatabaseError | StoredReleaseInvalid>;
-  readonly findExactDownload: (input: {
-    readonly owner: string;
-    readonly slug: string;
-    readonly version: string;
-  }) => Effect.Effect<DownloadableRelease | null, DatabaseError | StoredReleaseInvalid>;
-  readonly listLatestDownloads: (input: {
-    readonly owner: string;
-    readonly slug: string;
-  }) => Effect.Effect<ReadonlyArray<DownloadableRelease>, DatabaseError | StoredReleaseInvalid>;
+  readonly findDownload: (
+    input: {
+      readonly owner: string;
+      readonly slug: string;
+      readonly version: string;
+    },
+    authenticate?: Effect.Effect<Principal | undefined, unknown>,
+  ) => Effect.Effect<
+    DownloadableRelease | null,
+    DatabaseError | StoredReleaseInvalid | DownloadAuthenticationFailed
+  >;
 }
 
 /** Only Skits constructs release reads; archive storage keys never leave this module. */
-export const makeReleaseReads = (sql: DatabaseSqlClient, blobs: BlobStoreService): Releases => {
+export const makeReleaseReads = (
+  sql: DatabaseSqlClient,
+  blobs: BlobStoreService,
+  ownsNamespace: (principal: Principal, namespace: string) => Effect.Effect<boolean, DatabaseError>,
+): Releases => {
   const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
     effect.pipe(databaseError(operation));
   const readArchive = Effect.fn("ReleaseStore.readArchive")((objectKey: string) =>
@@ -131,5 +138,34 @@ export const makeReleaseReads = (sql: DatabaseSqlClient, blobs: BlobStoreService
     return yield* Effect.forEach(rows, decodeRelease);
   });
 
-  return { findLatestPublic, findAnonymousDownload, findExactDownload, listLatestDownloads };
+  const findDownload = Effect.fn("ReleaseStore.findDownload")(function* (
+    input: { readonly owner: string; readonly slug: string; readonly version: string },
+    authenticate?: Effect.Effect<Principal | undefined, unknown>,
+  ) {
+    if (input.version !== "latest") {
+      const release = yield* findExactDownload(input);
+      if (release === null || release.visibility !== "private") return release;
+      if (authenticate === undefined) return null;
+      const authenticated = yield* Effect.result(authenticate);
+      if (authenticated._tag === "Failure")
+        return yield* new DownloadAuthenticationFailed({ cause: authenticated.failure });
+      if (authenticated.success === undefined) return null;
+      return (yield* ownsNamespace(authenticated.success, input.owner)) ? release : null;
+    }
+    if (authenticate === undefined) return yield* findAnonymousDownload(input);
+    const candidates = yield* listLatestDownloads(input);
+    if (candidates.length === 0) return null;
+    const publicFallback = candidates.find((candidate) => candidate.visibility !== "private");
+    if (candidates[0] === publicFallback) return publicFallback;
+    const authenticated = yield* Effect.result(authenticate);
+    if (authenticated._tag === "Failure") {
+      if (publicFallback !== undefined) return publicFallback;
+      return yield* new DownloadAuthenticationFailed({ cause: authenticated.failure });
+    }
+    if (authenticated.success === undefined) return publicFallback ?? null;
+    return (yield* ownsNamespace(authenticated.success, input.owner))
+      ? candidates[0]
+      : (publicFallback ?? null);
+  });
+  return { findLatestPublic, findDownload };
 };

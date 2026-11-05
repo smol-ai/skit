@@ -59,17 +59,6 @@ describe("authorization", () => {
       expect(yield* authorization.ownsNamespace(principal, "admin")).toBe(false);
       expect(yield* authorization.canAuthor(principal, "external", "tool", "read")).toBe(true);
       expect(yield* authorization.canAuthor(principal, "external", "tool", "advance")).toBe(true);
-      expect(yield* authorization.canReadRelease(principal, "rel_secret", "other", "tool")).toBe(
-        true,
-      );
-      expect(
-        yield* authorization.readableReleaseIds(
-          principal,
-          ["rel_secret", "rel_inaccessible"],
-          "other",
-          "tool",
-        ),
-      ).toEqual(new Set(["rel_secret"]));
     }).pipe(Effect.provide(testLayer)),
   );
 

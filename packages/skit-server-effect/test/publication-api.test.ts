@@ -31,9 +31,7 @@ const dependencies = Layer.mergeAll(
   Layer.mock(Skits, {
     releases: {
       findLatestPublic: unexpectedReleaseRead,
-      findAnonymousDownload: unexpectedReleaseRead,
-      findExactDownload: unexpectedReleaseRead,
-      listLatestDownloads: unexpectedReleaseRead,
+      findDownload: unexpectedReleaseRead,
     },
     preparePublication: () =>
       Effect.succeed({

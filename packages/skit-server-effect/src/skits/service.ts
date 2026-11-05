@@ -533,7 +533,7 @@ export const layer = Layer.effect(
       revision,
       ancestors,
       list: makeList(sql, authorization),
-      releases: makeReleaseReads(sql, blobs),
+      releases: makeReleaseReads(sql, blobs, authorization.ownsNamespace),
       ...makeDeletion(sql, blobs, authorization.ownsNamespace),
       ...makePublication(sql, blobs, digests, random, current, authorization.ownsNamespace),
     });

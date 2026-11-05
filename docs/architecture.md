@@ -332,7 +332,7 @@ Exact release downloads are immutable. Public and unlisted Releases can be downl
 
 Better Auth owns email/password accounts and secure browser sessions. CLI automation uses separately revocable `skit_pat_` credentials whose hashes, scopes, expiry, generation, and last-use evidence are stored in D1. Both credential kinds normalize to an opaque SKIT Principal before domain authorization; route handlers do not treat a username, namespace string, descriptor ID, or bearer possession as authority by itself.
 
-Namespaces are controlled by an individual Principal or a registry-local team. Current team membership participates in Authorship, Publication, Library, and private Release access, so removing a membership removes authority on the next request. Authorship and Publication Grants remain distinct. Suspending a Principal or advancing its authorization generation invalidates previously issued credentials without rewriting every PAT.
+Namespaces are controlled by an individual Principal or a registry-local team. Current team membership participates in Authorship, Publication, Library, and private Release access, so removing a membership removes authority on the next request. Authorship and author inventory still support per-SKIT grants. Suspending a Principal or advancing its authorization generation invalidates previously issued credentials without rewriting every PAT.
 
 The server retains immutable revisions of each principal's portable Library Manifest using optimistic concurrency. These revisions contain Library Entries and Bindings only. In accordance with ADR-0001 they reject device-local Projection, Custody, paths, observations, ownership markers, drift, conflicts, suppression, and audit history rather than importing those fields into portable intent.
 
@@ -341,6 +341,8 @@ Private Library snapshots require the Library's owning Principal or current memb
 Deleting a private SKIT or previewing its deletion requires ownership of its Namespace or current membership in that Namespace's team. A per-resource admin grant does not authorize either operation. Skits checks this rule for both direct callers and HTTP requests; non-owners receive the same HTTP 404 as a missing SKIT.
 
 Publication also requires Namespace ownership or current membership in the owning team; per-resource publication grants do not authorize it. Skits checks access before the HTTP adapter decodes the archive, binds the publication to that Namespace and SKIT, and checks access again before publishing. A prepared publication does not retain authority after team membership is removed.
+
+Skits selects private Release downloads using the same Namespace ownership or current team membership rule; per-Release and per-SKIT grants do not authorize them. `latest` selects the newest Release the caller can access, falling back to a public or unlisted Release if authentication fails. Exact public and unlisted downloads do not consult credentials.
 
 ### Draft synchronization
 
