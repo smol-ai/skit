@@ -324,6 +324,27 @@ export const owners = {
   Feedback: { status: "EXISTS", owns: ["feedback"], ops: ["record"], removes: [] },
 } as const;
 
+/**
+ * Core subpaths with approved state owners and exact source entries. The root export is an
+ * aggregate compatibility surface, not a subpath. Unmapped subpaths fail check-structure;
+ * stateless contract exports need an explicit architecture decision, not an invented owner.
+ */
+export const coreExports = {
+  "./library": { owners: ["Library"], source: "packages/skit/src/library/index.ts" },
+  "./library/routing": {
+    owners: ["Library"],
+    source: "packages/skit/src/library/routing/index.ts",
+  },
+  "./library/setup": { owners: ["Library"], source: "packages/skit/src/library/setup.ts" },
+  "./library/session": { owners: ["Library"], source: "packages/skit/src/library/session.ts" },
+  "./author": {
+    owners: ["AuthorWorkspace", "AuthorHistory"],
+    source: "packages/skit/src/author/index.ts",
+  },
+} as const satisfies {
+  [subpath: string]: { owners: readonly (keyof typeof owners)[]; source: string };
+};
+
 /** Workflows: plain functions that coordinate owners. They own no state and are not services. */
 export const workflows = {
   LibrarySync: {

@@ -187,3 +187,90 @@ describe("skit/import-direction", () => {
     ).toEqual([1]);
   });
 });
+
+describe("skit/feature-entry", () => {
+  test("flat feature-prefixed siblings belong inside the feature", async () => {
+    expect(
+      await reported(
+        "packages/cli/src/library/PROBE.ts",
+        "export const probe = 1;",
+        "feature-entry",
+        "packages/skit/src/library/setup-intent.ts",
+      ),
+    ).toEqual([1]);
+  });
+  test.each([
+    "packages/skit/src/library/setup/setup-review.ts",
+    "packages/skit/src/library/setup/undo/setup-files.ts",
+    "packages/cli/src/library/enable/enable-command.ts",
+  ])("repeated feature prefixes fail: %s", async (filename) => {
+    expect(
+      await reported(
+        "packages/cli/src/library/PROBE.ts",
+        "export const probe = 1;",
+        "feature-entry",
+        filename,
+      ),
+    ).toEqual([1]);
+  });
+
+  test.each([
+    "packages/skit/src/library/setup/review.ts",
+    "packages/skit/src/library/setup/undo/files.ts",
+    "packages/cli/src/library/enable/command.ts",
+    "packages/skit/src/library/store/state-file.ts",
+  ])("unprefixed implementations and non-feature groups pass: %s", async (filename) => {
+    expect(
+      await reported(
+        "packages/cli/src/library/PROBE.ts",
+        "export const probe = 1;",
+        "feature-entry",
+        filename,
+      ),
+    ).toEqual([]);
+  });
+
+  test.each([
+    'import { review } from "./setup/review.js";',
+    'export { review } from "./setup/review.js";',
+    'export * from "./setup/review.js";',
+    'const review = import("./setup/review.js");',
+    'import { review } from "@smolai/skit-core/library/setup/review";',
+  ])("outside callers cannot bypass a feature entry: %s", async (source) => {
+    expect(
+      await reported(
+        "packages/cli/src/library/PROBE.ts",
+        source,
+        "feature-entry",
+        "packages/skit/src/library/other.ts",
+      ),
+    ).toEqual([1]);
+  });
+
+  test("the feature, its facade and package-local tests may use private implementation", async () => {
+    for (const [filename, source] of [
+      ["packages/skit/src/library/setup.ts", 'export { review } from "./setup/review.js";'],
+      ["packages/skit/src/library/setup/plan.ts", 'import { review } from "./review.js";'],
+      [
+        "packages/skit/test/setup.test.ts",
+        'import { review } from "../src/library/setup/review.js";',
+      ],
+      ["packages/skit/src/library/other.ts", 'import { setup } from "./setup.js";'],
+    ]) {
+      expect(
+        await reported("packages/cli/src/library/PROBE.ts", source, "feature-entry", filename),
+      ).toEqual([]);
+    }
+  });
+
+  test("another package's tests cannot bypass the feature facade", async () => {
+    expect(
+      await reported(
+        "packages/cli/src/library/PROBE.ts",
+        'import { review } from "../../skit/src/library/setup/review.js";',
+        "feature-entry",
+        "packages/cli/test/setup.test.ts",
+      ),
+    ).toEqual([1]);
+  });
+});

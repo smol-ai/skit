@@ -5,6 +5,7 @@
   "jsPlugins": ["./lint/oxlint-plugin-skit.mjs"],
   "rules": {
     "oxc/no-barrel-file": "error",
+    "skit/feature-entry": "error",
     "skit/no-record-any": "error",
     "skit/no-record-unknown": "error",
     "skit/library-contract-complete": "error",

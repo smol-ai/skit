@@ -2,6 +2,7 @@ import { dirname, relative, resolve } from "node:path";
 import { approvedServices, owners as boundaryOwners } from "../architecture/boundaries.mjs";
 import { layout, undecided } from "../architecture/layout.mjs";
 import { libraryRules } from "./library-rules.mjs";
+import { structureRules } from "./structure-rules.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 
@@ -698,6 +699,7 @@ export default {
   rules: {
     ...effectRules,
     ...libraryRules,
+    ...structureRules,
     "no-direct-cli-output": {
       meta: {
         type: "problem",

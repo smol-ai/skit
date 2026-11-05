@@ -58,3 +58,14 @@ export const undecided = [
   // The work item gives Storybook no layout, only an explicit CLI story export.
   "packages/storybook/src/",
 ];
+
+/**
+ * Concrete features, distinct from grouping folders such as store/ or terminal/.
+ * Each has one public sibling module; its directory is private implementation.
+ * Add new features here when deciding their placement. No migration exemptions.
+ */
+export const features = [
+  "packages/skit/src/library/setup",
+  "packages/cli/src/library/setup",
+  "packages/cli/src/library/enable",
+];

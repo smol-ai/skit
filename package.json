@@ -16,6 +16,7 @@
     "lint": "pnpm --parallel --no-bail --include-workspace-root run /^lint:/",
     "lint:code": "oxlint .",
     "lint:unused": "knip",
+    "lint:structure": "node scripts/check-structure.mjs",
     "skit": "node packages/cli/bin/skit.js",
     "vm": "pnpm --filter @smolai/skit-devtools vm",
     "tui": "pnpm --filter @smolai/skit-tui dev",
