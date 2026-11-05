@@ -1,15 +1,29 @@
 // Type-only failure and service aliases preserve portable inferred consumer declarations.
-export * from "./harnesses/skill-listing/codex-discovery.js";
-export * from "./harnesses/skill-listing/contracts.js";
-export * from "./harnesses/skill-listing/discovery.js";
+export { readCodexSkills } from "./harnesses/skill-listing/codex-discovery.js";
+export { largeListingEntries, ListingBudget } from "./harnesses/skill-listing/contracts.js";
+export { readListingBudgets } from "./harnesses/skill-listing/discovery.js";
 export { readClaudeListingSnapshot } from "./harnesses/skill-listing/claude.js";
 export { readCodexListingBudget } from "./harnesses/skill-listing/codex.js";
-export * from "./harnesses/skill-listing/codex-allocation.js";
-export * from "./shared/build-info.js";
-export * from "./api/consumer-contracts.js";
-export * from "./api/authoring-contracts.js";
-export * from "./auditing/skill-audit.js";
-export * from "./artifact/control-files.js";
+export { estimateCodexListing } from "./harnesses/skill-listing/codex-allocation.js";
+export { BuildInfo } from "./shared/build-info.js";
+export {
+  parseContract,
+  SkitContractError,
+  serverDiscoverySchema,
+} from "./api/consumer-contracts.js";
+export {
+  AuthorSkitSummary,
+  AuthorSkitListResponse,
+  AuthorSkitDeleteResponse,
+  releasePublishRequestSchema,
+  releasePublishResponseSchema,
+  type ReleasePublishResponse,
+} from "./api/authoring-contracts.js";
+export { skillFindingFingerprint, auditSkill, evaluateSkillAudit } from "./auditing/skill-audit.js";
+export {
+  COLLECTION_CONTROL_DIRECTORY,
+  AUTHOR_WORKSPACE_METADATA_FILE,
+} from "./artifact/control-files.js";
 
 export { OwnershipMarker } from "./installed-skills/ownership-marker.js";
 export {
@@ -24,7 +38,13 @@ export { InstallDestination } from "./installed-skills/destination.js";
 export { InstallScope } from "./library/scope.js";
 export { SkitValidationDiagnostic } from "./artifact/validation-diagnostic.js";
 
-export * from "./shared/failure.js";
+export {
+  errorMessage,
+  type FailureCode,
+  FailureTypeId,
+  type SkitFailure,
+  isSkitFailure,
+} from "./shared/failure.js";
 export {
   ReadmeFrontmatterMissing,
   DescriptorMalformed,
@@ -38,25 +58,49 @@ export {
 } from "./installed-skills/failures.js";
 export { ImportContentInvalid, InvalidLibraryState } from "./library/failures.js";
 export { HarnessMetadataInvalid } from "./harnesses/metadata-failures.js";
-export * from "./harnesses/contracts.js";
-export * from "./harnesses/catalog.js";
-export * from "./harnesses/drivers.js";
-export * from "./shared/json.js";
-export * from "./harnesses/frontmatter.js";
-export * from "./harnesses/invocation-metadata.js";
-export * from "./invocation/conformance.js";
-export * from "./authoring/invocation/generation.js";
-export * from "./harnesses/default-roots.js";
-export * from "./harnesses/install-destinations.js";
-export * from "./library/inventory/doctor-report.js";
-export * from "./authoring/archive.js";
-export * from "./authoring/scaffold.js";
-export * from "./platform/link-stat.js";
-export * from "./platform/file-lock.js";
-export * from "./platform/source-process.js";
-export * from "./platform/layer.js";
-export * from "./platform/path-identity.js";
-export * from "./installed-skills/policy.js";
+export {
+  type HarnessDocumentationSource,
+  type SkillsDirectory,
+  type HarnessProfile,
+  type SkillsDirectoryOverrides,
+} from "./harnesses/contracts.js";
+export {
+  harnessProfile,
+  harnessProfileIds,
+  skillsDirectory,
+  resolveSkillsDirectory,
+  installSkillsDirectory,
+} from "./harnesses/catalog.js";
+export { harnessDrivers } from "./harnesses/drivers.js";
+export { canonicalJson } from "./shared/json.js";
+export { evaluateSkillFrontmatter } from "./harnesses/frontmatter.js";
+
+export {
+  assessInvocationConformance,
+  resolveDeclaredInvocation,
+} from "./invocation/conformance.js";
+export {
+  isAuthorWorkspace,
+  generateInvocationMetadata,
+  InvocationMetadataGeneration,
+  type InvocationMetadataGenerationFailure,
+} from "./authoring/invocation/generation.js";
+export { defaultSkillsRoot } from "./harnesses/default-roots.js";
+export { installDestinationHarnesses } from "./harnesses/install-destinations.js";
+export { libraryDoctorReport, LibraryDoctorReport } from "./library/inventory/doctor-report.js";
+export { createSkitArchive } from "./authoring/archive.js";
+export { type InitSkitResult, initSkit } from "./authoring/scaffold.js";
+export { LinkStat } from "./platform/link-stat.js";
+export { type FileLockBusy, type FileLockFailed, acquireFileLock } from "./platform/file-lock.js";
+export {
+  type SourceProcessResult,
+  type SourceProcessFailure,
+  SourceProcess,
+  sourceProcessLayer,
+} from "./platform/source-process.js";
+export { type SkitServices, skitLayer } from "./platform/layer.js";
+export { pathIsWithin } from "./platform/path-identity.js";
+export { applyInvocationPolicy } from "./installed-skills/policy.js";
 export {
   type InstalledSkillFailure,
   inspectOwnershipMarker,
@@ -64,36 +108,100 @@ export {
   type ManageApproval,
 } from "./installed-skills/files.js";
 
-export * from "./installed-skills/pnpm-skills.js";
+export {
+  makePnpmSkillCheck,
+  pnpmSkillOwner,
+  type PnpmSkillManaged,
+  leavePnpmSkill,
+} from "./installed-skills/pnpm-skills.js";
 
-export * from "./artifact/registry-identity.js";
-export * from "./artifact/descriptor.js";
-export * from "./artifact/skit.js";
-export * from "./sources/resolve.js";
-export * from "./platform/tree-requirements.js";
-export * from "./shared/tree-error.js";
-export * from "./artifact/tree.js";
-export * from "./artifact/tree-entry.js";
+export {
+  hashParts,
+  hashInstalledSkillFiles,
+  parseSkitReadme,
+  parseSkitConfig,
+} from "./artifact/descriptor.js";
+export {
+  readSkitDescriptor,
+  deterministicTreeHash,
+  validateSkitDirectory,
+} from "./artifact/skit.js";
+export {
+  parseSkitSource,
+  sourceLocator,
+  resolveSkitSource,
+  type PluginManifestInvalid,
+  type PluginSkillConflict,
+  SourceDiscoveryDiagnostic,
+  type ParseSourceFailure,
+  type ResolvedSkitSource,
+  type CommandFailed,
+  type SourcePolicyViolation,
+} from "./sources/resolve.js";
+export { type TreeRequirements } from "./platform/tree-requirements.js";
+export { TreeError } from "./shared/tree-error.js";
+export {
+  walkTree,
+  inspectNormalizedTree,
+  scanAuthorTree,
+  walkAuthorTree,
+} from "./artifact/tree.js";
+export { TreeFile, TreeEntry } from "./artifact/tree-entry.js";
 export { type AuthorIgnoreRepository } from "./artifact/plain-author-ignore.js";
 
 export type { LibraryLayerError, LibraryStateReadError } from "./library/library.js";
 export { scanInventory, type InventoryScanRoot } from "./library/inventory/refresh.js";
 export { collectionVersionPath } from "./library/collection-version.js";
-export * from "./library/library-contracts.js";
-export * from "./library/source-identity.js";
+export {
+  SkitSource,
+  SkillsShLockFileEntry,
+  SkillVersion,
+  Skill,
+  Collection,
+  CollectionVersion,
+  Import,
+  importCanBeRefetched,
+  librarySnapshotDigests,
+  Enabled,
+  mergeEnabled,
+  sourceImports,
+  currentCollectionSkills,
+  currentSkillVersion,
+  enabledSkillIds,
+  LibraryManifest,
+  currentLibraryManifest,
+  SnapshotArchive,
+} from "./library/library-contracts.js";
 
-export * from "./library/library-state.js";
+export {
+  CURRENT_LIBRARY_STATE_VERSION,
+  LibraryState,
+  globalEnabled,
+  enabledAt,
+  currentLibraryState,
+  emptyLibraryState,
+  libraryStateRevision,
+  LibraryInventory,
+  libraryManifestFromLocalState,
+  AbsoluteDevicePath,
+  InstalledSkill,
+  DeviceSkillSelection,
+} from "./library/library-state.js";
 export { setupIntent } from "./library/setup.js";
-export * from "./library/enabled.js";
+export { prepareDeviceInstallation, withDeviceSkillSelection } from "./library/enabled.js";
 export { RestoreInvalid, SourceRestoreInvalid } from "./library/library.js";
-export * from "./library/collection-version-plan.js";
-export * from "./library/restore-progress.js";
+export { planCollectionVersions } from "./library/collection-version-plan.js";
+export {
+  type RestorePhase,
+  type RestoreTick,
+  type RestoreProgress,
+} from "./library/restore-progress.js";
 
 export {
   type CollectionRemovalMissing,
   type SkillRemovalRequiresCollection,
 } from "./library/installation/remove.js";
-export * from "./library/installed-skill-hash.js";
+export { type SkillMaterializationInvalid } from "./library/installed-skill-hash.js";
 export {
   type ImportRequestInvalid,
   type InstalledSkillChanged,
@@ -105,14 +213,35 @@ export type {
   ImportedEdit,
 } from "./library/import-collection.js";
 export { type InstalledSkillInvalid } from "./library/installation/install-enabled.js";
-export * from "./library/snapshot-archive.js";
-export * from "./library/entity-ids.js";
-export * from "./library/machine-document.js";
+export { readSnapshotArchive } from "./library/snapshot-archive.js";
+export {
+  CollectionId,
+  SkillId,
+  SkillVersionId,
+  makeCollectionId,
+  makeSkillId,
+  makeSkillVersionId,
+  makeCollectionVersionId,
+  makeImportId,
+  makeInstalledSkillId,
+  makeMachineId,
+  makeOperationId,
+  LegacyMachineId,
+  migratedMachineId,
+} from "./library/entity-ids.js";
+export { MachineDocumentJson } from "./library/machine-document.js";
 export { LibraryAuditEvent, type LibraryAuditInvalid } from "./library/audit/audit-log.js";
 
 export { errnoOf, isErrno } from "./shared/errno.js";
 
-export * from "./library/usage/contracts.js";
+export {
+  UsageHarness,
+  UsageRow,
+  UsageReport,
+  type InvalidUsageOptions,
+  type UsageRoot,
+  type UsageOptions,
+} from "./library/usage/contracts.js";
 export { scanUsage } from "./library/usage/scanner.js";
 
 export * as MachineSettings from "./library/machine-settings.js";
@@ -125,9 +254,19 @@ export { type Unusable as MachineSettingsUnusable } from "./library/machine-sett
 export { InstalledSkills } from "./library/installed-skills.js";
 export * as InstalledSkillStatus from "./library/installed-skill-status.js";
 export { Library } from "./library/library.js";
-export * from "./library/subject-resolution.js";
-export * from "./library/duplicates.js";
-export * from "./library/source-inspection.js";
+export {
+  type LibrarySubjectNotFound,
+  type LibrarySubjectAmbiguous,
+  librarySubjects,
+  matchingLibrarySubjects,
+} from "./library/subject-resolution.js";
+
+export {
+  type AddNoSkills,
+  leaveResolvedPnpmSkills,
+  describeSourceSkills,
+  inspectResolvedSource,
+} from "./library/source-inspection.js";
 
 export { observePathEvidence, recoveryFingerprint } from "./library/folder-evidence.js";
 export type { ApplyError as LibraryApplyError } from "./library/library.js";

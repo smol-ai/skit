@@ -14,8 +14,6 @@ import {
 import { Clock, Effect, Result } from "effect";
 import { Registry, type ResolvedAuth } from "../../registry/index.js";
 
-export { AddNoSkills } from "@smolai/skit-core";
-
 /** Resolve once inside the lifetime of the operation consuming the staged source. */
 const withResolvedSource = Effect.fn("SourceAcquisition.withResolvedSource")(function* <A, E, R>(
   input: string | SkitSource,

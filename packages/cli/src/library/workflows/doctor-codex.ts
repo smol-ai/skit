@@ -15,7 +15,7 @@ import {
   type ListingBudget,
   type LibraryState,
 } from "@smolai/skit-core";
-export { readCodexSkills, CodexDoctorFailure } from "@smolai/skit-core";
+export { readCodexSkills } from "@smolai/skit-core";
 import { probeHarness } from "@smolai/skit-core/harnesses";
 
 export const CodexDoctorInstance = Schema.Struct({
