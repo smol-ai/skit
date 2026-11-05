@@ -134,7 +134,7 @@ export const owners = {
 
   AuthorWorkspace: {
     status: "NEW",
-    module: "packages/cli/src/author/**",
+    module: "packages/skit/src/author/**",
     owns: [
       "<root>/.skit/workspace.json, .skit/.gitignore",
       "<root>/.skit/connection.json (device checkpoint, git-ignored) + <root>/skit.remote.json (committed, portable; ADR-0010, ADR-0011) — two files stay, one logical state", // decisions.md "The author connection is one state"
@@ -172,7 +172,7 @@ export const owners = {
 
   AuthorHistory: {
     status: "RESHAPE",
-    module: "packages/cli/src/author/{history,history-store}.ts",
+    module: "packages/skit/src/author/{history,history-store}.ts",
     owns: ["<home>/history/**", "<home>/sync-bindings.json"],
     ops: [
       "capture(root): { id, revision, treeHash }",

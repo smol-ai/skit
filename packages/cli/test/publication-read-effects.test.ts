@@ -5,16 +5,14 @@ import { Cause, Config, Deferred, Effect, Fiber, FileSystem, Layer } from "effec
 import { it } from "@effect/vitest";
 import { systemError, type PlatformError } from "effect/PlatformError";
 import { expect } from "vitest";
+import { RegistryOriginInvalid, type CredentialsUnusable } from "../src/registry/failures.js";
 import {
-  RegistryOriginInvalid,
   type AuthorRemoteMetadataInvalid,
-  type CredentialsUnusable,
-} from "../src/registry/failures.js";
-import type { AuthorWorkspaceMetadataInvalid } from "../src/library/failures.js";
-import type {
-  AuthorSyncStateInvalid,
-  AuthorWorkspaceRootInvalid,
-} from "../src/author/workspace.js";
+  type AuthorWorkspaceMetadataInvalid,
+  type AuthorSyncStateInvalid,
+  type AuthorWorkspaceRootInvalid,
+  AuthorWorkspace,
+} from "@smolai/skit-core/author";
 
 type ReadError =
   | AuthorRemoteMetadataInvalid
@@ -24,7 +22,7 @@ type ReadError =
   | PlatformError
   | CredentialsUnusable
   | Config.ConfigError;
-import { AuthorWorkspace } from "../src/author/workspace.js";
+
 import { readConfig, resolveAuthForOrigin } from "../src/registry/auth.js";
 
 /** The workspace read, with only skit.remote.json present: every other workspace file is absent. */

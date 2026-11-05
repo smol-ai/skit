@@ -1,6 +1,6 @@
 import type { Collection, LibraryState } from "@smolai/skit-core";
 import { Effect, FileSystem, Option, Schema } from "effect";
-import { WorkspaceId, type WorkspaceRoot } from "../../author/workspace.js";
+import { WorkspaceId, type WorkspaceRoot } from "@smolai/skit-core/author";
 
 /** The workspace id an authored Collection carries, if it is one. */
 export const authoredId = (collection: Collection | undefined) =>

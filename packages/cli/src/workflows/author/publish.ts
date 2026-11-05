@@ -17,6 +17,9 @@ import {
   readSkitDescriptor,
   releasePublishRequestSchema,
   validateSkitDirectory,
+  type SkitConfiguration,
+  FailureTypeId,
+  type SkitFailure,
 } from "@smolai/skit-core";
 import {
   ForbiddenOriginResponse,
@@ -43,24 +46,21 @@ import {
   AuthorWorkspace,
   type AuthorSyncStateInvalid,
   type AuthorWorkspaceRootInvalid,
-} from "../../author/workspace.js";
-import type { AuthorWorkspaceMetadataInvalid } from "../../library/failures.js";
-import {
+  type AuthorWorkspaceMetadataInvalid,
   AuthorRemoteMetadataInvalid,
+} from "@smolai/skit-core/author";
+
+import {
   AuthorSyncRequired,
   type CredentialsUnusable,
   NoRemoteHome,
   RegistryRejectedWrite,
   type RegistryOriginInvalid,
-} from "../../registry/failures.js";
-import type { SkitConfiguration } from "@smolai/skit-core";
-import {
   AuthenticationRequired,
   CredentialLacksScope,
   PrincipalNotAuthorized,
   PublicationBlocked,
 } from "../../registry/failures.js";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
 export class PublicationResponseError
   extends Data.TaggedError("PublicationResponseError")<{

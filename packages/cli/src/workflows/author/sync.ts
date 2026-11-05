@@ -20,42 +20,48 @@ import { join } from "node:path";
 import {
   AuthorDestinationInvalid,
   AuthorDestinationMalformed,
-  AuthorRemoteAlreadyExists,
   LocalFilesChangedDuringSync,
-  RemoteSkitUnavailable,
-  VisibilityNotAccepted,
-} from "../../registry/failures.js";
-import { resolveAuth, resolveAuthForOrigin } from "../../registry/auth.js";
-import type { AuthorSyncResult, AuthorVisibility } from "./sync-contract.js";
-import { authorDecider, authorTree } from "./device-view.js";
-import { scanAuthorSyncTree } from "./local-tree.js";
-import { decodeUrl, normalizeRemote, type AuthorRemoteHome } from "../../author/remote.js";
-import {
+  type AuthorVisibility,
+  scanAuthorSyncTree,
+  decodeUrl,
+  normalizeRemote,
+  type AuthorRemoteHome,
   AuthorSyncStateInvalid,
   AuthorWorkspace,
   AuthorWorkspaceConflict,
   type Connecting,
   type WorkspaceId,
-} from "../../author/workspace.js";
-import { adoptFrom, collectionsAt } from "./library-claims.js";
-import { AuthorHistory, AuthorHistoryInvalid } from "../../author/history.js";
-
-export type { AuthorVisibility } from "./sync-contract.js";
-export type { AuthorRemoteHome } from "../../author/remote.js";
-export { AuthorSyncStateInvalid } from "../../author/workspace.js";
-import { Library, History, conflictKind, SkitContractError, Sync } from "@smolai/skit-core";
-import { MissingRequirement } from "../failures.js";
+  AuthorHistory,
+  AuthorHistoryInvalid,
+} from "@smolai/skit-core/author";
 import {
+  AuthorRemoteAlreadyExists,
+  RemoteSkitUnavailable,
+  VisibilityNotAccepted,
   DestinationExistsWithoutHistory,
   DestinationFormInvalid,
   RegistryUnreachable,
-} from "../../registry/failures.js";
-import {
   AuthenticationRequired,
   CredentialLacksScope,
   PrincipalNotAuthorized,
 } from "../../registry/failures.js";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { resolveAuth, resolveAuthForOrigin } from "../../registry/auth.js";
+import type { AuthorSyncResult } from "./sync-contract.js";
+
+import { authorDecider, authorTree } from "./device-view.js";
+
+import { adoptFrom, collectionsAt } from "./library-claims.js";
+
+import {
+  Library,
+  History,
+  conflictKind,
+  SkitContractError,
+  Sync,
+  FailureTypeId,
+  type SkitFailure,
+} from "@smolai/skit-core";
+import { MissingRequirement } from "../failures.js";
 
 /** A SKIT request the Registry answered, with its own words for why it refused. */
 export class SyncRejected

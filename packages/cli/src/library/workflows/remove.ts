@@ -1,4 +1,4 @@
-import { AuthorWorkspace } from "../../author/workspace.js";
+import { AuthorWorkspace } from "@smolai/skit-core/author";
 import { SkitConfiguration } from "@smolai/skit-core";
 import { openRemoveSession } from "@smolai/skit-core/library/session";
 import { Effect, Option } from "effect";

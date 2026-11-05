@@ -2,7 +2,7 @@
 // two cases where the reason tag would give the wrong answer.
 
 import { describe, expect, test } from "vitest";
-import { errnoOf, isErrno } from "../src/platform/errno.js";
+import { errnoOf, isErrno } from "@smolai/skit-core";
 
 function platformError(code: string, tag: string) {
   const cause = Object.assign(new Error(`${code}: failed`), { code });

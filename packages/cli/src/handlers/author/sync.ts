@@ -1,8 +1,9 @@
 import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
+import type { AuthorVisibility } from "@smolai/skit-core/author";
 import { Argument, Command, Flag } from "effect/cli";
 import { Renderer } from "../../presentation/renderer.js";
-import { syncAuthorWorkspace, type AuthorVisibility } from "../../workflows/author/sync.js";
+import { syncAuthorWorkspace } from "../../workflows/author/sync.js";
 import { handleSourceCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";

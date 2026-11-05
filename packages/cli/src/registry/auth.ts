@@ -1,4 +1,10 @@
-import { configurationForHome, SkitConfiguration } from "@smolai/skit-core";
+import {
+  configurationForHome,
+  SkitConfiguration,
+  isErrno,
+  serverDiscoverySchema,
+  HomeLock,
+} from "@smolai/skit-core";
 import {
   Clock,
   Config,
@@ -16,7 +22,7 @@ import { ChildProcessSpawner } from "effect/process";
 import type { HttpClientResponse } from "effect/http/HttpClientResponse";
 import { hostname } from "node:os";
 import { dirname, join } from "node:path";
-import { isErrno } from "../platform/errno.js";
+
 import {
   CredentialsUnusable,
   DeviceLoginEnded,
@@ -41,8 +47,7 @@ import {
   writeStoredToken,
 } from "./credential-store.js";
 import { Renderer } from "../presentation/renderer.js";
-import { serverDiscoverySchema } from "@smolai/skit-core";
-import { HomeLock } from "@smolai/skit-core";
+
 const withConfigurationWriter = <A, E, R>(
   home: string | undefined,
   program: Effect.Effect<A, E, R>,

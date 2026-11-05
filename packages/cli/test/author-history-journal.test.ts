@@ -3,7 +3,7 @@ import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Stream } from "effect
 import { TestClock } from "effect/testing";
 import { dirname, join } from "node:path";
 import { History } from "@smolai/skit-core";
-import { AuthorHistory } from "../src/author/history.js";
+import { AuthorHistory } from "@smolai/skit-core/author";
 import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
 import {
   authorLayer,

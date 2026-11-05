@@ -1,8 +1,8 @@
-import { SkitConfiguration } from "@smolai/skit-core";
+import { SkitConfiguration, skitLayer } from "@smolai/skit-core";
 import { Effect, Layer } from "effect";
-import { skitLayer } from "@smolai/skit-core";
+
 import { Library } from "@smolai/skit-core/library";
-import { AuthorWorkspace } from "../../author/workspace.js";
+import { AuthorWorkspace } from "@smolai/skit-core/author";
 
 /** Storage constructors consume the application boundary's required path snapshot. */
 export const libraryApplicationLayer = Layer.unwrap(

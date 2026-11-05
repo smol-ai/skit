@@ -1,10 +1,13 @@
 import { Effect, Schema } from "effect";
-import { normalizeRegistryNamespace, normalizeRegistrySkitSlug } from "@smolai/skit-core";
+import {
+  normalizeRegistryNamespace,
+  normalizeRegistrySkitSlug,
+} from "../distribution/registry-identity.js";
 import {
   AuthorDestinationInvalid,
   AuthorDestinationMalformed,
   InsecureOrigin,
-} from "../registry/failures.js";
+} from "./failures.js";
 
 /**
  * skit.remote.v1: a SKIT's Registry home, origin + namespace + skit (ADR-0010, ADR-0011).
@@ -39,3 +42,6 @@ export const normalizeRemote = Effect.fn("Author.normalizeRemote")(function* (
   if (!namespace || !skit) return yield* new AuthorDestinationInvalid({ form: "bare" });
   return AuthorRemoteHome.make({ schema: "skit.remote.v1", origin, namespace, skit });
 });
+
+export const AuthorVisibility = Schema.Literals(["private", "unlisted", "public"]);
+export type AuthorVisibility = typeof AuthorVisibility.Type;

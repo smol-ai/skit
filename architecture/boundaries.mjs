@@ -58,16 +58,18 @@ export const owners = [
     // NEW owner (architecture/author.ts). Callers use AuthorWorkspace and its lease; this export
     // serves the owner itself.
     name: "AuthorWorkspace",
-    owner: "packages/cli/src/author/",
-    sources: ["packages/cli/src/author/"],
+    owner: "packages/skit/src/author/",
+    privateModules: ["packages/skit/src/author/local-tree."],
+    testOwner: "packages/skit/test/",
+    sources: ["packages/skit/src/author/"],
     private: ["writeWorkspaceTree"],
   },
   {
     // RESHAPE owner (architecture/author.ts): history, its journal and the history store.
     // Callers use AuthorHistory; these exports serve the owner itself.
     name: "AuthorHistory",
-    owner: "packages/cli/src/author/history",
-    sources: ["packages/cli/src/author/"],
+    owner: "packages/skit/src/author/history",
+    sources: ["packages/skit/src/author/"],
     private: ["makeHistoryStore", "storedPath"],
   },
 ];

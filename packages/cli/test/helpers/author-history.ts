@@ -1,7 +1,6 @@
 import { Effect, Layer } from "effect";
 import type { History } from "@smolai/skit-core";
-import { AuthorHistory } from "../../src/author/history.js";
-import { AuthorWorkspace } from "../../src/author/workspace.js";
+import { AuthorHistory, AuthorWorkspace } from "@smolai/skit-core/author";
 
 /**
  * AuthorHistory over `home` with AuthorWorkspace from the same graph, as the CLI builds them.

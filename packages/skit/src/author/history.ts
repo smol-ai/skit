@@ -22,25 +22,22 @@ import {
 import { Digest, SecureRandom } from "effect/crypto";
 import { SqlClient, SqlSchema } from "effect/sql";
 import { isSqlError } from "effect/sql/SqlError";
-import {
-  AuthorIgnoreRepository,
-  FailureTypeId,
-  Hash,
-  History,
-  type LibraryBusy,
-  LinkStat,
-  MachineSettings,
-  type SkitFailure,
-  SourceProcess,
-  Sync,
-  type TreeError,
-  sha256Hash,
-  syncPaths,
-  walkAuthorTree,
-  HomeLock,
-} from "@smolai/skit-core";
-import { AuthorWorkspaceAlreadyRegistered } from "../library/failures.js";
-import { LocalFilesChangedDuringSync } from "../registry/failures.js";
+import { AuthorIgnoreRepository } from "../artifact/plain-author-ignore.js";
+import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
+import { Hash } from "../vocabulary.js";
+import * as History from "../history/history.js";
+import { type LibraryBusy } from "../failures.js";
+import { LinkStat } from "../platform/link-stat.js";
+import * as MachineSettings from "../library/machine-settings.js";
+import { SourceProcess } from "../platform/source-process.js";
+import * as Sync from "../sync/sync.js";
+import { type TreeError } from "../shared/tree-error.js";
+import { sha256Hash } from "../shared/hash.js";
+import { syncPaths } from "../platform/atomic-write.js";
+import { walkAuthorTree } from "../artifact/tree.js";
+import { HomeLock } from "../platform/home-lock.js";
+import { AuthorWorkspaceAlreadyRegistered, LocalFilesChangedDuringSync } from "./failures.js";
+
 import {
   AuthorSyncStateInvalid,
   AuthorWorkspace,

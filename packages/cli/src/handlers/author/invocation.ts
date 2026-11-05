@@ -8,7 +8,7 @@ import { outputContracts } from "../../commands/output-contracts.js";
 import { jsonFlag } from "../../commands/parameters.js";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
-import { AuthorWorkspace } from "../../author/workspace.js";
+import { AuthorWorkspace } from "@smolai/skit-core/author";
 
 export const authorInvocationCommand = Effect.fn("CLI.authorInvocation")(function* (
   input: string,

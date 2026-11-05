@@ -1,8 +1,8 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { scanAuthorSyncTree } from "../src/workflows/author/local-tree.js";
-import { testPlatformLayer } from "./helpers/platform.js";
+import { scanWorkspaceWrite } from "../src/author/local-tree.js";
+import { skitLayer as testPlatformLayer } from "../src/platform/layer.js";
 
 const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -24,7 +24,7 @@ it.effect.each([
 ])("the write owner refuses an unsafe or control target %s", (path) =>
   Effect.gen(function* () {
     const { root } = yield* fixture;
-    const tree = yield* scanAuthorSyncTree(root);
+    const tree = yield* scanWorkspaceWrite(root);
     expect(yield* Effect.flip(tree.checkTarget(path))).toMatchObject({
       _tag: "SkitContractError",
       contract: "Author write target",
@@ -37,7 +37,7 @@ it.effect.each(["file", "parent", "root"] as const)(
   (kind) =>
     Effect.gen(function* () {
       const { fs, root, temporary } = yield* fixture;
-      const tree = yield* scanAuthorSyncTree(root);
+      const tree = yield* scanWorkspaceWrite(root);
       if (kind === "file") {
         const replacement = join(temporary, "replacement");
         yield* fs.writeFileString(replacement, "same bytes\n");
@@ -61,7 +61,7 @@ it.effect.each(["file", "parent", "root"] as const)(
 it.effect("normal missing parents remain writable after they are created", () =>
   Effect.gen(function* () {
     const { fs, root } = yield* fixture;
-    const tree = yield* scanAuthorSyncTree(root);
+    const tree = yield* scanWorkspaceWrite(root);
     const target = join(root, "notes/new/deep.txt");
     expect(yield* tree.checkTarget("notes/new/deep.txt")).toBe(target);
     yield* fs.makeDirectory(join(root, "notes/new"));
@@ -80,7 +80,7 @@ it.effect("atomic replacement during capture cannot pair old inode authority wit
     const path = join(root, "notes/a.txt");
     let replaced = false;
     const result = yield* Effect.flip(
-      scanAuthorSyncTree(root).pipe(
+      scanWorkspaceWrite(root).pipe(
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
           readFile: Effect.fn("Test.replaceDuringIdentityCapture")(function* (input) {

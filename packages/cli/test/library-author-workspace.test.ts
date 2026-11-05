@@ -12,7 +12,7 @@ import { holdHomeLock } from "./helpers/home-lock.js";
 import { importSource } from "../src/library/application/import-source.js";
 import { executeRemove } from "../src/library/workflows/remove.js";
 import { authorInitCommand } from "../src/workflows/author/initialization.js";
-import { AuthorWorkspace } from "../src/author/workspace.js";
+import { AuthorWorkspace } from "@smolai/skit-core/author";
 import {
   copySkitFixtureEffect,
   initializeLibraryMachine,

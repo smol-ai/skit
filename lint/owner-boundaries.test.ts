@@ -90,9 +90,23 @@ describe("skit/owner-boundaries", () => {
     );
   });
 
+  test("Author target authority stays inside its owner and package-local unit tests", async () => {
+    const source = `import * as checks from "../src/author/local-tree.js";`;
+    expect(
+      await reported(source, "owner-boundaries", "packages/skit/test/author-local-tree.test.ts"),
+    ).toEqual([]);
+    expect(
+      await reported(
+        `import * as checks from "../../skit/src/author/local-tree.js";`,
+        "owner-boundaries",
+        "packages/cli/src/example.ts",
+      ),
+    ).toHaveLength(1);
+  });
+
   test("a handler cannot write author state around AuthorWorkspace or AuthorHistory", async () => {
     const module = (directory: string, path: string) =>
-      relative(directory, join(root, "packages/cli/src", `${path}.js`));
+      relative(directory, join(root, "packages/skit/src", `${path}.js`));
     expect(
       await reported(
         (directory) =>

@@ -24,31 +24,33 @@ import { Digest, SecureRandom } from "effect/crypto";
 import {
   AUTHOR_WORKSPACE_METADATA_FILE,
   COLLECTION_CONTROL_DIRECTORY,
-  AuthorIgnoreRepository,
-  FailureTypeId,
-  History,
-  LinkStat,
-  type SkitContractError,
-  type SkitFailure,
-  SourceProcess,
-  type TreeError,
-  acquireFileLock,
+} from "../artifact/control-files.js";
+import { AuthorIgnoreRepository } from "../artifact/plain-author-ignore.js";
+import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
+import * as History from "../history/history.js";
+import { LinkStat } from "../platform/link-stat.js";
+import { type SkitContractError } from "../protocol/api-contracts.js";
+import { SourceProcess } from "../platform/source-process.js";
+import { type TreeError } from "../shared/tree-error.js";
+import { acquireFileLock } from "../platform/file-lock.js";
+import {
   syncPaths,
   writeJsonAtomic,
   writeJsonExclusive,
   writeRawAtomic,
-} from "@smolai/skit-core";
-import { isErrno } from "../platform/errno.js";
-import { AuthorWorkspaceMetadataInvalid } from "../library/failures.js";
+} from "../platform/atomic-write.js";
+import { isErrno } from "../shared/errno.js";
 import {
+  AuthorWorkspaceMetadataInvalid,
   AuthorRemoteMetadataInvalid,
   type AuthorLocalPathNotObserved,
   type AuthorNonNfcPathUnsupported,
   type AuthorNormalizationTwin,
   type LocalFilesChangedDuringSync,
-} from "../registry/failures.js";
-import { AuthorVisibility } from "../workflows/author/sync-contract.js";
-import { AuthorRemoteHome, normalizeRemote } from "./remote.js";
+} from "./failures.js";
+
+import { AuthorVisibility, AuthorRemoteHome, normalizeRemote } from "./remote.js";
+
 import { writeWorkspaceTree } from "./write-tree.js";
 import type { PreparedWrite } from "./history.js";
 

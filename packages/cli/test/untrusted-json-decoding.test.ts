@@ -9,7 +9,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Cause, Effect, Exit, FileSystem } from "effect";
 import { join } from "node:path";
 import { resolveAuth } from "../src/registry/auth.js";
-import { AuthorWorkspace } from "../src/author/workspace.js";
+import { AuthorWorkspace } from "@smolai/skit-core/author";
 
 const ORIGIN = "https://registry.example";
 const credential = { token: "t", tokenId: "i", tokenPrefix: "p", scopes: ["library:sync"] };

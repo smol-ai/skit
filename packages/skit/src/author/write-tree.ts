@@ -1,14 +1,12 @@
 import { Effect, FileSystem, Path, Schema } from "effect";
-import {
-  COLLECTION_CONTROL_DIRECTORY,
-  History,
-  LinkStat,
-  SkitContractError,
-  TreeEntry,
-  syncPaths,
-} from "@smolai/skit-core";
-import { LocalFilesChangedDuringSync } from "../registry/failures.js";
-import { scanAuthorSyncTree } from "../workflows/author/local-tree.js";
+import { COLLECTION_CONTROL_DIRECTORY } from "../artifact/control-files.js";
+import * as History from "../history/history.js";
+import { LinkStat } from "../platform/link-stat.js";
+import { SkitContractError } from "../protocol/api-contracts.js";
+import { TreeEntry } from "../artifact/tree-entry.js";
+import { syncPaths } from "../platform/atomic-write.js";
+import { LocalFilesChangedDuringSync } from "./failures.js";
+import { scanWorkspaceWrite } from "./local-tree.js";
 
 /**
  * The file half of WorkspaceLease.writeTree, after the lease has checked its PreparedWrite: make
@@ -28,7 +26,7 @@ export const writeWorkspaceTree = Effect.fn("AuthorWorkspace.writeTree")(functio
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const links = yield* LinkStat;
-  const local = yield* scanAuthorSyncTree(root);
+  const local = yield* scanWorkspaceWrite(root);
   if ((yield* History.treeHash(local.tree)) !== (yield* History.treeHash(from)))
     return yield* new LocalFilesChangedDuringSync();
   const before = new Map(

@@ -1,22 +1,22 @@
 import { Effect, Equal, FileSystem, Option, Path, Stream } from "effect";
+import * as History from "../history/history.js";
+import { LinkStat } from "../platform/link-stat.js";
+import { isCanonicalRelativePath } from "../shared/relative-path.js";
 import {
-  History,
-  LinkStat,
-  isCanonicalRelativePath,
   isNormalizedTreeControlPath,
   nativeIdentityOf,
   sameNativeIdentity,
-  SkitContractError,
   normalizeAuthorTreeEntries,
   scanAuthorTree,
   type NativeTreeIdentity,
-} from "@smolai/skit-core";
+} from "../artifact/tree.js";
+import { SkitContractError } from "../protocol/api-contracts.js";
 import {
   AuthorLocalPathNotObserved,
   AuthorNonNfcPathUnsupported,
   AuthorNormalizationTwin,
   LocalFilesChangedDuringSync,
-} from "../../registry/failures.js";
+} from "./failures.js";
 
 /**
  * The workspace's files as author sync sees them: normalized paths, files only, with their
@@ -24,7 +24,9 @@ import {
  * `verbatimHash` is the hash of the snapshot before normalization, as AuthorHistory.capture
  * hashes it, so sync can check that both saw the same files (A14).
  */
-export const scanAuthorSyncTree = Effect.fn("Sync.scanLocalTree")(function* (root: string) {
+export const scanWorkspaceWrite = Effect.fn("AuthorWorkspace.scanWriteTree")(function* (
+  root: string,
+) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const links = yield* LinkStat;
@@ -182,4 +184,16 @@ export const scanAuthorSyncTree = Effect.fn("Sync.scanLocalTree")(function* (roo
     return root;
   });
   return { tree, verbatimHash: yield* History.treeHash(snapshot.entries), checkTarget };
+});
+
+export interface SyncScan {
+  readonly tree: History.Tree;
+  readonly verbatimHash: History.TreeHash;
+}
+
+/** The passive sync view exposes file facts, never the write owner's target authority. */
+export const scanAuthorSyncTree = Effect.fn("Author.scanSyncTree")(function* (root: string) {
+  const { tree, verbatimHash } = yield* scanWorkspaceWrite(root);
+  const scan: SyncScan = { tree, verbatimHash };
+  return scan;
 });

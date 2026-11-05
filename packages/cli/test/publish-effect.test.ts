@@ -9,7 +9,7 @@ import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 import { registryCredentialLayer } from "./helpers/registry-credential.js";
 import { publish } from "../src/workflows/author/publish.js";
-import { AuthorWorkspace } from "../src/author/workspace.js";
+import { AuthorWorkspace } from "@smolai/skit-core/author";
 import { copySkitFixtureEffect, scratch } from "./helpers/library-home.js";
 
 /** A scoped authored Skit with a Registry binding, built on the platform FileSystem. */

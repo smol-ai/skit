@@ -77,35 +77,29 @@ import type { Unusable as MachineSettingsUnusable } from "../packages/skit/src/l
 import type {
   AuthorRemoteHome,
   AuthorSyncStateInvalid,
-} from "../packages/cli/src/workflows/author/sync.js";
-import type { AuthorVisibility } from "../packages/cli/src/workflows/author/sync-contract.js";
-import type {
+  AuthorVisibility,
   AuthorHistoryBusy,
   AuthorHistoryInvalid,
   AuthorSyncStateConflict,
   AuthorSyncStateIllegal,
-} from "../packages/cli/src/author/history.js";
-import type {
   AuthorLocalPathNotObserved,
   AuthorNonNfcPathUnsupported,
   AuthorNormalizationTwin,
   AuthorRemoteMetadataInvalid,
   LocalFilesChangedDuringSync,
-} from "../packages/cli/src/registry/failures.js";
-import type {
   AuthorWorkspaceAlreadyRegistered,
   AuthorWorkspaceMetadataInvalid,
-} from "../packages/cli/src/library/failures.js";
-// The NEW errors below, bound to their Schema.TaggedError classes (decisions.md "Errors"); each
-// keeps the fields stated here.
-import type {
   AuthorLeaseNotHeld,
   AuthorWorkspaceBusy,
   AuthorWorkspaceConflict,
   AuthorWorkspaceRootInvalid,
   AuthorWorkspaceUnsafe,
   AuthorWriteNotPrepared,
-} from "../packages/cli/src/author/workspace.js";
+} from "../packages/skit/src/author/index.js";
+
+// The NEW errors below, bound to their Schema.TaggedError classes (decisions.md "Errors"); each
+// keeps the fields stated here.
+
 export type {
   AuthorLeaseNotHeld,
   AuthorSyncStateConflict,

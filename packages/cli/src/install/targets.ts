@@ -1,7 +1,7 @@
 import { Effect, FileSystem } from "effect";
-import { isErrno } from "../platform/errno.js";
+import { isErrno, type HarnessName, type InstallScope } from "@smolai/skit-core";
 import { basename, dirname, join, resolve } from "node:path";
-import { type HarnessName, type InstallScope } from "@smolai/skit-core";
+
 import { RoutesCollide } from "./failures.js";
 
 /**

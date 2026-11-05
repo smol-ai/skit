@@ -1,8 +1,18 @@
 import { dirname, relative, resolve } from "node:path";
+import { readFileSync } from "node:fs";
 import { owners } from "../architecture/boundaries.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const library = "packages/skit/src/library/";
+// Follow the published entry points so adding a subpath cannot reopen raw filesystem writes.
+const coreManifest = JSON.parse(readFileSync(resolve(root, "packages/skit/package.json"), "utf8"));
+const publicCoreEntries = new Set(
+  Object.values(coreManifest.exports).map(
+    (entry) =>
+      `packages/skit/${entry.import.replace(/^\.\/dist\//, "src/").replace(/\.js$/, ".ts")}`,
+  ),
+);
+
 const libraryOwner = owners.find((owner) => owner.name === "Library");
 const privateNames = new Set([
   ...libraryOwner.private,
@@ -382,7 +392,7 @@ export const libraryRules = {
       const publicEntry =
         file === `${library}library.ts` ||
         file === `${library}index.ts` ||
-        file === "packages/skit/src/index.ts";
+        publicCoreEntries.has(file);
       const coreNamespaces = new Set();
       const libraryNamespaces = new Set();
       const installedNamespaces = new Set();
@@ -441,7 +451,7 @@ export const libraryRules = {
           storage ||
           (whole &&
             (privateExportModules.has(target) ||
-              (file === "packages/skit/src/index.ts" &&
+              (publicCoreEntries.has(file) &&
                 exporting &&
                 [
                   "packages/skit/src/platform/atomic-write",
@@ -460,7 +470,7 @@ export const libraryRules = {
           if (typeOnly(node, specifier)) continue;
           const name = nameOf(specifier.imported ?? specifier.local ?? specifier.exported);
           if (
-            file === "packages/skit/src/index.ts" &&
+            publicCoreEntries.has(file) &&
             exporting &&
             [
               "writeRawAtomic",

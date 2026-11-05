@@ -1,5 +1,11 @@
-import { skitConfigurationLayer } from "@smolai/skit-core";
-import { ImportContentInvalid, initSkit, validateSkitDirectory, Library } from "@smolai/skit-core";
+import {
+  skitConfigurationLayer,
+  ImportContentInvalid,
+  initSkit,
+  validateSkitDirectory,
+  Library,
+} from "@smolai/skit-core";
+
 import { Clock, Effect, FileSystem, Option, Path } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleLibraryCommand } from "../../application.js";
@@ -10,15 +16,16 @@ import { result } from "../../handlers/contracts.js";
 import { Renderer } from "../../presentation/renderer.js";
 import {
   AuthorWorkspaceAlreadyRegistered,
-  AuthorWorkspaceRemovalUnfinished,
-  DirectoryAlreadyInLibrary,
-} from "../../library/failures.js";
-import {
   AuthorWorkspace,
   type Identity,
   type WorkspaceId,
   type WorkspaceRoot,
-} from "../../author/workspace.js";
+} from "@smolai/skit-core/author";
+import {
+  AuthorWorkspaceRemovalUnfinished,
+  DirectoryAlreadyInLibrary,
+} from "../../library/failures.js";
+
 import { adoptFrom, authoredId, collectionsAt } from "./library-claims.js";
 
 /**

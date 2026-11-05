@@ -3,7 +3,7 @@ import { Clock, Effect, Stream, FileSystem, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
 import { History } from "@smolai/skit-core";
-import { AuthorHistory } from "../src/author/history.js";
+import { AuthorHistory } from "@smolai/skit-core/author";
 import { authorLayer, captureWorkspace, storedTreesAt } from "./helpers/author-history.js";
 import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
 import { testPlatformLayer } from "./helpers/platform.js";

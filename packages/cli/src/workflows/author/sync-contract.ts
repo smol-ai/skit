@@ -1,7 +1,6 @@
 import { Schema } from "effect";
 
-export const AuthorVisibility = Schema.Literals(["private", "unlisted", "public"]);
-export type AuthorVisibility = typeof AuthorVisibility.Type;
+import { AuthorVisibility } from "@smolai/skit-core/author";
 
 const AuthorIdentity = Schema.Struct({
   authority: Schema.String,

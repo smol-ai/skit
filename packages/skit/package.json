@@ -41,6 +41,10 @@
     "./library/session": {
       "types": "./dist/library/session.d.ts",
       "import": "./dist/library/session.js"
+    },
+    "./author": {
+      "types": "./dist/author/index.d.ts",
+      "import": "./dist/author/index.js"
     }
   },
   "scripts": {
@@ -50,6 +54,7 @@
   },
   "dependencies": {
     "@effect/platform-node": "4.1.1",
+    "@effect/sql-sqlite-node": "4.1.1",
     "acorn": "8.15.0",
     "effect": "4.1.1",
     "typeid-js": "^1.2.0",

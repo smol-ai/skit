@@ -3,7 +3,10 @@
  * and revisions as files under `<home>/history`, one JSON document per identity.
  */
 import { Array, Effect, FileSystem, Option, Order, Path } from "effect";
-import { hashHex, History, syncPaths, type Hash } from "@smolai/skit-core";
+import { hashHex } from "../shared/hash.js";
+import * as History from "../history/history.js";
+import { syncPaths } from "../platform/atomic-write.js";
+import { type Hash } from "../vocabulary.js";
 
 /** Where the device stores trees or revisions: `trees` or `revisions` under `directory`. */
 const storedFolder = (path: Path.Path, directory: string, kind: History.Kind) =>

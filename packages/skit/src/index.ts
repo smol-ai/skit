@@ -109,12 +109,8 @@ export {
   LibraryAuditChange,
   LibraryAuditInvalid,
 } from "./library/audit/audit-log.js";
-export {
-  writeRawAtomic,
-  writeJsonAtomic,
-  writeJsonExclusive,
-  syncPaths,
-} from "./platform/atomic-write.js";
+export { syncPaths } from "./platform/atomic-write.js";
+export { errnoOf, isErrno } from "./shared/errno.js";
 export { sha256Hash, hashHex } from "./shared/hash.js";
 export { isCanonicalRelativePath, parentDirectories } from "./shared/relative-path.js";
 export * from "./usage/contracts.js";

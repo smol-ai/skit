@@ -185,6 +185,15 @@ describe("skit/library-private-api", () => {
     ).toHaveLength(1);
   });
 
+  test.each([
+    `export { writeJsonAtomic as save } from "../platform/atomic-write.js";`,
+    `export * as files from "../platform/atomic-write.js";`,
+  ])("a public Author subpath cannot reopen raw write exports: %s", async (source) => {
+    expect(
+      await reported("library-private-api", "packages/skit/src/author/index.ts", source),
+    ).toHaveLength(1);
+  });
+
   test("raw make stays private; the owner namespace and public operation vocabulary remain legal", async () => {
     expect(
       await reported(

@@ -2,9 +2,14 @@ import { expect, it } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Option, Scope } from "effect";
 import { join } from "node:path";
 import { History, Sync } from "@smolai/skit-core";
-import { AuthorWorkspace, type Identity, type WorkspaceLease } from "../src/author/workspace.js";
-import { AuthorHistory } from "../src/author/history.js";
-import { scanAuthorSyncTree } from "../src/workflows/author/local-tree.js";
+import {
+  AuthorWorkspace,
+  type Identity,
+  type WorkspaceLease,
+  AuthorHistory,
+  scanAuthorSyncTree,
+} from "@smolai/skit-core/author";
+
 import { authorLayer } from "./helpers/author-history.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 

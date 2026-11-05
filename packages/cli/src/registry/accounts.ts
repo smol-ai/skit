@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
+import { InsecureOrigin } from "@smolai/skit-core/author";
 import {
-  InsecureOrigin,
   RegistryAliasConflict,
   RegistryAliasInvalid,
   RegistryAliasNotFound,

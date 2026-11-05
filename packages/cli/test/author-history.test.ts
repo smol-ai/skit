@@ -3,7 +3,7 @@ import { Effect, FileSystem, Result, Stream } from "effect";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { History } from "@smolai/skit-core";
-import { AuthorHistory } from "../src/author/history.js";
+import { AuthorHistory } from "@smolai/skit-core/author";
 import {
   authorLayer,
   captureWorkspace,

@@ -15,7 +15,7 @@ import {
   FailureTypeId,
   type SkitFailure,
 } from "@smolai/skit-core";
-import type { AuthorRemoteHome } from "./sync.js";
+import type { AuthorRemoteHome } from "@smolai/skit-core/author";
 import { parseAuthorDestination } from "./sync.js";
 import {
   AuthenticationRequired,
