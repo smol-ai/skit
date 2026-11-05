@@ -32,6 +32,7 @@ import {
   handleUsernameClaim,
 } from "./auth/better-auth.js";
 import type { RuntimeEnv } from "./platform/cloudflare.js";
+import { makeRateLimiter, type RateLimiter } from "./platform/rate-limiter.js";
 import { artifactResponse, indexResponse } from "./api/agent-skills-http.js";
 import { makeServerDiscovery, type ServerCapabilities } from "./discovery.js";
 
@@ -156,9 +157,12 @@ const uiConfigurationRoutes = (env: RuntimeEnv) =>
 const configuredBootstrapRoutes = (
   application: BootstrapApplication,
   authentication: AuthenticatedApplication,
+  limiter: RateLimiter,
 ) =>
   HttpApiBuilder.layer(BootstrapApi).pipe(
-    Layer.provide(bootstrapHandlers.pipe(Layer.provide(Layer.merge(application, authentication)))),
+    Layer.provide(
+      bootstrapHandlers(limiter).pipe(Layer.provide(Layer.merge(application, authentication))),
+    ),
     Layer.provide(HttpServer.layerServices),
   );
 
@@ -166,10 +170,11 @@ const configuredBootstrapRoutes = (
 const feedbackApi = (
   application: FeedbackApplication,
   authentication: AuthenticatedApplication | undefined,
+  limiter: RateLimiter,
 ) =>
   HttpApiBuilder.layer(FeedbackApi).pipe(
     Layer.provide(
-      feedbackHandlers.pipe(
+      feedbackHandlers(limiter).pipe(
         Layer.provide(authentication ? Layer.merge(application, authentication) : application),
       ),
     ),
@@ -195,7 +200,7 @@ const invalidAuthenticatedRoutes = (detail: string) =>
 
 const consumerAuthenticatedApi = (application: AuthenticatedApplication, env: RuntimeEnv) => {
   const handlers = Layer.mergeAll(
-    tokenHandlers,
+    tokenHandlers(makeRateLimiter(env.PAT_RATE_LIMITER)),
     teamHandlers,
     librarySnapshotHandlers,
     librarySyncHandlers,
@@ -262,7 +267,11 @@ const routeLayer = (env: RuntimeEnv, capabilities: ServerCapabilities) => {
   const bootstrap = env.SKIT_BOOTSTRAP_SECRET
     ? configured._tag === "Configured"
       ? application.bootstrap && authentication
-        ? configuredBootstrapRoutes(application.bootstrap, authentication)
+        ? configuredBootstrapRoutes(
+            application.bootstrap,
+            authentication,
+            makeRateLimiter(env.BOOTSTRAP_RATE_LIMITER),
+          )
         : Layer.empty
       : invalidBootstrapRoutes(configured.detail)
     : Layer.empty;
@@ -274,7 +283,13 @@ const routeLayer = (env: RuntimeEnv, capabilities: ServerCapabilities) => {
     typedSystem,
     uiConfigurationRoutes(env),
     agentSkillsRoutes(application.release),
-    application.feedback ? feedbackApi(application.feedback, authentication) : Layer.empty,
+    application.feedback
+      ? feedbackApi(
+          application.feedback,
+          authentication,
+          makeRateLimiter(env.FEEDBACK_RATE_LIMITER),
+        )
+      : Layer.empty,
     main,
     bootstrap,
   );

@@ -38,11 +38,6 @@ export class BlobStorageError extends Schema.TaggedError<BlobStorageError>()(
   },
 ) {}
 
-export class RateLimitError extends Schema.TaggedError<RateLimitError>()(
-  "Cloudflare.RateLimitError",
-  { operation: Schema.String, cause: Schema.Defect() },
-) {}
-
 /** R2 deletes at most this many keys per call. */
 const MAX_DELETE_KEYS = 1_000;
 
@@ -125,11 +120,3 @@ export const blobStoreLayer = (bucket: R2Bucket) => {
     }),
   );
 };
-
-/** Owns the Promise boundary exposed by Cloudflare's rate-limit binding. */
-export const rateLimit = (rateLimiter: RateLimit, key: string) =>
-  // oxlint-disable-next-line skit/no-promise-wrappers -- Wrangler's generated RateLimit binding is Promise-only; this platform module owns that SDK boundary.
-  Effect.tryPromise({
-    try: () => rateLimiter.limit({ key }),
-    catch: (cause) => new RateLimitError({ operation: "limit request", cause }),
-  });

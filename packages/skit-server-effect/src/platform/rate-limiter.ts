@@ -1,34 +1,20 @@
-import { Context, Effect, Layer } from "effect";
-import { RateLimitError, rateLimit } from "./cloudflare.js";
+import { Effect, Schema } from "effect";
 
-export interface RateLimiterService {
+class RateLimitError extends Schema.TaggedError<RateLimitError>()("Cloudflare.RateLimitError", {
+  operation: Schema.String,
+  cause: Schema.Defect(),
+}) {}
+
+/** A bound Cloudflare limiter; independent policies keep independent binding instances. */
+export interface RateLimiter {
   readonly limit: (key: string) => Effect.Effect<{ readonly success: boolean }, RateLimitError>;
 }
 
-export class PatRateLimiter extends Context.Service<PatRateLimiter, RateLimiterService>()(
-  "@skit-server-effect/PatRateLimiter",
-) {}
-
-export class BootstrapRateLimiter extends Context.Service<
-  BootstrapRateLimiter,
-  RateLimiterService
->()("@skit-server-effect/BootstrapRateLimiter") {}
-
-export class FeedbackRateLimiter extends Context.Service<FeedbackRateLimiter, RateLimiterService>()(
-  "@skit-server-effect/FeedbackRateLimiter",
-) {}
-
-export const patLayer = (binding: RateLimit) =>
-  Layer.succeed(PatRateLimiter, {
-    limit: (key) => rateLimit(binding, key),
-  });
-
-export const bootstrapLayer = (binding: RateLimit) =>
-  Layer.succeed(BootstrapRateLimiter, {
-    limit: (key) => rateLimit(binding, key),
-  });
-
-export const feedbackLayer = (binding: RateLimit) =>
-  Layer.succeed(FeedbackRateLimiter, {
-    limit: (key) => rateLimit(binding, key),
-  });
+export const makeRateLimiter = (binding: RateLimit): RateLimiter => ({
+  limit: (key) =>
+    // oxlint-disable-next-line skit/no-promise-wrappers -- Wrangler's generated RateLimit binding is Promise-only; this platform module owns that SDK boundary.
+    Effect.tryPromise({
+      try: () => binding.limit({ key }),
+      catch: (cause) => new RateLimitError({ operation: "limit request", cause }),
+    }),
+});

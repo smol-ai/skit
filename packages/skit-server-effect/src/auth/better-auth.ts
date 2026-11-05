@@ -7,9 +7,10 @@ import { Clock, Context, Effect, Layer, Option, Schema } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { schemaBodyJsonLimited } from "../api/request-body.js";
 import { normalizeNamespace } from "../domain/identifiers.js";
-import { rateLimit, type DatabaseSqlClient, type RuntimeEnv } from "../platform/cloudflare.js";
+import type { DatabaseSqlClient, RuntimeEnv } from "../platform/cloudflare.js";
 import { ServerConfiguration } from "../configuration.js";
 import { SecureRandom, WebCrypto } from "effect/crypto";
+import { makeRateLimiter } from "../platform/rate-limiter.js";
 import { passwordCallbacks } from "./password.js";
 import { provisionPrincipal } from "./provisioning.js";
 
@@ -485,10 +486,12 @@ export const handleRequest = Effect.fn("BetterAuthHttp.handleRequest")(function*
     ].includes(pathname)
   ) {
     const clientIp = webRequest.headers.get("cf-connecting-ip") ?? "unknown";
-    const outcome = yield* rateLimit(env.AUTH_RATE_LIMITER, `${pathname}:${clientIp}`).pipe(
-      Effect.tapError((error) => Effect.logError("authentication rate limit failed", error)),
-      Effect.catchTag("Cloudflare.RateLimitError", () => Effect.succeed(undefined)),
-    );
+    const outcome = yield* makeRateLimiter(env.AUTH_RATE_LIMITER)
+      .limit(`${pathname}:${clientIp}`)
+      .pipe(
+        Effect.tapError((error) => Effect.logError("authentication rate limit failed", error)),
+        Effect.catchTag("Cloudflare.RateLimitError", () => Effect.succeed(undefined)),
+      );
     if (outcome === undefined) return yield* storageFailure;
     if (!outcome.success)
       return yield* HttpServerResponse.json(

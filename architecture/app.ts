@@ -438,7 +438,7 @@ export const removedServices = [
   "SetupDiscovery → plain function (the scan-once requirement is proven another way)",
   "PasswordHasher → plain functions shared by Better Auth and bootstrap (done; same format: self-hosting.md:267)",
   "NativeCrypto → SecureRandom + Digest; built-in WebCrypto reference only for Promise password callbacks (done)",
-  "Pat/Bootstrap/FeedbackRateLimiter tags → one RateLimiter shape, auth included; bindings stay separate (self-hosting.md:119,257)",
+  "Pat/Bootstrap/FeedbackRateLimiter tags → one plain RateLimiter shape, auth included (done); bindings stay separate (self-hosting.md:119,257)",
   "ReadinessInspector → plain platform inspectReadiness() (done)",
   "CurrentRequest → handlers read HttpServerRequest directly",
   "BootstrapOperations → plain functions over ChildProcessSpawner, RegistryHttp and SecureRandom",

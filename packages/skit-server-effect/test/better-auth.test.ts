@@ -807,6 +807,43 @@ describe("Better Auth adapter", () => {
       const tokenValue = Schema.decodeUnknownSync(Schema.Struct({ token: Schema.String }))(
         token,
       ).token;
+      const patLimit = vi.fn<RateLimit["limit"]>().mockResolvedValue({ success: false });
+      const unexpectedLimit = vi
+        .fn<RateLimit["limit"]>()
+        .mockRejectedValue(new Error("wrong limiter binding"));
+      const limitedWeb = makeWebHandler({
+        ...env,
+        PAT_RATE_LIMITER: { limit: patLimit },
+        AUTH_RATE_LIMITER: { limit: unexpectedLimit },
+        BOOTSTRAP_RATE_LIMITER: { limit: unexpectedLimit },
+        FEEDBACK_RATE_LIMITER: { limit: unexpectedLimit },
+      });
+      yield* Effect.gen(function* () {
+        const denied = yield* webPromise(() =>
+          limitedWeb.handler(
+            new Request("https://registry.test/api/tokens", {
+              method: "POST",
+              headers: {
+                cookie: sessionCookie,
+                origin: "https://registry.test",
+                "content-type": "application/json",
+              },
+              body: JSON.stringify({ name: "must not be stored", scopes: ["library:sync"] }),
+            }),
+          ),
+        );
+        expect(denied.status).toBe(429);
+        expect(denied.headers.get("retry-after")).toBe("60");
+        expect(patLimit).toHaveBeenCalledTimes(1);
+        expect(patLimit).toHaveBeenCalledWith({ key: expect.stringMatching(/^principal_/) });
+        expect(unexpectedLimit).not.toHaveBeenCalled();
+        const counts = yield* Effect.flatMap(
+          D1Client.D1Client,
+          (sql) => sql<{ n: number }>`SELECT COUNT(*) n FROM personal_access_tokens`,
+        );
+        expect(counts[0]?.n).toBe(1);
+      }).pipe(Effect.ensuring(webPromise(() => limitedWeb.dispose())));
+
       expect(
         (yield* request("/api/operator/readiness", {
           headers: { authorization: `Bearer ${tokenValue}` },

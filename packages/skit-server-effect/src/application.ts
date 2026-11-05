@@ -12,11 +12,6 @@ import { layer as skitsLayer } from "./skits/service.js";
 import { layer as feedbackServiceLayer } from "./feedback/service.js";
 import { layer as serverLibraryLayer } from "./library/service.js";
 import { blobStoreLayer, databaseLayer, type RuntimeEnv } from "./platform/cloudflare.js";
-import {
-  bootstrapLayer as bootstrapRateLimiterLayer,
-  feedbackLayer as feedbackRateLimiterLayer,
-  patLayer as patRateLimiterLayer,
-} from "./platform/rate-limiter.js";
 import { layer as teamsLayer } from "./teams/service.js";
 
 export interface AuthenticatedConfiguration {
@@ -77,12 +72,7 @@ export const applicationLayers = (
   const release = skitsLayer.pipe(Layer.provide(authorization));
   // Feedback does not wait for authentication to be configured: reports can always be anonymous.
   const feedback =
-    env.FEEDBACK_MODE === "open"
-      ? Layer.merge(
-          feedbackServiceLayer.pipe(Layer.provide(platform)),
-          feedbackRateLimiterLayer(env.FEEDBACK_RATE_LIMITER),
-        )
-      : undefined;
+    env.FEEDBACK_MODE === "open" ? feedbackServiceLayer.pipe(Layer.provide(platform)) : undefined;
   if (configured === undefined)
     return { release, feedback, authenticated: undefined, bootstrap: undefined };
 
@@ -91,7 +81,6 @@ export const applicationLayers = (
     teamsLayer,
     serverLibraryLayer,
     skitsLayer,
-    patRateLimiterLayer(env.PAT_RATE_LIMITER),
     Layer.succeed(ServerConfiguration, { publicAppOrigin: configured.publicAppOrigin }),
   ).pipe(
     Layer.provideMerge(
@@ -110,7 +99,6 @@ export const applicationLayers = (
   const bootstrap = env.SKIT_BOOTSTRAP_SECRET
     ? Layer.mergeAll(
         bootstrapServiceLayer(env.SKIT_BOOTSTRAP_SECRET),
-        bootstrapRateLimiterLayer(env.BOOTSTRAP_RATE_LIMITER),
         Layer.succeed(ServerConfiguration, { publicAppOrigin: configured.publicAppOrigin }),
       ).pipe(Layer.provideMerge(platform))
     : undefined;
