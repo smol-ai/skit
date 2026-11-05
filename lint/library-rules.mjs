@@ -95,7 +95,7 @@ const executionEdges = [
   },
   {
     module: `${library}internal/recovery/moves`,
-    names: ["prepareRecoveryRestore"],
+    names: ["prepareRecoveryRestore", "restoreRecorded"],
     callers: [`${library}setup.ts`],
   },
   {
@@ -251,9 +251,11 @@ export const libraryRules = {
           context.report({ node, messageId: "owner", data: { name: node.source.value } });
           return;
         }
+        if (privateNames.has(nameOf(node.exported)))
+          context.report({ node, messageId: "private", data: { name: nameOf(node.exported) } });
         for (const specifier of node.specifiers ?? []) {
           if (typeOnly(node, specifier)) continue;
-          const name = nameOf(specifier.imported ?? specifier.local);
+          const name = nameOf(specifier.imported ?? specifier.local ?? specifier.exported);
           if (
             specifier.type === "ImportNamespaceSpecifier" ||
             specifier.type === "ExportNamespaceSpecifier" ||
@@ -431,9 +433,11 @@ export const libraryRules = {
           context.report({ node, messageId: "wildcard", data: { name: node.source.value } });
           return;
         }
+        if (privateNames.has(nameOf(node.exported)))
+          context.report({ node, messageId: "private", data: { name: nameOf(node.exported) } });
         for (const specifier of node.specifiers ?? []) {
           if (typeOnly(node, specifier)) continue;
-          const name = nameOf(specifier.imported ?? specifier.local);
+          const name = nameOf(specifier.imported ?? specifier.local ?? specifier.exported);
           if (
             privateNames.has(name) ||
             (name === "make" && publicSource && target !== "packages/skit/src/index")
@@ -538,7 +542,7 @@ export const libraryRules = {
         if (whole) report(node, node.source.value);
         else
           for (const specifier of node.specifiers ?? []) {
-            const name = nameOf(specifier.imported ?? specifier.local);
+            const name = nameOf(specifier.imported ?? specifier.local ?? specifier.exported);
             if (!typeOnly(node, specifier) && edge.names.includes(name)) report(specifier, name);
           }
       });

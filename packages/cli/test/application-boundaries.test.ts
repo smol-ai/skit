@@ -15,7 +15,6 @@ import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import type { CommandFailure, CommandResult } from "../src/commands/types.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
-import { withConfigurationWriter } from "../src/configuration-writer.js";
 import { holdHomeLock, homeLockIsFree } from "./helpers/home-lock.js";
 
 it.effect("configuration writers honor ConfigProvider and explicit home overrides", () =>
@@ -24,25 +23,27 @@ it.effect("configuration writers honor ConfigProvider and explicit home override
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-config-provider-" });
     const configured = join(root, "configured");
     const explicit = join(root, "explicit");
-    const inside = (home: string) =>
-      Effect.gen(function* () {
-        assert.isFalse(yield* homeLockIsFree(home));
-        assert.isFalse(yield* fs.exists(join(home, "state.json")));
-        yield* addRegistryRemote("fixture", "https://registry.example.test", undefined).pipe(
-          Effect.provide(
-            ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: join(root, "ignored") })),
-          ),
-        );
-        assert.isTrue(yield* fs.exists(join(home, "auth.json")));
-      });
-    yield* withConfigurationWriter(undefined, inside(configured)).pipe(
-      Effect.provide(skitConfigurationLayer()),
-      Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: configured }))),
-    );
-    yield* withConfigurationWriter(explicit, inside(explicit)).pipe(
-      Effect.provide(skitConfigurationLayer(explicit)),
-      Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: configured }))),
-    );
+    const checked = new Set<string>();
+    const filesystem: FileSystem.FileSystem = {
+      ...fs,
+      rename: (from, to) =>
+        Effect.gen(function* () {
+          if (to.endsWith("/auth.json")) {
+            const home = to.slice(0, -"/auth.json".length);
+            assert.isFalse(yield* homeLockIsFree(home));
+            assert.isFalse(yield* fs.exists(join(home, "state.json")));
+            checked.add(home);
+          }
+          yield* fs.rename(from, to);
+        }),
+    };
+    for (const home of [undefined, explicit])
+      yield* addRegistryRemote("fixture", "https://registry.example.test", home).pipe(
+        Effect.provide(skitConfigurationLayer()),
+        Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: configured }))),
+        Effect.provideService(FileSystem.FileSystem, filesystem),
+      );
+    assert.deepStrictEqual([...checked], [configured, explicit]);
     assert.isTrue(yield* homeLockIsFree(configured));
     assert.isTrue(yield* homeLockIsFree(explicit));
     assert.isFalse(yield* fs.exists(join(root, "ignored")));

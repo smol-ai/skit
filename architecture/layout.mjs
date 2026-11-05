@@ -92,7 +92,6 @@ export const layoutDebt = [
   "packages/skit-server-effect/src/readiness/service.ts",
   "packages/cli/src/bootstrap/server-bootstrap.ts",
   "packages/cli/src/build-info.ts",
-  "packages/cli/src/configuration-writer.ts",
   "packages/cli/src/failure-classification.ts",
   "packages/cli/src/feedback/send.ts",
   "packages/cli/src/front-end.ts",

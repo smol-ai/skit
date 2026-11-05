@@ -156,6 +156,8 @@ describe("skit/library-private-api", () => {
 
   test.each([
     `export * from "./library/import-collection.js";`,
+    `export * as InstalledSkillFiles from "./install/files.js";`,
+    `export * as InstalledSkillBackups from "./install/backups.js";`,
     `export * as imports from "./library/import-collection.js";`,
     `export { importCollection as write } from "./library/import-collection.js";`,
     `export { withHomeLock as lock } from "./library/store/writer-lock.js";`,

@@ -1,3 +1,17 @@
+import type {
+  RestoreIntent,
+  RestorePlan,
+  RestoreOutcome,
+  RestorePlanError,
+  RestoreApplyError,
+} from "./internal/recovery/restore.js";
+export type {
+  RestoreIntent,
+  RestorePlan,
+  RestoreOutcome,
+  RestorePlanError,
+  RestoreApplyError,
+} from "./internal/recovery/restore.js";
 import {
   type SyncIntent,
   type SyncPlan,
@@ -168,6 +182,7 @@ export interface UndoOutcome {
   readonly result: UndoResult;
 }
 export type Outcome =
+  | RestoreOutcome
   | SyncOutcome
   | EnabledOutcome
   | RemoveOutcome
@@ -189,6 +204,10 @@ export interface Interface {
    * Captures its state; apply refuses the plan if the Library has changed since.
    */
   readonly plan: {
+    (
+      intent: RestoreIntent,
+      options: { readonly base: Snapshot },
+    ): Effect.Effect<RestorePlan, RestorePlanError>;
     (
       intent: SyncIntent,
       options: { readonly base: Snapshot },
@@ -215,6 +234,7 @@ export interface Interface {
     ): Effect.Effect<Extract<Plan, { readonly _tag: I["_tag"] }>, PlanError>;
   };
   readonly apply: {
+    (plan: RestorePlan): Effect.Effect<RestoreOutcome, RestoreApplyError>;
     (request: SyncApplyRequest): Effect.Effect<SyncOutcome, SyncApplyError>;
     (plan: ManagePlan): Effect.Effect<ManageOutcome, ManageApplyError>;
     (plan: AcceptFindingPlan): Effect.Effect<AcceptFindingOutcome, AcceptFindingApplyError>;
@@ -277,7 +297,6 @@ export interface Interface {
 }
 export class Service extends Context.Service<Service, Interface>()("skit/library/Library") {}
 
-export { make } from "./internal/runtime.js";
 /** Routing is part of constructing this Library, never assembled by an operation's caller. */
 export type Routing =
   | { readonly _tag: "None" }

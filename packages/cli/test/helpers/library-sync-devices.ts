@@ -1,3 +1,5 @@
+import * as Construction from "effect/Layer";
+import * as Context from "effect/Context";
 import { installEnabledSkills } from "./installed-skills.js";
 import { assert } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Schema } from "effect";
@@ -9,52 +11,12 @@ import {
   emptyLibraryState,
   makeMachineId,
   Library,
-  InstalledSkills,
   LibraryState,
   skitConfigurationLayer,
   type InstallDestination,
 } from "@smolai/skit-core";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
 import { syncLibrary } from "../../src/workflows/library/library-sync.js";
-import {
-  existingRepositorySkillsDirectory,
-  findDuplicates,
-} from "@smolai/skit-core/library/routing";
-const syncInstalledSkills = Effect.fn("Test.syncInstalledSkills")(function* (
-  state: LibraryState,
-  rootFor: (target: InstallDestination) => string | undefined,
-  inventory?: Parameters<typeof syncLibrary>[0]["inventory"],
-) {
-  const active = (["agents", "claude"] as const).filter((target) => rootFor(target) !== undefined);
-  const context = yield* Effect.context<
-    | import("effect").FileSystem.FileSystem
-    | import("@smolai/skit-core").LinkStat
-    | import("effect/crypto").Digest.Digest
-  >();
-  return yield* InstalledSkills.make({
-    active: Effect.succeed(active),
-    destinations: (scope) =>
-      Effect.succeed(
-        active.flatMap((destination) => {
-          const root =
-            scope.kind === "global"
-              ? rootFor(destination)
-              : existingRepositorySkillsDirectory(state, scope.root, destination);
-          return root === undefined ? [] : [{ destination, root }];
-        }),
-      ),
-    duplicates: {
-      scan: (scope, names) =>
-        inventory === undefined
-          ? Effect.succeed({ copies: [], warnings: [], roots: [] })
-          : Effect.map(findDuplicates(inventory, scope, names), (copies) => ({
-              copies,
-              warnings: [],
-              roots: [],
-            })).pipe(Effect.provide(context)),
-    },
-  });
-});
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 
 /** state.json as the store reads it: validated, with undeclared fields kept as written. */
@@ -166,18 +128,34 @@ export const devices = Effect.gen(function* () {
       inventory?: Parameters<typeof syncLibrary>[0]["inventory"],
     ) =>
       Effect.gen(function* () {
-        // Opening a Library first migrates and recovers it: loader maintenance, not a save.
-        const opened = yield* (yield* Library.make(home).pipe(
-          Effect.provideServiceEffect(InstalledSkills.Service, InstalledSkills.make()),
+        // Opening first performs loader maintenance outside the save-counting filesystem.
+        yield* Effect.flatMap(Library.Service, (library) => library.read).pipe(
+          Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
           Effect.provideService(FileSystem.FileSystem, fs),
-        )).read;
-        const routed = yield* syncInstalledSkills(
-          opened._tag === "Present" ? opened.state : emptyLibraryState(),
-          route,
-          inventory,
         );
-        return yield* Library.make(home).pipe(
-          Effect.provideService(InstalledSkills.Service, routed),
+        const agents = route("agents");
+        const claude = route("claude");
+        return Context.get(
+          yield* Construction.build(
+            Library.layer({
+              home,
+              routing:
+                !agents && !claude
+                  ? { _tag: "None" }
+                  : inventory
+                    ? { _tag: "Configured", ...inventory }
+                    : {
+                        _tag: "Configured",
+                        home: workspace,
+                        configHome: join(workspace, "config"),
+                        overrides: {
+                          ...(agents ? { codex: [agents] } : {}),
+                          ...(claude ? { "claude-code": [claude] } : {}),
+                        },
+                      },
+            }),
+          ),
+          Library.Service,
         );
       });
     const owned = <A, E, R>(effect: Effect.Effect<A, E, R>) =>

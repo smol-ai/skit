@@ -18,7 +18,8 @@ import {
   type MachineRepositoryDecision,
   type MachineSettingsSetupRecord,
 } from "./machine-document.js";
-import { withHomeLock, withLibraryStateReplacement } from "./store/writer-lock.js";
+import { withLock as withHomeLock } from "../platform/home-lock.js";
+import { withLibraryStateReplacement } from "./store/writer-lock.js";
 
 /** Current settings, without exposing the persisted document version. */
 export type Settings = Omit<CurrentMachineDocument, "schemaVersion"> & { readonly path: string };

@@ -1,3 +1,4 @@
+import { make as makeLibrary } from "../src/library/internal/runtime.js";
 import { snapshotOf } from "../src/library/snapshot.js";
 import { assert, it } from "@effect/vitest";
 import { Context, Effect, Exit, FileSystem, Layer, Option, Schema } from "effect";
@@ -669,7 +670,7 @@ it.effect(
         inLibrary(home)(
           Effect.gen(function* () {
             const files = yield* routedInstalledSkills(routing);
-            const library = yield* Library.make(home).pipe(
+            const library = yield* makeLibrary(home).pipe(
               Effect.provideService(InstalledSkills.Service, files),
             );
             const read = yield* library.read;
@@ -718,7 +719,7 @@ it.effect(
       yield* inLibrary(home)(
         Effect.gen(function* () {
           const files = yield* routedInstalledSkills(routing);
-          const library = yield* Library.make(home).pipe(
+          const library = yield* makeLibrary(home).pipe(
             Effect.provideService(InstalledSkills.Service, files),
           );
           const read = yield* library.read;

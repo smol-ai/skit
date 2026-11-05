@@ -646,7 +646,7 @@ export declare namespace Services {
 // MachineSettings.read / ensureIdentity for the revision author device (history.ts:123-128) and
 // takes the home lock around the sync-bindings.json read-modify-write (A6). The home lock is a
 // plain Effect.fn as t3code's directory lock is (serverOwnership.ts#L183); today that is
-// withHomeLock (packages/skit/src/library/store/writer-lock.ts).
+// HomeLock.withLock (packages/skit/src/platform/home-lock.ts).
 
 /** What AuthorHistory.layer may require. Not Library, not Registry. */
 export type AuthorHistoryRequires =

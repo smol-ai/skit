@@ -167,17 +167,21 @@ const recordedSetup = Effect.fn("SetupUndo.recordedSetup")(function* (
         )
         .map((copy) => copy.path),
     ),
-    conflicts: operation.steps.some(({ step }) => step._tag === "Apply")
+    conflicts: operation.steps.some(({ step }) => step._tag === "Restore")
       ? [
-          "Recorded Library changes support startup recovery; use the corresponding Library command to change them.",
+          "Recovery restores put saved files back without changing Library selection. Setup undo cannot reverse them.",
         ]
-      : operation.steps.some(({ step }) => step._tag === "Sync")
+      : operation.steps.some(({ step }) => step._tag === "Apply")
         ? [
-            "Sync records support startup recovery. Undo cannot reverse their remote publication; review bindings and sync again.",
+            "Recorded Library changes support startup recovery; use the corresponding Library command to change them.",
           ]
-        : operation._tag === "Pending"
-          ? ["Setup has not finished. Run any SKIT command to finish or stop it, then undo it."]
-          : [],
+        : operation.steps.some(({ step }) => step._tag === "Sync")
+          ? [
+              "Sync records support startup recovery. Undo cannot reverse their remote publication; review bindings and sync again.",
+            ]
+          : operation._tag === "Pending"
+            ? ["Setup has not finished. Run any SKIT command to finish or stop it, then undo it."]
+            : [],
     discovery: { _tag: "MachineSettings", operationId: operation.operationId },
     evidence: yield* Schema.encodeEffect(OperationStatus)(operation),
   } satisfies SetupRecord;

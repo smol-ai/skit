@@ -3,7 +3,7 @@ import { it } from "@effect/vitest";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
 import { expect } from "vitest";
-import { withHomeLock } from "../src/library/store/writer-lock.js";
+import { withLock as withHomeLock } from "../src/platform/home-lock.js";
 import { acquireFileLock } from "../src/platform/file-lock.js";
 import { skitLayer } from "../src/index.js";
 

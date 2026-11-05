@@ -6,10 +6,10 @@ import { migratedMachineId } from "../src/library/entity-ids.js";
 import { importCollection } from "../src/library/import-collection.js";
 import { libraryManifestFromLocalState } from "../src/library/library-state.js";
 import { planCollectionVersions } from "../src/library/collection-version-plan.js";
-import { prepareRestore } from "../src/library/library-restore.js";
+import { prepareRestore } from "../src/library/internal/content/restore.js";
 import { collectionVersionPath } from "../src/library/collection-version.js";
 import { readSnapshotArchive } from "../src/library/snapshot-archive.js";
-import { withHomeLock } from "../src/library/store/writer-lock.js";
+import { withLock as withHomeLock } from "../src/platform/home-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { inLibrary, inspectLibrary, saveLibrary } from "./helpers/library-store.js";
 

@@ -15,7 +15,7 @@ import { canonicalJson } from "../../../shared/json.js";
 import { inspectOwnershipMarker } from "../../../install/files.js";
 import { type InstalledSkill } from "../../device-state.js";
 import { pathIsWithin } from "../../../platform/path-identity.js";
-import { withHomeLock } from "../../store/writer-lock.js";
+import { withLock as withHomeLock } from "../../../platform/home-lock.js";
 import { writeJsonExclusive } from "../../../platform/atomic-write.js";
 import { StalePlan } from "../../library-plan.js";
 import { leavePnpmSkill } from "../../../install/pnpm-skills.js";
@@ -72,21 +72,8 @@ const MoveRecord = Schema.Union([
   CurrentMoveRecord,
 ]);
 
-export const RecoveryFact = Schema.Struct({
-  name: Schema.String,
-  path: Schema.String,
-  recoveryPath: Schema.String,
-  type: Schema.Literals(["Directory", "SymbolicLink"]),
-  status: Schema.Literals(["saved", "at-original", "missing", "conflict"]),
-  reason: Schema.String,
-});
-export const RecoveryInspection = Schema.Struct({
-  operationId: Schema.String,
-  directory: Schema.String,
-  planId: Hash,
-  entries: Schema.Array(RecoveryFact),
-  legacy: Schema.Boolean,
-});
+import { RecoveryFact } from "../../recovery-facts.js";
+export { RecoveryFact, RecoveryInspection } from "../../recovery-facts.js";
 
 export interface RecoveryMoveRequest {
   readonly name: string;
@@ -401,11 +388,22 @@ const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
   const moveRecords: string[] = [...metadata];
   const content: { original: string | undefined; saved: string | undefined }[] = [];
   const evidence: unknown[] = [...metadata];
+  const structure: unknown[] = [...metadata];
+  const parents: string[] = [];
   let legacy = false;
   const paths = new Set<string>();
   for (const batch of batches) {
     yield* checkedDirectory(batch);
-    evidence.push({ batch, identity: yield* links.identity.lstat(batch) });
+    const batchIdentity = { batch, identity: yield* links.identity.lstat(batch) };
+    evidence.push(batchIdentity);
+    structure.push({
+      batch,
+      identity: {
+        dev: batchIdentity.identity.dev,
+        ino: batchIdentity.identity.ino,
+        type: batchIdentity.identity.type,
+      },
+    });
     const moveRecordPath = join(batch, "receipt.json");
     // A crash before the move record was written left no authorized moves in this batch.
     if (!(yield* missingStat(moveRecordPath))) continue;
@@ -423,6 +421,7 @@ const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
     );
     evidence.push(raw);
     moveRecords.push(raw);
+    structure.push(raw);
     legacy ||= moveRecord.schemaVersion === 1;
     for (const [index, storedEntry] of moveRecord.entries.entries()) {
       const expectedArchive = join(batch, `${index + 1}-${basename(storedEntry.path)}`);
@@ -521,6 +520,7 @@ const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
       });
       // canonicalJson renders exact device and inode numbers; JSON.stringify cannot.
       witnesses.push(canonicalJson({ parent, physicalParent, original, saved }));
+      parents.push(canonicalJson({ parent, physicalParent }));
       content.push({
         original: "hash" in original ? original.hash : undefined,
         saved: "hash" in saved ? saved.hash : undefined,
@@ -535,6 +535,8 @@ const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
   return {
     inspection: { operationId, directory, planId, entries: facts, legacy },
     witnesses,
+    parents,
+    structure: canonicalJson(structure),
     moveRecords,
     content,
   };
@@ -555,44 +557,59 @@ export const listRecoveryOperations = Effect.fn("Recovery.list")(function* (home
   return (yield* fs.readDirectory(removed)).sort();
 });
 
-/** Preview is passive; apply retains the reviewed evidence and revalidates under the writer. */
-export const prepareRecoveryRestore = Effect.fn("Recovery.prepareRestore")(function* (
+/** Data captured by Library.plan, persisted before the restore runner can move an entry. */
+export const captureRecoveryRestore = Effect.fn("Recovery.captureRestore")(function* (
   home: string,
   operationId: string,
 ) {
   const observed = yield* readRecoveryOperation(home, operationId);
-  const approvedId = observed.inspection.planId;
   return {
-    summary: structuredClone(observed.inspection),
-    apply: () =>
-      Effect.gen(function* () {
-        const fs = yield* FileSystem.FileSystem;
-        let current = yield* readRecoveryOperation(home, operationId);
-        if (current.inspection.planId !== approvedId)
-          return yield* new StalePlan({ message: "The Library changed since this was previewed" });
-        for (const [index, fact] of observed.inspection.entries.entries()) {
-          if (fact.status !== "saved") continue;
-          // Recheck the whole observed operation after each move. Never refresh consent for a changed entry.
-          const refreshed = yield* readRecoveryOperation(home, operationId);
-          if (refreshed.inspection.planId !== current.inspection.planId)
-            return yield* new StalePlan({
-              message: "The Library changed since this was previewed",
-            });
-          yield* fs.rename(fact.recoveryPath, fact.path);
-          const after = yield* readRecoveryOperation(home, operationId);
-          if (
-            JSON.stringify(after.moveRecords) !== JSON.stringify(current.moveRecords) ||
-            after.witnesses.length !== current.witnesses.length ||
-            after.witnesses.some((witness, i) => i !== index && witness !== current.witnesses[i]) ||
-            after.inspection.entries[index]?.status !== "at-original" ||
-            after.content[index]?.original !== current.content[index]?.saved
-          )
-            return yield* new StalePlan({
-              message: "The Library changed since this was previewed",
-            });
-          current = after;
-        }
-        return current.inspection;
-      }).pipe((effect) => withHomeLock(home, effect)),
+    summary: observed.inspection,
+    witnesses: observed.witnesses,
+    parents: observed.parents,
+    structure: observed.structure,
+    content: observed.content.map((item) => ({
+      ...(item.original === undefined ? {} : { original: item.original }),
+      ...(item.saved === undefined ? {} : { saved: item.saved }),
+    })),
   };
+});
+
+/** Accept the recorded observation or its exact restored entries; never refresh restore consent. */
+export const restoreRecorded = Effect.fn("Recovery.restoreRecorded")(function* (
+  home: string,
+  program: import("../../store/state-schema.js").RecoveryRestore,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const check = Effect.fn("Recovery.checkRecordedRestore")(function* () {
+    const current = yield* readRecoveryOperation(home, program.summary.operationId);
+    if (
+      current.structure !== program.structure ||
+      JSON.stringify(current.parents) !== JSON.stringify(program.parents) ||
+      current.witnesses.length !== program.witnesses.length
+    )
+      return yield* new StalePlan({ message: "Recovery evidence changed since this was reviewed" });
+    for (const [index, fact] of program.summary.entries.entries()) {
+      if (current.witnesses[index] === program.witnesses[index]) continue;
+      if (
+        fact.status === "saved" &&
+        current.inspection.entries[index]?.status === "at-original" &&
+        current.content[index]?.original === program.content[index]?.saved
+      )
+        continue;
+      return yield* new StalePlan({ message: `Recovery evidence changed at ${fact.path}` });
+    }
+    return current;
+  });
+  let current = yield* check();
+  for (const [index, fact] of program.summary.entries.entries()) {
+    if (fact.status !== "saved" || current.inspection.entries[index]?.status === "at-original")
+      continue;
+    current = yield* check();
+    yield* fs.rename(fact.recoveryPath, fact.path);
+    current = yield* check();
+    if (current.inspection.entries[index]?.status !== "at-original")
+      return yield* new StalePlan({ message: `Restored entry differs at ${fact.path}` });
+  }
+  return current.inspection;
 });

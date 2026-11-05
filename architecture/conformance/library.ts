@@ -5,10 +5,9 @@
  * are exact: closing a gap without removing its debt entry fails, and so does opening a new one.
  * So debt only shrinks, and only in the same change that closes it.
  */
-import type { Effect } from "effect";
+import type { Effect, Layer } from "effect";
 import type { Library as Implementation } from "../../packages/skit/src/library/library.js";
 import type { Library, LibraryRequires } from "../library.js";
-import type { InstalledSkills } from "../../packages/skit/src/library/installed-skills.js";
 
 /** Exactly equal, including literal unions; `never` equals only `never`. */
 export type Equal<A, B> =
@@ -40,16 +39,17 @@ type ExtraDebt = never;
 // preserves restore progress and offers a passive availability plan for sync's preview count.
 // Those signature differences require explicit target review, not casts or a relaxed assertion.
 type ChangedDebt = "plan" | "apply" | "setup" | "history" | "content";
-// InstalledSkills is built inside Library.layer from routing; `make` still takes it from context.
-type RequirementDebt = InstalledSkills.Service;
+// The public layer constructs InstalledSkills internally.
+type RequirementDebt = never;
 
 export type Checks = [
+  Assert<Equal<Extract<keyof typeof Implementation, "make">, never>>,
   Assert<Equal<MissingMethods<Library, Implementation.Interface>, MissingDebt>>,
   Assert<Equal<ExtraMethods<Library, Implementation.Interface>, ExtraDebt>>,
   Assert<Equal<ChangedMethods<Library, Implementation.Interface>, ChangedDebt>>,
   Assert<
     Equal<
-      UndeclaredRequirements<ReturnType<typeof Implementation.make>, LibraryRequires>,
+      Exclude<Layer.Services<ReturnType<typeof Implementation.layer>>, LibraryRequires>,
       RequirementDebt
     >
   >,

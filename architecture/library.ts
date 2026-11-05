@@ -379,6 +379,16 @@ export type RecordedInstalledChange =
   | { readonly _tag: "Fail"; readonly path: string; readonly reason: string };
 
 export type SetupStep =
+  | {
+      readonly _tag: "Restore";
+      readonly program: {
+        readonly summary: typeof import("../packages/skit/src/library/recovery-facts.js").RecoveryInspection.Type;
+        readonly witnesses: readonly string[];
+        readonly parents: readonly string[];
+        readonly structure: string;
+        readonly content: readonly { readonly original?: string; readonly saved?: string }[];
+      };
+    }
   // Execution consumes fixed changes; no reviewed Plan or replay-time planning.
   | {
       readonly _tag: "Apply";

@@ -1,4 +1,13 @@
 import {
+  planRestore,
+  applyRestore,
+  type RestoreIntent,
+  type RestorePlan,
+  type RestoreOutcome,
+  type RestorePlanError,
+  type RestoreApplyError,
+} from "./recovery/restore.js";
+import {
   planSync,
   applySync,
   type SyncIntent,
@@ -139,6 +148,10 @@ export const make = Effect.fn("Library.make")(function* (
   });
 
   function planFor(
+    intent: RestoreIntent,
+    options: { readonly base: Snapshot },
+  ): Effect.Effect<RestorePlan, RestorePlanError>;
+  function planFor(
     intent: SyncIntent,
     options: { readonly base: Snapshot },
   ): Effect.Effect<SyncPlan, SyncPlanError>;
@@ -164,6 +177,7 @@ export const make = Effect.fn("Library.make")(function* (
   ): Effect.Effect<Extract<Plan, { readonly _tag: I["_tag"] }>, PlanError>;
   function planFor(
     intent:
+      | RestoreIntent
       | SyncIntent
       | ManageIntent
       | AcceptFindingIntent
@@ -172,7 +186,14 @@ export const make = Effect.fn("Library.make")(function* (
       | Intent,
     options: { readonly base: Snapshot; readonly approvals?: readonly Approval[] },
   ): Effect.Effect<
-    SyncPlan | ManagePlan | AcceptFindingPlan | RefreshInventoryPlan | UndoPlan | Plan,
+    | RestorePlan
+    | SyncPlan
+    | ManagePlan
+    | AcceptFindingPlan
+    | RefreshInventoryPlan
+    | UndoPlan
+    | Plan,
+    | RestorePlanError
     | SyncPlanError
     | ManagePlanError
     | AcceptFindingPlanError
@@ -182,6 +203,11 @@ export const make = Effect.fn("Library.make")(function* (
   > {
     // The plan owns its Snapshot from the call, not from when its Effect runs.
     const base = structuredClone(options.base);
+    if (intent._tag === "Restore")
+      return planRestore(home, structuredClone(intent), { base }).pipe(
+        Effect.provide(importing),
+        Effect.provide(treeHasherLayer),
+      );
     const planning = Effect.provideService(InstalledSkills.Service, files);
     if (intent._tag === "Sync")
       return planSync(home, intent, {
@@ -234,6 +260,7 @@ export const make = Effect.fn("Library.make")(function* (
       return yield* planIntent(intent, { home, base, approvals: options.approvals });
     }).pipe(planning, Effect.provide(writer));
   }
+  function applyFor(plan: RestorePlan): Effect.Effect<RestoreOutcome, RestoreApplyError>;
   function applyFor(request: SyncApplyRequest): Effect.Effect<SyncOutcome, SyncApplyError>;
   function applyFor(plan: ManagePlan): Effect.Effect<ManageOutcome, ManageApplyError>;
   function applyFor(
@@ -248,6 +275,7 @@ export const make = Effect.fn("Library.make")(function* (
   ): Effect.Effect<Extract<Outcome, { readonly _tag: P["_tag"] }>, ApplyError>;
   function applyFor(
     plan:
+      | RestorePlan
       | SyncApplyRequest
       | ManagePlan
       | AcceptFindingPlan
@@ -256,6 +284,7 @@ export const make = Effect.fn("Library.make")(function* (
       | Plan,
   ): Effect.Effect<
     Outcome,
+    | RestoreApplyError
     | SyncApplyError
     | ManageApplyError
     | AcceptFindingApplyError
@@ -269,6 +298,7 @@ export const make = Effect.fn("Library.make")(function* (
         Effect.provide(writer),
         Effect.provide(importing),
       );
+    if (plan._tag === "Restore") return applyRestore(home, plan).pipe(applying);
     if (plan._tag === "Apply" || plan._tag === "ApplySynced")
       return applySync(home, plan, {
         none: configuration._tag === "None",

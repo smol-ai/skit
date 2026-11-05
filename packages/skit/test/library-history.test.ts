@@ -1,3 +1,4 @@
+import { LibraryActor } from "../src/library/actor.js";
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem } from "effect";
 import { join } from "node:path";
@@ -7,13 +8,8 @@ import { libraryLayer } from "./helpers/library-store.js";
 import { classifyLibraryAuditEvent } from "../src/library/audit/state-diff.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
 import { importCollection } from "../src/library/import-collection.js";
-import {
-  LibraryActor,
-  LibraryWriter,
-  loadLibrary,
-  writeLibrary,
-} from "../src/library/store/library-store.js";
-import { withHomeLock } from "../src/library/store/writer-lock.js";
+import { LibraryWriter, loadLibrary, writeLibrary } from "../src/library/store/library-store.js";
+import { withLock as withHomeLock } from "../src/platform/home-lock.js";
 import type { LibraryState } from "../src/library/library-state.js";
 import { skitLayer } from "../src/platform/layer.js";
 

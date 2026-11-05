@@ -37,7 +37,7 @@ import {
   sha256Hash,
   syncPaths,
   walkAuthorTree,
-  withHomeLock,
+  HomeLock,
 } from "@smolai/skit-core";
 import { AuthorWorkspaceAlreadyRegistered } from "../library/failures.js";
 import { LocalFilesChangedDuringSync } from "../registry/failures.js";
@@ -419,7 +419,7 @@ export interface AuthorHistoryShape {
       | AuthorSyncStateConflict
       | AuthorSyncStateIllegal
       | AuthorLeaseNotHeld
-      | LibraryBusy // the home lock is withHomeLock until its own function exists
+      | LibraryBusy // the shared home lock excludes other home writers
       | SyncStateError
     >;
     /** The step into Writing, once both trees are stored; returns the PreparedWrite for it. */
@@ -436,7 +436,7 @@ export interface AuthorHistoryShape {
       | AuthorSyncStateIllegal
       | AuthorLeaseNotHeld
       | AuthorHistoryInvalid
-      | LibraryBusy // the home lock is withHomeLock until its own function exists
+      | LibraryBusy // the shared home lock excludes other home writers
       | SyncStateError
     >;
   };
@@ -624,7 +624,7 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
     from: Sync.SyncState,
     to: Sync.SyncState,
   ) {
-    return yield* withHomeLock(
+    return yield* HomeLock.withLock(
       home,
       Effect.gen(function* () {
         // Refuse before writing when the lease is no longer held.

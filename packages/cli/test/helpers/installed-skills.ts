@@ -1,6 +1,5 @@
-import { Effect } from "effect";
+import { Context, Effect, Layer } from "effect";
 import {
-  canonicalJson,
   InstalledSkills,
   Library,
   SkitConfiguration,
@@ -11,14 +10,17 @@ import {
   type ManageApproval,
   type OwnershipMarker,
   emptyLibraryState,
+  pathIsWithin,
 } from "@smolai/skit-core";
 
 /** The configured Library's state, read through an owner that routes nothing. */
 const currentState = Effect.gen(function* () {
   const { skitHome } = yield* SkitConfiguration;
-  const snapshot = yield* (yield* Library.make(skitHome).pipe(
-    Effect.provideServiceEffect(InstalledSkills.Service, InstalledSkills.make()),
-  )).read;
+  const owner = Context.get(
+    yield* Layer.build(Library.layer({ home: skitHome, routing: { _tag: "None" } })),
+    Library.Service,
+  );
+  const snapshot = yield* owner.read;
   return snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
 });
 
@@ -29,22 +31,33 @@ const library = (
 ) =>
   Effect.gen(function* () {
     const { skitHome } = yield* SkitConfiguration;
-    const recorded = yield* InstalledSkills.recordedRouting(state);
-    const files = yield* InstalledSkills.make({
-      ...recorded,
-      active: Effect.succeed(["agents", "claude"]),
-      destinations: (scope) =>
-        Effect.map(recorded.destinations(scope), (targets) =>
-          add !== undefined && canonicalJson(add.scope) === canonicalJson(scope)
-            ? [
-                ...targets.filter((target) => target.destination !== add.destination),
-                { destination: add.destination, root: add.root },
-              ]
-            : targets,
-        ),
-    });
-    return yield* Library.make(skitHome).pipe(
-      Effect.provideService(InstalledSkills.Service, files),
+    const roots = state.installed_skills.filter(
+      (row) => !state.repositories.some((repository) => pathIsWithin(repository.root, row.root)),
+    );
+    const agents =
+      add?.destination === "agents" && add.scope.kind === "global"
+        ? add.root
+        : roots.find((row) => row.destination === "agents")?.root;
+    const claude =
+      add?.destination === "claude" && add.scope.kind === "global"
+        ? add.root
+        : roots.find((row) => row.destination === "claude")?.root;
+    return Context.get(
+      yield* Layer.build(
+        Library.layer({
+          home: skitHome,
+          routing: {
+            _tag: "Configured",
+            home: skitHome,
+            configHome: skitHome,
+            overrides: {
+              ...(agents ? { codex: [agents] } : {}),
+              ...(claude ? { "claude-code": [claude] } : {}),
+            },
+          },
+        }),
+      ),
+      Library.Service,
     );
   });
 

@@ -21,6 +21,7 @@ import {
 import { absentEvidence, observePathEvidence } from "./folder-evidence.js";
 import { changeWrites } from "./installed-update.js";
 import { recordedLibrary } from "./setup-intent.js";
+import { restoreRecorded } from "./internal/recovery/moves.js";
 import { moveAside, recoveryDirectory } from "./setup-moves.js";
 import { runSyncStep, type SyncStepResult } from "./internal/sync/operation.js";
 import { importCollection, type ImportedCollection } from "./import-collection.js";
@@ -57,6 +58,10 @@ import {
 
 /** One finished step, by step tag. */
 export type SetupStepResult =
+  | {
+      readonly _tag: "Restore";
+      readonly after: typeof import("./recovery-facts.js").RecoveryInspection.Type;
+    }
   | { readonly _tag: "Apply"; readonly outcome: Outcome }
   | SyncStepResult
   | { readonly _tag: "Import"; readonly imported: ImportedCollection }
@@ -106,6 +111,7 @@ const observed = (paths: readonly string[]) =>
  */
 const recordedStep = Effect.fn("Library.setup.recordedStep")(function* (step: SetupStep) {
   switch (step._tag) {
+    case "Restore":
     case "LegacyApply":
     case "Apply":
       return { step, before: [], after: [], status: "Pending" } satisfies RecordedSetupStep;
@@ -276,6 +282,12 @@ const runStep = Effect.fn("Library.setup.step")(function* (
   const { home } = yield* LibraryWriter;
   const step = steps[index]!.step;
   switch (step._tag) {
+    case "Restore":
+      return {
+        _tag: "Ran",
+        result: { _tag: "Restore", after: yield* restoreRecorded(home, step.program) },
+        after: [],
+      } satisfies StepOutcome;
     case "LegacyApply":
       return {
         _tag: "Stop",

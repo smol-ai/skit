@@ -1,4 +1,4 @@
-import { withHomeLock } from "../store/writer-lock.js";
+import { withLock as withHomeLock } from "../../platform/home-lock.js";
 import { join } from "node:path";
 
 import { Data, Effect } from "effect";

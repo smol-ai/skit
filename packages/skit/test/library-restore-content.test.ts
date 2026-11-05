@@ -1,3 +1,6 @@
+import { prepareRestore } from "../src/library/internal/content/restore.js";
+import { importCollection } from "../src/library/import-collection.js";
+import { withLock as withHomeLock } from "../src/platform/home-lock.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
@@ -7,14 +10,11 @@ import {
   deterministicTreeHash,
   libraryManifestFromLocalState,
   makeMachineId,
-  prepareRestore,
   planCollectionVersions,
   type RestorePhase,
   type RestoreTick,
   collectionVersionPath,
-  importCollection,
   SourceProcess,
-  withHomeLock,
   type SnapshotArchive,
 } from "../src/index.js";
 import { skitLayer } from "../src/platform/layer.js";

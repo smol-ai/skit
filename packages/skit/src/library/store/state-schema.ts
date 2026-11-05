@@ -35,6 +35,7 @@ import {
   InvocationPolicies,
   Repository,
 } from "../device-state.js";
+import { RecoveryInspection } from "../recovery-facts.js";
 import { EnabledChange } from "../enabled-change.js";
 import { Destination } from "../installed-skill-facts.js";
 import { Hash, HarnessName, InstallDestination, InstallScope } from "../../vocabulary.js";
@@ -419,7 +420,22 @@ export interface InstalledApply extends Schema.Schema.Type<typeof installedApply
 export interface StoredInstalledApply extends Schema.Codec.Encoded<typeof installedApply> {}
 export const InstalledApply: Schema.Codec<InstalledApply, StoredInstalledApply> = installedApply;
 
+export const RecoveryRestore = Schema.Struct({
+  summary: RecoveryInspection,
+  witnesses: Schema.Array(Schema.String),
+  parents: Schema.Array(Schema.String),
+  structure: Schema.String,
+  content: Schema.Array(
+    Schema.Struct({
+      original: Schema.optionalKey(Schema.String),
+      saved: Schema.optionalKey(Schema.String),
+    }),
+  ),
+});
+export type RecoveryRestore = typeof RecoveryRestore.Type;
+
 export const SetupStep = Schema.Union([
+  Schema.TaggedStruct("Restore", { program: RecoveryRestore }),
   InstalledApply,
   Schema.TaggedStruct("LegacyApply", { detail: Schema.String, document: Schema.Json }),
   Schema.TaggedStruct("Sync", { phase: Schema.Literal("retire"), program: SyncProgram }),

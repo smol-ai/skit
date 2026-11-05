@@ -1,3 +1,4 @@
+import { make as makeLibrary } from "../../src/library/internal/runtime.js";
 import { Effect } from "effect";
 import { Library } from "../../src/library/library.js";
 import { InstalledSkills } from "../../src/library/installed-skills.js";
@@ -40,7 +41,7 @@ const library = (
           ),
         ),
     });
-    return yield* Library.make(home).pipe(Effect.provideService(InstalledSkills.Service, files));
+    return yield* makeLibrary(home).pipe(Effect.provideService(InstalledSkills.Service, files));
   });
 
 const applied = (

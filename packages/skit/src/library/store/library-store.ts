@@ -1,3 +1,4 @@
+import { LibraryActor } from "../actor.js";
 import { Context, DateTime, Effect, FileSystem, Option } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { join, resolve } from "node:path";
@@ -6,7 +7,7 @@ import { emptyLibraryState, type LibraryState } from "../library-state.js";
 import { inspectLocalLibraryState, saveLibraryState } from "./state-file.js";
 import { appendLibraryAudit, type LibraryAuditChange } from "../audit/audit-log.js";
 import { classifyLibraryAuditEvent, diffLibraryState } from "../audit/state-diff.js";
-import { withHomeLock } from "./writer-lock.js";
+import { withLock as withHomeLock } from "../../platform/home-lock.js";
 
 // Reads and the one-time migration go through here too: only this module touches state-file.
 export {
@@ -56,14 +57,6 @@ export class LibraryWriter extends Context.Service<
     ) => Effect.Effect<void, LibraryStateWriteError>;
   }
 >()("skit/library/LibraryWriter") {}
-
-/**
- * Who is mutating the Library, for its history. A front end provides it once at its composition
- * root; it is a diagnostic label and not an authority, so an unlabelled mutation is still recorded.
- */
-export const LibraryActor = Context.Reference<string>("skit/library/LibraryActor", {
-  defaultValue: () => "unattributed",
-});
 
 /** Append one event to a Library's history. Reported, never raised: the change is durable. */
 const recordLibraryHistory = Effect.fn("Library.recordHistory")(function* (

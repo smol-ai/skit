@@ -1,3 +1,4 @@
+import { saveRecoveryFiles } from "./helpers/recovery-files.js";
 import { withLibraryOwner } from "./helpers/library-owner.js";
 import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
@@ -5,7 +6,6 @@ import { systemError } from "effect/PlatformError";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import {
-  deterministicTreeHash,
   hashParts,
   LinkStat,
   MachineSettings,
@@ -21,7 +21,7 @@ import { setupResultActions } from "../src/library/setup/actions.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import { renderContract } from "../src/presentation/contract-presenters.js";
-import { inspectRecoveryOperation, prepareRecoveryMoves } from "@smolai/skit-core";
+import { inspectRecoveryOperation } from "@smolai/skit-core";
 import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply-command.js";
 import { runSetup } from "@smolai/skit-core/library/setup";
 import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
@@ -151,12 +151,17 @@ it.effect.each([3, 2] as const)(
       const directory = join(home.home, "removed", operationId);
       const identity = (value: bigint) => (version === 3 ? String(value) : Number(value));
       const file = yield* readSkillPathDetails(source);
-      const moves = yield* prepareRecoveryMoves(
-        home.home,
-        [{ name: "review", path: source, currentHash: yield* deterministicTreeHash(source) }],
-        directory,
-      );
-      yield* moves.apply();
+      const moves = yield* saveRecoveryFiles(home.home, [source]);
+      yield* fs.rename(moves.operationDirectory, directory);
+      // This fixture represents the older UUID journal layout, including its receipt paths.
+      for (const batch of yield* fs.readDirectory(directory)) {
+        const receipt = join(directory, batch, "receipt.json");
+        if (yield* fs.exists(receipt))
+          yield* fs.writeFileString(
+            receipt,
+            (yield* fs.readFileString(receipt)).replaceAll(moves.operationDirectory, directory),
+          );
+      }
       const settings = setupDiscoverySettings(yield* MachineSettings.read(home.home));
       const intent = setupIntent(yield* home.durable);
       yield* fs.writeFileString(

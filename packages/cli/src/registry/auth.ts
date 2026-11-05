@@ -42,7 +42,16 @@ import {
 } from "./credential-store.js";
 import { Renderer } from "../presentation/renderer.js";
 import { serverDiscoverySchema } from "@smolai/skit-core";
-import { withConfigurationWriter } from "../configuration-writer.js";
+import { HomeLock } from "@smolai/skit-core";
+const withConfigurationWriter = <A, E, R>(
+  home: string | undefined,
+  program: Effect.Effect<A, E, R>,
+) =>
+  Effect.flatMap(configurationForHome(home), (paths) =>
+    HomeLock.withLock(paths.skitHome, Effect.scoped(program)).pipe(
+      Effect.provideService(SkitConfiguration, paths),
+    ),
+  );
 import {
   ApiErrorBody,
   ConsumerAuthenticatedApi,

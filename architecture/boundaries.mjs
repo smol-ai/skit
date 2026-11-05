@@ -75,40 +75,25 @@ export const owners = [
 ];
 
 export const debt = {
-  "packages/cli/test/pnpm-skills.test.ts": ["prepareRecoveryMoves"],
-  "packages/cli/test/recovery-moves.test.ts": ["prepareRecoveryMoves", "prepareRecoveryRestore"],
-  "packages/cli/test/recovery-command.test.ts": ["prepareRecoveryMoves"],
-  "packages/cli/src/author/history.ts": ["withHomeLock"],
-  "packages/cli/src/configuration-writer.ts": ["withHomeLock"],
-  "packages/cli/src/handlers/library/recovery.ts": ["prepareRecoveryRestore"],
-  "packages/cli/test/setup-undo.test.ts": ["prepareRecoveryMoves"],
+  // The existing recovery-internals tests moved from CLI to their state owner.
+  "packages/skit/test/recovery-moves.test.ts": ["prepareRecoveryMoves"],
   "packages/skit/test/collection-import-result.test.ts": [
     "importAuthoredCollection",
     "importCollection",
   ],
   "packages/skit/test/import-collection-errors.test.ts": ["prepareImport"],
   "packages/skit/test/library-binding-entries.test.ts": ["importCollection"],
-  "packages/skit/test/library-history.test.ts": ["importCollection", "withHomeLock"],
+  "packages/skit/test/library-history.test.ts": ["importCollection"],
   "packages/skit/test/library-installed-skills.test.ts": [
     "backUpInstalledSkill",
     "importCollection",
     "importEdit",
   ],
-  "packages/skit/test/library-local-journey.test.ts": [
-    "importCollection",
-    "prepareRestore",
-    "withHomeLock",
-  ],
+  "packages/skit/test/library-local-journey.test.ts": ["importCollection", "prepareRestore"],
   "packages/skit/test/library-moved-skill.test.ts": ["importCollection"],
-  "packages/skit/test/library-restore-content.test.ts": [
-    "importCollection",
-    "prepareRestore",
-    "withHomeLock",
-  ],
+  "packages/skit/test/library-restore-content.test.ts": ["importCollection", "prepareRestore"],
   "packages/skit/test/library-store.test.ts": ["importCollection"],
-  "packages/skit/test/library-writer-lock.test.ts": ["withHomeLock"],
   "packages/skit/test/local-retention.test.ts": ["writeCollectionVersion"],
-  "packages/skit/test/machine-settings.test.ts": ["withHomeLock"],
   "packages/skit/test/sources.test.ts": ["prepareImport"],
 };
 

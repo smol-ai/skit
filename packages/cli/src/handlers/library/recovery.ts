@@ -7,11 +7,8 @@ import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { recoveryActions } from "../../commands/recovery-contract.js";
 import { homeFlag, jsonFlag, optionalString } from "../../commands/parameters.js";
-import {
-  inspectRecoveryOperation,
-  listRecoveryOperations,
-  prepareRecoveryRestore,
-} from "@smolai/skit-core";
+import { inspectRecoveryOperation, listRecoveryOperations } from "@smolai/skit-core";
+import { Library } from "@smolai/skit-core/library";
 import { Renderer } from "../../presentation/renderer.js";
 import { result } from "../contracts.js";
 
@@ -87,28 +84,32 @@ const restore = Command.make("restore", { operation, apply, ...flags }, (input) 
       const configuration = yield* SkitConfiguration;
       const home = configuration.skitHome;
       const renderer = yield* Renderer;
-      const plan = yield* prepareRecoveryRestore(home, input.operation);
+      const library = yield* Library.Service;
+      const plan = yield* library.plan(
+        { _tag: "Restore", operationId: input.operation },
+        { base: yield* library.read },
+      );
       const approved = Option.getOrUndefined(input.apply);
       if (approved === undefined)
         return yield* renderer.result(
           result("recovery", {
-            ...plan.summary,
+            ...plan.change,
             phase: "preview",
             actions: recoveryActions(
               home,
               input.operation,
-              plan.summary.entries.some((entry) => entry.status === "saved")
-                ? plan.summary.planId
+              plan.change.entries.some((entry) => entry.status === "saved")
+                ? plan.change.planId
                 : undefined,
             ),
           }),
         );
-      if (approved !== plan.summary.planId)
+      if (approved !== plan.change.planId)
         return yield* renderer.result(
           result(
             "recovery",
             {
-              ...plan.summary,
+              ...plan.change,
               phase: "stale",
               failure: "The recovery plan changed. Review a new preview before applying.",
               actions: recoveryActions(home, input.operation),
@@ -116,10 +117,10 @@ const restore = Command.make("restore", { operation, apply, ...flags }, (input) 
             12,
           ),
         );
-      const applied = yield* Effect.result(plan.apply());
+      const applied = yield* Effect.result(library.apply(plan));
       const inspection =
         applied._tag === "Success"
-          ? applied.success
+          ? applied.success.result.after
           : yield* inspectRecoveryOperation(home, input.operation);
       const failed =
         applied._tag === "Failure" ? commandFailure(Cause.fail(applied.failure)) : undefined;

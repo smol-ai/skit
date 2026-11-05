@@ -10,7 +10,7 @@ import {
   makeOperationId,
   migratedMachineId,
 } from "../src/library/entity-ids.js";
-import { withHomeLock } from "../src/library/store/writer-lock.js";
+import { withLock as withHomeLock } from "../src/platform/home-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { acquireFileLock } from "../src/platform/file-lock.js";
 

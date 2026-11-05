@@ -1,16 +1,17 @@
+import {
+  prepareRecoveryMoves,
+  captureRecoveryRestore,
+  restoreRecorded,
+} from "../src/library/internal/recovery/moves.js";
 import { basename, join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { systemError } from "effect/PlatformError";
-import { LinkStat, skitLayer, deterministicTreeHash } from "@smolai/skit-core";
-import {
-  listRecoveryOperations,
-  prepareRecoveryRestore,
-  inspectRecoveryOperation,
-  prepareRecoveryMoves,
-} from "@smolai/skit-core";
-import { scratch } from "./helpers/library-home.js";
+import { LinkStat, skitLayer, deterministicTreeHash } from "../src/index.js";
+import { listRecoveryOperations, inspectRecoveryOperation } from "../src/index.js";
+const scratch = (prefix: string) =>
+  Effect.flatMap(FileSystem.FileSystem, (fs) => fs.makeTempDirectoryScoped({ prefix }));
 
 it.effect.each(["prepare", "apply"] as const)(
   "refuses a retargeted approved alias during %s without moving either source",
@@ -83,11 +84,11 @@ it.effect(
       yield* f.plan.apply();
       const moveRecord = yield* f.fs.readFileString(join(f.plan.recoveryDirectory, "receipt.json"));
       expect(moveRecord).not.toContain('"moved"');
-      const preview = yield* prepareRecoveryRestore(f.home, f.operationId);
+      const preview = yield* captureRecoveryRestore(f.home, f.operationId);
       expect(preview.summary.entries.map((entry) => entry.status)).toEqual(["saved", "saved"]);
       // Only the link text belongs to the saved inventory; its target is independently writable.
       yield* f.fs.writeFileString(f.external, "new external edit");
-      const restored = yield* preview.apply();
+      const restored = yield* restoreRecorded(f.home, preview);
       expect(restored.entries.map((entry) => entry.status)).toEqual(["at-original", "at-original"]);
       expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe("original skill");
       expect(yield* f.fs.readFileString(join(f.source, ".skit", "private"))).toBe("control bytes");
@@ -98,8 +99,8 @@ it.effect(
       expect(yield* f.fs.readFileString(join(f.plan.recoveryDirectory, "receipt.json"))).toBe(
         moveRecord,
       );
-      const repeated = yield* prepareRecoveryRestore(f.home, f.operationId);
-      expect((yield* repeated.apply()).planId).toBe(restored.planId);
+      const repeated = yield* captureRecoveryRestore(f.home, f.operationId);
+      expect((yield* restoreRecorded(f.home, repeated)).planId).toBe(restored.planId);
       expect(yield* f.fs.exists(join(f.home, "state.json"))).toBe(false);
     }).pipe(Effect.provide(skitLayer)),
 );
@@ -111,10 +112,10 @@ it.effect.each(["move", "restore"] as const)(
       const f = yield* recoveryFixture();
       if (phase === "restore") yield* f.plan.apply();
       const restore =
-        phase === "restore" ? yield* prepareRecoveryRestore(f.home, f.operationId) : undefined;
+        phase === "restore" ? yield* captureRecoveryRestore(f.home, f.operationId) : undefined;
       let moves = 0;
       const interrupted = yield* Effect.exit(
-        (restore ? restore.apply() : f.plan.apply()).pipe(
+        (restore ? restoreRecorded(f.home, restore) : f.plan.apply()).pipe(
           Effect.provideService(FileSystem.FileSystem, {
             ...f.fs,
             rename: (from, to) => {
@@ -129,10 +130,12 @@ it.effect.each(["move", "restore"] as const)(
       expect(inspection.entries.map((entry) => entry.status)).toEqual(
         phase === "move" ? ["saved", "at-original"] : ["at-original", "saved"],
       );
-      const next = yield* prepareRecoveryRestore(f.home, f.operationId);
-      expect((yield* next.apply()).entries.every((entry) => entry.status === "at-original")).toBe(
-        true,
-      );
+      const next = yield* captureRecoveryRestore(f.home, f.operationId);
+      expect(
+        (yield* restoreRecorded(f.home, next)).entries.every(
+          (entry) => entry.status === "at-original",
+        ),
+      ).toBe(true);
       expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe("original skill");
       expect(yield* f.fs.readLink(f.alias)).toBe("review");
     }).pipe(Effect.provide(skitLayer)),
@@ -172,9 +175,9 @@ it.effect.each(["directory", "dangling-link"] as const)(
       yield* f.plan.apply();
       if (kind === "directory") yield* f.fs.makeDirectory(f.source);
       else yield* f.fs.symlink("missing-target", f.source);
-      const preview = yield* prepareRecoveryRestore(f.home, f.operationId);
+      const preview = yield* captureRecoveryRestore(f.home, f.operationId);
       expect(preview.summary.entries.map((entry) => entry.status)).toEqual(["conflict", "saved"]);
-      const restored = yield* preview.apply();
+      const restored = yield* restoreRecorded(f.home, preview);
       expect(restored.entries.map((entry) => entry.status)).toEqual(["conflict", "at-original"]);
       expect(
         kind === "directory" ? yield* f.fs.readDirectory(f.source) : yield* f.fs.readLink(f.source),
@@ -191,7 +194,7 @@ it.effect.each(["content", "control", "identity", "destination", "parent"] as co
     Effect.gen(function* () {
       const f = yield* recoveryFixture();
       yield* f.plan.apply();
-      const preview = yield* prepareRecoveryRestore(f.home, f.operationId);
+      const preview = yield* captureRecoveryRestore(f.home, f.operationId);
       const saved = preview.summary.entries[0].recoveryPath;
       if (change === "content") yield* f.fs.writeFileString(join(saved, "SKILL.md"), "new bytes");
       if (change === "control")
@@ -205,7 +208,7 @@ it.effect.each(["content", "control", "identity", "destination", "parent"] as co
         yield* f.fs.rename(f.parent, `${f.parent}-original`);
         yield* f.fs.makeDirectory(f.parent);
       }
-      expect((yield* Effect.flip(preview.apply()))._tag).toBe("Library.StalePlan");
+      expect((yield* Effect.flip(restoreRecorded(f.home, preview)))._tag).toBe("Library.StalePlan");
       const inspection = yield* inspectRecoveryOperation(f.home, f.operationId);
       expect(inspection.entries[0].status).toBe("conflict");
       expect(yield* f.fs.readFileString(join(saved, "SKILL.md"))).toBe(
@@ -219,11 +222,11 @@ it.effect("a later entry edited during restoration is never silently approved", 
   Effect.gen(function* () {
     const f = yield* recoveryFixture();
     yield* f.plan.apply();
-    const preview = yield* prepareRecoveryRestore(f.home, f.operationId);
+    const preview = yield* captureRecoveryRestore(f.home, f.operationId);
     const savedAlias = preview.summary.entries[1].recoveryPath;
     let moved = false;
     const failure = yield* Effect.flip(
-      preview.apply().pipe(
+      restoreRecorded(f.home, preview).pipe(
         Effect.provideService(FileSystem.FileSystem, {
           ...f.fs,
           rename: (from, to) =>
@@ -250,9 +253,9 @@ it.effect("EXDEV refuses without copy/delete fallback and leaves saved source in
   Effect.gen(function* () {
     const f = yield* recoveryFixture();
     yield* f.plan.apply();
-    const preview = yield* prepareRecoveryRestore(f.home, f.operationId);
+    const preview = yield* captureRecoveryRestore(f.home, f.operationId);
     const failure = yield* Effect.flip(
-      preview.apply().pipe(
+      restoreRecorded(f.home, preview).pipe(
         Effect.provideService(FileSystem.FileSystem, {
           ...f.fs,
           rename: (from) =>
@@ -304,10 +307,10 @@ it.effect(
       });
       yield* f.fs.writeFileString(join(directory, "receipt.json"), moveRecord);
       yield* f.fs.rename(f.source, recoveryPath);
-      const preview = yield* prepareRecoveryRestore(f.home, "legacy-operation");
+      const preview = yield* captureRecoveryRestore(f.home, "legacy-operation");
       expect(preview.summary.legacy).toBe(true);
       expect(preview.summary.entries[0].status).toBe("saved");
-      expect((yield* preview.apply()).entries[0].status).toBe("at-original");
+      expect((yield* restoreRecorded(f.home, preview)).entries[0].status).toBe("at-original");
       expect(yield* f.fs.readFileString(join(directory, "receipt.json"))).toBe(moveRecord);
     }).pipe(Effect.provide(skitLayer)),
 );
@@ -347,9 +350,9 @@ it.effect("v2 move records with numeric device and inode numbers still restore",
       ),
     });
     yield* f.fs.writeFileString(path, v2);
-    const preview = yield* prepareRecoveryRestore(f.home, f.operationId);
+    const preview = yield* captureRecoveryRestore(f.home, f.operationId);
     expect(preview.summary.entries.map((entry) => entry.status)).toEqual(["saved", "saved"]);
-    const restored = yield* preview.apply();
+    const restored = yield* restoreRecorded(f.home, preview);
     expect(restored.entries.map((entry) => entry.status)).toEqual(["at-original", "at-original"]);
     expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe("original skill");
     expect(yield* f.fs.readFileString(path)).toBe(v2);
@@ -376,7 +379,7 @@ it.effect.each(["move-record", "archive-directory", "missing"] as const)(
           "missing",
         );
       else
-        expect((yield* Effect.flip(prepareRecoveryRestore(f.home, f.operationId)))._tag).toBe(
+        expect((yield* Effect.flip(captureRecoveryRestore(f.home, f.operationId)))._tag).toBe(
           "RecoveryInvalid",
         );
       expect(yield* f.fs.exists(f.source)).toBe(false);
@@ -430,9 +433,11 @@ it.effect(
           (entry) => entry.status,
         ),
       ).toEqual(["saved", "saved"]);
-      const restore = yield* prepareRecoveryRestore(f.home, f.operationId);
+      const restore = yield* captureRecoveryRestore(f.home, f.operationId);
       expect(
-        (yield* restore.apply()).entries.every((entry) => entry.status === "at-original"),
+        (yield* restoreRecorded(f.home, restore)).entries.every(
+          (entry) => entry.status === "at-original",
+        ),
       ).toBe(true);
       expect(yield* f.fs.readLink(f.alias)).toBe("review");
       expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe("original skill");
