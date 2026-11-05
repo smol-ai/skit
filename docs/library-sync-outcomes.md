@@ -39,9 +39,18 @@ The refusal comes from the head read, so it happens before sync plans, uploads, 
 
 ## One pipeline
 
-Every path is the same three-way merge of L with R from B. A push merges L with an absent R against an empty base, a pull an absent L with R, and a clean sync is a merge whose result is both sides. Absent and empty stay distinct facts: only two existing Libraries can be clean, and only an absent R is created by the write, so an empty L still pushes. One alias map, of Collection, Skill and Version handles, is computed once and applied to L, B and the device state at one site. A `--take-remote` key must name a conflict the merge can take remotely; it is checked before projection collisions on every path, so a push or a pull, which has no merge conflicts, refuses any key with `resolution_invalid`. A pull plans no device Projections, because an empty device has none and planning it would only report remote Bindings without a selected Version.
+Every path is the same three-way merge of L with R from B. A push merges L with an absent R against an empty base, a pull an absent L with R, and a clean sync is a merge whose result is both sides. Absent and empty stay distinct facts: only two existing Libraries can be clean, and only an absent R is created by the write, so an empty L still pushes. Library aligns Collection, Skill and Version handles in the review and revalidates the prepared local program against the reviewed snapshot. A `--take-remote` key must name a conflict the merge can take remotely; it is checked before projection collisions on every path, so a push or a pull, which has no merge conflicts, refuses any key with `resolution_invalid`. A pull plans no device Projections, because an empty device has none and planning it would only report remote Bindings without a selected Version.
 
-Every applying path commits in one order, stated once in `syncLibrary`:
+`openSyncSession` in Library owns ancestry/base choice, portable merge, identity alignment, device selection, destination checks and change summaries. Its reviewed target and facts are copies. It captures the base and remote head, rejects staged content that differs from its target, and constructs the local Sync plan and receipt internally. The CLI owns remote reads, transfer orchestration, remote compare-and-swap, progress and formatting; it no longer imports merge/device helpers or constructs receipts.
+
+```text
+CLI read + verify -> remote head -> Library.openSyncSession
+  -> reviewed target and changes -> stage content -> session.prepare
+  -> session freshness check -> upload -> remote CAS
+  -> prepared.apply(receipt) -> Library recorded local Sync -> reconciliation
+```
+
+Every applying path commits in this order:
 
 1. Retain every copy the result references in originals (downloading and reacquiring what is missing).
 2. Upload every snapshot the new head references that R lacks.
@@ -87,9 +96,9 @@ The unification is not behaviour-identical. These differences are intended, and 
 | --- | --- | --- | --- |
 | **Remote head** | D1 `libraries.current_revision_id` + `library_revisions` | `api.write` | Compare-and-swap batch on the expected revision |
 | **Remote snapshots** | R2 + D1 `library_snapshots` | `api.upload` | Content-addressed; idempotent |
-| **Originals** | `<home>/originals/<digest>` | `prepareRestore` | Content-addressed; unreferenced trees are inert |
-| **Local state** | `<home>/state.json`, including `sync_ancestry` | `store.publish` | Atomic rename, no fsync |
-| **Projections** | Harness roots | `reconcileLibraryProjections` | Per-projection; derived from local state |
+| **Originals** | `<home>/originals/<digest>` | `Library.content.stage` | Content-addressed; unreferenced trees are inert |
+| **Local state** | `<home>/state.json`, including `sync_ancestry` | Library recorded Sync | Atomic rename, no fsync |
+| **Projections** | Harness roots | Library recorded execution | Per-projection; derived from local state |
 
 A projection batch whose state is unchanged, which wrote nothing and has no pending backup to settle, publishes nothing. A batch with backups to settle publishes onto the state it loaded first, so a backup is never judged against a state the Library has moved on from.
 
@@ -108,7 +117,7 @@ Preflight writes nothing beyond the loader maintenance described under [Remote m
 | B exists and (B.origin ≠ origin, or R is absent, or B.library_id ≠ R.library_id) | Continue with an empty base; report `merge_base: empty-different-library` |
 | Neither L nor R exists | `clean` (nothing written) |
 
-Missing or mismatched ancestry uses an empty base, so the merge can only add records. For two existing Libraries without ancestry the output reports `merge_base: empty-first-sync`; a changed Registry/Library reports `empty-different-library`. Preview remains read-only and `--apply` uses the ordinary push/merge path. There is no adoption flag or gate. Then exactly one of the paths below runs. Every applying path holds the home's writer lock for its whole duration: `syncLibrary` acquires it when applying, and reuses it reentrantly when its caller already holds it. Each local publish is also checked against the local state the path planned from: if that state has changed, which only a caller without the writer lock can allow, the publish is refused with `SyncLocalChanged` and changes no local state.
+Missing or mismatched ancestry uses an empty base, so the merge can only add records. For two existing Libraries without ancestry the output reports `merge_base: empty-first-sync`; a changed Registry/Library reports `empty-different-library`. Preview remains read-only and `--apply` uses the ordinary push/merge path. There is no adoption flag or gate. Then exactly one of the paths below runs. Review, staging and network transfer do not hold a Library writer. Library owns the writer for local mutation. The prepared session checks a merge/pull snapshot before upload/CAS, and Library checks the reviewed revision again before its recorded local publication. If local state changed, publication is refused with `SyncLocalChanged`; sync never anchors an unrelated local state.
 
 Every ready/apply path also checks enabled destinations using filesystem identity and previews affected projection custody before committing. A collision reports the Skill IDs and Collection labels. `--keep-enabled <skill-id>` keeps one competing Skill enabled and retains the others without enabling them; invalid or competing choices return `resolution_invalid`. Modified copies and repository Bindings that would lose their selected entities report device conflicts with specific remediation. These checks are read-only.
 

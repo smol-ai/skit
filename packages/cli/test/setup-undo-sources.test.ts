@@ -2,7 +2,7 @@ import { withLibraryOwner } from "./helpers/library-owner.js";
 import { installEnabledSkills } from "./helpers/installed-skills.js";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { Clock, Effect, FileSystem } from "effect";
+import { Clock, Effect, FileSystem, Option } from "effect";
 import { systemError } from "effect/PlatformError";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { TestClock } from "effect/testing";
@@ -27,7 +27,8 @@ import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.j
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import { renderContract } from "../src/commands/output-presenters.js";
-import { mergeLibraryManifests } from "../src/library/sync/merge.js";
+import { Library } from "@smolai/skit-core/library";
+import { openSyncSession } from "@smolai/skit-core/library/session";
 import {
   deterministicTreeHash,
   libraryHome,
@@ -315,6 +316,29 @@ it.effect(
       const f = yield* fixture();
       const after = yield* f.home.durable;
       expect(enabledSkillIds(after, f.enabled)).toHaveLength(2);
+      const afterManifest = yield* libraryManifestFromLocalState(after);
+      const head = {
+        library_id: "source-undo-library",
+        revision_id: "after-setup",
+        manifest: afterManifest,
+      };
+      // Establish the accepted after-setup base through the owner, before undo makes a local edit.
+      yield* f.home.owned(
+        Effect.gen(function* () {
+          const library = yield* Library.Service;
+          const base = yield* library.read;
+          const session = yield* openSyncSession(
+            { origin: "https://registry.test", remote: head },
+            { base },
+          );
+          if (session._tag !== "Ready") return yield* Effect.die("Expected clean sync session");
+          const staged = yield* library.content.stage(session.target, {
+            localArchives: yield* library.content.pack(base),
+            registry: { origin: "https://registry.test", token: Option.none() },
+          });
+          yield* (yield* session.prepare(staged)).apply(head);
+        }),
+      );
       const inverse = yield* f.home.owned(prepareSetupUndo(f.operationId));
       expect(inverse.summary.conflicts).toEqual([]);
       expect(inverse.summary.sourceSelections).toHaveLength(1);
@@ -343,13 +367,21 @@ it.effect(
       expect(observation.input.value).toBe(
         collectionVersionPath(join(f.home.home, "originals"), copy.hash),
       );
-      const afterManifest = yield* libraryManifestFromLocalState(after);
       const restoredManifest = yield* libraryManifestFromLocalState(restored);
       expect(restoredManifest.imports).toEqual(restored.imports);
-      const synced = mergeLibraryManifests(afterManifest, restoredManifest, afterManifest);
-      expect(synced.conflicts).toEqual([]);
-      expect(enabledSkillIds(synced.manifest, f.enabled)).toHaveLength(1);
-      expect(synced.manifest.imports.map((item) => item.import_id).sort()).toEqual(
+      const synced = yield* f.home.owned(
+        Effect.gen(function* () {
+          const library = yield* Library.Service;
+          return yield* openSyncSession(
+            { origin: "https://registry.test", remote: head },
+            { base: yield* library.read },
+          );
+        }),
+      );
+      expect(synced._tag).toBe("Ready");
+      if (synced._tag !== "Ready") return;
+      expect(enabledSkillIds(synced.target, f.enabled)).toHaveLength(1);
+      expect(synced.target.imports.map((item) => item.import_id).sort()).toEqual(
         restored.imports.map((item) => item.import_id).sort(),
       );
       expect((yield* MachineSettings.read(f.home.home)).discoveryRoots).toEqual([]);

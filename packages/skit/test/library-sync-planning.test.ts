@@ -4,10 +4,8 @@ import { join } from "node:path";
 import * as Library from "../src/library/library.js";
 import { libraryManifestFromLocalState } from "../src/library/library-state.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
-import {
-  previewSyncInstalledSkills,
-  resolveSyncInstalledSkillCollisions,
-} from "../src/library/session.js";
+import { previewSyncInstalledSkills } from "../src/library/internal/sync/installed-skills.js";
+import { resolveSyncInstalledSkillCollisions } from "../src/library/internal/sync/collisions.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 it.effect("Sync planning protects edited copies without saving state or moving files", () =>

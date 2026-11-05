@@ -14,7 +14,7 @@ import {
 } from "@smolai/skit-core";
 import { LibraryChangedOnServer, RegistryUnreachable } from "../src/registry/failures.js";
 import { LibraryApiRejected, LibraryManifestTooNew } from "../src/library/sync/api.js";
-import { SyncLocalChanged } from "../src/library/sync/workflow.js";
+import { SyncLocalChanged } from "@smolai/skit-core/library/session";
 import {
   assertDiskUnchanged,
   captureDisk,

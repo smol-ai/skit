@@ -174,16 +174,18 @@ The local state also retains:
 - current native-deletion suppression on the affected Projection;
 - observations of unmanaged harness content.
 
-Device-local `audit.jsonl` separately records diagnostic semantic history. It is appended
-after authoritative state publication, so a crash may omit the final event. Audit history
-never drives reconciliation. These boundaries support reconciliation and diagnosis without
+Device-local `audit.jsonl` records semantic history. Undelivered events are saved alongside
+authoritative state, delivered by stable event ID, and acknowledged afterward. Startup retries
+interrupted delivery without duplicate events. Audit history never drives reconciliation. These boundaries support reconciliation and diagnosis without
 treating every file found in a harness root as SKIT-owned.
 
 ## Authoritative state and filesystem effects
 
 The default local library is `~/.skit`, overridable with `SKIT_HOME` or `--home`. Its `state.json` is the single authoritative metadata store. Content-addressed originals and normalized releases live alongside it.
 
-The core `LibraryStore` Layer owns fresh state loads and validated atomic publication. Standalone `refreshInventory` composes its load, read-only `scanInventory`, and completed observation publication; the CLI provides the store at application startup. Standalone `setProjectionEffect` owns one core enable/disable mutation through the acquired store. CLI code must use these core boundaries rather than implement a second state writer.
+`Library.layer` constructs the public owner. Its `read` returns a snapshot; `plan` prepares against that snapshot and `apply` revalidates before recorded mutation. Inventory refresh and enable/disable run through that owner. Stores and writers stay private to Library; CLI code does not provide a store or write state independently.
+
+`openSyncSession` is the shared Library boundary for portable sync review. It owns ancestry, merge, identity alignment, device selection and change summaries, then prepares the local Sync plan and remote receipt from the reviewed target. The caller owns remote transport and compare-and-swap. Library alone records and applies local mutations. A changed staged target or stale snapshot cannot inherit the original review.
 
 Projection changes use one serialized, scoped mutation:
 

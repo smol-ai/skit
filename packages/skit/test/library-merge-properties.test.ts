@@ -1,19 +1,22 @@
+import { normalizeLibraryManifest } from "../src/library/manifest.js";
 import { assert, it } from "@effect/vitest";
 import { Arbitrary, Schema } from "effect";
+import { canonicalJson } from "../src/shared/json.js";
 import {
-  canonicalJson,
   currentLibraryManifest,
   librarySnapshotDigests,
   LibraryManifest,
+  type Enabled,
+} from "../src/library/library-contracts.js";
+import {
   makeImportId,
   makeCollectionId,
   makeMachineId,
   makeCollectionVersionId,
   makeSkillId,
   makeSkillVersionId,
-  type Enabled,
-} from "@smolai/skit-core";
-import { mergeLibraryManifests, normalizeLibraryManifest } from "../src/library/sync/merge.js";
+} from "../src/library/entity-ids.js";
+import { mergeLibraryManifests } from "../src/library/internal/sync/merge.js";
 
 const machineId = makeMachineId();
 /** A fixed pool of one-Skill Collections; every side of a merge is drawn from the same records. */

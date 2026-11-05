@@ -73,10 +73,6 @@ export {
 export { updateSources } from "./internal/session/update-sources.js";
 
 export { SyncConflictDetail } from "./internal/sync/conflict.js";
-export { resolveSyncInstalledSkillCollisions } from "./internal/sync/collisions.js";
-export { previewSyncInstalledSkills } from "./internal/sync/installed-skills.js";
-
-export { alignLibrary, aliasManifest, aliasDevice } from "./internal/sync/alignment.js";
 
 // Inferred consumer declarations require these failure names.
 export type { EditImportAmbiguous } from "./internal/session/edit.js";
@@ -88,3 +84,10 @@ export type { SelectionError } from "./internal/session/set-enabled.js";
 export type { LibraryChangeSelection } from "./internal/session/set-enabled.js";
 
 export type { SkillsShUpdateMember } from "./internal/session/skills-sh-update-check.js";
+
+export {
+  openSyncSession,
+  SyncLocalChanged,
+  type SyncSessionRequest,
+} from "./internal/sync/session.js";
+export { SyncChanges, SyncChange, SyncEnabledItem } from "./sync-changes.js";

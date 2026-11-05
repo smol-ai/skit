@@ -820,7 +820,7 @@
       "examples": [
         "skit feedback send \"skit add said the Source was invalid but not which part\"",
         "skit feedback send --message \"setup --json had no field for skipped skills\" --harness codex --model gpt-5.5",
-        "skit feedback send \"skit sync --json gave no reason for base_mismatch\" --signed-in --email ada@example.com"
+        "skit feedback send \"skit sync --json gave no reason for a conflict\" --signed-in --email ada@example.com"
       ],
       "positionals": [
         {

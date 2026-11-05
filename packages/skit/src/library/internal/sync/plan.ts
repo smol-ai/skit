@@ -1,13 +1,9 @@
-import {
-  Enabled,
-  canonicalJson,
-  currentSkillVersion,
-  type LibraryManifest,
-} from "@smolai/skit-core";
+import { Enabled, currentSkillVersion, type LibraryManifest } from "../../library-contracts.js";
+import { canonicalJson } from "../../../shared/json.js";
 import { Schema } from "effect";
-import { normalizeLibraryManifest } from "./merge.js";
+import { normalizeLibraryManifest } from "../../manifest.js";
 
-import type { SyncChange, SyncEnabledItem, SyncPlan } from "./output.js";
+import type { SyncChange, SyncEnabledItem, SyncChanges } from "../../sync-changes.js";
 const action = (before: unknown, after: unknown): SyncChange["action"] =>
   before === undefined ? "add" : after === undefined ? "remove" : "update";
 
@@ -128,7 +124,7 @@ export const planLibrarySync = (
   local: LibraryManifest,
   remote: LibraryManifest,
   desired: LibraryManifest,
-): SyncPlan => {
+): SyncChanges => {
   const normalizedLocal = normalizeLibraryManifest(local);
   const normalizedRemote = normalizeLibraryManifest(remote);
   const normalizedDesired = normalizeLibraryManifest(desired);

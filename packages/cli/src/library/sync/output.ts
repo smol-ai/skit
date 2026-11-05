@@ -2,46 +2,8 @@ import { Schema } from "effect";
 import { SyncConflictDetail } from "@smolai/skit-core/library/session";
 export { SyncConflictDetail };
 
-export const SyncEnabledItem = Schema.Struct({
-  kind: Schema.Literals(["collection", "skill"]),
-  label: Schema.String,
-});
-
-export const SyncChange = Schema.Union([
-  Schema.Struct({
-    kind: Schema.Literal("collection"),
-    action: Schema.Literals(["add", "update", "remove"]),
-    subject_id: Schema.String,
-    label: Schema.String,
-    label_before: Schema.optionalKey(Schema.String),
-    label_after: Schema.optionalKey(Schema.String),
-    skills_added: Schema.Array(Schema.String),
-    skills_removed: Schema.Array(Schema.String),
-    skills_changed: Schema.Array(Schema.String),
-    /** Only fetch records or retained evidence differ; no Skill changes. */
-    evidence_only: Schema.Boolean,
-  }),
-  Schema.Struct({
-    kind: Schema.Literal("enabled"),
-    action: Schema.Literals(["add", "update", "remove"]),
-    /** Items this change enables and disables: a whole Collection or one Skill. */
-    items_added: Schema.Array(SyncEnabledItem),
-    items_removed: Schema.Array(SyncEnabledItem),
-  }),
-]);
-
-export const SyncPlan = Schema.Struct({
-  enabled_resolution: Schema.optionalKey(
-    Schema.Struct({
-      winner: Schema.Literal("local"),
-      collections: Schema.Array(
-        Schema.Struct({ collection_id: Schema.String, label: Schema.String }),
-      ),
-    }),
-  ),
-  local: Schema.Array(SyncChange),
-  remote: Schema.Array(SyncChange),
-});
+import { SyncChanges as SyncPlan } from "@smolai/skit-core/library/session";
+export { SyncPlan };
 
 export const SyncResult = Schema.Struct({
   status: Schema.Literals([
@@ -72,10 +34,6 @@ export const SyncResult = Schema.Struct({
   plan: Schema.optionalKey(SyncPlan),
 });
 export type SyncResult = typeof SyncResult.Type;
-
-export type SyncEnabledItem = typeof SyncEnabledItem.Type;
-export type SyncChange = typeof SyncChange.Type;
-export type SyncPlan = typeof SyncPlan.Type;
 
 export const syncOutputContracts = {
   librarySync: { id: "skit.library.sync.v13", schema: SyncResult },

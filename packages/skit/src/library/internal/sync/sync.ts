@@ -132,7 +132,7 @@ export type SyncApplyRequest =
       readonly plan: RemoteSyncPlan;
       readonly receipt: RemoteReceipt;
     };
-interface SyncResult {
+export interface SyncResult {
   readonly installed: number;
   readonly uninstalled: number;
   readonly enablementIssues: readonly string[];

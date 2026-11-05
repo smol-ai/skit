@@ -1,28 +1,26 @@
+import { normalizeLibraryManifest } from "../src/library/manifest.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
+import { CURRENT_LIBRARY_STATE_VERSION, LibraryState } from "../src/library/library-state.js";
 import {
-  CURRENT_LIBRARY_STATE_VERSION,
   currentCollectionSkills,
   currentSkillVersion,
   sourceImports,
+  LibraryManifest,
+} from "../src/library/library-contracts.js";
+import {
   makeImportId,
   makeCollectionId,
   makeMachineId,
   makeCollectionVersionId,
   makeSkillId,
   makeSkillVersionId,
-  LibraryManifest,
-  LibraryState,
   makeInstalledSkillId,
-} from "@smolai/skit-core";
-import {
-  normalizeLibraryManifest,
-  mergeLibraryManifests,
-  prepareLibraryMerge,
-} from "../src/library/sync/merge.js";
-import { planLibrarySync } from "../src/library/sync/plan.js";
+} from "../src/library/entity-ids.js";
+import { mergeLibraryManifests, prepareLibraryMerge } from "../src/library/internal/sync/merge.js";
+import { planLibrarySync } from "../src/library/internal/sync/plan.js";
 
-import { alignLibrary, aliasManifest } from "@smolai/skit-core/library/session";
+import { alignLibrary, aliasManifest } from "../src/library/internal/sync/alignment.js";
 
 const hash = `sha256:${"a".repeat(64)}`;
 const hashB = `sha256:${"b".repeat(64)}`;

@@ -19,7 +19,7 @@ import { importSource, previewLibrarySource } from "../src/library/source.js";
 import { planUpdates, updateSubjects } from "../src/library/update/operation.js";
 import { checkSubjects } from "../src/library/check/operation.js";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
-import { planLibrarySync } from "../src/library/sync/plan.js";
+import { openSyncSession } from "@smolai/skit-core/library/session";
 import { executeRemove } from "../src/library/remove/operation.js";
 
 import {
@@ -359,17 +359,17 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     assert.strictEqual(after.collections.length, 1);
     assert.strictEqual(after.skills[0]?.skill_id, added.skill_ids[0]);
     assert.strictEqual(after.skills[0]?.versions.length, 2);
-    const desired = yield* libraryManifestFromLocalState(after);
-    const empty = {
-      ...desired,
-      collections: [],
-      skills: [],
-      collection_versions: [],
-      imports: [],
-      snapshot_digests: [],
-      enabled: [],
-    };
-    assert.deepStrictEqual(planLibrarySync(desired, empty, desired).remote[0]?.kind, "collection");
+    const sync = yield* run(
+      Effect.gen(function* () {
+        const library = yield* Library.Service;
+        return yield* openSyncSession(
+          { origin: "https://registry.test", remote: null },
+          { base: yield* library.read },
+        );
+      }),
+    );
+    assert.strictEqual(sync._tag, "Ready");
+    if (sync._tag === "Ready") assert.strictEqual(sync.plan.remote[0]?.kind, "collection");
     yield* writingTo(home, run(setLibraryEnabled(enableInput(false))));
     const disabled = yield* stateAt(home);
     assert.deepStrictEqual(disabled.enabled, []);

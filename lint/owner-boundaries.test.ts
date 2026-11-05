@@ -191,6 +191,35 @@ describe("skit/owner-boundaries", () => {
     }
   });
 
+  test("sync derivation stays behind the Library session", async () => {
+    for (const name of [
+      "mergeLibraryManifests",
+      "prepareLibraryMerge",
+      "planLibrarySync",
+      "selectDeviceSkills",
+      "alignLibrary",
+      "aliasManifest",
+      "aliasDevice",
+      "resolveSyncInstalledSkillCollisions",
+      "previewSyncInstalledSkills",
+    ]) {
+      expect(
+        await reported(
+          `import { ${name} } from "@smolai/skit-core/library/session";`,
+          "owner-boundaries",
+          "packages/cli/src/library/sync/workflow.ts",
+        ),
+      ).toEqual([name]);
+    }
+    expect(
+      await reported(
+        'import { openSyncSession } from "@smolai/skit-core/library/session";',
+        "owner-boundaries",
+        "packages/cli/src/library/sync/workflow.ts",
+      ),
+    ).toEqual([]);
+  });
+
   test("private unit tests use the real module; public barrels never grant test authority", async () => {
     expect(
       await reported(

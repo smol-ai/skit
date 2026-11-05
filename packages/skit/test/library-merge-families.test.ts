@@ -1,27 +1,29 @@
 import { assert, it } from "@effect/vitest";
 import { Schema } from "effect";
 import { createHash } from "node:crypto";
+import { canonicalJson } from "../src/shared/json.js";
 import {
-  canonicalJson,
   currentLibraryManifest,
   librarySnapshotDigests,
   LibraryManifest,
+  type Import,
+  type Enabled,
+  type Collection,
+  type CollectionVersion,
+  type Skill,
+  type SkillVersion,
+} from "../src/library/library-contracts.js";
+import {
   makeImportId,
   makeCollectionId,
   makeMachineId,
   makeCollectionVersionId,
   makeSkillId,
   makeSkillVersionId,
-  type Import,
-  type Enabled,
-  type Collection,
   type CollectionId,
-  type CollectionVersion,
-  type Skill,
   type SkillId,
-  type SkillVersion,
-} from "@smolai/skit-core";
-import { mergeLibraryManifests } from "../src/library/sync/merge.js";
+} from "../src/library/entity-ids.js";
+import { mergeLibraryManifests } from "../src/library/internal/sync/merge.js";
 
 // Each family below is built so that its outcome is known by construction from the merge rules in
 // docs/library-sync-outcomes.md: which records each side changed relative to the base, and which

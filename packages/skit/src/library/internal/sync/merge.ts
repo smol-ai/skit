@@ -1,29 +1,27 @@
-import { normalizeLibraryManifest } from "@smolai/skit-core";
-import { alignLibrary, aliasManifest, aliasDevice } from "@smolai/skit-core/library/session";
+import { normalizeLibraryManifest } from "../../manifest.js";
+import { alignLibrary, aliasManifest, aliasDevice } from "./alignment.js";
 import {
   importCanBeRefetched,
   sourceImports,
   currentCollectionSkills,
-  canonicalJson,
   currentLibraryManifest,
   librarySnapshotDigests,
-  Merge,
   LibraryManifest,
-  LibraryState,
-  emptyLibraryState,
   enabledSkillIds,
   mergeEnabled,
   currentSkillVersion,
   type Enabled,
-  type CollectionId,
-  type SkillId,
   type Collection,
   type Skill,
   type CollectionVersion,
   type Import,
-} from "@smolai/skit-core";
+} from "../../library-contracts.js";
+import { canonicalJson } from "../../../shared/json.js";
+import * as Merge from "../../../sync/merge.js";
+import { LibraryState, emptyLibraryState } from "../../library-state.js";
+import { type CollectionId, type SkillId } from "../../entity-ids.js";
 import { Array, Data, Effect, Option, Order, Record, Result, Schema } from "effect";
-import { SyncConflictDetail } from "./output.js";
+import { SyncConflictDetail } from "./conflict.js";
 
 const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
 const byKey = <T>(records: readonly T[], key: (record: T) => string) =>
@@ -181,8 +179,6 @@ function mergeEnabledIntent(
     resolvedCollections,
   };
 }
-
-export { normalizeLibraryManifest } from "@smolai/skit-core";
 
 function mergeRecords<T>(
   label: string,
