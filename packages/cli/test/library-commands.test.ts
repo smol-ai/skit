@@ -4,11 +4,11 @@ import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem, Option, Result, Schema } from "effect";
 import { join } from "node:path";
 
-import { presentListCommand } from "../src/library/commands/list.js";
-import { browseLibrary } from "../src/library/presentation/browse.js";
+import { presentListCommand } from "../src/library/list.js";
+import { browseLibrary } from "../src/library/list/browse.js";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
-import { renderLibraryList } from "../src/library/presentation/list.js";
-import { ListResult } from "../src/library/workflows/list-contract.js";
+import { renderLibraryList } from "../src/library/list/present.js";
+import { ListResult } from "../src/library/list/output.js";
 import {
   confirmLibraryChange,
   openLibrarySession,

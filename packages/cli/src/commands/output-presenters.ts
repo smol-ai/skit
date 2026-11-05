@@ -10,7 +10,7 @@ import { renderSetEnabled } from "../library/enable.js";
 import { renderRemove, renderRemovePlan } from "../library/remove.js";
 import { renderCheck } from "../library/check.js";
 import { renderLibrarySync } from "../library/presentation/sync.js";
-import { renderLibraryList } from "../library/presentation/list.js";
+import { renderLibraryList } from "../library/list.js";
 import { renderAuditV1Alpha4 } from "../audit/presentation/report.js";
 import { severityHeadline } from "../audit/presentation/language.js";
 import {

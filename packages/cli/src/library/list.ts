@@ -3,16 +3,16 @@ import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
 import { openLibraryView, openLibrarySession } from "@smolai/skit-core/library/session";
 import { Option, Effect } from "effect";
 import { Command } from "effect/cli";
-import { handleLibraryCommand } from "../../commands/handler.js";
-import { CommandMetadata } from "../../commands/metadata.js";
-import { outputContracts } from "../../commands/output-contracts.js";
-import { localFlags } from "../../commands/parameters.js";
-import { Renderer } from "../../terminal/renderer.js";
-import { result } from "../../commands/result.js";
-import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
-import { terminalPrompterLayer } from "../../terminal/prompter.js";
-import { promptsAllowed } from "../../terminal/interactivity.js";
-import { browseLibrary } from "../presentation/browse.js";
+import { handleLibraryCommand } from "../commands/handler.js";
+import { CommandMetadata } from "../commands/metadata.js";
+import { listOutputContracts } from "./list/output.js";
+import { localFlags } from "../commands/parameters.js";
+import { Renderer } from "../terminal/renderer.js";
+import { encodeResult as result } from "../commands/encode-result.js";
+import { libraryCommandConfiguration } from "../commands/library-configuration.js";
+import { terminalPrompterLayer } from "../terminal/prompter.js";
+import { promptsAllowed } from "../terminal/interactivity.js";
+import { browseLibrary } from "./list/browse.js";
 
 export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
   const view = yield* Effect.flatMap(SkitConfiguration, (paths) => openLibraryView(paths.skitHome));
@@ -40,7 +40,7 @@ export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
     enabled_skills: view.enabledEverywhere.skills,
   };
   const renderer = yield* Renderer;
-  yield* renderer.result(result("list", value));
+  yield* renderer.result(result("list", listOutputContracts.list, value));
 });
 
 export const listCliCommand = Command.make("list", localFlags, (input) =>
@@ -66,8 +66,11 @@ export const listCliCommand = Command.make("list", localFlags, (input) =>
   Command.withExamples([{ command: "skit list" }, { command: "skit list --json" }]),
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read", "filesystem.write"] },
-    outputSchemas: [outputContracts.list],
+    outputSchemas: [listOutputContracts.list],
     exitCodes: [0, 12, 64, 65],
     interactive: true,
   }),
 );
+
+export { listOutputContracts } from "./list/output.js";
+export { renderLibraryList } from "./list/present.js";

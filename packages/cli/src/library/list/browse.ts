@@ -3,7 +3,7 @@ import {
   metadataSource,
   metadataRevision,
   metadataDate,
-} from "./skill-metadata.js";
+} from "../presentation/skill-metadata.js";
 import { terminalColors } from "../../terminal/style.js";
 import { Effect } from "effect";
 import { resolve } from "node:path";
@@ -32,7 +32,7 @@ import {
 } from "@smolai/skit-core/library/session";
 import { Prompter, PromptCancelled } from "../../terminal/prompter.js";
 import { Renderer } from "../../terminal/renderer.js";
-import { promptForScope } from "./scope-prompt.js";
+import { promptForScope } from "../presentation/scope-prompt.js";
 
 const DONE = "Done";
 const BACK_TO_COLLECTIONS = "Back to collections";

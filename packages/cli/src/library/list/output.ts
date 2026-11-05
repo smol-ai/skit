@@ -35,3 +35,7 @@ export const ListResult = Schema.Struct({
   enabled_skills: Schema.Array(Schema.String),
 });
 export type ListResult = typeof ListResult.Type;
+
+export const listOutputContracts = {
+  list: { id: "skit.list.v7", schema: ListResult },
+} as const;

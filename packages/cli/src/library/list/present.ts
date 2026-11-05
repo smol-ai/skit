@@ -1,11 +1,8 @@
 import { createColors } from "picocolors";
-import { metadataDate, metadataSource, metadataRevision } from "./skill-metadata.js";
-import type { ContractDataForId } from "../../commands/output-contracts.js";
+import { metadataDate, metadataSource, metadataRevision } from "../presentation/skill-metadata.js";
+import type { ListResult } from "./output.js";
 
-export function renderLibraryList(
-  data: ContractDataForId<"skit.list.v7">,
-  color = createColors(false),
-): string {
+export function renderLibraryList(data: ListResult, color = createColors(false)): string {
   if (data.subjects.length === 0) return "No retained Skills in this Library.";
   const lines: string[] = [];
   for (const subject of data.subjects) {

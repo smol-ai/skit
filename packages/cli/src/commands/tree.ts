@@ -5,7 +5,7 @@ import { serverBootstrapCliCommand } from "../registry/commands/bootstrap.js";
 import { authLogoutCliCommand } from "../registry/commands/logout.js";
 import { authLoginCliCommand } from "../registry/commands/login.js";
 import { authStatusCliCommand } from "../registry/commands/status.js";
-import { listCliCommand } from "../library/commands/list.js";
+import { listCliCommand } from "../library/list.js";
 import { addCliCommand } from "../library/commands/add.js";
 import { removeCliCommand } from "../library/remove.js";
 import { updateCliCommand } from "../library/commands/update.js";

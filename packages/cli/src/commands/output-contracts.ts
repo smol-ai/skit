@@ -26,7 +26,7 @@ import { checkOutputContracts } from "../library/check.js";
 import { AddPreview, AddResult } from "../library/workflows/add-contract.js";
 import { UpdatePlan, UpdateResult } from "../library/workflows/update-contract.js";
 import { SyncResult } from "../library/workflows/library-sync-contract.js";
-import { ListResult } from "../library/workflows/list-contract.js";
+import { listOutputContracts } from "../library/list.js";
 import { EditImportPlan, EditImportResult } from "@smolai/skit-core/library/session";
 import { RepositoryPolicyResult } from "@smolai/skit-core/library/setup";
 
@@ -110,7 +110,7 @@ export const outputContracts = {
   authorDelete: effectOutput("skit.author.delete.v2", AuthorSkitDeleteResponse),
   add: effectOutput("skit.add.v7", AddResult),
   addPreview: effectOutput("skit.add.preview.v4", AddPreview),
-  list: effectOutput("skit.list.v7", ListResult),
+  list: listOutputContracts.list,
   securityReview: effectOutput("skit.security.review.v4", SkillSecurityReview),
   securityAccept: effectOutput("skit.security.accept.v4", SkillSecurityReview),
   inventory: effectOutput("skit.inventory.v13", MachineInventoryResult),

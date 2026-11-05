@@ -4,7 +4,7 @@ import {
   skitLayer,
   type SkillsShLockFileEntry,
 } from "@smolai/skit-core";
-import { ListResult } from "../src/library/workflows/list-contract.js";
+import { ListResult } from "../src/library/list/output.js";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { Effect, FileSystem, Schema } from "effect";
@@ -19,8 +19,8 @@ import {
 } from "@smolai/skit-core/library/session";
 import { inventoryCommand } from "../src/library/commands/inventory.js";
 import { renderMachineSkills } from "../src/library/presentation/inventory.js";
-import { renderLibraryList } from "../src/library/presentation/list.js";
-import { presentListCommand } from "../src/library/commands/list.js";
+import { renderLibraryList } from "../src/library/list/present.js";
+import { presentListCommand } from "../src/library/list.js";
 
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import {
