@@ -1,13 +1,12 @@
 import { env } from "cloudflare:test";
 import { D1Client } from "@effect/sql-d1";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer } from "effect";
+import { Effect } from "effect";
 import { makeWebHandler } from "../src/http.js";
-import { PasswordHasher, layer as passwordHasherLayer } from "../src/auth/password.js";
+import { passwordCallbacks } from "../src/auth/password.js";
 import { databaseLayer } from "../src/platform/cloudflare.js";
 
 const platformLayer = databaseLayer(env.DB);
-const testLayer = Layer.merge(platformLayer, passwordHasherLayer);
 
 const web = makeWebHandler(env);
 
@@ -233,9 +232,11 @@ describe("bootstrap status", () => {
       );
       expect(account[0]?.issuer).toBe("local:credential");
       expect(
-        yield* (yield* PasswordHasher).verify(
-          "correct horse battery staple",
-          account[0]?.password ?? "",
+        yield* webPromise(() =>
+          passwordCallbacks(globalThis.crypto).verify({
+            password: "correct horse battery staple",
+            hash: account[0]?.password ?? "",
+          }),
         ),
       ).toBe(true);
       for (const table of [
@@ -251,7 +252,7 @@ describe("bootstrap status", () => {
         );
         expect(count[0]).toEqual({ count: 1 });
       }
-    }).pipe(Effect.provide(testLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("rejects malformed input, wrong origins, and wrong secrets", () =>

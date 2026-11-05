@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { WebCrypto } from "effect/crypto";
 
 const ITERATIONS = 100_000;
@@ -8,15 +8,6 @@ const SALT_BYTES = 16;
 export class PasswordHashError extends Schema.TaggedError<PasswordHashError>()(
   "PasswordHasher.PasswordHashError",
   { cause: Schema.Defect() },
-) {}
-
-export interface PasswordHasherService {
-  readonly hash: (password: string) => Effect.Effect<string, PasswordHashError>;
-  readonly verify: (password: string, stored: string) => Effect.Effect<boolean, PasswordHashError>;
-}
-
-export class PasswordHasher extends Context.Service<PasswordHasher, PasswordHasherService>()(
-  "@skit-server-effect/PasswordHasher",
 ) {}
 
 const derivePromise = async (crypto: Crypto, password: string, salt: Uint8Array) => {
@@ -67,27 +58,12 @@ export const passwordCallbacks = (crypto: Crypto) => ({
   },
 });
 
-export const layer = Layer.effect(
-  PasswordHasher,
-  Effect.gen(function* () {
-    const crypto = yield* WebCrypto.WebCrypto;
-    const callbacks = passwordCallbacks(crypto);
-    const hash = Effect.fn("PasswordHasher.hash")((password: string) =>
-      // oxlint-disable-next-line skit/no-promise-wrappers -- Better Auth's password implementation is Promise-shaped; PasswordHasher owns the Effect adapter.
-      Effect.tryPromise({
-        try: () => callbacks.hash(password),
-        catch: (cause) => new PasswordHashError({ cause }),
-      }),
-    );
-
-    const verify = Effect.fn("PasswordHasher.verify")((password: string, stored: string) =>
-      // oxlint-disable-next-line skit/no-promise-wrappers -- Better Auth's password implementation is Promise-shaped; PasswordHasher owns the Effect adapter.
-      Effect.tryPromise({
-        try: () => callbacks.verify({ hash: stored, password }),
-        catch: (cause) => new PasswordHashError({ cause }),
-      }),
-    );
-
-    return PasswordHasher.of({ hash, verify });
-  }),
-);
+/** Effect boundary for the same callbacks Better Auth uses. */
+export const hashPassword = Effect.fn("Password.hash")(function* (password: string) {
+  const crypto = yield* WebCrypto.WebCrypto;
+  // oxlint-disable-next-line skit/no-promise-wrappers -- Better Auth's shared password implementation is Promise-shaped; this function owns its Effect boundary.
+  return yield* Effect.tryPromise({
+    try: () => passwordCallbacks(crypto).hash(password),
+    catch: (cause) => new PasswordHashError({ cause }),
+  });
+});

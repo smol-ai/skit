@@ -5,7 +5,6 @@ import {
   type Scope as AuthenticationScope,
 } from "./auth/authentication.js";
 import { layer as betterAuthLayer } from "./auth/better-auth.js";
-import { layer as passwordHasherLayer } from "./auth/password.js";
 import { layer as authorizationLayer } from "./authorization/service.js";
 import { layer as bootstrapServiceLayer } from "./bootstrap/service.js";
 import { ServerConfiguration } from "./configuration.js";
@@ -88,7 +87,6 @@ export const applicationLayers = (
   if (configured === undefined)
     return { release, feedback, authenticated: undefined, bootstrap: undefined };
 
-  const passwordHasher = passwordHasherLayer.pipe(Layer.provideMerge(platform));
   const authenticated = Layer.mergeAll(
     authenticationLayer(supportedScopes),
     teamsLayer,
@@ -110,14 +108,13 @@ export const applicationLayers = (
       }).pipe(Layer.provideMerge(platform)),
     ),
     Layer.provideMerge(authorization),
-    Layer.provideMerge(passwordHasher),
   );
   const bootstrap = env.SKIT_BOOTSTRAP_SECRET
     ? Layer.mergeAll(
         bootstrapServiceLayer(env.SKIT_BOOTSTRAP_SECRET),
         bootstrapRateLimiterLayer(env.BOOTSTRAP_RATE_LIMITER),
         Layer.succeed(ServerConfiguration, { publicAppOrigin: configured.publicAppOrigin }),
-      ).pipe(Layer.provideMerge(passwordHasher))
+      ).pipe(Layer.provideMerge(platform))
     : undefined;
   return { release, feedback, authenticated, bootstrap };
 };

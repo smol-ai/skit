@@ -1,6 +1,6 @@
 import { D1Client } from "@effect/sql-d1";
 import { Clock, Context, Effect, Layer, Schema } from "effect";
-import { PasswordHashError, PasswordHasher, type PasswordHasherService } from "../auth/password.js";
+import { PasswordHashError, hashPassword } from "../auth/password.js";
 import { provisionPrincipal } from "../auth/provisioning.js";
 import { normalizeNamespace } from "../domain/identifiers.js";
 import { DatabaseError, databaseError, type DatabaseSqlClient } from "../platform/cloudflare.js";
@@ -78,7 +78,6 @@ export const layer = (bootstrapSecret: string) =>
     Bootstrap,
     Effect.gen(function* () {
       const sql: DatabaseSqlClient = yield* D1Client.D1Client;
-      const passwordHasher: PasswordHasherService = yield* PasswordHasher;
       const random = yield* SecureRandom.SecureRandom;
       const digests = yield* Digest.Digest;
       const clock = yield* Clock.Clock;
@@ -129,7 +128,7 @@ export const layer = (bootstrapSecret: string) =>
         const principalId = `principal_${(yield* random.uuidV4()).replaceAll("-", "")}`;
         const now = yield* clock.currentTimeMillis;
         const timestamp = new Date(now).toISOString();
-        const passwordHash = yield* passwordHasher.hash(input.password);
+        const passwordHash = yield* hashPassword(input.password);
         const committed = yield* db(
           "commit initial operator",
           sql.batch([
