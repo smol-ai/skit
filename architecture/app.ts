@@ -265,7 +265,7 @@ export const owners = {
   },
 
   Skits: {
-    status: "RESHAPE",
+    status: "EXISTS",
     module: "packages/skit-server-effect/src/skits/**",
     owns: [
       "skits",
@@ -297,7 +297,7 @@ export const owners = {
   },
 
   ServerLibrary: {
-    status: "RESHAPE",
+    status: "EXISTS",
     module: "packages/skit-server-effect/src/library/**",
     owns: ["libraries", "library_revisions", "library_snapshots", "<library_id>/<digest> blobs"],
     ops: ["read", "write(expected, manifest)", "snapshots.{upload, download}"],
@@ -310,9 +310,10 @@ export const owners = {
   },
 
   // decisions.md "No per-SKIT grants" (decided): resource_grants dropped; access is namespace owner or team member. HttpApi
-  // middleware establishes principal + scope; each owner enforces access.
+  // middleware establishes the Principal; Authentication checks scope after adapter decoding.
+  // Each owner enforces namespace/team access.
   AuthorizationMiddleware: {
-    status: "RESHAPE",
+    status: "EXISTS",
     owns: [],
     ops: ["principal + scope for the matched route"],
     invariants: [
