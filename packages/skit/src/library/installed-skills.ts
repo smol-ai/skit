@@ -12,7 +12,7 @@ import {
   Warning,
 } from "./installed-skill-facts.js";
 export { Destination, Duplicate, DuplicateScanIncomplete } from "./installed-skill-facts.js";
-import { Context, Data, Effect, FileSystem, Layer, Option, Path, Schema, Scope } from "effect";
+import { Context, Data, Effect, FileSystem, Option, Path, Schema, Scope } from "effect";
 import { dirname, join, resolve } from "node:path";
 import { Digest } from "effect/crypto";
 import * as InstalledSkillFiles from "../installed-skills/files.js";
@@ -566,6 +566,4 @@ export const recordedRouting = Effect.fn("recordedRouting")(function* (state: Li
   } satisfies Routing;
 });
 
-export const layer = (routing?: Routing | InventoryRootOptions) =>
-  Layer.effect(Service, make(routing));
 export * as InstalledSkills from "./installed-skills.js";
