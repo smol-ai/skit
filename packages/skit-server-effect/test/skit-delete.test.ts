@@ -1,4 +1,4 @@
-import { layer as authorizationLayer } from "../src/authorization/service.js";
+import { layer as teamsLayer } from "../src/teams/service.js";
 import { BrowserCrypto } from "@effect/platform-browser";
 import { env } from "cloudflare:test";
 import { D1Client } from "@effect/sql-d1";
@@ -18,10 +18,7 @@ const platformLayer = Layer.mergeAll(
   databaseLayer(env.DB),
   BrowserCrypto.layer,
 );
-const testLayer = skitsLayer.pipe(
-  Layer.provide(authorizationLayer),
-  Layer.provideMerge(platformLayer),
-);
+const testLayer = skitsLayer.pipe(Layer.provide(teamsLayer), Layer.provideMerge(platformLayer));
 
 const prepareDatabase = Effect.flatMap(D1Client.D1Client, (sql) =>
   sql.batch([

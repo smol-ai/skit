@@ -1,7 +1,6 @@
 import { BrowserCrypto } from "@effect/platform-browser";
 import { Layer } from "effect";
 import { layer as identityLayer, type Scope as AuthenticationScope } from "./identity/service.js";
-import { layer as authorizationLayer } from "./authorization/service.js";
 import { ServerConfiguration } from "./configuration.js";
 import { layer as skitsLayer } from "./skits/service.js";
 import { layer as feedbackServiceLayer } from "./feedback/service.js";
@@ -63,8 +62,8 @@ export const applicationLayers = (
     databaseLayer(env.DB),
     BrowserCrypto.layer,
   );
-  const authorization = authorizationLayer.pipe(Layer.provideMerge(platform));
-  const release = skitsLayer.pipe(Layer.provide(authorization));
+  const teams = teamsLayer.pipe(Layer.provideMerge(platform));
+  const release = skitsLayer.pipe(Layer.provide(teams));
   // Feedback does not wait for authentication to be configured: reports can always be anonymous.
   const feedback =
     env.FEEDBACK_MODE === "open" ? feedbackServiceLayer.pipe(Layer.provide(platform)) : undefined;
@@ -87,6 +86,6 @@ export const applicationLayers = (
     serverLibraryLayer,
     skitsLayer,
     Layer.succeed(ServerConfiguration, { publicAppOrigin: configured.publicAppOrigin }),
-  ).pipe(Layer.provideMerge(teamsLayer), Layer.provideMerge(authorization));
+  ).pipe(Layer.provideMerge(teams));
   return { release, feedback, authenticated };
 };

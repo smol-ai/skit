@@ -4,7 +4,7 @@ import { D1Client } from "@effect/sql-d1";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { Skits, layer as skitsLayer } from "../src/skits/service.js";
-import { layer as authorizationLayer } from "../src/authorization/service.js";
+import { layer as teamsLayer } from "../src/teams/service.js";
 import { databaseLayer, blobStoreLayer } from "../src/platform/cloudflare.js";
 
 const platformLayer = Layer.mergeAll(
@@ -13,7 +13,7 @@ const platformLayer = Layer.mergeAll(
   BrowserCrypto.layer,
 );
 const testLayer = skitsLayer.pipe(
-  Layer.provideMerge(authorizationLayer.pipe(Layer.provideMerge(platformLayer))),
+  Layer.provideMerge(teamsLayer.pipe(Layer.provideMerge(platformLayer))),
 );
 const principal = {
   id: "principal_test",

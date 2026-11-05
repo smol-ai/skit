@@ -238,6 +238,7 @@ export const owners = {
       "provision",
       "claimUsername",
       "createOperator",
+      "makeNamespaceAccess → {ownsNamespace, ownedNamespaces}",
       "tokens.{create, list, revoke}",
       "DESIGNED, NOT IMPLEMENTED: suspend, reinstate, invalidateCredentials (writes state, authorization_generation)", // decisions.md "One Identity owner"
     ],
@@ -255,10 +256,10 @@ export const owners = {
   Teams: {
     status: "EXISTS",
     owns: ["teams", "team_memberships"],
-    ops: ["create", "addMember", "removeMember", "isMember"],
+    ops: ["create", "addMember", "removeMember", "isMember", "memberTeamIds"],
     removes: [
       "direct INSERT into namespaces (via Identity)",
-      "private ownedTeam SQL (via Authorization)",
+      "membership lookup outside Teams (done: namespace access uses Teams.memberTeamIds; owner-role checks stay private to Teams)",
     ],
   },
 
@@ -318,7 +319,7 @@ export const owners = {
     removes: [
       "per-handler origin checks (done: 9 copies and credentialOriginAllowed removed)",
       "resource_grants table, its indexes and every grant query (decisions.md: No per-SKIT grants)",
-      "Authorization service and its 7 single-caller can*/has*/scope methods",
+      "Authorization service and its single-caller can*/has*/scope methods (done: role checks live in owners; namespace reads use Identity with Teams membership reads)",
       "authorization checks split between handlers and services",
       "Readiness.isServerOperator (done: auth owns operator lookup); Teams' private ownedTeam SQL",
     ],

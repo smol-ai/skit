@@ -1,4 +1,4 @@
-import { layer as authorizationLayer } from "../src/authorization/service.js";
+import { layer as teamsLayer } from "../src/teams/service.js";
 import { BrowserCrypto } from "@effect/platform-browser";
 import { D1Client } from "@effect/sql-d1";
 import { env } from "cloudflare:test";
@@ -10,7 +10,7 @@ import { BlobStore, blobStoreLayer, databaseLayer } from "../src/platform/cloudf
 import { Skits, layer as skitsLayer } from "../src/skits/service.js";
 
 const testLayer = skitsLayer.pipe(
-  Layer.provide(authorizationLayer),
+  Layer.provide(teamsLayer),
   Layer.provideMerge(
     Layer.mergeAll(blobStoreLayer(env.SKIT_BLOBS), databaseLayer(env.DB), BrowserCrypto.layer),
   ),

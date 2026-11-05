@@ -1,6 +1,6 @@
 import type { Principal } from "../identity/service.js";
 import { makeList, type List } from "./internal/list.js";
-import { Authorization } from "../authorization/service.js";
+import { makeNamespaceAccess } from "../identity/namespaces.js";
 import { makeReleaseReads, type Releases } from "./internal/releases.js";
 import { makePublication, type Publication } from "./internal/publication.js";
 import { makeDeletion, type Deletion } from "./internal/deletion.js";
@@ -179,7 +179,7 @@ export const layer = Layer.effect(
   Skits,
   Effect.gen(function* () {
     const blobs = yield* BlobStore;
-    const authorization = yield* Authorization;
+    const namespaces = yield* makeNamespaceAccess();
     const sql: DatabaseSqlClient = yield* D1Client.D1Client;
     const digests = yield* Digest.Digest;
     const random = yield* SecureRandom.SecureRandom;
@@ -534,7 +534,7 @@ export const layer = Layer.effect(
     ) {
       const { owner, slug } = target;
       const credentialId = principal.tokenId;
-      const requireOwner = authorization
+      const requireOwner = namespaces
         .ownsNamespace(principal, owner)
         .pipe(
           Effect.flatMap((allowed) => (allowed ? Effect.void : Effect.fail(new SkitForbidden()))),
@@ -555,10 +555,10 @@ export const layer = Layer.effect(
 
     return Skits.of({
       prepareAuthoring,
-      list: makeList(sql, authorization.ownedNamespaces),
-      releases: makeReleaseReads(sql, blobs, authorization.ownsNamespace),
-      ...makeDeletion(sql, blobs, authorization.ownsNamespace),
-      ...makePublication(sql, blobs, digests, random, current, authorization.ownsNamespace),
+      list: makeList(sql, namespaces.ownedNamespaces),
+      releases: makeReleaseReads(sql, blobs, namespaces.ownsNamespace),
+      ...makeDeletion(sql, blobs, namespaces.ownsNamespace),
+      ...makePublication(sql, blobs, digests, random, current, namespaces.ownsNamespace),
     });
   }),
 );

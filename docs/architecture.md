@@ -334,6 +334,8 @@ Better Auth owns email/password accounts and secure browser sessions. CLI automa
 
 Namespaces are controlled by an individual Principal or a registry-local team. Current team membership participates in Authorship, Publication, Library, and private Release access, so removing a membership removes authority on the next request. Author inventory lists SKITs in those owned Namespaces; per-resource grants do not confer content access. Suspending a Principal or advancing its authorization generation invalidates previously issued credentials without rewriting every PAT.
 
+Identity owns namespace access queries and obtains current membership IDs from Teams. Resource owners use these queries to enforce their own access rules; there is no separate Authorization service. Namespace reads do not require constructing the account/session SDK, so public Release reads remain available when accounts are not configured.
+
 The server retains immutable revisions of each principal's portable Library Manifest using optimistic concurrency. These revisions contain Library Entries and Bindings only. In accordance with ADR-0001 they reject device-local Projection, Custody, paths, observations, ownership markers, drift, conflicts, suppression, and audit history rather than importing those fields into portable intent.
 
 Private Library snapshots require the Library's owning Principal or current membership in its owning team. Per-resource grants do not authorize Library snapshot reads. Removing team membership removes access on the next request.

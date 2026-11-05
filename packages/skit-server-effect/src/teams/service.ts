@@ -27,6 +27,9 @@ export class OwnerRoleImmutable extends Schema.TaggedError<OwnerRoleImmutable>()
 ) {}
 
 export interface TeamsService {
+  readonly memberTeamIds: (
+    principal: Principal,
+  ) => Effect.Effect<ReadonlyArray<string>, DatabaseError>;
   readonly isMember: (
     principal: Principal,
     teamId: string,
@@ -60,6 +63,19 @@ export const layer = Layer.effect(
     const clock = yield* Clock.Clock;
     const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
       effect.pipe(databaseError(operation));
+
+    const memberTeamIds = Effect.fn("Teams.memberTeamIds")(function* (principal: Principal) {
+      const rows = yield* db(
+        "read team memberships",
+        sql`SELECT team_id FROM team_memberships WHERE principal_id = ${principal.id}`,
+      );
+      const memberships = yield* Schema.decodeUnknownEffect(Schema.Array(TeamIdRow))(rows).pipe(
+        Effect.mapError(
+          (cause) => new DatabaseError({ operation: "decode team memberships", cause }),
+        ),
+      );
+      return memberships.map(({ team_id }) => team_id);
+    });
 
     const isMember = Effect.fn("Teams.isMember")(function* (principal: Principal, teamId: string) {
       const rows = yield* db(
@@ -168,6 +184,6 @@ export const layer = Layer.effect(
       return rows.length === 1;
     });
 
-    return Teams.of({ isMember, create, addMember, removeMember });
+    return Teams.of({ memberTeamIds, isMember, create, addMember, removeMember });
   }),
 );

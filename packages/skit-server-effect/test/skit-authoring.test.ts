@@ -3,7 +3,7 @@ import { D1Client } from "@effect/sql-d1";
 import { env } from "cloudflare:test";
 import { expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
-import { layer as authorizationLayer } from "../src/authorization/service.js";
+import { layer as teamsLayer } from "../src/teams/service.js";
 import { Skits, layer as skitsLayer } from "../src/skits/service.js";
 import { blobStoreLayer, databaseLayer } from "../src/platform/cloudflare.js";
 import { revisionRequest } from "./fixtures/revision-request.js";
@@ -14,7 +14,7 @@ const principal = {
   scopes: new Set(["authoring:write"] as const),
 };
 const testLayer = skitsLayer.pipe(
-  Layer.provide(authorizationLayer),
+  Layer.provide(teamsLayer),
   Layer.provideMerge(
     Layer.mergeAll(blobStoreLayer(env.SKIT_BLOBS), databaseLayer(env.DB), BrowserCrypto.layer),
   ),
