@@ -1,3 +1,4 @@
+// Type-only failure and service aliases preserve portable inferred consumer declarations.
 export * from "./harnesses/skill-listing/codex-discovery.js";
 export * from "./harnesses/skill-listing/contracts.js";
 export * from "./harnesses/skill-listing/discovery.js";
@@ -38,54 +39,18 @@ export {
 export { type HarnessInstallStatus, type OwnershipIssue } from "./installed-skills/metadata.js";
 export * from "./shared/failure.js";
 export {
-  DuplicateSkillNames,
-  DuplicateSkillPaths,
-  ConflictingInvocationDeclaration,
   ReadmeFrontmatterMissing,
   DescriptorMalformed,
-  SkillDiscoveryLimitExceeded,
-  SkillNameInvalid,
   SkitValidationFailed,
   type DescriptorFailure,
 } from "./artifact/failures.js";
+export { DirectSkillDocumentInvalid, NoSkitDescriptorFound } from "./sources/failures.js";
 export {
-  SourceRequired,
-  UnsafeSourceUrl,
-  InsecureSourceUrl,
-  ArchiveEntryLimitExceeded,
-  UnsafeArchivePath,
-  SourceNotFound,
-  UnsafeGitSubpath,
-  GitSourceFragment,
-  DirectSkillDocumentInvalid,
-  NoSkitDescriptorFound,
-} from "./sources/failures.js";
-export {
-  UnsafeInstalledSkillName,
-  UnsafeInstalledSkillBackups,
-  SharedTargetCollision,
-  InstalledPathCollision,
-  NoSkillsDirectory,
   SkillsDirectoryNotWritable,
-  OwnershipMarkerDisagrees,
-  ManageTargetChanged,
-  ManageContentMismatch,
   InstalledSkillFileMissing,
-  UninstallConflict,
 } from "./installed-skills/failures.js";
-export {
-  ContentAddressCollision,
-  UnknownInstalledSkill,
-  SecurityFindingAbsent,
-  AcceptanceIncomplete,
-  ImportContentInvalid,
-  InvalidLibraryState,
-  LibraryChanged,
-} from "./library/failures.js";
-export { HomeBusy } from "./platform/lock-failures.js";
-export { NotAnAuthorWorkspace } from "./author/failures.js";
+export { ImportContentInvalid, InvalidLibraryState } from "./library/failures.js";
 export { HarnessMetadataInvalid } from "./harnesses/metadata-failures.js";
-export { RegistryNotConfigured } from "./shared/input-failures.js";
 export * from "./harnesses/contracts.js";
 export * from "./harnesses/catalog.js";
 export * from "./harnesses/drivers.js";
@@ -106,7 +71,7 @@ export * from "./platform/layer.js";
 export * from "./platform/path-identity.js";
 export * from "./installed-skills/policy.js";
 export {
-  InstalledSkillFailure,
+  type InstalledSkillFailure,
   inspectOwnershipMarker,
   prepareInstalledSkillRebuild,
   type InstalledSkillMutationError,
@@ -123,7 +88,7 @@ export * from "./platform/tree-requirements.js";
 export * from "./shared/tree-error.js";
 export * from "./artifact/tree.js";
 export * from "./artifact/tree-entry.js";
-export { AuthorIgnoreRepository } from "./artifact/plain-author-ignore.js";
+export { type AuthorIgnoreRepository } from "./artifact/plain-author-ignore.js";
 
 export type {
   LibraryLayerError,
@@ -143,11 +108,14 @@ export * from "./library/collection-version-plan.js";
 export * from "./library/restore-progress.js";
 
 export {
-  CollectionRemovalMissing,
-  SkillRemovalRequiresCollection,
+  type CollectionRemovalMissing,
+  type SkillRemovalRequiresCollection,
 } from "./library/installation/remove.js";
 export * from "./library/installed-skill-hash.js";
-export { ImportRequestInvalid, InstalledSkillChanged } from "./library/import-collection.js";
+export {
+  type ImportRequestInvalid,
+  type InstalledSkillChanged,
+} from "./library/import-collection.js";
 export type {
   ImportRequestSkill,
   ImportRequest,
@@ -160,15 +128,11 @@ export type {
   ImportAuthoredCollectionError,
   ImportEditError,
 } from "./library/import-collection.js";
-export { InstalledSkillInvalid } from "./library/installation/install-enabled.js";
+export { type InstalledSkillInvalid } from "./library/installation/install-enabled.js";
 export * from "./library/snapshot-archive.js";
 export * from "./library/entity-ids.js";
 export * from "./library/machine-document.js";
-export {
-  LibraryAuditEvent,
-  LibraryAuditChange,
-  LibraryAuditInvalid,
-} from "./library/audit/audit-log.js";
+export { LibraryAuditEvent, type LibraryAuditInvalid } from "./library/audit/audit-log.js";
 
 export { errnoOf, isErrno } from "./shared/errno.js";
 
@@ -181,7 +145,7 @@ export * as History from "./history/history.js";
 export * as Sync from "./sync/sync.js";
 export { mergeAuthorTree, conflictKind } from "./author/merge/files.js";
 export {
-  Unusable as MachineSettingsUnusable,
+  type Unusable as MachineSettingsUnusable,
   type Settings as MachineSettingsSnapshot,
 } from "./library/machine-settings.js";
 
@@ -192,7 +156,6 @@ export * from "./library/subject-resolution.js";
 export * from "./library/duplicates.js";
 export * from "./library/source-inspection.js";
 export {
-  ReviewedChangeDiffers,
   type ReviewedChange,
   type UpdateChoice,
   type UpdatedCopy,
@@ -204,13 +167,16 @@ export type {
   ApplyError as LibraryApplyError,
 } from "./library/library.js";
 
-export { InstalledSkillWouldReplaceLink, InstalledSkillWouldDuplicate } from "./library/library.js";
+export {
+  type InstalledSkillWouldReplaceLink,
+  type InstalledSkillWouldDuplicate,
+} from "./library/library.js";
 
-export { DuplicateScanIncomplete } from "./library/installed-skills.js";
-export { InvalidIntent, StalePlan, DestinationsIncomplete } from "./library/library.js";
+export { type DuplicateScanIncomplete } from "./library/installed-skills.js";
+export { type InvalidIntent, StalePlan, type DestinationsIncomplete } from "./library/library.js";
 
 // Recovery vocabulary is public; reading and mutating recovery evidence belongs to Library.
-export { RecoveryInspection, RecoveryInvalid } from "./library/recovery-facts.js";
+export { RecoveryInspection, type RecoveryInvalid } from "./library/recovery-facts.js";
 
 export { OptionCombinationInvalid } from "./shared/input-failures.js";
 
@@ -224,7 +190,7 @@ export {
 
 export { normalizeLibraryManifest } from "./library/manifest.js";
 
-export { ManageStopped, SyncStopped } from "./library/library.js";
+export { type ManageStopped, type SyncStopped } from "./library/library.js";
 export type {
   SyncProgram,
   StoredSyncProgram,
