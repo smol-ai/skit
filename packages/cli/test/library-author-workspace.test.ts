@@ -12,6 +12,7 @@ import { holdHomeLock } from "./helpers/home-lock.js";
 import { importSource } from "../src/library/application/import-source.js";
 import { executeRemove } from "../src/library/workflows/remove.js";
 import { authorInitCommand } from "../src/workflows/author/initialization.js";
+import { authorInvocationCommand } from "../src/handlers/author/invocation.js";
 import { AuthorWorkspace } from "@smolai/skit-core/author";
 import {
   copySkitFixtureEffect,
@@ -87,6 +88,38 @@ const workspaceFixture = Effect.gen(function* () {
   );
   return { fs, root, source, home, path, init, metadata };
 });
+
+it.effect("built-in Author edits refuse a held workspace lease while preview stays passive", () =>
+  Effect.gen(function* () {
+    const f = yield* workspaceFixture;
+    yield* f.init();
+    const metadataPath = join(f.source, "skills", "review", "agents", "openai.yaml");
+    yield* f.fs.writeFileString(metadataPath, "policy:\n  allow_implicit_invocation: true\n");
+    const workspaces = yield* AuthorWorkspace;
+    const root = yield* workspaces.resolveRoot(f.source);
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        yield* workspaces.acquire(root);
+        const before = yield* captureDisk([f.source, f.home.home], { identity: true });
+        const initFailure = yield* Effect.flip(f.init());
+        assert.strictEqual(initFailure._tag, "AuthorWorkspaceBusy");
+        const invocationFailure = yield* Effect.flip(authorInvocationCommand(f.source, false));
+        assert.strictEqual(invocationFailure._tag, "AuthorWorkspaceBusy");
+        const preview = yield* authorInvocationCommand(f.source, true);
+        assert.isTrue(preview.generated.some((item) => item.changed));
+        yield* assertDiskUnchanged(before);
+      }),
+    );
+    // Releasing the competing lease lets both real command callers run again.
+    yield* f.init();
+    const generated = yield* authorInvocationCommand(f.source, false);
+    assert.isTrue(generated.generated.some((item) => item.changed));
+    assert.strictEqual(
+      yield* f.fs.readFileString(metadataPath),
+      "policy:\n  allow_implicit_invocation: false\n",
+    );
+  }).pipe(Effect.provide(AuthorWorkspace.layer), Effect.provide(skitLayer), Effect.scoped),
+);
 
 it.effect("recovers a missing workspace document from the retained identity", () =>
   Effect.gen(function* () {
