@@ -1,6 +1,7 @@
 import { Clock, Effect, Schema } from "effect";
 import { D1Client } from "@effect/sql-d1";
 import { Digest, SecureRandom } from "effect/crypto";
+import type { Principal } from "../../identity/service.js";
 import type { SkitService } from "../service.js";
 import { verifyReleaseArchive } from "./release-archive.js";
 import { type Hash, sha256Hash } from "@smolai/skit-core/universal/consumer";
@@ -12,6 +13,11 @@ import {
   databaseError,
   type DatabaseSqlClient,
 } from "../../platform/cloudflare.js";
+
+class PublicationForbidden extends Schema.TaggedError<PublicationForbidden>()(
+  "Publication.Forbidden",
+  {},
+) {}
 
 const ReleaseRow = Schema.Struct({ release_id: Schema.String });
 
@@ -45,6 +51,7 @@ interface PublicationResult {
 }
 
 type PublicationError =
+  | PublicationForbidden
   | SkitNotFound
   | CurrentRevisionMissing
   | StaleRevision
@@ -55,8 +62,16 @@ type PublicationError =
   | BlobStorageError
   | import("effect/PlatformError").PlatformError;
 
+interface PreparedPublication {
+  readonly publish: (
+    input: Omit<PublicationInput, "owner" | "slug">,
+  ) => Effect.Effect<PublicationResult, PublicationError>;
+}
 export interface Publication {
-  readonly publish: (input: PublicationInput) => Effect.Effect<PublicationResult, PublicationError>;
+  readonly preparePublication: (
+    principal: Principal,
+    target: { readonly owner: string; readonly slug: string },
+  ) => Effect.Effect<PreparedPublication, DatabaseError | PublicationForbidden>;
 }
 
 /** Publication is constructed only by Skits, using its lifecycle storage and current revision. */
@@ -66,6 +81,7 @@ export const makePublication = (
   digests: Digest.Digest["Service"],
   random: SecureRandom.SecureRandom["Service"],
   currentSkit: SkitService["current"],
+  ownsNamespace: (principal: Principal, namespace: string) => Effect.Effect<boolean, DatabaseError>,
 ): Publication => {
   const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
     effect.pipe(databaseError(operation));
@@ -85,7 +101,17 @@ export const makePublication = (
     );
   });
 
-  const publish = Effect.fn("Publication.publish")(function* (input: PublicationInput) {
+  const requireOwner = Effect.fn("Publication.requireOwner")(function* (
+    principal: Principal,
+    owner: string,
+  ) {
+    if (!(yield* ownsNamespace(principal, owner))) return yield* new PublicationForbidden();
+  });
+  const publish = Effect.fn("Publication.publish")(function* (
+    principal: Principal,
+    input: PublicationInput,
+  ) {
+    yield* requireOwner(principal, input.owner);
     const skit = yield* currentSkit(input.owner, input.slug);
     if (skit === undefined) return yield* new SkitNotFound();
     const current = skit.current;
@@ -157,5 +183,16 @@ export const makePublication = (
     };
   });
 
-  return { publish };
+  const preparePublication = Effect.fn("Publication.preparePublication")(function* (
+    principal: Principal,
+    target: { readonly owner: string; readonly slug: string },
+  ) {
+    const { owner, slug } = target;
+    yield* requireOwner(principal, owner);
+    return {
+      publish: (input: Omit<PublicationInput, "owner" | "slug">) =>
+        publish(principal, { ...input, owner, slug }),
+    };
+  });
+  return { preparePublication };
 };

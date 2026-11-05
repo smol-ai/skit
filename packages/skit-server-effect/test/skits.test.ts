@@ -477,6 +477,38 @@ it.effect("conceals deletion and previews from a non-owner despite a legacy admi
   ),
 );
 
+it.effect("refuses publication grants before decoding an unauthorized archive", () =>
+  withRegistry(({ skits, cookie }) =>
+    Effect.gen(function* () {
+      yield* skits.create({ payload: { ...params, visibility: "private" } });
+      yield* Effect.promise(() =>
+        env.DB.batch([
+          env.DB.prepare(`INSERT INTO resource_grants
+          (grant_id, subject_kind, subject_id, resource_kind, resource_id, permission, created_at)
+          SELECT 'publish_probe', 'principal', subject_id, 'namespace', ?, 'publish', '2026-11-05'
+          FROM namespaces WHERE namespace_slug = ?`).bind(owner, owner),
+          env.DB.prepare(
+            "UPDATE namespaces SET subject_id = 'principal_elsewhere' WHERE namespace_slug = ?",
+          ).bind(owner),
+        ]),
+      );
+      for (const body of ["{", JSON.stringify({ version: "1.0.0", archive_base64: "" })]) {
+        const response = yield* Effect.promise(() =>
+          SELF.fetch(`${origin}/api/skits/${owner}/tools/releases`, {
+            method: "POST",
+            headers: { cookie, origin, "content-type": "application/json" },
+            body,
+          }),
+        );
+        expect(response.status).toBe(403);
+        expect(yield* Effect.promise(() => response.json())).toEqual({ error: "forbidden" });
+      }
+      expect(yield* countRows("releases")).toBe(0);
+      expect(yield* countRows("resource_grants")).toBe(1);
+    }),
+  ),
+);
+
 it.effect("deleting a SKIT removes its revisions and the trees no other SKIT records", () =>
   withRegistry(({ skits, skitDelete }) =>
     Effect.gen(function* () {

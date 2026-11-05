@@ -43,11 +43,6 @@ export interface AuthorizationService {
     slug: string,
     permission: "read" | "change" | "advance",
   ) => Effect.Effect<boolean, DatabaseError>;
-  readonly canPublish: (
-    principal: Principal,
-    owner: string,
-    slug: string,
-  ) => Effect.Effect<boolean, DatabaseError>;
   readonly canReadRelease: (
     principal: Principal,
     releaseId: string,
@@ -172,35 +167,6 @@ export const layer = Layer.effect(
       return yield* hasGrantForSubjects(candidates, "skit", `${owner}/${slug}`, permission);
     });
 
-    const canPublish = Effect.fn("Authorization.canPublish")(function* (
-      principal: Principal,
-      owner: string,
-      slug: string,
-    ) {
-      const candidates = yield* subjects(principal);
-      if (yield* ownsForSubjects(candidates, owner)) return true;
-      const allowed = IMPLIED_PERMISSIONS.publish;
-      const placeholders = allowed.map(() => "?").join(", ");
-      const rows = yield* Effect.all(
-        batches(candidates).map((batch) => {
-          const where = predicate(batch);
-          return db(
-            "check publication grant",
-            sql.unsafe(
-              `SELECT 1 allowed FROM resource_grants
-               WHERE (${where.sql})
-                 AND ((resource_kind = 'namespace' AND resource_id = ?)
-                   OR (resource_kind = 'skit' AND resource_id = ?))
-                 AND permission IN (${placeholders}) LIMIT 1`,
-              [...where.bindings, owner, `${owner}/${slug}`, ...allowed],
-            ),
-          );
-        }),
-        { concurrency: SUBREQUEST_CONCURRENCY },
-      );
-      return rows.some((row) => row.length !== 0);
-    });
-
     const canReadRelease = Effect.fn("Authorization.canReadRelease")(function* (
       principal: Principal,
       releaseId: string,
@@ -307,7 +273,6 @@ export const layer = Layer.effect(
       authorInventoryScope,
       ownsNamespace,
       canAuthor,
-      canPublish,
       canReadRelease,
       readableReleaseIds,
     });

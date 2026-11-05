@@ -90,7 +90,7 @@ export interface SkitService {
   /** Selected releases expose archive reads, never blob keys or arbitrary storage access. */
   readonly releases: Releases;
   /** Publish the current revision after checking the complete release archive. */
-  readonly publish: Publication["publish"];
+  readonly preparePublication: Publication["preparePublication"];
   /** Passive deletion facts; no state or archives change. */
   readonly planDelete: Deletion["planDelete"];
   /** Delete private lifecycle state atomically, then clean up release archives. */
@@ -535,7 +535,7 @@ export const layer = Layer.effect(
       list: makeList(sql, authorization),
       releases: makeReleaseReads(sql, blobs),
       ...makeDeletion(sql, blobs, authorization.ownsNamespace),
-      ...makePublication(sql, blobs, digests, random, current),
+      ...makePublication(sql, blobs, digests, random, current, authorization.ownsNamespace),
     });
   }),
 );

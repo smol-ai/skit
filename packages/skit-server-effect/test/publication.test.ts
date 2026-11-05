@@ -15,6 +15,11 @@ const testLayer = skitsLayer.pipe(
     Layer.mergeAll(blobStoreLayer(env.SKIT_BLOBS), databaseLayer(env.DB), BrowserCrypto.layer),
   ),
 );
+const principal = {
+  id: "principal_alice",
+  credential: "session" as const,
+  scopes: new Set(["publication:write"] as const),
+};
 const bytes = (value: string) => new TextEncoder().encode(value);
 
 const descriptor = {
@@ -39,6 +44,11 @@ const files = new Map([
 const prepareDatabase = Effect.fn("PublicationTest.prepareDatabase")(function* () {
   yield* Effect.flatMap(D1Client.D1Client, (sql) =>
     sql.batch([
+      sql`DROP TABLE IF EXISTS namespaces`,
+      sql`DROP TABLE IF EXISTS team_memberships`,
+      sql`CREATE TABLE team_memberships (team_id TEXT NOT NULL, principal_id TEXT NOT NULL)`,
+      sql`CREATE TABLE namespaces (namespace_slug TEXT PRIMARY KEY, subject_kind TEXT NOT NULL, subject_id TEXT NOT NULL)`,
+      sql`INSERT INTO namespaces VALUES ('alice', 'principal', 'principal_alice')`,
       sql`DROP TABLE IF EXISTS releases`,
       sql`DROP TABLE IF EXISTS revision_tree_entries`,
       sql`DROP TABLE IF EXISTS revisions`,
@@ -79,14 +89,44 @@ const prepareDatabase = Effect.fn("PublicationTest.prepareDatabase")(function* (
 });
 
 describe("Publication", () => {
+  it.effect("refuses publication if owning-team membership is removed after preparation", () =>
+    Effect.gen(function* () {
+      yield* prepareDatabase();
+      const sql = yield* D1Client.D1Client;
+      const skits = yield* Skits;
+      yield* sql.batch([
+        sql`UPDATE namespaces SET subject_kind = 'team', subject_id = 'team_tools' WHERE namespace_slug = 'alice'`,
+        sql`INSERT INTO team_memberships VALUES ('team_tools', ${principal.id})`,
+      ]);
+      const publication = yield* skits.preparePublication(principal, {
+        owner: "alice",
+        slug: "tools",
+      });
+      yield* sql`DELETE FROM team_memberships WHERE team_id = 'team_tools' AND principal_id = ${principal.id}`;
+      expect(
+        yield* Effect.flip(
+          publication.publish({ version: "1.0.0", archive: zipSync(Object.fromEntries(files)) }),
+        ),
+      ).toMatchObject({ _tag: "Publication.Forbidden" });
+      expect(yield* sql`SELECT COUNT(*) count FROM releases`).toEqual([{ count: 0 }]);
+      // oxlint-disable-next-line skit/no-promise-wrappers -- R2 is a Promise-only host boundary; check that revocation precedes every archive write.
+      const objects = yield* Effect.promise(() =>
+        env.SKIT_BLOBS.list({ prefix: "releases/alice/tools/" }),
+      );
+      expect(objects.objects).toEqual([]);
+    }).pipe(Effect.provide(testLayer)),
+  );
+
   it.effect("publishes the exact current skit snapshot to D1 and R2", () =>
     Effect.gen(function* () {
       yield* prepareDatabase();
       const skits = yield* Skits;
+      const target = { owner: "alice", slug: "tools" };
+      const publication = yield* skits.preparePublication(principal, target);
+      target.owner = "someone-else";
+      target.slug = "another-skit";
       const archive = zipSync(Object.fromEntries(files));
-      const published = yield* skits.publish({
-        owner: "alice",
-        slug: "tools",
+      const published = yield* publication.publish({
         version: "1.2.3",
         revisionId: "sha256:1111111111111111111111111111111111111111111111111111111111111111",
         archive,
@@ -124,11 +164,13 @@ describe("Publication", () => {
     Effect.gen(function* () {
       yield* prepareDatabase();
       const skits = yield* Skits;
+      const publication = yield* skits.preparePublication(principal, {
+        owner: "alice",
+        slug: "tools",
+      });
       const archive = zipSync(Object.fromEntries(files));
       const stale = yield* Effect.result(
-        skits.publish({
-          owner: "alice",
-          slug: "tools",
+        publication.publish({
           version: "1.0.0",
           revisionId: "sha256:2222222222222222222222222222222222222222222222222222222222222222",
           archive,
@@ -137,10 +179,8 @@ describe("Publication", () => {
       expect(stale._tag).toBe("Failure");
       if (stale._tag === "Failure") expect(stale.failure._tag).toBe("Publication.StaleRevision");
 
-      yield* skits.publish({ owner: "alice", slug: "tools", version: "1.0.0", archive });
-      const conflict = yield* Effect.result(
-        skits.publish({ owner: "alice", slug: "tools", version: "1.0.0", archive }),
-      );
+      yield* publication.publish({ version: "1.0.0", archive });
+      const conflict = yield* Effect.result(publication.publish({ version: "1.0.0", archive }));
       expect(conflict._tag).toBe("Failure");
       if (conflict._tag === "Failure")
         expect(conflict.failure._tag).toBe("Publication.ReleaseConflict");

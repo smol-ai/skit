@@ -6,7 +6,6 @@ import { CurrentPrincipal, PrincipalAuthentication } from "../src/api/authentica
 import { PublicationAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import { publicationHandlers } from "../src/api/publication-http.js";
 import { requestDecodingLayer } from "../src/api/request-decoding.js";
-import { Authorization } from "../src/authorization/service.js";
 import { ServerConfiguration } from "../src/configuration.js";
 import { DatabaseError } from "../src/platform/cloudflare.js";
 import { Skits } from "../src/skits/service.js";
@@ -28,9 +27,6 @@ const authentication = Layer.succeed(
 const unexpectedReleaseRead = () => Effect.die("Publication HTTP must not read release archives");
 
 const dependencies = Layer.mergeAll(
-  Layer.mock(Authorization, {
-    canPublish: () => Effect.succeed(true),
-  }),
   Layer.succeed(ServerConfiguration, { publicAppOrigin: "https://registry.test" }),
   Layer.mock(Skits, {
     releases: {
@@ -39,20 +35,23 @@ const dependencies = Layer.mergeAll(
       findExactDownload: unexpectedReleaseRead,
       listLatestDownloads: unexpectedReleaseRead,
     },
-    publish: (input) =>
-      input.version === "2.0.0"
-        ? Effect.fail(new ReleaseConflict())
-        : input.version === "3.0.0"
-          ? Effect.fail(
-              new DatabaseError({ operation: "publish test release", cause: "unavailable" }),
-            )
-          : Effect.succeed({
-              release_id: "release_test",
-              version: input.version,
-              revision_id: "revision_test",
-              archive_digest:
-                "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            }),
+    preparePublication: () =>
+      Effect.succeed({
+        publish: (input) =>
+          input.version === "2.0.0"
+            ? Effect.fail(new ReleaseConflict())
+            : input.version === "3.0.0"
+              ? Effect.fail(
+                  new DatabaseError({ operation: "publish test release", cause: "unavailable" }),
+                )
+              : Effect.succeed({
+                  release_id: "release_test",
+                  version: input.version,
+                  revision_id: "revision_test",
+                  archive_digest:
+                    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                }),
+      }),
   }),
 );
 

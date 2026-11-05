@@ -340,6 +340,8 @@ Private Library snapshots require the Library's owning Principal or current memb
 
 Deleting a private SKIT or previewing its deletion requires ownership of its Namespace or current membership in that Namespace's team. A per-resource admin grant does not authorize either operation. Skits checks this rule for both direct callers and HTTP requests; non-owners receive the same HTTP 404 as a missing SKIT.
 
+Publication also requires Namespace ownership or current membership in the owning team; per-resource publication grants do not authorize it. Skits checks access before the HTTP adapter decodes the archive, binds the publication to that Namespace and SKIT, and checks access again before publishing. A prepared publication does not retain authority after team membership is removed.
+
 ### Draft synchronization
 
 Remote drafts are immutable revisions behind one guarded current-draft head. Draft files are content-addressed in R2; D1 records revision ancestry, metadata, manifests, and the selected head.

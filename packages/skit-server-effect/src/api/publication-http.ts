@@ -1,6 +1,5 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
-import { Authorization } from "../authorization/service.js";
 import {
   MAX_RELEASE_ARCHIVE_BASE64_LENGTH,
   MAX_RELEASE_ARCHIVE_BYTES,
@@ -31,7 +30,6 @@ export const publicationHandlers = HttpApiBuilder.group(
   "publication",
   (handlers) =>
     Effect.gen(function* () {
-      const authorization = yield* Authorization;
       const skits = yield* Skits;
 
       return handlers.handleRaw("publish", ({ params, request: rawRequest }) =>
@@ -40,17 +38,17 @@ export const publicationHandlers = HttpApiBuilder.group(
           if (!principal.scopes.has("publication:write"))
             return yield* Effect.fail(insufficientScopeResponse);
 
-          const allowed = yield* authorization
-            .canPublish(principal, params.owner, params.slug)
+          const publication = yield* skits
+            .preparePublication(principal, { owner: params.owner, slug: params.slug })
             .pipe(
               Effect.tapError((error) =>
                 Effect.logError("publication authorization failed", error),
               ),
-              Effect.catchTag("Cloudflare.DatabaseError", () =>
-                Effect.fail(storageFailureResponse),
-              ),
+              Effect.catchTags({
+                "Publication.Forbidden": () => Effect.fail(forbiddenResponse),
+                "Cloudflare.DatabaseError": () => Effect.fail(storageFailureResponse),
+              }),
             );
-          if (!allowed) return yield* Effect.fail(forbiddenResponse);
 
           const decoded = yield* schemaBodyJsonLimited(
             rawRequest,
@@ -70,10 +68,8 @@ export const publicationHandlers = HttpApiBuilder.group(
           if (archive.byteLength > MAX_RELEASE_ARCHIVE_BYTES)
             return yield* Effect.fail(archiveTooLargeResponse);
 
-          const release = yield* skits
+          const release = yield* publication
             .publish({
-              owner: params.owner,
-              slug: params.slug,
               version: payload.version,
               revisionId: payload.revision_id,
               archive,
@@ -82,6 +78,8 @@ export const publicationHandlers = HttpApiBuilder.group(
               Effect.catch((error) =>
                 Effect.gen(function* () {
                   switch (error._tag) {
+                    case "Publication.Forbidden":
+                      return yield* Effect.fail(forbiddenResponse);
                     case "Publication.SkitNotFound":
                       return yield* Effect.fail(skitNotFoundResponse);
                     case "Publication.CurrentRevisionMissing":

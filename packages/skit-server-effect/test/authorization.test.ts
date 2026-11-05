@@ -59,7 +59,6 @@ describe("authorization", () => {
       expect(yield* authorization.ownsNamespace(principal, "admin")).toBe(false);
       expect(yield* authorization.canAuthor(principal, "external", "tool", "read")).toBe(true);
       expect(yield* authorization.canAuthor(principal, "external", "tool", "advance")).toBe(true);
-      expect(yield* authorization.canPublish(principal, "partner", "tool")).toBe(true);
       expect(yield* authorization.canReadRelease(principal, "rel_secret", "other", "tool")).toBe(
         true,
       );
