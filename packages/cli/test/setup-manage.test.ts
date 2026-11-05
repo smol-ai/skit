@@ -9,7 +9,7 @@ import {
   collectionVersionPath,
   skitLayer,
 } from "@smolai/skit-core";
-import { importSource } from "../src/library/application/import-source.js";
+import { importSource } from "../src/library/source.js";
 import { setupCommand } from "../src/library/setup.js";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import { setupStepTitles } from "../src/library/setup/steps.js";

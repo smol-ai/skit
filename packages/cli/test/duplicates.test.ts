@@ -26,7 +26,7 @@ import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
 import { expect } from "vitest";
 
-import { importSource } from "../src/library/application/import-source.js";
+import { importSource } from "../src/library/source.js";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
 
 import { setupCommand } from "../src/library/setup.js";

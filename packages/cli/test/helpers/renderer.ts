@@ -1,4 +1,4 @@
-import { terminalLibraryProgressLayer } from "../../src/library/presentation/progress.js";
+import { terminalLibraryProgressLayer } from "../../src/library/update/present-progress.js";
 import { Effect, Layer } from "effect";
 import { Renderer, type RendererShape } from "../../src/terminal/renderer.js";
 

@@ -1,5 +1,5 @@
 import { Library } from "@smolai/skit-core/library";
-import { officialRegistryOrigin } from "../../registry/accounts.js";
+import { officialRegistryOrigin } from "../registry/accounts.js";
 import {
   describeSourceSkills,
   inspectResolvedSource,
@@ -12,7 +12,7 @@ import {
   leavePnpmSkill,
 } from "@smolai/skit-core";
 import { Clock, Effect, Result } from "effect";
-import { Registry, type ResolvedAuth } from "../../registry/index.js";
+import { Registry, type ResolvedAuth } from "../registry/index.js";
 
 /** Resolve once inside the lifetime of the operation consuming the staged source. */
 const withResolvedSource = Effect.fn("SourceAcquisition.withResolvedSource")(function* <A, E, R>(
@@ -79,7 +79,7 @@ export const previewLibrarySource = Effect.fn("Library.previewSource")(function*
   };
 });
 
-/** Own the retention transaction, including partial commits and temporary-source cleanup. */
+/** Keep source staging alive through Library import, then clean it up. */
 export const importSource = Effect.fn("Library.addSource")(function* (
   input: string | SkitSource,
   previousSkillPaths?: readonly string[],

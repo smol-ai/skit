@@ -15,8 +15,8 @@ import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { HttpClient, HttpClientResponse } from "effect/http";
 
-import { importSource, previewLibrarySource } from "../src/library/application/import-source.js";
-import { planUpdates, updateSubjects } from "../src/library/application/update.js";
+import { importSource, previewLibrarySource } from "../src/library/source.js";
+import { planUpdates, updateSubjects } from "../src/library/update/operation.js";
 import { checkSubjects } from "../src/library/check/operation.js";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { planLibrarySync } from "../src/library/workflows/library-sync-plan.js";

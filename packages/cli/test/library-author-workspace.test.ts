@@ -9,7 +9,7 @@ import {
 } from "@smolai/skit-core";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
 import { holdHomeLock } from "./helpers/home-lock.js";
-import { importSource } from "../src/library/application/import-source.js";
+import { importSource } from "../src/library/source.js";
 import { executeRemove } from "../src/library/remove/operation.js";
 import { authorInitCommand } from "../src/author/init.js";
 import { authorInvocationCommand } from "../src/author/invocation.js";

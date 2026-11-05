@@ -1,16 +1,9 @@
-import { type ContractData, type ContractDataForId } from "../../commands/output-contracts.js";
-
-const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
-
-const sourceDiagnosticLines = (diagnostics?: readonly { path: string; message: string }[]) =>
-  (diagnostics ?? []).map((diagnostic) => `  ! ${diagnostic.path}: ${diagnostic.message}`);
+import type { UpdatePlan, UpdateResult } from "./output.js";
+import { plural, sourceDiagnosticLines } from "../presentation/source.js";
 
 /** One Source's effect on this device: enabled, changed, retired, kept, and available Skills. */
 function skillChangeLines(
-  item: Pick<
-    ContractDataForId<"skit.update.plan.v6">[number],
-    "enabled" | "updated" | "removed" | "kept" | "new_available"
-  >,
+  item: Pick<UpdatePlan[number], "enabled" | "updated" | "removed" | "kept" | "new_available">,
 ): string[] {
   return [
     ...item.enabled.map((name) => `  + ${name}`),
@@ -25,7 +18,7 @@ function skillChangeLines(
   ];
 }
 
-export function renderUpdate(data: ContractDataForId<"skit.update.v9">): string {
+export function renderUpdate(data: UpdateResult): string {
   if (!data.length) return "No device-local Sources to update";
   const failures = data.filter((item) => "status" in item);
   const successful = data.filter((item) => "changed" in item);
@@ -60,7 +53,7 @@ export function renderUpdate(data: ContractDataForId<"skit.update.v9">): string 
   return lines.join("\n");
 }
 
-export function renderUpdatePlan(data: ContractDataForId<"skit.update.plan.v6">): string {
+export function renderUpdatePlan(data: UpdatePlan): string {
   if (!data.length) return "No device-local Sources to update";
   const lines = ["Update plan"];
   for (const item of data)
@@ -78,25 +71,3 @@ export function renderUpdatePlan(data: ContractDataForId<"skit.update.plan.v6">)
   );
   return lines.join("\n");
 }
-
-export const renderAdd = (data: ContractData<"add">) => {
-  const count = data.skills.length;
-  const noun = plural(count, "skill");
-  const summary =
-    data.action === "updated"
-      ? `Updated ${noun} in your Library.`
-      : data.action === "unchanged"
-        ? `${noun} already ${count === 1 ? "has" : "have"} the current retained version.`
-        : `Added ${noun} to your Library.`;
-  return [summary, ...sourceDiagnosticLines(data.diagnostics)].join("\n");
-};
-
-export const renderAddPreview = (data: ContractData<"addPreview">) => {
-  const count = data.skills.length;
-  return [
-    `${count} ${count === 1 ? "skill" : "skills"}`,
-    "",
-    ...data.skills.map((skill) => `  ${skill.name}`),
-    ...sourceDiagnosticLines(data.diagnostics),
-  ].join("\n");
-};

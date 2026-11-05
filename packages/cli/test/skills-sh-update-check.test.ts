@@ -11,7 +11,7 @@ import { Library } from "@smolai/skit-core/library";
 import { runSetup } from "@smolai/skit-core/library/setup";
 import { applySetupSelections } from "./helpers/setup-apply.js";
 import { libraryView } from "@smolai/skit-core/library/session";
-import { inspectLibrarySource } from "../src/library/application/import-source.js";
+import { inspectLibrarySource } from "../src/library/source.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 const hash = (text: string) => createHash("sha256").update("SKILL.md").update(text).digest("hex");

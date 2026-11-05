@@ -13,12 +13,8 @@ import { renderLibrarySync } from "../library/presentation/sync.js";
 import { renderLibraryList } from "../library/list.js";
 import { renderAuditV1Alpha4 } from "../audit/presentation/report.js";
 import { severityHeadline } from "../audit/presentation/language.js";
-import {
-  renderAdd,
-  renderAddPreview,
-  renderUpdate,
-  renderUpdatePlan,
-} from "../library/presentation/update.js";
+import { renderAdd, renderAddPreview } from "../library/add.js";
+import { renderUpdate, renderUpdatePlan } from "../library/update.js";
 import { renderDoctor } from "../library/presentation/doctor.js";
 import {
   renderSetup,
@@ -30,10 +26,7 @@ import {
 } from "../library/setup.js";
 import { renderRecoveryList, renderRecovery } from "../library/presentation/recovery.js";
 import { renderLibraryHistory } from "../library/presentation/history.js";
-import {
-  renderProjectionRetention,
-  renderProjectionRetentionPlan,
-} from "../library/presentation/retention.js";
+import { renderProjectionRetention, renderProjectionRetentionPlan } from "../library/update.js";
 
 type ContractPresenters = {
   [K in ContractKey]: (data: ContractData<K>, context: RenderContext) => string;

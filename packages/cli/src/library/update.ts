@@ -1,20 +1,20 @@
 import { skitConfigurationLayer } from "@smolai/skit-core";
-import { terminalLibraryProgressLayer } from "../presentation/progress.js";
+import { terminalLibraryProgressLayer } from "./update/present-progress.js";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { handleSourceCommand } from "../../commands/handler.js";
-import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
+import { handleSourceCommand } from "../commands/handler.js";
+import { libraryCommandConfiguration } from "../commands/library-configuration.js";
 import {
   CommandMetadata,
   credentialStoreReadSubprocesses,
   sourceFetchSubprocesses,
-} from "../../commands/metadata.js";
-import { outputContracts } from "../../commands/output-contracts.js";
-import { localFlags } from "../../commands/parameters.js";
-import { Renderer } from "../../terminal/renderer.js";
-import { result } from "../../commands/result.js";
-import { planUpdates, updateSubjects, updateExitCode } from "../application/update.js";
-import { prepareEditImport, EditImportMissing } from "../workflows/import-edit.js";
+} from "../commands/metadata.js";
+import { updateOutputContracts } from "./update/output.js";
+import { localFlags } from "../commands/parameters.js";
+import { Renderer } from "../terminal/renderer.js";
+import { encodeResult as result } from "../commands/encode-result.js";
+import { planUpdates, updateSubjects, updateExitCode } from "./update/operation.js";
+import { prepareEditImport, EditImportMissing } from "./update/edit.js";
 
 const subject = Argument.String("skill-or-collection").pipe(Argument.optional);
 const dryRun = Flag.Boolean("dry-run").pipe(
@@ -47,8 +47,16 @@ export const updateCliCommand = Command.make(
             Effect.gen(function* () {
               const prepared = yield* prepareEditImport(query, installedSkillSelector);
               return input.dryRun
-                ? result("projectionRetentionPlan", prepared.preview)
-                : result("projectionRetention", yield* prepared.apply());
+                ? result(
+                    "projectionRetentionPlan",
+                    updateOutputContracts.projectionRetentionPlan,
+                    prepared.preview,
+                  )
+                : result(
+                    "projectionRetention",
+                    updateOutputContracts.projectionRetention,
+                    yield* prepared.apply(),
+                  );
             }),
           );
           return yield* renderer.result(value);
@@ -58,13 +66,17 @@ export const updateCliCommand = Command.make(
             "Checking Source observations",
             planUpdates(query),
           );
-          return yield* renderer.result(result("updatePlan", value));
+          return yield* renderer.result(
+            result("updatePlan", updateOutputContracts.updatePlan, value),
+          );
         }
         const configuration = yield* libraryCommandConfiguration(input);
         const value = yield* updateSubjects({ roots: configuration.inventory }, query).pipe(
           Effect.provide(terminalLibraryProgressLayer),
         );
-        yield* renderer.result(result("update", value, updateExitCode(value)));
+        yield* renderer.result(
+          result("update", updateOutputContracts.update, value, updateExitCode(value)),
+        );
       }),
     ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
@@ -79,12 +91,16 @@ export const updateCliCommand = Command.make(
       subprocesses: [...sourceFetchSubprocesses, ...credentialStoreReadSubprocesses],
     },
     outputSchemas: [
-      outputContracts.update,
-      outputContracts.updatePlan,
-      outputContracts.projectionRetention,
-      outputContracts.projectionRetentionPlan,
+      updateOutputContracts.update,
+      updateOutputContracts.updatePlan,
+      updateOutputContracts.projectionRetention,
+      updateOutputContracts.projectionRetentionPlan,
     ],
     exitCodes: [0, 1, 11, 12, 64, 65],
     interactive: false,
   }),
 );
+
+export { updateOutputContracts } from "./update/output.js";
+export { renderUpdate, renderUpdatePlan } from "./update/present.js";
+export { renderProjectionRetention, renderProjectionRetentionPlan } from "./update/retention.js";

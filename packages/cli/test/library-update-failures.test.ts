@@ -14,8 +14,8 @@ import { join } from "node:path";
 
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { writingTo } from "./helpers/library-home.js";
-import { importSource } from "../src/library/application/import-source.js";
-import { updateSubjects, updateExitCode } from "../src/library/application/update.js";
+import { importSource } from "../src/library/source.js";
+import { updateSubjects, updateExitCode } from "../src/library/update/operation.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 import { defaultTerminalEnvironment, renderResultFrame } from "../src/commands/output-frame.js";
 import { result } from "../src/commands/result.js";

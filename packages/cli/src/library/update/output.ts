@@ -1,3 +1,4 @@
+import { EditImportPlan, EditImportResult } from "@smolai/skit-core/library/session";
 import { Hash, SourceDiscoveryDiagnostic } from "@smolai/skit-core";
 import { Schema } from "effect";
 
@@ -61,3 +62,13 @@ export const UpdatePlan = Schema.Array(
   }),
 );
 export type UpdatePlan = typeof UpdatePlan.Type;
+
+export const updateOutputContracts = {
+  update: { id: "skit.update.v9", schema: UpdateResult },
+  updatePlan: { id: "skit.update.plan.v6", schema: UpdatePlan },
+  projectionRetention: { id: "skit.update.projection-retention.v4", schema: EditImportResult },
+  projectionRetentionPlan: {
+    id: "skit.update.projection-retention.plan.v4",
+    schema: EditImportPlan,
+  },
+} as const;

@@ -6,7 +6,7 @@ import { Effect, FileSystem, Ref } from "effect";
 import { join } from "node:path";
 
 import { checkSubjects } from "../src/library/check/operation.js";
-import { importSource } from "../src/library/application/import-source.js";
+import { importSource } from "../src/library/source.js";
 import { initializeLibraryMachine } from "./helpers/library-home.js";
 
 it.effect("checks retained files without treating an observed local copy as an upstream", () =>

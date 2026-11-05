@@ -1,23 +1,23 @@
 import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
 
 import { Effect, Option } from "effect";
-import { descriptionLoadMessage } from "../workflows/collection-load.js";
+import { descriptionLoadMessage } from "./workflows/collection-load.js";
 import { openLibraryView } from "@smolai/skit-core/library/session";
 import { Argument, Command, Flag } from "effect/cli";
-import { handleSourceCommand } from "../../commands/handler.js";
-import { MissingRequirement } from "../../commands/input-failures.js";
+import { handleSourceCommand } from "../commands/handler.js";
+import { MissingRequirement } from "../commands/input-failures.js";
 import {
   CommandMetadata,
   credentialStoreReadSubprocesses,
   sourceFetchSubprocesses,
-} from "../../commands/metadata.js";
-import { outputContracts } from "../../commands/output-contracts.js";
-import { localFlags, optionalString } from "../../commands/parameters.js";
-import { Renderer } from "../../terminal/renderer.js";
-import { result } from "../../commands/result.js";
-import { Registry, type ResolvedAuth } from "../../registry/index.js";
-import { importSource, previewLibrarySource } from "../application/import-source.js";
-import { rejectDedicatedInstallerSource } from "../workflows/dedicated-installer-catalog.js";
+} from "../commands/metadata.js";
+import { addOutputContracts } from "./add/output.js";
+import { localFlags, optionalString } from "../commands/parameters.js";
+import { Renderer } from "../terminal/renderer.js";
+import { encodeResult as result } from "../commands/encode-result.js";
+import { Registry, type ResolvedAuth } from "../registry/index.js";
+import { importSource, previewLibrarySource } from "./source.js";
+import { rejectDedicatedInstallerSource } from "./workflows/dedicated-installer-catalog.js";
 
 const source = Argument.String("source");
 const registry = optionalString("registry", "Resolve a Registry source through a name or URL.");
@@ -58,14 +58,14 @@ export const addCliCommand = Command.make(
             `Inspecting ${selectedSource}`,
             previewLibrarySource(selectedSource, selectedRegistry),
           );
-          return yield* renderer.result(result("addPreview", value));
+          return yield* renderer.result(result("addPreview", addOutputContracts.addPreview, value));
         }
         const imported = yield* renderer.withStatus(
           "Retaining source",
           importSource(selectedSource, undefined, selectedRegistry),
         );
         yield* renderer.result(
-          result("add", {
+          result("add", addOutputContracts.add, {
             action: imported.action,
             ...(imported.collection_id === undefined
               ? {}
@@ -104,8 +104,11 @@ export const addCliCommand = Command.make(
       capabilities: ["filesystem.read", "filesystem.write", "network.read", "process.execute"],
       subprocesses: [...sourceFetchSubprocesses, ...credentialStoreReadSubprocesses],
     },
-    outputSchemas: [outputContracts.add, outputContracts.addPreview],
+    outputSchemas: [addOutputContracts.add, addOutputContracts.addPreview],
     exitCodes: [0, 11, 12, 64, 65],
     interactive: false,
   }),
 );
+
+export { addOutputContracts } from "./add/output.js";
+export { renderAdd, renderAddPreview } from "./add/present.js";

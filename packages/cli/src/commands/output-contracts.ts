@@ -23,11 +23,10 @@ import { RegistryRemoteChange, RegistryRemoteList } from "../registry/contracts.
 import { AuthorSyncResult } from "../author/contracts.js";
 import { removeOutputContracts } from "../library/remove.js";
 import { checkOutputContracts } from "../library/check.js";
-import { AddPreview, AddResult } from "../library/workflows/add-contract.js";
-import { UpdatePlan, UpdateResult } from "../library/workflows/update-contract.js";
+import { addOutputContracts } from "../library/add.js";
+import { updateOutputContracts } from "../library/update.js";
 import { SyncResult } from "../library/workflows/library-sync-contract.js";
 import { listOutputContracts } from "../library/list.js";
-import { EditImportPlan, EditImportResult } from "@smolai/skit-core/library/session";
 import { RepositoryPolicyResult } from "@smolai/skit-core/library/setup";
 
 import { MachineInventoryResult } from "../library/workflows/machine-inventory-contract.js";
@@ -108,18 +107,18 @@ export const outputContracts = {
     }),
   ),
   authorDelete: effectOutput("skit.author.delete.v2", AuthorSkitDeleteResponse),
-  add: effectOutput("skit.add.v7", AddResult),
-  addPreview: effectOutput("skit.add.preview.v4", AddPreview),
+  add: addOutputContracts.add,
+  addPreview: addOutputContracts.addPreview,
   list: listOutputContracts.list,
   securityReview: effectOutput("skit.security.review.v4", SkillSecurityReview),
   securityAccept: effectOutput("skit.security.accept.v4", SkillSecurityReview),
   inventory: effectOutput("skit.inventory.v13", MachineInventoryResult),
   doctor: effectOutput("skit.doctor.v9", DoctorReport),
   check: checkOutputContracts.check,
-  update: effectOutput("skit.update.v9", UpdateResult),
-  updatePlan: effectOutput("skit.update.plan.v6", UpdatePlan),
-  projectionRetention: effectOutput("skit.update.projection-retention.v4", EditImportResult),
-  projectionRetentionPlan: effectOutput("skit.update.projection-retention.plan.v4", EditImportPlan),
+  update: updateOutputContracts.update,
+  updatePlan: updateOutputContracts.updatePlan,
+  projectionRetention: updateOutputContracts.projectionRetention,
+  projectionRetentionPlan: updateOutputContracts.projectionRetentionPlan,
   remove: removeOutputContracts.remove,
   removePlan: removeOutputContracts.removePlan,
   enable: enableOutputContracts.enable,

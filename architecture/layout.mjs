@@ -75,6 +75,8 @@ export const undecided = [
  * Add new features here when deciding their placement. No migration exemptions.
  */
 export const features = [
+  "packages/cli/src/library/add",
+  "packages/cli/src/library/update",
   "packages/cli/src/library/list",
   "packages/cli/src/library/check",
   "packages/cli/src/library/remove",

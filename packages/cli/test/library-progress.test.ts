@@ -7,9 +7,9 @@ import {
   LibraryProgress,
   libraryProgressLayer,
   type LibraryProgressEvent,
-} from "../src/library/application/progress.js";
-import { updateSubjects } from "../src/library/application/update.js";
-import { importSource } from "../src/library/application/import-source.js";
+} from "../src/library/update/progress.js";
+import { updateSubjects } from "../src/library/update/operation.js";
+import { importSource } from "../src/library/source.js";
 import { copySkitFixtureEffect, libraryHome } from "./helpers/library-home.js";
 import { homeLockIsFree } from "./helpers/home-lock.js";
 

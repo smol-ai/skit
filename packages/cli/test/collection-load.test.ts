@@ -15,7 +15,7 @@ import {
   descriptionLoadMessage,
   largeCollectionWarning,
 } from "../src/library/workflows/collection-load.js";
-import { importSource } from "../src/library/application/import-source.js";
+import { importSource } from "../src/library/source.js";
 import { openLibraryView } from "@smolai/skit-core/library/session";
 import {
   initializeLibraryMachine,
