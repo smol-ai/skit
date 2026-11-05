@@ -5,7 +5,7 @@ import { libraryApplicationLayer } from "../src/application.js";
 import { join } from "node:path";
 import { ConfigProvider, Effect, FileSystem, Layer, Result } from "effect";
 import { HttpClient } from "effect/http";
-import { authorSyncCommand } from "../src/handlers/author/sync.js";
+import { authorSyncCommand } from "../src/author/sync.js";
 import { librarySyncCommand } from "../src/library/commands/sync.js";
 import { CredentialsUnusable } from "../src/registry/failures.js";
 import { RegistryHttp, registryClient, registryHttpLayer } from "../src/registry/registry-http.js";

@@ -18,7 +18,7 @@ import { HttpApiClient } from "effect/http-api";
 import { Argument, Command, Flag } from "effect/cli";
 
 import type { AuthorRemoteHome } from "@smolai/skit-core/author";
-import { parseAuthorDestination } from "../workflows/author/sync.js";
+import { parseAuthorDestination } from "./destination.js";
 import {
   AuthenticationRequired,
   CredentialLacksScope,

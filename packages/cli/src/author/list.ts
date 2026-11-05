@@ -24,7 +24,7 @@ import {
 } from "../registry/api-client.js";
 import { isRegistryTransportError, RegistryHttp } from "../registry/registry-http.js";
 import { Renderer } from "../terminal/renderer.js";
-import { skitLocator } from "../workflows/author/sync.js";
+import { skitLocator } from "./destination.js";
 import {
   AuthenticationRequired,
   CredentialLacksScope,

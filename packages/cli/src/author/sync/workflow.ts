@@ -18,13 +18,9 @@ import {
 import { isRegistryTransportError, RegistryHttp } from "../../registry/registry-http.js";
 import { join } from "node:path";
 import {
-  AuthorDestinationInvalid,
-  AuthorDestinationMalformed,
   LocalFilesChangedDuringSync,
   type AuthorVisibility,
   scanAuthorSyncTree,
-  decodeUrl,
-  normalizeRemote,
   type AuthorRemoteHome,
   AuthorSyncStateInvalid,
   AuthorWorkspace,
@@ -39,18 +35,17 @@ import {
   RemoteSkitUnavailable,
   VisibilityNotAccepted,
   DestinationExistsWithoutHistory,
-  DestinationFormInvalid,
   RegistryUnreachable,
   AuthenticationRequired,
   CredentialLacksScope,
   PrincipalNotAuthorized,
 } from "../../registry/failures.js";
 import { Registry } from "../../registry/index.js";
-import type { AuthorSyncResult } from "./sync-contract.js";
+import type { AuthorSyncResult } from "../contracts.js";
 
-import { authorDecider, authorTree } from "../../author/device-view.js";
+import { authorDecider, authorTree } from "../device-view.js";
 
-import { adoptFrom, collectionsAt } from "../../author/library-claims.js";
+import { adoptFrom, collectionsAt } from "../library-claims.js";
 
 import {
   Library,
@@ -63,6 +58,8 @@ import {
 } from "@smolai/skit-core";
 import { MissingRequirement } from "../../commands/input-failures.js";
 
+import { parseAuthorDestination, skitLocator } from "../destination.js";
+
 /** A SKIT request the Registry answered, with its own words for why it refused. */
 class SyncRejected
   extends Data.TaggedError("SyncRejected")<{ message: string }>
@@ -71,54 +68,6 @@ class SyncRejected
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "OPERATION_FAILED" as const;
   readonly remediation = "Check the Registry's reason, then sync again.";
-}
-
-const decodeAuthorSegment = (input: string) =>
-  Schema.decodeUnknownEffect(Schema.StringFromUriComponent)(input).pipe(
-    Effect.mapError(() => new AuthorDestinationMalformed({ message: "URI malformed" })),
-  );
-
-export const parseAuthorDestination = Effect.fn("Author.parseDestination")(function* (
-  input: string,
-  registryOrigin?: string,
-) {
-  if (input.startsWith("skit://")) {
-    const url = yield* decodeUrl(input);
-    const parts = url.pathname.split("/").filter(Boolean);
-    if (parts.length !== 2 || url.search || url.hash)
-      return yield* new DestinationFormInvalid({ form: "canonical" });
-    return yield* normalizeRemote({
-      origin: `https://${url.host}`,
-      namespace: yield* decodeAuthorSegment(parts[0]),
-      skit: yield* decodeAuthorSegment(parts[1]),
-    });
-  }
-  if (/^https?:\/\//.test(input)) {
-    const url = yield* decodeUrl(input);
-    const parts = url.pathname.split("/").filter(Boolean);
-    if (parts.length !== 2 || url.search || url.hash)
-      return yield* new AuthorDestinationInvalid({ form: "https" });
-    return yield* normalizeRemote({
-      origin: url.origin,
-      namespace: yield* decodeAuthorSegment(parts[0]),
-      skit: yield* decodeAuthorSegment(parts[1]),
-    });
-  }
-  const parts = input.split("/");
-  if (parts.length !== 2 || !registryOrigin)
-    return yield* registryOrigin
-      ? new AuthorDestinationInvalid({ form: "bare" })
-      : new DestinationFormInvalid({ form: "relative-without-registry" });
-  return yield* normalizeRemote({
-    origin: registryOrigin,
-    namespace: parts[0],
-    skit: parts[1],
-  });
-});
-
-export function skitLocator(remote: AuthorRemoteHome): string {
-  const authority = new URL(remote.origin).host;
-  return `skit://${authority}/${remote.namespace}/${remote.skit}`;
 }
 
 /** A first sync names its destination and visibility; it is persisted only once connecting. */

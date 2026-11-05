@@ -3,7 +3,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { HttpClient } from "effect/http";
 import { MissingRequirement } from "../src/commands/input-failures.js";
-import { publishCommand } from "../src/handlers/author/publish.js";
+import { publishCommand } from "../src/author/publish.js";
 import { RegistryHttp, registryClient } from "../src/registry/registry-http.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 

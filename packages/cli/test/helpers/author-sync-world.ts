@@ -3,7 +3,7 @@ import { Effect, Exit, Fiber, FileSystem, Layer, Ref, Scope } from "effect";
 import { libraryApplicationLayer } from "../../src/application.js";
 import { skitConfigurationLayer } from "@smolai/skit-core";
 import type { PlatformError } from "effect/PlatformError";
-import { syncAuthorWorkspace } from "../../src/workflows/author/sync.js";
+import { syncAuthorWorkspace } from "../../src/author/sync/workflow.js";
 import { authorLayer, storedTreesAt } from "./author-history.js";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
 import { testHttpClientLayer } from "./http-test-client.js";

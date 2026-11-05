@@ -1,14 +1,14 @@
 import { skitConfigurationLayer } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { MissingRequirement } from "../../commands/input-failures.js";
-import { publish } from "../../workflows/author/publish.js";
-import { Renderer } from "../../terminal/renderer.js";
-import { handleRegistryCommand } from "../../commands/handler.js";
-import { CommandMetadata } from "../../commands/metadata.js";
-import { outputContracts } from "../../commands/output-contracts.js";
-import { jsonFlag, optionalString } from "../../commands/parameters.js";
-import { result } from "../../commands/result.js";
+import { MissingRequirement } from "../commands/input-failures.js";
+import { publish } from "./publish/workflow.js";
+import { Renderer } from "../terminal/renderer.js";
+import { handleRegistryCommand } from "../commands/handler.js";
+import { CommandMetadata } from "../commands/metadata.js";
+import { outputContracts } from "../commands/output-contracts.js";
+import { jsonFlag, optionalString } from "../commands/parameters.js";
+import { result } from "../commands/result.js";
 
 export const publishCommand = Effect.fn("CLI.publish")(function* (options: {
   readonly root?: string;

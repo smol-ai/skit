@@ -20,7 +20,7 @@ import { RecoveryList, RecoveryOutput } from "./recovery-contract.js";
 import { AuditReportV1Alpha4 } from "@smolai/skit-core/audit";
 import { HarnessProbeReport } from "@smolai/skit-core/harnesses";
 import { RegistryRemoteChange, RegistryRemoteList } from "../registry/contracts.js";
-import { AuthorSyncResult } from "../workflows/author/sync-contract.js";
+import { AuthorSyncResult } from "../author/contracts.js";
 import { RemovePlan, RemoveResult } from "../library/workflows/remove-contract.js";
 import { CheckResult } from "../library/workflows/check-contract.js";
 import { AddPreview, AddResult } from "../library/workflows/add-contract.js";
