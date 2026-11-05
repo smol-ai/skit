@@ -10,3 +10,5 @@ export { skitLayer, type SkitServices } from "./layer.js";
 export { SourceProcess, type SourceProcessResult } from "./source-process.js";
 export { pathIsWithin } from "./path-identity.js";
 export type { TreeRequirements } from "./tree-requirements.js";
+export type { AuthorIgnoreRepository } from "../artifact/plain-author-ignore.js";
+export type { FileLockBusy, FileLockFailed } from "./file-lock.js";

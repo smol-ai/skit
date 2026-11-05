@@ -1,5 +1,6 @@
 import { Effect } from "effect";
-import type { DeviceSkillSelection, Enabled, LibraryManifest } from "@smolai/skit-core";
+import type { DeviceSkillSelection } from "../../device-state.js";
+import type { Enabled, LibraryManifest } from "../../library-contracts.js";
 import { OptionCombinationInvalid } from "../../../shared/input-failures.js";
 
 /** Resolve explicit names once to stable identities; collection items continue to follow membership. */

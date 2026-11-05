@@ -647,6 +647,8 @@ const effectRules = {
       type: "problem",
       docs: { description: "Imports follow the target layout's direction" },
       messages: {
+        coreRoot:
+          "Core implementations import the defining owner module, not the aggregate package root.",
         frontend:
           "{{target}} is CLI source. The TUI imports core public APIs; Storybook may also use the CLI public story export, never CLI source (architecture/layout.mjs).",
         internal:
@@ -675,6 +677,14 @@ const effectRules = {
           : source.startsWith("@smolai/skit-core/")
             ? `packages/skit/src/${source.slice("@smolai/skit-core/".length)}`
             : undefined;
+        if (
+          file.startsWith("packages/skit/src/") &&
+          (source === "@smolai/skit-core" ||
+            target?.replace(/\.[jt]s$/, "") === "packages/skit/src/index")
+        ) {
+          context.report({ node: sourceNode, messageId: "coreRoot" });
+          return;
+        }
         if (target === undefined) return;
         if (frontend && source.startsWith(".") && target.startsWith("packages/cli/src/"))
           context.report({ node: sourceNode, messageId: "frontend", data: { target } });

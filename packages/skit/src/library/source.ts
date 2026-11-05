@@ -110,3 +110,10 @@ export const importSource = Effect.fn("Library.importSource")(function* (request
 });
 
 export type { InstalledSkillFailure } from "../installed-skills/files.js";
+export type {
+  PluginManifestInvalid,
+  PluginSkillConflict,
+  CommandFailed,
+  SourcePolicyViolation,
+  ParseSourceFailure,
+} from "../sources/resolve.js";

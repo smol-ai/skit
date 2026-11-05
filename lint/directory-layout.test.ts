@@ -97,6 +97,30 @@ describe("skit/directory-layout", () => {
 });
 
 describe("skit/import-direction", () => {
+  test("core implementations cannot re-enter the aggregate root, including type imports", async () => {
+    for (const source of [
+      'import type { LibraryManifest } from "@smolai/skit-core";',
+      'import * as Core from "@smolai/skit-core";',
+      'import type { LibraryManifest } from "../../../index.js";',
+      'export { Library } from "../../../index.js";',
+      'const core = import("@smolai/skit-core");',
+    ])
+      expect(
+        await reported(
+          "packages/skit/src/library/internal/sync/PROBE.ts",
+          source,
+          "import-direction",
+        ),
+      ).toEqual([1]);
+    expect(
+      await reported(
+        "packages/skit/src/library/internal/sync/PROBE.ts",
+        'import type { LibraryManifest } from "../../library-contracts.js";',
+        "import-direction",
+      ),
+    ).toEqual([]);
+  });
+
   test("Storybook uses its declared CLI story API; the TUI stays on core", async () => {
     const source = `import { journeyStories } from "@smolai/skit/storybook"; export const stories = journeyStories;`;
     expect(await reported("packages/storybook/src/PROBE.ts", source, "import-direction")).toEqual(
