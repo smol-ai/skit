@@ -346,6 +346,8 @@ Deleting a private SKIT or previewing its deletion requires ownership of its Nam
 
 Publication also requires Namespace ownership or current membership in the owning team; per-resource publication grants do not authorize it. Skits checks access before the HTTP adapter decodes the archive, binds the publication to that Namespace and SKIT, and checks access again before publishing. A prepared publication does not retain authority after team membership is removed.
 
+After archive validation and upload, the D1 release insert compares the selected current revision and visibility atomically. If either changed, publication returns the existing stale-revision error and removes the uncommitted archive. Cleanup failures are logged, as for other failed release inserts; the metadata is never committed from the stale selection.
+
 Skits selects private Release downloads using the same Namespace ownership or current team membership rule; per-Release and per-SKIT grants do not authorize them. `latest` selects the newest Release the caller can access, falling back to a public or unlisted Release if authentication fails. Exact public and unlisted downloads do not consult credentials.
 
 ### Draft synchronization

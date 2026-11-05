@@ -151,20 +151,30 @@ export const makePublication = (
       sql`INSERT INTO releases
          (owner_slug, skit_slug, version, release_id, source_revision, archive_digest,
           archive_bytes, archive_object_key, published_at, visibility)
-         VALUES (${input.owner}, ${input.slug}, ${input.version}, ${releaseId},
+         SELECT ${input.owner}, ${input.slug}, ${input.version}, ${releaseId},
                  ${current}, ${archiveDigest}, ${input.archive.byteLength},
-                 ${objectKey}, ${publishedAt}, ${skit.visibility})`,
+                 ${objectKey}, ${publishedAt}, ${skit.visibility}
+         FROM skits WHERE owner_slug = ${input.owner} AND skit_slug = ${input.slug}
+           AND current_revision_id = ${current} AND visibility = ${skit.visibility}
+         RETURNING release_id`,
     );
+    const cleanup = blobs
+      .delete("delete uncommitted release archive", [objectKey])
+      .pipe(
+        Effect.catch((cleanupError) =>
+          Effect.logError("release archive cleanup failed", cleanupError),
+        ),
+      );
     yield* insert.pipe(
+      Effect.flatMap((rows) =>
+        rows.length === 1 ? Effect.void : Effect.fail(new StaleRevision()),
+      ),
+      Effect.catchTag("Publication.StaleRevision", (error) =>
+        cleanup.pipe(Effect.andThen(Effect.fail(error))),
+      ),
       Effect.catchTag("Cloudflare.DatabaseError", (insertError) =>
         Effect.gen(function* () {
-          yield* blobs
-            .delete("delete uncommitted release archive", [objectKey])
-            .pipe(
-              Effect.catch((cleanupError) =>
-                Effect.logError("release archive cleanup failed", cleanupError),
-              ),
-            );
+          yield* cleanup;
           const raced = yield* findRelease(input.owner, input.slug, input.version).pipe(
             Effect.catch((lookupError) =>
               Effect.logError("release conflict lookup failed", lookupError).pipe(

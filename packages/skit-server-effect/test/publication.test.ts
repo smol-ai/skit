@@ -4,6 +4,7 @@ import { D1Client } from "@effect/sql-d1";
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
+import { vi } from "vitest";
 import { zipSync } from "fflate";
 import { sha256Hash } from "@smolai/skit-core/universal/consumer";
 import { BlobStore, blobStoreLayer, databaseLayer } from "../src/platform/cloudflare.js";
@@ -89,6 +90,64 @@ const prepareDatabase = Effect.fn("PublicationTest.prepareDatabase")(function* (
 });
 
 describe("Publication", () => {
+  it.effect(
+    "refuses a stale commit and removes its archive when the head or visibility changes after archive write",
+    () =>
+      Effect.gen(function* () {
+        for (const change of ["head", "visibility"] as const) {
+          yield* prepareDatabase();
+          const sql = yield* D1Client.D1Client;
+          const blobs = yield* BlobStore;
+          const skits = yield* Skits;
+          if (change === "visibility")
+            yield* sql`UPDATE skits SET visibility = 'public' WHERE owner_slug = 'alice' AND skit_slug = 'tools'`;
+          const publication = yield* skits.preparePublication(principal, {
+            owner: "alice",
+            slug: "tools",
+          });
+          const next = "sha256:2222222222222222222222222222222222222222222222222222222222222222";
+          yield* sql`INSERT INTO revisions SELECT owner_slug, skit_slug, ${next}, tree_hash, descriptor_json
+        FROM revisions WHERE owner_slug = 'alice' AND skit_slug = 'tools' LIMIT 1`;
+          const write = blobs.put;
+          let archiveKey: string | undefined;
+          const racedWrite = vi
+            .spyOn(blobs, "put")
+            .mockImplementation((operation, key, bytes, options) =>
+              write(operation, key, bytes, options).pipe(
+                Effect.tap(() => {
+                  if (operation !== "write release archive") return Effect.void;
+                  archiveKey = key;
+                  return (
+                    change === "head"
+                      ? sql`UPDATE skits SET current_revision_id = ${next} WHERE owner_slug = 'alice' AND skit_slug = 'tools'`
+                      : sql`UPDATE skits SET visibility = 'private' WHERE owner_slug = 'alice' AND skit_slug = 'tools'`
+                  ).pipe(Effect.orDie);
+                }),
+              ),
+            );
+          const result = yield* publication
+            .publish({ version: "1.0.0", archive: zipSync(Object.fromEntries(files)) })
+            .pipe(Effect.result, Effect.ensuring(Effect.sync(() => racedWrite.mockRestore())));
+          expect(result).toMatchObject({
+            _tag: "Failure",
+            failure: { _tag: "Publication.StaleRevision" },
+          });
+          expect(yield* sql`SELECT COUNT(*) count FROM releases`).toEqual([{ count: 0 }]);
+          expect(yield* sql`SELECT current_revision_id FROM skits`).toEqual([
+            {
+              current_revision_id:
+                change === "head"
+                  ? next
+                  : "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            },
+          ]);
+          if (archiveKey === undefined)
+            return yield* Effect.die("fixture did not write its real archive");
+          expect(yield* blobs.exists("check uncommitted release cleanup", archiveKey)).toBe(false);
+        }
+      }).pipe(Effect.provide(testLayer)),
+  );
+
   it.effect("refuses publication if owning-team membership is removed after preparation", () =>
     Effect.gen(function* () {
       yield* prepareDatabase();
