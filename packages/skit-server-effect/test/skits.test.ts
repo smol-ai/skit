@@ -446,6 +446,37 @@ it.effect("publishes current, and refuses a stale revision or an unpublishable t
   ),
 );
 
+it.effect("conceals deletion and previews from a non-owner despite a legacy admin grant", () =>
+  withRegistry(({ skits, cookie }) =>
+    Effect.gen(function* () {
+      yield* skits.create({ payload: { ...params, visibility: "private" } });
+      yield* Effect.promise(() =>
+        env.DB.batch([
+          env.DB.prepare(`INSERT INTO resource_grants
+          (grant_id, subject_kind, subject_id, resource_kind, resource_id, permission, created_at)
+          SELECT 'delete_admin_probe', 'principal', subject_id, 'skit', ?, 'admin', '2026-11-05'
+          FROM namespaces WHERE namespace_slug = ?`).bind(`${owner}/tools`, owner),
+          env.DB.prepare(
+            "UPDATE namespaces SET subject_id = 'principal_elsewhere' WHERE namespace_slug = ?",
+          ).bind(owner),
+        ]),
+      );
+      for (const suffix of ["?dry_run=true", ""]) {
+        const response = yield* Effect.promise(() =>
+          SELF.fetch(`${origin}/api/skits/${owner}/tools${suffix}`, {
+            method: "DELETE",
+            headers: { cookie, origin },
+          }),
+        );
+        expect(response.status).toBe(404);
+        expect(yield* Effect.promise(() => response.json())).toEqual({ error: "skit_not_found" });
+      }
+      expect(yield* countRows("skits")).toBe(1);
+      expect(yield* countRows("resource_grants")).toBe(1);
+    }),
+  ),
+);
+
 it.effect("deleting a SKIT removes its revisions and the trees no other SKIT records", () =>
   withRegistry(({ skits, skitDelete }) =>
     Effect.gen(function* () {

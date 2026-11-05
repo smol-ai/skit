@@ -287,6 +287,7 @@ export const owners = {
       "SkitDeletion service (done: planDelete/delete are Skits operations; implementation private under skits/internal)",
       "Publication + ReleaseStore services (done: Skits.publish and Skits.releases own release writes and reads)",
       "AuthorInventory service (done: access-filtered query is Skits.list; no separate tag/provider)",
+      "HTTP deletion authorization (done: Skits.planDelete/delete require a Principal and enforce namespace ownership or current team membership)",
       "publication/archive.ts reading Skits' tables directly (done: private skits/internal/release-archive.ts)",
       "ReleaseStore.readArchive leaking R2ObjectBody (done: BlobStore returns bytes or a stream)",
       "releases.adopted_content_digest (no reader or writer)",

@@ -71,7 +71,6 @@ describe("authorization", () => {
           "tool",
         ),
       ).toEqual(new Set(["rel_secret"]));
-      expect(yield* authorization.canDeleteSkit(principal, "external", "tool")).toBe(true);
     }).pipe(Effect.provide(testLayer)),
   );
 

@@ -48,11 +48,6 @@ export interface AuthorizationService {
     owner: string,
     slug: string,
   ) => Effect.Effect<boolean, DatabaseError>;
-  readonly canDeleteSkit: (
-    principal: Principal,
-    owner: string,
-    slug: string,
-  ) => Effect.Effect<boolean, DatabaseError>;
   readonly canReadRelease: (
     principal: Principal,
     releaseId: string,
@@ -206,16 +201,6 @@ export const layer = Layer.effect(
       return rows.some((row) => row.length !== 0);
     });
 
-    const canDeleteSkit = Effect.fn("Authorization.canDeleteSkit")(function* (
-      principal: Principal,
-      owner: string,
-      slug: string,
-    ) {
-      const candidates = yield* subjects(principal);
-      if (yield* ownsForSubjects(candidates, owner)) return true;
-      return yield* hasGrantForSubjects(candidates, "skit", `${owner}/${slug}`, "admin");
-    });
-
     const canReadRelease = Effect.fn("Authorization.canReadRelease")(function* (
       principal: Principal,
       releaseId: string,
@@ -323,7 +308,6 @@ export const layer = Layer.effect(
       ownsNamespace,
       canAuthor,
       canPublish,
-      canDeleteSkit,
       canReadRelease,
       readableReleaseIds,
     });

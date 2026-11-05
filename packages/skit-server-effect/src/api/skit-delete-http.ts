@@ -1,6 +1,5 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
-import { Authorization } from "../authorization/service.js";
 import { Skits } from "../skits/service.js";
 import { CurrentPrincipal } from "./authentication.js";
 import { AuthoringAuthenticatedApi } from "@smolai/skit-core/universal/api";
@@ -17,7 +16,6 @@ export const skitDeleteHandlers = HttpApiBuilder.group(
   "skitDelete",
   (handlers) =>
     Effect.gen(function* () {
-      const authorization = yield* Authorization;
       const skits = yield* Skits;
 
       return handlers.handle("deletePrivate", ({ params, query }) =>
@@ -26,21 +24,9 @@ export const skitDeleteHandlers = HttpApiBuilder.group(
           if (!principal.scopes.has("authoring:write"))
             return yield* Effect.fail(insufficientScopeResponse);
 
-          const permitted = yield* authorization
-            .canDeleteSkit(principal, params.owner, params.slug)
-            .pipe(
-              Effect.tapError((error) =>
-                Effect.logError("SKIT deletion authorization failed", error),
-              ),
-              Effect.catchTag("Cloudflare.DatabaseError", () =>
-                Effect.fail(storageFailureResponse),
-              ),
-            );
-          if (!permitted) return yield* Effect.fail(skitNotFoundResponse);
-
           const operation =
             query.dry_run === "true"
-              ? skits.planDelete(params.owner, params.slug).pipe(
+              ? skits.planDelete(principal, params.owner, params.slug).pipe(
                   Effect.map((plan) =>
                     plan === undefined
                       ? {
@@ -54,11 +40,12 @@ export const skitDeleteHandlers = HttpApiBuilder.group(
                       : { status: "delete_ready" as const, changed: false, ...plan },
                   ),
                 )
-              : skits.delete(params.owner, params.slug);
+              : skits.delete(principal, params.owner, params.slug);
 
           const result = yield* operation.pipe(
             Effect.tapError((error) => Effect.logError("SKIT deletion failed", error)),
             Effect.catchTags({
+              "SkitDelete.NotFound": () => Effect.fail(skitNotFoundResponse),
               "SkitDelete.RequiresPrivate": () => Effect.fail(deleteRequiresPrivateResponse),
               "Cloudflare.DatabaseError": () => Effect.fail(storageFailureResponse),
             }),

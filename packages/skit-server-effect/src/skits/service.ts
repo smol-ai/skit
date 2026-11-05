@@ -534,7 +534,7 @@ export const layer = Layer.effect(
       ancestors,
       list: makeList(sql, authorization),
       releases: makeReleaseReads(sql, blobs),
-      ...makeDeletion(sql, blobs),
+      ...makeDeletion(sql, blobs, authorization.ownsNamespace),
       ...makePublication(sql, blobs, digests, random, current),
     });
   }),

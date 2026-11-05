@@ -6,6 +6,7 @@ import {
   type BlobStoreService,
 } from "../../platform/cloudflare.js";
 import type { AuthorSkitDeleteResponse } from "@smolai/skit-core/universal/api";
+import type { Principal } from "../../identity/service.js";
 
 const SkitVisibility = Schema.Struct({
   visibility: Schema.Literals(["public", "unlisted", "private"]),
@@ -35,18 +36,32 @@ class DeleteRequiresPrivate extends Schema.TaggedError<DeleteRequiresPrivate>()(
   {},
 ) {}
 
+class DeleteNotFound extends Schema.TaggedError<DeleteNotFound>()("SkitDelete.NotFound", {}) {}
+
 export interface Deletion {
   readonly planDelete: (
+    principal: Principal,
     owner: string,
     slug: string,
-  ) => Effect.Effect<SkitDeletePlan | undefined, DatabaseError | DeleteRequiresPrivate>;
+  ) => Effect.Effect<
+    SkitDeletePlan | undefined,
+    DatabaseError | DeleteRequiresPrivate | DeleteNotFound
+  >;
   readonly delete: (
+    principal: Principal,
     owner: string,
     slug: string,
-  ) => Effect.Effect<AuthorSkitDeleteResponse, DatabaseError | DeleteRequiresPrivate>;
+  ) => Effect.Effect<
+    AuthorSkitDeleteResponse,
+    DatabaseError | DeleteRequiresPrivate | DeleteNotFound
+  >;
 }
 /** Private SKIT deletion, using only the database and blobs acquired by Skits. */
-export const makeDeletion = (sql: DatabaseSqlClient, blobs: BlobStoreService): Deletion => {
+export const makeDeletion = (
+  sql: DatabaseSqlClient,
+  blobs: BlobStoreService,
+  ownsNamespace: (principal: Principal, namespace: string) => Effect.Effect<boolean, DatabaseError>,
+): Deletion => {
   const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
     effect.pipe(databaseError(operation));
 
@@ -91,7 +106,26 @@ export const makeDeletion = (sql: DatabaseSqlClient, blobs: BlobStoreService): D
     };
   });
 
-  const deleteSkit = Effect.fn("SkitDeletion.delete")(function* (owner: string, slug: string) {
+  const requireOwner = Effect.fn("SkitDeletion.requireOwner")(function* (
+    principal: Principal,
+    owner: string,
+  ) {
+    if (!(yield* ownsNamespace(principal, owner))) return yield* new DeleteNotFound();
+  });
+  const planDelete = Effect.fn("SkitDeletion.planDelete")(function* (
+    principal: Principal,
+    owner: string,
+    slug: string,
+  ) {
+    yield* requireOwner(principal, owner);
+    return yield* plan(owner, slug);
+  });
+  const deleteSkit = Effect.fn("SkitDeletion.delete")(function* (
+    principal: Principal,
+    owner: string,
+    slug: string,
+  ) {
+    yield* requireOwner(principal, owner);
     const guard = `EXISTS (
     SELECT 1 FROM skits
     WHERE owner_slug = ? AND skit_slug = ? AND visibility = 'private'
@@ -198,5 +232,5 @@ export const makeDeletion = (sql: DatabaseSqlClient, blobs: BlobStoreService): D
     };
   });
 
-  return { planDelete: plan, delete: deleteSkit };
+  return { planDelete, delete: deleteSkit };
 };
