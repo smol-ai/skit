@@ -1,4 +1,4 @@
-import { LibraryAuditEvent } from "@smolai/skit-core";
+import { LibraryAuditEvent } from "@smolai/skit-core/library";
 import { Schema } from "effect";
 
 const HistoryResult = Schema.Struct({ events: Schema.Array(LibraryAuditEvent) });

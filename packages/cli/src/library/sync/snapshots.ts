@@ -4,7 +4,7 @@ import {
   type SnapshotArchive,
   type RestoreProgress,
   RestoreInvalid,
-} from "@smolai/skit-core";
+} from "@smolai/skit-core/library";
 import { Effect, Option } from "effect";
 import type { librarySyncApi } from "./api.js";
 import { silentSyncProgress, type SyncProgress } from "./progress.js";

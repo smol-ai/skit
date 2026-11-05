@@ -1,4 +1,4 @@
-import type { InstallDestination } from "@smolai/skit-core";
+import type { InstallDestination } from "@smolai/skit-core/library";
 import type { HarnessName } from "@smolai/skit-core/harnesses";
 import {
   installDestinationsFor,

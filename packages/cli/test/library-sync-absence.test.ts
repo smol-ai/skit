@@ -3,7 +3,8 @@ import { assert, it } from "@effect/vitest";
 import { join } from "node:path";
 import { renderLibrarySync } from "../src/library/sync/present.js";
 import { Effect } from "effect";
-import { currentLibraryManifest, type LibraryManifest } from "@smolai/skit-core";
+import { currentLibraryManifest } from "@smolai/skit-core";
+import { type LibraryManifest } from "@smolai/skit-core/library";
 import { captureDisk, diskChanges, noDiskChanges } from "./helpers/disk-snapshot.js";
 import { devices } from "./helpers/library-sync-devices.js";
 

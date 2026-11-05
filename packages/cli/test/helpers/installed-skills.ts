@@ -1,13 +1,12 @@
 import { Context, Effect, Layer } from "effect";
 import {
   InstalledSkills,
-  type InstallDestination,
-  type InstallScope,
   type LibraryState,
   type ManageApproval,
   type OwnershipMarker,
   emptyLibraryState,
 } from "@smolai/skit-core";
+import { type InstallDestination, type InstallScope } from "@smolai/skit-core/library";
 import { Library } from "@smolai/skit-core/library";
 import { SkitConfiguration, pathIsWithin } from "@smolai/skit-core/platform";
 import { type Hash } from "@smolai/skit-core/shared";

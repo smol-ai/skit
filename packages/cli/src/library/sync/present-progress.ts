@@ -1,4 +1,4 @@
-import type { RestoreProgress, RestorePhase } from "@smolai/skit-core";
+import type { RestoreProgress, RestorePhase } from "@smolai/skit-core/library";
 import type { SyncProgress, SyncPhase } from "./progress.js";
 import type { RendererShape } from "../../terminal/renderer.js";
 

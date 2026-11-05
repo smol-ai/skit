@@ -1,7 +1,7 @@
 import { OptionCombinationInvalid, MissingRequirement } from "../commands/input-failures.js";
 import { promptsAllowed } from "../terminal/interactivity.js";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
-import { type InstallScope as Scope } from "@smolai/skit-core";
+import { type InstallScope as Scope } from "@smolai/skit-core/library";
 
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";

@@ -6,10 +6,10 @@ import {
   readSnapshotArchive,
   currentSkillVersion,
   libraryManifestFromLocalState,
-  LibraryManifest,
   LibraryState,
   collectionVersionPath,
 } from "@smolai/skit-core";
+import { LibraryManifest } from "@smolai/skit-core/library";
 import { type SkillId } from "@smolai/skit-core/universal/consumer";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
 import { devices } from "./helpers/library-sync-devices.js";

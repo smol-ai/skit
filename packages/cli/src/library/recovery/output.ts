@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { RecoveryInspection } from "@smolai/skit-core";
+import { RecoveryInspection } from "@smolai/skit-core/library";
 
 import { CommandAction } from "../../commands/command-actions.js";
 
