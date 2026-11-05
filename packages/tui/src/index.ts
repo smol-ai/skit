@@ -7,8 +7,6 @@ import { probeHarness, type HarnessProbeResult } from "@smolai/skit-core/harness
 import {
   BoxRenderable,
   fg,
-  InputRenderable,
-  InputRenderableEvents,
   ScrollBoxRenderable,
   SelectRenderable,
   SelectRenderableEvents,
@@ -40,6 +38,7 @@ import { createRenderer, writeFrame } from "./shell/render";
 import { createInteractionController } from "./shell/interaction";
 import { createViewPrimitives } from "./shell/view";
 import { createLibraryOverlays } from "./library/overlays";
+import { createShellOverlays } from "./shell/overlays";
 import { copySelectedText, isCopySelectionKey } from "./shell/selection-copy";
 import {
   ink,
@@ -159,16 +158,7 @@ let auditSelectedIndex =
   requestedItemIndex !== undefined && requestedItemIndex >= 0 ? requestedItemIndex : 0;
 const interaction = createInteractionController(renderInventory);
 const view = createViewPrimitives(renderer);
-const {
-  box,
-  text,
-  statusColor,
-  detailFields,
-  isCompact,
-  modalWidth,
-  overlayHandle,
-  scrollOverlay,
-} = view;
+const { box, text, statusColor, detailFields, isCompact, scrollOverlay } = view;
 const libraryOverlays = createLibraryOverlays(renderer, interaction, view);
 const libraryController = createLibraryController({
   host: libraryHost,
@@ -621,22 +611,7 @@ const paletteCommands = [
 ] as const;
 
 keymap.registerLayer({ commands: paletteCommands });
-
-function commandField(
-  command: (typeof paletteCommands)[number],
-  field: "title" | "description" | "shortcut",
-): string {
-  return command[field];
-}
-
-function closePalette(): void {
-  interaction.close("palette");
-}
-
-function runPaletteCommand(name: string): void {
-  closePalette();
-  keymap.runCommand(name);
-}
+const shellOverlays = createShellOverlays(renderer, interaction, view, keymap);
 
 function openSelectedSkill(): void {
   if (
@@ -676,56 +651,8 @@ function openSelectedSkill(): void {
     .then((content) => {
       const selected = currentSectionItems()[selection.index];
       if (!stillBrowsing() || selected?.kind !== "skill" || selected.location !== location) return;
-      showDocument(name, location, content);
+      shellOverlays.showDocument(name, location, content);
     });
-}
-
-function showDocument(name: string, location: string, content: string): void {
-  const overlay = box("skill-document", {
-    position: "absolute",
-    left: 0,
-    top: 0,
-    width: "100%",
-    height: "100%",
-    zIndex: 100,
-    border: true,
-    backgroundColor: surface.canvas,
-    ...panelColors(true),
-    title: panelTitle(`SKILL.md · ${name}`),
-    flexDirection: "column",
-    padding: 1,
-  });
-  const pathLine = text("skill-document-path", location, { fg: ink.faint, height: 2 });
-  const scroll = new ScrollBoxRenderable(renderer, {
-    id: "skill-document-scroll",
-    width: "100%",
-    flexGrow: 1,
-    scrollY: true,
-    scrollX: false,
-    focusable: true,
-    viewportCulling: true,
-    verticalScrollbarOptions: { visible: true },
-  });
-  scroll.add(
-    text("skill-document-content", content, {
-      width: "100%",
-    }),
-  );
-  overlay.add(pathLine);
-  overlay.add(scroll);
-  overlay.add(
-    text("skill-document-help", "↑↓/PgUp/PgDn scroll   Home/End jump   Esc close", {
-      fg: ink.faint,
-      height: 1,
-    }),
-  );
-  interaction.open({
-    kind: "document",
-    view: {
-      ...overlayHandle(overlay, () => scroll.focus(), false),
-      scroll: (key) => scrollOverlay(scroll, key),
-    },
-  });
 }
 
 /** Harnesses with a probe already running, so a repeated key cannot start a second one. */
@@ -760,74 +687,6 @@ function probeSelectedHarness(all: boolean): void {
   })();
 }
 
-function openPalette(): void {
-  if (interaction.kind === "palette") return;
-
-  const overlay = box("command-palette", {
-    position: "absolute",
-    ...modalWidth(),
-    top: "15%",
-    height: "70%",
-    zIndex: 100,
-    border: true,
-    backgroundColor: surface.canvas,
-    ...panelColors(true),
-    title: panelTitle("command palette"),
-    flexDirection: "column",
-    padding: 1,
-    gap: 1,
-  });
-  const input = new InputRenderable(renderer, {
-    id: "command-palette-input",
-    width: "100%",
-    placeholder: "Search commands…",
-    textColor: ink.strong,
-    focusedBackgroundColor: surface.hairline,
-    cursorColor: tone.accent,
-  });
-  const select = new SelectRenderable(renderer, {
-    id: "command-palette-results",
-    width: "100%",
-    flexGrow: 1,
-    textColor: ink.DEFAULT,
-    descriptionColor: ink.faint,
-    ...listColors(true),
-    focusedBackgroundColor: "transparent",
-    showScrollIndicator: true,
-    wrapSelection: true,
-  });
-  const updateResults = (query: string): void => {
-    const commands = keymap.getCommands({
-      visibility: "registered",
-      search: query,
-      searchIn: ["name", "title", "description", "keywords"],
-    }) as (typeof paletteCommands)[number][];
-    select.options = commands.map((command) => ({
-      name: commandField(command, "title"),
-      description: `${commandField(command, "description")}${command.shortcut ? `  ·  ${command.shortcut}` : ""}`,
-      value: command.name,
-    }));
-    select.setSelectedIndex(0);
-  };
-
-  input.on(InputRenderableEvents.INPUT, (value: string) => updateResults(value));
-  input.on(InputRenderableEvents.ENTER, () => select.selectCurrent());
-  select.on(SelectRenderableEvents.ITEM_SELECTED, (_index: number, option: { value?: unknown }) => {
-    if (typeof option?.value === "string") runPaletteCommand(option.value);
-  });
-  updateResults("");
-  overlay.add(input);
-  overlay.add(select);
-  overlay.add(text("command-palette-help", "↑↓ browse   enter run   esc close", { fg: ink.faint }));
-  interaction.open({
-    kind: "palette",
-    view: {
-      ...overlayHandle(overlay, () => input.focus()),
-      move: (direction) => (direction === "up" ? select.moveUp() : select.moveDown()),
-    },
-  });
-}
-
 function handleGlobalKey(key: KeyEvent): void {
   const result = interaction.handleKey(key, {
     section: sections[variant]!.key,
@@ -858,7 +717,7 @@ function handleGlobalKey(key: KeyEvent): void {
       void libraryController.cancelPending();
       break;
     case "open-palette":
-      openPalette();
+      shellOverlays.openPalette();
       break;
     case "open-selected":
       openSelectedSkill();
@@ -912,7 +771,7 @@ if (process.env.SKIT_TUI_SNAPSHOT_DETAILS === "1") narrowDetails = true;
 render();
 
 if (process.env.SKIT_TUI_SNAPSHOT_HARNESS_PROBE === "1") probeSelectedHarness(true);
-if (process.env.SKIT_TUI_SNAPSHOT_PALETTE === "1") openPalette();
+if (process.env.SKIT_TUI_SNAPSHOT_PALETTE === "1") shellOverlays.openPalette();
 if (process.env.SKIT_TUI_SNAPSHOT_DOCUMENT === "1") {
   if (sections[variant]?.key === "skills" && skillNavigation.view === "groups") {
     skillNavigation = { view: "skills", group: skillGroups[0]! };
