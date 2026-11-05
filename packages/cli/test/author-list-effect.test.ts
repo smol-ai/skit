@@ -4,7 +4,7 @@ import { HttpClientError } from "effect/http";
 import { assert, it } from "@effect/vitest";
 import { expect } from "vitest";
 import { authorListCommand, listAuthorSkits, AuthorListIdentityError } from "../src/author/list.js";
-import { SkitContractError } from "@smolai/skit-core";
+import { SkitContractError } from "@smolai/skit-core/api";
 
 import { renderCommandFailures } from "../src/application.js";
 import type { ResolvedAuth } from "../src/registry/auth.js";

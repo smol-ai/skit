@@ -2,7 +2,11 @@ import { Data, Effect, Predicate, Schema } from "effect";
 import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
-import { SkitContractError, parseContract, releasePublishRequestSchema } from "@smolai/skit-core";
+import {
+  SkitContractError,
+  parseContract,
+  releasePublishRequestSchema,
+} from "@smolai/skit-core/api";
 import type { AuthorRemoteHome } from "@smolai/skit-core/author";
 import {
   IntegrityFailureResponse,

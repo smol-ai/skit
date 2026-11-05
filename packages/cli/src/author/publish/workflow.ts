@@ -5,13 +5,12 @@ import type { ChildProcessSpawner } from "effect/process";
 import { join, resolve } from "node:path";
 import {
   createSkitArchive,
-  SkitContractError,
   type DescriptorFailure,
-  type ReleasePublishResponse,
   type SkitValidationFailed,
   readSkitDescriptor,
   validateSkitDirectory,
 } from "@smolai/skit-core";
+import { SkitContractError, type ReleasePublishResponse } from "@smolai/skit-core/api";
 import { type TreeError } from "@smolai/skit-core/shared";
 import { type TreeRequirements, type SkitConfiguration } from "@smolai/skit-core/platform";
 import { RegistryHttp, RegistryTransportError } from "../../registry/registry-http.js";

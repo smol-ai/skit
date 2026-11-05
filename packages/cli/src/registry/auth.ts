@@ -1,6 +1,7 @@
 import { configurationForHome, SkitConfiguration } from "@smolai/skit-core/platform";
 import { isErrno } from "@smolai/skit-core/shared";
-import { serverDiscoverySchema, HomeLock } from "@smolai/skit-core";
+import { HomeLock } from "@smolai/skit-core";
+import { serverDiscoverySchema } from "@smolai/skit-core/api";
 import { Clock, Config, Effect, FileSystem, Option, Redacted, Result, Schema } from "effect";
 import { Cookies, HttpClientRequest } from "effect/http";
 import { HttpApiClient } from "effect/http-api";

@@ -81,3 +81,10 @@ export {
   SnapshotUploadResponse,
   SnapshotArchive,
 } from "../library/library-contracts.js";
+export {
+  AuthorSkitListResponse,
+  releasePublishRequestSchema,
+  releasePublishResponseSchema,
+  type ReleasePublishResponse,
+} from "./authoring-contracts.js";
+export { parseContract, SkitContractError, serverDiscoverySchema } from "./consumer-contracts.js";

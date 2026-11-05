@@ -1,13 +1,15 @@
 import { securityOutputContracts } from "../library/security.js";
 import {
-  AuthorSkitDeleteResponse,
-  AuthorSkitSummary,
   InvocationMetadataGeneration,
-  releasePublishResponseSchema,
   SkillAssessmentDecision,
   SkillAudit,
   SkitValidationDiagnostic,
 } from "@smolai/skit-core";
+import {
+  AuthorSkitDeleteResponse,
+  AuthorSkitSummary,
+  releasePublishResponseSchema,
+} from "@smolai/skit-core/api";
 import { Hash } from "@smolai/skit-core/shared";
 import { VersionReport } from "../releases.js";
 
