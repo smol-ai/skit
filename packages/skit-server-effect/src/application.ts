@@ -11,8 +11,7 @@ import { layer as bootstrapServiceLayer } from "./bootstrap/service.js";
 import { ServerConfiguration } from "./configuration.js";
 import { layer as skitsLayer } from "./skits/service.js";
 import { layer as feedbackServiceLayer } from "./feedback/service.js";
-import { layer as librarySyncLayer } from "./library/library-sync.js";
-import { layer as librarySnapshotsLayer } from "./library/snapshots.js";
+import { layer as serverLibraryLayer } from "./library/service.js";
 import { blobStoreLayer, databaseLayer, type RuntimeEnv } from "./platform/cloudflare.js";
 import { layer as nativeClockLayer } from "./platform/native-clock.js";
 import { layer as nativeCryptoLayer } from "./platform/native-crypto.js";
@@ -97,8 +96,7 @@ export const applicationLayers = (
   const authenticated = Layer.mergeAll(
     authenticationLayer(supportedScopes),
     teamsLayer,
-    librarySnapshotsLayer,
-    librarySyncLayer,
+    serverLibraryLayer,
     readinessLayer(env),
     skitsLayer,
     patRateLimiterLayer(env.PAT_RATE_LIMITER),

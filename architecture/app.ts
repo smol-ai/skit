@@ -297,9 +297,9 @@ export const owners = {
     owns: ["libraries", "library_revisions", "library_snapshots", "<library_id>/<digest> blobs"],
     ops: ["read", "write(expected, manifest)", "snapshots.{upload, download}"],
     removes: [
-      "LibrarySnapshots and LibrarySync as two services both inserting libraries rows",
-      "library/owner.ts findOwnedLibrary helper",
-      "exported commitLibraryRevision (test-only)",
+      "LibrarySnapshots + LibrarySync services (done: one ServerLibrary constructor and default-Library lookup)",
+      "library/owner.ts helper (done: private internal/owned.ts, used only by ServerLibrary construction)",
+      "public commitLibraryRevision export (done: private internal/sync.ts; only the owner and an atomic-guard unit test use it)",
     ],
   },
 

@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
-import { LibrarySnapshots } from "../library/snapshots.js";
+import { ServerLibrary } from "../library/service.js";
 import { CurrentPrincipal } from "./authentication.js";
 import { ConsumerAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import {
@@ -16,7 +16,7 @@ export const librarySnapshotHandlers = HttpApiBuilder.group(
   "librarySnapshots",
   (handlers) =>
     Effect.gen(function* () {
-      const snapshots = yield* LibrarySnapshots;
+      const snapshots = (yield* ServerLibrary).snapshots;
       const requirePrincipal = Effect.gen(function* () {
         const principal = yield* CurrentPrincipal;
         if (!principal.scopes.has("library:sync"))

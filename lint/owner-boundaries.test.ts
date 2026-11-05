@@ -50,6 +50,37 @@ async function reported(
 }
 
 describe("skit/owner-boundaries", () => {
+  test("server Library adapters cannot bypass the owner for revisions or snapshots", async () => {
+    for (const statement of [
+      `import { commitLibraryRevision } from "../library/internal/sync.js";`,
+      `import { makeSnapshots } from "../library/internal/snapshots.js";`,
+      `const loading = import("../library/internal/owned.js");`,
+      `export * from "../library/internal/owned.js";`,
+    ]) {
+      expect(
+        await reported(
+          statement,
+          "owner-boundaries",
+          "packages/skit-server-effect/src/api/library-sync-http.ts",
+        ),
+      ).toHaveLength(1);
+    }
+    expect(
+      await reported(
+        `import { ServerLibrary } from "../library/service.js";`,
+        "owner-boundaries",
+        "packages/skit-server-effect/src/api/library-sync-http.ts",
+      ),
+    ).toEqual([]);
+    expect(
+      await reported(
+        `import { commitLibraryRevision } from "../src/library/internal/sync.js";`,
+        "owner-boundaries",
+        "packages/skit-server-effect/test/library-sync.test.ts",
+      ),
+    ).toEqual([]);
+  });
+
   test("server HTTP adapters cannot acquire private SKIT lifecycle authority", async () => {
     for (const statement of [
       `import { makeDeletion as createWriter } from "../skits/internal/deletion.js";`,

@@ -9,7 +9,7 @@ import {
   SnapshotArchive,
 } from "@smolai/skit-core/universal/consumer";
 import { RevisionConflictResponse } from "@smolai/skit-core/universal/api";
-import { commitLibraryRevision, LibraryRevisionConflict } from "../src/library/library-sync.js";
+import { commitLibraryRevision, LibraryRevisionConflict } from "../src/library/internal/sync.js";
 import { databaseLayer } from "../src/platform/cloudflare.js";
 import { layer as nativeCryptoLayer } from "../src/platform/native-crypto.js";
 import archiveFixture from "./fixtures/library-sync/archive.json" with { type: "json" };
@@ -151,6 +151,29 @@ const competing = {
 };
 
 describe("Library sync Worker persistence", () => {
+  it.effect("snapshot upload and a first revision share one default Library", () =>
+    Effect.gen(function* () {
+      const headers = yield* session();
+      const empty = Schema.decodeUnknownSync(LibraryManifest)(emptyManifestFixture);
+      const [uploaded, response] = yield* Effect.all(
+        [upload(headers), write(headers, null, empty)],
+        {
+          concurrency: 2,
+        },
+      );
+      expect(response.status).toBe(200);
+      const committed = Schema.decodeUnknownSync(remote)(
+        yield* Effect.promise(() => response.json()),
+      ).library;
+      expect(committed.library_id).toBe(uploaded.library_id);
+      const libraries = yield* Effect.promise(() =>
+        env.DB.prepare("SELECT library_id FROM libraries").all(),
+      );
+      expect(libraries.results).toEqual([{ library_id: uploaded.library_id }]);
+      yield* assertArchive(uploaded.library_id);
+    }),
+  );
+
   it.effect("smoke: competing HTTP submissions accept one writer (not proof of D1 atomicity)", () =>
     Effect.gen(function* () {
       const headers = yield* session();

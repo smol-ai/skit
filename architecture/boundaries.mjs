@@ -12,6 +12,13 @@
  */
 export const owners = [
   {
+    name: "ServerLibrary",
+    owner: "packages/skit-server-effect/src/library/",
+    privateModules: ["packages/skit-server-effect/src/library/internal/"],
+    testOwner: "packages/skit-server-effect/test/",
+    private: [],
+  },
+  {
     name: "Skits",
     owner: "packages/skit-server-effect/src/skits/",
     privateModules: ["packages/skit-server-effect/src/skits/internal/"],
@@ -124,6 +131,7 @@ export const approvedServices = [
   "@smolai/skit-core/CurrentPrincipal",
   "@skit-server-effect/BlobStore",
   "@skit-server-effect/Skits",
+  "@skit-server-effect/ServerLibrary",
   "@skit-server-effect/Teams",
   "@skit-server-effect/Feedback",
   "@skit-server-effect/ServerConfiguration",
