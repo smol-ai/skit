@@ -118,5 +118,3 @@ export const withLock = Effect.fn("HomeLock.with")(function* <A, E, R>(
           ),
   );
 });
-
-export * as HomeLock from "./home-lock.js";

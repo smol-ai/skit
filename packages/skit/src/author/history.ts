@@ -35,7 +35,7 @@ import { type TreeError } from "../shared/tree-error.js";
 
 import { syncPaths } from "../platform/atomic-write.js";
 import { walkAuthorTree } from "../artifact/tree.js";
-import { HomeLock } from "../platform/home-lock.js";
+import * as HomeLock from "../platform/home-lock.js";
 import { AuthorWorkspaceAlreadyRegistered, LocalFilesChangedDuringSync } from "./failures.js";
 
 import {

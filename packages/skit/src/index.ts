@@ -297,4 +297,4 @@ export { normalizeLibraryManifest } from "./library/manifest.js";
 export { type ManageStopped, type SyncStopped } from "./library/library.js";
 export type { StoredSyncProgram } from "./library/store/state-schema.js";
 
-export { HomeLock } from "./platform/home-lock.js";
+export * as HomeLock from "./platform/home-lock.js";

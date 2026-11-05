@@ -1,6 +1,6 @@
 import { Semaphore } from "effect";
 import { resolve } from "node:path";
-import { HomeLock } from "../../platform/home-lock.js";
+import * as HomeLock from "../../platform/home-lock.js";
 import type { Effect } from "effect";
 const processSavers = new Map<string, Semaphore.Semaphore>();
 const semaphoreFor = (root: string) => {
