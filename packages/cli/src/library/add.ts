@@ -1,4 +1,4 @@
-import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
+import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
 
 import { Effect, Option } from "effect";
 import { descriptionLoadMessage } from "./presentation/description-size.js";

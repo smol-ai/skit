@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Cause, Effect, Exit, FileSystem, Schema } from "effect";
-import { skitLayer } from "@smolai/skit-core";
+import { skitLayer } from "@smolai/skit-core/platform";
 import { publish } from "../src/author/publish/workflow.js";
 import { AuthorWorkspace } from "@smolai/skit-core/author";
 import { registryHttpLayer } from "../src/registry/registry-http.js";

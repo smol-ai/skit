@@ -9,12 +9,11 @@ import {
   type DescriptorFailure,
   type ReleasePublishResponse,
   type SkitValidationFailed,
-  type TreeError,
-  type TreeRequirements,
   readSkitDescriptor,
   validateSkitDirectory,
-  type SkitConfiguration,
 } from "@smolai/skit-core";
+import { type TreeError } from "@smolai/skit-core/shared";
+import { type TreeRequirements, type SkitConfiguration } from "@smolai/skit-core/platform";
 import { RegistryHttp, RegistryTransportError } from "../../registry/registry-http.js";
 import { publishRelease, PublicationResponseError } from "../../registry/publication.js";
 import {

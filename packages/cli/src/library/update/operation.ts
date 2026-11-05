@@ -1,4 +1,5 @@
-import { Library, SkitConfiguration } from "@smolai/skit-core";
+import { Library } from "@smolai/skit-core/library";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { updateSources } from "@smolai/skit-core/library/session";
 import { Effect } from "effect";
 import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";

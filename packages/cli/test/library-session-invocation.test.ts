@@ -1,4 +1,4 @@
-import { SkitConfiguration } from "@smolai/skit-core";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { Effect, FileSystem, Result } from "effect";
@@ -9,8 +9,8 @@ import {
   HarnessName,
   collectionVersionPath,
   resolveDeclaredInvocation,
-  skitLayer,
 } from "@smolai/skit-core";
+import { skitLayer } from "@smolai/skit-core/platform";
 import {
   confirmLibraryChange,
   libraryPolicyAfter,

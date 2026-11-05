@@ -22,7 +22,7 @@ import { Prompt } from "effect/cli";
 import { terminalColors } from "./style.js";
 import { fitTerminalLine, renderSkillPreview } from "./skill-preview.js";
 import { terminalText } from "./text.js";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 
 export interface Choice<Value> {
   value: Value;

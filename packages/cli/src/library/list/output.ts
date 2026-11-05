@@ -1,6 +1,7 @@
 import { SkillMetadata } from "@smolai/skit-core/library/session";
 import { Schema } from "effect";
-import { CollectionId, Hash, SkillId, SkillVersionId } from "@smolai/skit-core";
+import { CollectionId, SkillId, SkillVersionId } from "@smolai/skit-core";
+import { Hash } from "@smolai/skit-core/shared";
 
 export const ListResult = Schema.Struct({
   subjects: Schema.Array(

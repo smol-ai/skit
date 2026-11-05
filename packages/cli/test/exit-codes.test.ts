@@ -16,8 +16,8 @@ import {
   InstalledSkillFileMissing,
   ReadmeFrontmatterMissing,
   resolveSkitSource,
-  skitLayer,
 } from "@smolai/skit-core";
+import { skitLayer } from "@smolai/skit-core/platform";
 import { productionUrlTestClient } from "./helpers/http-test-client.js";
 import { commandApplicationLayer } from "../src/application.js";
 import { commandDescriptions } from "../src/commands/manifest.js";

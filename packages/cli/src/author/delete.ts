@@ -1,4 +1,4 @@
-import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
+import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { Option, Effect, Result } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { parseAuthorDestination } from "./destination.js";

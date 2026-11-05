@@ -1,6 +1,6 @@
 // Failures a workflow raises about its own input, shared by the handlers that call it.
 
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 import { Data } from "effect";
 
 /** A required input the parser cannot enforce, such as an option that only some paths need. */

@@ -1,4 +1,5 @@
-import { SkitContractError, FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { SkitContractError } from "@smolai/skit-core";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 import {
   AuthoringAuthenticatedApi,
   DeleteRequiresPrivateResponse,

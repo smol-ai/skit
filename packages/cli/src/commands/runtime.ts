@@ -1,9 +1,5 @@
-import {
-  FailureTypeId,
-  SkitConfiguration,
-  resolveSkitConfiguration,
-  type SkitFailure,
-} from "@smolai/skit-core";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
+import { SkitConfiguration, resolveSkitConfiguration } from "@smolai/skit-core/platform";
 import { Data, Console, Effect, Option } from "effect";
 import { CliError, CliOutput, Command, type HelpDoc } from "effect/cli";
 import { skitCliConfigLayer } from "./parameters.js";

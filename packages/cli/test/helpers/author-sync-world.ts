@@ -1,7 +1,8 @@
 import { dirname, join } from "node:path";
 import { Effect, Exit, Fiber, FileSystem, Layer, Ref, Scope } from "effect";
 import { libraryApplicationLayer } from "../../src/application.js";
-import { LinkStat, skitConfigurationLayer } from "@smolai/skit-core";
+import { LinkStat } from "@smolai/skit-core";
+import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import type { PlatformError } from "effect/PlatformError";
 import { syncAuthorWorkspace } from "../../src/author/sync/workflow.js";
 import { authorLayer, storedTreesAt } from "./author-history.js";

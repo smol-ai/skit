@@ -339,6 +339,18 @@ export const owners = {
  * The root export is an aggregate compatibility surface, not a subpath.
  */
 export const coreExports = {
+  "./shared": {
+    kind: "shared",
+    purpose:
+      "Common failure, hash, JSON and build vocabulary without persisted owner state or Node runtime wiring.",
+    source: "packages/skit/src/shared/index.ts",
+  },
+  "./platform": {
+    kind: "shared",
+    purpose:
+      "Device configuration snapshots and runtime/process/path adapters; no owner stores or writer capabilities.",
+    source: "packages/skit/src/platform/index.ts",
+  },
   "./library": { kind: "owner", owners: ["Library"], source: "packages/skit/src/library/index.ts" },
   "./library/routing": {
     kind: "owner",

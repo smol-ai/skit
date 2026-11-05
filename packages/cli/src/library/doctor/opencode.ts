@@ -2,7 +2,7 @@ import { Data, Effect, FileSystem, Option, Schedule, Schema, Stream } from "effe
 import { randomBytes } from "node:crypto";
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 
 class OpenCodeDiscoveryFailure
   extends Data.TaggedError("OpenCodeDiscoveryFailure")<{

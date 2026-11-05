@@ -23,7 +23,7 @@ import {
   registryApiFailure,
 } from "../../registry/api-client.js";
 import { RegistryHttp, RegistryTransportError } from "../../registry/registry-http.js";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 
 export class LibraryApiRejected
   extends Data.TaggedError("Library.LibraryApiRejected")<{

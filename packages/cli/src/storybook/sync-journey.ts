@@ -6,8 +6,8 @@ import {
   deterministicTreeHash,
   libraryManifestFromLocalState,
   makeMachineId,
-  skitLayer,
 } from "@smolai/skit-core";
+import { skitLayer } from "@smolai/skit-core/platform";
 import {
   LibraryResponse,
   SnapshotArchive,

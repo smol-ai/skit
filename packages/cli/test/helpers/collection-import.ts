@@ -2,7 +2,8 @@ import { assert } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { collectionVersionPath, Library } from "@smolai/skit-core";
+import { collectionVersionPath } from "@smolai/skit-core";
+import { Library } from "@smolai/skit-core/library";
 import { importSource, previewLibrarySource } from "../../src/library/source.js";
 import { writingTo } from "./library-home.js";
 

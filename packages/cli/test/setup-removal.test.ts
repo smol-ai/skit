@@ -2,7 +2,8 @@ import { join } from "node:path";
 import { Effect, FileSystem, Schema } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import { LinkStat, skitLayer } from "@smolai/skit-core";
+import { LinkStat } from "@smolai/skit-core";
+import { skitLayer } from "@smolai/skit-core/platform";
 import { setupCommand } from "../src/library/setup.js";
 import {
   makeScriptedInteraction,

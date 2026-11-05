@@ -7,8 +7,8 @@ import {
   InstalledSkillStatus,
   currentSkillVersion,
   deterministicTreeHash,
-  Library,
 } from "@smolai/skit-core";
+import { Library } from "@smolai/skit-core/library";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { isolatedRoots } from "./helpers/isolated-library.js";
 import {

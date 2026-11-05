@@ -1,5 +1,5 @@
 import { Layer } from "effect";
-import { skitLayer, skitConfigurationLayer } from "@smolai/skit-core";
+import { skitLayer, skitConfigurationLayer } from "@smolai/skit-core/platform";
 
 import { AuthorWorkspace } from "@smolai/skit-core/author";
 

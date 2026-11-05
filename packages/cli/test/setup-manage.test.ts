@@ -7,8 +7,8 @@ import {
   inspectOwnershipMarker,
   libraryManifestFromLocalState,
   collectionVersionPath,
-  skitLayer,
 } from "@smolai/skit-core";
+import { skitLayer } from "@smolai/skit-core/platform";
 import { importSource } from "../src/library/source.js";
 import { setupCommand } from "../src/library/setup.js";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";

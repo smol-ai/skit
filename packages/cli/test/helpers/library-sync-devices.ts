@@ -10,11 +10,11 @@ import {
   deterministicTreeHash,
   emptyLibraryState,
   makeMachineId,
-  Library,
   LibraryState,
-  skitConfigurationLayer,
   type InstallDestination,
 } from "@smolai/skit-core";
+import { Library } from "@smolai/skit-core/library";
+import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
 import { syncLibrary } from "../../src/library/sync/workflow.js";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";

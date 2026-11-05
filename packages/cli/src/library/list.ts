@@ -1,4 +1,4 @@
-import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
+import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
 
 import { openLibraryView, openLibrarySession } from "@smolai/skit-core/library/session";
 import { Option, Effect } from "effect";

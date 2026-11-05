@@ -1,10 +1,5 @@
-import {
-  SkitConfiguration,
-  skitConfigurationLayer,
-  deterministicTreeHash,
-  makeMachineId,
-  skitLayer,
-} from "@smolai/skit-core";
+import { SkitConfiguration, skitConfigurationLayer, skitLayer } from "@smolai/skit-core/platform";
+import { deterministicTreeHash, makeMachineId } from "@smolai/skit-core";
 import { Library } from "@smolai/skit-core/library";
 
 import { presentDoctorCleanup } from "../library/doctor.js";

@@ -4,7 +4,7 @@
 // them, and "conflict" was not enough to tell an operator whether a directory is already
 // retained, whether its identity moved, or whether the acquired bytes disagree with the Registry.
 
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 import { Data, Schema } from "effect";
 
 // -- Author Workspaces ---------------------------------------------------------------------------

@@ -2,7 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { ConfigProvider, Effect } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { Command } from "effect/cli";
-import { SkitConfiguration, resolveSkitConfiguration } from "@smolai/skit-core";
+import { SkitConfiguration, resolveSkitConfiguration } from "@smolai/skit-core/platform";
 import { runCommandTree } from "../src/commands/runtime.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 

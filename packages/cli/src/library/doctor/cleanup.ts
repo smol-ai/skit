@@ -1,4 +1,5 @@
-import { SkitConfiguration, type ListingBudget } from "@smolai/skit-core";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
+import { type ListingBudget } from "@smolai/skit-core";
 import { Effect } from "effect";
 import { applySetEnabledPlan } from "@smolai/skit-core/library/session";
 import { openDoctorCleanupSelection, overBudget } from "./selection.js";

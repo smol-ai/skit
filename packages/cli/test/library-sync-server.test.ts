@@ -1,7 +1,7 @@
 /* oxlint-disable skit/no-promise-wrappers -- Response.json is the native HTTP fake boundary; no application operation is wrapped. */
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Schema } from "effect";
-import { skitLayer } from "@smolai/skit-core";
+import { skitLayer } from "@smolai/skit-core/platform";
 import {
   InvalidRequestResponse,
   LibraryManifest,

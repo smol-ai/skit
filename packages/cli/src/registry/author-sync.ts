@@ -5,7 +5,8 @@ import {
   SkitNotFoundResponse,
 } from "@smolai/skit-core/universal/api";
 import type { AuthorRemoteHome, AuthorVisibility } from "@smolai/skit-core/author";
-import { FailureTypeId, SkitContractError, Sync, type SkitFailure } from "@smolai/skit-core";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
+import { SkitContractError, Sync } from "@smolai/skit-core";
 import { Data, Effect, Option, Result, Schema, Stream } from "effect";
 import { HttpApiClient } from "effect/http-api";
 import {

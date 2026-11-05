@@ -1,6 +1,7 @@
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
-import { Library, skitConfigurationLayer } from "@smolai/skit-core";
+import { Library } from "@smolai/skit-core/library";
+import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { libraryApplicationLayer } from "../src/application.js";
 import { join } from "node:path";
 import { ConfigProvider, Effect, FileSystem, Layer, Result } from "effect";

@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { configurationForHome } from "@smolai/skit-core";
+import { configurationForHome } from "@smolai/skit-core/platform";
 import {
   detectInstalledHarnesses as detect,
   type InstalledHarnessOptions,

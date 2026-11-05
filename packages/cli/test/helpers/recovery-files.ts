@@ -1,6 +1,7 @@
 import { Effect, Option } from "effect";
 import { join } from "node:path";
-import { Library, observePathEvidence } from "@smolai/skit-core";
+import { Library } from "@smolai/skit-core/library";
+import { observePathEvidence } from "@smolai/skit-core";
 /** Create recovery fixtures through the same recorded owner used by setup. */
 export const saveRecoveryFiles = (home: string, paths: readonly string[]) =>
   Effect.gen(function* () {

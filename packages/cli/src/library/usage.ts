@@ -1,5 +1,6 @@
-import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
-import { Library, emptyLibraryState, UsageHarness } from "@smolai/skit-core";
+import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
+import { Library } from "@smolai/skit-core/library";
+import { emptyLibraryState, UsageHarness } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { Command, Flag } from "effect/cli";
 import { scanLocalUsage } from "./usage/scan.js";

@@ -17,7 +17,7 @@ import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-c
 import { authLoginCommand } from "../src/registry/commands/login.js";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import { Registry } from "../src/registry/index.js";
-import { skitConfigurationLayer } from "@smolai/skit-core";
+import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 
 /**
  * The native login with an injected Registry transport.

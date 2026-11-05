@@ -17,7 +17,7 @@ import {
   scratch,
 } from "./helpers/library-home.js";
 import { authorInitCommand } from "../src/author/init.js";
-import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
+import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { authorLayer, storedTreesAt } from "./helpers/author-history.js";
 import { makeAuthorSyncServer } from "./helpers/author-sync-server.js";
 

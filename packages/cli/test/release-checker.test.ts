@@ -5,7 +5,7 @@ import {
   skitConfigurationLayer,
   SkitConfiguration,
   resolveSkitConfiguration,
-} from "@smolai/skit-core";
+} from "@smolai/skit-core/platform";
 import { NodeServices } from "@effect/platform-node";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { defaultChannel, decideRelease, checkRelease, noticeRelease } from "../src/releases.js";

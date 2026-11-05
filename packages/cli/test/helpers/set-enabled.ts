@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import type { InstallScope } from "@smolai/skit-core";
 import type { InvocationOption } from "@smolai/skit-core/library/session";
-import { SkitConfiguration } from "@smolai/skit-core";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
 import * as Selection from "@smolai/skit-core/library/session";
 import type { SetEnabledRequest } from "@smolai/skit-core/library/session";
 export { SetEnabledIncomplete, type SetEnabledRequest } from "@smolai/skit-core/library/session";

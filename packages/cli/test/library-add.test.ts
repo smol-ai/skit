@@ -1,5 +1,5 @@
+import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import {
-  skitConfigurationLayer,
   currentSkillVersion,
   emptyLibraryState,
   libraryManifestFromLocalState,

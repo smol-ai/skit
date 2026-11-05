@@ -1,6 +1,5 @@
+import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
 import {
-  SkitConfiguration,
-  skitConfigurationLayer,
   createSkitArchive,
   deterministicTreeHash,
   initSkit,

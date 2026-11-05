@@ -1,7 +1,8 @@
 import { test, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem, Schema } from "effect";
-import { UsageReport, skitLayer } from "@smolai/skit-core";
+import { UsageReport } from "@smolai/skit-core";
+import { skitLayer } from "@smolai/skit-core/platform";
 import { join } from "node:path";
 import { commandDescriptions } from "../src/commands/manifest.js";
 import { skitCommand } from "../src/commands/tree.js";

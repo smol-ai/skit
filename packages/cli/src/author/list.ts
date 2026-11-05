@@ -1,11 +1,6 @@
-import {
-  SkitConfiguration,
-  skitConfigurationLayer,
-  SkitContractError,
-  type AuthorSkitListResponse,
-  FailureTypeId,
-  type SkitFailure,
-} from "@smolai/skit-core";
+import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
+import { SkitContractError, type AuthorSkitListResponse } from "@smolai/skit-core";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 import { Data, Effect, Option, Result, Scope } from "effect";
 import { Command } from "effect/cli";
 

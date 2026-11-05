@@ -1,4 +1,4 @@
-import { skitLayer } from "@smolai/skit-core";
+import { skitLayer } from "@smolai/skit-core/platform";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { systemError } from "effect/PlatformError";

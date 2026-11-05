@@ -1,5 +1,5 @@
 import { AuthorWorkspace } from "@smolai/skit-core/author";
-import { SkitConfiguration } from "@smolai/skit-core";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { openRemoveSession } from "@smolai/skit-core/library/session";
 import { Effect, Option } from "effect";
 

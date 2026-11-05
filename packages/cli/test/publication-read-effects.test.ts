@@ -1,6 +1,6 @@
 import { Registry } from "../src/registry/index.js";
 import { ChildProcessSpawner } from "effect/process";
-import { SkitConfiguration } from "@smolai/skit-core";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { Cause, Config, Deferred, Effect, Fiber, FileSystem, Layer } from "effect";
 import { it } from "@effect/vitest";

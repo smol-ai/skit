@@ -1,5 +1,5 @@
+import { SkitConfiguration } from "@smolai/skit-core/platform";
 import {
-  SkitConfiguration,
   LibraryState,
   deterministicTreeHash,
   inspectOwnershipMarker,

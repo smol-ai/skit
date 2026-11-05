@@ -5,8 +5,8 @@ import {
   COLLECTION_CONTROL_DIRECTORY,
   AUTHOR_WORKSPACE_METADATA_FILE,
   collectionVersionPath,
-  skitLayer,
 } from "@smolai/skit-core";
+import { skitLayer } from "@smolai/skit-core/platform";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
 import { holdHomeLock } from "./helpers/home-lock.js";
 import { importSource } from "../src/library/source.js";

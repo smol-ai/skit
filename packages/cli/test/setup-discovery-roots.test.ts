@@ -3,7 +3,8 @@ import { join } from "node:path";
 import { Cause, Effect, Exit, FileSystem, Result } from "effect";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
-import { skitLayer, MachineSettings, LinkStat } from "@smolai/skit-core";
+import { skitLayer } from "@smolai/skit-core/platform";
+import { MachineSettings, LinkStat } from "@smolai/skit-core";
 import { setupCommand } from "../src/library/setup.js";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import {

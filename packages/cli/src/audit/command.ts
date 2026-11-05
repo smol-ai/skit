@@ -1,4 +1,4 @@
-import { skitConfigurationLayer } from "@smolai/skit-core";
+import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { Effect, Option } from "effect";
 import { Command, Flag } from "effect/cli";
 import { auditLocalCapabilitiesV1Alpha4, type AuditOptions } from "@smolai/skit-core/audit";

@@ -11,7 +11,7 @@ import { Registry } from "../src/registry/index.js";
 import { authLoginCommand } from "../src/registry/commands/login.js";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
-import { skitConfigurationLayer } from "@smolai/skit-core";
+import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 

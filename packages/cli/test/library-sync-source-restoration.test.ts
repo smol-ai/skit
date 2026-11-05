@@ -7,12 +7,12 @@ import { execFileSync } from "node:child_process";
 import {
   readSnapshotArchive,
   libraryManifestFromLocalState,
-  Library,
   LibraryState,
   collectionVersionPath,
-  SourceProcess,
   type SkitSource,
 } from "@smolai/skit-core";
+import { Library } from "@smolai/skit-core/library";
+import { SourceProcess } from "@smolai/skit-core/platform";
 import { importSource } from "../src/library/source.js";
 import { syncLibrary } from "../src/library/sync/workflow.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";

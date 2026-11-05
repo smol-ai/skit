@@ -1,6 +1,6 @@
 import { readDescriptionLoad } from "@smolai/skit-core/library/session";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
 import {
-  SkitConfiguration,
   deterministicTreeHash,
   collectionVersionPath,
   emptyLibraryState,

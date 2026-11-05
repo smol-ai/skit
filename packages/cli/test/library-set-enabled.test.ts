@@ -4,11 +4,11 @@ import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import {
   deterministicTreeHash,
-  skitConfigurationLayer,
   makeCollectionId,
   makeSkillId,
   type ImportRequestSkill,
 } from "@smolai/skit-core";
+import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { isolatedRoots } from "./helpers/isolated-library.js";
 import { setLibraryEnabled, planLibraryEnabled } from "./helpers/set-enabled.js";
 import { calculateSetEnabled } from "@smolai/skit-core/library/session";

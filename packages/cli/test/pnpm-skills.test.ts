@@ -5,13 +5,8 @@ import { expect } from "vitest";
 import { Effect, FileSystem, Logger, References, Schema } from "effect";
 import { systemError } from "effect/PlatformError";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import {
-  skitLayer,
-  skitConfigurationLayer,
-  makePnpmSkillCheck,
-  pnpmSkillOwner,
-  leavePnpmSkill,
-} from "@smolai/skit-core";
+import { skitLayer, skitConfigurationLayer } from "@smolai/skit-core/platform";
+import { makePnpmSkillCheck, pnpmSkillOwner, leavePnpmSkill } from "@smolai/skit-core";
 
 import { auditLocalCapabilitiesV1Alpha4 } from "@smolai/skit-core/audit";
 import { runSetup, SetupResult, setupRemovablePaths } from "@smolai/skit-core/library/setup";

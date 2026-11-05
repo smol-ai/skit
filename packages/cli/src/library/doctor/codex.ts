@@ -1,4 +1,4 @@
-import { configurationForHome } from "@smolai/skit-core";
+import { configurationForHome } from "@smolai/skit-core/platform";
 import {
   SkillAlias,
   type DuplicateCopy,

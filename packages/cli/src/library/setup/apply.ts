@@ -1,6 +1,7 @@
 import { resolve } from "node:path";
 import { Effect, Option, Schema } from "effect";
-import { Hash, emptyLibraryState } from "@smolai/skit-core";
+import { Hash } from "@smolai/skit-core/shared";
+import { emptyLibraryState } from "@smolai/skit-core";
 import { Library } from "@smolai/skit-core/library";
 import { Renderer } from "../../terminal/renderer.js";
 import { OptionCombinationInvalid } from "../../commands/input-failures.js";

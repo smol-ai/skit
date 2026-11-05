@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { describe, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
-import { skitLayer } from "@smolai/skit-core";
+import { skitLayer } from "@smolai/skit-core/platform";
 import { probeHarness } from "@smolai/skit-core/harnesses";
 
 describe("harness probe", () => {

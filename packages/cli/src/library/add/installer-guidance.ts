@@ -1,6 +1,6 @@
 import { parseSkitSource, type SkitSource } from "@smolai/skit-core";
 import { Data, Effect } from "effect";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 
 export interface DedicatedInstallerGuidance {
   readonly sourceCoordinate: string;

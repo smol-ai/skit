@@ -1,4 +1,4 @@
-import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
+import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { Effect, Option } from "effect";
 import type { AuthorVisibility } from "@smolai/skit-core/author";
 import { Argument, Command, Flag } from "effect/cli";

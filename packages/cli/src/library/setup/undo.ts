@@ -1,7 +1,7 @@
 import { Cause, Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
 import { commandFailure, handleLibraryCommand } from "../../commands/handler.js";
-import { skitConfigurationLayer, SkitConfiguration } from "@smolai/skit-core";
+import { skitConfigurationLayer, SkitConfiguration } from "@smolai/skit-core/platform";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { setupOutputContracts } from "./output.js";
 import { homeFlag, jsonFlag, optionalString } from "../../commands/parameters.js";

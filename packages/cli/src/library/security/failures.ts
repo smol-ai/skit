@@ -1,4 +1,4 @@
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 import { Data } from "effect";
 
 export class FindingFingerprintInvalid

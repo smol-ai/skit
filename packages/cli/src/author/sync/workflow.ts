@@ -26,7 +26,8 @@ import { authorDecider, authorTree } from "../device-view.js";
 
 import { adoptFrom, collectionsAt } from "../library-claims.js";
 
-import { Library, History, conflictKind, Sync } from "@smolai/skit-core";
+import { Library } from "@smolai/skit-core/library";
+import { History, conflictKind, Sync } from "@smolai/skit-core";
 import { MissingRequirement } from "../../commands/input-failures.js";
 
 import { parseAuthorDestination, skitLocator } from "../destination.js";

@@ -1,7 +1,7 @@
 import { cliBuild } from "../commands/build-info.js";
 import { Data, Context, Effect, Layer, Predicate, Scope } from "effect";
 import { FetchHttpClient, HttpClient, HttpClientError, HttpClientRequest } from "effect/http";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 
 export class RegistryTransportError
   extends Data.TaggedError("RegistryTransportError")<{

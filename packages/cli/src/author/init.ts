@@ -1,10 +1,6 @@
-import {
-  skitConfigurationLayer,
-  ImportContentInvalid,
-  initSkit,
-  validateSkitDirectory,
-  Library,
-} from "@smolai/skit-core";
+import { skitConfigurationLayer } from "@smolai/skit-core/platform";
+import { ImportContentInvalid, initSkit, validateSkitDirectory } from "@smolai/skit-core";
+import { Library } from "@smolai/skit-core/library";
 
 import { Clock, Effect, FileSystem, Option, Path } from "effect";
 import { Argument, Command, Flag } from "effect/cli";

@@ -2,7 +2,7 @@ import { it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { expect } from "vitest";
-import { skitLayer, SkitConfiguration, resolveSkitConfiguration } from "@smolai/skit-core";
+import { skitLayer, SkitConfiguration, resolveSkitConfiguration } from "@smolai/skit-core/platform";
 import { detectInstalledHarnesses } from "../src/commands/harness-detection.js";
 
 it.effect("CLI detection supplies omitted roots from the application configuration", () =>

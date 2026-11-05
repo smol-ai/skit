@@ -5,7 +5,7 @@
 // an expired race against the server is not a malformed destination — and callers that want to
 // retry, re-authenticate or re-resolve need to tell them apart.
 
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 import { Data } from "effect";
 
 /** The Registry could not be reached at all; nothing it would have said is known. */

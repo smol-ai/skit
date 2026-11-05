@@ -1,5 +1,5 @@
-import { errorMessage } from "@smolai/skit-core";
-import { isSkitFailure, type FailureCode } from "@smolai/skit-core";
+import { errorMessage } from "@smolai/skit-core/shared";
+import { isSkitFailure, type FailureCode } from "@smolai/skit-core/shared";
 import { Cause } from "effect";
 
 /**

@@ -1,5 +1,5 @@
 import { syncLibraryApplicationLayer } from "./sync/layer.js";
-import { skitConfigurationLayer } from "@smolai/skit-core";
+import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { Registry, type ResolvedAuth } from "../registry/index.js";
 import { Option, Effect, Result } from "effect";
 import { Command, Flag } from "effect/cli";

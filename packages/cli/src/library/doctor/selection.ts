@@ -4,7 +4,7 @@ import {
   type UsageReport,
   type InstallScope,
 } from "@smolai/skit-core";
-import { SkitConfiguration } from "@smolai/skit-core";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Array, Effect } from "effect";
 import { resolve } from "node:path";
 import { openSetEnabledSession, type SetEnabledIntent } from "@smolai/skit-core/library/session";

@@ -1,5 +1,6 @@
-import { SkitConfiguration } from "@smolai/skit-core";
-import { Library, type Hash } from "@smolai/skit-core";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
+import { Library } from "@smolai/skit-core/library";
+import { type Hash } from "@smolai/skit-core/shared";
 import { Effect, Option } from "effect";
 import { openLibraryView } from "@smolai/skit-core/library/session";
 

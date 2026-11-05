@@ -53,6 +53,14 @@
     "./audit": {
       "types": "./dist/auditing/index.d.ts",
       "import": "./dist/auditing/index.js"
+    },
+    "./shared": {
+      "types": "./dist/shared/index.d.ts",
+      "import": "./dist/shared/index.js"
+    },
+    "./platform": {
+      "types": "./dist/platform/index.d.ts",
+      "import": "./dist/platform/index.js"
     }
   },
   "scripts": {

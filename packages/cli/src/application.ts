@@ -1,5 +1,5 @@
 import { Layer } from "effect";
-import { skitConfigurationLayer } from "@smolai/skit-core";
+import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { sourceApplicationLayer } from "./commands/handler.js";
 import { consoleRendererLayer } from "./terminal/console-renderer.js";
 

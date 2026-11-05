@@ -1,6 +1,6 @@
 import { Cause, Effect, Layer } from "effect";
 import { registryHttpLayer } from "../registry/registry-http.js";
-import { skitLayer, SkitConfiguration } from "@smolai/skit-core";
+import { skitLayer, SkitConfiguration } from "@smolai/skit-core/platform";
 import { libraryApplicationLayer } from "../library/layer.js";
 
 import { commandFailure } from "./failure-classification.js";

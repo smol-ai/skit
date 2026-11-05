@@ -1,6 +1,6 @@
 import { Cause, Deferred, Effect, Fiber, FileSystem, Sink } from "effect";
 import { systemError } from "effect/PlatformError";
-import { skitLayer } from "@smolai/skit-core";
+import { skitLayer } from "@smolai/skit-core/platform";
 import { join } from "node:path";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";

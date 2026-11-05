@@ -16,8 +16,8 @@ import {
   MachineSettings,
   collectionVersionPath,
   sourceImports,
-  skitLayer,
 } from "@smolai/skit-core";
+import { skitLayer } from "@smolai/skit-core/platform";
 import { skillsDirectoryFor } from "@smolai/skit-core/library/routing";
 import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply.js";
 import { prepareSetupUndo } from "../src/library/setup/undo.js";

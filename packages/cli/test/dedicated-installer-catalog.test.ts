@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { skitLayer } from "@smolai/skit-core";
+import { skitLayer } from "@smolai/skit-core/platform";
 import { classifyFailure } from "../src/commands/failure-classification.js";
 import {
   DedicatedInstallerRequired,

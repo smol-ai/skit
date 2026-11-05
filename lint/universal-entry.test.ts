@@ -80,6 +80,14 @@ describe("@smolai/skit-core/universal", () => {
     });
 });
 
+test("shared vocabulary never reaches Node adapters or Node builtins", () => {
+  const path = offendingPathFrom(
+    join(coreRoot, "shared/index.ts"),
+    (specifier) => forbidden(specifier) || specifier.startsWith("node:"),
+  );
+  expect(path).toBeNull();
+});
+
 const repoRoot = resolve(import.meta.dirname, "..");
 
 function sourceImports(directory: string): Array<{ file: string; dependency: string }> {

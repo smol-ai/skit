@@ -1,11 +1,11 @@
+import { Library } from "@smolai/skit-core/library";
 import {
-  Library,
   emptyLibraryState,
-  pathIsWithin,
   libraryInventory,
   type LibraryState,
   type InventoryScanRoot,
 } from "@smolai/skit-core";
+import { pathIsWithin } from "@smolai/skit-core/platform";
 import { skillModificationTime } from "@smolai/skit-core/library/session";
 import { selectInventoryRoots, type InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { runSetup } from "@smolai/skit-core/library/setup";

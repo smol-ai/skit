@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { Hash } from "@smolai/skit-core";
+import { Hash } from "@smolai/skit-core/shared";
 
 const SkillsShMemberCheck = Schema.Struct({
   skill_name: Schema.String,

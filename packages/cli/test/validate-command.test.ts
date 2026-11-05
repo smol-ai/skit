@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest";
-import { skitLayer } from "@smolai/skit-core";
+import { skitLayer } from "@smolai/skit-core/platform";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { validateCommand } from "../src/author/validate.js";

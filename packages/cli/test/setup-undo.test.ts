@@ -6,17 +6,17 @@ import { Effect, FileSystem, Option } from "effect";
 import { systemError } from "effect/PlatformError";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
+import { Library } from "@smolai/skit-core/library";
 import {
-  Library,
   hashParts,
   LinkStat,
   MachineSettings,
   prepareInstalledSkillRebuild,
   setupIntent,
-  skitLayer,
   observePathEvidence,
   recoveryFingerprint,
 } from "@smolai/skit-core";
+import { skitLayer } from "@smolai/skit-core/platform";
 
 const { setupDiscoverySettings } = MachineSettings;
 

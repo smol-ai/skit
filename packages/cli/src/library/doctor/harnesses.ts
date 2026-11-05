@@ -14,13 +14,12 @@ import {
   LibraryDoctorReport,
   readClaudeListingSnapshot,
   ListingBudget,
-  SourceProcess,
-  type SourceProcessResult,
 } from "@smolai/skit-core";
+import { SourceProcess, type SourceProcessResult } from "@smolai/skit-core/platform";
 import { probeHarness } from "@smolai/skit-core/harnesses";
 import { CodexDoctorCheck, doctorCodexCheck } from "./codex.js";
 import { readOpenCodeV2Skills } from "./opencode.js";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 
 class HarnessDiscoveryFailure
   extends Data.TaggedError("HarnessDiscoveryFailure")<{

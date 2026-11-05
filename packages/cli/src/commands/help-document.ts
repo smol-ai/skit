@@ -1,7 +1,7 @@
 import { Data, Effect, Option } from "effect";
 import { CliOutput, Command } from "effect/cli";
 import type { HelpDoc } from "effect/cli";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 import { skitCliConfigLayer } from "./parameters.js";
 
 class HelpDocumentMissing

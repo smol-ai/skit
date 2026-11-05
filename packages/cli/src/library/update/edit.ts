@@ -1,4 +1,4 @@
-import { SkitConfiguration } from "@smolai/skit-core";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { openEditImport } from "@smolai/skit-core/library/session";
 import { Effect } from "effect";
 export { EditImportMissing } from "@smolai/skit-core/library/session";

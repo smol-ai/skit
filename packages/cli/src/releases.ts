@@ -3,8 +3,9 @@ import { HttpClient, HttpClientResponse } from "effect/http";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { gt, prerelease, valid } from "semver";
-import { BuildInfo, SkitConfiguration } from "@smolai/skit-core";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { BuildInfo } from "@smolai/skit-core/shared";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 
 class UpdateCheckTimedOut
   extends Data.TaggedError("UpdateCheckTimedOut")<{}>

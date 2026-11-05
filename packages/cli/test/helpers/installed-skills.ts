@@ -1,17 +1,16 @@
 import { Context, Effect, Layer } from "effect";
 import {
   InstalledSkills,
-  Library,
-  SkitConfiguration,
-  type Hash,
   type InstallDestination,
   type InstallScope,
   type LibraryState,
   type ManageApproval,
   type OwnershipMarker,
   emptyLibraryState,
-  pathIsWithin,
 } from "@smolai/skit-core";
+import { Library } from "@smolai/skit-core/library";
+import { SkitConfiguration, pathIsWithin } from "@smolai/skit-core/platform";
+import { type Hash } from "@smolai/skit-core/shared";
 
 /** The configured Library's state, read through an owner that routes nothing. */
 const currentState = Effect.gen(function* () {

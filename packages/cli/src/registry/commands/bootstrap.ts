@@ -1,4 +1,5 @@
-import { skitConfigurationLayer, FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { skitConfigurationLayer } from "@smolai/skit-core/platform";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 import {
   Data,
   Cause,

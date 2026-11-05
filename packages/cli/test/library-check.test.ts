@@ -1,5 +1,6 @@
 import { testPlatformLayer } from "./helpers/platform.js";
-import { skitConfigurationLayer, collectionVersionPath } from "@smolai/skit-core";
+import { skitConfigurationLayer } from "@smolai/skit-core/platform";
+import { collectionVersionPath } from "@smolai/skit-core";
 import { Library } from "@smolai/skit-core/library";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Ref } from "effect";

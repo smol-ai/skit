@@ -1,6 +1,7 @@
 import { openSetupCommandReview, prepareSetupCommand, setupApplyCommand } from "./setup/apply.js";
 export { setupApplyCommand } from "./setup/apply.js";
-import { SkitConfiguration, skitConfigurationLayer, emptyLibraryState } from "@smolai/skit-core";
+import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
+import { emptyLibraryState } from "@smolai/skit-core";
 import { skillModificationTime } from "@smolai/skit-core/library/session";
 import { Cause, Effect, FileSystem, Option } from "effect";
 import { Command, Flag } from "effect/cli";

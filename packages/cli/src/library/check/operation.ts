@@ -1,4 +1,4 @@
-import { SkitConfiguration } from "@smolai/skit-core";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Effect } from "effect";
 import { inspectLibrarySource } from "../source.js";
 import { openLibraryView } from "@smolai/skit-core/library/session";

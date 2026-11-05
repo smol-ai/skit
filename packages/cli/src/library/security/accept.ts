@@ -1,5 +1,5 @@
-import { skitConfigurationLayer } from "@smolai/skit-core";
-import type { Hash } from "@smolai/skit-core";
+import { skitConfigurationLayer } from "@smolai/skit-core/platform";
+import type { Hash } from "@smolai/skit-core/shared";
 import { Effect, Option, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleLibraryCommand } from "../../commands/handler.js";
