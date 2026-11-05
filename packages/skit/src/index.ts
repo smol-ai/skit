@@ -92,12 +92,7 @@ export { createSkitArchive } from "./authoring/archive.js";
 export { type InitSkitResult, initSkit } from "./authoring/scaffold.js";
 export { LinkStat } from "./platform/link-stat.js";
 export { type FileLockBusy, type FileLockFailed, acquireFileLock } from "./platform/file-lock.js";
-export {
-  type SourceProcessResult,
-  type SourceProcessFailure,
-  SourceProcess,
-  sourceProcessLayer,
-} from "./platform/source-process.js";
+export { type SourceProcessResult, SourceProcess, sourceProcessLayer } from "./platform/source-process.js";
 export { type SkitServices, skitLayer } from "./platform/layer.js";
 export { pathIsWithin } from "./platform/path-identity.js";
 export { applyInvocationPolicy } from "./installed-skills/policy.js";
@@ -297,6 +292,5 @@ export {
 export { normalizeLibraryManifest } from "./library/manifest.js";
 
 export { type ManageStopped, type SyncStopped } from "./library/library.js";
-export type { StoredSyncProgram } from "./library/store/state-schema.js";
 
 export * as HomeLock from "./platform/home-lock.js";
