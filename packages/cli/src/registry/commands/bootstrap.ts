@@ -20,17 +20,14 @@ import { Base64Url } from "effect/encoding";
 import { platform } from "node:os";
 import { resolve } from "node:path";
 import { parse, type ParseError } from "jsonc-parser";
-import { isRegistryTransportError, RegistryHttp } from "../registry/registry-http.js";
-import {
-  isSuccessfulResponseDecodeFailure,
-  registryApiFailureMessage,
-} from "../registry/api-client.js";
-import { Renderer } from "../terminal/renderer.js";
-import { handleRegistryCommand } from "../commands/handler.js";
-import { CommandMetadata } from "../commands/metadata.js";
-import { outputContracts } from "../commands/output-contracts.js";
-import { jsonFlag, optionalString } from "../commands/parameters.js";
-import { result } from "../commands/result.js";
+import { isRegistryTransportError, RegistryHttp } from "../registry-http.js";
+import { isSuccessfulResponseDecodeFailure, registryApiFailureMessage } from "../api-client.js";
+import { Renderer } from "../../terminal/renderer.js";
+import { handleRegistryCommand } from "../../commands/handler.js";
+import { CommandMetadata } from "../../commands/metadata.js";
+import { outputContracts } from "../../commands/output-contracts.js";
+import { jsonFlag, optionalString } from "../../commands/parameters.js";
+import { result } from "../../commands/result.js";
 
 const SECRET_NAME = "SKIT_BOOTSTRAP_SECRET";
 

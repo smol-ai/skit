@@ -12,9 +12,10 @@
  */
 export const layout = {
   "packages/cli/src/": {
-    files: ["main.ts", "application.ts", "releases.ts"],
+    files: ["main.ts", "application.ts", "releases.ts", "feedback.ts"],
     folders: [
       "commands",
+      "feedback",
       "library",
       "author",
       "registry",
@@ -74,6 +75,7 @@ export const undecided = [
  * Add new features here when deciding their placement. No migration exemptions.
  */
 export const features = [
+  "packages/cli/src/feedback",
   "packages/cli/src/author/sync",
   "packages/cli/src/author/publish",
   "packages/cli/src/releases",

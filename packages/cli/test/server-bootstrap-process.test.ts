@@ -6,7 +6,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { TestClock } from "effect/testing";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { consoleRendererLayer } from "../src/terminal/console-renderer.js";
-import { BootstrapExternalFailure, bootstrapServer } from "../src/bootstrap/server-bootstrap.js";
+import { BootstrapExternalFailure, bootstrapServer } from "../src/registry/commands/bootstrap.js";
 
 it.effect("terminates a real Wrangler substitute that ignores SIGTERM", () =>
   Effect.gen(function* () {

@@ -1,7 +1,7 @@
 import { usageCliCommand } from "../library/commands/usage.js";
 import { Command } from "effect/cli";
 import { checkCliCommand } from "../library/commands/check.js";
-import { serverBootstrapCliCommand } from "../bootstrap/server-bootstrap.js";
+import { serverBootstrapCliCommand } from "../registry/commands/bootstrap.js";
 import { authLogoutCliCommand } from "../registry/commands/logout.js";
 import { authLoginCliCommand } from "../registry/commands/login.js";
 import { authStatusCliCommand } from "../registry/commands/status.js";
@@ -23,8 +23,8 @@ import {
 } from "../library/commands/repository.js";
 import { libraryRecoveryCliCommand } from "../library/commands/recovery.js";
 import { libraryHistoryCliCommand } from "../library/commands/history.js";
-import { versionCliCommand } from "../handlers/version.js";
-import { feedbackSendCliCommand } from "../handlers/feedback.js";
+import { versionCliCommand } from "./version.js";
+import { feedbackSendCliCommand } from "../feedback.js";
 import {
   registryAddCliCommand,
   registryDefaultCliCommand,

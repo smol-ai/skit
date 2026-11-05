@@ -1,13 +1,13 @@
 import { Effect } from "effect";
-import { cliBuild } from "../commands/build-info.js";
+import { cliBuild } from "./build-info.js";
 import { checkRelease } from "../releases.js";
 import { Command } from "effect/cli";
-import { handlePlatformCommand } from "../commands/handler.js";
-import { CommandMetadata } from "../commands/metadata.js";
-import { outputContracts } from "../commands/output-contracts.js";
-import { jsonFlag } from "../commands/parameters.js";
+import { handlePlatformCommand } from "./handler.js";
+import { CommandMetadata } from "./metadata.js";
+import { outputContracts } from "./output-contracts.js";
+import { jsonFlag } from "./parameters.js";
 import { Renderer } from "../terminal/renderer.js";
-import { result } from "../commands/result.js";
+import { result } from "./result.js";
 
 export const versionCliCommand = Command.make("version", { json: jsonFlag }, () =>
   handlePlatformCommand(

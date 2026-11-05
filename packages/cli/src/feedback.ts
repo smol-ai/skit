@@ -1,19 +1,19 @@
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { handlePlatformCommand } from "../commands/handler.js";
-import { CommandMetadata, credentialStoreReadSubprocesses } from "../commands/metadata.js";
-import { outputContracts } from "../commands/output-contracts.js";
-import { homeFlag, jsonFlag, optionalString } from "../commands/parameters.js";
+import { handlePlatformCommand } from "./commands/handler.js";
+import { CommandMetadata, credentialStoreReadSubprocesses } from "./commands/metadata.js";
+import { outputContracts } from "./commands/output-contracts.js";
+import { homeFlag, jsonFlag, optionalString } from "./commands/parameters.js";
 import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
 import {
   feedbackInput,
   feedbackOrigin,
   feedbackSigningToken,
   sendFeedback,
-} from "../feedback/send.js";
-import { Renderer } from "../terminal/renderer.js";
-import { registryHttpLayer } from "../registry/registry-http.js";
-import { result } from "../commands/result.js";
+} from "./feedback/send.js";
+import { Renderer } from "./terminal/renderer.js";
+import { registryHttpLayer } from "./registry/registry-http.js";
+import { result } from "./commands/result.js";
 
 const text = Argument.String("message").pipe(
   Argument.withDescription("What surprised you or slowed you down."),
