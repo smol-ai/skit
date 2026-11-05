@@ -43,7 +43,7 @@ export type LibraryStateV10 = typeof LibraryStateV10.Type;
  * pending, so SKIT checks its folder again: no released SKIT wrote `drifted` or `unsupported`, and a
  * conflicted copy without the hash SKIT found is not one SKIT can describe.
  */
-export const installedSkillFromV10 = ({
+const installedSkillFromV10 = ({
   current_hash,
   status,
   suppression_reason: _suppressionReason,

@@ -124,7 +124,7 @@ const policies = (invocation_policies: Readonly<Record<string, InvocationPolicy>
 export const DeviceSkillSelectionV9 = LibraryStateV9.fields.device_skill_selection.schema;
 export type DeviceSkillSelectionV9 = typeof DeviceSkillSelectionV9.Type;
 
-export const installedSkillFromV9 = ({
+const installedSkillFromV9 = ({
   projection_id,
   target,
   projected_at,
@@ -140,19 +140,19 @@ export const installedSkillFromV9 = ({
   ...(observed_digest === undefined ? {} : { current_hash: observed_digest }),
 });
 
-export const repositoryFromV9 = (binding: typeof RepositoryBindingV9.Type) => ({
+const repositoryFromV9 = (binding: typeof RepositoryBindingV9.Type) => ({
   root: binding.scope.root,
   enabled: enabledFromV7(binding.entries),
   ...policies(binding.invocation_policies),
 });
 
 /** The global list a v9 global Binding held; none means nothing enabled. */
-export const globalFromV9 = (binding: typeof DeviceBindingV9.Type | undefined) => ({
+const globalFromV9 = (binding: typeof DeviceBindingV9.Type | undefined) => ({
   enabled: binding === undefined ? [] : enabledFromV7(binding.entries),
   ...policies(binding?.invocation_policies),
 });
 
-export const deviceSelectionFromV9 = (selection: DeviceSkillSelectionV9) =>
+const deviceSelectionFromV9 = (selection: DeviceSkillSelectionV9) =>
   selection.mode === "choose"
     ? { mode: "choose" as const, ...globalFromV9(selection.binding) }
     : selection;
