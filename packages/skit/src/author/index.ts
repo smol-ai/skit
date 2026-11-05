@@ -38,3 +38,18 @@ export {
 } from "./failures.js";
 export { AuthorRemoteHome, AuthorVisibility, decodeUrl, normalizeRemote } from "./remote.js";
 export { scanAuthorSyncTree } from "./local-tree.js";
+export { type InitSkitResult, initSkit } from "./scaffold.js";
+export {
+  readSkitDescriptor,
+  deterministicTreeHash,
+  validateSkitDirectory,
+} from "../artifact/skit.js";
+export { createSkitArchive } from "../artifact/archive.js";
+export { type DescriptorFailure, SkitValidationFailed } from "../artifact/failures.js";
+export { SkitValidationDiagnostic } from "../artifact/validation-diagnostic.js";
+export {
+  generateInvocationMetadata,
+  InvocationMetadataGeneration,
+  type InvocationMetadataGenerationFailure,
+} from "./invocation/generation.js";
+export { mergeAuthorTree, conflictKind } from "./merge/files.js";

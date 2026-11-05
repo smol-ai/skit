@@ -1,6 +1,6 @@
 import { expect } from "vitest";
 import { assert, it } from "@effect/vitest";
-import { History } from "@smolai/skit-core";
+import * as History from "@smolai/skit-core/history";
 import { Effect } from "effect";
 import { authorSyncApi } from "../src/registry/author-sync.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";

@@ -1,7 +1,8 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Option, Scope } from "effect";
 import { join } from "node:path";
-import { History, Sync } from "@smolai/skit-core";
+import * as History from "@smolai/skit-core/history";
+import * as Sync from "@smolai/skit-core/sync";
 import {
   AuthorWorkspace,
   type Identity,

@@ -13,7 +13,8 @@ import {
 import { TestClock } from "effect/testing";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { type History, Sync } from "@smolai/skit-core";
+import type * as History from "@smolai/skit-core/history";
+import * as Sync from "@smolai/skit-core/sync";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
 import { makeAuthorSyncServer } from "./helpers/author-sync-server.js";

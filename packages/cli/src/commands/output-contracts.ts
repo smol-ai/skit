@@ -1,10 +1,6 @@
 import { securityOutputContracts } from "../library/security.js";
-import {
-  InvocationMetadataGeneration,
-  SkillAssessmentDecision,
-  SkillAudit,
-  SkitValidationDiagnostic,
-} from "@smolai/skit-core";
+import { SkillAssessmentDecision, SkillAudit } from "@smolai/skit-core";
+import { InvocationMetadataGeneration, SkitValidationDiagnostic } from "@smolai/skit-core/author";
 import {
   AuthorSkitDeleteResponse,
   AuthorSkitSummary,

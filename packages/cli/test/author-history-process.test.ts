@@ -2,7 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { Clock, Effect, Stream, FileSystem, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
-import { History } from "@smolai/skit-core";
+import * as History from "@smolai/skit-core/history";
 import { AuthorHistory } from "@smolai/skit-core/author";
 import { authorLayer, captureWorkspace, storedTreesAt } from "./helpers/author-history.js";
 import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";

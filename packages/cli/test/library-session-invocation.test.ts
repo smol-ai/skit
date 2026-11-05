@@ -4,11 +4,8 @@ import { expect } from "vitest";
 import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
 import { Library } from "@smolai/skit-core/library";
-import {
-  deterministicTreeHash,
-  collectionVersionPath,
-  resolveDeclaredInvocation,
-} from "@smolai/skit-core";
+import { collectionVersionPath, resolveDeclaredInvocation } from "@smolai/skit-core";
+import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { HarnessName } from "@smolai/skit-core/harnesses";
 import { skitLayer } from "@smolai/skit-core/platform";
 import {

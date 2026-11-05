@@ -1,4 +1,4 @@
-import { generateInvocationMetadata } from "@smolai/skit-core";
+import { generateInvocationMetadata } from "@smolai/skit-core/author";
 import { Effect, Option } from "effect";
 import { resolve } from "node:path";
 import { Argument, Command, Flag } from "effect/cli";

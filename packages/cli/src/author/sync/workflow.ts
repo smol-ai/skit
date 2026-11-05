@@ -27,7 +27,9 @@ import { adoptFrom } from "../library-claims.js";
 
 import { openLibraryView } from "@smolai/skit-core/library/session";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { History, conflictKind, Sync } from "@smolai/skit-core";
+import { conflictKind } from "@smolai/skit-core/author";
+import * as History from "@smolai/skit-core/history";
+import * as Sync from "@smolai/skit-core/sync";
 import { MissingRequirement } from "../../commands/input-failures.js";
 
 import { parseAuthorDestination, skitLocator } from "../destination.js";

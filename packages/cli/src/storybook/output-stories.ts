@@ -1,6 +1,5 @@
 import { emptyUsageStory, usageStory } from "./usage-stories.js";
 import {
-  History,
   makeCollectionId,
   makeOperationId,
   makeInstalledSkillId,
@@ -8,6 +7,7 @@ import {
   makeSkillId,
   makeSkillVersionId,
 } from "@smolai/skit-core";
+import * as History from "@smolai/skit-core/history";
 import { estimateCodexListing } from "@smolai/skit-core/harnesses";
 import { Data } from "effect";
 

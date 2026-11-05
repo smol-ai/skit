@@ -2,7 +2,8 @@ import { expect, it } from "@effect/vitest";
 import { Effect, FileSystem, Result, Stream } from "effect";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { History, acquireFileLock } from "@smolai/skit-core";
+import { acquireFileLock } from "@smolai/skit-core";
+import * as History from "@smolai/skit-core/history";
 import { AuthorHistory } from "@smolai/skit-core/author";
 import {
   authorLayer,

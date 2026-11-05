@@ -7,12 +7,12 @@ import { join } from "node:path";
 import { systemError } from "effect/PlatformError";
 import {
   type InstalledSkill,
-  deterministicTreeHash,
   emptyLibraryState,
   makeMachineId,
   LibraryState,
   type InstallDestination,
 } from "@smolai/skit-core";
+import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { Library } from "@smolai/skit-core/library";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";

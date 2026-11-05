@@ -1,5 +1,5 @@
 import { Effect, Layer } from "effect";
-import type { History } from "@smolai/skit-core";
+import type * as History from "@smolai/skit-core/history";
 import { AuthorHistory, AuthorWorkspace } from "@smolai/skit-core/author";
 
 /**

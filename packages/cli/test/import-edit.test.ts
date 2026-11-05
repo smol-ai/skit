@@ -3,7 +3,7 @@ import { installEnabledSkills } from "./helpers/installed-skills.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { deterministicTreeHash } from "@smolai/skit-core";
+import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { prepareEditImport } from "../src/library/update/edit.js";
 import {

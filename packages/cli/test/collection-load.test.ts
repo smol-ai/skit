@@ -1,11 +1,11 @@
 import { readDescriptionLoad } from "@smolai/skit-core/library/session";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import {
-  deterministicTreeHash,
   collectionVersionPath,
   emptyLibraryState,
   type ImportRequestSkill,
 } from "@smolai/skit-core";
+import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { Library } from "@smolai/skit-core/library";
 import { it as effectIt } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";

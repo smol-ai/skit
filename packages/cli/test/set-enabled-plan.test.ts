@@ -1,7 +1,6 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import {
   LibraryState,
-  deterministicTreeHash,
   inspectOwnershipMarker,
   libraryStateRevision,
   enabledAt,
@@ -9,6 +8,7 @@ import {
   SkillsDirectoryNotWritable,
   type UsageReport,
 } from "@smolai/skit-core";
+import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { type ListingBudget } from "@smolai/skit-core/harnesses";
 import { assert, it } from "@effect/vitest";
 import { systemError } from "effect/PlatformError";

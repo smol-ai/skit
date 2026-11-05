@@ -8,7 +8,6 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { expect } from "vitest";
 import {
   CURRENT_LIBRARY_STATE_VERSION,
-  deterministicTreeHash,
   LibraryState,
   makeImportId,
   makeCollectionId,
@@ -19,6 +18,7 @@ import {
   makeSkillId,
   makeSkillVersionId,
 } from "@smolai/skit-core";
+import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { type Hash } from "@smolai/skit-core/shared";
 import { SourceProcess, skitConfigurationLayer } from "@smolai/skit-core/platform";
 import {

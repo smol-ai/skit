@@ -1,5 +1,6 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { deterministicTreeHash, StalePlan } from "@smolai/skit-core";
+import { StalePlan } from "@smolai/skit-core";
+import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem, Option, Result, Schema } from "effect";

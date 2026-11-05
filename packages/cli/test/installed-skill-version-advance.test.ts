@@ -3,11 +3,8 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import {
-  InstalledSkillStatus,
-  currentSkillVersion,
-  deterministicTreeHash,
-} from "@smolai/skit-core";
+import { InstalledSkillStatus, currentSkillVersion } from "@smolai/skit-core";
+import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { Library } from "@smolai/skit-core/library";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { isolatedRoots } from "./helpers/isolated-library.js";

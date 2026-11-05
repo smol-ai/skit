@@ -3,9 +3,9 @@ import {
   currentSkillVersion,
   emptyLibraryState,
   libraryManifestFromLocalState,
-  deterministicTreeHash,
   collectionVersionPath,
 } from "@smolai/skit-core";
+import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { Library } from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";

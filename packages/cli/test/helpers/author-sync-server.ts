@@ -1,7 +1,7 @@
 import { NodeCrypto } from "@effect/platform-node";
 import { Deferred, Effect, Ref, Schema } from "effect";
 import { HttpClientError, type HttpClientRequest } from "effect/http";
-import { History } from "@smolai/skit-core";
+import * as History from "@smolai/skit-core/history";
 import {
   CurrentMoveRequest,
   SkitCreateRequest,

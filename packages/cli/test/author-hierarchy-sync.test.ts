@@ -2,7 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { Cause, Effect, FileSystem } from "effect";
 import { TestClock } from "effect/testing";
 import { join } from "node:path";
-import { History } from "@smolai/skit-core";
+import * as History from "@smolai/skit-core/history";
 import { authorLayer, captureWorkspace } from "./helpers/author-history.js";
 import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
 import { testPlatformLayer } from "./helpers/platform.js";

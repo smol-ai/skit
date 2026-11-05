@@ -7,11 +7,11 @@ import { join } from "node:path";
 import {
   LibraryState,
   readSnapshotArchive,
-  deterministicTreeHash,
   collectionVersionPath,
   libraryManifestFromLocalState,
   emptyLibraryState,
 } from "@smolai/skit-core";
+import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { LibraryChangedOnServer, RegistryUnreachable } from "../src/registry/failures.js";
 import { LibraryApiRejected, LibraryManifestTooNew } from "../src/library/sync/api.js";
 import { SyncLocalChanged } from "@smolai/skit-core/library/session";

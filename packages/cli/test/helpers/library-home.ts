@@ -1,15 +1,17 @@
 import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
 import {
-  createSkitArchive,
-  deterministicTreeHash,
-  initSkit,
-  readSkitDescriptor,
-  validateSkitDirectory,
   type LibraryState,
   makeMachineId,
   emptyLibraryState,
   type ImportRequest,
 } from "@smolai/skit-core";
+import {
+  createSkitArchive,
+  deterministicTreeHash,
+  initSkit,
+  readSkitDescriptor,
+  validateSkitDirectory,
+} from "@smolai/skit-core/author";
 import { type HarnessName, type SkillsDirectoryOverrides } from "@smolai/skit-core/harnesses";
 import { Effect, FileSystem, Layer } from "effect";
 import { join } from "node:path";

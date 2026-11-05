@@ -1,5 +1,6 @@
 import { SkitConfiguration, skitLayer } from "@smolai/skit-core/platform";
-import { deterministicTreeHash, type SkillsShLockFileEntry } from "@smolai/skit-core";
+import { type SkillsShLockFileEntry } from "@smolai/skit-core";
+import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { ListResult } from "../src/library/list/output.js";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";

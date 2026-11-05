@@ -2,11 +2,8 @@ import { Library } from "@smolai/skit-core/library";
 import { Effect, FileSystem, Layer, Result, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { join } from "node:path";
-import {
-  deterministicTreeHash,
-  libraryManifestFromLocalState,
-  makeMachineId,
-} from "@smolai/skit-core";
+import { libraryManifestFromLocalState, makeMachineId } from "@smolai/skit-core";
+import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { skitLayer } from "@smolai/skit-core/platform";
 import {
   LibraryResponse,

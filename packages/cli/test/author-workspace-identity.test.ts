@@ -2,7 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect, FileSystem, Option, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
-import { History } from "@smolai/skit-core";
+import * as History from "@smolai/skit-core/history";
 import { AuthorHistory, AuthorWorkspace, type Identity } from "@smolai/skit-core/author";
 
 /** No identity, typed as the state a first registration plans from. */

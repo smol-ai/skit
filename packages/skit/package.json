@@ -69,6 +69,18 @@
     "./library/inventory": {
       "types": "./dist/library/inventory.d.ts",
       "import": "./dist/library/inventory.js"
+    },
+    "./history": {
+      "types": "./dist/history/history.d.ts",
+      "import": "./dist/history/history.js"
+    },
+    "./merge": {
+      "types": "./dist/sync/merge.d.ts",
+      "import": "./dist/sync/merge.js"
+    },
+    "./sync": {
+      "types": "./dist/sync/sync.d.ts",
+      "import": "./dist/sync/sync.js"
     }
   },
   "scripts": {

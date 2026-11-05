@@ -9,7 +9,7 @@ import {
   type SkitValidationFailed,
   readSkitDescriptor,
   validateSkitDirectory,
-} from "@smolai/skit-core";
+} from "@smolai/skit-core/author";
 import { SkitContractError, type ReleasePublishResponse } from "@smolai/skit-core/api";
 import { type TreeError } from "@smolai/skit-core/shared";
 import { type TreeRequirements, type SkitConfiguration } from "@smolai/skit-core/platform";

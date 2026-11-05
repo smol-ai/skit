@@ -6,7 +6,7 @@ import {
 } from "@smolai/skit-core/universal/api";
 import type { AuthorRemoteHome, AuthorVisibility } from "@smolai/skit-core/author";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
-import { Sync } from "@smolai/skit-core";
+import * as Sync from "@smolai/skit-core/sync";
 import { SkitContractError } from "@smolai/skit-core/api";
 import { Data, Effect, Option, Result, Schema, Stream } from "effect";
 import { HttpApiClient } from "effect/http-api";
