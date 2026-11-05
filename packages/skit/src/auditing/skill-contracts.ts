@@ -50,29 +50,25 @@ export type SkillAudit = typeof SkillAudit.Type;
 
 export const SkillAssessmentContext = Schema.Literals(["author", "import", "project", "publish"]);
 export type SkillAssessmentContext = typeof SkillAssessmentContext.Type;
-export const SkillAssessmentOutcome = Schema.Literals(["allow", "warn", "block"]);
-export type SkillAssessmentOutcome = typeof SkillAssessmentOutcome.Type;
+const SkillAssessmentOutcome = Schema.Literals(["allow", "warn", "block"]);
 
-export const SkillAssessmentReason = Schema.Struct({
+const SkillAssessmentReason = Schema.Struct({
   code: Schema.String,
   ruleIds: Schema.mutableKey(Schema.mutable(Schema.Array(Schema.String))),
   capabilityIds: Schema.mutableKey(Schema.mutable(Schema.Array(Schema.String))),
 });
-export type SkillAssessmentReason = typeof SkillAssessmentReason.Type;
 
-export const SkillAcceptanceReviewRecord = Schema.Struct({
+const SkillAcceptanceReviewRecord = Schema.Struct({
   ...SkillAssessmentAcceptance.fields,
   status: Schema.Literals(["applicable", "expired", "stale_digest"]),
 });
-export type SkillAcceptanceReviewRecord = typeof SkillAcceptanceReviewRecord.Type;
 
-export const SkillFindingDecision = Schema.Struct({
+const SkillFindingDecision = Schema.Struct({
   fingerprint: Hash,
   ruleId: Schema.String,
   disposition: Schema.Literals(["unresolved", "accepted"]),
   acceptance: Schema.optionalKey(SkillAssessmentAcceptance),
 });
-export type SkillFindingDecision = typeof SkillFindingDecision.Type;
 
 export const SkillAssessmentDecision = Schema.Struct({
   context: SkillAssessmentContext,

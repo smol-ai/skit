@@ -3,30 +3,14 @@ import { Hash } from "../shared/hash.js";
 import {
   apiSemverPattern,
   parseContract,
-  parseWireDescriptor,
   semver,
-  SKIT_API_CONTRACT_VERSION,
-  skitApiErrorSchema,
   SkitContractError,
-  skitSourceKindSchema,
-  skitVisibilitySchema,
   type SkitApiError,
   type SkitWireDescriptor,
 } from "./contracts.js";
 
 /** Consumer-facing Registry contracts: Distribution reads and Server discovery. */
-export {
-  parseContract,
-  parseWireDescriptor,
-  semver,
-  SKIT_API_CONTRACT_VERSION,
-  skitApiErrorSchema,
-  SkitContractError,
-  skitSourceKindSchema,
-  skitVisibilitySchema,
-  type SkitApiError,
-  type SkitWireDescriptor,
-};
+export { parseContract, semver, SkitContractError, type SkitApiError, type SkitWireDescriptor };
 
 export const releaseSchema = Schema.Struct({
   release_id: Schema.NonEmptyString,

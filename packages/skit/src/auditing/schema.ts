@@ -120,12 +120,12 @@ export const AuditSkillV1Alpha4 = Schema.Struct({
 });
 export type AuditSkillV1Alpha4 = typeof AuditSkillV1Alpha4.Type;
 
-export const AuditPluginV1Alpha4 = Schema.Struct({
+const AuditPluginV1Alpha4 = Schema.Struct({
   ...auditEntryFields,
   installed: Schema.Boolean,
   enabled: Schema.NullOr(Schema.Boolean),
 });
-export type AuditPluginV1Alpha4 = typeof AuditPluginV1Alpha4.Type;
+type AuditPluginV1Alpha4 = typeof AuditPluginV1Alpha4.Type;
 
 export const AuditMcpServerV1Alpha4 = Schema.Struct({
   ...auditEntryFields,
@@ -139,10 +139,10 @@ export const AuditMcpServerV1Alpha4 = Schema.Struct({
 });
 export type AuditMcpServerV1Alpha4 = typeof AuditMcpServerV1Alpha4.Type;
 
-export const AuditRuleV1Alpha4 = Schema.Struct(auditEntryFields);
-export type AuditRuleV1Alpha4 = typeof AuditRuleV1Alpha4.Type;
-export const AuditMarketplaceV1Alpha4 = Schema.Struct(auditEntryFields);
-export type AuditMarketplaceV1Alpha4 = typeof AuditMarketplaceV1Alpha4.Type;
+const AuditRuleV1Alpha4 = Schema.Struct(auditEntryFields);
+type AuditRuleV1Alpha4 = typeof AuditRuleV1Alpha4.Type;
+const AuditMarketplaceV1Alpha4 = Schema.Struct(auditEntryFields);
+type AuditMarketplaceV1Alpha4 = typeof AuditMarketplaceV1Alpha4.Type;
 export type AuditEntryV1Alpha4 =
   | AuditSkillV1Alpha4
   | AuditPluginV1Alpha4

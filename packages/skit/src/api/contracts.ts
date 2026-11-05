@@ -6,17 +6,7 @@ import {
   type SkitWireDescriptor,
 } from "../artifact/schemas.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
-
-/** Capability-neutral primitives shared by consumer and optional write protocols. */
-export const SKIT_API_CONTRACT_VERSION = "1" as const;
 export const skitVisibilitySchema = Schema.Literals(["public", "unlisted", "private"]);
-export const skitSourceKindSchema = Schema.Literals([
-  "registry",
-  "git",
-  "local",
-  "migration",
-  "import",
-]);
 
 // Effect v4's built-in Base64 regex backtracks badly on multi-megabyte archives. Validate the
 // alphabet and padding in linear passes because release publication decodes this wire field.
@@ -44,7 +34,7 @@ export function parseWireDescriptor(value: unknown): SkitWireDescriptor | null {
 export type { SkitWireDescriptor };
 export const skitValidationDiagnosticsSchema = Schema.Array(skitValidationDiagnosticSchema);
 export const skitDescriptorRequestSchema = skitDescriptorWireSchema;
-export const skitApiErrorSchema = Schema.Struct({
+const skitApiErrorSchema = Schema.Struct({
   error: apiNonEmptyString,
   request_id: Schema.optional(Schema.String),
   details: Schema.optional(Schema.Unknown),

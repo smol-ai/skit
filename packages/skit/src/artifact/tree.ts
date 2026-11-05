@@ -11,14 +11,14 @@ import { TreeEntry } from "./tree-entry.js";
 
 export type TreePolicy = "normalized" | "verbatim";
 
-export const ExcludedTreeEntry = Schema.Struct({
+const ExcludedTreeEntry = Schema.Struct({
   path: Schema.String,
   kind: Schema.Literals(["directory", "file", "symlink"]),
   bytes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   opaque: Schema.Boolean,
   reason: Schema.Literals(["gitignored", "normalized-control-exclusion"]),
 });
-export interface ExcludedTreeEntry extends Schema.Schema.Type<typeof ExcludedTreeEntry> {}
+interface ExcludedTreeEntry extends Schema.Schema.Type<typeof ExcludedTreeEntry> {}
 
 export const NormalizedTreeInspection = Schema.Struct({
   entries: Schema.Array(TreeEntry),

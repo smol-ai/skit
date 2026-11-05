@@ -1,10 +1,9 @@
 import { Schema, Struct } from "effect";
 import { normalizeRegistryNamespace, normalizeRegistrySkitSlug } from "./registry-identity.js";
-import { Hash } from "../shared/hash.js";
 import { InvocationPolicy } from "./invocation-policy.js";
 
-export const SKIT_DESCRIPTOR_VERSION = 1 as const;
-export const SKILL_EXAMPLE_SCHEMA_VERSION = "skit.skill-example/v1" as const;
+const SKIT_DESCRIPTOR_VERSION = 1 as const;
+const SKILL_EXAMPLE_SCHEMA_VERSION = "skit.skill-example/v1" as const;
 
 const nonEmpty = Schema.String.check(Schema.isMinLength(1));
 const atMost = (length: number) =>
@@ -24,8 +23,6 @@ const isoTimestamp = Schema.String.check(
     /^\d{4}-(?:0[1-9]|1[0-2])-(?:[12]\d|0[1-9]|3[01])[T ](?:0\d|1\d|2[0-3])(?::[0-5]\d){2}(?:\.\d{1,9})?(?:Z| ?[+-](?:0\d|1\d|2[0-3])(?::?[0-5]\d)?)$/u,
   ),
 );
-
-export const hashSchema = Hash;
 export const safePathSchema = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(1_024),
@@ -40,17 +37,12 @@ export const safePathSchema = Schema.String.check(
   }),
 );
 export const kebabNameSchema = Schema.String.check(Schema.isPattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u));
-export const registryNamespaceSchema = Schema.String.check(
-  Schema.makeFilter((value) => normalizeRegistryNamespace(value) === value, {
-    message: "Namespace must be canonical",
-  }),
-);
 export const registrySkitSlugSchema = Schema.String.check(
   Schema.makeFilter((value) => normalizeRegistrySkitSlug(value) === value, {
     message: "SKIT slug must be canonical",
   }),
 );
-export const registrySkitIdSchema = Schema.String.check(
+const registrySkitIdSchema = Schema.String.check(
   Schema.makeFilter(
     (value) => {
       const parts = value.split("/");
@@ -64,7 +56,7 @@ export const registrySkitIdSchema = Schema.String.check(
   ),
 );
 
-export const sharedMappingSchema = Schema.Struct({ from: safePathSchema, to: safePathSchema });
+const sharedMappingSchema = Schema.Struct({ from: safePathSchema, to: safePathSchema });
 export type SharedMapping = typeof sharedMappingSchema.Type;
 
 export const skitValidationDiagnosticSchema = Schema.Struct({
