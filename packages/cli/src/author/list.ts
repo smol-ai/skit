@@ -6,23 +6,12 @@ import {
   FailureTypeId,
   type SkitFailure,
 } from "@smolai/skit-core";
-import {
-  AuthoringAuthenticatedApi,
-  InsufficientScopeResponse,
-  UnauthorizedResponse,
-} from "@smolai/skit-core/universal/api";
-import { Data, Effect, Option, Result, Schema, Scope } from "effect";
-import { HttpApiClient } from "effect/http-api";
+import { Data, Effect, Option, Result, Scope } from "effect";
 import { Command } from "effect/cli";
 
 import { Registry, type ResolvedAuth } from "../registry/index.js";
-import {
-  authenticatedApiMiddleware,
-  isSuccessfulResponseDecodeFailure,
-  registryApiFailure,
-  registryApiFailureMessage,
-} from "../registry/api-client.js";
-import { isRegistryTransportError, RegistryHttp } from "../registry/registry-http.js";
+import { RegistryHttp } from "../registry/registry-http.js";
+import { authorInventoryApi, AuthorListResponseError } from "../registry/authoring.js";
 import { Renderer } from "../terminal/renderer.js";
 import { skitLocator } from "./destination.js";
 import {
@@ -40,16 +29,6 @@ import { result } from "../commands/result.js";
 
 export type AuthorSkitInventory = typeof outputContracts.authorList.schema.Type;
 
-class AuthorListResponseError
-  extends Data.TaggedError("AuthorListResponseError")<{
-    message: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Check the Registry's reason, then retry.";
-}
 class AuthorListPaginationError
   extends Data.TaggedError("AuthorListPaginationError")<{
     origin: string;
@@ -86,57 +65,18 @@ export type AuthorListFailure =
   | AuthorListIdentityError
   | RegistryOriginInvalid;
 
-const parseUrl = (input: string) =>
-  Schema.decodeUnknownEffect(Schema.URLFromString)(input).pipe(
-    Effect.mapError(() => new RegistryOriginInvalid({ origin: input })),
-  );
-
-const classifyListFailure = (origin: string, error: unknown): AuthorListFailure => {
-  if (isRegistryTransportError(error)) return new RegistryUnreachable({ origin, cause: error });
-  if (Schema.is(UnauthorizedResponse)(error))
-    return new AuthenticationRequired({ origin, scopes: "authoring:write" });
-  if (Schema.is(InsufficientScopeResponse)(error))
-    return new CredentialLacksScope({ scope: "authoring:write", origin });
-  const failure = registryApiFailure(error);
-  if (failure.status === 401)
-    return new AuthenticationRequired({ origin, scopes: "authoring:write" });
-  if (isSuccessfulResponseDecodeFailure(error, [200]))
-    return new SkitContractError({
-      contract: "author SKIT list response",
-      issues: [{ path: "", message: String(error) }],
-    });
-  if (failure.status !== undefined || failure.code !== undefined)
-    return new AuthorListResponseError({
-      message: registryApiFailureMessage("Author SKIT list", error),
-    });
-  return new AuthorListResponseError({ message: "Registry returned an invalid response" });
-};
-
 export const listAuthorSkits = Effect.fn("listAuthorSkits")(function* (input: {
   origin?: string;
   token?: string;
 }): Effect.fn.Return<AuthorSkitInventory, AuthorListFailure, RegistryHttp | Scope.Scope> {
-  const configuredOrigin = input.origin;
-  if (!configuredOrigin || !input.token)
-    return yield* Effect.fail(
-      new AuthenticationRequired({ origin: input.origin, scopes: "authoring:write" }),
-    );
-  const origin = (yield* parseUrl(configuredOrigin)).origin;
-  // Opaque origins are rejected before making a request.
-  yield* parseUrl(origin);
-  const transport = yield* (yield* RegistryHttp).client;
-  const client = yield* HttpApiClient.makeWith(AuthoringAuthenticatedApi, {
-    httpClient: transport,
-    baseUrl: origin,
-  }).pipe(Effect.provide(authenticatedApiMiddleware(input.token)));
+  const api = yield* authorInventoryApi(input);
+  const origin = api.origin;
   const skits: Array<AuthorSkitListResponse["skits"][number]> = [];
   let cursor: string | null = null;
   const cursors = new Set<string>();
   let pages = 0;
   do {
-    const page: AuthorSkitListResponse = yield* client.authorInventory
-      .read({ query: cursor === null ? {} : { cursor } })
-      .pipe(Effect.mapError((error) => classifyListFailure(origin, error)));
+    const page: AuthorSkitListResponse = yield* api.readPage(cursor);
     skits.push(...page.skits);
     cursor = page.next_cursor;
     pages++;

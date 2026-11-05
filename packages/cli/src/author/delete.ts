@@ -1,127 +1,15 @@
-import {
-  SkitConfiguration,
-  skitConfigurationLayer,
-  AuthorSkitDeleteResponse,
-  SkitContractError,
-  FailureTypeId,
-  type SkitFailure,
-} from "@smolai/skit-core";
-import {
-  AuthoringAuthenticatedApi,
-  DeleteRequiresPrivateResponse,
-  InsufficientScopeResponse,
-  SkitNotFoundResponse,
-  UnauthorizedResponse,
-} from "@smolai/skit-core/universal/api";
-import { Data, Option, Effect, Result, Schema, Scope } from "effect";
-import { HttpApiClient } from "effect/http-api";
+import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
+import { Option, Effect, Result } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-
-import type { AuthorRemoteHome } from "@smolai/skit-core/author";
 import { parseAuthorDestination } from "./destination.js";
-import {
-  AuthenticationRequired,
-  CredentialLacksScope,
-  DeleteRequiresPrivate,
-  RegistryUnreachable,
-} from "../registry/failures.js";
 import { Registry, type ResolvedAuth } from "../registry/index.js";
-import {
-  authenticatedApiMiddleware,
-  isSuccessfulResponseDecodeFailure,
-  registryApiFailureMessage,
-} from "../registry/api-client.js";
-import { isRegistryTransportError, RegistryHttp } from "../registry/registry-http.js";
+import { deletePrivateAuthorSkit } from "../registry/authoring.js";
 import { Renderer } from "../terminal/renderer.js";
 import { handleRegistryCommand } from "../commands/handler.js";
-
 import { CommandMetadata } from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";
 import { homeFlag, jsonFlag } from "../commands/parameters.js";
 import { result } from "../commands/result.js";
-
-export class AuthorSkitNotFound
-  extends Data.TaggedError("AuthorSkitNotFound")<{}>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "NOT_FOUND" as const;
-  readonly remediation =
-    "Check the destination, and that you are signed in as its owner, then retry.";
-  get message(): string {
-    return "The private SKIT was not found or is not owned by you";
-  }
-}
-export class AuthorDeleteResponseError
-  extends Data.TaggedError("AuthorDeleteResponseError")<{
-    message: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Check the Registry's reason, then retry.";
-}
-
-/**
- * Delete one private SKIT, or plan the deletion under `dryRun`.
- *
- * The request and its body read share the caller's Scope, so an interrupted deletion releases the
- * connection rather than leaving the body streaming. This never retries: a delete that may have
- * been accepted must not be sent twice.
- */
-export const deleteAuthorSkit = Effect.fn("deleteAuthorSkit")(function* (
-  remote: AuthorRemoteHome,
-  options: { token?: string; dryRun?: boolean },
-): Effect.fn.Return<
-  AuthorSkitDeleteResponse,
-  | AuthenticationRequired
-  | CredentialLacksScope
-  | DeleteRequiresPrivate
-  | AuthorSkitNotFound
-  | RegistryUnreachable
-  | AuthorDeleteResponseError
-  | SkitContractError,
-  RegistryHttp | Scope.Scope
-> {
-  if (!options.token)
-    return yield* Effect.fail(
-      new AuthenticationRequired({ origin: remote.origin, scopes: "authoring:write" }),
-    );
-  const transport = yield* (yield* RegistryHttp).client;
-  const client = yield* HttpApiClient.makeWith(AuthoringAuthenticatedApi, {
-    httpClient: transport,
-    baseUrl: remote.origin,
-  }).pipe(Effect.provide(authenticatedApiMiddleware(options.token)));
-  return yield* client.skitDelete
-    .deletePrivate({
-      params: { owner: remote.namespace, slug: remote.skit },
-      query: options.dryRun ? { dry_run: "true" } : {},
-    })
-    .pipe(
-      Effect.mapError((error) => {
-        if (isRegistryTransportError(error))
-          return new RegistryUnreachable({ origin: remote.origin, cause: error });
-        if (Schema.is(UnauthorizedResponse)(error))
-          return new AuthenticationRequired({
-            origin: remote.origin,
-            scopes: "authoring:write",
-          });
-        if (Schema.is(InsufficientScopeResponse)(error))
-          return new CredentialLacksScope({ scope: "authoring:write", origin: remote.origin });
-        if (Schema.is(SkitNotFoundResponse)(error)) return new AuthorSkitNotFound();
-        if (Schema.is(DeleteRequiresPrivateResponse)(error)) return new DeleteRequiresPrivate();
-        if (isSuccessfulResponseDecodeFailure(error, [200]))
-          return new SkitContractError({
-            contract: "author SKIT delete response",
-            issues: [{ path: "", message: String(error) }],
-          });
-        return new AuthorDeleteResponseError({
-          message: registryApiFailureMessage("Author SKIT delete", error),
-        });
-      }),
-    );
-});
 
 export interface AuthorDeleteOptions<E> {
   readonly authState: Result.Result<ResolvedAuth, E>;
@@ -141,7 +29,9 @@ export const authorDeleteCommand = Effect.fn("CLI.authorDelete")(function* <E>(
   const renderer = yield* Renderer;
   return yield* renderer.withStatus(
     options.dryRun ? "Planning private SKIT deletion" : "Deleting private SKIT",
-    Effect.scoped(deleteAuthorSkit(remote, { token: credentials.token, dryRun: options.dryRun })),
+    Effect.scoped(
+      deletePrivateAuthorSkit(remote, { token: credentials.token, dryRun: options.dryRun }),
+    ),
   );
 });
 
