@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path";
 import { UnsafeInstalledSkillBackups } from "./failures.js";
 import { makeOperationId } from "../library/entity-ids.js";
-import type { InstalledSkill } from "../library/library-state.js";
+import type { InstalledSkill } from "../library/device-state.js";
 import { LinkStat } from "../platform/link-stat.js";
 
 const BACKUPS_DIRECTORY = ".skit-backups";

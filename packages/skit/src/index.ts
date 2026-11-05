@@ -176,17 +176,18 @@ export {
 export {
   CURRENT_LIBRARY_STATE_VERSION,
   LibraryState,
-  globalEnabled,
-  enabledAt,
   currentLibraryState,
   emptyLibraryState,
   libraryStateRevision,
   LibraryInventory,
   libraryManifestFromLocalState,
+} from "./library/library-state.js";
+export { globalEnabled, enabledAt } from "./library/enabled.js";
+export {
   AbsoluteDevicePath,
   InstalledSkill,
   DeviceSkillSelection,
-} from "./library/library-state.js";
+} from "./library/device-state.js";
 export { setupIntent } from "./library/setup.js";
 export { prepareDeviceInstallation, withDeviceSkillSelection } from "./library/enabled.js";
 export { RestoreInvalid, SourceRestoreInvalid } from "./library/library.js";

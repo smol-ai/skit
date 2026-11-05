@@ -5,11 +5,8 @@ import { makeInstalledSkillId, type OperationId } from "../../entity-ids.js";
 import { reviewApply } from "./review.js";
 import { InvalidIntent } from "../../enabled-plan.js";
 import { StalePlan, type Plan } from "../../library-plan.js";
-import {
-  libraryStateRevision,
-  type LibraryState,
-  type InstalledSkill,
-} from "../../library-state.js";
+import { libraryStateRevision, type LibraryState } from "../../library-state.js";
+import { type InstalledSkill } from "../../device-state.js";
 import { OperationStatus } from "../../store/state-schema.js";
 import { LibraryWriter, loadLibrary, libraryOriginalsPath } from "../../store/library-store.js";
 import { stepRouting } from "../../routing/step.js";

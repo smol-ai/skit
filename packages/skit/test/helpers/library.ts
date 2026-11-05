@@ -2,11 +2,8 @@ import { Context, Effect, FileSystem, Layer } from "effect";
 import { join, resolve } from "node:path";
 import * as Library from "../../src/library/library.js";
 import { CollectionRemovalMissing } from "../../src/library/installation/remove.js";
-import {
-  emptyLibraryState,
-  type LibraryState,
-  type InstalledSkill,
-} from "../../src/library/library-state.js";
+import { emptyLibraryState, type LibraryState } from "../../src/library/library-state.js";
+import { type InstalledSkill } from "../../src/library/device-state.js";
 import { snapshotOf } from "../../src/library/snapshot.js";
 
 import type { ManageApproval } from "../../src/installed-skills/files.js";

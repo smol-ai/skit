@@ -5,7 +5,7 @@ import type {
   InstalledSkillInstalled,
   InstalledSkillPending,
   InstalledSkillSuppressed,
-} from "./library-state.js";
+} from "./device-state.js";
 
 // The only places an installed copy's status changes. Each takes the statuses it may leave and
 // keeps only the fields its new status uses.

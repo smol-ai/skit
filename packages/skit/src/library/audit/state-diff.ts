@@ -1,4 +1,5 @@
-import type { InvocationPolicies, LibraryState } from "../library-state.js";
+import type { InvocationPolicies } from "../device-state.js";
+import type { LibraryState } from "../library-state.js";
 import type { LibraryAuditChange } from "./audit-log.js";
 import { currentSkillVersion, enabledSkillIds, type Enabled } from "../library-contracts.js";
 

@@ -1,6 +1,6 @@
 import { Schema, SchemaGetter } from "effect";
 import { InstalledSkillId, SkillId, SkillVersionId } from "../entity-ids.js";
-import { AbsoluteDevicePath, type InstalledSkill } from "../library-state.js";
+import { AbsoluteDevicePath, type InstalledSkill } from "../device-state.js";
 import { Hash } from "../../shared/hash.js";
 import { HarnessInstallStatus } from "../../installed-skills/metadata.js";
 import { RecordedInstallDestination } from "./state-schema.js";

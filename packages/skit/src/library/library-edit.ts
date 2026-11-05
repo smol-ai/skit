@@ -1,5 +1,6 @@
 import { Effect } from "effect";
-import { setEnabledAt, pruneEmptyEnabled, type LibraryState } from "./library-state.js";
+import { setEnabledAt, pruneEmptyEnabled } from "./enabled.js";
+import { type LibraryState } from "./library-state.js";
 import { calculateEnabled, expandIntent } from "./enabled-plan.js";
 import { removeFromEnabled } from "./enabled.js";
 import { CollectionRemovalMissing } from "./installation/remove.js";

@@ -4,12 +4,8 @@ import { deterministicTreeHash } from "../../../artifact/skit.js";
 import { inspectOwnershipMarker } from "../../../installed-skills/files.js";
 import type { OwnershipMarker } from "../../../installed-skills/ownership-marker.js";
 import { libraryOriginalsPath, loadLibrary, writeLibrary } from "../../store/library-store.js";
-import {
-  libraryStateRevision,
-  emptyLibraryState,
-  type LibraryState,
-  type InstalledSkill,
-} from "../../library-state.js";
+import { libraryStateRevision, emptyLibraryState, type LibraryState } from "../../library-state.js";
+import { type InstalledSkill } from "../../device-state.js";
 import { enabledByScope } from "../../enabled.js";
 import { enabledSkillIds, currentSkillVersion, versionBacking } from "../../library-contracts.js";
 import { prepareImport } from "../../import-collection.js";

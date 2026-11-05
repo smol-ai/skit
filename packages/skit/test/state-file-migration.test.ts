@@ -13,11 +13,8 @@ import {
   makeSkillVersionId,
 } from "../src/library/entity-ids.js";
 import { currentSkillVersion, type Enabled } from "../src/library/library-contracts.js";
-import {
-  emptyLibraryState,
-  globalEnabled,
-  type LibraryState,
-} from "../src/library/library-state.js";
+import { emptyLibraryState, type LibraryState } from "../src/library/library-state.js";
+import { globalEnabled } from "../src/library/enabled.js";
 import { inspectLibrary, libraryLayer, saveLibrary } from "./helpers/library-store.js";
 import { migrateLocalLibraryState } from "../src/library/store/library-store.js";
 import * as Library from "../src/library/library.js";

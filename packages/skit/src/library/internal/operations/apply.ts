@@ -9,11 +9,8 @@ import {
   libraryStatePath,
   loadLibrary,
 } from "../../store/library-store.js";
-import {
-  libraryStateRevision,
-  type LibraryState,
-  type InstalledSkill,
-} from "../../library-state.js";
+import { libraryStateRevision, type LibraryState } from "../../library-state.js";
+import { type InstalledSkill } from "../../device-state.js";
 import type { OperationId } from "../../entity-ids.js";
 import type { RecordedInstalledChange, SyncFolder } from "../../store/state-schema.js";
 import { execute } from "./installed-changes.js";

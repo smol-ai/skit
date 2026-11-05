@@ -2,7 +2,8 @@ import { Effect } from "effect";
 import { canonicalJson } from "../../../shared/json.js";
 import { InvalidIntent } from "../../enabled-plan.js";
 import type { Plan, InstalledSkillResult } from "../../library-plan.js";
-import type { InstalledSkill, LibraryState } from "../../library-state.js";
+import type { InstalledSkill } from "../../device-state.js";
+import type { LibraryState } from "../../library-state.js";
 import * as Status from "../../installed-skill-status.js";
 import type {
   InstalledApply,

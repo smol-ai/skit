@@ -13,11 +13,7 @@ import {
 } from "./store/state-schema.js";
 import { canonicalJson } from "../shared/json.js";
 
-export * from "./device-state.js";
-
-export { CURRENT_LIBRARY_STATE_VERSION, SyncAncestry } from "./store/state-schema.js";
-export type { StoredInstalledApply } from "./store/state-schema.js";
-export type { SyncPublication } from "./store/state-schema.js";
+export { CURRENT_LIBRARY_STATE_VERSION } from "./store/state-schema.js";
 
 export const LibraryState = Schema.Struct({
   ...LibraryStateFields,
@@ -54,8 +50,6 @@ export const LibraryState = Schema.Struct({
   ),
 );
 export interface LibraryState extends Schema.Schema.Type<typeof LibraryState> {}
-
-export { globalEnabled, enabledAt, setEnabledAt, pruneEmptyEnabled } from "./enabled.js";
 
 export const currentLibraryState = (fields: Omit<LibraryState, "schemaVersion">): LibraryState => ({
   ...fields,

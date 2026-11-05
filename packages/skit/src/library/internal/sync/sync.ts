@@ -21,8 +21,8 @@ import {
   LibraryState,
   emptyLibraryState,
   libraryManifestFromLocalState,
-  SyncAncestry,
 } from "../../library-state.js";
+import { SyncAncestry } from "../../store/state-schema.js";
 import { DeviceSkillSelection } from "../../device-state.js";
 import { makeOperationId, OperationId, CollectionVersionId } from "../../entity-ids.js";
 

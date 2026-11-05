@@ -29,7 +29,9 @@ import {
   UnsafeInstalledSkillBackups,
   UnsafeInstalledSkillName,
 } from "./failures.js";
-import { type InstalledSkill, globalEnabled, type LibraryState } from "../library/library-state.js";
+import { type InstalledSkill } from "../library/device-state.js";
+import { globalEnabled } from "../library/enabled.js";
+import { type LibraryState } from "../library/library-state.js";
 
 import { installedSkillSource } from "../library/installation/installed-skill-source.js";
 import {

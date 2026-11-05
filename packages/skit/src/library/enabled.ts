@@ -2,7 +2,8 @@ import { resolve } from "node:path";
 import type { InstallScope } from "./scope.js";
 import type { Enabled, LibraryManifest } from "./library-contracts.js";
 import type { CollectionId, SkillId } from "./entity-ids.js";
-import type { DeviceSkillSelection, InvocationPolicies, LibraryState } from "./library-state.js";
+import type { DeviceSkillSelection, InvocationPolicies } from "./device-state.js";
+import type { LibraryState } from "./library-state.js";
 
 /** What is enabled at one install scope, with the invocation overrides chosen there. */
 export interface EnabledAtScope {

@@ -16,7 +16,8 @@ import {
   uninstallLeftovers,
 } from "./helpers/library.js";
 
-import type { LibraryState, InstalledSkill } from "../src/library/library-state.js";
+import type { LibraryState } from "../src/library/library-state.js";
+import type { InstalledSkill } from "../src/library/device-state.js";
 import { LibraryWriter, loadLibrary } from "../src/library/store/library-store.js";
 
 import { skitLayer } from "../src/platform/layer.js";

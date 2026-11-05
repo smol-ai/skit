@@ -1,5 +1,5 @@
 import { Schema, SchemaGetter } from "effect";
-import { AbsoluteDevicePath } from "../library-state.js";
+import { AbsoluteDevicePath } from "../device-state.js";
 import {
   AdoptionReceiptId,
   CollectionId,

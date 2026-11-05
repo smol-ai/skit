@@ -1,7 +1,7 @@
 import { Schema, SchemaGetter } from "effect";
 import { CollectionId, InstalledSkillId, SkillId, SkillVersionId } from "../entity-ids.js";
 import { Collection } from "../library-contracts.js";
-import { AbsoluteDevicePath } from "../library-state.js";
+import { AbsoluteDevicePath } from "../device-state.js";
 import { LibraryStateFromV10 } from "./state-schema-v10.js";
 import { Hash } from "../../shared/hash.js";
 import { HarnessName } from "../../harnesses/contracts.js";

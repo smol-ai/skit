@@ -1,7 +1,8 @@
 import { Effect, Schema } from "effect";
 import * as InstalledSkillStatus from "../../installed-skill-status.js";
 import { LibraryManifest, enabledSkillIds, currentSkillVersion } from "../../library-contracts.js";
-import { InstalledSkill, type LibraryState } from "../../library-state.js";
+import { InstalledSkill } from "../../device-state.js";
+import { type LibraryState } from "../../library-state.js";
 
 import { InstalledSkillId } from "../../entity-ids.js";
 import type { InstallDestination } from "../../../installed-skills/destination.js";

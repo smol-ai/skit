@@ -10,7 +10,7 @@ import {
   ImportV7,
   mergeBindingEntriesV7,
 } from "./manifest-v7.js";
-import { AbsoluteDevicePath } from "../library-state.js";
+import { AbsoluteDevicePath } from "../device-state.js";
 import { HarnessName } from "../../harnesses/contracts.js";
 import { InvocationPolicy } from "../../artifact/invocation-policy.js";
 import type { RecordedInstallDestination } from "./state-schema.js";

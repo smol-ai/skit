@@ -1,6 +1,6 @@
 import { Schema, SchemaGetter } from "effect";
 import { SkillId } from "../entity-ids.js";
-import { AbsoluteDevicePath } from "../library-state.js";
+import { AbsoluteDevicePath } from "../device-state.js";
 import { HarnessName } from "../../harnesses/contracts.js";
 import { InvocationPolicy } from "../../artifact/invocation-policy.js";
 import {
