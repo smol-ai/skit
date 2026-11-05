@@ -23,4 +23,4 @@ export class MissingRequirement
   }
 }
 
-export { OptionCombinationInvalid } from "@smolai/skit-core";
+export { OptionCombinationInvalid } from "@smolai/skit-core/shared";

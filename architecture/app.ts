@@ -407,7 +407,8 @@ export const coreExports = {
   },
   "./audit": {
     kind: "shared",
-    purpose: "Passive local capability scans and versioned audit report schemas.",
+    purpose:
+      "Passive local capability scans, Skill security assessment and versioned report schemas.",
     source: "packages/skit/src/auditing/index.ts",
   },
   "./universal/consumer": {

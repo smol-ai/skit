@@ -1,4 +1,4 @@
-import type { SkillSecurityReview } from "@smolai/skit-core";
+import type { SkillSecurityReview } from "@smolai/skit-core/audit";
 
 export function renderSecurityReview(data: typeof SkillSecurityReview.Type): string {
   return data.audit.findings.length

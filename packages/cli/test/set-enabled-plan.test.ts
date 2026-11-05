@@ -6,8 +6,8 @@ import {
   enabledAt,
   enabledSkillIds,
   SkillsDirectoryNotWritable,
-  type UsageReport,
 } from "@smolai/skit-core";
+import { type UsageReport } from "@smolai/skit-core/library/usage";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { type ListingBudget } from "@smolai/skit-core/harnesses";
 import { assert, it } from "@effect/vitest";

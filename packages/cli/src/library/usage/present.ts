@@ -1,5 +1,5 @@
 import stringWidth from "string-width";
-import type { UsageReport, UsageRow } from "@smolai/skit-core";
+import type { UsageReport, UsageRow } from "@smolai/skit-core/library/usage";
 
 const safe = (value: string) =>
   Array.from(value, (char) => {

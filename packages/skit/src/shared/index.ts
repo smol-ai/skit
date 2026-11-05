@@ -4,6 +4,7 @@ export { Hash } from "./hash.js";
 export { canonicalJson } from "./json.js";
 export { isErrno } from "./errno.js";
 export { TreeError } from "./tree-error.js";
+export { OptionCombinationInvalid } from "./input-failures.js";
 export {
   errorMessage,
   FailureTypeId,

@@ -1,4 +1,4 @@
-import { SkillSecurityReview } from "@smolai/skit-core";
+import { SkillSecurityReview } from "@smolai/skit-core/audit";
 
 export const securityOutputContracts = {
   securityReview: { id: "skit.security.review.v4", schema: SkillSecurityReview },
