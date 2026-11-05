@@ -262,7 +262,7 @@ export const setupRecord = Effect.fn("MachineSettings.setupRecord")(function* (
 });
 
 /** No record of the setup to undo: it saved no discovery folders, or a later setup has since. */
-export class SetupNotRecorded
+class SetupNotRecorded
   extends Schema.TaggedError<SetupNotRecorded>()("MachineSettings.SetupNotRecorded", {
     path: Schema.String,
     operationId: Schema.String,

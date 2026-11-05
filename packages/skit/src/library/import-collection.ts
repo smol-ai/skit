@@ -47,7 +47,7 @@ import {
 import type { Hash } from "../shared/hash.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
-export class ImportRequestInvalid
+class ImportRequestInvalid
   extends Data.TaggedError("Library.ImportRequestInvalid")<{
     reason: string;
   }>
@@ -391,7 +391,7 @@ export const importCollection = Effect.fn("Library.importCollection")(function* 
   });
 });
 
-export class InstalledSkillChanged
+class InstalledSkillChanged
   extends Data.TaggedError("Library.InstalledSkillChanged")<{ path: string }>
   implements SkitFailure
 {
@@ -579,3 +579,6 @@ export type ImportAuthoredCollectionError = Effect.Error<
   ReturnType<typeof importAuthoredCollection>
 >;
 export type ImportEditError = Effect.Error<ReturnType<typeof importEdit>>;
+
+// Required by the public declaration-only error vocabulary.
+export type { ImportRequestInvalid, InstalledSkillChanged };

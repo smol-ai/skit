@@ -13,7 +13,7 @@ import { originalTreeHash } from "./collection-version.js";
 import { prepareImport } from "./import-collection.js";
 import type { SkitSource } from "./library-contracts.js";
 
-export class AddNoSkills
+class AddNoSkills
   extends Data.TaggedError("Library.AddNoSkills")<{ source: string }>
   implements SkitFailure
 {
@@ -111,3 +111,6 @@ export const inspectResolvedSource = Effect.fn("Library.inspectResolvedSource")(
     })),
   };
 });
+
+// Required by the public declaration-only error vocabulary.
+export type { AddNoSkills };

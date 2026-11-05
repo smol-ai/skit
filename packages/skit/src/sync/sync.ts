@@ -73,7 +73,7 @@ export class Moved extends Schema.TaggedError<Moved>()("Sync.Moved", {
 }) {}
 
 /** The Registry sent a revision or tree that does not match its identity. */
-export class RemoteInvalid
+class RemoteInvalid
   extends Schema.TaggedError<RemoteInvalid>()("Sync.RemoteInvalid", {
     id: History.RevisionId,
     reason: Schema.String,
@@ -89,7 +89,7 @@ export class RemoteInvalid
 }
 
 /** Other devices kept moving `current` while this one tried to sync. */
-export class Unsettled
+class Unsettled
   extends Schema.TaggedError<Unsettled>()("Sync.Unsettled", { steps: Schema.Int })
   implements SkitFailure
 {

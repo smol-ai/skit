@@ -149,7 +149,7 @@ export const pnpmSkillOwner = Effect.fn("PnpmSkills.owner")(function* (directory
   return yield* checkPnpm(directory);
 });
 
-export class PnpmSkillManaged
+class PnpmSkillManaged
   extends Data.TaggedError("PnpmSkillManaged")<{
     path: string;
     package: string;
@@ -168,3 +168,6 @@ export const leavePnpmSkill = Effect.fn("PnpmSkills.leaveManaged")(function* (pa
   const owner = yield* pnpmSkillOwner(path);
   if (owner) return yield* new PnpmSkillManaged({ path, package: owner.package });
 });
+
+// Required by the public declaration-only error vocabulary.
+export type { PnpmSkillManaged };

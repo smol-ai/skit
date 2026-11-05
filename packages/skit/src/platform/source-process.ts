@@ -22,7 +22,7 @@ export interface SourceProcessResult {
   readonly exitCode: number;
 }
 
-export class SourceProcessOutputTooLarge
+class SourceProcessOutputTooLarge
   extends Data.TaggedError("SourceProcess.OutputTooLarge")<{
     invocation: string;
     stream: "stdout" | "stderr";
@@ -36,7 +36,7 @@ export class SourceProcessOutputTooLarge
   readonly remediation = "Choose a smaller source, then retry.";
 }
 
-export class SourceProcessTimedOut
+class SourceProcessTimedOut
   extends Data.TaggedError("SourceProcess.TimedOut")<{
     invocation: string;
     timeoutMs: number;

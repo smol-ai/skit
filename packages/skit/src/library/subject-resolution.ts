@@ -36,7 +36,7 @@ export class LibrarySubjectNotFound
   }
 }
 
-export class LibrarySubjectAmbiguous
+class LibrarySubjectAmbiguous
   extends Data.TaggedError("Library.SubjectAmbiguous")<{
     query: string;
   }>
@@ -152,3 +152,6 @@ export const resolveOwningLibrarySubjects = Effect.fn("Library.resolveOwningSubj
 /** The subject's Collection's latest source import. */
 export const latestSourceImport = (state: LibraryState, subject: LibrarySubject) =>
   sourceImports(state, subjectCollectionId(subject))[0];
+
+// Required by the public declaration-only error vocabulary.
+export type { LibrarySubjectAmbiguous };
