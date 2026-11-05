@@ -53,7 +53,9 @@ describe("skit/owner-boundaries", () => {
   test("callers cannot import the installed-skill implementation namespace", async () => {
     for (const statement of [
       'import { InstalledSkills } from "@smolai/skit-core";',
+      'import { InstalledSkillStatus } from "@smolai/skit-core";',
       'import * as Files from "../../../skit/src/library/installed-skills.js";',
+      'import * as Status from "../../../skit/src/library/installed-skill-status.js";',
       'export * from "../../../skit/src/library/installed-skills.js";',
     ])
       expect(

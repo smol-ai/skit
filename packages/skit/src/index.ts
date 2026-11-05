@@ -242,7 +242,6 @@ export * as Sync from "./sync/sync.js";
 export { mergeAuthorTree, conflictKind } from "./author/merge/files.js";
 export { type Unusable as MachineSettingsUnusable } from "./library/machine-settings.js";
 
-export * as InstalledSkillStatus from "./library/installed-skill-status.js";
 export * as Library from "./library/library.js";
 
 export { observePathEvidence, recoveryFingerprint } from "./library/folder-evidence.js";

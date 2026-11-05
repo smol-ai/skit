@@ -76,6 +76,7 @@ export const owners = [
       "packages/skit/src/library/subject-resolution.",
       "packages/skit/src/library/source-inspection.",
       "packages/skit/src/library/installed-skills.",
+      "packages/skit/src/library/installed-skill-status.",
     ],
     testOwner: "packages/skit/test/",
     private: [
@@ -102,6 +103,7 @@ export const owners = [
 
       "withHomeLock",
       "InstalledSkills",
+      "InstalledSkillStatus",
       "InstalledSkillFiles",
       "InstalledSkillBackups",
       "writeCollectionVersion",

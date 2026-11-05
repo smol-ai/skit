@@ -3,7 +3,7 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { InstalledSkillStatus, currentSkillVersion } from "@smolai/skit-core";
+import { currentSkillVersion } from "@smolai/skit-core";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { Library } from "@smolai/skit-core/library";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
@@ -131,9 +131,12 @@ it.effect("heals an untouched installed skill already recorded as conflicted", (
     yield* library.writeDurable({
       ...state,
       // Untouched on disk, so the folder still holds the hash SKIT wrote.
-      installed_skills: state.installed_skills.map((row) =>
-        InstalledSkillStatus.conflicted({ ...row, skill_version_id: selected }, row.expected_hash),
-      ),
+      installed_skills: state.installed_skills.map((row) => ({
+        ...row,
+        skill_version_id: selected,
+        status: "conflicted" as const,
+        current_hash: row.expected_hash,
+      })),
     });
     yield* project;
     assert.strictEqual(yield* fs.readFileString(installedPath), "second verbatim Skill\n");

@@ -2,7 +2,7 @@ import { skitLayer } from "@smolai/skit-core/platform";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { Effect, Fiber, FileSystem, Layer, Result, Schedule, Schema } from "effect";
-import { InstalledSkillStatus, emptyLibraryState, libraryDoctorReport } from "@smolai/skit-core";
+import { emptyLibraryState, libraryDoctorReport } from "@smolai/skit-core";
 import { SourceProcess } from "@smolai/skit-core/platform";
 import { ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
@@ -405,7 +405,11 @@ test.each([
   const claude = state.installed_skills[1];
   if (!claude) throw new Error("Missing fixture installed skill");
   if (kind === "edited")
-    state.installed_skills[1] = InstalledSkillStatus.conflicted(claude, `sha256:${"b".repeat(64)}`);
+    state.installed_skills[1] = {
+      ...claude,
+      status: "conflicted",
+      current_hash: `sha256:${"b".repeat(64)}`,
+    };
   if (kind === "different-version")
     state.installed_skills[1] = { ...claude, skill_version_id: makeSkillVersionId() };
   if (kind === "foreign") state.installed_skills.pop();
