@@ -1,5 +1,4 @@
 import { errorMessage } from "@smolai/skit-core";
-export { errorMessage } from "@smolai/skit-core";
 import { isSkitFailure, type FailureCode } from "@smolai/skit-core";
 import { Cause } from "effect";
 

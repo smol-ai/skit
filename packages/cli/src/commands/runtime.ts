@@ -13,7 +13,7 @@ import { Renderer } from "../terminal/renderer.js";
 import { result } from "./result.js";
 
 /** The command line did not parse; the parser's own sentences are the message. */
-export class CommandLineInvalid
+class CommandLineInvalid
   extends Data.TaggedError("CommandLineInvalid")<{ message: string }>
   implements SkitFailure
 {
@@ -28,7 +28,7 @@ const quietConsole: Console.Console = Object.assign(Object.create(console), {
 });
 
 /** Render Effect's structured help model through SKIT's stable output envelope. */
-export function formatHelpDocument(document: HelpDoc.HelpDoc): string {
+function formatHelpDocument(document: HelpDoc.HelpDoc): string {
   const formatted = CliOutput.defaultFormatter().formatHelpDoc(document);
   if (!document.subcommands?.length) return formatted;
   const prefix = document.usage.match(/^(.*?)\s+<subcommand>/)?.[1];

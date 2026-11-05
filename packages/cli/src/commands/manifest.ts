@@ -4,9 +4,7 @@ import { helpDocument } from "./help-document.js";
 import { CommandMetadata } from "./metadata.js";
 import type { CommandDescription } from "./command-contracts.js";
 
-export type { CommandDescription } from "./command-contracts.js";
-
-export interface CommandDocument extends CommandDescription {
+interface CommandDocument extends CommandDescription {
   readonly examples: readonly string[];
   readonly positionals: readonly { readonly name: string; readonly required: boolean }[];
   readonly documentedFlags: Readonly<

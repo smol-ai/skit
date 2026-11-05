@@ -32,19 +32,19 @@ export const optionalString = (name: string, description: string) =>
   Flag.String(name).pipe(Flag.withDescription(description), Flag.optional);
 
 export const homeFlag = optionalString("home", "Override the SKIT state directory.");
-export const codexRootFlag = optionalString(
+const codexRootFlag = optionalString(
   "codex-root",
   "Override the shared .agents skills directory that Codex and other harnesses read.",
 );
-export const claudeRootFlag = optionalString(
+const claudeRootFlag = optionalString(
   "claude-root",
   "Override the Claude skills directory; treats Claude Code as present.",
 );
-export const opencodeRootFlag = optionalString(
+const opencodeRootFlag = optionalString(
   "opencode-root",
   "Scan an OpenCode skills directory for inventory; SKIT does not install there.",
 );
-export const devinRootFlag = Flag.String("devin-root").pipe(
+const devinRootFlag = Flag.String("devin-root").pipe(
   Flag.withDescription(
     "Scan additional Devin skills directories for inventory without changing install destinations.",
   ),

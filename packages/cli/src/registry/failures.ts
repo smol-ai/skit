@@ -196,15 +196,6 @@ export class AuthorRemoteAlreadyExists
   }
 }
 
-export class NoAuthorRemote extends Data.TaggedError("NoAuthorRemote")<{}> implements SkitFailure {
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "INVALID_ARGUMENT" as const;
-  readonly remediation = "Run `skit author sync --to <namespace/skit>` to configure one.";
-  get message(): string {
-    return "No author remote is configured";
-  }
-}
-
 // -- SKIT synchronization ----------------------------------------------------------------------
 
 export class VisibilityNotAccepted
@@ -227,22 +218,6 @@ export class VisibilityNotAccepted
   }
 }
 
-export class SyncBlockedByValidation
-  extends Data.TaggedError("SyncBlockedByValidation")<{
-    stage: "local" | "merged";
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "VALIDATION_FAILED" as const;
-  readonly remediation = "Correct the reported validation diagnostics, then sync again.";
-  get message(): string {
-    return this.stage === "local"
-      ? "Sync is blocked until the local SKIT validates"
-      : "The merged SKIT does not validate";
-  }
-}
-
 export class RemoteSkitUnavailable
   extends Data.TaggedError("RemoteSkitUnavailable")<{
     identity: string;
@@ -255,18 +230,6 @@ export class RemoteSkitUnavailable
     "Check that the SKIT still exists and that the active credential can read it, then retry.";
   get message(): string {
     return `Remote SKIT ${this.identity} is unavailable`;
-  }
-}
-
-export class RemoteSkitIdentityMismatch
-  extends Data.TaggedError("RemoteSkitIdentityMismatch")<{}>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly remediation = "Check the author remote's Registry and destination, then retry.";
-  get message(): string {
-    return "Remote SKIT identity does not match its Registry route";
   }
 }
 
@@ -458,25 +421,6 @@ export class NoRemoteHome extends Data.TaggedError("NoRemoteHome")<{}> implement
   }
 }
 
-/** The configured Registry is not the one this SKIT is bound to. */
-export class RegistryMismatch
-  extends Data.TaggedError("RegistryMismatch")<{
-    active: string;
-    expected: string;
-    subject: "remote home" | "author destination";
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  get remediation(): string {
-    return `Sign in to ${this.expected} with \`skit auth login ${this.expected}\`, then retry.`;
-  }
-  get message(): string {
-    return `Active Registry ${this.active} does not match ${this.subject} ${this.expected}`;
-  }
-}
-
 export class PublicationBlocked
   extends Data.TaggedError("PublicationBlocked")<{
     reason: "content" | "assessment";
@@ -555,22 +499,6 @@ export class DestinationFormInvalid
     return this.form === "canonical"
       ? "Canonical SKIT destination must be skit://host/namespace/skit"
       : "A relative author destination requires an active Registry; run `skit auth login`";
-  }
-}
-
-export class SkitSlugMismatch
-  extends Data.TaggedError("SkitSlugMismatch")<{
-    context: string;
-    remote: string;
-    local: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly remediation = "Use a destination whose slug matches the local SKIT, then retry.";
-  get message(): string {
-    return `${this.context} SKIT slug ${this.remote} does not match local slug ${this.local}`;
   }
 }
 

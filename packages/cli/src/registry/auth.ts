@@ -73,10 +73,9 @@ import {
 /** Every Registry status this module treats as success. */
 const ok = (response: HttpClientResponse) => response.status >= 200 && response.status < 300;
 
-export const AUTH_SCOPES = ["library:sync", "authoring:write", "publication:write"] as const;
+const AUTH_SCOPES = ["library:sync", "authoring:write", "publication:write"] as const;
 export type AuthScope = (typeof AUTH_SCOPES)[number];
 
-export { parseOrigin } from "./accounts.js";
 export type { ResolvedAuth } from "./accounts.js";
 import {
   AuthConfig,
@@ -106,7 +105,7 @@ export type RegistryConfigurationError =
   | RegistryAliasNotFound
   | RegistrySelectionAmbiguous;
 
-export const authPath = Effect.fn("Auth.path")(function* (home?: string) {
+const authPath = Effect.fn("Auth.path")(function* (home?: string) {
   return (yield* configurationForHome(home)).authPath;
 });
 

@@ -3,7 +3,6 @@ import { Effect } from "effect";
 import { resolveAuth, resolveAuthForOrigin, resolveRegistryLocator } from "./auth.js";
 
 export type { ResolvedAuth } from "./accounts.js";
-export type { RegistryConfigurationError } from "./auth.js";
 
 /** A concrete origin never borrows a different Registry's ambient credentials. */
 const credentials = Effect.fn("Registry.credentials")(function* (

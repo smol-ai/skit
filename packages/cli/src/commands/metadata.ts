@@ -2,7 +2,7 @@ import { Context } from "effect";
 import type { AnyOutputContract } from "./output-contracts.js";
 
 /** The side effects a command may have, published so callers can decide whether to run it. */
-export type CommandCapability =
+type CommandCapability =
   | "filesystem.read"
   | "filesystem.write"
   | "network.read"
