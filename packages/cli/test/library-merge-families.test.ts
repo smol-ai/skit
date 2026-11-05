@@ -370,9 +370,9 @@ const families = {
       base: x.held([first], { entries: both }),
       local: x.held([first], { entries: [{ collection: x.collection_id }] }),
       remote: x.held([first], { entries: [skill(x.skillIds.beta!)] }),
-      conflicts: ["binding:global"],
-      resolved: x.held([first], { entries: [skill(x.skillIds.beta!)] }),
-      symmetric: true,
+      conflicts: [],
+      resolved: x.held([first], { entries: [{ collection: x.collection_id }] }),
+      symmetric: false,
     };
   },
   "an empty base with the same Collection held differently": (): Family => {
@@ -575,22 +575,7 @@ it.prop(
     ].sort();
     assert.deepStrictEqual(resolved.conflicts, remaining);
     if (remaining.length > 0) return;
-    // Taking the global Binding adopts remote's entries for every surviving record.
-    const sides = cases.map((item) => item.resolved as Side);
-    const present = new Set<string>(
-      sides.flatMap((side) => [
-        ...side.collections.map((record) => record.collection_id),
-        ...side.skills.map((record) => record.skill_id),
-      ]),
-    );
-    const expected = conflicts.has("binding:global")
-      ? sides.map((side, index) => ({
-          ...side,
-          entries: cases[index]!.remote.entries.filter((item) =>
-            present.has("collection" in item ? item.collection : item.skill),
-          ),
-        }))
-      : sides;
+    const expected = cases.map((item) => item.resolved as Side);
     assert.isTrue(Schema.is(LibraryManifest)(resolved.manifest));
     assert.strictEqual(canonical(resolved.manifest), canonical(manifestOf(expected)));
   },

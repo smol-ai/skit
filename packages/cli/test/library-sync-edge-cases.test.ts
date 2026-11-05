@@ -11,6 +11,8 @@ import {
   type SkillId,
 } from "@smolai/skit-core";
 import { RegistryUnreachable } from "../src/registry/failures.js";
+import { captureDisk, assertDiskUnchanged } from "./helpers/disk-snapshot.js";
+import { renderLibrarySyncPlan } from "../src/library/sync/present.js";
 import { devices } from "./helpers/library-sync-devices.js";
 
 const enable = (ids: readonly SkillId[]) => ids.map((id) => ({ skill: id }));
@@ -686,3 +688,62 @@ it.effect("a copy becoming snapshot-backed during merge uploads its already-reta
     assert.equal((yield* b.sync()).status, "merged");
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
+
+for (const localFollows of [true, false])
+  it.effect(
+    `sync resolves local ${localFollows ? "follow" : "disable"} clash without dropping unrelated remote choices`,
+    () =>
+      Effect.gen(function* () {
+        const { a, b, remote } = yield* devices;
+        const tools = yield* a.importMany("tools", ["alpha", "beta"], "2026-01-01T00:00:00Z");
+        const unrelated = yield* a.importSource("unrelated");
+        const alpha = tools.skills.find((skill) => skill.name === "alpha")!.skill_id;
+        const beta = tools.skills.find((skill) => skill.name === "beta")!.skill_id;
+        const other = unrelated.skills[0]!.skill_id;
+        yield* a.edit((state) => ({ ...state, enabled: enable([alpha, beta, other]) }));
+        yield* a.sync();
+        yield* b.sync();
+        const chosen = localFollows
+          ? [{ collection: tools.collection.collection_id }]
+          : enable([beta]);
+        const competing = localFollows
+          ? enable([beta])
+          : [{ collection: tools.collection.collection_id }];
+        yield* b.edit((state) => ({ ...state, enabled: [...chosen, { skill: other }] }));
+        yield* a.edit((state) => ({ ...state, enabled: competing }));
+        yield* a.sync();
+        const before = yield* captureDisk([...a.disk, ...b.disk]);
+        const priorHead = yield* remote;
+        const preview = yield* b.sync({ apply: false });
+        assert.strictEqual(preview.status, "merge_ready");
+        assert.ok("plan" in preview && preview.plan);
+        const resolution = {
+          winner: "local" as const,
+          collections: [
+            { collection_id: tools.collection.collection_id, label: tools.collection.label },
+          ],
+        };
+        assert.deepStrictEqual(preview.plan.enabled_resolution, resolution);
+        assert.include(
+          renderLibrarySyncPlan(preview.plan),
+          "Enabled-list clashes resolved using this device's choices",
+        );
+        assert.strictEqual(
+          (yield* b.sync({ takeRemote: ["binding:global"] })).status,
+          "resolution_invalid",
+        );
+        yield* assertDiskUnchanged(before);
+        assert.deepStrictEqual(yield* remote, priorHead);
+        const applied = yield* b.sync();
+        assert.strictEqual(applied.status, "merged");
+        assert.ok("plan" in applied && applied.plan);
+        assert.deepStrictEqual(applied.plan.enabled_resolution, resolution);
+        assert.deepStrictEqual((yield* b.state).enabled, chosen);
+        assert.strictEqual((yield* b.state).skills.length, 3);
+        assert.strictEqual((yield* b.state).collections.length, 2);
+        assert.strictEqual((yield* a.sync()).status, "merged");
+        assert.deepStrictEqual((yield* a.state).enabled, chosen);
+        assert.strictEqual((yield* b.sync()).status, "clean");
+        assert.strictEqual((yield* a.sync()).status, "clean");
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+  );

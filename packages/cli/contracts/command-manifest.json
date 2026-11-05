@@ -2465,7 +2465,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.library.sync.v11"
+        "skit.library.sync.v12"
       ],
       "exitCodes": [
         0,

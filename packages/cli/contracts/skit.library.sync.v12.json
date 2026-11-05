@@ -1,5 +1,5 @@
 {
-  "$id": "skit.library.sync.v11",
+  "$id": "skit.library.sync.v12",
   "type": "object",
   "properties": {
     "status": {
@@ -142,6 +142,41 @@
     "plan": {
       "type": "object",
       "properties": {
+        "enabled_resolution": {
+          "type": "object",
+          "properties": {
+            "winner": {
+              "type": "string",
+              "enum": [
+                "local"
+              ]
+            },
+            "collections": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "collection_id": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "collection_id",
+                  "label"
+                ],
+                "additionalProperties": true
+              }
+            }
+          },
+          "required": [
+            "winner",
+            "collections"
+          ],
+          "additionalProperties": true
+        },
         "local": {
           "type": "array",
           "items": {

@@ -290,7 +290,10 @@ export const syncLibrary = Effect.fn("Library.sync")(function* (options: {
   }
 
   // Equivalent handle alignment alone is not a Collection content or evidence change.
-  const plan = planLibrarySync(merge.alignedLocal, remoteManifest, desired);
+  const plan: SyncPlan = {
+    ...planLibrarySync(merge.alignedLocal, remoteManifest, desired),
+    ...(merge.enabledResolution ? { enabled_resolution: merge.enabledResolution } : {}),
+  };
   const transfer = yield* prepareSyncTransfer(inventory.archives, desired, remote, api, {
     ...options,
   });

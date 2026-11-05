@@ -156,14 +156,20 @@ it.prop("identical changes on both sides merge to that change", [side, side], ([
 });
 
 it.prop(
-  "a conflict-free merge is valid and independent of which side is local",
+  "a conflict-free merge is valid and only enabled-clash policy depends on the syncing side",
   [conflictFreeSides],
   ([[base, local, remote]]) => {
     const merged = mergeLibraryManifests(manifestOf(base), manifestOf(local), manifestOf(remote));
     assert.isTrue(Schema.is(LibraryManifest)(merged.manifest));
     const swapped = mergeLibraryManifests(manifestOf(base), manifestOf(remote), manifestOf(local));
     assert.deepStrictEqual(swapped.conflicts, []);
-    assert.isTrue(same(merged.manifest, swapped.manifest));
+    assert.isTrue(Schema.is(LibraryManifest)(swapped.manifest));
+    if (!merged.enabledResolution && !swapped.enabledResolution)
+      assert.isTrue(same(merged.manifest, swapped.manifest));
+    else
+      assert.isTrue(
+        same({ ...merged.manifest, enabled: [] }, { ...swapped.manifest, enabled: [] }),
+      );
   },
 );
 

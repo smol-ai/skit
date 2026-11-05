@@ -137,7 +137,6 @@ function mergeEnabledIntent(
   library: Parameters<typeof enabledSkillIds>[0] & {
     readonly collections: readonly Collection[];
   },
-  takeRemote: ReadonlySet<string>,
 ) {
   const before = enabledIntent(base);
   const mine = enabledIntent(local);
@@ -155,19 +154,32 @@ function mergeEnabledIntent(
     ...Object.values(followed.records).map((collection): Enabled => ({ collection })),
     ...Object.values(enabled.records).map((skill): Enabled => ({ skill })),
   ].filter(present);
-  // A followed Collection enables every current member, so it cannot coexist with one disabled.
-  const coherent = enabledSkillIds(
-    library,
-    items.filter((item) => "collection" in item),
-  ).every((skillId) => enabled.records[skillId] !== undefined);
-  if (coherent) return { values: mergeEnabled(library, [items]), conflicts: [] };
-  // `binding:global` is the key users already pass to --take-remote.
-  return takeRemote.has("binding:global")
-    ? {
-        values: mergeEnabled(library, [remote.enabled.filter(present)]),
-        conflicts: [],
-      }
-    : { values: [...local.enabled], conflicts: ["binding:global"] };
+  // Following a Collection and disabling a member cannot coexist. The syncing device chooses
+  // that Collection's intent; unrelated Collections still retain their three-way merge.
+  const resolvedCollections = Object.values(followed.records).filter((collection) =>
+    enabledSkillIds(library, [{ collection }]).some(
+      (skill) => enabled.records[skill] === undefined,
+    ),
+  );
+  if (!resolvedCollections.length)
+    return { values: mergeEnabled(library, [items]), resolvedCollections };
+  const clashing = new Set<string>(resolvedCollections);
+  const memberIds = new Set(
+    library.skills
+      .filter((skill) => clashing.has(skill.collection_id))
+      .map((skill) => skill.skill_id),
+  );
+  const belongs = (item: Enabled) =>
+    "collection" in item ? clashing.has(item.collection) : memberIds.has(item.skill);
+  return {
+    values: mergeEnabled(library, [
+      [
+        ...items.filter((item) => !belongs(item)),
+        ...local.enabled.filter((item) => belongs(item) && present(item)),
+      ],
+    ]),
+    resolvedCollections,
+  };
 }
 
 export { normalizeLibraryManifest } from "@smolai/skit-core";
@@ -380,7 +392,7 @@ export function mergeLibraryManifests(
     collection_versions: trees.values,
     imports: imports.values,
   };
-  const enabled = mergeEnabledIntent(base, local, remote, library, takeRemote);
+  const enabled = mergeEnabledIntent(base, local, remote, library);
   const manifest = currentLibraryManifest({
     collections: collections.values,
     skills: skills.values,
@@ -411,14 +423,30 @@ export function mergeLibraryManifests(
             conflictedCollections.has(item.collection_id),
         ),
     ),
-    ...enabled.conflicts,
   ];
   if (
     conflicts.length === 0 &&
     Result.isFailure(Schema.decodeUnknownResult(LibraryManifest)(manifest))
   )
     conflicts.push("manifest:invariants");
-  return { manifest, conflicts: [...new Set(conflicts)].sort(), unresolvable };
+  return {
+    manifest,
+    conflicts: [...new Set(conflicts)].sort(),
+    unresolvable,
+    enabledResolution: enabled.resolvedCollections.length
+      ? {
+          winner: "local" as const,
+          collections: enabled.resolvedCollections
+            .map((collection_id) => ({
+              collection_id,
+              label:
+                library.collections.find((collection) => collection.collection_id === collection_id)
+                  ?.label ?? collection_id,
+            }))
+            .sort((left, right) => left.collection_id.localeCompare(right.collection_id)),
+        }
+      : undefined,
+  };
 }
 
 function describeLibraryMergeConflicts(
@@ -455,6 +483,7 @@ type MergePreparation = Data.TaggedEnum<{
     readonly manifest: LibraryManifest;
     readonly alignedLocal: LibraryManifest;
     readonly device: LibraryState;
+    readonly enabledResolution: ReturnType<typeof mergeLibraryManifests>["enabledResolution"];
   };
   InvalidResolution: {};
   Conflicted: { readonly conflicts: readonly SyncConflictDetail[] };
@@ -525,6 +554,7 @@ export const prepareLibraryMerge = Effect.fn("Library.prepareMerge")(function* (
     });
   return MergePreparation.Ready({
     manifest: merged.manifest,
+    enabledResolution: merged.enabledResolution,
     alignedLocal,
     device,
   });

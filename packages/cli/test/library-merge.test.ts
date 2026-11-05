@@ -781,3 +781,34 @@ it.effect(
       }
     }),
 );
+
+for (const localFollows of [true, false])
+  it.effect(
+    `settles enabled-list clash using local ${localFollows ? "follow" : "disable"} intent`,
+    () =>
+      Effect.gen(function* () {
+        const base = yield* decode(pairManifest([{ skill: alpha }, { skill: beta }]));
+        const follow = yield* decode(pairManifest([{ collection: pairCollection }]));
+        const subset = yield* decode(pairManifest([{ skill: beta }]));
+        const local = localFollows ? follow : subset;
+        const remote = localFollows ? subset : follow;
+        const merged = yield* prepareLibraryMerge({ base, local, remote });
+        assert.strictEqual(merged._tag, "Ready");
+        if (merged._tag !== "Ready") return;
+        assert.deepStrictEqual(merged.manifest.enabled, local.enabled);
+        assert.deepStrictEqual(merged.enabledResolution, {
+          winner: "local",
+          collections: [{ collection_id: pairCollection, label: base.collections[0]!.label }],
+        });
+        assert.deepStrictEqual(merged.manifest.collections, base.collections);
+        assert.deepStrictEqual(merged.manifest.skills, base.skills);
+        assert.deepStrictEqual(merged.manifest.collection_versions, base.collection_versions);
+        const obsolete = yield* prepareLibraryMerge({
+          base,
+          local,
+          remote,
+          takeRemote: ["binding:global"],
+        });
+        assert.strictEqual(obsolete._tag, "InvalidResolution");
+      }),
+  );

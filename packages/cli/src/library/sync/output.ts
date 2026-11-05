@@ -31,6 +31,14 @@ export const SyncChange = Schema.Union([
 ]);
 
 export const SyncPlan = Schema.Struct({
+  enabled_resolution: Schema.optionalKey(
+    Schema.Struct({
+      winner: Schema.Literal("local"),
+      collections: Schema.Array(
+        Schema.Struct({ collection_id: Schema.String, label: Schema.String }),
+      ),
+    }),
+  ),
   local: Schema.Array(SyncChange),
   remote: Schema.Array(SyncChange),
 });
@@ -72,5 +80,5 @@ export type SyncChange = typeof SyncChange.Type;
 export type SyncPlan = typeof SyncPlan.Type;
 
 export const syncOutputContracts = {
-  librarySync: { id: "skit.library.sync.v11", schema: SyncResult },
+  librarySync: { id: "skit.library.sync.v12", schema: SyncResult },
 } as const;

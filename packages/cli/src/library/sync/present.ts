@@ -21,6 +21,11 @@ export function renderLibrarySyncPlan(plan: SyncPlan, color = createColors(false
   const shown = (changes: SyncPlan["local"]) =>
     changes.filter((change) => change.kind !== "collection" || !change.evidence_only);
   const lines = [color.bold("Library sync plan")];
+  if (plan.enabled_resolution)
+    lines.push(
+      "",
+      `Enabled-list clashes resolved using this device's choices: ${plan.enabled_resolution.collections.map((collection) => collection.label).join(", ")}.`,
+    );
   for (const [title, changes] of [
     ["This device", shown(plan.local)],
     ["Remote Library", shown(plan.remote)],
