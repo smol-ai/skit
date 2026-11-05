@@ -149,7 +149,7 @@ const cases: readonly {
       }),
   },
   {
-    row: "Preflight: base_mismatch",
+    row: "Different Library: preview merges from an empty base",
     run: (homes) =>
       Effect.gen(function* () {
         const { a, resetRemote, server } = homes;
@@ -157,7 +157,7 @@ const cases: readonly {
         yield* resetRemote;
         const unchanged = yield* captureDisk(a.disk);
         const before = server.stored;
-        assert.strictEqual((yield* a.sync()).status, "base_mismatch");
+        assert.strictEqual((yield* a.sync({ apply: false })).status, "push_ready");
         yield* assertDiskUnchanged(unchanged);
         assert.deepStrictEqual(server.stored, before);
       }),
@@ -199,11 +199,82 @@ const cases: readonly {
         yield* assertDiskUnchanged(unchanged);
         const winner = server.remote;
         assert.ok(winner);
-        assert.strictEqual((yield* a.sync()).status, "adoption_required");
+        assert.strictEqual((yield* a.sync({ apply: false })).status, "merge_ready");
         yield* assertDiskUnchanged(unchanged);
         assert.deepStrictEqual(server.remote, winner);
-        assert.strictEqual((yield* a.sync({ adopt: true })).status, "merged");
+        assert.strictEqual((yield* a.sync()).status, "merged");
         assert.strictEqual((yield* a.state).collections.length, 2);
+      }),
+  },
+  {
+    row: "Push: accepted remotely, refused locally, then local enabled intent changes",
+    run: ({ a, inject, server }) =>
+      Effect.gen(function* () {
+        const imported = yield* a.importSource("first");
+        const skill = imported.skills[0]!;
+        inject({ _tag: "FailSave", anchoredOnly: false });
+        assert.strictEqual((yield* Effect.flip(a.sync()))._tag, "PlatformError");
+        const accepted = server.remote;
+        assert.ok(accepted);
+        assert.isUndefined((yield* a.state).sync_ancestry);
+        yield* a.edit((state) => ({ ...state, enabled: [{ skill: skill.skill_id }] }));
+        const changed = yield* a.state;
+        const before = yield* captureDisk(a.disk);
+        const preview = yield* a.sync({ apply: false });
+        assert.strictEqual(preview.status, "merge_ready");
+        assert.ok("merge_base" in preview);
+        assert.strictEqual(preview.merge_base, "empty-first-sync");
+        yield* assertDiskUnchanged(before);
+        assert.deepStrictEqual(server.remote, accepted);
+        const applied = yield* a.sync();
+        assert.strictEqual(applied.status, "merged");
+        const after = yield* a.state;
+        assert.deepStrictEqual(after.enabled, changed.enabled);
+        assert.deepStrictEqual(after.collections, changed.collections);
+        assert.strictEqual(after.sync_ancestry?.revision_id, server.remote?.revision_id);
+        assert.deepStrictEqual(after.sync_ancestry?.base_manifest.enabled, changed.enabled);
+        const writes = server.writes;
+        assert.strictEqual((yield* a.sync()).status, "clean");
+        assert.strictEqual((yield* a.sync()).status, "clean");
+        assert.strictEqual(server.writes, writes);
+      }),
+  },
+  {
+    row: "Push: collision choice survives refused publication with subsequent compatible edits",
+    run: ({ a, inject, server }) =>
+      Effect.gen(function* () {
+        const first = yield* a.importSource("first", { name: "review" });
+        const second = yield* a.importSource("second", { name: "review" });
+        const third = yield* a.importSource("third");
+        const firstId = first.skills[0]!.skill_id;
+        const secondId = second.skills[0]!.skill_id;
+        const thirdId = third.skills[0]!.skill_id;
+        yield* a.edit((state) => ({
+          ...state,
+          enabled: [{ skill: firstId }, { skill: secondId }],
+        }));
+        inject({ _tag: "FailSave", anchoredOnly: false });
+        assert.strictEqual(
+          (yield* Effect.flip(a.sync({ keepEnabled: [firstId] })))._tag,
+          "PlatformError",
+        );
+        assert.deepStrictEqual(server.remote?.manifest.enabled, [{ skill: firstId }]);
+        assert.isUndefined((yield* a.state).sync_ancestry);
+        yield* a.edit((state) => ({ ...state, enabled: [...state.enabled, { skill: thirdId }] }));
+        const before = yield* captureDisk(a.disk);
+        const head = server.remote;
+        assert.strictEqual((yield* a.sync()).status, "conflicted");
+        const preview = yield* a.sync({ apply: false, keepEnabled: [firstId] });
+        assert.strictEqual(preview.status, "merge_ready");
+        yield* assertDiskUnchanged(before);
+        assert.deepStrictEqual(server.remote, head);
+        assert.strictEqual((yield* a.sync({ keepEnabled: [firstId] })).status, "merged");
+        const after = yield* a.state;
+        assert.sameDeepMembers(after.enabled, [{ skill: firstId }, { skill: thirdId }]);
+        assert.strictEqual(after.skills.length, 3);
+        assert.deepStrictEqual(after.enabled, server.remote?.manifest.enabled);
+        assert.strictEqual((yield* a.sync()).status, "clean");
+        assert.strictEqual((yield* a.sync()).status, "clean");
       }),
   },
   {
@@ -264,10 +335,10 @@ const cases: readonly {
         yield* b.importSource("second");
         yield* b.sync();
         const winner = server.remote;
-        assert.strictEqual((yield* a.sync()).status, "adoption_required");
+        assert.strictEqual((yield* a.sync({ apply: false })).status, "merge_ready");
         yield* assertDiskUnchanged(unchanged);
         assert.deepStrictEqual(server.remote, winner);
-        assert.strictEqual((yield* a.sync({ adopt: true })).status, "merged");
+        assert.strictEqual((yield* a.sync()).status, "merged");
         assert.strictEqual((yield* a.state).collections.length, 2);
         assert.strictEqual((yield* b.sync()).status, "clean");
       }),
@@ -473,7 +544,7 @@ const cases: readonly {
       }),
   },
   {
-    row: "Adoption gate: adoption_required writes nothing",
+    row: "First connection: add-only preview writes nothing",
     run: ({ a, b, server }) =>
       Effect.gen(function* () {
         yield* a.importSource("remote");
@@ -481,7 +552,7 @@ const cases: readonly {
         yield* b.importSource("local");
         const unchanged = yield* captureDisk(b.disk);
         const before = server.stored;
-        assert.strictEqual((yield* b.sync()).status, "adoption_required");
+        assert.strictEqual((yield* b.sync({ apply: false })).status, "merge_ready");
         yield* assertDiskUnchanged(unchanged);
         assert.deepStrictEqual(server.stored, before);
       }),

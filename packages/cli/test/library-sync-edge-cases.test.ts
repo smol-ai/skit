@@ -37,7 +37,7 @@ it.effect(
       const head = yield* remote;
       assert.ok(before.skills[0]?.local_version_id);
       const key = `collection:${published.collection.collection_id}`;
-      const preview = yield* b.sync({ adopt: true, apply: false });
+      const preview = yield* b.sync({ apply: false });
       assert.equal(preview.status, "conflicted");
       if (preview.status === "conflicted") {
         assert.include(preview.conflicts, key);
@@ -47,10 +47,7 @@ it.effect(
         );
       }
       for (const apply of [false, true]) {
-        assert.equal(
-          (yield* b.sync({ adopt: true, apply, takeRemote: [key] })).status,
-          "resolution_invalid",
-        );
+        assert.equal((yield* b.sync({ apply, takeRemote: [key] })).status, "resolution_invalid");
         assert.deepEqual(yield* b.state, before);
         assert.deepEqual(yield* remote, head);
         assert.equal(
@@ -84,7 +81,7 @@ it.effect("same-name Skills from different Sources stop before writes and resolv
     const head = yield* remote;
     const marker = yield* fs.readFileString(join(b.root, "review", ".skit-ownership.json"));
     for (const apply of [false, true]) {
-      const stopped = yield* b.sync({ adopt: true, apply });
+      const stopped = yield* b.sync({ apply });
       assert.equal(stopped.status, "conflicted");
       if (stopped.status === "conflicted")
         assert.isTrue(stopped.conflicts.some((key) => key.endsWith(":collision")));
@@ -96,14 +93,10 @@ it.effect("same-name Skills from different Sources stop before writes and resolv
       );
     }
     assert.equal(
-      (yield* b.sync({ adopt: true, keepEnabled: [firstSkill.skill_id, secondSkill.skill_id] }))
-        .status,
+      (yield* b.sync({ keepEnabled: [firstSkill.skill_id, secondSkill.skill_id] })).status,
       "resolution_invalid",
     );
-    assert.equal(
-      (yield* b.sync({ adopt: true, keepEnabled: [secondSkill.skill_id] })).status,
-      "merged",
-    );
+    assert.equal((yield* b.sync({ keepEnabled: [secondSkill.skill_id] })).status, "merged");
     assert.equal((yield* b.state).skills.length, 3);
     assert.isTrue(
       (yield* b.state).enabled.some(
@@ -141,12 +134,12 @@ it.effect(
       yield* b.project();
       yield* a.sync();
       const before = yield* b.state;
-      assert.equal((yield* b.sync({ adopt: true, apply: false })).status, "adoption_ready");
+      assert.equal((yield* b.sync({ apply: false })).status, "merge_ready");
       assert.deepEqual(yield* b.state, before);
       inject({ _tag: "DropAfterCommit" });
-      assert.ok((yield* Effect.flip(b.sync({ adopt: true }))) instanceof RegistryUnreachable);
+      assert.ok((yield* Effect.flip(b.sync())) instanceof RegistryUnreachable);
       assert.deepEqual(yield* b.state, before);
-      assert.equal((yield* b.sync({ adopt: true })).status, "merged");
+      assert.equal((yield* b.sync()).status, "merged");
       const after = yield* b.state;
       assert.equal(after.collections.length, 1);
       assert.equal(after.skills.length, 1);
@@ -398,11 +391,11 @@ it.effect(
       yield* a.sync();
       const before = yield* b.state;
       inject({ _tag: "RejectWrite" });
-      assert.isTrue(Exit.isFailure(yield* Effect.exit(b.sync({ adopt: true }))));
+      assert.isTrue(Exit.isFailure(yield* Effect.exit(b.sync())));
       assert.deepEqual(yield* b.state, before);
       assert.isTrue(yield* fs.exists(join(b.root, "same")));
       inject({ _tag: "FailSave", anchoredOnly: true });
-      assert.isTrue(Exit.isFailure(yield* Effect.exit(b.sync({ adopt: true }))));
+      assert.isTrue(Exit.isFailure(yield* Effect.exit(b.sync())));
       const interrupted = yield* b.state;
       assert.equal(interrupted.skills[0]?.skill_id, secondSkill.skill_id);
       assert.equal(interrupted.installed_skills[0]?.status, "pending");
@@ -410,7 +403,7 @@ it.effect(
       const observed = yield* scanInventory(interrupted, []);
       assert.equal(observed.installed_skills[0]?.status, "pending");
       yield* b.edit(() => observed);
-      assert.equal((yield* b.sync({ adopt: true })).status, "merged");
+      assert.equal((yield* b.sync()).status, "merged");
       assert.equal((yield* b.state).skills[0]?.skill_id, firstSkill.skill_id);
       assert.equal((yield* b.state).installed_skills[0]?.status, "installed");
       assert.equal(yield* fs.readFileString(join(b.root, "same", "SKILL.md")), "same\n");
@@ -437,14 +430,13 @@ for (const localBytes of ["B\n", "base\n"]) {
         yield* a.sync();
         const skill = remoteUpdate.skills[0];
         assert.ok(skill);
-        const conflict = yield* b.sync({ adopt: true, apply: false });
+        const conflict = yield* b.sync({ apply: false });
         assert.equal(conflict.status, "conflicted");
         if (conflict.status === "conflicted")
           assert.deepEqual(conflict.conflicts, [`collection:${skill.collection_id}`]);
         if (localBytes === "B\n")
           assert.equal(
-            (yield* b.sync({ adopt: true, takeRemote: [`collection:${skill.collection_id}`] }))
-              .status,
+            (yield* b.sync({ takeRemote: [`collection:${skill.collection_id}`] })).status,
             "resolution_invalid",
           );
         yield* b.edit((state) => ({
@@ -456,8 +448,7 @@ for (const localBytes of ["B\n", "base\n"]) {
           ),
         }));
         assert.equal(
-          (yield* b.sync({ adopt: true, takeRemote: [`collection:${skill.collection_id}`] }))
-            .status,
+          (yield* b.sync({ takeRemote: [`collection:${skill.collection_id}`] })).status,
           "merged",
         );
         const merged = yield* b.state;
@@ -505,7 +496,7 @@ it.effect("identity alignment preserves a native deletion recorded before first 
     const deleted = yield* scanInventory(yield* b.state, []);
     yield* b.edit(() => deleted);
     yield* a.sync();
-    assert.equal((yield* b.sync({ adopt: true })).status, "merged");
+    assert.equal((yield* b.sync()).status, "merged");
     const after = yield* b.state;
     assert.equal(after.installed_skills[0]?.skill_id, published.skill_id);
     assert.equal(after.installed_skills[0]?.status, "suppressed");
@@ -568,14 +559,11 @@ it.effect("destination comparison follows the filesystem's case behavior", () =>
     yield* b.project();
     yield* a.sync();
     const folded = yield* fs.exists(join(b.root, "Review"));
-    const result = yield* b.sync({ adopt: true, apply: false });
-    assert.equal(result.status, folded ? "conflicted" : "adoption_ready");
+    const result = yield* b.sync({ apply: false });
+    assert.equal(result.status, folded ? "conflicted" : "merge_ready");
     if (folded)
-      assert.equal(
-        (yield* b.sync({ adopt: true, keepEnabled: [secondSkill.skill_id] })).status,
-        "merged",
-      );
-    else assert.equal((yield* b.sync({ adopt: true })).status, "merged");
+      assert.equal((yield* b.sync({ keepEnabled: [secondSkill.skill_id] })).status, "merged");
+    else assert.equal((yield* b.sync()).status, "merged");
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -675,7 +663,7 @@ it.effect("a copy becoming snapshot-backed during merge uploads its already-reta
       ],
     }));
     yield* a.sync();
-    yield* b.sync({ adopt: true });
+    yield* b.sync();
     yield* a.sync();
     const initialHead = yield* remote;
     assert.ok(initialHead);

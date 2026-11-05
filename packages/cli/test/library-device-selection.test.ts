@@ -114,7 +114,7 @@ it.effect(
           invocation_policies: { [localSkill.skill_id]: "explicit" },
         },
       }));
-      const result = yield* b.sync({ adopt: true });
+      const result = yield* b.sync();
       assert.strictEqual(result.status, "merged");
       const state = yield* b.state;
       const global = globalEnabled(state);

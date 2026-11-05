@@ -51,15 +51,13 @@ export const SyncResult = Schema.Struct({
     "pull_ready",
     "pulled",
     "local_bytes_changed",
-    "adoption_required",
-    "adoption_ready",
     "merge_ready",
     "merged",
     "conflicted",
-    "base_mismatch",
     "resolution_invalid",
     "enablement_incomplete",
   ]),
+  merge_base: Schema.optionalKey(Schema.Literals(["empty-first-sync", "empty-different-library"])),
   changed: Schema.optionalKey(Schema.Boolean),
   revision_id: Schema.optionalKey(Schema.String),
   snapshots: Schema.optionalKey(Schema.Number),
@@ -80,5 +78,5 @@ export type SyncChange = typeof SyncChange.Type;
 export type SyncPlan = typeof SyncPlan.Type;
 
 export const syncOutputContracts = {
-  librarySync: { id: "skit.library.sync.v12", schema: SyncResult },
+  librarySync: { id: "skit.library.sync.v13", schema: SyncResult },
 } as const;

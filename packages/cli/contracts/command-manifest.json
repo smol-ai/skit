@@ -2465,7 +2465,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.library.sync.v12"
+        "skit.library.sync.v13"
       ],
       "exitCodes": [
         0,
@@ -2487,15 +2487,10 @@
           "valueName": "boolean",
           "description": "Apply the current sync plan."
         },
-        "adopt": {
-          "type": "boolean",
-          "valueName": "boolean",
-          "description": "Explicitly adopt the current remote Library, setting aside ancestry from another Library."
-        },
         "take-remote": {
           "type": "string",
           "valueName": "string",
-          "description": "Resolve a named Collection or Binding conflict from the current remote Library."
+          "description": "Resolve a named content conflict from the current remote Library."
         },
         "keep-enabled": {
           "type": "string",

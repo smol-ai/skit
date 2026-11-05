@@ -28,7 +28,6 @@ import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthError>(options: {
   readonly authState: Result.Result<ResolvedAuth, AuthError>;
   readonly apply: boolean;
-  readonly adopt: boolean;
   readonly takeRemote?: readonly string[];
   readonly keepEnabled?: readonly string[];
   readonly installedSkill: Pick<LibraryInstallationConfiguration, "rootFor">;
@@ -46,7 +45,6 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
       origin: auth.origin ?? officialRegistryOrigin,
       ...(auth.token === undefined ? {} : { token: auth.token }),
       apply: options.apply,
-      adopt: options.adopt,
       ...(options.takeRemote === undefined ? {} : { takeRemote: options.takeRemote }),
       ...(options.keepEnabled === undefined ? {} : { keepEnabled: options.keepEnabled }),
       installedSkill: options.installedSkill,
@@ -73,16 +71,8 @@ const apply = Flag.Boolean("apply").pipe(
   Flag.withDescription("Apply the current sync plan."),
   Flag.withDefault(false),
 );
-const adopt = Flag.Boolean("adopt").pipe(
-  Flag.withDescription(
-    "Explicitly adopt the current remote Library, setting aside ancestry from another Library.",
-  ),
-  Flag.withDefault(false),
-);
 const takeRemote = Flag.String("take-remote").pipe(
-  Flag.withDescription(
-    "Resolve a named Collection or Binding conflict from the current remote Library.",
-  ),
+  Flag.withDescription("Resolve a named content conflict from the current remote Library."),
   Flag.atLeast(0),
 );
 const registry = optionalString("registry", "Select the Registry to synchronize.");
@@ -113,7 +103,6 @@ export const librarySyncCliCommand = Command.make(
   "sync",
   {
     apply,
-    adopt,
     takeRemote,
     keepEnabled,
     registry,
@@ -145,7 +134,6 @@ export const librarySyncCliCommand = Command.make(
         const value = yield* librarySyncCommand({
           authState,
           apply: input.apply,
-          adopt: input.adopt,
           takeRemote: input.takeRemote,
           keepEnabled: input.keepEnabled,
           installedSkill: configuration.pull.installation,
@@ -167,8 +155,6 @@ export const librarySyncCliCommand = Command.make(
             syncOutputContracts.librarySync,
             value,
             value.status === "conflicted" ||
-              value.status === "adoption_required" ||
-              value.status === "base_mismatch" ||
               value.status === "resolution_invalid" ||
               value.status === "enablement_incomplete"
               ? 12

@@ -294,7 +294,6 @@ export const devices = Effect.gen(function* () {
           restoreProgress?: Parameters<typeof syncLibrary>[0]["restoreProgress"];
           onPlan?: Parameters<typeof syncLibrary>[0]["onPlan"];
           apply?: boolean;
-          adopt?: boolean;
           takeRemote?: readonly string[];
           keepEnabled?: readonly string[];
           deviceSelection?: Parameters<typeof syncLibrary>[0]["deviceSelection"];

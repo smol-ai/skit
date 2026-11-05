@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted; bootstrap policy amended 2026-11-06.
 
 ## Context
 
@@ -17,11 +17,13 @@ No merge rule can distinguish "the user removed this" from "this file lost the w
 Sync ancestry is part of Library state. Schema-v8 `state.json` carries an optional `sync_ancestry` record of the origin, library identity, revision, and normalized base manifest the portable Library was last reconciled with. One atomic replacement of `state.json` publishes local state and its ancestry together.
 
 - Push, pull, merge, and clean replace ancestry, in the same publish as the state they reconciled. No other workflow replaces it; every other mutation carries it unchanged, because a local edit after sync is exactly the divergence the merge interprets.
-- Ancestry whose origin or library identity differs from the remote is `base_mismatch`.
-- State without ancestry has no base. Equal local and remote portable manifests anchor ancestry through the clean path. Otherwise sync reports `adoption_required`, and `--adopt` merges against an empty base, which keeps one-sided records, reports differing records as conflicts, and never infers a deletion.
+- Missing ancestry, a different recorded Registry origin, a changed remote Library identity, or an absent previously connected remote uses an empty base. Preview reports why and `--apply` follows the ordinary merge or push path. An empty base keeps one-sided records, reports differing records as conflicts, and never infers a deletion.
+- Equal local and remote portable manifests anchor ancestry through the clean path. A remote-accepted first push whose local publication was refused retries against the current local manifest and remote head; ancestry is never written separately.
 - `library-sync.json` is no longer read or written.
 
-The v7-to-v8 migration happens once in the state-file loader and adds no ancestry. Only one person had used sync when this changed, so the sidecar is not migrated: each of their homes re-anchors on its first sync, or adopts once. The version bump makes older CLIs, which would still trust the sidecar, refuse v8 state instead of syncing beside it.
+The 2026-11-06 amendment removes the original explicit adoption flag and gate. It preserves the atomic state/ancestry rule and makes first connections and changed Libraries ordinary add-only plans. Content conflicts and destination collisions retain their explicit resolution rules.
+
+The v7-to-v8 migration happens once in the state-file loader and adds no ancestry. Only one person had used sync when this changed, so the sidecar is not migrated: each of their homes re-anchors or merges from an empty base on its first sync. The version bump makes older CLIs, which would still trust the sidecar, refuse v8 state instead of syncing beside it.
 
 ## Consequences
 

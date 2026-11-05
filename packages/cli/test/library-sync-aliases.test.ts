@@ -99,7 +99,7 @@ it.effect(
       const imported = yield* collectionVersionHashes(b);
       const installedSkillId = before.installed_skills[0]!.installed_skill_id;
       assert.strictEqual((yield* a.sync()).status, "pushed");
-      assert.strictEqual((yield* b.sync({ adopt: true })).status, "merged");
+      assert.strictEqual((yield* b.sync()).status, "merged");
 
       const after = yield* b.state;
       assert.deepStrictEqual(
@@ -192,7 +192,7 @@ it.effect("distinct upstreams with identical bytes keep separate identities", ()
     );
     const imported = yield* collectionVersionHashes(b);
     assert.strictEqual((yield* a.sync()).status, "pushed");
-    assert.strictEqual((yield* b.sync({ adopt: true })).status, "merged");
+    assert.strictEqual((yield* b.sync()).status, "merged");
     assert.strictEqual((yield* a.sync()).status, "merged");
     for (const device of [a, b]) {
       const state = yield* device.state;
@@ -313,8 +313,8 @@ it.effect("many independent imports of one upstream converge on one published id
     for (const device of [a, b, c]) imports.push(...(yield* device.state).imports);
     const imported = yield* collectionVersionHashes(c);
     assert.strictEqual((yield* a.sync()).status, "pushed");
-    assert.strictEqual((yield* b.sync({ adopt: true })).status, "merged");
-    assert.strictEqual((yield* c.sync({ adopt: true })).status, "merged");
+    assert.strictEqual((yield* b.sync()).status, "merged");
+    assert.strictEqual((yield* c.sync()).status, "merged");
     assert.strictEqual((yield* a.sync()).status, "merged");
     assert.strictEqual((yield* b.sync()).status, "merged");
     for (const device of [a, b, c]) {
@@ -427,7 +427,7 @@ it.effect(
       const unchanged = yield* captureDisk(b.disk);
       const stored = server.stored;
       for (const apply of [false, true]) {
-        const stopped = yield* b.sync({ adopt: true, apply });
+        const stopped = yield* b.sync({ apply });
         assert.strictEqual(stopped.status, "conflicted");
         if (stopped.status === "conflicted") {
           // The Skill and import differences belong to the one Collection choice.
@@ -439,7 +439,7 @@ it.effect(
         assert.strictEqual(yield* fs.readFileString(join(b.root, "same", "SKILL.md")), "local\n");
       }
 
-      assert.strictEqual((yield* b.sync({ adopt: true, takeRemote: [key] })).status, "merged");
+      assert.strictEqual((yield* b.sync({ takeRemote: [key] })).status, "merged");
       const after = yield* b.state;
       assert.deepStrictEqual(
         ids(after.collections, (item) => item.collection_id),
@@ -482,7 +482,7 @@ it.effect(
       const key = `collection:${published.collection.collection_id}`;
       const unchanged = yield* captureDisk(b.disk);
       const stored = server.stored;
-      const stopped = yield* b.sync({ adopt: true, apply: false });
+      const stopped = yield* b.sync({ apply: false });
       assert.strictEqual(stopped.status, "conflicted");
       if (stopped.status === "conflicted") {
         assert.deepStrictEqual(stopped.conflicts, [key]);
@@ -491,7 +491,7 @@ it.effect(
       }
       for (const apply of [false, true])
         assert.strictEqual(
-          (yield* b.sync({ adopt: true, apply, takeRemote: [key] })).status,
+          (yield* b.sync({ apply, takeRemote: [key] })).status,
           "resolution_invalid",
         );
       yield* assertDiskUnchanged(unchanged);

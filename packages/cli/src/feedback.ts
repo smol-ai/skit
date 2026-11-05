@@ -84,7 +84,7 @@ export const feedbackSendCliCommand = Command.make(
     },
     {
       command:
-        'skit feedback send "skit sync --json gave no reason for base_mismatch" --signed-in --email ada@example.com',
+        'skit feedback send "skit sync --json gave no reason for a conflict" --signed-in --email ada@example.com',
     },
   ]),
   Command.annotate(CommandMetadata, {

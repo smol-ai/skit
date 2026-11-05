@@ -110,7 +110,7 @@ export const syncJourney = (failDownload: boolean) =>
           source: "stored",
         }),
         apply: true,
-        adopt: false,
+
         installedSkill: {
           rootFor: (target) => (target === "agents" ? join(workspace, "agents-skills") : undefined),
         },

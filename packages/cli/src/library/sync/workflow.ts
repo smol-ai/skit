@@ -60,13 +60,12 @@ export class SyncLocalChanged
  * Sync is one three-way merge of this device's Library (L) with the remote head (R) from their
  * accepted base (B). A push merges L with an absent R, a pull an absent L with R, and a clean sync
  * is a merge whose result is both sides. Absent and empty stay distinct: only two existing
- * Libraries can be clean or need adoption, and only an absent R is created by the write.
+ * Libraries can be clean, and only an absent R is created by the write.
  */
 export const syncLibrary = Effect.fn("Library.sync")(function* (options: {
   origin: string;
   token?: string;
   apply: boolean;
-  adopt?: boolean;
   takeRemote?: readonly string[];
   keepEnabled?: readonly string[];
   deviceSelection?:
@@ -104,11 +103,11 @@ export const syncLibrary = Effect.fn("Library.sync")(function* (options: {
     (ancestry.origin !== options.origin ||
       remote === null ||
       ancestry.library_id !== remote.library_id);
-  if (mismatched && !options.adopt)
-    return {
-      status: "base_mismatch" as const,
-      ...(remote === null ? {} : { revision_id: remote.revision_id }),
-    };
+  const baseNote = mismatched
+    ? { merge_base: "empty-different-library" as const }
+    : ancestry === undefined && local.present && remote !== null
+      ? { merge_base: "empty-first-sync" as const }
+      : {};
   if (remote === null && !local.present) {
     if (options.apply && options.deviceSelection !== undefined) {
       const selection =
@@ -135,26 +134,13 @@ export const syncLibrary = Effect.fn("Library.sync")(function* (options: {
     }
     return { status: "clean" as const, changed: false };
   }
-  // Explicit adoption sets aside ancestry from another Library. Against an empty base the merge
-  // can only add records, never infer a deletion.
+  // Without matching ancestry the empty base can only add records, never infer a deletion.
   const accepted = mismatched ? undefined : ancestry;
   const remoteManifest = remote?.manifest ?? emptyManifest;
   const revision = remote === null ? {} : { revision_id: remote.revision_id };
   const equalToRemote = local.present && remote !== null && same(manifest, remoteManifest);
   const clean = equalToRemote && !options.keepEnabled?.length;
-  if (
-    local.present &&
-    remote !== null &&
-    accepted === undefined &&
-    !options.adopt &&
-    !equalToRemote &&
-    !(
-      local.state.pending_device_selection_origin === options.origin &&
-      same(manifest, emptyManifest)
-    )
-  )
-    return { status: "adoption_required" as const, revision_id: remote.revision_id };
-  const base = accepted?.base_manifest ?? (equalToRemote ? remoteManifest : emptyManifest);
+  const base = accepted?.base_manifest ?? emptyManifest;
   // State and the base it was reconciled with are always saved together, never apart.
   const ancestryAt = (
     remote: { library_id: string; revision_id: string },
@@ -177,8 +163,9 @@ export const syncLibrary = Effect.fn("Library.sync")(function* (options: {
     }),
   );
   if (merge._tag === "InvalidResolution")
-    return { status: "resolution_invalid" as const, ...revision };
-  if (merge._tag === "Conflicted") return conflicted(merge.conflicts, remote?.revision_id);
+    return { ...baseNote, status: "resolution_invalid" as const, ...revision };
+  if (merge._tag === "Conflicted")
+    return { ...baseNote, ...conflicted(merge.conflicts, remote?.revision_id) };
   const selected =
     options.deviceSelection === undefined
       ? undefined
@@ -202,9 +189,9 @@ export const syncLibrary = Effect.fn("Library.sync")(function* (options: {
       device,
     ),
   );
-  if (collision.invalid) return { status: "resolution_invalid" as const, ...revision };
+  if (collision.invalid) return { ...baseNote, status: "resolution_invalid" as const, ...revision };
   if (collision.conflicts.length && !choosing)
-    return conflicted(collision.conflicts, remote?.revision_id);
+    return { ...baseNote, ...conflicted(collision.conflicts, remote?.revision_id) };
   const { account: desired, installation: effectiveManifest } = installation.resolveEnabled(
     collision.manifest.enabled,
   );
@@ -220,7 +207,8 @@ export const syncLibrary = Effect.fn("Library.sync")(function* (options: {
         ),
       )
     : undefined;
-  if (transition?.conflicts.length) return conflicted(transition.conflicts, remote?.revision_id);
+  if (transition?.conflicts.length)
+    return { ...baseNote, ...conflicted(transition.conflicts, remote?.revision_id) };
 
   const prepareLocal = (staged: Library.StagedContent) =>
     library
@@ -276,6 +264,7 @@ export const syncLibrary = Effect.fn("Library.sync")(function* (options: {
         })
       : { installed: 0, uninstalled: 0, enablementIssues: [] as readonly string[] };
     return {
+      ...baseNote,
       status: installedSkills.enablementIssues.length
         ? ("enablement_incomplete" as const)
         : ("clean" as const),
@@ -300,11 +289,12 @@ export const syncLibrary = Effect.fn("Library.sync")(function* (options: {
   const snapshots = transfer.snapshotCount;
   if (!options.apply)
     return remote === null
-      ? { status: "push_ready" as const, snapshots, plan }
+      ? { ...baseNote, status: "push_ready" as const, snapshots, plan }
       : !local.present
-        ? { status: "pull_ready" as const, snapshots, plan }
+        ? { ...baseNote, status: "pull_ready" as const, snapshots, plan }
         : {
-            status: accepted === undefined ? ("adoption_ready" as const) : ("merge_ready" as const),
+            ...baseNote,
+            status: "merge_ready" as const,
             revision_id: remote.revision_id,
             snapshots,
             collections_to_remove: local.state.collections.filter(
@@ -344,6 +334,7 @@ export const syncLibrary = Effect.fn("Library.sync")(function* (options: {
         ? ("pulled" as const)
         : ("merged" as const);
   return {
+    ...baseNote,
     status: installedSkills.enablementIssues.length
       ? ("enablement_incomplete" as const)
       : syncStatus,

@@ -75,9 +75,19 @@ export function renderLibrarySyncPlan(plan: SyncPlan, color = createColors(false
 export function renderLibrarySync(data: SyncData, color = createColors(false)): string {
   const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
   // What syncing did to this device, when it did anything worth knowing.
-  const notes = data.uninstalled
-    ? [`Removed ${plural(data.uninstalled, "Skill")} no longer enabled from this device.`]
-    : [];
+  const notes = [
+    ...(data.merge_base === "empty-first-sync"
+      ? ["First sync with this Library: merging from an empty base without inferring deletions."]
+      : []),
+    ...(data.merge_base === "empty-different-library"
+      ? [
+          "This device last synced with a different Library: merging from an empty base without inferring deletions.",
+        ]
+      : []),
+    ...(data.uninstalled
+      ? [`Removed ${plural(data.uninstalled, "Skill")} no longer enabled from this device.`]
+      : []),
+  ];
   const withNotes = (message: string) =>
     notes.length ? `${message}\n\n${notes.join("\n")}` : message;
   const plan = data.plan ? `${renderLibrarySyncPlan(data.plan, color)}\n\n` : "";
@@ -90,22 +100,20 @@ export function renderLibrarySync(data: SyncData, color = createColors(false)): 
     case "pull_ready":
     case "merge_ready":
       return unapplied("skit sync --apply");
-    case "adoption_ready":
-      return unapplied("skit sync --adopt --apply");
     case "pushed":
     case "pulled":
     case "merged":
       return withNotes("Library synced.");
     case "local_bytes_changed":
       return "A stored Skill copy on this device changed unexpectedly; sync stopped.";
-    case "adoption_required":
-      return "This device hasn't synced with this Library before. Review what would change with skit sync --adopt.";
     case "conflicted":
       if (data.conflict_details?.length)
-        return `Library sync stopped:\n${data.conflict_details.map((detail) => `  ${detail.key}\n    ${detail.message}`).join("\n")}\n\nNo sync changes applied.`;
-      return `This device and the remote Library changed the same things:\n${data.conflicts?.map((key) => `  ${key}`).join("\n") ?? "  unknown conflict"}\n\nKeep the remote version with skit sync --apply --take-remote <key>.`;
-    case "base_mismatch":
-      return "This device last synced with a different Library; sync stopped. Run sync --adopt to merge with this Library without inferring deletions.";
+        return withNotes(
+          `Library sync stopped:\n${data.conflict_details.map((detail) => `  ${detail.key}\n    ${detail.message}`).join("\n")}\n\nNo sync changes applied.`,
+        );
+      return withNotes(
+        `This device and the remote Library changed the same things:\n${data.conflicts?.map((key) => `  ${key}`).join("\n") ?? "  unknown conflict"}\n\nKeep the remote version with skit sync --apply --take-remote <key>.`,
+      );
     case "resolution_invalid":
       return "The requested resolution isn't available. Use --take-remote for a listed resolvable conflict, or --keep-enabled for one Skill in a listed destination collision.";
     case "enablement_incomplete":
