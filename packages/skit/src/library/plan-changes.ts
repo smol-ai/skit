@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { Effect, Schema, type Scope } from "effect";
 import * as InstalledSkills from "./installed-skills.js";
 import { libraryOriginalsPath } from "./store/library-store.js";
@@ -267,10 +267,13 @@ export const planChanges = Effect.fn("Library.planChanges")(function* (
           return yield* new InstalledSkillInvalid({
             detail: "An enabled Skill has no selected stored Version",
           });
-        const recorded = base.installed_skills.find(
-          (item) => item.skill_id === skill.skill_id && at(item, target),
-        );
         const path = join(target.root, yield* installedSkillName(skill.name));
+        const recorded = base.installed_skills.find(
+          (item) =>
+            item.skill_id === skill.skill_id &&
+            at(item, target) &&
+            basename(item.path) === basename(path),
+        );
         const folder = yield* files.inspect(path);
         const change = yield* decide(
           {
@@ -313,7 +316,12 @@ export const planChanges = Effect.fn("Library.planChanges")(function* (
     : base.installed_skills.filter(
         (item) =>
           selected(item.skill_id) &&
-          !installing.some(({ change }) => change.skillId === item.skill_id && at(item, change)),
+          !installing.some(
+            ({ change }) =>
+              change.skillId === item.skill_id &&
+              at(item, change) &&
+              basename(change.path) === basename(item.path),
+          ),
       )) {
     const folder = yield* files.inspect(recorded.path);
     const facts = folder.entry._tag === "Present" ? folder.entry.facts : null;

@@ -455,6 +455,8 @@ export type SetupStep = typeof SetupStep.Type;
 /** One step as saved before any step runs; Done once its effect is complete. */
 export const RecordedSetupStep = Schema.Struct({
   step: SetupStep,
+  /** Older Update records lost the approved selection and must not resume. */
+  updateSelection: Schema.optionalKey(Schema.Literal("reviewed")),
   /** Named installed-change batches. Absent in existing v12 operation records. */
   applies: Schema.optionalKey(
     Schema.Array(Schema.Struct({ key: Schema.String, apply: InstalledApply })),

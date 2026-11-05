@@ -134,6 +134,7 @@ const recordedStep = Effect.fn("Library.setup.recordedStep")(function* (step: Se
     case "Update":
       return {
         step,
+        updateSelection: "reviewed",
         before: yield* observed(
           step.changes
             .filter(
@@ -497,6 +498,26 @@ const runOperation = Effect.fn("Library.setup.run")(function* (operationId: Oper
       ),
     });
   let pending = loaded.success.value;
+  // Check before root preparation or replaying any batch: old Update records may include
+  // unselected Skills, even when their compiled filesystem actions are exact.
+  const ambiguousUpdate = pending.steps.findIndex(
+    (saved) =>
+      saved.status === "Pending" &&
+      saved.step._tag === "Update" &&
+      saved.updateSelection !== "reviewed",
+  );
+  if (ambiguousUpdate !== -1)
+    return yield* stop({
+      _tag: "StepFailed",
+      step: ambiguousUpdate,
+      error: {
+        _tag: "Library.UpdateSelectionMissing",
+        code: "CONFLICT",
+        message: "This older setup did not record which Skills were selected for update",
+        remediation:
+          "Preview undoing this setup, or run setup again to review the current changes.",
+      },
+    });
   if (pending.preparation) {
     const prepared = yield* Effect.result(prepareRoots(pending.preparation, pending.steps));
     if (prepared._tag === "Failure") {

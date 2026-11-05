@@ -486,6 +486,8 @@ export type SetupStep =
  */
 export interface RecordedSetupStep {
   readonly step: SetupStep;
+  /** Absent in older Update records, which stop before resuming. */
+  readonly updateSelection?: "reviewed";
   readonly before: readonly StepEvidence[];
   readonly after: readonly StepEvidence[];
   readonly status: "Pending" | "Done";
