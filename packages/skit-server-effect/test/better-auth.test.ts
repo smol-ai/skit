@@ -5,7 +5,7 @@ import { Effect, Schema } from "effect";
 import { vi } from "vitest";
 import { makeWebHandler } from "../src/http.js";
 import { databaseLayer } from "../src/platform/cloudflare.js";
-import { expectedMigrations } from "../src/readiness/migrations.generated.js";
+import { expectedMigrations } from "../src/platform/migrations.generated.js";
 import {
   makeImportId,
   makeCollectionId,

@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const migrationsDirectory = join(packageRoot, "migrations");
-const outputPath = join(packageRoot, "src", "readiness", "migrations.generated.ts");
+const outputPath = join(packageRoot, "src", "platform", "migrations.generated.ts");
 const migrationName = /^(\d{4})_[a-z0-9_]+\.sql$/;
 
 export const migrationManifestSource = (entries) => {

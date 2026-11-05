@@ -317,7 +317,7 @@ export const owners = {
       "resource_grants table, its indexes and every grant query (decisions.md: No per-SKIT grants)",
       "Authorization service and its 7 single-caller can*/has*/scope methods",
       "authorization checks split between handlers and services",
-      "Readiness.isServerOperator and Teams' private ownedTeam SQL",
+      "Readiness.isServerOperator (done: auth owns operator lookup); Teams' private ownedTeam SQL",
     ],
   },
 
@@ -439,7 +439,7 @@ export const removedServices = [
   "PasswordHasher → plain functions shared by Better Auth and bootstrap (done; same format: self-hosting.md:267)",
   "NativeCrypto → SecureRandom + Digest; built-in WebCrypto reference only for Promise password callbacks (done)",
   "Pat/Bootstrap/FeedbackRateLimiter tags → one RateLimiter shape, auth included; bindings stay separate (self-hosting.md:119,257)",
-  "ReadinessInspector → plain inspect()",
+  "ReadinessInspector → plain platform inspectReadiness() (done)",
   "CurrentRequest → handlers read HttpServerRequest directly",
   "BootstrapOperations → plain functions over ChildProcessSpawner, RegistryHttp and SecureRandom",
   "server re-export shims (api/bootstrap.ts, api/errors.ts, bootstrap/contracts.ts); auth/contracts.ts's own types (CreatePatInput …) move, not deleted",

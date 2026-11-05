@@ -18,7 +18,7 @@ import {
   RevisionPostRequest,
   RevisionReadResponse,
 } from "@smolai/skit-core/universal/authoring";
-import { expectedMigrations } from "../src/readiness/migrations.generated.js";
+import { expectedMigrations } from "../src/platform/migrations.generated.js";
 
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
 

@@ -17,7 +17,6 @@ import {
   feedbackLayer as feedbackRateLimiterLayer,
   patLayer as patRateLimiterLayer,
 } from "./platform/rate-limiter.js";
-import { layer as readinessLayer } from "./readiness/service.js";
 import { layer as teamsLayer } from "./teams/service.js";
 
 export interface AuthenticatedConfiguration {
@@ -91,7 +90,6 @@ export const applicationLayers = (
     authenticationLayer(supportedScopes),
     teamsLayer,
     serverLibraryLayer,
-    readinessLayer(env),
     skitsLayer,
     patRateLimiterLayer(env.PAT_RATE_LIMITER),
     Layer.succeed(ServerConfiguration, { publicAppOrigin: configured.publicAppOrigin }),

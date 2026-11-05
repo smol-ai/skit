@@ -13,6 +13,17 @@ export interface Principal {
   readonly tokenId?: string;
 }
 
+/** Operator membership belongs to identity, not to deployment probing. */
+export const isServerOperator = Effect.fn("Authentication.isServerOperator")(function* (
+  principal: Principal,
+) {
+  const sql: DatabaseSqlClient = yield* D1Client.D1Client;
+  const rows = yield* sql<{ readonly authorized: number }>`
+    SELECT 1 authorized FROM server_operators WHERE principal_id = ${principal.id}
+  `.pipe(databaseError("check server operator"));
+  return rows.length > 0;
+});
+
 const PatRow = Schema.Struct({
   principal_id: Schema.String,
   token_id: Schema.String,

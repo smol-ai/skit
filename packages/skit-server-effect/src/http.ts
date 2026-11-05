@@ -193,13 +193,13 @@ const invalidAuthenticatedRoutes = (detail: string) =>
     ]),
   );
 
-const consumerAuthenticatedApi = (application: AuthenticatedApplication) => {
+const consumerAuthenticatedApi = (application: AuthenticatedApplication, env: RuntimeEnv) => {
   const handlers = Layer.mergeAll(
     tokenHandlers,
     teamHandlers,
     librarySnapshotHandlers,
     librarySyncHandlers,
-    readinessHandlers,
+    readinessHandlers(env),
   ).pipe(Layer.provide(application));
   return HttpApiBuilder.layer(ConsumerAuthenticatedApi).pipe(
     Layer.provide(handlers),
@@ -249,7 +249,7 @@ const routeLayer = (env: RuntimeEnv, capabilities: ServerCapabilities) => {
           authenticatedReleaseApi(authentication),
           authenticatedRoutes(env),
           onboardingRoutes(authentication),
-          capabilities.library ? consumerAuthenticatedApi(authentication) : Layer.empty,
+          capabilities.library ? consumerAuthenticatedApi(authentication, env) : Layer.empty,
           capabilities.authoring ? authoringAuthenticatedApi(authentication) : Layer.empty,
           capabilities.publication ? publicationAuthenticatedApi(authentication) : Layer.empty,
         ).pipe(HttpRouter.provideRequest(authentication))
