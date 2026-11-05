@@ -51,7 +51,7 @@ export const RefreshInventoryPlan = Schema.Unknown.pipe(
   ),
 );
 export type RefreshInventoryPlan = typeof RefreshInventoryPlan.Type;
-export interface RefreshInventoryResult {
+interface RefreshInventoryResult {
   readonly roots: readonly (typeof ScanRoot.Type)[];
   readonly state: LibraryState;
   /** The reviewed pending-backup records that were promoted; their paths identify the before state. */

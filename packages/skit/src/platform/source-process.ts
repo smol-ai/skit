@@ -7,7 +7,7 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_STDOUT_BYTES = 4_000_000;
 const DEFAULT_STDERR_BYTES = 8_000;
 
-export interface SourceProcessOptions {
+interface SourceProcessOptions {
   readonly stdin?: Stream.Stream<Uint8Array, PlatformError>;
   readonly cwd?: string;
   readonly timeoutMs?: number;

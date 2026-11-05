@@ -57,7 +57,7 @@ const ManageBlocker = Schema.Literals([
   "would-discard-control-entry",
   "would-normalize-path",
 ]);
-export type ManageBlocker = typeof ManageBlocker.Type;
+type ManageBlocker = typeof ManageBlocker.Type;
 
 const PlannedManageTarget = Schema.Union([
   Schema.Struct({
@@ -76,7 +76,7 @@ const PlannedManageTarget = Schema.Union([
     currentHash: Schema.optionalKey(HashSchema),
   }),
 ]);
-export type PlannedManageTarget = typeof PlannedManageTarget.Type;
+type PlannedManageTarget = typeof PlannedManageTarget.Type;
 
 const ManagePlan = Schema.Struct({
   revision: Schema.String,
@@ -92,7 +92,7 @@ const ManagePlan = Schema.Struct({
   blockers: Schema.Array(Schema.Struct({ path: Schema.String, reason: ManageBlocker })),
   applicable: Schema.Boolean,
 });
-export interface ManagePlan extends Schema.Schema.Type<typeof ManagePlan> {}
+interface ManagePlan extends Schema.Schema.Type<typeof ManagePlan> {}
 
 const manageBlockers = Effect.fn("Library.manageBlockers")(function* (root: string) {
   const normalized = yield* inspectNormalizedTree(root);

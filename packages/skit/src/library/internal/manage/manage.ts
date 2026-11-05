@@ -92,7 +92,7 @@ export const ManagePlan = Reviewed.pipe(
   Schema.fieldsAssign({ planId: Hash, change: ManageChange }),
 );
 export type ManagePlan = typeof ManagePlan.Type;
-export interface ManageResult {
+interface ManageResult {
   readonly results: readonly SetEnabledResult[];
   readonly imported: readonly ImportedCollection[];
   readonly recoveryDirectories: readonly string[];

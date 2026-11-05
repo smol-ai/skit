@@ -4,7 +4,6 @@ import { evaluateSkillFrontmatter } from "../harnesses/frontmatter.js";
 import { harnessDrivers } from "../harnesses/drivers.js";
 import {
   HarnessName,
-  type HarnessProfile,
   type SkillsDirectory,
   type SkillsDirectoryRole,
 } from "../harnesses/contracts.js";
@@ -36,12 +35,6 @@ function frontmatterProblem(
     case "field-constraint":
       return `Skill frontmatter${field} does not meet this Harness's requirements`;
   }
-}
-
-export interface SkillAuditResult {
-  profiles: HarnessProfile[];
-  observations: AuditEntry[];
-  findings: AuditFinding[];
 }
 
 export interface SkillCandidate {

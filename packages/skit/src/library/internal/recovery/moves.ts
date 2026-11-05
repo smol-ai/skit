@@ -186,8 +186,6 @@ export const prepareRecoveryMoves = (
   operationDirectory = recoveryOperationDirectory(home),
 ) => prepareMoves(home, requests, operationDirectory);
 
-export type PreparedRecoveryMoves = Effect.Success<ReturnType<typeof prepareRecoveryMoves>>;
-
 const applyRecoveryMoves = Effect.fn("RecoveryMoves.apply")(
   function* (
     home: string,

@@ -88,7 +88,7 @@ const recoveryContainer = Effect.fn("Library.setup.recoveryContainer")(function*
 });
 
 /** Every folder moved aside into `directory`, or the first that is not as recorded. */
-export type Moved =
+type Moved =
   | { readonly _tag: "Moved"; readonly directory: string }
   | { readonly _tag: "Differs"; readonly folder: FolderEvidence | LinkEvidence };
 

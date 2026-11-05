@@ -61,7 +61,7 @@ import {
 } from "../../store/state-schema.js";
 
 /** One finished step, by step tag. */
-export type SetupStepResult =
+type SetupStepResult =
   | { readonly _tag: "Undo"; readonly operationId: string; readonly backupId: string }
   | {
       readonly _tag: "Restore";

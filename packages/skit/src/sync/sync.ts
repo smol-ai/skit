@@ -171,7 +171,7 @@ export type PlanInput =
  * The revision this device sends: its local tree recorded on top of `parents`, or a revision it
  * already recorded and posted.
  */
-export type LocalRevision =
+type LocalRevision =
   | { readonly _tag: "Local"; readonly parents: ReadonlyArray<History.RevisionId> }
   | { readonly _tag: "Sent"; readonly sent: LoadedRevision };
 
@@ -379,7 +379,7 @@ const editedAt = Effect.fn("Sync.editedAt")(function* (remote: Remote, start: Lo
   );
 });
 
-export type Outcome =
+type Outcome =
   | { readonly status: "up_to_date"; readonly revision: History.RevisionId }
   | {
       readonly status: "pulled";

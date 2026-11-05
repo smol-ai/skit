@@ -111,11 +111,10 @@ const remoteSyncPlan = syncPlan.mapFields((fields) => ({
   ...fields,
   change: fields.change.mapFields((change) => ({ ...change, remote: Remote.cases.Expected })),
 }));
-export type LocalSyncPlan = typeof localSyncPlan.Type;
+type LocalSyncPlan = typeof localSyncPlan.Type;
 export type RemoteSyncPlan = typeof remoteSyncPlan.Type;
 export type SyncPlan = LocalSyncPlan | RemoteSyncPlan;
 export const SyncPlan = Schema.Union([localSyncPlan, remoteSyncPlan]);
-export type StoredSyncPlan = typeof SyncPlan.Encoded;
 export const isRemoteSyncPlan = (plan: SyncPlan): plan is RemoteSyncPlan =>
   plan.change.remote._tag === "Expected";
 export const RemoteReceipt = Schema.Struct({
@@ -133,7 +132,7 @@ export type SyncApplyRequest =
       readonly plan: RemoteSyncPlan;
       readonly receipt: RemoteReceipt;
     };
-export interface SyncResult {
+interface SyncResult {
   readonly installed: number;
   readonly uninstalled: number;
   readonly enablementIssues: readonly string[];

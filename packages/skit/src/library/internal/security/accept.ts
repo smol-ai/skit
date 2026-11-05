@@ -33,7 +33,7 @@ export const AcceptFindingPlan = Schema.TaggedStruct("AcceptFinding", {
   folders: Schema.Array(InstalledSkills.Folder),
 });
 export type AcceptFindingPlan = typeof AcceptFindingPlan.Type;
-export interface AcceptFindingResult {
+interface AcceptFindingResult {
   readonly acceptance: SkillAssessmentAcceptance;
   readonly review: SkillSecurityReview;
 }
