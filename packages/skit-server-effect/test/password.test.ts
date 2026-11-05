@@ -1,9 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer } from "effect";
+import { Effect } from "effect";
 import { PasswordHasher, layer } from "../src/auth/password.js";
-import { NativeCrypto, layer as nativeCryptoLayer } from "../src/platform/native-crypto.js";
-
-const passwordLayer = layer.pipe(Layer.provide(nativeCryptoLayer));
+import { WebCrypto } from "effect/crypto";
 
 const LEGACY_FIXTURE = "AAECAwQFBgcICQoLDA0OD0nUnCX1l4RiCfDZLndwq2Thx16UtM5sUJJl7mcXXSoe";
 
@@ -14,7 +12,7 @@ describe("PasswordHasher", () => {
 
       expect(yield* passwords.verify("correct horse battery staple", LEGACY_FIXTURE)).toBe(true);
       expect(yield* passwords.verify("incorrect", LEGACY_FIXTURE)).toBe(false);
-    }).pipe(Effect.provide(passwordLayer)),
+    }).pipe(Effect.provide(layer)),
   );
 
   it.effect("hashes a password into the legacy 48-byte envelope", () =>
@@ -25,7 +23,7 @@ describe("PasswordHasher", () => {
       expect(Uint8Array.from(atob(stored), (value) => value.charCodeAt(0))).toHaveLength(48);
       expect(yield* passwords.verify("password1234", stored)).toBe(true);
       expect(yield* passwords.verify("password123", stored)).toBe(false);
-    }).pipe(Effect.provide(passwordLayer)),
+    }).pipe(Effect.provide(layer)),
   );
 
   it.effect("treats malformed stored credentials as non-matches", () =>
@@ -34,7 +32,7 @@ describe("PasswordHasher", () => {
 
       expect(yield* passwords.verify("password1234", "not base64!")).toBe(false);
       expect(yield* passwords.verify("password1234", btoa("too short"))).toBe(false);
-    }).pipe(Effect.provide(passwordLayer)),
+    }).pipe(Effect.provide(layer)),
   );
 
   it.effect("keeps WebCrypto failures distinct from password mismatches", () =>
@@ -56,7 +54,7 @@ describe("PasswordHasher", () => {
       const outcome = yield* Effect.gen(function* () {
         const passwords = yield* PasswordHasher;
         return yield* Effect.result(passwords.verify("password", LEGACY_FIXTURE));
-      }).pipe(Effect.provide(layer), Effect.provideService(NativeCrypto, brokenCrypto));
+      }).pipe(Effect.provide(layer), Effect.provideService(WebCrypto.WebCrypto, brokenCrypto));
 
       expect(outcome._tag).toBe("Failure");
       if (outcome._tag === "Failure")

@@ -4,7 +4,7 @@ import { PasswordHashError, PasswordHasher, type PasswordHasherService } from ".
 import { provisionPrincipal } from "../auth/provisioning.js";
 import { normalizeNamespace } from "../domain/identifiers.js";
 import { DatabaseError, databaseError, type DatabaseSqlClient } from "../platform/cloudflare.js";
-import { NativeCrypto } from "../platform/native-crypto.js";
+import { Digest, SecureRandom } from "effect/crypto";
 import { BootstrapInput } from "./contracts.js";
 export { BootstrapInput } from "./contracts.js";
 
@@ -58,15 +58,13 @@ export class Bootstrap extends Context.Service<Bootstrap, BootstrapService>()(
   "@skit-server-effect/Bootstrap",
 ) {}
 
-const digest = (crypto: Crypto, value: string) =>
-  // oxlint-disable-next-line skit/no-promise-wrappers -- Web Crypto is Promise-only; Bootstrap owns this secret-comparison boundary.
-  Effect.tryPromise({
-    try: () => crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)),
-    catch: (cause) => new SecretComparisonError({ cause }),
-  }).pipe(Effect.map((bytes) => new Uint8Array(bytes)));
+const digest = (digests: Digest.Digest["Service"], value: string) =>
+  digests
+    .digest(Digest.sha256, new TextEncoder().encode(value))
+    .pipe(Effect.mapError((cause) => new SecretComparisonError({ cause })));
 
-const secretsMatch = (crypto: Crypto, actual: string, expected: string) =>
-  Effect.all([digest(crypto, actual), digest(crypto, expected)]).pipe(
+const secretsMatch = (digests: Digest.Digest["Service"], actual: string, expected: string) =>
+  Effect.all([digest(digests, actual), digest(digests, expected)]).pipe(
     Effect.map(([left, right]) => {
       let difference = left.byteLength ^ right.byteLength;
       for (let index = 0; index < Math.max(left.byteLength, right.byteLength); index++)
@@ -81,7 +79,8 @@ export const layer = (bootstrapSecret: string) =>
     Effect.gen(function* () {
       const sql: DatabaseSqlClient = yield* D1Client.D1Client;
       const passwordHasher: PasswordHasherService = yield* PasswordHasher;
-      const crypto = yield* NativeCrypto;
+      const random = yield* SecureRandom.SecureRandom;
+      const digests = yield* Digest.Digest;
       const clock = yield* Clock.Clock;
       const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
         effect.pipe(databaseError(operation));
@@ -103,7 +102,7 @@ export const layer = (bootstrapSecret: string) =>
       const createInitialOperator = Effect.fn("Bootstrap.createInitialOperator")(function* (
         input: BootstrapInput,
       ) {
-        if (!(yield* secretsMatch(crypto, input.token, bootstrapSecret)))
+        if (!(yield* secretsMatch(digests, input.token, bootstrapSecret)))
           return yield* new InvalidBootstrapSecret();
         const username = normalizeNamespace(input.username);
         const email = input.email.trim().toLowerCase();
@@ -125,9 +124,9 @@ export const layer = (bootstrapSecret: string) =>
         );
         if (count > 0) return yield* new BootstrapUnavailable();
 
-        const userId = crypto.randomUUID();
-        const accountId = crypto.randomUUID();
-        const principalId = `principal_${crypto.randomUUID().replaceAll("-", "")}`;
+        const userId = yield* random.uuidV4();
+        const accountId = yield* random.uuidV4();
+        const principalId = `principal_${(yield* random.uuidV4()).replaceAll("-", "")}`;
         const now = yield* clock.currentTimeMillis;
         const timestamp = new Date(now).toISOString();
         const passwordHash = yield* passwordHasher.hash(input.password);

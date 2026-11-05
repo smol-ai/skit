@@ -1,5 +1,5 @@
 import { Context, Effect, Layer, Schema } from "effect";
-import { NativeCrypto } from "../platform/native-crypto.js";
+import { WebCrypto } from "effect/crypto";
 
 const ITERATIONS = 100_000;
 const HASH_BYTES = 32;
@@ -70,7 +70,7 @@ export const passwordCallbacks = (crypto: Crypto) => ({
 export const layer = Layer.effect(
   PasswordHasher,
   Effect.gen(function* () {
-    const crypto = yield* NativeCrypto;
+    const crypto = yield* WebCrypto.WebCrypto;
     const callbacks = passwordCallbacks(crypto);
     const hash = Effect.fn("PasswordHasher.hash")((password: string) =>
       // oxlint-disable-next-line skit/no-promise-wrappers -- Better Auth's password implementation is Promise-shaped; PasswordHasher owns the Effect adapter.

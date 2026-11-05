@@ -11,7 +11,7 @@ import {
 import { RevisionConflictResponse } from "@smolai/skit-core/universal/api";
 import { commitLibraryRevision, LibraryRevisionConflict } from "../src/library/internal/sync.js";
 import { databaseLayer } from "../src/platform/cloudflare.js";
-import { layer as nativeCryptoLayer } from "../src/platform/native-crypto.js";
+import { BrowserCrypto } from "@effect/platform-browser";
 import archiveFixture from "./fixtures/library-sync/archive.json" with { type: "json" };
 import manifestFixture from "./fixtures/library-sync/manifest.json" with { type: "json" };
 import emptyManifestFixture from "./fixtures/library-sync/empty-manifest.json" with { type: "json" };
@@ -245,7 +245,7 @@ describe("Library sync Worker persistence", () => {
       ).toBe(true);
       expect(yield* stored(library_id)).toEqual(before);
       yield* assertArchive(library_id);
-    }).pipe(Effect.provide(databaseLayer(env.DB)), Effect.provide(nativeCryptoLayer)),
+    }).pipe(Effect.provide(databaseLayer(env.DB)), Effect.provide(BrowserCrypto.layerSecureRandom)),
   );
 
   it.effect("rejects a stale base without adding revisions or changing snapshot bytes", () =>

@@ -21,7 +21,7 @@ export const findOwnedLibrary = Effect.fn("Libraries.findOwned")(function* (opti
   readonly principal: Principal;
   readonly create: boolean;
   readonly clock: Clock.Clock;
-  readonly randomUUID: () => string;
+  readonly randomUUID: () => Effect.Effect<string>;
 }) {
   const find = () =>
     options.sql`SELECT library_id, owner_subject_kind, owner_subject_id, current_revision_id
@@ -31,7 +31,7 @@ export const findOwnedLibrary = Effect.fn("Libraries.findOwned")(function* (opti
   let rows = yield* find();
   if (rows.length === 0 && options.create) {
     const now = new Date(yield* options.clock.currentTimeMillis).toISOString();
-    const libraryId = `library_${options.randomUUID().replaceAll("-", "")}`;
+    const libraryId = `library_${(yield* options.randomUUID()).replaceAll("-", "")}`;
     yield* options.sql`INSERT OR IGNORE INTO libraries
       (library_id, owner_subject_kind, owner_subject_id, current_revision_id, created_at, updated_at)
       VALUES (${libraryId}, 'principal', ${options.principal.id}, NULL, ${now}, ${now})`.pipe(

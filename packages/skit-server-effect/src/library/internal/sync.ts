@@ -7,7 +7,7 @@ import {
 } from "@smolai/skit-core/universal/consumer";
 import type { Principal } from "../../auth/authentication.js";
 import { DatabaseError, databaseError, type DatabaseSqlClient } from "../../platform/cloudflare.js";
-import { NativeCrypto } from "../../platform/native-crypto.js";
+import { SecureRandom } from "effect/crypto";
 import type { FindLibrary } from "./owned.js";
 
 const RevisionRow = Schema.Struct({ manifest_json: Schema.String });
@@ -45,10 +45,10 @@ export const commitLibraryRevision = Effect.fn("LibrarySync.commitRevision")(fun
   manifest: LibraryManifest,
 ) {
   const sql = yield* D1Client.D1Client;
-  const crypto = yield* NativeCrypto;
+  const random = yield* SecureRandom.SecureRandom;
   const clock = yield* Clock.Clock;
   const json = JSON.stringify(manifest);
-  const id = `library_revision_${crypto.randomUUID().replaceAll("-", "")}`;
+  const id = `library_revision_${(yield* random.uuidV4()).replaceAll("-", "")}`;
   const now = new Date(yield* clock.currentTimeMillis).toISOString();
   const results = yield* sql
     .batch([
@@ -79,7 +79,7 @@ export const commitLibraryRevision = Effect.fn("LibrarySync.commitRevision")(fun
 /** Revision reads and writes use the default-Library lookup captured by ServerLibrary. */
 export const makeSync = (
   sql: DatabaseSqlClient,
-  crypto: NativeCrypto["Service"],
+  random: SecureRandom.SecureRandom["Service"],
   own: FindLibrary,
 ): Sync => {
   const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
@@ -134,7 +134,7 @@ export const makeSync = (
     }
     return yield* commitLibraryRevision(library, expected, manifest).pipe(
       Effect.provideService(D1Client.D1Client, sql),
-      Effect.provideService(NativeCrypto, crypto),
+      Effect.provideService(SecureRandom.SecureRandom, random),
     );
   });
   return { read, write };

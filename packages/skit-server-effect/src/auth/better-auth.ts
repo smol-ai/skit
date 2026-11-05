@@ -9,7 +9,7 @@ import { schemaBodyJsonLimited } from "../api/request-body.js";
 import { normalizeNamespace } from "../domain/identifiers.js";
 import { rateLimit, type DatabaseSqlClient, type RuntimeEnv } from "../platform/cloudflare.js";
 import { ServerConfiguration } from "../configuration.js";
-import { NativeCrypto } from "../platform/native-crypto.js";
+import { SecureRandom, WebCrypto } from "effect/crypto";
 import { passwordCallbacks } from "./password.js";
 import { provisionPrincipal } from "./provisioning.js";
 
@@ -105,7 +105,8 @@ export const layer = (configuration: BetterAuthConfiguration) =>
     BetterAuth,
     Effect.gen(function* () {
       const sql: DatabaseSqlClient = yield* D1Client.D1Client;
-      const crypto = yield* NativeCrypto;
+      const crypto = yield* WebCrypto.WebCrypto;
+      const random = yield* SecureRandom.SecureRandom;
       const clock = yield* Clock.Clock;
       const now = () => new Date(clock.currentTimeMillisUnsafe());
       const passwords = passwordCallbacks(crypto);
@@ -131,18 +132,22 @@ export const layer = (configuration: BetterAuthConfiguration) =>
         );
       });
 
-      const provision = Effect.fn("BetterAuth.provision")((userId: string, username: string) =>
-        sql
+      const provision = Effect.fn("BetterAuth.provision")(function* (
+        userId: string,
+        username: string,
+      ) {
+        const principalId = `principal_${(yield* random.uuidV4()).replaceAll("-", "")}`;
+        return yield* sql
           .batch(
             provisionPrincipal(sql, {
               userId,
               username,
-              principalId: `principal_${crypto.randomUUID().replaceAll("-", "")}`,
+              principalId,
               timestamp: now().toISOString(),
             }),
           )
-          .pipe(Effect.mapError((cause) => new BetterAuthError({ operation: "provision", cause }))),
-      );
+          .pipe(Effect.mapError((cause) => new BetterAuthError({ operation: "provision", cause })));
+      });
 
       const auth = betterAuth({
         appName: "SKIT",
@@ -413,7 +418,7 @@ export const layer = (configuration: BetterAuthConfiguration) =>
             ...provisionPrincipal(sql, {
               userId,
               username,
-              principalId: `principal_${crypto.randomUUID().replaceAll("-", "")}`,
+              principalId: `principal_${(yield* random.uuidV4()).replaceAll("-", "")}`,
               timestamp: timestamp.toISOString(),
             }),
           ])

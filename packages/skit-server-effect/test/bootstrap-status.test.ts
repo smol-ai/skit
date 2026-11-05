@@ -5,13 +5,9 @@ import { Effect, Layer } from "effect";
 import { makeWebHandler } from "../src/http.js";
 import { PasswordHasher, layer as passwordHasherLayer } from "../src/auth/password.js";
 import { databaseLayer } from "../src/platform/cloudflare.js";
-import { layer as nativeCryptoLayer } from "../src/platform/native-crypto.js";
 
 const platformLayer = databaseLayer(env.DB);
-const testLayer = Layer.merge(
-  platformLayer,
-  passwordHasherLayer.pipe(Layer.provide(nativeCryptoLayer)),
-);
+const testLayer = Layer.merge(platformLayer, passwordHasherLayer);
 
 const web = makeWebHandler(env);
 

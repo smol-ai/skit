@@ -1,9 +1,8 @@
 import { D1Client } from "@effect/sql-d1";
 import { Clock, Context, Effect, Layer } from "effect";
-import { Digest } from "effect/crypto";
+import { Digest, SecureRandom } from "effect/crypto";
 import { Authorization } from "../authorization/service.js";
 import { BlobStore } from "../platform/cloudflare.js";
-import { NativeCrypto } from "../platform/native-crypto.js";
 import { findOwnedLibrary, type FindLibrary } from "./internal/owned.js";
 import { makeSync, type Sync } from "./internal/sync.js";
 import { makeSnapshots, type Snapshots } from "./internal/snapshots.js";
@@ -25,11 +24,11 @@ export const layer = Layer.effect(
     const authorization = yield* Authorization;
     const digests = yield* Digest.Digest;
     const clock = yield* Clock.Clock;
-    const crypto = yield* NativeCrypto;
+    const random = yield* SecureRandom.SecureRandom;
     const own: FindLibrary = (principal, create) =>
-      findOwnedLibrary({ sql, principal, create, clock, randomUUID: () => crypto.randomUUID() });
+      findOwnedLibrary({ sql, principal, create, clock, randomUUID: random.uuidV4 });
     return ServerLibrary.of({
-      ...makeSync(sql, crypto, own),
+      ...makeSync(sql, random, own),
       snapshots: makeSnapshots(sql, blobs, authorization, digests, clock, own),
     });
   }),
