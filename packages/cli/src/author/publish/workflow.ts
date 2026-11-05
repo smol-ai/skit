@@ -1,9 +1,7 @@
 import type { PlatformError } from "effect/PlatformError";
 import { Registry } from "../../registry/index.js";
-import { type Config, Data, Effect, FileSystem, Predicate, Schema, Scope } from "effect";
+import { type Config, Effect, FileSystem, Scope } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
-import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http";
-import { HttpApiClient } from "effect/http-api";
 import { join, resolve } from "node:path";
 import {
   createSkitArchive,
@@ -13,35 +11,12 @@ import {
   type SkitValidationFailed,
   type TreeError,
   type TreeRequirements,
-  parseContract,
   readSkitDescriptor,
-  releasePublishRequestSchema,
   validateSkitDirectory,
   type SkitConfiguration,
-  FailureTypeId,
-  type SkitFailure,
 } from "@smolai/skit-core";
-import {
-  ForbiddenOriginResponse,
-  ForbiddenResponse,
-  InsufficientScopeResponse,
-  IntegrityFailureResponse,
-  PublicationAuthenticatedApi,
-  PublishBlockedResponse,
-  ReleaseConflictResponse,
-  UnauthorizedResponse,
-} from "@smolai/skit-core/universal/api";
-import {
-  isRegistryTransportError,
-  RegistryHttp,
-  RegistryTransportError,
-} from "../../registry/registry-http.js";
-import {
-  authenticatedApiMiddleware,
-  isSuccessfulResponseDecodeFailure,
-  registryApiFailure,
-  registryApiFailureMessage,
-} from "../../registry/api-client.js";
+import { RegistryHttp, RegistryTransportError } from "../../registry/registry-http.js";
+import { publishRelease, PublicationResponseError } from "../../registry/publication.js";
 import {
   AuthorWorkspace,
   type AuthorSyncStateInvalid,
@@ -62,16 +37,6 @@ import {
   PublicationBlocked,
 } from "../../registry/failures.js";
 
-export class PublicationResponseError
-  extends Data.TaggedError("PublicationResponseError")<{
-    message: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Check the Registry's reason, then publish again.";
-}
 export type PublicationFailure =
   | DescriptorFailure
   | SkitValidationFailed
@@ -99,17 +64,6 @@ export type PublicationFailure =
 /** The SKIT home whose Registry credentials publish uses. */
 type PublishOptions = { readonly home?: string };
 
-function discoveryUrl(template: string, base: string): Effect.Effect<string, TypeError> {
-  const url = URL.parse(template, base);
-  return url
-    ? Effect.succeed(url.toString())
-    : Effect.fail(new TypeError(`Invalid URL: ${template} against ${base}`));
-}
-function stringField(body: unknown, field: string): string | undefined {
-  if (typeof body !== "object" || body === null || !(field in body)) return undefined;
-  const value: unknown = Reflect.get(body, field);
-  return typeof value === "string" ? value : undefined;
-}
 export const publish = Effect.fn("publish")(function* (
   root: string,
   version: string,
@@ -134,9 +88,6 @@ export const publish = Effect.fn("publish")(function* (
   const { connection } = yield* workspaces.read(yield* workspaces.resolveRoot(absolute));
   if (connection._tag !== "Connected") return yield* new NoRemoteHome();
   const remote = connection.remote;
-  const owner = remote.namespace;
-  const slug = remote.skit;
-  const base = remote.origin.replace(/\/$/, "");
   // Only this remote's credential: an environment token for another Registry is never sent.
   const credentials = yield* Registry.credentials({ origin: remote.origin, home: options.home });
   if (!credentials.token)
@@ -165,109 +116,13 @@ export const publish = Effect.fn("publish")(function* (
   );
   const archive = join(temporary, "release.zip");
   yield* createSkitArchive(absolute, archive);
-  const http = yield* (yield* RegistryHttp).client;
-  const token = credentials.token;
   const bytes = yield* fs.readFile(archive);
-  const body = yield* parseContract("publish request", releasePublishRequestSchema, {
+  return yield* publishRelease({
+    remote,
+    token: credentials.token,
     version,
-    ...(revision === undefined ? {} : { revision_id: revision }),
-    archive_base64: Buffer.from(bytes).toString("base64"),
+    revision,
+    archive: bytes,
+    commandPath,
   });
-  let publishUrl = `${base}/api/skits/${encodeURIComponent(owner)}/${encodeURIComponent(slug)}/releases`;
-  const discovered = yield* Effect.gen(function* () {
-    let discovery = yield* http.execute(HttpClientRequest.get(`${base}/.well-known/agent-skills/`));
-    if (discovery.status === 404)
-      discovery = yield* http.execute(HttpClientRequest.get(`${base}/.well-known/skit`));
-    if (discovery.status < 200 || discovery.status >= 300) return undefined;
-    const template = stringField(yield* discovery.json, "publish");
-    return template === undefined
-      ? undefined
-      : yield* discoveryUrl(
-          template
-            .replace("{owner}", encodeURIComponent(owner))
-            .replace("{slug}", encodeURIComponent(slug)),
-          base,
-        );
-  }).pipe(
-    Effect.catchTags({
-      RegistryTransportError: () => Effect.succeed(undefined),
-      HttpClientError: () => Effect.succeed(undefined),
-    }),
-    // Only discovery URL syntax remains in this channel.
-    Effect.catch(() => Effect.succeed(undefined)),
-  );
-  if (discovered) publishUrl = discovered;
-  const transport = yield* (yield* RegistryHttp).client;
-  const client = yield* HttpApiClient.makeWith(PublicationAuthenticatedApi, {
-    httpClient: HttpClient.mapRequest(transport, HttpClientRequest.setUrl(publishUrl)),
-  }).pipe(Effect.provide(authenticatedApiMiddleware(token)));
-  return yield* client.publication.publish({ params: { owner, slug }, payload: body }).pipe(
-    Effect.catchTag(
-      "HttpClientError",
-      (
-        error,
-      ): Effect.Effect<
-        never,
-        HttpClientError.HttpClientError | RegistryRejectedWrite | PublicationResponseError
-      > => {
-        if (error.response !== undefined && error.response.status !== 201) {
-          const response = error.response;
-          return response.text.pipe(
-            Effect.orElseSucceed(() => ""),
-            Effect.flatMap((text) => {
-              const detail = `SKIT publish failed (${response.status}): ${(text || "Registry returned an invalid error response").slice(0, 1000)}`;
-              return Effect.fail(
-                response.status === 409
-                  ? new RegistryRejectedWrite({ detail })
-                  : new PublicationResponseError({ message: detail }),
-              );
-            }),
-          );
-        }
-        return Effect.fail(error);
-      },
-    ),
-    Effect.mapError((error) => {
-      if (
-        Predicate.isTagged(error, "PublicationResponseError") ||
-        Predicate.isTagged(error, "RegistryRejectedWrite")
-      )
-        return error;
-      if (Schema.is(UnauthorizedResponse)(error))
-        return new AuthenticationRequired({
-          scopes: "library:sync,authoring:write,publication:write",
-        });
-      if (Schema.is(InsufficientScopeResponse)(error))
-        return new CredentialLacksScope({
-          scope: "publication:write",
-          scopes: "library:sync,authoring:write,publication:write",
-        });
-      if (Schema.is(ForbiddenResponse)(error) || Schema.is(ForbiddenOriginResponse)(error))
-        return new PrincipalNotAuthorized({ action: "publish this SKIT" });
-      if (Schema.is(PublishBlockedResponse)(error)) {
-        const details = error.diagnostics
-          .filter((item) => item.severity === "error")
-          .map((item) => item.message)
-          .join("\n");
-        return new PublicationBlocked({
-          reason: "assessment",
-          detail: details ? `:\n${details}` : "",
-        });
-      }
-      if (Schema.is(IntegrityFailureResponse)(error) && error.error === "ARCHIVE_MANIFEST_MISMATCH")
-        return new AuthorSyncRequired({ commandPath });
-      if (isRegistryTransportError(error)) return error;
-      if (isSuccessfulResponseDecodeFailure(error, [201]))
-        return new SkitContractError({
-          contract: "publish response",
-          issues: [{ path: "", message: String(error) }],
-        });
-      const failure = registryApiFailure(error, { defaultStatus: 400 });
-      const detail = registryApiFailureMessage("SKIT publish", error, { defaultStatus: 400 });
-      if (failure.status === 409 || Schema.is(ReleaseConflictResponse)(error))
-        return new RegistryRejectedWrite({ detail });
-      if (Schema.is(IntegrityFailureResponse)(error)) return new RegistryRejectedWrite({ detail });
-      return new PublicationResponseError({ message: detail });
-    }),
-  );
 }, Effect.scoped);
