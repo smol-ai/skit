@@ -7,8 +7,8 @@ import {
   MAX_ARTIFACT_FILES,
 } from "@smolai/skit-core/universal/authoring";
 import { Hash, sha256Hash } from "@smolai/skit-core/universal/consumer";
-import { IntegrityError } from "../../integrity/contracts.js";
-import { unpublishableEntries, validateArtifactBundle } from "../../integrity/validate.js";
+import { IntegrityError } from "./integrity/contracts.js";
+import { unpublishableEntries, validateArtifactBundle } from "./integrity/validate.js";
 
 const invalidArchive = () => new IntegrityError({ code: "INVALID_ARCHIVE" });
 const manifestMismatch = () => new IntegrityError({ code: "ARCHIVE_MANIFEST_MISMATCH" });

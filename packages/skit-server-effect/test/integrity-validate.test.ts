@@ -2,7 +2,7 @@ import { BrowserCrypto } from "@effect/platform-browser";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { sha256Hash } from "@smolai/skit-core/universal/consumer";
-import { validateArtifactBundle } from "../src/integrity/validate.js";
+import { validateArtifactBundle } from "../src/skits/internal/integrity/validate.js";
 
 const file = Effect.fn("Test.file")(function* (path: string, contents: string) {
   const bytes = new TextEncoder().encode(contents);

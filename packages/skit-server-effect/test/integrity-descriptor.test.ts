@@ -2,7 +2,7 @@ import { BrowserCrypto } from "@effect/platform-browser";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import { skitDescriptorRequestSchema } from "@smolai/skit-core/universal/authoring";
-import { hashInstalledSkillFiles } from "../src/integrity/descriptor.js";
+import { hashInstalledSkillFiles } from "../src/skits/internal/integrity/descriptor.js";
 
 describe("Integrity descriptor", () => {
   it.effect("pins the legacy depth-first code-unit Skill digest", () =>

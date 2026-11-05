@@ -1,7 +1,7 @@
 import { Clock, Effect, Schema } from "effect";
 import { PasswordHashError, hashPassword } from "./password.js";
 import { provisionPrincipal } from "./provisioning.js";
-import { normalizeNamespace } from "../../domain/identifiers.js";
+import { normalizeNamespace } from "../namespace-name.js";
 import { DatabaseError, databaseError, type DatabaseSqlClient } from "../../platform/cloudflare.js";
 import { Digest, SecureRandom } from "effect/crypto";
 import { BootstrapInput } from "../contracts.js";

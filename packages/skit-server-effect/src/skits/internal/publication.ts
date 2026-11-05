@@ -5,7 +5,7 @@ import type { Principal } from "../../identity/service.js";
 import type { SkitCurrentResponse } from "@smolai/skit-core/universal/authoring";
 import { verifyReleaseArchive } from "./release-archive.js";
 import { type Hash, sha256Hash } from "@smolai/skit-core/universal/consumer";
-import { IntegrityError, ValidationDiagnostic } from "../../integrity/contracts.js";
+import { IntegrityError, ValidationDiagnostic } from "./integrity/contracts.js";
 import {
   type BlobStoreService,
   type BlobStorageError,

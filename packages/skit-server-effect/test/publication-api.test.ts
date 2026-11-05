@@ -6,7 +6,7 @@ import { CurrentPrincipal, PrincipalAuthentication } from "../src/api/authentica
 import { PublicationAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import { publicationHandlers } from "../src/api/publication-http.js";
 import { requestDecodingLayer } from "../src/api/request-decoding.js";
-import { ServerConfiguration } from "../src/configuration.js";
+import { ServerConfiguration } from "../src/platform/configuration.js";
 import { DatabaseError } from "../src/platform/cloudflare.js";
 import { Skits } from "../src/skits/service.js";
 import { ReleaseConflict } from "../src/skits/internal/publication.js";

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
-import { HealthResponse, inspectHealth } from "../src/health.js";
+import { HealthResponse, inspectHealth } from "../src/api/health.js";
 
 describe("Health", () => {
   it.effect("reports the versioned liveness contract", () =>

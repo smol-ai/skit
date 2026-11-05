@@ -1,5 +1,5 @@
 import { BuildInfo } from "@smolai/skit-core/universal/consumer";
-import { serverBuild } from "./build-info.js";
+import { serverBuild } from "../platform/build-info.js";
 import { Effect, Schema } from "effect";
 
 export const HealthResponse = Schema.Struct({

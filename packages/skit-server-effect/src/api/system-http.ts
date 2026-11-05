@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
-import { serverDiscovery, type ServerDiscovery as ServerDiscoveryDocument } from "../discovery.js";
-import { inspectHealth } from "../health.js";
+import { serverDiscovery, type ServerDiscovery as ServerDiscoveryDocument } from "./discovery.js";
+import { inspectHealth } from "./health.js";
 import { noStore } from "./response.js";
 import { SkitApi } from "./system.js";
 

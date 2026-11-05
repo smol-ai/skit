@@ -1,7 +1,7 @@
 import { Effect, Option, Schema } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { schemaBodyJsonLimited } from "../api/request-body.js";
-import { ServerConfiguration } from "../configuration.js";
+import { ServerConfiguration } from "../platform/configuration.js";
 import { makeRateLimiter } from "../platform/rate-limiter.js";
 import type { RuntimeEnv } from "../platform/cloudflare.js";
 import { Identity } from "./service.js";

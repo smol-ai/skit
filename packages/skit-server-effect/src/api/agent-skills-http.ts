@@ -1,7 +1,7 @@
 import { sha256Hash } from "@smolai/skit-core/universal/consumer";
 import { Effect, Option } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
-import { agentSkillsIndex, discoverableSkills, skillArtifact } from "../releases/agent-skills.js";
+import { agentSkillsIndex, discoverableSkills, skillArtifact } from "../skits/agent-skills.js";
 import { Skits } from "../skits/service.js";
 
 const discoveryHeaders = { "cache-control": "public, no-cache" };

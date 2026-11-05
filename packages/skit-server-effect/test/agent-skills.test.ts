@@ -5,7 +5,7 @@ import { Effect, Layer, Schema } from "effect";
 import { unzipSync, zipSync } from "fflate";
 import { measureSkillProjection, projectionIndex } from "@smolai/skit-core/universal/consumer";
 import { makeWebHandler } from "../src/http.js";
-import { discoverableSkills, skillArtifact } from "../src/releases/agent-skills.js";
+import { discoverableSkills, skillArtifact } from "../src/skits/agent-skills.js";
 import { databaseLayer } from "../src/platform/cloudflare.js";
 
 const web = makeWebHandler(env);

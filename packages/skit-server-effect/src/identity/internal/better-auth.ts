@@ -3,7 +3,7 @@ import { bearer } from "better-auth/plugins/bearer";
 import { deviceAuthorization } from "better-auth/plugins/device-authorization";
 import { APIError } from "better-auth/api";
 import { Clock, Effect, Option, Schema } from "effect";
-import { normalizeNamespace } from "../../domain/identifiers.js";
+import { normalizeNamespace } from "../namespace-name.js";
 import type { DatabaseSqlClient } from "../../platform/cloudflare.js";
 import { SecureRandom, WebCrypto } from "effect/crypto";
 import { passwordCallbacks } from "./password.js";

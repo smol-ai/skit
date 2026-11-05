@@ -20,13 +20,13 @@ import {
 import { Hash, safePathSchema, sha256Hash } from "@smolai/skit-core/universal/consumer";
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect";
 import { Digest, SecureRandom } from "effect/crypto";
-import { IntegrityError } from "../integrity/contracts.js";
+import { IntegrityError } from "./internal/integrity/contracts.js";
 import {
   readArtifactDescriptor,
   unpublishableEntries,
   validateArtifactBundle,
   validateArtifactFiles,
-} from "../integrity/validate.js";
+} from "./internal/integrity/validate.js";
 import {
   BlobStore,
   type BlobStorageError,

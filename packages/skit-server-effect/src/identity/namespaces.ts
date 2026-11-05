@@ -2,7 +2,7 @@ import { D1Client } from "@effect/sql-d1";
 import { Array as EffectArray, Effect, Schema } from "effect";
 import type { Principal } from "./internal/credentials.js";
 import { Teams } from "../teams/service.js";
-import { normalizeNamespace } from "../domain/identifiers.js";
+import { normalizeNamespace } from "./namespace-name.js";
 import { DatabaseError, databaseError, type DatabaseSqlClient } from "../platform/cloudflare.js";
 
 const SUBJECT_BATCH_SIZE = 40;

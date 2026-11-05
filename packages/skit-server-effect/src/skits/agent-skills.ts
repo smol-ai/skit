@@ -6,7 +6,7 @@ import {
 } from "@smolai/skit-core/universal/consumer";
 import { Effect, Schema } from "effect";
 import { unzipSync, zipSync } from "fflate";
-import { projectionLimitExceeded } from "../integrity/projection-limits.js";
+import { projectionLimitExceeded } from "./internal/integrity/projection-limits.js";
 
 const AGENT_SKILLS_DISCOVERY_SCHEMA = "https://schemas.agentskills.io/discovery/0.2.0/schema.json";
 

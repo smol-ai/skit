@@ -9,7 +9,7 @@ import {
   storageFailureResponse,
   unauthorizedResponse,
 } from "./errors.js";
-import { ServerConfiguration } from "../configuration.js";
+import { ServerConfiguration } from "../platform/configuration.js";
 import { noStore } from "./response.js";
 
 export { CurrentPrincipal, PrincipalAuthentication };

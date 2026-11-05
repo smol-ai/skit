@@ -1,4 +1,4 @@
-import { serverBuild } from "./build-info.js";
+import { serverBuild } from "../platform/build-info.js";
 import {
   serverDiscoverySchema,
   type ServerDiscovery as ServerDiscoveryDocument,

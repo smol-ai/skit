@@ -1,7 +1,7 @@
 import { BrowserCrypto } from "@effect/platform-browser";
 import { Layer } from "effect";
 import { layer as identityLayer, type Scope as AuthenticationScope } from "./identity/service.js";
-import { ServerConfiguration } from "./configuration.js";
+import { ServerConfiguration } from "./platform/configuration.js";
 import { layer as skitsLayer } from "./skits/service.js";
 import { layer as feedbackServiceLayer } from "./feedback/service.js";
 import { layer as serverLibraryLayer } from "./library/service.js";

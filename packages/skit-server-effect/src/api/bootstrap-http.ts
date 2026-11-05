@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { HttpEffect, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 import { Identity, BootstrapInput, type CreateError } from "../identity/service.js";
-import { ServerConfiguration } from "../configuration.js";
+import { ServerConfiguration } from "../platform/configuration.js";
 import type { RateLimiter } from "../platform/rate-limiter.js";
 import { BootstrapApi } from "./bootstrap.js";
 import {

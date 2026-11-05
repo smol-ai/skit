@@ -1,9 +1,9 @@
-import { serverBuild } from "../src/build-info.js";
+import { serverBuild } from "../src/platform/build-info.js";
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { makeWebHandler } from "../src/http.js";
-import { makeServerDiscovery, serverDiscovery } from "../src/discovery.js";
+import { makeServerDiscovery, serverDiscovery } from "../src/api/discovery.js";
 
 const web = makeWebHandler(env);
 const releaseOnlyWeb = makeWebHandler(env, {});

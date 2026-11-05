@@ -34,7 +34,7 @@ import {
 import type { RuntimeEnv } from "./platform/cloudflare.js";
 import { makeRateLimiter, type RateLimiter } from "./platform/rate-limiter.js";
 import { artifactResponse, indexResponse } from "./api/agent-skills-http.js";
-import { makeServerDiscovery, type ServerCapabilities } from "./discovery.js";
+import { makeServerDiscovery, type ServerCapabilities } from "./api/discovery.js";
 
 type ApplicationLayers = ReturnType<typeof applicationLayers>;
 type ReleaseApplication = ApplicationLayers["release"];
