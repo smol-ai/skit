@@ -605,6 +605,37 @@ function commandOutputEffect(
   });
 }
 
+/** Every downloaded archive is checked before extraction, then audited without following links. */
+const extractArchive = Effect.fn("Source.extractArchive")(function* (
+  bytes: Uint8Array,
+  format: "zip" | "tar.gz" | "tar",
+  into: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const archive = `${into}.${format}`;
+  yield* fs.writeFile(archive, bytes);
+  yield* fs.makeDirectory(into);
+  const zip = format === "zip";
+  const gzip = format === "tar.gz";
+  const listing = yield* commandOutputEffect(
+    zip ? "unzip" : "tar",
+    zip ? ["-Z1", archive] : [gzip ? "-tzf" : "-tf", archive],
+  );
+  yield* assertArchivePaths(listing.split("\n"));
+  const modes = yield* commandOutputEffect(
+    zip ? "unzip" : "tar",
+    zip ? ["-Z", "-l", archive] : [gzip ? "-tvzf" : "-tvf", archive],
+  );
+  if (/^[lh][rwxstST-]{9}\s/m.test(modes)) return yield* invalidSource("Archive contains a link");
+  yield* runEffect(
+    zip ? "unzip" : "tar",
+    zip
+      ? ["-q", archive, "-d", into]
+      : [gzip ? "-xzf" : "-xf", archive, "-C", into, "--no-same-owner", "--no-same-permissions"],
+  );
+  yield* auditExtractedSource(into);
+});
+
 const lockedSkillDirectory = Effect.fn("Source.lockedSkillDirectory")(function* (
   root: string,
   path: string,
@@ -896,33 +927,8 @@ const fetchDiscovery = Effect.fn("Discovery.fetch")(function* (
         const gzip = bytes[0] === 0x1f && bytes[1] === 0x8b;
         if (!zip && !gzip)
           return yield* invalidSource(`Unsupported discovery archive for ${entry.name}`);
-        const archive = join(workspace, `${entry.name}${zip ? ".zip" : ".tar.gz"}`);
-        yield* fs.writeFile(archive, bytes);
         const extracted = join(workspace, `extracted-${entry.name}`);
-        yield* fs.makeDirectory(extracted);
-        if (archive.endsWith(".zip")) {
-          const listing = yield* commandOutputEffect("unzip", ["-Z1", archive]);
-          yield* assertArchivePaths(listing.split("\n"));
-          const modes = yield* commandOutputEffect("unzip", ["-Z", "-l", archive]);
-          if (/^[lh][rwxstST-]{9}\s/m.test(modes))
-            return yield* invalidSource(`Discovery archive contains a link: ${entry.name}`);
-          yield* runEffect("unzip", ["-q", archive, "-d", extracted]);
-        } else {
-          const listing = yield* commandOutputEffect("tar", ["-tzf", archive]);
-          yield* assertArchivePaths(listing.split("\n"));
-          const modes = yield* commandOutputEffect("tar", ["-tvzf", archive]);
-          if (/^[lh][rwxstST-]{9}\s/m.test(modes))
-            return yield* invalidSource(`Discovery archive contains a link: ${entry.name}`);
-          yield* runEffect("tar", [
-            "-xzf",
-            archive,
-            "-C",
-            extracted,
-            "--no-same-owner",
-            "--no-same-permissions",
-          ]);
-        }
-        yield* auditExtractedSource(extracted);
+        yield* extractArchive(bytes, zip ? "zip" : "tar.gz", extracted);
         if (!(yield* fs.exists(join(extracted, "SKILL.md"))))
           return yield* invalidSource(`Discovery archive missing root SKILL.md for ${entry.name}`);
         for (const name of yield* fs.readDirectory(extracted))
@@ -1016,7 +1022,6 @@ export function resolveSkitSource(
         `Git Entry ${sourceLocator(source)} has no recorded commit. Run skit update on the retaining device and sync it before acquiring on another device.`,
       );
     const workspace = yield* fs.makeTempDirectoryScoped({ prefix: "skit-source-" });
-    const guard = assertArchivePaths;
 
     const resolved = yield* Effect.gen(function* () {
       if (source.type === "local") {
@@ -1247,45 +1252,13 @@ export function resolveSkitSource(
           foundSkillPaths: ["."],
         };
       }
-      const archive = join(
-        workspace,
-        registryReference.match(/\.(?:tar\.gz|tgz)(?:\?|$)/)
-          ? "source.tar.gz"
-          : registryReference.match(/\.tar(?:\?|$)/)
-            ? "source.tar"
-            : "source.zip",
-      );
-      yield* fs.writeFile(archive, body);
+      const format = registryReference.match(/\.(?:tar\.gz|tgz)(?:\?|$)/)
+        ? "tar.gz"
+        : registryReference.match(/\.tar(?:\?|$)/)
+          ? "tar"
+          : "zip";
       const extracted = join(workspace, "extracted");
-      yield* fs.makeDirectory(extracted);
-      if (archive.endsWith(".zip")) {
-        const listing = yield* commandOutputEffect("unzip", ["-Z1", archive]);
-        yield* guard(listing.split("\n"));
-        yield* runEffect("unzip", ["-q", archive, "-d", extracted]);
-      } else if (archive.endsWith(".tar.gz")) {
-        const listing = yield* commandOutputEffect("tar", ["-tzf", archive]);
-        yield* guard(listing.split("\n"));
-        yield* runEffect("tar", [
-          "-xzf",
-          archive,
-          "-C",
-          extracted,
-          "--no-same-owner",
-          "--no-same-permissions",
-        ]);
-      } else {
-        const listing = yield* commandOutputEffect("tar", ["-tf", archive]);
-        yield* guard(listing.split("\n"));
-        yield* runEffect("tar", [
-          "-xf",
-          archive,
-          "-C",
-          extracted,
-          "--no-same-owner",
-          "--no-same-permissions",
-        ]);
-      }
-      yield* auditExtractedSource(extracted);
+      yield* extractArchive(body, format, extracted);
       const discovered = yield* discoverRoot(
         extracted,
         undefined,
