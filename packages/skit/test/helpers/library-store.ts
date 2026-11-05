@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Context, Effect, Layer } from "effect";
 import { Library } from "../../src/library/library.js";
 import {
   inspectLocalLibraryState,
@@ -26,3 +26,7 @@ export const saveLibrary = (home: string, state: LibraryState) =>
 
 /** The Library rooted at `home`, routing nothing; building it migrates a legacy state.json. */
 export const libraryLayer = (home: string) => Library.layer({ home, routing: { _tag: "None" } });
+
+/** Build the public owner in the caller's test scope, with no installed-skill destinations. */
+export const openLibrary = (home: string) =>
+  Effect.map(Layer.build(libraryLayer(home)), (context) => Context.get(context, Library.Service));

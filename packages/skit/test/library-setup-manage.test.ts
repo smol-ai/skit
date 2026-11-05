@@ -1,17 +1,12 @@
-import { make as makeLibrary } from "../src/library/internal/runtime.js";
-import { snapshotOf } from "../src/library/snapshot.js";
 import { assert, it } from "@effect/vitest";
 import { Context, Effect, Exit, FileSystem, Layer, Option, Schema } from "effect";
 import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
 import { observePathEvidence } from "../src/library/folder-evidence.js";
-import { InstalledSkills } from "../src/library/installed-skills.js";
 import { reviewInstalledSkillChanges } from "../src/library/installed-skill-review.js";
 import { LibraryState } from "../src/library/library-state.js";
 import { Library } from "../src/library/library.js";
-import { planIntent } from "../src/library/plan-changes.js";
-import { routedInstalledSkills } from "../src/library/routing/recorded.js";
 import {
   OperationStatus,
   type FolderEvidence,
@@ -21,7 +16,7 @@ import {
 } from "../src/library/store/state-schema.js";
 import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
 import { skitLayer } from "../src/platform/layer.js";
-import { inLibrary, inspectLibrary, libraryLayer, saveLibrary } from "./helpers/library-store.js";
+import { inspectLibrary, libraryLayer, saveLibrary } from "./helpers/library-store.js";
 
 const machineId = migratedMachineId("019950c0-4c00-7000-8000-000000000001", "setup-manage-test");
 const skill = "---\nname: review\n---\nReview.\n";
@@ -369,20 +364,15 @@ it.effect("a re-run stops when the copy to manage changed after the record", () 
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-/** What updating every copy would do now, routed as `routing` records. */
-const reviewUpdate = (home: string, routing: StepRouting) =>
-  inLibrary(home)(
-    Effect.gen(function* () {
-      const inspected = yield* inspectLibrary(home);
-      if (!inspected.present) return yield* Effect.die("no Library");
-      const files = yield* routedInstalledSkills(routing);
-      return reviewInstalledSkillChanges(
-        yield* planIntent({ _tag: "Update" }, { home, base: snapshotOf(inspected) }).pipe(
-          Effect.provideService(InstalledSkills.Service, files),
-        ),
-      );
-    }),
-  );
+/** Review the public owner's update against the installed routes it recorded. */
+const reviewUpdate = (home: string) =>
+  Effect.gen(function* () {
+    const layer = Library.layer({ home, routing: { _tag: "Recorded" } });
+    const owner = Context.get(yield* Layer.build(layer), Library.Service);
+    return reviewInstalledSkillChanges(
+      yield* owner.plan({ _tag: "Update" }, { base: yield* owner.read }),
+    );
+  });
 
 /** The managed fixture, its source then edited and imported again: the copy has an update. */
 const updateFixture = Effect.gen(function* () {
@@ -404,7 +394,7 @@ const updateFixture = Effect.gen(function* () {
       lockFileEntries: [],
     }),
   );
-  const changes = yield* reviewUpdate(home, routing);
+  const changes = yield* reviewUpdate(home);
   assert.deepStrictEqual(
     changes.map(({ path, status }) => ({ path, status })),
     [{ path: copy, status: "incoming-update" }],
@@ -455,7 +445,7 @@ it.effect("updates the reviewed copies, routed as recorded", () =>
 // record of it, the step's Done mark, then Done.
 it.effect("a crash after the update was saved is finished by a re-run that accepts it", () =>
   Effect.gen(function* () {
-    const { fs, home, copy, update, routing } = yield* updateFixture;
+    const { fs, home, copy, update } = yield* updateFixture;
     const crashed = yield* Effect.exit(
       withLibrary(
         home,
@@ -474,7 +464,7 @@ it.effect("a crash after the update was saved is finished by a re-run that accep
 
     assert.deepStrictEqual(startup, { finished: [operation.operationId], stopped: [] });
     assert.deepStrictEqual(
-      (yield* reviewUpdate(home, routing)).map(({ path, status }) => ({ path, status })),
+      (yield* reviewUpdate(home)).map(({ path, status }) => ({ path, status })),
       [{ path: copy, status: "unchanged" }],
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -547,7 +537,7 @@ it.effect("a re-run imports a chosen local edit once", () =>
   Effect.gen(function* () {
     const { fs, home, copy, routing } = yield* updateFixture;
     yield* fs.writeFileString(join(copy, "SKILL.md"), `${skill}The user's own line.\n`);
-    const changes = yield* reviewUpdate(home, routing);
+    const changes = yield* reviewUpdate(home);
     const [competing] = changes;
     if (competing?.status !== "competing") return assert.fail("the copy is not competing");
     const update: SetupStep = {
@@ -651,7 +641,16 @@ it.effect(
   "an ordinary enable that crashed before writing its marker is finished by the next change",
   () =>
     Effect.gen(function* () {
-      const { fs, home, source, copy, routing } = yield* fixture;
+      const { fs, home, source, copy } = yield* fixture;
+      const configured = Library.layer({
+        home,
+        routing: {
+          _tag: "Configured",
+          home: join(home, "test-device"),
+          configHome: join(home, "test-device", ".config"),
+          overrides: { codex: [join(copy, "..")] },
+        },
+      });
       const currentHash = yield* deterministicTreeHash(source);
       const imported = yield* withLibrary(home, (library) =>
         library.import.collection({
@@ -667,35 +666,30 @@ it.effect(
       const change = (
         fileSystem: Layer.Layer<FileSystem.FileSystem, never, FileSystem.FileSystem>,
       ) =>
-        inLibrary(home)(
-          Effect.gen(function* () {
-            const files = yield* routedInstalledSkills(routing);
-            const library = yield* makeLibrary(home).pipe(
-              Effect.provideService(InstalledSkills.Service, files),
-            );
-            const read = yield* library.read;
-            if (read._tag !== "Present") return yield* Effect.die("no Library");
-            return yield* library.apply({
-              _tag: "Apply",
-              plan: yield* library.plan(
-                {
-                  _tag: "Enabled",
-                  changes: [
-                    {
-                      _tag: "Enable",
-                      subject: { _tag: "Collection", id: imported.collection.collection_id },
-                      where: [{ kind: "global" }],
-                    },
-                  ],
-                },
-                {
-                  base: read,
-                  approvals: [{ _tag: "Manage", manage: { path: copy, currentHash } }],
-                },
-              ),
-            });
-          }),
-        ).pipe(Effect.provide(fileSystem));
+        Effect.gen(function* () {
+          const library = Context.get(yield* Layer.build(configured), Library.Service);
+          const read = yield* library.read;
+          if (read._tag !== "Present") return yield* Effect.die("no Library");
+          return yield* library.apply({
+            _tag: "Apply",
+            plan: yield* library.plan(
+              {
+                _tag: "Enabled",
+                changes: [
+                  {
+                    _tag: "Enable",
+                    subject: { _tag: "Collection", id: imported.collection.collection_id },
+                    where: [{ kind: "global" }],
+                  },
+                ],
+              },
+              {
+                base: read,
+                approvals: [{ _tag: "Manage", manage: { path: copy, currentHash } }],
+              },
+            ),
+          });
+        }).pipe(Effect.provide(fileSystem));
       const beforeMarker = Layer.effect(
         FileSystem.FileSystem,
         Effect.map(FileSystem.FileSystem, (fs) => ({
@@ -717,20 +711,15 @@ it.effect(
       assert.isFalse(yield* fs.exists(join(copy, ".skit-ownership.json")));
 
       // The next change that plans the copy, here updating every copy, writes the marker.
-      yield* inLibrary(home)(
-        Effect.gen(function* () {
-          const files = yield* routedInstalledSkills(routing);
-          const library = yield* makeLibrary(home).pipe(
-            Effect.provideService(InstalledSkills.Service, files),
-          );
-          const read = yield* library.read;
-          if (read._tag !== "Present") return yield* Effect.die("no Library");
-          yield* library.apply({
-            _tag: "Apply",
-            plan: yield* library.plan({ _tag: "Update" }, { base: read }),
-          });
-        }),
-      );
+      yield* Effect.gen(function* () {
+        const library = Context.get(yield* Layer.build(configured), Library.Service);
+        const read = yield* library.read;
+        if (read._tag !== "Present") return yield* Effect.die("no Library");
+        yield* library.apply({
+          _tag: "Apply",
+          plan: yield* library.plan({ _tag: "Update" }, { base: read }),
+        });
+      });
 
       yield* assertManaged(home, copy);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -844,7 +833,7 @@ it.effect(
 for (const boundary of ["backup", "successor"] as const)
   it.effect(`a recorded setup Update resumes after the ${boundary} rename`, () =>
     Effect.gen(function* () {
-      const { fs, home, copy, update, routing } = yield* updateFixture;
+      const { fs, home, copy, update } = yield* updateFixture;
       const crashed = yield* Effect.exit(
         withLibrary(
           home,
@@ -883,7 +872,7 @@ for (const boundary of ["backup", "successor"] as const)
       );
       assert.include(yield* fs.readFileString(join(copy, "SKILL.md")), "Now with more.");
       assert.deepStrictEqual(
-        (yield* reviewUpdate(home, routing)).map((row) => row.status),
+        (yield* reviewUpdate(home)).map((row) => row.status),
         ["unchanged"],
       );
     }).pipe(Effect.provide(skitLayer), Effect.scoped),

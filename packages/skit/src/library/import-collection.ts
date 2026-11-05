@@ -36,7 +36,8 @@ import {
   loadLibrary,
   inspectLocalLibraryState,
 } from "./store/library-store.js";
-import { originalTreeHash, writeCollectionVersion } from "./collection-version.js";
+import { originalTreeHash } from "./collection-version.js";
+import { writeCollectionVersion } from "./internal/content/collection-version.js";
 import { installedSkillHash } from "./installed-skill-hash.js";
 import {
   collectionLabelFromSource,

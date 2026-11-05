@@ -1,3 +1,5 @@
+import type { Library } from "../src/library/library.js";
+import { openLibrary } from "./helpers/library-store.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
@@ -5,7 +7,7 @@ import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
 import { installEnabledSkills, removeCollection } from "./helpers/library.js";
 import type { Enabled } from "../src/library/library-contracts.js";
-import { importCollection } from "../src/library/import-collection.js";
+
 import { LibraryWriter, loadLibrary, writeLibrary } from "../src/library/store/library-store.js";
 import { skitLayer } from "../src/platform/layer.js";
 
@@ -26,7 +28,9 @@ const upstream = Effect.gen(function* () {
   const refresh = (names: readonly string[]) =>
     Effect.gen(function* () {
       refreshes++;
-      const skills = [];
+      const skills: Array<
+        Parameters<Library.Interface["import"]["collection"]>[0]["skills"][number]
+      > = [];
       for (const name of names) {
         const directory = join(checkout, name);
         yield* fs.makeDirectory(directory, { recursive: true });
@@ -39,9 +43,9 @@ const upstream = Effect.gen(function* () {
         });
       }
       return yield* Effect.scoped(
-        writeLibrary(
-          home,
-          importCollection({
+        Effect.gen(function* () {
+          const owner = yield* openLibrary(home);
+          return yield* owner.import.collection({
             machineId,
             source: { type: "github", owner: "fixture", repository: "skills" },
             input: "https://github.com/fixture/skills",
@@ -49,8 +53,8 @@ const upstream = Effect.gen(function* () {
             importedAt: `2026-09-16T0${refreshes}:00:00.000Z`,
             skills,
             lockFileEntries: [],
-          }),
-        ),
+          });
+        }),
       );
     });
   const load = loadLibrary(home);
@@ -64,14 +68,12 @@ const upstream = Effect.gen(function* () {
         ),
       );
     });
-  const project = writeLibrary(
+  const project = installEnabledSkills({
     home,
-    installEnabledSkills({
-      target: "agents",
-      root,
-      variantsPath: join(home, "variants"),
-    }),
-  );
+    target: "agents",
+    root,
+    variantsPath: join(home, "variants"),
+  });
   const installed = Effect.gen(function* () {
     return (yield* fs.readDirectory(root)).sort();
   });
@@ -123,9 +125,7 @@ it.effect("refuses to remove a Collection that gained a member after removal was
 
     yield* refresh(["alpha", "beta"]);
     yield* project;
-    const error = yield* writeLibrary(home, removeCollection(planned, collectionId)).pipe(
-      Effect.flip,
-    );
+    const error = yield* removeCollection(home, planned, collectionId).pipe(Effect.flip);
 
     assert.strictEqual(error._tag, "Library.StalePlan");
     const state = yield* load;

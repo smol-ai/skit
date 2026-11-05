@@ -194,6 +194,15 @@ describe("skit/library-private-api", () => {
     ).toHaveLength(1);
   });
 
+  test.each([
+    `import { make as buildOwner } from "../../src/library/internal/runtime.js";`,
+    `import * as ownerRuntime from "../../src/library/internal/runtime.js";`,
+  ])("a test helper cannot bypass Library.layer: %s", async (source) => {
+    expect(
+      await reported("library-private-api", "packages/skit/test/helpers/library.ts", source),
+    ).toHaveLength(1);
+  });
+
   test("raw make stays private; the owner namespace and public operation vocabulary remain legal", async () => {
     expect(
       await reported(

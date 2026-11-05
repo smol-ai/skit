@@ -1,12 +1,13 @@
+import { openLibrary, libraryLayer } from "./helpers/library-store.js";
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem } from "effect";
 import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { Library } from "../src/library/library.js";
-import { libraryLayer } from "./helpers/library-store.js";
+
 import { classifyLibraryAuditEvent } from "../src/library/audit/state-diff.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
-import { importCollection } from "../src/library/import-collection.js";
+
 import { LibraryWriter, loadLibrary, writeLibrary } from "../src/library/store/library-store.js";
 import { withLock as withHomeLock } from "../src/platform/home-lock.js";
 import type { LibraryState } from "../src/library/library-state.js";
@@ -52,20 +53,23 @@ const library = Effect.gen(function* () {
   const source = join(workspace, "source");
   yield* fs.makeDirectory(source, { recursive: true });
   yield* fs.writeFileString(join(source, "SKILL.md"), "raw Skill bytes\n");
-  const importSource = importCollection({
-    machineId,
-    source: { type: "local", path: source },
-    input: source,
-    importedAt: "2026-09-17T00:00:00.000Z",
-    skills: [
-      {
-        name: "review",
-        sourcePath: source,
-        relativePath: ".",
-        currentHash: yield* deterministicTreeHash(source),
-      },
-    ],
-    lockFileEntries: [],
+  const importSource = Effect.gen(function* () {
+    const owner = yield* openLibrary(home);
+    return yield* owner.import.collection({
+      machineId,
+      source: { type: "local", path: source },
+      input: source,
+      importedAt: "2026-09-17T00:00:00.000Z",
+      skills: [
+        {
+          name: "review",
+          sourcePath: source,
+          relativePath: ".",
+          currentHash: yield* deterministicTreeHash(source),
+        },
+      ],
+      lockFileEntries: [],
+    });
   });
   const history = Effect.flatMap(Library.Service, (owner) =>
     Effect.map(owner.history, (history) => history.events),

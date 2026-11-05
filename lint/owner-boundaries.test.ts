@@ -64,6 +64,37 @@ describe("skit/owner-boundaries", () => {
     }
   });
 
+  test("private unit tests use the real module; public barrels never grant test authority", async () => {
+    expect(
+      await reported(
+        `import { prepareRecoveryMoves } from "../src/library/internal/recovery/moves.js";`,
+        "owner-boundaries",
+        "packages/skit/test/recovery-moves.test.ts",
+      ),
+    ).toEqual([]);
+    expect(
+      await reported(
+        `import { writeCollectionVersion } from "../src/library/internal/content/collection-version.js";`,
+        "owner-boundaries",
+        "packages/skit/test/local-retention.test.ts",
+      ),
+    ).toEqual([]);
+    expect(
+      await reported(
+        `import { writeCollectionVersion } from "../src/library/collection-version.js";`,
+        "owner-boundaries",
+        "packages/skit/test/local-retention.test.ts",
+      ),
+    ).toEqual(["writeCollectionVersion"]);
+    expect(
+      await reported(
+        `import { prepareRecoveryMoves } from "@smolai/skit-core";`,
+        "owner-boundaries",
+        "packages/skit/test/recovery-moves.test.ts",
+      ),
+    ).toEqual(["prepareRecoveryMoves"]);
+  });
+
   test("a handler cannot take the Library's home lock", async () => {
     expect(await reported(`import { withHomeLock } from "@smolai/skit-core";`)).toEqual([
       "withHomeLock",

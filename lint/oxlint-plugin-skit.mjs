@@ -535,7 +535,17 @@ const effectRules = {
           });
           return;
         }
-        const reachable = owners.filter((owner) => carries(owner, source));
+        // Package-local unit tests may name helpers only through their actual private module.
+        // Public barrels and compatibility paths carry no test authority.
+        const reachable = owners.filter(
+          (owner) =>
+            carries(owner, source) &&
+            !(
+              target !== undefined &&
+              file.startsWith(owner.testOwner ?? "\0") &&
+              owner.privateModules?.some((prefix) => target.startsWith(prefix))
+            ),
+        );
         if (reachable.length === 0) return;
         for (const specifier of node.specifiers ?? []) {
           const imported = specifier.imported ?? specifier.local;

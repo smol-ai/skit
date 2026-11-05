@@ -1,17 +1,17 @@
+import { openLibrary, inspectLibrary } from "./helpers/library-store.js";
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
-import { join } from "node:path";
+import { Effect, FileSystem, Option } from "effect";
+import { dirname, join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
-import { importCollection } from "../src/library/import-collection.js";
+
 import { libraryManifestFromLocalState } from "../src/library/library-state.js";
 import { planCollectionVersions } from "../src/library/collection-version-plan.js";
-import { prepareRestore } from "../src/library/internal/content/restore.js";
+
 import { collectionVersionPath } from "../src/library/collection-version.js";
 import { readSnapshotArchive } from "../src/library/snapshot-archive.js";
-import { withLock as withHomeLock } from "../src/platform/home-lock.js";
+import { Library } from "../src/library/library.js";
 import { skitLayer } from "../src/platform/layer.js";
-import { inLibrary, inspectLibrary, saveLibrary } from "./helpers/library-store.js";
 
 const machineId = migratedMachineId("019950c0-4c00-7000-8000-000000000001", "portable-local-test");
 
@@ -27,9 +27,9 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
     yield* fs.writeFileString(join(installed, "notes.txt"), "retained too\n");
 
     const imported = yield* Effect.scoped(
-      withHomeLock(
-        firstHome,
-        importCollection({
+      Effect.gen(function* () {
+        const owner = yield* openLibrary(firstHome);
+        return yield* owner.import.collection({
           machineId,
           source: { type: "local", path: installed },
           input: installed,
@@ -43,8 +43,8 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
             },
           ],
           lockFileEntries: [],
-        }).pipe(inLibrary(firstHome)),
-      ),
+        });
+      }),
     );
     const saved = yield* inspectLibrary(firstHome);
     assert.strictEqual(saved.present, true);
@@ -69,8 +69,32 @@ it.effect("retains exact local bytes and restores the portable Library on anothe
       originalsPath,
       localArchives: [archive],
     });
-    const restored = yield* Effect.scoped(prepareRestore(manifest, plan, { originalsPath }));
-    yield* saveLibrary(secondHome, restored.state);
+    const restored = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const owner = yield* openLibrary(dirname(originalsPath));
+        return yield* owner.content.stage(manifest, {
+          plan: plan,
+          registry: { origin: "https://registry.example", token: Option.none() },
+        });
+      }),
+    );
+    assert.deepStrictEqual(restored.missing, []);
+    const secondOwner = yield* openLibrary(secondHome);
+    const base = yield* secondOwner.read;
+    const review = yield* secondOwner.plan(
+      {
+        _tag: "Sync",
+        deviceSelection: Option.none(),
+        pendingOrigin: Option.none(),
+        acceptedBase: Option.none(),
+        remote: Option.none(),
+        staged: restored,
+      },
+      { base },
+    );
+    if (Library.isRemoteSyncPlan(review)) return yield* Effect.die("Expected a local Sync");
+    const outcome = yield* secondOwner.apply({ _tag: "Apply", plan: review });
+    assert.deepStrictEqual(outcome.result.enablementIssues, []);
     const second = yield* inspectLibrary(secondHome);
     assert.strictEqual(second.present, true);
     if (!second.present) return;
@@ -97,9 +121,9 @@ it.effect("reuses an unchanged Skill Version and keeps every import", () =>
 
     const importSource = Effect.fn("Test.retainPair")(function* (importedAt: string) {
       return yield* Effect.scoped(
-        withHomeLock(
-          home,
-          importCollection({
+        Effect.gen(function* () {
+          const owner = yield* openLibrary(home);
+          return yield* owner.import.collection({
             machineId,
             source: { type: "github", owner: "fixture", repository: "skills" },
             input: "https://github.com/fixture/skills",
@@ -119,8 +143,8 @@ it.effect("reuses an unchanged Skill Version and keeps every import", () =>
               },
             ],
             lockFileEntries: [],
-          }).pipe(inLibrary(home)),
-        ),
+          });
+        }),
       );
     });
     yield* importSource("2026-09-16T01:00:00.000Z");

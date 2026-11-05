@@ -387,8 +387,19 @@ export const libraryRules = {
     },
     create(context) {
       const file = relative(root, context.filename);
-      if (!file.startsWith("packages/") || !file.includes("/src/")) return {};
+      if (!file.startsWith("packages/")) return {};
       const inside = file.startsWith(library);
+      const rawConstructor = (node) => {
+        if (
+          !inside &&
+          targetOf(context.filename, node.source?.value) === `${library}internal/runtime`
+        ) {
+          context.report({ node, messageId: "constructor" });
+          return true;
+        }
+        return false;
+      };
+      if (!file.includes("/src/")) return declarations(rawConstructor);
       const publicEntry =
         file === `${library}library.ts` ||
         file === `${library}index.ts` ||
@@ -410,6 +421,7 @@ export const libraryRules = {
       const installedInstance = (node) =>
         installedInstances.has(node?.name) || installedService(node);
       const check = (node, exporting) => {
+        if (rawConstructor(node)) return;
         const target = targetOf(context.filename, node.source?.value);
         if (!target?.startsWith("packages/skit/src/")) return;
         if (node.importKind === "type" || node.exportKind === "type") return;

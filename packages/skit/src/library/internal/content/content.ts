@@ -36,6 +36,7 @@ import {
   completeRestoreArchives,
   retainRestoreArchives,
   restoredState,
+  restorePlanProblem,
   RestoreInvalid,
   type SourceRestoreInvalid,
 } from "./restore.js";
@@ -150,6 +151,8 @@ export const stageContent = Effect.fn("Library.content.stage")(function* <E = ne
           localArchives: structuredClone(source.localArchives),
         })
       : structuredClone(source.plan);
+  const invalid = restorePlanProblem(manifest, plan);
+  if (invalid !== undefined) return yield* new RestoreInvalid({ detail: invalid });
   const unavailable = new Set<Hash>(source.download === undefined ? plan.download : []);
   for (const id of plan.reacquire) {
     if (

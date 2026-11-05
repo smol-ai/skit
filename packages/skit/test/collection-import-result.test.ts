@@ -1,10 +1,11 @@
+import { openLibrary, inLibrary } from "./helpers/library-store.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { currentCollectionSkills, currentSkillVersion } from "../src/library/library-contracts.js";
 import { makeMachineId } from "../src/library/entity-ids.js";
-import { importAuthoredCollection, importCollection } from "../src/library/import-collection.js";
+
 import { originalTreeHash, collectionVersionPath } from "../src/library/collection-version.js";
 import {
   libraryOriginalsPath,
@@ -12,7 +13,6 @@ import {
   loadLibrary,
 } from "../src/library/store/library-store.js";
 import { skitLayer } from "../src/platform/layer.js";
-import { inLibrary } from "./helpers/library-store.js";
 
 for (const kind of ["observed", "authored"] as const) {
   it.effect(`${kind} import returns a durable result on creation, no-op, and content reuse`, () =>
@@ -44,10 +44,14 @@ for (const kind of ["observed", "authored"] as const) {
           importedAt,
         };
         return yield* Effect.scoped(
-          inLibrary(home)(
-            kind === "authored"
-              ? importAuthoredCollection({ ...request, root: path })
-              : importCollection({
+          kind === "authored"
+            ? Effect.gen(function* () {
+                const owner = yield* openLibrary(home);
+                return yield* owner.import.authored({ ...request, root: path });
+              })
+            : Effect.gen(function* () {
+                const owner = yield* openLibrary(home);
+                return yield* owner.import.collection({
                   ...request,
                   skills: [
                     {
@@ -58,8 +62,8 @@ for (const kind of ["observed", "authored"] as const) {
                     },
                   ],
                   lockFileEntries: [],
-                }),
-          ),
+                });
+              }),
         );
       });
 
@@ -147,10 +151,14 @@ for (const kind of ["observed", "authored"] as const) {
           importedAt: new Date(Date.UTC(2026, 9, 22, 0, tick++)).toISOString(),
         };
         return yield* Effect.scoped(
-          inLibrary(home)(
-            kind === "authored"
-              ? importAuthoredCollection({ ...request, root: source })
-              : importCollection({
+          kind === "authored"
+            ? Effect.gen(function* () {
+                const owner = yield* openLibrary(home);
+                return yield* owner.import.authored({ ...request, root: source });
+              })
+            : Effect.gen(function* () {
+                const owner = yield* openLibrary(home);
+                return yield* owner.import.collection({
                   ...request,
                   skills: [
                     {
@@ -161,8 +169,8 @@ for (const kind of ["observed", "authored"] as const) {
                     },
                   ],
                   lockFileEntries: [],
-                }),
-          ),
+                });
+              }),
         );
       });
       yield* write("first");
@@ -254,10 +262,14 @@ for (const kind of ["observed", "authored"] as const) {
             importedAt: "2026-10-22T00:00:00.000Z",
           };
           return yield* Effect.scoped(
-            inLibrary(home)(
-              kind === "authored"
-                ? importAuthoredCollection({ ...request, root: source })
-                : importCollection({
+            kind === "authored"
+              ? Effect.gen(function* () {
+                  const owner = yield* openLibrary(home);
+                  return yield* owner.import.authored({ ...request, root: source });
+                })
+              : Effect.gen(function* () {
+                  const owner = yield* openLibrary(home);
+                  return yield* owner.import.collection({
                     ...request,
                     lockFileEntries: [],
                     skills: yield* Effect.forEach(names, (name) =>
@@ -271,8 +283,8 @@ for (const kind of ["observed", "authored"] as const) {
                         };
                       }),
                     ),
-                  }),
-            ),
+                  });
+                }),
           );
         });
         yield* write("review", "original review");

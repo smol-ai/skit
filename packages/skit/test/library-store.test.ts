@@ -1,3 +1,4 @@
+import { openLibrary } from "./helpers/library-store.js";
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem, Option, Predicate, Result, Schema } from "effect";
 import { join } from "node:path";
@@ -15,7 +16,7 @@ import { OperationStatus, type StepError } from "../src/library/store/state-sche
 import { InvalidLibraryState, LibraryBusy, LibraryChanged } from "../src/failures.js";
 import { TreeError } from "../src/shared/tree-error.js";
 import { badArgument, systemError } from "effect/PlatformError";
-import { importCollection } from "../src/library/import-collection.js";
+
 import {
   libraryOriginalsPath,
   LibraryWriter,
@@ -36,9 +37,9 @@ const library = Effect.gen(function* () {
   yield* fs.makeDirectory(source, { recursive: true });
   yield* fs.writeFileString(join(source, "SKILL.md"), "raw Skill bytes\n");
   yield* Effect.scoped(
-    writeLibrary(
-      home,
-      importCollection({
+    Effect.gen(function* () {
+      const owner = yield* openLibrary(home);
+      return yield* owner.import.collection({
         machineId,
         source: { type: "local", path: source },
         input: source,
@@ -52,8 +53,8 @@ const library = Effect.gen(function* () {
           },
         ],
         lockFileEntries: [],
-      }),
-    ),
+      });
+    }),
   );
   /** Save `next` over `base` in a write of its own. */
   const save = (next: LibraryState, base: LibraryState) =>

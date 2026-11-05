@@ -1,10 +1,10 @@
-import { prepareRestore } from "../src/library/internal/content/restore.js";
-import { importCollection } from "../src/library/import-collection.js";
-import { withLock as withHomeLock } from "../src/platform/home-lock.js";
+import { SourceNotFound } from "../src/failures.js";
+import { openLibrary, inspectLibrary } from "./helpers/library-store.js";
+
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Option } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   readSnapshotArchive,
   deterministicTreeHash,
@@ -18,7 +18,6 @@ import {
   type SnapshotArchive,
 } from "../src/index.js";
 import { skitLayer } from "../src/platform/layer.js";
-import { inLibrary, inspectLibrary } from "./helpers/library-store.js";
 
 const origin = "https://registry.example";
 const fixture = Effect.gen(function* () {
@@ -37,9 +36,9 @@ const fixture = Effect.gen(function* () {
   yield* fs.writeFileString(join(privatePath, "SKILL.md"), "Private notes\n");
   const machineId = makeMachineId();
   const source = yield* Effect.scoped(
-    withHomeLock(
-      home,
-      importCollection({
+    Effect.gen(function* () {
+      const owner = yield* openLibrary(home);
+      return yield* owner.import.collection({
         machineId,
         source: { type: "registry", namespace: "tim", slug: "tools", version: "1.2.3" },
         // Reconstruction must use the identity and recorded release, never this input.
@@ -55,13 +54,13 @@ const fixture = Effect.gen(function* () {
           },
         ],
         lockFileEntries: [],
-      }).pipe(inLibrary(home)),
-    ),
+      });
+    }),
   );
   const privateCopy = yield* Effect.scoped(
-    withHomeLock(
-      home,
-      importCollection({
+    Effect.gen(function* () {
+      const owner = yield* openLibrary(home);
+      return yield* owner.import.collection({
         machineId,
         source: { type: "local", path: privatePath },
         input: privatePath,
@@ -75,8 +74,8 @@ const fixture = Effect.gen(function* () {
           },
         ],
         lockFileEntries: [],
-      }).pipe(inLibrary(home)),
-    ),
+      });
+    }),
   );
   const saved = yield* inspectLibrary(home);
   assert(saved.present);
@@ -118,20 +117,22 @@ const fixture = Effect.gen(function* () {
           originalsPath,
           localArchives: available,
         });
-        return yield* prepareRestore(manifest, plan, {
-          originalsPath,
-          registryBaseUrl: origin,
-          registryToken: "restore-token",
-          progress: {
-            around: (phase, operation) =>
-              Effect.sync(() => {
-                phases.push(phase);
-              }).pipe(Effect.andThen(operation)),
-            tick: (tick) =>
-              Effect.sync(() => {
-                ticks.push(tick);
-              }),
-          },
+        return yield* Effect.gen(function* () {
+          const owner = yield* openLibrary(dirname(originalsPath));
+          return yield* owner.content.stage(manifest, {
+            plan: plan,
+            registry: { origin: origin, token: Option.some("restore-token") },
+            progress: {
+              around: (phase, operation) =>
+                Effect.sync(() => {
+                  phases.push(phase);
+                }).pipe(Effect.andThen(operation)),
+              tick: (tick) =>
+                Effect.sync(() => {
+                  ticks.push(tick);
+                }),
+            },
+          });
         });
       }).pipe(Effect.provideService(HttpClient.HttpClient, client)),
     );
@@ -217,18 +218,14 @@ it.effect("available source archives require no source access", () =>
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("a missing private snapshot fails before retaining any content", () =>
+it.effect("a missing private snapshot is reported before transport or retention", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    const error = yield* f.restore([]).pipe(Effect.flip);
-    assert.strictEqual(error._tag, "Library.RestoreInvalid");
-    if (error._tag === "Library.RestoreInvalid")
-      assert.include(
-        error.detail,
-        `snapshot-backed retained copy ${f.privateCopy.snapshotDigest} not downloaded`,
-      );
-    // Source reconstruction cannot stand in for the missing private archive.
-    assert(f.requests.every((request) => request.url.endsWith("/releases/1.2.3/download")));
+    const staged = yield* f.restore([]);
+    assert.deepStrictEqual(staged.missing, [f.privateCopy.collectionVersionId]);
+    assert.deepStrictEqual(staged.retained, []);
+    assert.deepStrictEqual(f.requests, []);
+    assert.deepStrictEqual(f.phases, []);
     assert.strictEqual(yield* f.fs.exists(f.originalsPath), false);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -252,12 +249,14 @@ it.effect("an unavailable pinned source fails before retaining available private
     const f = yield* fixture;
     f.unavailable();
     const error = yield* f.restore().pipe(Effect.flip);
-    assert.strictEqual(error._tag, "SourceNotFound");
+    assert.strictEqual(error._tag, "Library.SyncSourceRestoreInvalid");
+    if (error._tag === "Library.SyncSourceRestoreInvalid")
+      assert.instanceOf(error.cause, SourceNotFound);
     assert.strictEqual(yield* f.fs.exists(f.originalsPath), false);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("an unpinned acquisition cannot reconstruct a missing source copy", () =>
+it.effect("an unpinned acquisition requires snapshot bytes instead of source reconstruction", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
     const manifest = {
@@ -266,20 +265,16 @@ it.effect("an unpinned acquisition cannot reconstruct a missing source copy", ()
         const { revision: _revision, ...unpinned } = sourceImport;
         return unpinned;
       }),
+      snapshot_digests: f.manifest.collection_versions.map((copy) => copy.hash),
     };
-    const plan = yield* planCollectionVersions(manifest, {
-      originalsPath: f.originalsPath,
+    const owner = yield* openLibrary(dirname(f.originalsPath));
+    const staged = yield* owner.content.stage(manifest, {
       localArchives: [f.privateArchive],
+      registry: { origin, token: Option.none() },
     });
-    const error = yield* Effect.scoped(
-      prepareRestore(manifest, plan, {
-        originalsPath: f.originalsPath,
-        registryBaseUrl: origin,
-      }),
-    ).pipe(Effect.flip);
-    assert.strictEqual(error._tag, "Library.SyncSourceRestoreInvalid");
-    if (error._tag === "Library.SyncSourceRestoreInvalid")
-      assert.strictEqual(error.detail, "manifest has no exact source-restoration acquisition");
+    assert.deepStrictEqual(staged.missing, [f.source.collectionVersionId]);
+    assert.deepStrictEqual(staged.retained, []);
+    assert.deepStrictEqual(f.requests, []);
     assert.strictEqual(yield* f.fs.exists(f.originalsPath), false);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -297,15 +292,19 @@ it.effect("restoring existing copies avoids temporary trees and still rejects da
       originalsPath: f.originalsPath,
       localArchives: archives,
     });
-    const restore = prepareRestore(f.manifest, plan, {
-      originalsPath: f.originalsPath,
-      progress: {
-        around: (_phase, operation) => operation,
-        tick: (tick) =>
-          Effect.sync(() => {
-            ticks.push(tick);
-          }),
-      },
+    const restore = Effect.gen(function* () {
+      const owner = yield* openLibrary(dirname(f.originalsPath));
+      return yield* owner.content.stage(f.manifest, {
+        plan: plan,
+        registry: { origin: "https://registry.example", token: Option.none() },
+        progress: {
+          around: (_phase, operation) => operation,
+          tick: (tick) =>
+            Effect.sync(() => {
+              ticks.push(tick);
+            }),
+        },
+      });
     }).pipe(
       Effect.provideService(FileSystem.FileSystem, {
         ...f.fs,
@@ -394,9 +393,13 @@ it.effect(
       );
       assert.deepStrictEqual(plan.download, []);
       assert.deepStrictEqual(plan.reacquire, []);
-      const error = yield* prepareRestore(f.manifest, plan, {
-        originalsPath: f.originalsPath,
-        download: () => Effect.die("corrupt reusable content must fail before transport"),
+      const error = yield* Effect.gen(function* () {
+        const owner = yield* openLibrary(dirname(f.originalsPath));
+        return yield* owner.content.stage(f.manifest, {
+          plan: plan,
+          registry: { origin: "https://registry.example", token: Option.none() },
+          download: () => Effect.die("corrupt reusable content must fail before transport"),
+        });
       }).pipe(Effect.flip);
       assert.strictEqual(error._tag, "ContentAddressCollision");
       assert.deepStrictEqual(f.requests, []);
@@ -414,18 +417,23 @@ it.effect("a copy disappearing after planning fails without an unplanned downloa
     yield* f.fs.remove(collectionVersionPath(f.originalsPath, f.privateCopy.snapshotDigest), {
       recursive: true,
     });
-    const error = yield* prepareRestore(f.manifest, plan, {
-      originalsPath: f.originalsPath,
-      download: () => Effect.die("no unplanned download"),
+    const error = yield* Effect.gen(function* () {
+      const owner = yield* openLibrary(dirname(f.originalsPath));
+      return yield* owner.content.stage(f.manifest, {
+        plan: plan,
+        registry: { origin: "https://registry.example", token: Option.none() },
+        download: () => Effect.die("no unplanned download"),
+      });
     }).pipe(Effect.flip);
     assert.strictEqual(error._tag, "Library.RestoreInvalid");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("verified whole-tree bytes do not bypass member digest verification", () =>
+it.effect("public staging refuses inconsistent member hashes before content reuse", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
     yield* f.restore();
+    f.requests.length = 0;
     const manifest = {
       ...f.manifest,
       collection_versions: f.manifest.collection_versions.map((copy) => ({
@@ -440,12 +448,17 @@ it.effect("verified whole-tree bytes do not bypass member digest verification", 
       originalsPath: f.originalsPath,
       localArchives: [],
     });
-    const error = yield* prepareRestore(manifest, plan, {
-      originalsPath: f.originalsPath,
+    const error = yield* Effect.gen(function* () {
+      const owner = yield* openLibrary(dirname(f.originalsPath));
+      return yield* owner.content.stage(manifest, {
+        plan: plan,
+        registry: { origin: "https://registry.example", token: Option.none() },
+      });
     }).pipe(Effect.flip);
     assert.strictEqual(error._tag, "Library.RestoreInvalid");
     if (error._tag === "Library.RestoreInvalid")
-      assert.include(error.detail, "source bytes disagree");
+      assert.strictEqual(error.detail, "invalid target manifest");
+    assert.deepStrictEqual(f.requests, []);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -459,13 +472,13 @@ it.effect("an incomplete plan fails before retaining any available archive", () 
       originalsPath: f.originalsPath,
       localArchives: [sourceArchive],
     });
-    const error = yield* prepareRestore(
-      f.manifest,
-      { ...plan, download: [] },
-      {
-        originalsPath: f.originalsPath,
-      },
-    ).pipe(Effect.flip);
+    const error = yield* Effect.gen(function* () {
+      const owner = yield* openLibrary(dirname(f.originalsPath));
+      return yield* owner.content.stage(f.manifest, {
+        plan: { ...plan, download: [] },
+        registry: { origin: "https://registry.example", token: Option.none() },
+      });
+    }).pipe(Effect.flip);
     assert.strictEqual(error._tag, "Library.RestoreInvalid");
     assert.strictEqual(yield* f.fs.exists(f.originalsPath), false);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -487,40 +500,55 @@ it.effect(
       );
       assert(privateCopy);
       let downloads = 0;
-      for (const invalid of [
-        { ...plan, download: [] },
-        { ...plan, localArchives: [foreign] },
-        { ...plan, reusable: [foreign.digest] },
-        { ...plan, download: [...plan.download, foreign.digest] },
-        { ...plan, download: [...plan.download, f.source.snapshotDigest] },
-        { ...plan, reacquire: [...plan.reacquire, privateCopy.collection_version_id] },
-      ]) {
-        const error = yield* prepareRestore(f.manifest, invalid, {
-          originalsPath: f.originalsPath,
-          download: () =>
-            Effect.sync(() => {
-              downloads++;
-              return f.privateArchive;
-            }),
-          progress: {
-            around: () => Effect.die("invalid plans must fail before opening a phase"),
-            tick: () => Effect.die("invalid plans must not emit ticks"),
-          },
-        }).pipe(Effect.provideService(HttpClient.HttpClient, f.client), Effect.flip);
-        assert.strictEqual(error._tag, "Library.RestoreInvalid");
-        assert.strictEqual(downloads, 0);
-        assert.deepStrictEqual(f.requests, []);
-        assert.strictEqual(yield* f.fs.exists(f.originalsPath), false);
+      for (const hasDownload of [false, true]) {
+        for (const invalid of [
+          { ...plan, download: [] },
+          { ...plan, localArchives: [foreign] },
+          { ...plan, reusable: [foreign.digest] },
+          { ...plan, download: [...plan.download, foreign.digest] },
+          { ...plan, download: [...plan.download, f.source.snapshotDigest] },
+          { ...plan, reacquire: [...plan.reacquire, privateCopy.collection_version_id] },
+        ]) {
+          const error = yield* Effect.gen(function* () {
+            const owner = yield* openLibrary(dirname(f.originalsPath));
+            return yield* owner.content.stage(f.manifest, {
+              plan: invalid,
+              registry: { origin: "https://registry.example", token: Option.none() },
+              ...(hasDownload
+                ? {
+                    download: () =>
+                      Effect.sync(() => {
+                        downloads++;
+                        return f.privateArchive;
+                      }),
+                  }
+                : {}),
+              progress: {
+                around: () => Effect.die("invalid plans must fail before opening a phase"),
+                tick: () => Effect.die("invalid plans must not emit ticks"),
+              },
+            });
+          }).pipe(Effect.provideService(HttpClient.HttpClient, f.client), Effect.flip);
+          assert.strictEqual(error._tag, "Library.RestoreInvalid");
+          assert.strictEqual(downloads, 0);
+          assert.deepStrictEqual(f.requests, []);
+          assert.strictEqual(yield* f.fs.exists(f.originalsPath), false);
+        }
       }
-      // A complete plan without its required transport also fails before phases/source fetches.
-      const error = yield* prepareRestore(f.manifest, plan, {
-        originalsPath: f.originalsPath,
-        progress: {
-          around: () => Effect.die("missing transport must fail before phases"),
-          tick: () => Effect.void,
-        },
-      }).pipe(Effect.provideService(HttpClient.HttpClient, f.client), Effect.flip);
-      assert.strictEqual(error._tag, "Library.RestoreInvalid");
+      // A complete plan without its transport reports the unavailable copy without starting work.
+      const staged = yield* Effect.gen(function* () {
+        const owner = yield* openLibrary(dirname(f.originalsPath));
+        return yield* owner.content.stage(f.manifest, {
+          plan: plan,
+          registry: { origin: "https://registry.example", token: Option.none() },
+          progress: {
+            around: () => Effect.die("missing transport must fail before phases"),
+            tick: () => Effect.void,
+          },
+        });
+      }).pipe(Effect.provideService(HttpClient.HttpClient, f.client));
+      assert.deepStrictEqual(staged.missing, [f.privateCopy.collectionVersionId]);
+      assert.deepStrictEqual(staged.retained, []);
       assert.deepStrictEqual(f.requests, []);
       assert.strictEqual(yield* f.fs.exists(f.originalsPath), false);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),

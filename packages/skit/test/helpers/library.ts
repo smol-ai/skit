@@ -1,47 +1,63 @@
-import { make as makeLibrary } from "../../src/library/internal/runtime.js";
-import { Effect } from "effect";
+import { Context, Effect, FileSystem, Layer } from "effect";
+import { join, resolve } from "node:path";
 import { Library } from "../../src/library/library.js";
-import { InstalledSkills } from "../../src/library/installed-skills.js";
 import { CollectionRemovalMissing } from "../../src/library/installation/remove.js";
-import { emptyLibraryState } from "../../src/library/library-state.js";
-import { inspectLocalLibraryState, LibraryWriter } from "../../src/library/store/library-store.js";
+import {
+  emptyLibraryState,
+  type LibraryState,
+  type InstalledSkill,
+} from "../../src/library/library-state.js";
 import { snapshotOf } from "../../src/library/snapshot.js";
-import type { LibraryState, InstalledSkill } from "../../src/library/library-state.js";
+
 import type { ManageApproval } from "../../src/installed-skills/files.js";
 import type { OwnershipMarker } from "../../src/contracts.js";
 import type { Hash, InstallDestination, InstallScope } from "../../src/vocabulary.js";
-import { canonicalJson } from "../../src/shared/json.js";
 
-/**
- * A Library owner routed where this device already has copies, or to `add` for its destination
- * and scope; only `active` destinations count when given.
- */
+/** Real public owner construction; fixture options supply device roots, never adapters. */
 const library = (
   home: string,
   state: LibraryState,
   options: {
     readonly active?: readonly InstallDestination[];
-    readonly add?: InstalledSkills.Destination & { readonly scope: InstallScope };
+    readonly add?: {
+      readonly destination: InstallDestination;
+      readonly root: string;
+      readonly scope: InstallScope;
+    };
   } = {},
 ) =>
   Effect.gen(function* () {
-    const recorded = yield* InstalledSkills.recordedRouting(state);
-    const { add, active } = options;
-    const files = yield* InstalledSkills.make({
-      ...recorded,
-      ...(active === undefined ? {} : { active: Effect.succeed(active) }),
-      destinations: (scope) =>
-        Effect.map(recorded.destinations(scope), (targets) =>
-          (active ?? ["agents", "claude"]).flatMap((destination) =>
-            add !== undefined &&
-            add.destination === destination &&
-            canonicalJson(add.scope) === canonicalJson(scope)
-              ? [{ destination, root: add.root }]
-              : targets.filter((target) => target.destination === destination),
-          ),
-        ),
-    });
-    return yield* makeLibrary(home).pipe(Effect.provideService(InstalledSkills.Service, files));
+    let routing: Library.Routing = { _tag: "Recorded" };
+    if (options.add !== undefined || options.active !== undefined) {
+      const fs = yield* FileSystem.FileSystem;
+      const physical = (path: string) =>
+        fs.realPath(path).pipe(Effect.orElseSucceed(() => resolve(path)));
+      const repositories = yield* Effect.forEach(state.repositories, (repository) =>
+        physical(repository.root),
+      );
+      const roots = new Map<InstallDestination, string>();
+      for (const copy of state.installed_skills) {
+        const path = yield* physical(copy.root);
+        if (!repositories.some((root) => path === root || path.startsWith(`${root}/`)))
+          roots.set(copy.destination, copy.root);
+      }
+      if (options.add?.scope.kind === "global")
+        roots.set(options.add.destination, options.add.root);
+      const deviceHome = join(home, "test-device");
+      const active = options.active ?? [...roots.keys()];
+      routing = {
+        _tag: "Configured",
+        home: deviceHome,
+        configHome: join(deviceHome, ".config"),
+        overrides: {
+          codex: [roots.get("agents") ?? join(deviceHome, ".agents", "skills")],
+          ...(active.includes("claude")
+            ? { "claude-code": [roots.get("claude") ?? join(deviceHome, ".claude", "skills")] }
+            : {}),
+        },
+      };
+    }
+    return Context.get(yield* Layer.build(Library.layer({ home, routing })), Library.Service);
   });
 
 const applied = (
@@ -50,12 +66,12 @@ const applied = (
 ) => (outcome._tag === "Applied" ? outcome.copies.filter((copy) => copy._tag === tag).length : 0);
 
 /** Keep the known-present, deliberately stale state supplied by removal safety tests. */
-export const removeCollection = (state: LibraryState, collectionId: string) =>
+export const removeCollection = (home: string, state: LibraryState, collectionId: string) =>
   Effect.gen(function* () {
     const id = state.collections.find((item) => item.collection_id === collectionId)?.collection_id;
     if (id === undefined)
       return yield* new CollectionRemovalMissing({ collection_id: collectionId });
-    const owner = yield* library((yield* LibraryWriter).home, state);
+    const owner = yield* library(home, state);
     return (yield* owner.apply({
       _tag: "Apply",
       plan: yield* owner.plan(
@@ -67,6 +83,7 @@ export const removeCollection = (state: LibraryState, collectionId: string) =>
 
 /** Update every installed copy, with what is enabled at `scope` also routed to this destination. */
 export const installEnabledSkills = (options: {
+  readonly home: string;
   readonly target: InstallDestination;
   readonly root: string;
   readonly variantsPath?: string;
@@ -79,8 +96,8 @@ export const installEnabledSkills = (options: {
   >;
 }) =>
   Effect.gen(function* () {
-    const { home } = yield* LibraryWriter;
-    const snapshot = snapshotOf(yield* inspectLocalLibraryState(home));
+    const { home } = options;
+    const snapshot = yield* (yield* library(home, emptyLibraryState())).read;
     const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
     const owner = yield* library(home, state, {
       add: {
@@ -122,13 +139,14 @@ export const installEnabledSkills = (options: {
  * destination, and the apply of exactly that plan.
  */
 export const planUpdate = (options: {
+  readonly home: string;
   readonly target: InstallDestination;
   readonly root: string;
   readonly approvals: readonly Library.Approval[];
 }) =>
   Effect.gen(function* () {
-    const { home } = yield* LibraryWriter;
-    const snapshot = snapshotOf(yield* inspectLocalLibraryState(home));
+    const { home } = options;
+    const snapshot = yield* (yield* library(home, emptyLibraryState())).read;
     const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
     const owner = yield* library(home, state, {
       add: { scope: { kind: "global" }, destination: options.target, root: options.root },
@@ -142,12 +160,13 @@ export const planUpdate = (options: {
 
 /** Update every installed copy with only these destinations active. */
 export const uninstallLeftovers = (options: {
+  readonly home: string;
   readonly activeTargets: readonly InstallDestination[];
   readonly variantsPath?: string;
 }) =>
   Effect.gen(function* () {
-    const { home } = yield* LibraryWriter;
-    const snapshot = snapshotOf(yield* inspectLocalLibraryState(home));
+    const { home } = options;
+    const snapshot = yield* (yield* library(home, emptyLibraryState())).read;
     const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
     const owner = yield* library(home, state, { active: options.activeTargets });
     const outcome = (yield* owner.apply({
@@ -158,9 +177,13 @@ export const uninstallLeftovers = (options: {
   });
 
 /** Keep the known-present, deliberately stale state supplied by backup safety tests. */
-export const uninstallCopies = (state: LibraryState, copies: readonly InstalledSkill[]) =>
+export const uninstallCopies = (
+  home: string,
+  state: LibraryState,
+  copies: readonly InstalledSkill[],
+) =>
   Effect.gen(function* () {
-    const owner = yield* library((yield* LibraryWriter).home, state);
+    const owner = yield* library(home, state);
     return (yield* owner.apply({
       _tag: "Apply",
       plan: yield* owner.plan(

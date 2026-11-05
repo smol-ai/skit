@@ -2,13 +2,14 @@ import type { CollectionVersionPlan } from "../../collection-version-plan.js";
 import type { RestoreProgress, RestorePhase } from "../../restore-progress.js";
 import type { Hash } from "../../../contracts.js";
 import { ContentAddressCollision } from "../../../failures.js";
-import { collectionVersionPath } from "../../collection-version.js";
+import { collectionVersionPath, originalTreeHash } from "../../collection-version.js";
 import { resolveSkitSource } from "../../../sources/resolve.js";
 import { deterministicTreeHash } from "../../../artifact/skit.js";
 import { prepareImport } from "../../import-collection.js";
 import { Data, Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { originalTreeHash, writeCollectionVersion } from "../../collection-version.js";
+
+import { writeCollectionVersion } from "./collection-version.js";
 import { readSnapshotArchive, writeVerifiedSnapshot } from "../../snapshot-archive.js";
 import { verifySnapshotArchive } from "../../snapshot-archive-universal.js";
 import { currentLibraryState, LibraryState } from "../../library-state.js";
@@ -192,10 +193,9 @@ const silentRestoreProgress: RestoreProgress = {
 };
 
 /** Reject incomplete or foreign plans before any I/O. Their bytes still need verifying. */
-const invalidPlan = (
+export const restorePlanProblem = (
   manifest: LibraryManifest,
   plan: CollectionVersionPlan,
-  hasDownload: boolean,
 ): string | undefined => {
   const required = new Set(manifest.collection_versions.map((copy) => copy.hash));
   const copies = new Map(
@@ -225,8 +225,6 @@ const invalidPlan = (
   for (const hash of required) {
     if (!covered.has(hash)) return `retained copy ${hash} not downloaded`;
   }
-  if (plan.download.length && !hasDownload)
-    return `snapshot-backed retained copy ${plan.download[0]} not downloaded: no download transport`;
 };
 
 /** Resolve every required byte before writing any new immutable object. */
@@ -240,8 +238,12 @@ export const completeRestoreArchives = Effect.fn("Library.completeRestoreArchive
     readonly download?: (hash: Hash) => Effect.Effect<SnapshotArchive, E, R>;
   },
 ) {
-  const invalid = invalidPlan(manifest, plan, options.download !== undefined);
+  const invalid = restorePlanProblem(manifest, plan);
   if (invalid !== undefined) return yield* new RestoreInvalid({ detail: invalid });
+  if (plan.download.length && options.download === undefined)
+    return yield* new RestoreInvalid({
+      detail: `snapshot-backed retained copy ${plan.download[0]} not downloaded: no download transport`,
+    });
   const progress = options.progress ?? silentRestoreProgress;
   const archives = new Map(plan.localArchives.map((archive) => [archive.digest, archive]));
   const fs = yield* FileSystem.FileSystem;
@@ -424,18 +426,6 @@ export const retainRestoreArchives = Effect.fn("Library.retainRestoreArchives")(
     );
   const state = yield* restoredState(manifest);
   return { state };
-});
-
-/** Legacy compatibility: resolve all bytes, then retain them inside the caller's writer. */
-export const prepareRestore = Effect.fn("Library.prepareRestore")(function* <E = never, R = never>(
-  manifest: LibraryManifest,
-  plan: CollectionVersionPlan,
-  options: RestoreOptions & {
-    readonly download?: (hash: Hash) => Effect.Effect<SnapshotArchive, E, R>;
-  },
-) {
-  const available = yield* completeRestoreArchives(manifest, plan, options);
-  return yield* retainRestoreArchives(manifest, available, options);
 });
 
 /** Preview device facts that replacement of portable Library state would strand. */
