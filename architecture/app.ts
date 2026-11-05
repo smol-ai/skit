@@ -292,7 +292,7 @@ export const owners = {
       "unguarded publication commit after archive upload (done: D1 compares the selected current revision and visibility; refusal compensates the uploaded archive)",
       "publication/archive.ts reading Skits' tables directly (done: private skits/internal/release-archive.ts)",
       "ReleaseStore.readArchive leaking R2ObjectBody (done: BlobStore returns bytes or a stream)",
-      "releases.adopted_content_digest (no reader or writer)",
+      "releases.adopted_content_digest (done: no reader or writer; forward migration 0015 removes the obsolete column and partial unique index)",
     ],
   },
 

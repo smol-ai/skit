@@ -15,4 +15,5 @@ export const expectedMigrations = [
   "0012_skit_creation_request.sql",
   "0013_remove_resource_grants.sql",
   "0014_remove_auth_rate_limit.sql",
+  "0015_remove_release_adoption.sql",
 ] as const;

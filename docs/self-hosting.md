@@ -86,6 +86,10 @@ already disables that SDK limiter and enforces limits through its Cloudflare
 bindings. Identity, session and token data are retained. The `0013` compatibility
 deployment prerequisite above still applies when upgrading an older installation.
 
+Migration `0015` removes the unused release snapshot-adoption digest and its index.
+Release identities, versions, source revisions, archive metadata and visibility
+are retained; the Worker no longer reads or writes adoption metadata.
+
 ## Promote to a custom domain
 
 The domain must already belong to a zone on the same Cloudflare account. Promote it with:
