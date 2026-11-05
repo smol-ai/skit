@@ -20,3 +20,7 @@ export const MachineInventoryResult = Schema.Struct({
   }),
 });
 export type MachineInventoryResult = typeof MachineInventoryResult.Type;
+
+export const inventoryOutputContracts = {
+  inventory: { id: "skit.inventory.v13", schema: MachineInventoryResult },
+} as const;

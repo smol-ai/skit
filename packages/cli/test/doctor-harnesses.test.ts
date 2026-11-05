@@ -24,7 +24,7 @@ import {
   nativeDiscovery,
   inspectNativeDiscovery,
   DoctorReport,
-} from "../src/library/workflows/doctor-harnesses.js";
+} from "../src/library/doctor/harnesses.js";
 import { nativeLibraryFixture } from "./helpers/native-library.js";
 
 import { skitConfigurationLayer } from "@smolai/skit-core";

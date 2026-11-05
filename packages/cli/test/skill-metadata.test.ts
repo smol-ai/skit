@@ -17,8 +17,8 @@ import {
   openLibraryView,
   openLibrarySession,
 } from "@smolai/skit-core/library/session";
-import { inventoryCommand } from "../src/library/commands/inventory.js";
-import { renderMachineSkills } from "../src/library/presentation/inventory.js";
+import { inventoryCommand } from "../src/library/inventory/operation.js";
+import { renderMachineSkills } from "../src/library/inventory/present.js";
 import { renderLibraryList } from "../src/library/list/present.js";
 import { presentListCommand } from "../src/library/list.js";
 

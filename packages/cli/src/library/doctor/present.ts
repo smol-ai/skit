@@ -1,16 +1,13 @@
-import { renderDoctorListingBudget } from "./listing-budget.js";
-import { type ContractDataForId } from "../../commands/output-contracts.js";
+import { renderDoctorListingBudget } from "./budget.js";
+import type { DoctorReport } from "./harnesses.js";
 import { dirname } from "node:path";
 import { compactHomePath } from "../../terminal/home-path.js";
 import { harnessLabel } from "@smolai/skit-core/harnesses";
-import { conditionHeadline, conditionNextStep } from "./language.js";
+import { conditionHeadline, conditionNextStep } from "../presentation/language.js";
 import { createColors } from "picocolors";
 import type { RenderContext } from "../../terminal/contracts.js";
 
-export function renderDoctor(
-  data: ContractDataForId<"skit.doctor.v9">,
-  context: RenderContext,
-): string {
+export function renderDoctor(data: typeof DoctorReport.Type, context: RenderContext): string {
   const color = createColors(context.color);
   const section = (title: string) => color.cyan(color.bold(title));
   const path = (value: string) => color.cyan(compactHomePath(value));

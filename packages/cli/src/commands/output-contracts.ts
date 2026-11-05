@@ -29,8 +29,8 @@ import { listOutputContracts } from "../library/list.js";
 import { repositoryOutputContracts } from "../library/repository.js";
 import { usageOutputContracts } from "../library/usage.js";
 
-import { MachineInventoryResult } from "../library/workflows/machine-inventory-contract.js";
-import { DoctorReport } from "../library/workflows/doctor-harnesses.js";
+import { inventoryOutputContracts } from "../library/inventory.js";
+import { doctorOutputContracts } from "../library/doctor.js";
 
 function effectOutput<
   const TId extends string,
@@ -112,8 +112,8 @@ export const outputContracts = {
   list: listOutputContracts.list,
   securityReview: securityOutputContracts.securityReview,
   securityAccept: securityOutputContracts.securityAccept,
-  inventory: effectOutput("skit.inventory.v13", MachineInventoryResult),
-  doctor: effectOutput("skit.doctor.v9", DoctorReport),
+  inventory: inventoryOutputContracts.inventory,
+  doctor: doctorOutputContracts.doctor,
   check: checkOutputContracts.check,
   update: updateOutputContracts.update,
   updatePlan: updateOutputContracts.updatePlan,

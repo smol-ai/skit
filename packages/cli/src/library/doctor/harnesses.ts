@@ -18,8 +18,8 @@ import {
   type SourceProcessResult,
 } from "@smolai/skit-core";
 import { probeHarness } from "@smolai/skit-core/harnesses";
-import { CodexDoctorCheck, doctorCodexCheck } from "./doctor-codex.js";
-import { readOpenCodeV2Skills } from "./doctor-opencode-v2.js";
+import { CodexDoctorCheck, doctorCodexCheck } from "./codex.js";
+import { readOpenCodeV2Skills } from "./opencode.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
 class HarnessDiscoveryFailure

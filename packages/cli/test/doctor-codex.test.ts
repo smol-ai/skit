@@ -7,7 +7,7 @@ import {
   codexDuplicateFindings,
   readCodexSkills,
   type CodexDoctorInstance,
-} from "../src/library/workflows/doctor-codex.js";
+} from "../src/library/doctor/codex.js";
 import { nativeLibraryFixture } from "./helpers/native-library.js";
 
 const instance = (path: string, extra: Partial<CodexDoctorInstance> = {}): CodexDoctorInstance => ({

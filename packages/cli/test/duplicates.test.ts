@@ -20,7 +20,7 @@ import {
   scanSkillsDirectory,
   readableSkillsDirectories,
 } from "@smolai/skit-core/library/routing";
-import { codexSkillAliases } from "../src/library/workflows/doctor-codex.js";
+import { codexSkillAliases } from "../src/library/doctor/codex.js";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";

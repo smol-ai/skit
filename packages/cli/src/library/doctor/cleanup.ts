@@ -1,13 +1,14 @@
 import { SkitConfiguration, type ListingBudget } from "@smolai/skit-core";
 import { Effect } from "effect";
 import { applySetEnabledPlan } from "@smolai/skit-core/library/session";
-import { openDoctorCleanupSelection, overBudget } from "../application/doctor-cleanup.js";
+import { openDoctorCleanupSelection, overBudget } from "./selection.js";
 import { type InventoryRootOptions } from "@smolai/skit-core/library/routing";
-import { renderDoctorBudgetSelection } from "../presentation/listing-budget.js";
+import { renderDoctorBudgetSelection } from "./budget.js";
 import { Renderer } from "../../terminal/renderer.js";
 import { terminalColorEnabled } from "../../terminal/style.js";
 import { Prompter } from "../../terminal/prompter.js";
-import { result } from "../../commands/result.js";
+import { encodeResult as result } from "../../commands/encode-result.js";
+import { enableOutputContracts } from "../enable.js";
 
 export const presentDoctorCleanup = Effect.fn("Doctor.cleanup")(function* (
   budgets: readonly ListingBudget[],
@@ -83,7 +84,8 @@ export const presentDoctorCleanup = Effect.fn("Doctor.cleanup")(function* (
   const selected = candidates.filter((c) => chosen.includes(c.id));
   if (!selected.length) return false;
   const plan = yield* selection.preview(chosen);
-  for (const change of plan.changes) yield* renderer.result(result("disablePlan", change));
+  for (const change of plan.changes)
+    yield* renderer.result(result("disablePlan", enableOutputContracts.disablePlan, change));
   yield* renderer.note(
     budgetSummary(chosen).join("\n") +
       "\nRed marks demand over the limit. Estimates subtract listed costs; native precedence can expose other skills. Doctor will recheck after applying.\nDisabling part of a followed collection keeps its other current skills individually; that scope stops following future collection additions.",
@@ -96,6 +98,7 @@ export const presentDoctorCleanup = Effect.fn("Doctor.cleanup")(function* (
     "Disabling selected skills",
     applySetEnabledPlan((yield* SkitConfiguration).skitHome, plan),
   );
-  for (const outcome of outcomes) yield* renderer.result(result("disable", outcome.value));
+  for (const outcome of outcomes)
+    yield* renderer.result(result("disable", enableOutputContracts.disable, outcome.value));
   return true;
 });

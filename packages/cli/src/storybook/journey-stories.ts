@@ -7,7 +7,7 @@ import {
 } from "@smolai/skit-core";
 import { Library } from "@smolai/skit-core/library";
 
-import { presentDoctorCleanup } from "../library/workflows/doctor-cleanup.js";
+import { presentDoctorCleanup } from "../library/doctor.js";
 import { syncJourney } from "./sync-journey.js";
 import { join } from "node:path";
 import { ConfigProvider, Effect, FileSystem, Option } from "effect";

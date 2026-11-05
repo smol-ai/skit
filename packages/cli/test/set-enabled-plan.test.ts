@@ -39,11 +39,11 @@ import {
   confirmLibraryChange,
 } from "@smolai/skit-core/library/session";
 
-import { presentDoctorCleanup } from "../src/library/workflows/doctor-cleanup.js";
+import { presentDoctorCleanup } from "../src/library/doctor/cleanup.js";
 import {
   suggestDoctorCleanup,
   openDoctorCleanupSelection,
-} from "../src/library/application/doctor-cleanup.js";
+} from "../src/library/doctor/selection.js";
 import { usageStory } from "../src/storybook/usage-stories.js";
 import { presentSetEnabled } from "../src/library/enable.js";
 import { libraryCommandConfiguration } from "../src/commands/library-configuration.js";

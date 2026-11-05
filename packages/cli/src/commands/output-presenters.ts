@@ -7,7 +7,7 @@ import { terminalData } from "../terminal/text.js";
 import { harnessLabel } from "@smolai/skit-core/harnesses";
 import { createColors } from "picocolors";
 import { renderUsage } from "../library/usage.js";
-import { renderInventory } from "../library/presentation/inventory.js";
+import { renderInventory } from "../library/inventory.js";
 import { renderSetEnabled } from "../library/enable.js";
 import { renderRemove, renderRemovePlan } from "../library/remove.js";
 import { renderCheck } from "../library/check.js";
@@ -17,7 +17,7 @@ import { renderAuditV1Alpha4 } from "../audit/presentation/report.js";
 import { severityHeadline } from "../audit/presentation/language.js";
 import { renderAdd, renderAddPreview } from "../library/add.js";
 import { renderUpdate, renderUpdatePlan } from "../library/update.js";
-import { renderDoctor } from "../library/presentation/doctor.js";
+import { renderDoctor } from "../library/doctor.js";
 import {
   renderSetup,
   renderSetupApplied,

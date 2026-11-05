@@ -13,7 +13,8 @@ import { librarySyncCliCommand } from "../library/sync.js";
 import { disableCliCommand, enableCliCommand } from "../library/enable.js";
 import { securityAcceptCliCommand, securityReviewCliCommand } from "../library/security.js";
 import { setupCliCommand, librarySetupUndoCliCommand } from "../library/setup.js";
-import { doctorCliCommand, inventoryCliCommand } from "../library/commands/inventory.js";
+import { doctorCliCommand } from "../library/doctor.js";
+import { inventoryCliCommand } from "../library/inventory.js";
 import {
   repositoryForgetCliCommand,
   repositoryIgnoreCliCommand,

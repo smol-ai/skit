@@ -1,5 +1,5 @@
 import { createColors } from "picocolors";
-import { metadataDate } from "./skill-metadata.js";
+import { metadataDate } from "../presentation/skill-metadata.js";
 import { basename, dirname, sep } from "node:path";
 import { compactHomePath } from "../../terminal/home-path.js";
 import {
@@ -8,8 +8,8 @@ import {
   type LibraryInventory,
 } from "@smolai/skit-core";
 import { harnessLabel } from "@smolai/skit-core/harnesses";
-import { conditionHeadline, installedSkillStatusLabel } from "./language.js";
-import type { MachineInventoryResult } from "../workflows/machine-inventory-contract.js";
+import { conditionHeadline, installedSkillStatusLabel } from "../presentation/language.js";
+import type { MachineInventoryResult } from "./output.js";
 
 type MachineInstance = MachineInventoryResult["machine"]["instances"][number];
 
