@@ -2,7 +2,7 @@ import { skitConfigurationLayer } from "@smolai/skit-core";
 import { terminalLibraryProgressLayer } from "../presentation/progress.js";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { handleSourceCommand } from "../../application.js";
+import { handleSourceCommand } from "../../commands/handler.js";
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import {
   CommandMetadata,

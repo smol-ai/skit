@@ -20,12 +20,12 @@ import {
 
 const { setupDiscoverySettings } = MachineSettings;
 
-import { prepareSetupUndo } from "../src/library/setup/setup-undo.js";
+import { prepareSetupUndo } from "../src/library/setup/undo.js";
 import { setupResultActions } from "../src/library/setup/actions.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import { renderContract } from "../src/commands/output-presenters.js";
-import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply-command.js";
+import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply.js";
 import { runSetup } from "@smolai/skit-core/library/setup";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import { libraryHome, scratch } from "./helpers/library-home.js";

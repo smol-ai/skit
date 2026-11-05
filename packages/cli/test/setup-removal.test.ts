@@ -3,13 +3,13 @@ import { Effect, FileSystem, Schema } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { LinkStat, skitLayer } from "@smolai/skit-core";
-import { setupCommand } from "../src/library/setup/command.js";
+import { setupCommand } from "../src/library/setup.js";
 import {
   makeScriptedInteraction,
   type InteractionEvent,
   type ScriptedAnswer,
 } from "../src/storybook/interaction-recorder.js";
-import { setupPrompts, setupStepTitles } from "../src/library/setup/setup-steps.js";
+import { setupPrompts, setupStepTitles } from "../src/library/setup/steps.js";
 import {
   runSetup,
   revalidateSetupPlan,

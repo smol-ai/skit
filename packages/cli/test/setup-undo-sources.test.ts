@@ -19,8 +19,8 @@ import {
   skitLayer,
 } from "@smolai/skit-core";
 import { skillsDirectoryFor } from "@smolai/skit-core/library/routing";
-import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply-command.js";
-import { prepareSetupUndo } from "../src/library/setup/setup-undo.js";
+import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply.js";
+import { prepareSetupUndo } from "../src/library/setup/undo.js";
 import { setupSourceChoiceId, runSetup } from "@smolai/skit-core/library/setup";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 

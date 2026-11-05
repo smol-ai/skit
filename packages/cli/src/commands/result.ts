@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { encodeResult } from "./encode-result.js";
 import {
   outputContracts,
   type ContractData,
@@ -12,7 +12,5 @@ export function result<K extends ContractKey>(
   data: ContractData<NoInfer<K>>,
   exitCode?: number,
 ): CommandResult<K> {
-  const { id, schema } = outputContracts[contract];
-  const encodedData = Schema.encodeUnknownSync(schema)(data);
-  return { contract, schema: id, data, encodedData, exitCode };
+  return encodeResult(contract, outputContracts[contract], data, exitCode);
 }

@@ -8,7 +8,7 @@ import {
 
 import { Clock, Effect, FileSystem, Option, Path } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { handleLibraryCommand } from "../../application.js";
+import { handleLibraryCommand } from "../../commands/handler.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags } from "../../commands/parameters.js";

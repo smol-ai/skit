@@ -10,7 +10,7 @@ import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { afterEach, beforeEach, expect, vi, type MockInstance } from "vitest";
 import { Prompter, terminalPrompterLayer, type Choice } from "../src/terminal/prompter.js";
 
-import { setupDiscoveredSkillChoices } from "../src/library/setup/setup-skills.js";
+import { setupDiscoveredSkillChoices } from "../src/library/setup/skills.js";
 import { classifySetupOnboarding, type SetupSkillInstance } from "@smolai/skit-core/library/setup";
 
 type Key =

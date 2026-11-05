@@ -2,7 +2,7 @@ import { skitConfigurationLayer } from "@smolai/skit-core";
 import type { Hash } from "@smolai/skit-core";
 import { Effect, Option, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { handleLibraryCommand } from "../../application.js";
+import { handleLibraryCommand } from "../../commands/handler.js";
 import { FindingFingerprintInvalid } from "../../audit/failures.js";
 import { MissingRequirement } from "../../commands/input-failures.js";
 import { CommandMetadata } from "../../commands/metadata.js";

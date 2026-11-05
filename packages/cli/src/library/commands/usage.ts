@@ -3,7 +3,7 @@ import { Library, emptyLibraryState, UsageHarness } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { Command, Flag } from "effect/cli";
 import { scanLocalUsage } from "../application/local-usage.js";
-import { handleLibraryCommand } from "../../application.js";
+import { handleLibraryCommand } from "../../commands/handler.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homeFlag, jsonFlag, optionalString } from "../../commands/parameters.js";

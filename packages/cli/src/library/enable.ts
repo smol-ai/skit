@@ -1,17 +1,17 @@
-import { OptionCombinationInvalid, MissingRequirement } from "../../commands/input-failures.js";
-import { promptsAllowed } from "../../terminal/interactivity.js";
+import { OptionCombinationInvalid, MissingRequirement } from "../commands/input-failures.js";
+import { promptsAllowed } from "../terminal/interactivity.js";
 import { skitConfigurationLayer, type InstallScope as Scope } from "@smolai/skit-core";
 
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { resolve } from "node:path";
-import { handleLibraryCommand } from "../../application.js";
+import { handleLibraryCommand } from "../commands/handler.js";
 
-import { NothingToSelect } from "../../terminal/interaction-failures.js";
-import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
-import { CommandMetadata } from "../../commands/metadata.js";
-import { outputContracts } from "../../commands/output-contracts.js";
-import { localFlags, optionalString } from "../../commands/parameters.js";
+import { NothingToSelect } from "../terminal/interaction-failures.js";
+import { libraryCommandConfiguration } from "../commands/library-configuration.js";
+import { CommandMetadata } from "../commands/metadata.js";
+import { enableOutputContracts } from "./enable/output.js";
+import { localFlags, optionalString } from "../commands/parameters.js";
 import {
   invocationOptions,
   type InvocationOption,
@@ -23,13 +23,13 @@ import {
   type EnabledCollection,
 } from "@smolai/skit-core/library/session";
 
-import { Prompter, terminalPrompterLayer } from "../../terminal/prompter.js";
-import { Renderer } from "../../terminal/renderer.js";
-import { promptForScope } from "../presentation/scope-prompt.js";
-import { failureExitCodes } from "../../commands/failure-classification.js";
-import { result } from "../../commands/result.js";
+import { Prompter, terminalPrompterLayer } from "../terminal/prompter.js";
+import { Renderer } from "../terminal/renderer.js";
+import { promptForScope } from "./presentation/scope-prompt.js";
+import { failureExitCodes } from "../commands/failure-classification.js";
+import { encodeResult as result } from "../commands/encode-result.js";
 
-import { largeCollectionWarning, descriptionLoadMessage } from "../workflows/collection-load.js";
+import { largeCollectionWarning, descriptionLoadMessage } from "./workflows/collection-load.js";
 
 const subject = Argument.String("skill-or-collection").pipe(Argument.optional);
 const repo = optionalString("repo", "Use repository scope.");
@@ -122,8 +122,8 @@ const setEnabledCliCommand = (enabled: boolean) => {
     Command.annotate(CommandMetadata, {
       effects: { capabilities: ["filesystem.read", "filesystem.write"] },
       outputSchemas: enabled
-        ? [outputContracts.enable, outputContracts.enablePlan]
-        : [outputContracts.disable, outputContracts.disablePlan],
+        ? [enableOutputContracts.enable, enableOutputContracts.enablePlan]
+        : [enableOutputContracts.disable, enableOutputContracts.disablePlan],
       exitCodes: [0, 1, 11, 12, 64, 65],
       interactive: true,
     }),
@@ -385,12 +385,13 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
     yield* renderer.result(
       outcome.kind === "plan"
         ? input.enabled
-          ? result("enablePlan", outcome.value)
-          : result("disablePlan", outcome.value)
+          ? result("enablePlan", enableOutputContracts.enablePlan, outcome.value)
+          : result("disablePlan", enableOutputContracts.disablePlan, outcome.value)
         : input.enabled
           ? // Completion is decided by the application; the CLI maps its classification to an exit.
             result(
               "enable",
+              enableOutputContracts.enable,
               outcome.value,
               outcome.value.application.status === "incomplete" && incomplete
                 ? failureExitCodes[incomplete.code]
@@ -398,6 +399,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
             )
           : result(
               "disable",
+              enableOutputContracts.disable,
               outcome.value,
               outcome.value.application.status === "incomplete" && incomplete
                 ? failureExitCodes[incomplete.code]
@@ -413,3 +415,6 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
 
 export const enableCliCommand = setEnabledCliCommand(true);
 export const disableCliCommand = setEnabledCliCommand(false);
+
+export { enableOutputContracts } from "./enable/output.js";
+export { renderSetEnabled } from "./enable/present.js";

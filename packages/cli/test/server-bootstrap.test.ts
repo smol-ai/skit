@@ -7,7 +7,7 @@ import { TestClock } from "effect/testing";
 import { NodeFileSystem } from "@effect/platform-node";
 import { skitLayer } from "@smolai/skit-core";
 import { renderContract } from "../src/commands/output-presenters.js";
-import { consoleRendererLayer } from "../src/terminal/renderer.js";
+import { consoleRendererLayer } from "../src/terminal/console-renderer.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { result } from "../src/commands/result.js";
 import {

@@ -5,7 +5,8 @@ import { commandActor } from "./commands/actor.js";
 import { skitCommand } from "./commands/tree.js";
 import { jsonRequested } from "./commands/parameters.js";
 import { runCommandTree } from "./commands/runtime.js";
-import { consoleRendererLayer, Renderer } from "./terminal/renderer.js";
+import { Renderer } from "./terminal/renderer.js";
+import { consoleRendererLayer } from "./terminal/console-renderer.js";
 
 import { cliBuild } from "./commands/build-info.js";
 import { ReleaseChecker, releaseCheckerLive } from "./releases/checker.js";

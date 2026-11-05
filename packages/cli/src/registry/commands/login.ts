@@ -1,7 +1,7 @@
 import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
 import { Effect, Option, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { handleRegistryCommand } from "../../application.js";
+import { handleRegistryCommand } from "../../commands/handler.js";
 import {
   awaitDeviceApproval,
   clearPendingLogin,

@@ -6,9 +6,9 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import { MachineSettings, collectionVersionPath, skitLayer } from "@smolai/skit-core";
-import { setupCommand } from "../src/library/setup/command.js";
+import { setupCommand } from "../src/library/setup.js";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
-import { setupPrompts } from "../src/library/setup/setup-steps.js";
+import { setupPrompts } from "../src/library/setup/steps.js";
 import {
   runSetup,
   setupImportRequests,

@@ -7,13 +7,13 @@ import { assert, it } from "@effect/vitest";
 import { LibraryState, StalePlan, skitLayer } from "@smolai/skit-core";
 import { withSandboxDenying } from "./helpers/sandbox.js";
 import { SetupResult, SetupPlanStale, SetupStopped } from "@smolai/skit-core/library/setup";
-import { setupCommand } from "../src/library/setup/command.js";
+import { setupCommand } from "../src/library/setup.js";
 import {
   makeScriptedInteraction,
   type ScriptedAnswer,
 } from "../src/storybook/interaction-recorder.js";
 import { Prompter } from "../src/terminal/prompter.js";
-import { setupPrompts } from "../src/library/setup/setup-steps.js";
+import { setupPrompts } from "../src/library/setup/steps.js";
 
 import { captureDisk, diskChanges, noDiskChanges, type DiskDiff } from "./helpers/disk-snapshot.js";
 import {

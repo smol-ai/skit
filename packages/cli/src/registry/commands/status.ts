@@ -1,7 +1,7 @@
 import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
 import { Option, Effect } from "effect";
 import { Command } from "effect/cli";
-import { handlePlatformCommand } from "../../application.js";
+import { handlePlatformCommand } from "../../commands/handler.js";
 import { authStatusCommand } from "../auth.js";
 import { CommandMetadata, credentialStoreReadSubprocesses } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";

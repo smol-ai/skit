@@ -31,7 +31,7 @@ import {
   RegistryOriginInvalid,
   RegistryUnreachable,
 } from "../../registry/failures.js";
-import { handleRegistryCommand } from "../../application.js";
+import { handleRegistryCommand } from "../../commands/handler.js";
 
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";

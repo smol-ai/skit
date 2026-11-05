@@ -9,7 +9,7 @@ import {
 import { renderContract } from "../src/commands/output-presenters.js";
 import { result } from "../src/commands/result.js";
 import { classifySetupOnboarding, type SetupSkillInstance } from "@smolai/skit-core/library/setup";
-import { setupDiscoveredSkillChoices } from "../src/library/setup/setup-skills.js";
+import { setupDiscoveredSkillChoices } from "../src/library/setup/skills.js";
 
 it("shows all physical copies, groups actual sources, and leaves conflicts and Codex unchecked", () => {
   const instance = (name: string, path: string, hash = "a"): SetupSkillInstance => ({

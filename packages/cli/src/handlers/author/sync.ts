@@ -4,7 +4,7 @@ import type { AuthorVisibility } from "@smolai/skit-core/author";
 import { Argument, Command, Flag } from "effect/cli";
 import { Renderer } from "../../terminal/renderer.js";
 import { syncAuthorWorkspace } from "../../workflows/author/sync.js";
-import { handleSourceCommand } from "../../application.js";
+import { handleSourceCommand } from "../../commands/handler.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homeFlag, jsonFlag, optionalString } from "../../commands/parameters.js";

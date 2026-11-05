@@ -18,7 +18,7 @@ import {
   renderChangeResult,
   renderSetupVersionChoice,
   renderReviewedChanges,
-} from "./installed-skill-changes.js";
+} from "../presentation/installed-skill-changes.js";
 
 function renderSetupCollections(data: ContractDataForId<"skit.setup.v11">): string[] {
   type Instance = (typeof data.instances)[number];

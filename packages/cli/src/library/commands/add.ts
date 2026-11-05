@@ -4,7 +4,7 @@ import { Effect, Option } from "effect";
 import { descriptionLoadMessage } from "../workflows/collection-load.js";
 import { openLibraryView } from "@smolai/skit-core/library/session";
 import { Argument, Command, Flag } from "effect/cli";
-import { handleSourceCommand } from "../../application.js";
+import { handleSourceCommand } from "../../commands/handler.js";
 import { MissingRequirement } from "../../commands/input-failures.js";
 import {
   CommandMetadata,

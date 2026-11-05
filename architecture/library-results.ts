@@ -105,7 +105,7 @@ type ExistingApplyError = Exclude<StoredExistingApplyError, StoredLibraryChanged
 
 // ── Undo ────────────────────────────────────────────────────────────────────────────────────────
 // Source: skit/src/library/internal/setup/{undo,undo-plan,undo-files}.ts.
-// CLI library/setup/setup-undo.ts composes this owner with MachineSettings; it opens no writer.
+// CLI library/setup/undo.ts supplies the home to core's shared review; it opens no writer.
 
 /** One folder action undo would take. setup-undo-files.ts:126-131, pushed at :231, :253, :323, :345. */
 export interface UndoFileAction {

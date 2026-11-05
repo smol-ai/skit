@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { cliBuild } from "../commands/build-info.js";
 import { ReleaseChecker, releaseCheckerLive } from "../releases/checker.js";
 import { Command } from "effect/cli";
-import { handlePlatformCommand } from "../application.js";
+import { handlePlatformCommand } from "../commands/handler.js";
 import { CommandMetadata } from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";
 import { jsonFlag } from "../commands/parameters.js";

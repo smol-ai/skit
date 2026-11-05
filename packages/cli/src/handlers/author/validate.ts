@@ -2,7 +2,7 @@ import { validateSkitDirectory } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { resolve } from "node:path";
 import { Argument, Command, Flag } from "effect/cli";
-import { handlePlatformCommand } from "../../application.js";
+import { handlePlatformCommand } from "../../commands/handler.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts, type ContractDataForId } from "../../commands/output-contracts.js";
 

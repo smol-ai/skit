@@ -24,7 +24,7 @@ import {
 } from "./helpers/library-home.js";
 import type { CommandResult } from "../src/commands/types.js";
 import { libraryCommandConfiguration } from "../src/commands/library-configuration.js";
-import { presentSetEnabled } from "../src/library/enable/command.js";
+import { presentSetEnabled } from "../src/library/enable.js";
 
 it.effect("lists a retained Collection without Release-shaped fields", () =>
   Effect.gen(function* () {

@@ -29,7 +29,7 @@ import { expect } from "vitest";
 import { importSource } from "../src/library/application/import-source.js";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
 
-import { setupCommand } from "../src/library/setup/command.js";
+import { setupCommand } from "../src/library/setup.js";
 import { Renderer } from "../src/terminal/renderer.js";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import {

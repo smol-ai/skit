@@ -1,7 +1,7 @@
 import { skitConfigurationLayer } from "@smolai/skit-core";
 import { Option, Effect } from "effect";
 import { Argument, Command } from "effect/cli";
-import { handleLibraryCommand } from "../../application.js";
+import { handleLibraryCommand } from "../../commands/handler.js";
 import { MissingRequirement } from "../../commands/input-failures.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";

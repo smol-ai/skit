@@ -6,7 +6,7 @@ import { harnessLabel } from "@smolai/skit-core/harnesses";
 import { createColors } from "picocolors";
 import { renderUsage } from "../library/presentation/usage.js";
 import { renderInventory } from "../library/presentation/inventory.js";
-import { renderSetEnabled } from "../library/enable/present.js";
+import { renderSetEnabled } from "../library/enable.js";
 import { renderRemove, renderRemovePlan } from "../library/presentation/remove.js";
 import { renderCheck } from "../library/presentation/check.js";
 import { renderLibrarySync } from "../library/presentation/sync.js";
@@ -26,12 +26,9 @@ import {
   renderSetupComparison,
   renderSetupReview,
   renderSetupFailed,
-} from "../library/presentation/setup.js";
-import {
   renderSetupUndo,
-  renderRecoveryList,
-  renderRecovery,
-} from "../library/presentation/recovery.js";
+} from "../library/setup.js";
+import { renderRecoveryList, renderRecovery } from "../library/presentation/recovery.js";
 import { renderLibraryHistory } from "../library/presentation/history.js";
 import {
   renderProjectionRetention,

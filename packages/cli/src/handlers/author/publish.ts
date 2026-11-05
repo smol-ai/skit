@@ -4,7 +4,7 @@ import { Argument, Command, Flag } from "effect/cli";
 import { MissingRequirement } from "../../commands/input-failures.js";
 import { publish } from "../../workflows/author/publish.js";
 import { Renderer } from "../../terminal/renderer.js";
-import { handleRegistryCommand } from "../../application.js";
+import { handleRegistryCommand } from "../../commands/handler.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { jsonFlag, optionalString } from "../../commands/parameters.js";

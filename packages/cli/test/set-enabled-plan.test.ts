@@ -45,7 +45,7 @@ import {
   openDoctorCleanupSelection,
 } from "../src/library/application/doctor-cleanup.js";
 import { usageStory } from "../src/storybook/usage-stories.js";
-import { presentSetEnabled } from "../src/library/enable/command.js";
+import { presentSetEnabled } from "../src/library/enable.js";
 import { libraryCommandConfiguration } from "../src/commands/library-configuration.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";

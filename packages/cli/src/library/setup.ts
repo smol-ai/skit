@@ -1,26 +1,26 @@
-import { openSetupCommandReview, prepareSetupCommand, setupApplyCommand } from "./apply-command.js";
-export { setupApplyCommand } from "./apply-command.js";
+import { openSetupCommandReview, prepareSetupCommand, setupApplyCommand } from "./setup/apply.js";
+export { setupApplyCommand } from "./setup/apply.js";
 import { SkitConfiguration, skitConfigurationLayer, emptyLibraryState } from "@smolai/skit-core";
 import { skillModificationTime } from "@smolai/skit-core/library/session";
 import { Cause, Effect, FileSystem, Option } from "effect";
 import { Command, Flag } from "effect/cli";
 import { join, resolve } from "node:path";
-import { commandFailure, handleSourceCommand } from "../../application.js";
-import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
-import { CommandMetadata } from "../../commands/metadata.js";
-import { outputContracts } from "../../commands/output-contracts.js";
-import { inventoryRootOptions, localFlags, optionalString } from "../../commands/parameters.js";
-import { Prompter, terminalPrompterLayer } from "../../terminal/prompter.js";
-import { promptsAllowed } from "../../terminal/interactivity.js";
-import { compactHomePath } from "../../terminal/home-path.js";
+import { commandFailure, handleSourceCommand } from "../commands/handler.js";
+import { libraryCommandConfiguration } from "../commands/library-configuration.js";
+import { CommandMetadata } from "../commands/metadata.js";
+import { setupOutputContracts } from "./setup/output.js";
+import { inventoryRootOptions, localFlags, optionalString } from "../commands/parameters.js";
+import { Prompter, terminalPrompterLayer } from "../terminal/prompter.js";
+import { promptsAllowed } from "../terminal/interactivity.js";
+import { compactHomePath } from "../terminal/home-path.js";
 import { Library } from "@smolai/skit-core/library";
-import { Renderer } from "../../terminal/renderer.js";
+import { Renderer } from "../terminal/renderer.js";
 import {
   setupOverviewTitle,
   setupPrompts,
   setupStepPlan,
   type SetupStepPlan,
-} from "./setup-steps.js";
+} from "./setup/steps.js";
 import {
   runSetup,
   type SetupOptions,
@@ -30,7 +30,7 @@ import {
   SetupDuplicateAction,
 } from "@smolai/skit-core/library/setup";
 
-import { result } from "../../commands/result.js";
+import { encodeResult as result } from "../commands/encode-result.js";
 import {
   setupDiscoveryOutput,
   setupScanAction,
@@ -39,21 +39,21 @@ import {
   setupReviewAction,
   setupApplyAction,
   setupReviewSummary,
-} from "./actions.js";
+} from "./setup/actions.js";
 
-import { OptionCombinationInvalid } from "../../commands/input-failures.js";
+import { OptionCombinationInvalid } from "../commands/input-failures.js";
 
-import { checkSubjects } from "../workflows/check.js";
-import { renderCheck } from "../presentation/check.js";
-import { setupReviewSkillChoices } from "./setup-skills.js";
+import { checkSubjects } from "./workflows/check.js";
+import { renderCheck } from "./presentation/check.js";
+import { setupReviewSkillChoices } from "./setup/skills.js";
 
-import { renderChangeResult } from "../presentation/installed-skill-changes.js";
+import { renderChangeResult } from "./presentation/installed-skill-changes.js";
 import {
   chooseSetupCopyDecisions,
   chooseSetupVersions,
   setupPlanLines,
   renderSetupAliasRecovery,
-} from "./setup-choice-presentation.js";
+} from "./setup/choices.js";
 
 const workDirFlag = optionalString(
   "work-dir",
@@ -481,7 +481,7 @@ export const setupCliCommand = Command.make(
                   choice.selection?.copyPaths ?? [],
                 );
                 const discovery = setupDiscoveryOutput(opened.scan, opened.review, context);
-                return result("setupComparison", {
+                return result("setupComparison", setupOutputContracts.setupComparison, {
                   planId: opened.planId,
                   copies,
                   actions: [
@@ -504,7 +504,7 @@ export const setupCliCommand = Command.make(
               }
               if (reviewId !== undefined) {
                 const prepared = yield* prepareSetupCommand({ ...selected, planId: reviewId });
-                return result("setupReview", {
+                return result("setupReview", setupOutputContracts.setupReview, {
                   planId: prepared.planId,
                   reviewId: prepared.plan.reviewId,
                   hasChanges: prepared.plan.hasChanges,
@@ -534,7 +534,7 @@ export const setupCliCommand = Command.make(
                   planId: apply,
                   ...(reviewedPlanId === undefined ? {} : { reviewedPlanId }),
                 });
-                return result("setupApplied", {
+                return result("setupApplied", setupOutputContracts.setupApplied, {
                   ...applied,
                   actions: setupResultActions(context, applied),
                 });
@@ -553,7 +553,11 @@ export const setupCliCommand = Command.make(
                 persistRoots: false,
               };
               const review = yield* openSetupReview(setup, value, manageOptions);
-              return result("setup", setupDiscoveryOutput(value, review, context));
+              return result(
+                "setup",
+                setupOutputContracts.setup,
+                setupDiscoveryOutput(value, review, context),
+              );
             }),
           );
           if (execution._tag === "Failure") {
@@ -561,6 +565,7 @@ export const setupCliCommand = Command.make(
             return yield* renderer.result(
               result(
                 "setupFailed",
+                setupOutputContracts.setupFailed,
                 {
                   code: failed.code,
                   message: failed.message,
@@ -604,13 +609,24 @@ export const setupCliCommand = Command.make(
       ],
     },
     outputSchemas: [
-      outputContracts.setup,
-      outputContracts.setupApplied,
-      outputContracts.setupReview,
-      outputContracts.setupFailed,
-      outputContracts.setupComparison,
+      setupOutputContracts.setup,
+      setupOutputContracts.setupApplied,
+      setupOutputContracts.setupReview,
+      setupOutputContracts.setupFailed,
+      setupOutputContracts.setupComparison,
     ],
     exitCodes: [0, 1, 11, 12, 64, 65],
     interactive: true,
   }),
 );
+
+export { librarySetupUndoCliCommand } from "./setup/undo.js";
+export { setupOutputContracts } from "./setup/output.js";
+export { setupUndoActions, renderSetupUndo } from "./setup/undo-result.js";
+export {
+  renderSetup,
+  renderSetupApplied,
+  renderSetupComparison,
+  renderSetupReview,
+  renderSetupFailed,
+} from "./setup/present.js";

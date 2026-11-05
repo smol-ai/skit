@@ -7,6 +7,8 @@ import { commandContractArtifacts } from "../src/commands/artifacts.js";
 import { outputContracts } from "../src/commands/output-contracts.js";
 import { commandApplicationLayer } from "../src/application.js";
 import { result } from "../src/commands/result.js";
+import { encodeResult } from "../src/commands/encode-result.js";
+import { enableOutputContracts } from "../src/library/enable.js";
 import { renderContract } from "../src/commands/output-presenters.js";
 import { defaultTerminalEnvironment, renderResultFrame } from "../src/commands/output-frame.js";
 import { writeCommandContractArtifacts } from "../src/commands/contract-writer.js";
@@ -64,17 +66,21 @@ describe("generated command contracts", () => {
     const collectionId = makeCollectionId();
     const skillId = makeSkillId();
     expect(() => Schema.decodeUnknownSync(outputContracts.updatePlan.schema)([])).not.toThrow();
-    expect(() =>
-      Schema.decodeUnknownSync(outputContracts.enablePlan.schema)({
-        subject_id: collectionId,
-        skills: ["review"],
-        harnesses: ["codex"],
-        scope: { kind: "global" },
-        action: "enable",
-        changed: true,
-        enabled: [{ skill: skillId }],
-      }),
-    ).not.toThrow();
+    const enabled = Schema.decodeUnknownSync(outputContracts.enablePlan.schema)({
+      subject_id: collectionId,
+      skills: ["review"],
+      harnesses: ["codex"],
+      scope: { kind: "global" },
+      action: "enable",
+      changed: true,
+      enabled: [{ skill: skillId }],
+    });
+    expect(encodeResult("enablePlan", enableOutputContracts.enablePlan, enabled)).toEqual(
+      result("enablePlan", enabled),
+    );
+    // The payload schema is shared, but another contract's envelope ID cannot label this result.
+    // @ts-expect-error a disable definition cannot encode an enable result
+    encodeResult("enablePlan", enableOutputContracts.disablePlan, enabled);
     expect(() =>
       Schema.decodeUnknownSync(outputContracts.registryRemote.schema)({
         name: "public",

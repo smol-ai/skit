@@ -2,7 +2,7 @@ import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
 import { Option, Effect } from "effect";
 import { Argument, Command } from "effect/cli";
 import { resolve } from "node:path";
-import { handlePlatformCommand } from "../../application.js";
+import { handlePlatformCommand } from "../../commands/handler.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homeFlag, jsonFlag } from "../../commands/parameters.js";

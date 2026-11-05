@@ -16,7 +16,7 @@ import {
 import { auditLocalCapabilitiesV1Alpha4 } from "@smolai/skit-core/audit";
 import { runSetup, SetupResult, setupRemovablePaths } from "@smolai/skit-core/library/setup";
 
-import { setupDiscoveredSkillChoices } from "../src/library/setup/setup-skills.js";
+import { setupDiscoveredSkillChoices } from "../src/library/setup/skills.js";
 
 import { applySetupSelections } from "./helpers/setup-apply.js";
 import { importSource, inspectLibrarySource } from "../src/library/application/import-source.js";

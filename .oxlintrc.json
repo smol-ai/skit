@@ -47,7 +47,7 @@
     {
       "files": ["packages/cli/src/**/*.ts"],
       "excludeFiles": [
-        "packages/cli/src/terminal/renderer.ts",
+        "packages/cli/src/terminal/console-renderer.ts",
         "packages/cli/src/terminal/prompter.ts"
       ],
       "rules": {

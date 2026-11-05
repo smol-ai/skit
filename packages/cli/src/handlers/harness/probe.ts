@@ -1,6 +1,6 @@
 import { Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
-import { handlePlatformCommand } from "../../application.js";
+import { handlePlatformCommand } from "../../commands/handler.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { jsonFlag } from "../../commands/parameters.js";

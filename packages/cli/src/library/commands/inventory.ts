@@ -16,7 +16,7 @@ import { presentDoctorCleanup } from "../workflows/doctor-cleanup.js";
 
 import { selectInventoryRoots, type InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { Renderer } from "../../terminal/renderer.js";
-import { handleLibraryCommand } from "../../application.js";
+import { handleLibraryCommand } from "../../commands/handler.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { inventoryRootOptions, localFlags } from "../../commands/parameters.js";

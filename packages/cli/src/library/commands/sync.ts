@@ -3,7 +3,7 @@ import { skitConfigurationLayer } from "@smolai/skit-core";
 import { Registry, type ResolvedAuth } from "../../registry/index.js";
 import { Option, Effect, Result } from "effect";
 import { Command, Flag } from "effect/cli";
-import { handleRegistryCommand } from "../../application.js";
+import { handleRegistryCommand } from "../../commands/handler.js";
 
 import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
 import {

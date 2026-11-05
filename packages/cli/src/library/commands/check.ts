@@ -2,7 +2,7 @@ import { skitConfigurationLayer } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
 import { Renderer } from "../../terminal/renderer.js";
-import { handleSourceCommand } from "../../application.js";
+import { handleSourceCommand } from "../../commands/handler.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { localFlags } from "../../commands/parameters.js";

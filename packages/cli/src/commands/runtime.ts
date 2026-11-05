@@ -3,7 +3,7 @@ import { Data, Console, Effect } from "effect";
 import { CliError, CliOutput, Command, type HelpDoc } from "effect/cli";
 import { skitCliConfigLayer } from "./parameters.js";
 
-import { renderCommandFailures } from "../application.js";
+import { renderCommandFailures } from "./handler.js";
 import { Renderer } from "../terminal/renderer.js";
 import { result } from "./result.js";
 

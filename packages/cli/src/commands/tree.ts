@@ -10,10 +10,10 @@ import { addCliCommand } from "../library/commands/add.js";
 import { removeCliCommand } from "../library/commands/remove.js";
 import { updateCliCommand } from "../library/commands/update.js";
 import { librarySyncCliCommand } from "../library/commands/sync.js";
-import { disableCliCommand, enableCliCommand } from "../library/enable/command.js";
+import { disableCliCommand, enableCliCommand } from "../library/enable.js";
 import { securityAcceptCliCommand } from "../library/commands/security-accept.js";
 import { securityReviewCliCommand } from "../library/commands/security-review.js";
-import { setupCliCommand } from "../library/setup/command.js";
+import { setupCliCommand, librarySetupUndoCliCommand } from "../library/setup.js";
 import { doctorCliCommand, inventoryCliCommand } from "../library/commands/inventory.js";
 import {
   repositoryForgetCliCommand,
@@ -22,7 +22,6 @@ import {
   repositoryWatchCliCommand,
 } from "../library/commands/repository.js";
 import { libraryRecoveryCliCommand } from "../library/commands/recovery.js";
-import { librarySetupUndoCliCommand } from "../library/setup/undo-command.js";
 import { libraryHistoryCliCommand } from "../library/commands/history.js";
 import { versionCliCommand } from "../handlers/version.js";
 import { feedbackSendCliCommand } from "../handlers/feedback.js";

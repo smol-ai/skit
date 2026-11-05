@@ -6,10 +6,10 @@ import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { LinkStat, skitLayer, type LibraryState } from "@smolai/skit-core";
 import type { PlatformError } from "effect/PlatformError";
-import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply-command.js";
+import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply.js";
 import { runSetup } from "@smolai/skit-core/library/setup";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
-import { prepareSetupUndo } from "../src/library/setup/setup-undo.js";
+import { prepareSetupUndo } from "../src/library/setup/undo.js";
 import { libraryHome, scratch } from "./helpers/library-home.js";
 
 const fixture = Effect.fn("Test.setupDuplicateCopies")(function* () {

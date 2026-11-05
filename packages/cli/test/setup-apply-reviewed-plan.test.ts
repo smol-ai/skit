@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { Effect, Exit, FileSystem, Option } from "effect";
 import { assert, it } from "@effect/vitest";
 import { inspectOwnershipMarker, MachineSettings, skitLayer } from "@smolai/skit-core";
-import { setupApplyCommand, setupCommand } from "../src/library/setup/command.js";
+import { setupApplyCommand, setupCommand } from "../src/library/setup.js";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import {
   SetupPlanStale,
@@ -12,7 +12,7 @@ import {
 } from "@smolai/skit-core/library/setup";
 import { OptionCombinationInvalid } from "../src/commands/input-failures.js";
 
-import { prepareSetupUndo } from "../src/library/setup/setup-undo.js";
+import { prepareSetupUndo } from "../src/library/setup/undo.js";
 import { captureDisk, diskChanges, noDiskChanges } from "./helpers/disk-snapshot.js";
 import { libraryHome, scratch } from "./helpers/library-home.js";
 import { withSandboxDenying } from "./helpers/sandbox.js";

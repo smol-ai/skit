@@ -13,7 +13,7 @@ import { join } from "node:path";
 import { ConfigProvider, Effect, FileSystem, Option } from "effect";
 
 import { libraryCommandConfiguration } from "../commands/library-configuration.js";
-import { presentSetEnabled } from "../library/enable/command.js";
+import { presentSetEnabled } from "../library/enable.js";
 import type { Prompter } from "../terminal/prompter.js";
 import type { Renderer } from "../terminal/renderer.js";
 import type { ScriptedAnswer } from "./interaction-recorder.js";

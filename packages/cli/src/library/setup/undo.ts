@@ -1,14 +1,18 @@
 import { Cause, Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
-import { commandFailure, handleLibraryCommand } from "../../application.js";
+import { commandFailure, handleLibraryCommand } from "../../commands/handler.js";
 import { skitConfigurationLayer, SkitConfiguration } from "@smolai/skit-core";
 import { CommandMetadata } from "../../commands/metadata.js";
-import { outputContracts } from "../../commands/output-contracts.js";
+import { setupOutputContracts } from "./output.js";
 import { homeFlag, jsonFlag, optionalString } from "../../commands/parameters.js";
 import { setupUndoActions } from "./undo-result.js";
-import { prepareSetupUndo } from "./setup-undo.js";
+import { prepareSetupUndo as prepareCoreSetupUndo } from "@smolai/skit-core/library/setup";
 import { Renderer } from "../../terminal/renderer.js";
-import { result } from "../../commands/result.js";
+import { encodeResult as result } from "../../commands/encode-result.js";
+
+export const prepareSetupUndo = Effect.fn("CLI.setupUndo.prepare")(function* (operationId: string) {
+  return yield* prepareCoreSetupUndo((yield* SkitConfiguration).skitHome, operationId);
+});
 
 export const librarySetupUndoCliCommand = Command.make(
   "undo",
@@ -32,6 +36,7 @@ export const librarySetupUndoCliCommand = Command.make(
           return yield* renderer.result(
             result(
               "setupUndo",
+              setupOutputContracts.setupUndo,
               {
                 operationId: input.operation,
                 status: "conflicted",
@@ -54,6 +59,7 @@ export const librarySetupUndoCliCommand = Command.make(
           return yield* renderer.result(
             result(
               "setupUndo",
+              setupOutputContracts.setupUndo,
               {
                 ...plan.summary,
                 phase: "preview",
@@ -70,6 +76,7 @@ export const librarySetupUndoCliCommand = Command.make(
           return yield* renderer.result(
             result(
               "setupUndo",
+              setupOutputContracts.setupUndo,
               {
                 ...plan.summary,
                 phase: "stale",
@@ -86,6 +93,7 @@ export const librarySetupUndoCliCommand = Command.make(
           return yield* renderer.result(
             result(
               "setupUndo",
+              setupOutputContracts.setupUndo,
               {
                 ...plan.summary,
                 phase: "failed",
@@ -98,7 +106,7 @@ export const librarySetupUndoCliCommand = Command.make(
         }
         const undone = applied.success;
         yield* renderer.result(
-          result("setupUndo", {
+          result("setupUndo", setupOutputContracts.setupUndo, {
             ...undone,
             phase: "applied",
             actions: [
@@ -132,7 +140,7 @@ export const librarySetupUndoCliCommand = Command.make(
   ),
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read", "filesystem.write"] },
-    outputSchemas: [outputContracts.setupUndo],
+    outputSchemas: [setupOutputContracts.setupUndo],
     exitCodes: [0, 11, 12, 64],
     interactive: false,
   }),

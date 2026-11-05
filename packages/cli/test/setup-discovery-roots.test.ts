@@ -4,7 +4,7 @@ import { Effect, FileSystem } from "effect";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import { skitLayer, MachineSettings } from "@smolai/skit-core";
-import { setupCommand } from "../src/library/setup/command.js";
+import { setupCommand } from "../src/library/setup.js";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import { collectSetupEvidence, runSetup } from "@smolai/skit-core/library/setup";
 

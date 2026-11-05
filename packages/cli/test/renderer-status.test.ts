@@ -2,7 +2,7 @@ import { it } from "@effect/vitest";
 import { Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, expect, vi } from "vitest";
-import { consoleRenderer } from "../src/terminal/renderer.js";
+import { consoleRenderer } from "../src/terminal/console-renderer.js";
 
 const originalTTY = Object.getOwnPropertyDescriptor(process.stderr, "isTTY");
 afterEach(() => {

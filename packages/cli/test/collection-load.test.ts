@@ -23,7 +23,7 @@ import {
   importCollectionIn,
   writingTo,
 } from "./helpers/library-home.js";
-import { presentSetEnabled } from "../src/library/enable/command.js";
+import { presentSetEnabled } from "../src/library/enable.js";
 import { libraryCommandConfiguration } from "../src/commands/library-configuration.js";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import { testPlatformLayer } from "./helpers/platform.js";
