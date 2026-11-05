@@ -64,7 +64,7 @@ const normalizedHashParts = (entries: readonly TreeEntry[]) =>
     entry.kind === "file" ? [entry.path, String(entry.mode), entry.bytes] : [],
   );
 
-export function hashNormalizedEntries(entries: readonly TreeEntry[]): Hash {
+function hashNormalizedEntries(entries: readonly TreeEntry[]): Hash {
   return hashParts(normalizedHashParts(entries));
 }
 
@@ -116,14 +116,6 @@ const MIME: Record<string, string> = {
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
 };
-
-export function inventorySkitFiles(
-  root: string,
-): Effect.Effect<SkitFileRecord[], TreeError | PlatformError, TreeRequirements> {
-  return walkTree(root, "normalized", { respectGitIgnore: true }).pipe(
-    Effect.map(inventoryEntries),
-  );
-}
 
 function inventoryEntries(entries: TreeEntry[]): SkitFileRecord[] {
   return entries.flatMap((entry) => {
