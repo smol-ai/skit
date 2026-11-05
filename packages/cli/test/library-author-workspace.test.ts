@@ -137,6 +137,23 @@ it.effect("recovers a missing workspace document from the retained identity", ()
   }).pipe(Effect.provide(AuthorWorkspace.layer), Effect.provide(skitLayer), Effect.scoped),
 );
 
+it.effect("initializing through a symlink reuses the canonical workspace claim", () =>
+  Effect.gen(function* () {
+    const f = yield* workspaceFixture;
+    const first = yield* f.init();
+    const identity = yield* f.metadata;
+    const alias = join(f.root, "alias");
+    yield* f.fs.symlink(f.source, alias);
+    const again = yield* f.init(false, alias);
+    assert.strictEqual(
+      again.entry?.collection.collection_id,
+      first.entry?.collection.collection_id,
+    );
+    assert.deepStrictEqual(yield* f.metadata, identity);
+    assert.strictEqual((yield* f.home.durable).collections.length, 1);
+  }).pipe(Effect.provide(AuthorWorkspace.layer), Effect.provide(skitLayer), Effect.scoped),
+);
+
 it.effect("rejects a copied workspace identity before scaffolding or publishing", () =>
   Effect.gen(function* () {
     const f = yield* workspaceFixture;

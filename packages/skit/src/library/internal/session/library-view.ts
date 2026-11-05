@@ -1,3 +1,4 @@
+import { readWorkspaceClaims } from "./workspace-claims.js";
 import { previewSourceUpdates, type SourceInspection } from "./source-updates.js";
 import { checkLibrarySubjects } from "./check.js";
 import type { Hash } from "../../../shared/hash.js";
@@ -107,6 +108,7 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
     });
   });
   return {
+    readWorkspaceClaims: (root: string) => readWorkspaceClaims(state, root),
     previewSourceUpdates: <E, R>(
       query: string | undefined,
       inspectSource: (

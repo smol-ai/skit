@@ -10,7 +10,6 @@ import {
   AuthorWorkspace,
   AuthorWorkspaceConflict,
   type Connecting,
-  type WorkspaceId,
   AuthorHistory,
   AuthorHistoryInvalid,
 } from "@smolai/skit-core/author";
@@ -24,9 +23,10 @@ import type { AuthorSyncResult } from "../contracts.js";
 
 import { authorDecider, authorTree } from "../device-view.js";
 
-import { adoptFrom, collectionsAt } from "../library-claims.js";
+import { adoptFrom } from "../library-claims.js";
 
-import { Library } from "@smolai/skit-core/library";
+import { openLibraryView } from "@smolai/skit-core/library/session";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { History, conflictKind, Sync } from "@smolai/skit-core";
 import { MissingRequirement } from "../../commands/input-failures.js";
 
@@ -153,11 +153,8 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
           const workspaceId = Option.isSome(identity)
             ? identity.value.workspaceId
             : yield* Effect.gen(function* () {
-                const snapshot = yield* (yield* Library.Service).read;
-                const adopt =
-                  snapshot._tag === "Present"
-                    ? adoptFrom(yield* collectionsAt(root, snapshot.state))
-                    : Option.none<WorkspaceId>();
+                const view = yield* openLibraryView((yield* SkitConfiguration).skitHome);
+                const adopt = adoptFrom((yield* view.readWorkspaceClaims(root)).atRoot);
                 const created = yield* lease.register({
                   from: identity,
                   to: "IdentityOnly",

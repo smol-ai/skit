@@ -1,6 +1,7 @@
-import { skitConfigurationLayer } from "@smolai/skit-core/platform";
+import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { ImportContentInvalid, initSkit, validateSkitDirectory } from "@smolai/skit-core";
 import { Library } from "@smolai/skit-core/library";
+import { openLibraryView } from "@smolai/skit-core/library/session";
 
 import { Clock, Effect, FileSystem, Option, Path } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
@@ -22,7 +23,7 @@ import {
   DirectoryAlreadyInLibrary,
 } from "../library/failures.js";
 
-import { adoptFrom, authoredId, collectionsAt } from "./library-claims.js";
+import { adoptFrom } from "./library-claims.js";
 
 /**
  * What the Library already says about this folder: no other Collection may claim it, and a
@@ -30,38 +31,28 @@ import { adoptFrom, authoredId, collectionsAt } from "./library-claims.js";
  */
 const checkLibraryClaims = Effect.fn("Author.checkLibraryClaims")(function* (
   root: WorkspaceRoot,
-  snapshot: Library.Snapshot,
   identity: Option.Option<Identity>,
 ) {
-  if (snapshot._tag === "Absent") return { adopt: Option.none<WorkspaceId>(), existing: undefined };
-  const { state } = snapshot;
-  const fs = yield* FileSystem.FileSystem;
-  const sameRoot = yield* collectionsAt(root, state);
-  const imported = sameRoot.find((collection) => authoredId(collection) !== undefined);
-  const expected = Option.isSome(identity) ? identity.value.workspaceId : authoredId(imported);
+  const view = yield* openLibraryView((yield* SkitConfiguration).skitHome);
+  const claims = yield* view.readWorkspaceClaims(root);
+  const sameRoot = claims.atRoot;
+  const imported = sameRoot.find((collection) => collection.workspaceId !== undefined);
+  const expected = Option.isSome(identity) ? identity.value.workspaceId : imported?.workspaceId;
   const conflict = sameRoot.find(
-    (collection) => authoredId(collection) === undefined || authoredId(collection) !== expected,
+    (collection) => collection.workspaceId === undefined || collection.workspaceId !== expected,
   );
   if (conflict)
-    return yield* new DirectoryAlreadyInLibrary({ collectionId: conflict.collection_id });
-  const existing =
-    expected === undefined
-      ? undefined
-      : state.collections.find((collection) => authoredId(collection) === expected);
-  const existingInput =
-    existing === undefined
-      ? undefined
-      : state.imports.find((sourceImport) => sourceImport.collection_id === existing.collection_id)
-          ?.input.value;
+    return yield* new DirectoryAlreadyInLibrary({ collectionId: conflict.collectionId });
+  const existing = expected === undefined ? undefined : yield* claims.readRegistration(expected);
   if (
     expected !== undefined &&
-    existingInput !== undefined &&
-    (yield* fs.exists(existingInput)) &&
-    (yield* fs.realPath(existingInput)) !== root
+    existing?.input !== undefined &&
+    existing.root !== undefined &&
+    existing.root !== root
   )
     return yield* new AuthorWorkspaceAlreadyRegistered({
       workspaceId: expected,
-      at: existingInput,
+      at: existing.input,
     });
   return {
     adopt: Option.isSome(identity) ? Option.none<WorkspaceId>() : adoptFrom(sameRoot),
@@ -88,7 +79,7 @@ export const authorInitCommand = Effect.fn("CLI.authorInit")(function* (
   const lease = yield* workspaces.acquire(root);
   const library = yield* Library.Service;
   const identity = yield* workspaces.readIdentity(root);
-  const claims = yield* checkLibraryClaims(root, yield* library.read, identity);
+  const claims = yield* checkLibraryClaims(root, identity);
   const initialized = yield* initSkit(folder);
   const validated = yield* validateSkitDirectory(folder, "source", {
     assessmentContext: "import",
@@ -110,7 +101,7 @@ export const authorInitCommand = Effect.fn("CLI.authorInit")(function* (
             to: "Removed",
           })
         : yield* new AuthorWorkspaceRemovalUnfinished({
-            collectionId: claims.existing.collection_id,
+            collectionId: claims.existing.collectionId,
           })
       : registered;
   if (settled.registration === "Removed" && !register) return { initialized, entry: undefined };

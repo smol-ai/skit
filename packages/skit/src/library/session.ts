@@ -95,3 +95,5 @@ export { SyncChanges, SyncChange, SyncEnabledItem } from "./sync-changes.js";
 export type { LibrarySubjectNotFound, LibrarySubjectAmbiguous } from "./subject-resolution.js";
 
 export type { CleanupBudget, CleanupCandidate } from "./internal/session/cleanup-selection.js";
+
+export type { WorkspaceClaim } from "./internal/session/workspace-claims.js";
