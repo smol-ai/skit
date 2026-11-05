@@ -7,7 +7,7 @@ import { canonicalJson } from "../../../shared/json.js";
 
 import { FailureTypeId } from "../../../shared/failure.js";
 import { InvalidLibraryState, LibraryChanged } from "../../failures.js";
-import { LibraryBusy } from "../../../platform/lock-failures.js";
+import { HomeBusy } from "../../../platform/lock-failures.js";
 import { TreeError } from "../../../shared/tree-error.js";
 import { InstalledSkills } from "../../installed-skills.js";
 import { InvalidIntent } from "../../enabled-plan.js";
@@ -518,7 +518,7 @@ export const applySync = Effect.fn("Library.applySync")(function* (
             const error = result.reason.error;
             if (
               Schema.is(InvalidLibraryState)(error) ||
-              Schema.is(LibraryBusy)(error) ||
+              Schema.is(HomeBusy)(error) ||
               Schema.is(LibraryChanged)(error) ||
               Schema.is(TreeError)(error) ||
               isPlatformError(error)

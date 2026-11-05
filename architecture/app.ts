@@ -52,6 +52,7 @@ export const owners = {
       "Library.layer({ home, routing: None | Recorded | Configured }) — one constructor; keeps the 3 routing modes (library-owner.ts:4-17, library-sync-installed-skills.ts:310-313)",
     invariants: [
       "one composed action records one history event (ADR-0024:65)",
+      "home-lock contention is HomeBusy across all home owners; old recorded LibraryBusy failures decode privately",
       "operation record is durable before the first folder move (setup-recovery-refactor.md:26)",
       "Setup intent carries prior/expected-after evidence in the same state.json write (setup-recovery-refactor.md:136-138)",
     ],

@@ -128,11 +128,9 @@ export type RemoteHome = AuthorRemoteHome;
 /** FROM CODE: `skit://<authority>/<namespace>/<skit>` (sync.ts:195-198). */
 export type Locator = string;
 
-/** NEW: another process holds the home lock (D3). Today the same lock fails LibraryBusy (packages/skit/src/failures.ts:595). */
-export interface HomeBusy {
-  readonly _tag: "HomeBusy";
-  readonly path: string;
-}
+/** Shared contention error: every home owner competes for the same OS lock. */
+export type { HomeBusy } from "../packages/skit/src/platform/lock-failures.js";
+import type { HomeBusy } from "../packages/skit/src/platform/lock-failures.js";
 
 /**
  * NEW (core change): the Registry side of one SKIT, a plain value passed to Sync.loadPlanInput and
@@ -516,6 +514,7 @@ export type CaptureError =
   | AuthorHistoryBusy // SQLite contention after retries (history-journal.ts:197-205)
   | LocalFilesChangedDuringSync // no stable scan after 2 retries (history.ts:132-141)
   | AuthorWorkspaceAlreadyRegistered // a live copy of this workspace id elsewhere (history-journal.ts:47-53)
+  | HomeBusy // MachineSettings identity creation takes the shared home lock.
   | MachineSettingsUnusable // OPEN: becomes MachineSettings' error (D3); today history.ts:125-126, :152
   | TreeError
   | PlatformError.PlatformError; // includes AuthorWorkspace.readIdentity's I/O errors; only a malformed workspace.json falls back

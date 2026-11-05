@@ -56,7 +56,7 @@ import type {
   StalePlan,
 } from "./library-results.js";
 import type { InvalidLibraryState } from "../packages/skit/src/library/failures.js";
-import type { LibraryBusy } from "../packages/skit/src/platform/lock-failures.js";
+import type { HomeBusy } from "../packages/skit/src/platform/lock-failures.js";
 import type {
   AuthoredImport,
   EditImport,
@@ -695,13 +695,13 @@ export interface LibraryConfig {
 
 /**
  * Library.layer's error. Migration failure is InvalidLibraryState (state-file.ts:116-158, run by
- * libraryStoreLayer today); LibraryBusy when the home lock is held; writes of the migrated state or
+ * libraryStoreLayer today); HomeBusy when the home lock is held; writes of the migrated state or
  * recovery marks are LibraryStateWriteError. Reads never take the lock, so LibraryStateReadError has
- * no LibraryBusy, and a read refuses any state.json that is not the current version.
+ * no HomeBusy, and a read refuses any state.json that is not the current version.
  */
 export type LibraryLayerError =
   | InvalidLibraryState
-  | LibraryBusy
+  | HomeBusy
   | LibraryStateReadError
   | LibraryStateWriteError;
 

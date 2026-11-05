@@ -26,7 +26,7 @@ import { AuthorIgnoreRepository } from "../artifact/plain-author-ignore.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 import { Hash, sha256Hash } from "../shared/hash.js";
 import * as History from "../history/history.js";
-import { type LibraryBusy } from "../platform/lock-failures.js";
+import { type HomeBusy } from "../platform/lock-failures.js";
 import { LinkStat } from "../platform/link-stat.js";
 import * as MachineSettings from "../library/machine-settings.js";
 import { SourceProcess } from "../platform/source-process.js";
@@ -168,7 +168,7 @@ export type CaptureError =
   | LocalFilesChangedDuringSync
   | AuthorWorkspaceAlreadyRegistered
   | MachineSettings.Unusable
-  | LibraryBusy // MachineSettings.ensureIdentity takes the home lock (withHomeLock today)
+  | HomeBusy // MachineSettings.ensureIdentity takes the home lock (withHomeLock today)
   | TreeError
   | PlatformError.PlatformError;
 
@@ -416,7 +416,7 @@ export interface AuthorHistoryShape {
       | AuthorSyncStateConflict
       | AuthorSyncStateIllegal
       | AuthorLeaseNotHeld
-      | LibraryBusy // the shared home lock excludes other home writers
+      | HomeBusy // the shared home lock excludes other home writers
       | SyncStateError
     >;
     /** The step into Writing, once both trees are stored; returns the PreparedWrite for it. */
@@ -433,7 +433,7 @@ export interface AuthorHistoryShape {
       | AuthorSyncStateIllegal
       | AuthorLeaseNotHeld
       | AuthorHistoryInvalid
-      | LibraryBusy // the shared home lock excludes other home writers
+      | HomeBusy // the shared home lock excludes other home writers
       | SyncStateError
     >;
   };

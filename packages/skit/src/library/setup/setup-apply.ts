@@ -1,12 +1,10 @@
 import { Clock, Effect, Option, Predicate, Schema } from "effect";
 import { canonicalJson } from "../../shared/json.js";
 import { currentSkillVersion } from "../library-contracts.js";
-import { ensureSkillsDirectoryWritable } from "../../installed-skills/writable.js";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 import { type Hash } from "../../shared/hash.js";
 import * as MachineSettings from "../machine-settings.js";
 import { stepRouting } from "../routing/step.js";
-import { activeInstallDestinations, skillsDirectoryFor } from "../routing/roots.js";
 import { Library } from "../library.js";
 import type { ManageOptions } from "./manage-existing.js";
 import { revalidateSetupPlan, saveSetupMachineConfig, type SetupOptions } from "./setup.js";
@@ -16,7 +14,7 @@ import type {
   SetupVersionChoice,
   InstalledSkillChangeResult,
 } from "./setup-contract.js";
-import { isSetupInstallDestination, type SetupCopySelection } from "./setup-decisions.js";
+import { type SetupCopySelection } from "./setup-decisions.js";
 import { setupExistingSelections, setupNewSelections } from "./setup-manage.js";
 import { setupImportRequests } from "./setup-import.js";
 import type { SetupRemovals } from "./setup-removal.js";
@@ -158,42 +156,10 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(function* (
     return yield* new StalePlan({ message: "The Library changed since this was previewed" });
   const unresolved = changesNeedingChoice(installedSkillChanges, versionChoices);
   if (unresolved.length) return yield* new ChangeChoiceRequired({ facts: unresolved });
-  // Only enabled global copies install into this device's skills directories. Prove those roots
-  // are writable before any step writes, so a sandboxed or read-only root (Codex keeps `.agents`
-  // read-only) fails the apply whole instead of leaving a Library with no copies behind.
-  const installedCopies = [...approval.bindings, ...approval.ownership].filter(
-    (copy) =>
-      copy.duplicateAction !== "retain-only" &&
-      isSetupInstallDestination(
-        revalidated.scan.instances.find((instance) => instance.path === copy.sourcePath),
-      ) &&
-      !revalidated.scan.onboarding.candidates.some(
-        (candidate) =>
-          candidate.action === "repository-owned" && candidate.paths.includes(copy.sourcePath),
-      ),
-  );
-  const enablingCopies = installedCopies.length > 0;
-  // Updating existing copies updates every one the approved plan showed, not only those selected.
+  // Writability checks create directories. Library.setup records their paths and ancestry before
+  // preparing them, and stops before any Import/Manage/Update step if preparation fails.
   const scanChanges = revalidated.scan.changes ?? [];
   const updating = hasChangesToApply(installedSkillChanges, versionChoices);
-  if (enablingCopies || updating)
-    for (const target of yield* activeInstallDestinations(approval.setup.inventory))
-      if (
-        enablingCopies ||
-        (updating ? scanChanges : installedSkillChanges).some(
-          (fact) =>
-            fact.destination === target &&
-            (fact.status === "incoming-update" ||
-              fact.status === "uninstall" ||
-              fact.status === "install" ||
-              fact.metadataChanged ||
-              (fact.status !== "native-delete" &&
-                versionChoices.some((choice) => choice.skillId === fact.skillId))),
-        )
-      )
-        yield* ensureSkillsDirectoryWritable(
-          skillsDirectoryFor(target, { kind: "global" }, approval.setup.inventory),
-        );
 
   // Imports and managed copies are recorded under this machine's identity, created once.
   const home = approval.setup.libraryHome;

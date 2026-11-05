@@ -93,7 +93,7 @@ export {
   InvalidLibraryState,
   LibraryChanged,
 } from "./library/failures.js";
-export { LibraryBusy } from "./platform/lock-failures.js";
+export { HomeBusy } from "./platform/lock-failures.js";
 export { NotAnAuthorWorkspace } from "./author/failures.js";
 export { HarnessMetadataInvalid } from "./harnesses/metadata-failures.js";
 export { RegistryNotConfigured } from "./shared/input-failures.js";

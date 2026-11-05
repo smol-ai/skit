@@ -976,7 +976,7 @@ it.effect("building the layer over an absent Library creates nothing", () =>
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("building the layer fails LibraryBusy, migrating nothing, while the lock is held", () =>
+it.effect("building the layer fails HomeBusy, migrating nothing, while the lock is held", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-layer-busy-" });
@@ -987,7 +987,7 @@ it.effect("building the layer fails LibraryBusy, migrating nothing, while the lo
 
     const error = yield* Effect.flip(Layer.build(libraryLayer(home)));
 
-    assert.strictEqual(error._tag, "LibraryBusy");
+    assert.strictEqual(error._tag, "HomeBusy");
     assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), legacy);
     assert.deepStrictEqual(yield* stateBackups(home), []);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),

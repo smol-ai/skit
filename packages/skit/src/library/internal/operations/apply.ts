@@ -1,3 +1,4 @@
+import { samePathChain } from "../../../platform/path-evidence.js";
 import { Effect } from "effect";
 import { InstalledSkills } from "../../installed-skills.js";
 import * as Status from "../../installed-skill-status.js";
@@ -81,18 +82,7 @@ const ancestorsMatch = (
   before: SyncFolder,
   current: InstalledSkills.Folder,
   allowCreation: boolean,
-) =>
-  same(before.ancestors, current.ancestors) ||
-  (allowCreation &&
-    before.ancestors.length === current.ancestors.length &&
-    current.ancestors.every((ancestor) => {
-      const prior = before.ancestors.find((item) => item.path === ancestor.path);
-      return (
-        prior &&
-        (prior.evidence === ancestor.evidence ||
-          (prior.evidence === "absent" && ancestor.evidence.startsWith("Directory:")))
-      );
-    }));
+) => samePathChain(before.ancestors, current.ancestors, allowCreation);
 const backedUp = Effect.fn("Library.checkApplyPredecessor")(function* (
   before: SyncFolder,
   row: InstalledSkill,

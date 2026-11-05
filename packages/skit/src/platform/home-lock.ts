@@ -1,7 +1,7 @@
 import { Context, Deferred, Effect, Exit, FileSystem, Scope, Semaphore, Option } from "effect";
 import { systemError, type PlatformError } from "effect/PlatformError";
 import { join, resolve } from "node:path";
-import { LibraryBusy } from "./lock-failures.js";
+import { HomeBusy } from "./lock-failures.js";
 import { acquireFileLock } from "./file-lock.js";
 
 /**
@@ -53,13 +53,13 @@ const semaphoreFor = (semaphores: Map<string, Semaphore.Semaphore>, root: string
  * serialize their own writes here; this grants no LibraryWriter. Across processes it
  * is an exclusive SQLite transaction on `<home>/lock.sqlite` (decisions.md A8, D3): the file never
  * holds data and is never unlinked, so the OS releases the lock when its holder exits, even on
- * SIGKILL. It never waits: a lock another process holds fails `LibraryBusy` at once. A `.lock` left
+ * SIGKILL. It never waits: a lock another process holds fails `HomeBusy` at once. A `.lock` left
  * by an earlier SKIT means nothing and is ignored.
  */
 export const withLock = Effect.fn("HomeLock.with")(function* <A, E, R>(
   home: string,
   program: Effect.Effect<A, E, R>,
-): Effect.fn.Return<A, E | LibraryBusy | PlatformError, R | FileSystem.FileSystem> {
+): Effect.fn.Return<A, E | HomeBusy | PlatformError, R | FileSystem.FileSystem> {
   const fs = yield* FileSystem.FileSystem;
   const root = resolve(home);
   const path = join(root, "lock.sqlite");
@@ -69,7 +69,7 @@ export const withLock = Effect.fn("HomeLock.with")(function* <A, E, R>(
     yield* acquireFileLock(path).pipe(
       Scope.provide(lock),
       Effect.catchTags({
-        FileLockBusy: () => Effect.fail(new LibraryBusy({ path })),
+        FileLockBusy: () => Effect.fail(new HomeBusy({ path })),
         FileLockFailed: (error) =>
           Effect.fail(
             systemError({

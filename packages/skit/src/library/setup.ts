@@ -1,3 +1,4 @@
+import { recordPreparation, prepareRoots } from "./internal/setup/prepare-roots.js";
 import { withLock as withHomeLock } from "../platform/home-lock.js";
 import { runUndo } from "./internal/setup/undo-execution.js";
 // Setup: steps saved in state.json before any runs, run in order, each marked Done as it ends
@@ -9,7 +10,7 @@ import { TreeError } from "../shared/tree-error.js";
 import { isSkitFailure } from "../shared/failure.js";
 import { isAbsolute, resolve } from "node:path";
 import { InvalidLibraryState, LibraryChanged } from "./failures.js";
-import { LibraryBusy } from "../platform/lock-failures.js";
+import { HomeBusy } from "../platform/lock-failures.js";
 import { pathIsWithin } from "../platform/path-identity.js";
 import { InvalidIntent } from "./enabled-plan.js";
 import { makeOperationId, type OperationId } from "./entity-ids.js";
@@ -427,7 +428,7 @@ const runStep = Effect.fn("Library.setup.step")(function* (
 });
 
 const storedInFull = Schema.is(
-  Schema.Union([TreeError, LibraryBusy, LibraryChanged, InvalidLibraryState]),
+  Schema.Union([TreeError, HomeBusy, LibraryChanged, InvalidLibraryState]),
 );
 
 /** The error a failed step stores: in full where it can be, otherwise what it says about itself. */
@@ -495,7 +496,30 @@ const runOperation = Effect.fn("Library.setup.run")(function* (operationId: Oper
         () => snapshotOf({ present: false }).revision,
       ),
     });
-  const recorded = loaded.success.value.steps;
+  let pending = loaded.success.value;
+  if (pending.preparation) {
+    const prepared = yield* Effect.result(prepareRoots(pending.preparation, pending.steps));
+    if (prepared._tag === "Failure") {
+      const error = prepared.failure;
+      return yield* Predicate.isTagged(error, "Library.InstalledSkillsChanged")
+        ? stop({
+            _tag: "EvidenceDiffers",
+            step: 0,
+            path: error.path,
+            expected: { before: Option.none(), after: Option.none() },
+          })
+        : failed(0)(error);
+    }
+    if (!pending.preparation.done) {
+      pending = { ...pending, ...prepared.success };
+      const saved = yield* Effect.result(
+        Effect.flatMap(loadLibrary(home), (current) => saveOperation(current, pending)),
+      );
+      if (saved._tag === "Failure") return yield* failed(0)(saved.failure);
+    }
+  }
+  const recorded = pending.steps;
+
   for (const [index, { status }] of recorded.entries()) {
     if (status === "Done") continue;
     // The record as saved now: an earlier step's Done write may have added this step's evidence.
@@ -525,6 +549,7 @@ const runOperation = Effect.fn("Library.setup.run")(function* (operationId: Oper
         yield* saveOperation(
           current,
           OperationStatus.cases.Pending.make({
+            ...operation.value,
             operationId,
             before: operation.value.before,
             // A later step that takes its files from this one records what it retained.
@@ -604,9 +629,11 @@ export const setupOperation = Effect.fn("Library.setupOperation")(function* (
   const operationId = options.operationId;
   if (state.operations.some((operation) => operation.operationId === operationId))
     return yield* new StalePlan({ message: "This operation is already recorded" });
+  const preparation = yield* recordPreparation(steps);
   const pending = yield* encodeOperation(
     OperationStatus.cases.Pending.make({
       operationId,
+      ...(preparation === undefined ? {} : { preparation }),
       steps: yield* Effect.forEach(steps, recordedStep).pipe(
         Effect.catchTag("TreeError", (error) =>
           Effect.fail(new InvalidIntent({ detail: `Setup cannot record ${error.message}` })),

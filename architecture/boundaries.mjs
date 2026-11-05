@@ -19,6 +19,7 @@ export const owners = [
       "packages/skit/src/library/store/library-store.",
       "packages/skit/src/library/store/state-file.",
       "packages/skit/src/library/store/writer-lock.",
+      "packages/skit/src/library/store/step-error-compat.",
       "packages/skit/src/library/internal/",
     ],
     testOwner: "packages/skit/test/",

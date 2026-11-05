@@ -12,9 +12,9 @@ import {
 } from "../src/library/library-state.js";
 import { recordedLibrary } from "../src/library/setup-intent.js";
 import { readSnapshotArchive } from "../src/library/snapshot-archive.js";
-import { OperationStatus, type StepError } from "../src/library/store/state-schema.js";
+import { OperationStatus, StepError } from "../src/library/store/state-schema.js";
 import { InvalidLibraryState, LibraryChanged } from "../src/library/failures.js";
-import { LibraryBusy } from "../src/platform/lock-failures.js";
+import { HomeBusy } from "../src/platform/lock-failures.js";
 import { TreeError } from "../src/shared/tree-error.js";
 import { badArgument, systemError } from "effect/PlatformError";
 
@@ -149,7 +149,7 @@ it.effect("refuses to save while another holder has the lock", () =>
 
     const error = yield* save({ ...state, enabled: [] }, state).pipe(Effect.flip);
 
-    assert.strictEqual(error._tag, "LibraryBusy");
+    assert.strictEqual(error._tag, "HomeBusy");
     assert.strictEqual(yield* fs.readFileString(path), before);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -175,7 +175,7 @@ it.effect("makes a save that outlives its write acquire the lock again", () =>
     yield* acquireFileLock(join(home, "lock.sqlite"));
     yield* Deferred.succeed(resume, undefined);
 
-    assert.strictEqual((yield* Effect.flip(Fiber.join(child)))._tag, "LibraryBusy");
+    assert.strictEqual((yield* Effect.flip(Fiber.join(child)))._tag, "HomeBusy");
     assert.strictEqual(yield* fs.readFileString(path), before);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -317,7 +317,7 @@ it.effect(
       const { save, home } = yield* library;
       const errors: readonly StepError[] = [
         new TreeError({ reason: { _tag: "UnsupportedEntry", path: "/skills/review/socket" } }),
-        new LibraryBusy({ path: "/home/lock.sqlite" }),
+        new HomeBusy({ path: "/home/lock.sqlite" }),
         new LibraryChanged({ path: "/home/state.json" }),
         new InvalidLibraryState({ path: "/home/state.json", detail: "invalid setup record" }),
         systemError({
@@ -376,4 +376,47 @@ it.effect(
         errors.map(fields),
       );
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("reads a recorded LibraryBusy failure without rewriting it, and encodes HomeBusy", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-old-home-busy-" });
+    const state = emptyLibraryState();
+    const bytes = JSON.stringify({
+      ...state,
+      operations: [
+        {
+          _tag: "Stopped",
+          operationId: makeOperationId(),
+          steps: [],
+          before: recordedLibrary(state),
+          after: recordedLibrary(state),
+          reason: {
+            _tag: "StepFailed",
+            step: 0,
+            error: { _tag: "LibraryBusy", path: "/home/lock.sqlite" },
+          },
+        },
+      ],
+    });
+    yield* fs.writeFileString(join(home, "state.json"), bytes);
+    const owner = yield* openLibrary(home);
+    const snapshot = yield* owner.read;
+    assert.strictEqual(snapshot._tag, "Present");
+    if (snapshot._tag !== "Present") return;
+    const operations = yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
+      snapshot.state.operations,
+    );
+    const operation = operations[0];
+    assert.strictEqual(operation?._tag, "Stopped");
+    if (operation?._tag !== "Stopped" || operation.reason._tag !== "StepFailed")
+      return yield* Effect.die("Missing stopped failure");
+    assert.strictEqual(operation.reason.error._tag, "HomeBusy");
+    assert.deepStrictEqual(yield* Schema.encodeEffect(StepError)(operation.reason.error), {
+      _tag: "HomeBusy",
+      path: "/home/lock.sqlite",
+    });
+    assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), bytes);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

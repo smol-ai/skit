@@ -3,7 +3,7 @@ import type { Digest } from "effect/crypto";
 import type { HttpClient } from "effect/http";
 import type { TreeRequirements } from "../../../platform/tree-requirements.js";
 import { InvalidLibraryState, type ContentAddressCollision } from "../../failures.js";
-import { type LibraryBusy } from "../../../platform/lock-failures.js";
+import { type HomeBusy } from "../../../platform/lock-failures.js";
 import type { PlatformError } from "effect/PlatformError";
 import type { TreeError } from "../../../shared/tree-error.js";
 import type { SnapshotArchiveInvalid } from "../../snapshot-archive-universal.js";
@@ -203,4 +203,4 @@ export type ContentStageError =
   | ContentAddressCollision
   | PlatformError
   | TreeError
-  | LibraryBusy;
+  | HomeBusy;

@@ -32,7 +32,7 @@ it.effect("fails at once while another process holds the lock, and not after it 
       ran = true;
     });
     expect(yield* Effect.flip(withHomeLock(home, program))).toMatchObject({
-      _tag: "LibraryBusy",
+      _tag: "HomeBusy",
       path: join(home, "lock.sqlite"),
     });
     expect(ran).toBe(false);
@@ -103,7 +103,7 @@ it.effect("makes a fiber that outlives its owner's lock acquire the lock again",
     // Another holder takes the lock once the owner has released it.
     yield* acquireFileLock(join(home, "lock.sqlite"));
     yield* Deferred.succeed(released, undefined);
-    expect(yield* Effect.flip(Fiber.join(child))).toMatchObject({ _tag: "LibraryBusy" });
+    expect(yield* Effect.flip(Fiber.join(child))).toMatchObject({ _tag: "HomeBusy" });
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 

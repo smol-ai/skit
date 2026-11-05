@@ -2,7 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect, FileSystem, Result, Stream } from "effect";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { History } from "@smolai/skit-core";
+import { History, acquireFileLock } from "@smolai/skit-core";
 import { AuthorHistory } from "@smolai/skit-core/author";
 import {
   authorLayer,
@@ -262,4 +262,31 @@ it.effect(
       }).pipe(Effect.provide(authorLayer(world.a.home)));
       expect(yield* fs.readFileString(metadata)).toBe("unfinished metadata");
     }).pipe(Effect.provide(testPlatformLayer)),
+);
+
+it.effect("capture reports shared HomeBusy when machine identity cannot be written", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-capture-home-busy-" });
+    const home = join(root, "home");
+    const workspace = join(root, "workspace");
+    yield* fs.makeDirectory(home);
+    yield* fs.makeDirectory(workspace);
+    yield* fs.writeFileString(
+      join(workspace, "SKILL.md"),
+      "---\nname: review\ndescription: review\n---\nReview\n",
+    );
+    yield* acquireFileLock(join(home, "lock.sqlite"));
+    const error = yield* captureWorkspace(workspace).pipe(
+      Effect.provide(authorLayer(home)),
+      Effect.flip,
+    );
+    expect(error).toMatchObject({
+      _tag: "HomeBusy",
+      code: "CONFLICT",
+      path: join(home, "lock.sqlite"),
+    });
+    expect(yield* fs.exists(join(home, "machine.json"))).toBe(false);
+    expect(yield* fs.exists(join(home, "state.json"))).toBe(false);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

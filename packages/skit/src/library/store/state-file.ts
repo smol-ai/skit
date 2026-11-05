@@ -9,7 +9,7 @@ import { Clock, DateTime, Effect, FileSystem, Schema, SchemaIssue } from "effect
 import type { PlatformError } from "effect/PlatformError";
 import { dirname, join, resolve } from "node:path";
 import { InvalidLibraryState, LibraryChanged } from "../failures.js";
-import { LibraryBusy } from "../../platform/lock-failures.js";
+import { HomeBusy } from "../../platform/lock-failures.js";
 import { writeJsonAtomic, writeRawAtomic, syncPaths } from "../../platform/atomic-write.js";
 import {
   decodeLibraryState,
@@ -134,15 +134,11 @@ const decodeStoredState = Effect.fn("Library.decodeStoredState")(function* (
 /**
  * Migrate a legacy `state.json` to the current version, once, under the home lock, keeping the
  * pre-migration file as a backup. An absent file stays absent, and a file of any other version is
- * left for reads to accept or refuse. Fails with `LibraryBusy` when the lock is held elsewhere.
+ * left for reads to accept or refuse. Fails with `HomeBusy` when the lock is held elsewhere.
  */
 export const migrateLocalLibraryState = Effect.fn("Library.migrateState")(function* (
   home: string,
-): Effect.fn.Return<
-  void,
-  PlatformError | InvalidLibraryState | LibraryBusy,
-  FileSystem.FileSystem
-> {
+): Effect.fn.Return<void, PlatformError | InvalidLibraryState | HomeBusy, FileSystem.FileSystem> {
   const path = join(resolve(home), "state.json");
   const value = yield* readStateValue(path);
   if (value === undefined || !isLegacyVersion(yield* readStateVersion(path, value))) return;

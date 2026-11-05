@@ -172,7 +172,9 @@ export type {
 } from "./store/state-schema.js";
 /** History reports steps and evidence, without private installed-change checkpoints. */
 type ReportedOperation<O> = {
-  readonly [K in keyof O]: K extends "steps" ? readonly Omit<RecordedSetupStep, "applies">[] : O[K];
+  readonly [K in keyof O as K extends "preparation" ? never : K]: K extends "steps"
+    ? readonly Omit<RecordedSetupStep, "applies">[]
+    : O[K];
 };
 export type OperationStatus = ReportedOperation<StoredOperationStatus>;
 

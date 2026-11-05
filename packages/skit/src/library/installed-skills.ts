@@ -1,3 +1,4 @@
+import { pathEntryIdentity, pathChain } from "../platform/path-evidence.js";
 import {
   activeInstallDestinations,
   skillsDirectoryFor,
@@ -277,25 +278,8 @@ export const make = Effect.fn("make")(function* (configuration?: Routing | Inven
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
 
-  /** The entry's own identity, and where a link points. Never follows a link to inspect it. */
-  const identity = Effect.fn("identity")(function* (path: string) {
-    return yield* links.identity.lstat(path).pipe(
-      Effect.flatMap((info) =>
-        info.type === "SymbolicLink"
-          ? links.identity.stat(path).pipe(
-              Effect.map(
-                (target) =>
-                  `${info.type}:${info.dev}:${info.ino}->${target.type}:${target.dev}:${target.ino}`,
-              ),
-              Effect.catchReason("PlatformError", "NotFound", () =>
-                Effect.succeed(`${info.type}:${info.dev}:${info.ino}->absent`),
-              ),
-            )
-          : Effect.succeed(`${info.type}:${info.dev}:${info.ino}`),
-      ),
-      Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed("absent")),
-    );
-  });
+  const identity = (path: string) =>
+    pathEntryIdentity(path).pipe(Effect.provideService(LinkStat, links));
   // Includes entries normalized hashes omit, and reads links without following them.
   const tree = Effect.fn("tree")(function* (path: string): Effect.fn.Return<string, PlatformError> {
     const entry = yield* identity(path);
@@ -355,11 +339,7 @@ export const make = Effect.fn("make")(function* (configuration?: Routing | Inven
     const info = yield* links.identity
       .lstat(absolute)
       .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
-    const ancestors: { path: string; evidence: string }[] = [];
-    for (let parent = dirname(absolute); ; parent = dirname(parent)) {
-      ancestors.push({ path: parent, evidence: yield* identity(parent) });
-      if (parent === dirname(parent)) break;
-    }
+    const ancestors = yield* pathChain(dirname(absolute));
     if (info === undefined)
       return {
         path: absolute,

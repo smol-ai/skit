@@ -8,7 +8,7 @@ import {
   type PlatformError,
 } from "effect/PlatformError";
 import { InvalidLibraryState, LibraryChanged } from "../failures.js";
-import { LibraryBusy } from "../../platform/lock-failures.js";
+import { StoredHomeBusy } from "./step-error-compat.js";
 import { TreeError } from "../../shared/tree-error.js";
 import {
   CollectionId,
@@ -546,7 +546,7 @@ export type StoredFailure = typeof StoredFailure.Type;
  */
 export const StepError = Schema.Union([
   TreeError,
-  LibraryBusy,
+  StoredHomeBusy,
   LibraryChanged,
   InvalidLibraryState,
   StoredPlatformError,
@@ -619,8 +619,20 @@ export type RecordedLibrary = typeof RecordedLibrary.Type;
  * Every status keeps its steps and their evidence: undo needs a Done or Stopped operation's
  * evidence as much as resuming needs a Pending one's.
  */
+export const SetupPreparation = Schema.Struct({
+  roots: Schema.Array(
+    Schema.Struct({
+      path: Schema.String,
+      ancestors: Schema.Array(Schema.Struct({ path: Schema.String, evidence: Schema.String })),
+    }),
+  ),
+  done: Schema.Boolean,
+});
+export type SetupPreparation = typeof SetupPreparation.Type;
+
 export const OperationStatus = Schema.TaggedUnion({
   Pending: {
+    preparation: Schema.optionalKey(SetupPreparation),
     operationId: OperationId,
     steps: Schema.Array(RecordedSetupStep),
     before: RecordedLibrary,

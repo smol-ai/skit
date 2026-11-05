@@ -4,7 +4,7 @@ import { Context, Effect, FileSystem, Option, References } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { join, resolve } from "node:path";
 import type { InvalidLibraryState, LibraryChanged } from "../failures.js";
-import type { LibraryBusy } from "../../platform/lock-failures.js";
+import type { HomeBusy } from "../../platform/lock-failures.js";
 import { emptyLibraryState, type LibraryState } from "../library-state.js";
 import {
   inspectLocalLibraryState,
@@ -22,12 +22,12 @@ export {
 } from "./state-file.js";
 
 export type LibraryStateReadError = PlatformError | InvalidLibraryState;
-/** Opening a Library migrates a legacy state.json under the home lock: `LibraryBusy` if held elsewhere. */
-export type LibraryLayerError = PlatformError | InvalidLibraryState | LibraryBusy;
+/** Opening a Library migrates a legacy state.json under the home lock: `HomeBusy` if held elsewhere. */
+export type LibraryLayerError = PlatformError | InvalidLibraryState | HomeBusy;
 export type LibraryStateWriteError =
   | PlatformError
   | InvalidLibraryState
-  | LibraryBusy
+  | HomeBusy
   | LibraryChanged;
 
 export const libraryStatePath = (home: string) => join(resolve(home), "state.json");

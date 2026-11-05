@@ -138,7 +138,7 @@ it.effect("refuses an occupied root lock before replacing settings", () =>
     const error = yield* MachineSettings.setRepositoryDecision(home, "/repo", "ignored").pipe(
       Effect.flip,
     );
-    assert.strictEqual(error._tag, "LibraryBusy");
+    assert.strictEqual(error._tag, "HomeBusy");
     assert.strictEqual(yield* fs.readFileString(path), before);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

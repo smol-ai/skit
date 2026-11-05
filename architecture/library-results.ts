@@ -49,7 +49,7 @@ import type {
   SecurityFindingAbsent,
   UnknownInstalledSkill,
 } from "../packages/skit/src/library/failures.js";
-import type { LibraryBusy as StoredLibraryBusy } from "../packages/skit/src/platform/lock-failures.js";
+import type { HomeBusy as StoredHomeBusy } from "../packages/skit/src/platform/lock-failures.js";
 import type { TreeError } from "../packages/skit/src/shared/tree-error.js";
 import type { Hash } from "../packages/skit/src/shared/hash.js";
 import type {
@@ -287,7 +287,7 @@ export type ContentStageError =
   | ContentAddressCollision
   | PlatformError
   | TreeError
-  | StoredLibraryBusy;
+  | StoredHomeBusy;
 
 // ── Sync (local half) ───────────────────────────────────────────────────────────────────────────
 // Source: cli/src/workflows/library/library-sync.ts, library-sync-installed-skills.ts.
@@ -495,7 +495,7 @@ export type SetupStopReason =
 type StoredPlatformError = PlatformErrors.PlatformError;
 export type StepError =
   | TreeError
-  | StoredLibraryBusy
+  | StoredHomeBusy
   | StoredLibraryChanged
   | StoredInvalidLibraryState
   | StoredPlatformError

@@ -7,7 +7,7 @@ import { stepRouting } from "../routing/step.js";
 import { planAcceptance, applyAcceptance } from "./security/accept.js";
 import { planInventory, applyInventory } from "./inventory/refresh.js";
 import { planUndo, applyUndo } from "./setup/undo.js";
-import { Context, Effect, FileSystem, Layer, Option, Path, Schema } from "effect";
+import { Context, Effect, FileSystem, Layer, Option, Path, Schema, Struct } from "effect";
 import { LinkStat } from "../../platform/link-stat.js";
 import { SourceProcess } from "../../platform/source-process.js";
 import { FetchHttpClient, HttpClient } from "effect/http";
@@ -240,7 +240,7 @@ export const make = Effect.fn("Library.make")(function* (
       return {
         events,
         operations: operations.map(({ steps, ...operation }) => ({
-          ...operation,
+          ...(operation._tag === "Pending" ? Struct.omit(operation, ["preparation"]) : operation),
           steps: steps.map(({ applies: _applies, ...step }) => step),
         })),
       } satisfies History;
