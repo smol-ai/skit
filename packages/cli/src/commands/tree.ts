@@ -9,7 +9,7 @@ import { listCliCommand } from "../library/list.js";
 import { addCliCommand } from "../library/add.js";
 import { removeCliCommand } from "../library/remove.js";
 import { updateCliCommand } from "../library/update.js";
-import { librarySyncCliCommand } from "../library/commands/sync.js";
+import { librarySyncCliCommand } from "../library/sync.js";
 import { disableCliCommand, enableCliCommand } from "../library/enable.js";
 import { securityAcceptCliCommand } from "../library/commands/security-accept.js";
 import { securityReviewCliCommand } from "../library/commands/security-review.js";

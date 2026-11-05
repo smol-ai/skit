@@ -13,10 +13,7 @@ import {
   makeSkillVersionId,
   type Enabled,
 } from "@smolai/skit-core";
-import {
-  mergeLibraryManifests,
-  normalizeLibraryManifest,
-} from "../src/library/workflows/library-merge.js";
+import { mergeLibraryManifests, normalizeLibraryManifest } from "../src/library/sync/merge.js";
 
 const machineId = makeMachineId();
 /** A fixed pool of one-Skill Collections; every side of a merge is drawn from the same records. */

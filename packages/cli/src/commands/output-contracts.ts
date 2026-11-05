@@ -25,7 +25,7 @@ import { removeOutputContracts } from "../library/remove.js";
 import { checkOutputContracts } from "../library/check.js";
 import { addOutputContracts } from "../library/add.js";
 import { updateOutputContracts } from "../library/update.js";
-import { SyncResult } from "../library/workflows/library-sync-contract.js";
+import { syncOutputContracts } from "../library/sync.js";
 import { listOutputContracts } from "../library/list.js";
 import { RepositoryPolicyResult } from "@smolai/skit-core/library/setup";
 
@@ -127,7 +127,7 @@ export const outputContracts = {
   disablePlan: enableOutputContracts.disablePlan,
   publish: effectOutput("skit.publish.v1", releasePublishResponseSchema),
   sync: effectOutput("skit.author.sync.v5", AuthorSyncResult),
-  librarySync: effectOutput("skit.library.sync.v11", SyncResult),
+  librarySync: syncOutputContracts.librarySync,
   libraryHistory: effectOutput(
     "skit.library.history.v1",
     Schema.Struct({ events: Schema.Array(LibraryAuditEvent) }),

@@ -16,13 +16,13 @@ import {
   FailureTypeId,
   type SkitFailure,
 } from "@smolai/skit-core";
-import { inspectSyncSnapshots } from "./library-sync-inspection.js";
-import { prepareSyncTransfer } from "./library-sync-snapshots.js";
-import { silentSyncProgress, type SyncProgress } from "./library-sync-progress.js";
-import { librarySyncApi } from "./library-sync-api.js";
-import { prepareLibraryMerge, normalizeLibraryManifest } from "./library-merge.js";
-import { planLibrarySync } from "./library-sync-plan.js";
-import { type SyncPlan, SyncConflictDetail } from "./library-sync-contract.js";
+import { inspectSyncSnapshots } from "./inspection.js";
+import { prepareSyncTransfer } from "./snapshots.js";
+import { silentSyncProgress, type SyncProgress } from "./progress.js";
+import { librarySyncApi } from "./api.js";
+import { prepareLibraryMerge, normalizeLibraryManifest } from "./merge.js";
+import { planLibrarySync } from "./plan.js";
+import { type SyncPlan, SyncConflictDetail } from "./output.js";
 
 import { selectDeviceSkills } from "./device-selection.js";
 import { OptionCombinationInvalid } from "../../commands/input-failures.js";

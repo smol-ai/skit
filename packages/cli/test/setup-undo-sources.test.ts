@@ -27,7 +27,7 @@ import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.j
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import { renderContract } from "../src/commands/output-presenters.js";
-import { mergeLibraryManifests } from "../src/library/workflows/library-merge.js";
+import { mergeLibraryManifests } from "../src/library/sync/merge.js";
 import {
   deterministicTreeHash,
   libraryHome,

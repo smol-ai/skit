@@ -23,7 +23,7 @@ import {
   type Import,
 } from "@smolai/skit-core";
 import { Array, Data, Effect, Option, Order, Record, Result, Schema } from "effect";
-import { SyncConflictDetail } from "./library-sync-contract.js";
+import { SyncConflictDetail } from "./output.js";
 
 const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
 const byKey = <T>(records: readonly T[], key: (record: T) => string) =>

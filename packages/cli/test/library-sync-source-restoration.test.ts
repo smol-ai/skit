@@ -14,7 +14,7 @@ import {
   type SkitSource,
 } from "@smolai/skit-core";
 import { importSource } from "../src/library/source.js";
-import { syncLibrary } from "../src/library/workflows/library-sync.js";
+import { syncLibrary } from "../src/library/sync/workflow.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { archiveBytes, writingTo } from "./helpers/library-home.js";
 import { librarySyncServer } from "./helpers/library-sync-server.js";

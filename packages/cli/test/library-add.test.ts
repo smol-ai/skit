@@ -19,7 +19,7 @@ import { importSource, previewLibrarySource } from "../src/library/source.js";
 import { planUpdates, updateSubjects } from "../src/library/update/operation.js";
 import { checkSubjects } from "../src/library/check/operation.js";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
-import { planLibrarySync } from "../src/library/workflows/library-sync-plan.js";
+import { planLibrarySync } from "../src/library/sync/plan.js";
 import { executeRemove } from "../src/library/remove/operation.js";
 
 import {

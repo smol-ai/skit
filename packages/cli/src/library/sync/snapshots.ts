@@ -6,8 +6,8 @@ import {
   RestoreInvalid,
 } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
-import type { librarySyncApi } from "./library-sync-api.js";
-import { silentSyncProgress, type SyncProgress } from "./library-sync-progress.js";
+import type { librarySyncApi } from "./api.js";
+import { silentSyncProgress, type SyncProgress } from "./progress.js";
 
 type SnapshotApi = Pick<Effect.Success<ReturnType<typeof librarySyncApi>>, "download" | "upload">;
 type RemoteSnapshots = { readonly library_id: string; readonly manifest: LibraryManifest } | null;

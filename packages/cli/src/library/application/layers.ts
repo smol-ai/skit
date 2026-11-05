@@ -14,13 +14,3 @@ export const libraryApplicationLayer = Layer.unwrap(
     ).pipe(Layer.provideMerge(skitLayer)),
   ),
 );
-
-/** The executable's Sync root supplies routing once; the owner keeps its storage private. */
-export const syncLibraryApplicationLayer = (
-  roots: import("@smolai/skit-core/library/routing").InventoryRootOptions,
-) =>
-  Layer.unwrap(
-    Effect.map(SkitConfiguration, (paths) =>
-      Library.layer({ home: paths.skitHome, routing: { _tag: "Configured", ...roots } }),
-    ),
-  );

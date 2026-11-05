@@ -19,8 +19,8 @@ import {
   normalizeLibraryManifest,
   mergeLibraryManifests,
   prepareLibraryMerge,
-} from "../src/library/workflows/library-merge.js";
-import { planLibrarySync } from "../src/library/workflows/library-sync-plan.js";
+} from "../src/library/sync/merge.js";
+import { planLibrarySync } from "../src/library/sync/plan.js";
 
 import { alignLibrary, aliasManifest } from "@smolai/skit-core/library/session";
 

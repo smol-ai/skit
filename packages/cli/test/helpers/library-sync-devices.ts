@@ -16,7 +16,7 @@ import {
   type InstallDestination,
 } from "@smolai/skit-core";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
-import { syncLibrary } from "../../src/library/workflows/library-sync.js";
+import { syncLibrary } from "../../src/library/sync/workflow.js";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 
 /** state.json as the store reads it: validated, with undeclared fields kept as written. */

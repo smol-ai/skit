@@ -5,9 +5,9 @@ import {
   type LibraryManifest,
 } from "@smolai/skit-core";
 import { Schema } from "effect";
-import { normalizeLibraryManifest } from "./library-merge.js";
+import { normalizeLibraryManifest } from "./merge.js";
 
-import type { SyncChange, SyncEnabledItem, SyncPlan } from "./library-sync-contract.js";
+import type { SyncChange, SyncEnabledItem, SyncPlan } from "./output.js";
 const action = (before: unknown, after: unknown): SyncChange["action"] =>
   before === undefined ? "add" : after === undefined ? "remove" : "update";
 

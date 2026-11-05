@@ -13,11 +13,8 @@ import {
   emptyLibraryState,
 } from "@smolai/skit-core";
 import { LibraryChangedOnServer, RegistryUnreachable } from "../src/registry/failures.js";
-import {
-  LibraryApiRejected,
-  LibraryManifestTooNew,
-} from "../src/library/workflows/library-sync-api.js";
-import { SyncLocalChanged } from "../src/library/workflows/library-sync.js";
+import { LibraryApiRejected, LibraryManifestTooNew } from "../src/library/sync/api.js";
+import { SyncLocalChanged } from "../src/library/sync/workflow.js";
 import {
   assertDiskUnchanged,
   captureDisk,

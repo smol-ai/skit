@@ -1,6 +1,6 @@
 import { Library } from "@smolai/skit-core/library";
 import { Effect } from "effect";
-import type { SyncProgress, SyncPhase } from "./library-sync-progress.js";
+import type { SyncProgress, SyncPhase } from "./progress.js";
 
 /** Presentation brackets owner verification; Library alone knows retained paths and archive rules. */
 export const inspectSyncSnapshots = Effect.fn("Library.sync.inspectSnapshots")(function* (

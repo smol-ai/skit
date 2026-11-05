@@ -21,7 +21,7 @@ import {
   type SkillId,
   type SkillVersion,
 } from "@smolai/skit-core";
-import { mergeLibraryManifests } from "../src/library/workflows/library-merge.js";
+import { mergeLibraryManifests } from "../src/library/sync/merge.js";
 
 // Each family below is built so that its outcome is known by construction from the merge rules in
 // docs/library-sync-outcomes.md: which records each side changed relative to the base, and which

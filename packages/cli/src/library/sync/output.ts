@@ -70,3 +70,7 @@ export type SyncResult = typeof SyncResult.Type;
 export type SyncEnabledItem = typeof SyncEnabledItem.Type;
 export type SyncChange = typeof SyncChange.Type;
 export type SyncPlan = typeof SyncPlan.Type;
+
+export const syncOutputContracts = {
+  librarySync: { id: "skit.library.sync.v11", schema: SyncResult },
+} as const;

@@ -1,7 +1,7 @@
 import { createColors } from "picocolors";
-import type { ContractDataForId } from "../../commands/output-contracts.js";
+import type { SyncResult } from "./output.js";
 
-type SyncData = ContractDataForId<"skit.library.sync.v11">;
+type SyncData = SyncResult;
 type SyncPlan = NonNullable<SyncData["plan"]>;
 
 /** Name a few Skills; past that, count them so a large Collection stays readable. */

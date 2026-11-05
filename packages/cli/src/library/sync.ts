@@ -1,28 +1,28 @@
-import { syncLibraryApplicationLayer } from "../application/layers.js";
+import { syncLibraryApplicationLayer } from "./sync/layer.js";
 import { skitConfigurationLayer } from "@smolai/skit-core";
-import { Registry, type ResolvedAuth } from "../../registry/index.js";
+import { Registry, type ResolvedAuth } from "../registry/index.js";
 import { Option, Effect, Result } from "effect";
 import { Command, Flag } from "effect/cli";
-import { handleRegistryCommand } from "../../commands/handler.js";
+import { handleRegistryCommand } from "../commands/handler.js";
 
-import { libraryCommandConfiguration } from "../../commands/library-configuration.js";
+import { libraryCommandConfiguration } from "../commands/library-configuration.js";
 import {
   CommandMetadata,
   credentialStoreReadSubprocesses,
   sourceFetchSubprocesses,
-} from "../../commands/metadata.js";
-import { outputContracts } from "../../commands/output-contracts.js";
-import { localFlags, optionalString, optionValue } from "../../commands/parameters.js";
-import { syncLibrary } from "../workflows/library-sync.js";
-import type { LibraryInstallationConfiguration } from "../installation-configuration.js";
-import { officialRegistryOrigin } from "../../registry/accounts.js";
-import { Renderer } from "../../terminal/renderer.js";
+} from "../commands/metadata.js";
+import { syncOutputContracts } from "./sync/output.js";
+import { localFlags, optionalString, optionValue } from "../commands/parameters.js";
+import { syncLibrary } from "./sync/workflow.js";
+import type { LibraryInstallationConfiguration } from "./installation-configuration.js";
+import { officialRegistryOrigin } from "../registry/accounts.js";
+import { Renderer } from "../terminal/renderer.js";
 import { createColors } from "picocolors";
-import { result } from "../../commands/result.js";
-import { terminalSyncProgress } from "../presentation/sync-progress.js";
-import { renderLibrarySyncPlan } from "../presentation/sync.js";
-import { terminalData } from "../../terminal/text.js";
-import { OptionCombinationInvalid } from "../../commands/input-failures.js";
+import { encodeResult as result } from "../commands/encode-result.js";
+import { terminalSyncProgress } from "./sync/present-progress.js";
+import { renderLibrarySyncPlan } from "./sync/present.js";
+import { terminalData } from "../terminal/text.js";
+import { OptionCombinationInvalid } from "../commands/input-failures.js";
 import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 
 export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthError>(options: {
@@ -164,6 +164,7 @@ export const librarySyncCliCommand = Command.make(
         yield* renderer.result(
           result(
             "librarySync",
+            syncOutputContracts.librarySync,
             value,
             value.status === "conflicted" ||
               value.status === "adoption_required" ||
@@ -190,8 +191,11 @@ export const librarySyncCliCommand = Command.make(
       ],
       subprocesses: [...sourceFetchSubprocesses, ...credentialStoreReadSubprocesses],
     },
-    outputSchemas: [outputContracts.librarySync],
+    outputSchemas: [syncOutputContracts.librarySync],
     exitCodes: [0, 11, 12, 13, 64, 65],
     interactive: false,
   }),
 );
+
+export { syncOutputContracts } from "./sync/output.js";
+export { renderLibrarySync } from "./sync/present.js";

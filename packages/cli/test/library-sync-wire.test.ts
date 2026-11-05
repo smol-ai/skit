@@ -4,10 +4,7 @@ import { join } from "node:path";
 import { importCanBeRefetched, librarySnapshotDigests } from "@smolai/skit-core";
 import { LibraryChangedOnServer } from "../src/registry/failures.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
-import {
-  LibraryManifestTooNew,
-  librarySyncApi,
-} from "../src/library/workflows/library-sync-api.js";
+import { LibraryManifestTooNew, librarySyncApi } from "../src/library/sync/api.js";
 import { testHttpClientLayer } from "./helpers/http-test-client.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
