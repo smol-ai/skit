@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
 import { HttpServerRequest } from "effect/http";
-import { Authentication } from "./authentication.js";
+import { Identity } from "./service.js";
 
 export class RequestConversionError extends Schema.TaggedError<RequestConversionError>()(
   "Authentication.RequestConversionError",
@@ -8,7 +8,7 @@ export class RequestConversionError extends Schema.TaggedError<RequestConversion
 ) {}
 
 export const authenticateRequest = Effect.fn("Authentication.authenticateRequest")(function* () {
-  const authentication = yield* Authentication;
+  const authentication = yield* Identity;
   const request = yield* HttpServerRequest.HttpServerRequest.pipe(
     Effect.flatMap(HttpServerRequest.toWeb),
     Effect.mapError((cause) => new RequestConversionError({ cause })),

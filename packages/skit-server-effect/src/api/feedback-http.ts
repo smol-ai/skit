@@ -2,8 +2,8 @@ import { Effect, Option } from "effect";
 import { HttpEffect, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 import { FeedbackApi, FeedbackInput } from "@smolai/skit-core/universal/api";
-import { Authentication } from "../auth/authentication.js";
-import { RequestConversionError } from "../auth/request-context.js";
+import { Identity } from "../identity/service.js";
+import { RequestConversionError } from "../identity/request-context.js";
 import { Feedback } from "../feedback/service.js";
 import type { RateLimiter } from "../platform/rate-limiter.js";
 import {
@@ -29,7 +29,7 @@ export const feedbackHandlers = (rateLimiter: RateLimiter) =>
       const feedback = yield* Feedback;
       // Present only on a deployment with accounts. Without it a report can still be sent, but not
       // signed: there is no account to attribute it to.
-      const authentication = yield* Effect.serviceOption(Authentication);
+      const authentication = yield* Effect.serviceOption(Identity);
 
       // A report is signed only by an explicit Bearer token, never by a browser's session cookie, so
       // no page can attribute a report to whoever happens to be signed in. A token that does not
@@ -41,7 +41,7 @@ export const feedbackHandlers = (rateLimiter: RateLimiter) =>
         const principal = yield* HttpServerRequest.HttpServerRequest.pipe(
           Effect.flatMap(HttpServerRequest.toWeb),
           Effect.mapError((cause) => new RequestConversionError({ cause })),
-          // Authentication accepts device-login session tokens too. Give it only the Bearer
+          // Identity accepts device-login session tokens too. Give it only the Bearer
           // header so an invalid token cannot fall back to a browser's session cookie.
           Effect.flatMap((request) =>
             authentication.value.authenticate(

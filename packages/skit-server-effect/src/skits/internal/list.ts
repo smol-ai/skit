@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import type { Principal } from "../../auth/authentication.js";
+import type { Principal } from "../../identity/service.js";
 import type { AuthorizationService } from "../../authorization/service.js";
 import { DatabaseError, databaseError, type DatabaseSqlClient } from "../../platform/cloudflare.js";
 import type { AuthorSkitSummary } from "@smolai/skit-core/universal/api";

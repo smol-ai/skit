@@ -4,41 +4,27 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import * as TestClock from "effect/testing/TestClock";
-import { Authentication, layer as authenticationLayer } from "../src/auth/authentication.js";
-import { BetterAuth, type BetterAuthService } from "../src/auth/better-auth.js";
+import { makeCredentials } from "../src/identity/internal/credentials.js";
+import type { BetterAuthService } from "../src/identity/internal/better-auth.js";
 import { databaseLayer } from "../src/platform/cloudflare.js";
 
 const platformLayer = databaseLayer(env.DB);
 const testLayer = Layer.merge(platformLayer, BrowserCrypto.layer);
-const betterAuthTestLayer = (
-  getSession: BetterAuthService["getSession"] = () => Effect.succeed(undefined),
-) =>
-  Layer.succeed(
-    BetterAuth,
-    BetterAuth.of({
-      getSession,
-      handle: () => Effect.die(new Error("BetterAuth.handle is outside this test surface")),
-      claimUsername: () =>
-        Effect.die(new Error("BetterAuth.claimUsername is outside this test surface")),
-      provisionedUsername: () =>
-        Effect.die(new Error("BetterAuth.provisionedUsername is outside this test surface")),
-      sendVerificationEmail: () =>
-        Effect.die(new Error("BetterAuth.sendVerificationEmail is outside this test surface")),
-    }),
-  );
 const allScopes = new Set(["library:sync", "authoring:write", "publication:write"] as const);
 const authenticationServiceFor = (
   supportedScopes = allScopes,
-  getSession?: BetterAuthService["getSession"],
+  getSession: BetterAuthService["getSession"] = () => Effect.succeed(undefined),
 ) =>
   Effect.gen(function* () {
     yield* TestClock.setTime(new Date("2026-09-11T03:04:05.000Z").getTime());
-    return yield* Authentication;
-  }).pipe(
-    Effect.provide(authenticationLayer(supportedScopes)),
-    Effect.provide(betterAuthTestLayer(getSession)),
-  );
+    const sql = yield* D1Client.D1Client;
+    return yield* makeCredentials(sql, supportedScopes, { getSession });
+  });
 const authenticationService = authenticationServiceFor();
+const tokenRequest = (token: string) =>
+  new Request("https://registry.test/api/library", {
+    headers: { authorization: `Bearer ${token}` },
+  });
 
 const sha256 = (value: string) =>
   // oxlint-disable-next-line skit/no-promise-wrappers -- Web Crypto is Promise-only; this fixture helper owns the host boundary.
@@ -101,7 +87,7 @@ describe("personal access token authentication", () => {
         ]),
       );
 
-      const principal = yield* service.authenticatePat(token);
+      const principal = yield* service.authenticate(tokenRequest(token));
 
       expect(principal).toEqual({
         id: "principal_test",
@@ -171,11 +157,11 @@ describe("personal access token authentication", () => {
         ]),
       );
 
-      expect(yield* service.authenticatePat("other_token")).toBeUndefined();
-      expect(yield* service.authenticatePat("skit_pat_missing")).toBeUndefined();
-      expect(yield* service.authenticatePat(revoked)).toBeUndefined();
-      expect(yield* service.authenticatePat(stale)).toBeUndefined();
-      expect(yield* service.authenticatePat(expired)).toBeUndefined();
+      expect(yield* service.authenticate(tokenRequest("other_token"))).toBeUndefined();
+      expect(yield* service.authenticate(tokenRequest("skit_pat_missing"))).toBeUndefined();
+      expect(yield* service.authenticate(tokenRequest(revoked))).toBeUndefined();
+      expect(yield* service.authenticate(tokenRequest(stale))).toBeUndefined();
+      expect(yield* service.authenticate(tokenRequest(expired))).toBeUndefined();
     }).pipe(Effect.provide(testLayer)),
   );
 
@@ -195,7 +181,7 @@ describe("personal access token authentication", () => {
         ]),
       );
 
-      const failure = yield* Effect.flip(service.authenticatePat(token));
+      const failure = yield* Effect.flip(service.authenticate(tokenRequest(token)));
       expect(failure).toMatchObject({
         _tag: "Cloudflare.DatabaseError",
         operation: "decode access token scopes",
@@ -229,7 +215,7 @@ describe("personal access token authentication", () => {
       expect(created.token_id).toMatch(/^pat_[a-f0-9]{32}$/);
       expect(created.token_prefix).toBe(created.token.slice(0, 18));
       expect(created.expires_at).toBe("2030-01-01T00:00:00.000Z");
-      expect(yield* authentication.authenticatePat(created.token)).toMatchObject({
+      expect(yield* authentication.authenticate(tokenRequest(created.token))).toMatchObject({
         id: "principal_owner",
         tokenId: created.token_id,
       });
@@ -247,7 +233,7 @@ describe("personal access token authentication", () => {
 
       expect(yield* authentication.revokePat(session, created.token_id)).toBe(true);
       expect(yield* authentication.revokePat(session, created.token_id)).toBe(false);
-      expect(yield* authentication.authenticatePat(created.token)).toBeUndefined();
+      expect(yield* authentication.authenticate(tokenRequest(created.token))).toBeUndefined();
     }).pipe(Effect.provide(testLayer)),
   );
 

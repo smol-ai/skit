@@ -1,6 +1,6 @@
 import { D1Client } from "@effect/sql-d1";
 import { Clock, Context, Effect, Layer, Schema } from "effect";
-import type { Principal } from "../auth/authentication.js";
+import type { Principal } from "../identity/service.js";
 import { normalizeNamespace } from "../domain/identifiers.js";
 import { DatabaseError, databaseError, type DatabaseSqlClient } from "../platform/cloudflare.js";
 import { SecureRandom } from "effect/crypto";

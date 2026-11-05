@@ -2,7 +2,7 @@ import { HttpServerRequest } from "effect/http";
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { inspectReadiness } from "../platform/readiness.js";
-import { isServerOperator } from "../auth/authentication.js";
+import { isServerOperator } from "../identity/service.js";
 import type { RuntimeEnv } from "../platform/cloudflare.js";
 import { CurrentPrincipal } from "./authentication.js";
 import { ConsumerAuthenticatedApi } from "@smolai/skit-core/universal/api";

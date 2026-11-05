@@ -1,8 +1,8 @@
 import { CurrentPrincipal, PrincipalAuthentication } from "@smolai/skit-core/universal/api";
 import { Effect, Layer } from "effect";
 import { HttpServerRequest } from "effect/http";
-import { Authentication } from "../auth/authentication.js";
-import { authenticateRequest } from "../auth/request-context.js";
+import { Identity } from "../identity/service.js";
+import { authenticateRequest } from "../identity/request-context.js";
 import { forbiddenOriginResponse, storageFailureResponse, unauthorizedResponse } from "./errors.js";
 import { ServerConfiguration } from "../configuration.js";
 import { noStore } from "./response.js";
@@ -12,14 +12,14 @@ export { CurrentPrincipal, PrincipalAuthentication };
 export const principalAuthenticationLayer = Layer.effect(
   PrincipalAuthentication,
   Effect.gen(function* () {
-    const authentication = yield* Authentication;
+    const authentication = yield* Identity;
     const configuration = yield* ServerConfiguration;
     return PrincipalAuthentication.of((effect) =>
       noStore.pipe(
         Effect.andThen(
           Effect.gen(function* () {
             const { principal } = yield* authenticateRequest().pipe(
-              Effect.provideService(Authentication, authentication),
+              Effect.provideService(Identity, authentication),
               Effect.tapError((error) => Effect.logError("request authentication failed", error)),
               Effect.mapError(() => storageFailureResponse),
             );

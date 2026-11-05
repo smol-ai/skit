@@ -5,7 +5,7 @@ import {
   RemoteLibrary,
   StoredLibraryManifest,
 } from "@smolai/skit-core/universal/consumer";
-import type { Principal } from "../../auth/authentication.js";
+import type { Principal } from "../../identity/service.js";
 import { DatabaseError, databaseError, type DatabaseSqlClient } from "../../platform/cloudflare.js";
 import { SecureRandom } from "effect/crypto";
 import type { FindLibrary } from "./owned.js";

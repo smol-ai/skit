@@ -50,6 +50,35 @@ async function reported(
 }
 
 describe("skit/owner-boundaries", () => {
+  test("server adapters use Identity instead of its SDK or credential implementation", async () => {
+    for (const statement of [
+      `import { makeBetterAuth } from "../identity/internal/better-auth.js";`,
+      `export * from "../identity/internal/credentials.js";`,
+      `const loading = import("../identity/internal/credentials.js");`,
+    ]) {
+      expect(
+        await reported(
+          statement,
+          "owner-boundaries",
+          "packages/skit-server-effect/src/api/tokens-http.ts",
+        ),
+      ).toHaveLength(1);
+    }
+    expect(
+      await reported(
+        `import { Identity } from "../identity/service.js";`,
+        "owner-boundaries",
+        "packages/skit-server-effect/src/api/tokens-http.ts",
+      ),
+    ).toEqual([]);
+    expect(
+      await reported(
+        `import { makeCredentials } from "../src/identity/internal/credentials.js";`,
+        "owner-boundaries",
+        "packages/skit-server-effect/test/authentication.test.ts",
+      ),
+    ).toEqual([]);
+  });
   test("server Library adapters cannot bypass the owner for revisions or snapshots", async () => {
     for (const statement of [
       `import { commitLibraryRevision } from "../library/internal/sync.js";`,

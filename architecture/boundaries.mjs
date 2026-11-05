@@ -12,6 +12,13 @@
  */
 export const owners = [
   {
+    name: "Identity",
+    owner: "packages/skit-server-effect/src/identity/",
+    privateModules: ["packages/skit-server-effect/src/identity/internal/"],
+    testOwner: "packages/skit-server-effect/test/",
+    private: [],
+  },
+  {
     name: "ServerLibrary",
     owner: "packages/skit-server-effect/src/library/",
     privateModules: ["packages/skit-server-effect/src/library/internal/"],
@@ -134,6 +141,7 @@ export const approvedServices = [
   "@skit-server-effect/ServerLibrary",
   "@skit-server-effect/Teams",
   "@skit-server-effect/Feedback",
+  "@skit-server-effect/Identity",
   "@skit-server-effect/ServerConfiguration",
   "skit/AuthorIgnoreRepository",
   "skit/author/AuthorWorkspace",

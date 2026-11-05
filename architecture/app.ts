@@ -218,8 +218,8 @@ export const owners = {
 
   // ── Server ─────────────────────────────────────────────────────────────────────────────────
   Identity: {
-    status: "NEW",
-    module: "packages/skit-server-effect/src/auth/**",
+    status: "RESHAPE",
+    module: "packages/skit-server-effect/src/identity/**",
     // server_bootstrap stays: its singleton insert is the concurrency guard (docs/self-hosting.md:261).
     owns: [
       "user",
@@ -241,12 +241,13 @@ export const owners = {
       "DESIGNED, NOT IMPLEMENTED: suspend, reinstate, invalidateCredentials (writes state, authorization_generation)", // decisions.md "One Identity owner"
     ],
     removes: [
+      "Authentication and BetterAuth providers (done: one Identity provider owns both implementations)",
       "auth/provisioning.ts helper written from two services",
       "Bootstrap as a separate writer: its atomic claim batch moves into Identity.createOperator unchanged (self-hosting.md:261,269)",
       "NativeClock service (done: Better Auth captures the built-in Clock)",
       "nested runPromise in Better Auth hooks (the Promise boundary itself stays; keep the hook invariants at better-auth.ts:264,286,325)",
       "rateLimit table (Better Auth rate limiting disabled)",
-      "Authentication.authenticatePat in the public API",
+      "Authentication.authenticatePat in the public API (done: private to Identity credential implementation)",
     ],
   },
 

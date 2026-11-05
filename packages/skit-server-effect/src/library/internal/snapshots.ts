@@ -5,7 +5,7 @@ import {
   SnapshotArchiveInvalid,
   verifySnapshotArchive,
 } from "@smolai/skit-core/universal/consumer";
-import type { Principal } from "../../auth/authentication.js";
+import type { Principal } from "../../identity/service.js";
 import type { AuthorizationService } from "../../authorization/service.js";
 import {
   type BlobStoreService,

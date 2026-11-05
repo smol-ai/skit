@@ -1,10 +1,6 @@
 import { BrowserCrypto } from "@effect/platform-browser";
 import { Layer } from "effect";
-import {
-  layer as authenticationLayer,
-  type Scope as AuthenticationScope,
-} from "./auth/authentication.js";
-import { layer as betterAuthLayer } from "./auth/better-auth.js";
+import { layer as identityLayer, type Scope as AuthenticationScope } from "./identity/service.js";
 import { layer as authorizationLayer } from "./authorization/service.js";
 import { layer as bootstrapServiceLayer } from "./bootstrap/service.js";
 import { ServerConfiguration } from "./configuration.js";
@@ -77,14 +73,8 @@ export const applicationLayers = (
     return { release, feedback, authenticated: undefined, bootstrap: undefined };
 
   const authenticated = Layer.mergeAll(
-    authenticationLayer(supportedScopes),
-    teamsLayer,
-    serverLibraryLayer,
-    skitsLayer,
-    Layer.succeed(ServerConfiguration, { publicAppOrigin: configured.publicAppOrigin }),
-  ).pipe(
-    Layer.provideMerge(
-      betterAuthLayer({
+    identityLayer(
+      {
         database: env.DB,
         publicAppOrigin: configured.publicAppOrigin,
         secret: configured.betterAuthSecret,
@@ -92,10 +82,14 @@ export const applicationLayers = (
         github: configured.github,
         email:
           env.EMAIL && env.EMAIL_FROM ? { binding: env.EMAIL, from: env.EMAIL_FROM } : undefined,
-      }).pipe(Layer.provideMerge(platform)),
+      },
+      supportedScopes,
     ),
-    Layer.provideMerge(authorization),
-  );
+    teamsLayer,
+    serverLibraryLayer,
+    skitsLayer,
+    Layer.succeed(ServerConfiguration, { publicAppOrigin: configured.publicAppOrigin }),
+  ).pipe(Layer.provideMerge(authorization));
   const bootstrap = env.SKIT_BOOTSTRAP_SECRET
     ? Layer.mergeAll(
         bootstrapServiceLayer(env.SKIT_BOOTSTRAP_SECRET),

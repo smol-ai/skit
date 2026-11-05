@@ -1,5 +1,5 @@
 import { Clock, Effect, Schema } from "effect";
-import type { Principal } from "../../auth/authentication.js";
+import type { Principal } from "../../identity/service.js";
 import { DatabaseError, databaseError, type DatabaseSqlClient } from "../../platform/cloudflare.js";
 
 const OwnedLibraryRow = Schema.Struct({

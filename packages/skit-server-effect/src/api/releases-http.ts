@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
-import { Authentication } from "../auth/authentication.js";
+import { Identity } from "../identity/service.js";
 import { Authorization } from "../authorization/service.js";
 import { downloadRelease, downloadReleaseAnonymous } from "./release-download.js";
 import { Skits } from "../skits/service.js";
@@ -11,12 +11,12 @@ export const authenticatedReleaseHandlers = HttpApiBuilder.group(
   "releaseDownloads",
   (handlers) =>
     Effect.gen(function* () {
-      const authentication = yield* Authentication;
+      const authentication = yield* Identity;
       const authorization = yield* Authorization;
       const skits = yield* Skits;
       return handlers.handle("download", ({ params }) =>
         downloadRelease(params).pipe(
-          Effect.provideService(Authentication, authentication),
+          Effect.provideService(Identity, authentication),
           Effect.provideService(Authorization, authorization),
           Effect.provideService(Skits, skits),
         ),

@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { HttpEffect, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
 import { Bootstrap, BootstrapInput, type CreateError } from "../bootstrap/service.js";
-import { BetterAuth } from "../auth/better-auth.js";
+import { Identity } from "../identity/service.js";
 import { ServerConfiguration } from "../configuration.js";
 import type { RateLimiter } from "../platform/rate-limiter.js";
 import { BootstrapApi } from "./bootstrap.js";
@@ -40,7 +40,7 @@ export const bootstrapHandlers = (rateLimiter: RateLimiter) =>
   HttpApiBuilder.group(BootstrapApi, "bootstrap", (handlers) =>
     Effect.gen(function* () {
       const bootstrap = yield* Bootstrap;
-      const authentication = yield* BetterAuth;
+      const authentication = yield* Identity;
       const configuration = yield* ServerConfiguration;
 
       return handlers

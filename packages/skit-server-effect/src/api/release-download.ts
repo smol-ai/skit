@@ -1,10 +1,6 @@
 import { Effect, Option } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
-import {
-  Authentication,
-  type AuthenticationService,
-  type Principal,
-} from "../auth/authentication.js";
+import { Identity, type IdentityService, type Principal } from "../identity/service.js";
 import { Authorization, type AuthorizationService } from "../authorization/service.js";
 import { Skits } from "../skits/service.js";
 
@@ -14,7 +10,7 @@ const errorResponse = (error: string, status: number) =>
   );
 
 interface DownloadAccess {
-  readonly authentication: AuthenticationService;
+  readonly authentication: IdentityService;
   readonly authorization: AuthorizationService;
 }
 
@@ -126,7 +122,7 @@ export const downloadRelease = Effect.fn("ReleaseHttp.downloadAuthenticated")(fu
   readonly version: string;
 }) {
   return yield* download(target, {
-    authentication: yield* Authentication,
+    authentication: yield* Identity,
     authorization: yield* Authorization,
   });
 });

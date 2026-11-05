@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { HttpEffect, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
-import { Authentication } from "../auth/authentication.js";
+import { Identity } from "../identity/service.js";
 import type { RateLimiter } from "../platform/rate-limiter.js";
 import { CurrentPrincipal } from "./authentication.js";
 import { ConsumerAuthenticatedApi } from "@smolai/skit-core/universal/api";
@@ -22,7 +22,7 @@ const retryAfter = HttpEffect.appendPreResponseHandler((_request, response) =>
 export const tokenHandlers = (rateLimiter: RateLimiter) =>
   HttpApiBuilder.group(ConsumerAuthenticatedApi, "tokens", (handlers) =>
     Effect.gen(function* () {
-      const authentication = yield* Authentication;
+      const authentication = yield* Identity;
 
       return handlers.handleAll({
         create: ({ payload }) =>

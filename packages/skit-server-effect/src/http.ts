@@ -30,7 +30,7 @@ import {
   handleProvisionedUsername,
   handleRequest as handleAuthRequest,
   handleUsernameClaim,
-} from "./auth/better-auth.js";
+} from "./identity/http.js";
 import type { RuntimeEnv } from "./platform/cloudflare.js";
 import { makeRateLimiter, type RateLimiter } from "./platform/rate-limiter.js";
 import { artifactResponse, indexResponse } from "./api/agent-skills-http.js";
