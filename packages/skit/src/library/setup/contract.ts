@@ -326,6 +326,30 @@ export const SetupScanIssue = Schema.Struct({
 });
 export type SetupScanIssue = typeof SetupScanIssue.Type;
 
+/** Collection membership is a setup fact; consumers only choose how to display these groups. */
+const SetupCollectionGroups = Schema.Struct({
+  sources: Schema.Array(
+    Schema.Struct({ source: Schema.String, instances: Schema.Array(SetupSkillInstance) }),
+  ),
+  repositories: Schema.Array(
+    Schema.Struct({
+      repository: Schema.String,
+      root: Schema.String,
+      instances: Schema.Array(SetupSkillInstance),
+    }),
+  ),
+  loose: Schema.Array(SetupSkillInstance),
+  installed: Schema.Array(
+    Schema.Struct({ displayName: Schema.String, skills: Schema.Array(SetupInstalledSkill) }),
+  ),
+  authored: Schema.Array(
+    Schema.Struct({
+      ...SetupAuthoredCollection.fields,
+      installedSkills: Schema.Array(SetupInstalledSkill),
+    }),
+  ),
+});
+
 export const SetupResult = Schema.Struct({
   operationId: Schema.optionalKey(Schema.String),
   machineConfig: Schema.Struct({
@@ -355,6 +379,7 @@ export const SetupResult = Schema.Struct({
   repositoryConfigs: Schema.Array(SetupRepositoryConfig),
   authoredCollections: Schema.Array(SetupAuthoredCollection),
   installedSkills: Schema.Array(SetupInstalledSkill),
+  collectionGroups: SetupCollectionGroups,
   changes: Schema.optionalKey(Schema.Array(InstalledSkillChange)),
   onboarding: Schema.Struct({
     planId: Hash,

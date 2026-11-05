@@ -12,6 +12,7 @@ import {
   skillsDirectoryFor,
   type InventoryRootOptions,
 } from "../routing/roots.js";
+import { setupCollectionGroups } from "./collections.js";
 import type { SetupResult } from "./contract.js";
 import { collectSetupEvidence, suggestRepositoryRoots } from "./discovery.js";
 import { scanSetupCopies } from "./copies.js";
@@ -198,6 +199,11 @@ const scanForSetup = Effect.fn("Library.setup")(
           `${right.collectionId}\0${right.skillId}\0${right.path ?? ""}`,
         ),
       ),
+      collectionGroups: setupCollectionGroups({
+        instances: sortedInstances,
+        installedSkills,
+        authoredCollections,
+      }),
       onboarding: {
         planId,
         candidates: onboarding,

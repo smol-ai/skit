@@ -71,6 +71,18 @@ const doctorListingBudget = estimateCodexListing({
   ],
 });
 
+const setupStoryInstance = {
+  name: "review",
+  path: "/home/story/.claude/skills/review",
+  aliases: ["/home/story/.claude/skills/review"],
+  scope: "global",
+  harnesses: ["claude-code"],
+  owner: { kind: "unknown" },
+  contentIdentity: { status: "none", libraryMatches: [] },
+  git: { status: "outside-git" },
+  locks: [],
+} as const;
+
 export const outputStories: ReadonlyArray<OutputStory> = [
   resultStory("usage", "empty", result("usage", emptyUsageStory)),
   resultStory("usage", "observed", result("usage", usageStory)),
@@ -313,6 +325,13 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       repositoryConfigs: [],
       authoredCollections: [],
       installedSkills: [],
+      collectionGroups: {
+        sources: [],
+        repositories: [],
+        loose: [setupStoryInstance],
+        installed: [],
+        authored: [],
+      },
       onboarding: {
         planId: `sha256:${"0".repeat(64)}`,
         candidates: [
@@ -331,19 +350,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
         },
       },
       locks: [],
-      instances: [
-        {
-          name: "review",
-          path: "/home/story/.claude/skills/review",
-          aliases: ["/home/story/.claude/skills/review"],
-          scope: "global",
-          harnesses: ["claude-code"],
-          owner: { kind: "unknown" },
-          contentIdentity: { status: "none", libraryMatches: [] },
-          git: { status: "outside-git" },
-          locks: [],
-        },
-      ],
+      instances: [setupStoryInstance],
       brokenLinks: [],
       suppressed: [],
     }),

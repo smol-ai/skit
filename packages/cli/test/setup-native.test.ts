@@ -444,6 +444,16 @@ it.effect("reports Git preservation and verifies a project skills.sh lock", () =
     expect(scan.locks).toEqual([
       expect.objectContaining({ scope: "project", status: "valid", version: 1 }),
     ]);
+    expect(
+      scan.collectionGroups.sources.map((group) => [
+        group.source,
+        group.instances.map((instance) => instance.name),
+      ]),
+    ).toEqual([["acme/tools", ["review"]]]);
+    expect(scan.collectionGroups.loose.map((instance) => instance.name).sort()).toEqual([
+      "private",
+      "root-local",
+    ]);
     expect(scan.onboarding.candidates).toEqual([
       expect.objectContaining({
         name: "private",

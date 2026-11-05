@@ -11,7 +11,7 @@ const setupGitStateOrder = [
 const setupExpandedSkillLimit = 5;
 
 import { type ContractData, type ContractDataForId } from "../../commands/output-contracts.js";
-import { basename, dirname, relative, sep } from "node:path";
+import { basename, relative } from "node:path";
 import { harnessLabel } from "@smolai/skit-core/harnesses";
 import {
   renderInstalledSkillChange,
@@ -20,62 +20,12 @@ import {
   renderReviewedChanges,
 } from "../presentation/installed-skill-changes.js";
 
-function renderSetupCollections(data: ContractDataForId<"skit.setup.v12">): string[] {
-  type Instance = (typeof data.instances)[number];
-  type Collection = {
+function renderSetupCollections(data: ContractDataForId<"skit.setup.v13">): string[] {
+  const { sources, repositories, loose } = data.collectionGroups;
+  const renderCollection = (collection: {
     label: string;
-    instances: Instance[];
-  };
-  const installed = new Map<string, Collection>();
-  const repositoryRoots = new Map<string, Collection>();
-  const loose: Instance[] = [];
-
-  for (const instance of data.instances.filter(
-    (item) => item.owner.kind !== "skit" && item.owner.kind !== "authored",
-  )) {
-    const sourceLock = instance.locks[0];
-    if (sourceLock) {
-      const collection = installed.get(sourceLock.entry.source) ?? {
-        label: sourceLock.entry.source,
-        instances: [],
-      };
-      collection.instances.push(instance);
-      installed.set(sourceLock.entry.source, collection);
-      continue;
-    }
-
-    const repository = instance.git.repository;
-    if (!repository) {
-      loose.push(instance);
-      continue;
-    }
-
-    const root = dirname(instance.path);
-    const key = `${repository}:${root}`;
-    const rootLabel = relative(repository, root) || ".";
-    const rootSegments = rootLabel.split(sep);
-    const isConventionalCollectionRoot =
-      rootSegments.at(-1) === "skills" && rootSegments.length <= 2;
-    if (!isConventionalCollectionRoot) {
-      loose.push(instance);
-      continue;
-    }
-    const collection = repositoryRoots.get(key) ?? {
-      label: `${basename(repository)} · ${rootLabel}`,
-      instances: [],
-    };
-    collection.instances.push(instance);
-    repositoryRoots.set(key, collection);
-  }
-
-  const repositoryCollections: Collection[] = [];
-  for (const collection of repositoryRoots.values()) {
-    const names = new Set(collection.instances.map((instance) => instance.name));
-    if (names.size > 1) repositoryCollections.push(collection);
-    else loose.push(...collection.instances);
-  }
-
-  const renderCollection = (collection: Collection): string[] => {
+    instances: typeof data.instances;
+  }): string[] => {
     const names = [...new Set(collection.instances.map((instance) => instance.name))].sort();
     const states = setupGitStateOrder.flatMap((status) => {
       const count = collection.instances.filter(
@@ -94,20 +44,23 @@ function renderSetupCollections(data: ContractDataForId<"skit.setup.v12">): stri
   };
 
   const lines: string[] = [];
-  if (installed.size)
+  if (sources.length)
     lines.push(
       "Installed collections",
-      ...[...installed.values()]
-        .sort((left, right) => left.label.localeCompare(right.label))
-        .flatMap(renderCollection),
+      ...sources.flatMap((collection) =>
+        renderCollection({ label: collection.source, instances: collection.instances }),
+      ),
     );
-  if (repositoryCollections.length)
+  if (repositories.length)
     lines.push(
       ...(lines.length ? [""] : []),
       "Repository collections (inferred)",
-      ...repositoryCollections
-        .sort((left, right) => left.label.localeCompare(right.label))
-        .flatMap(renderCollection),
+      ...repositories.flatMap((collection) =>
+        renderCollection({
+          label: `${basename(collection.repository)} · ${relative(collection.repository, collection.root) || "."}`,
+          instances: collection.instances,
+        }),
+      ),
     );
   if (loose.length) {
     const names = [...new Set(loose.map((instance) => instance.name))].sort();
@@ -125,44 +78,33 @@ function renderSetupCollections(data: ContractDataForId<"skit.setup.v12">): stri
 }
 
 function renderSetupInstalledSkills(
-  installedSkills: ContractDataForId<"skit.setup.v12">["installedSkills"],
+  collections: ContractDataForId<"skit.setup.v13">["collectionGroups"]["installed"],
 ): string[] {
-  const collections = new Map<string, (typeof installedSkills)[number][]>();
-  for (const installedSkill of installedSkills) {
-    const group = installedSkill.collectionId ?? installedSkill.skillId;
-    collections.set(group, [...(collections.get(group) ?? []), installedSkill]);
-  }
-  return [...collections.entries()]
-    .sort(([left], [right]) => left.localeCompare(right))
-    .flatMap(([, installedSkills]) => {
-      const names = [
-        ...new Set(installedSkills.map((installedSkill) => installedSkill.name)),
-      ].sort();
-      const statuses = ["current", "modified", "missing"] as const;
-      const counts = statuses.flatMap((status) => {
-        const count = installedSkills.filter(
-          (installedSkill) => installedSkill.status === status,
-        ).length;
-        return count ? [`${count} ${status}`] : [];
-      });
-      const harnesses = [
-        ...new Set(installedSkills.flatMap((installedSkill) => installedSkill.harnesses)),
-      ]
-        .sort()
-        .map(harnessLabel);
-      return [
-        `  ${installedSkills[0]!.collectionDisplayName} · ${names.length} skill${names.length === 1 ? "" : "s"}${installedSkills.length === names.length ? "" : ` · ${installedSkills.length} installed copies`}`,
-        ...(names.length <= setupExpandedSkillLimit ? [`    ${names.join(", ")}`] : []),
-        `    ${counts.join(" · ")}${harnesses.length ? ` · ${harnesses.join(", ")}` : ""}`,
-      ];
+  return collections.flatMap(({ displayName, skills: installedSkills }) => {
+    const names = [...new Set(installedSkills.map((installedSkill) => installedSkill.name))].sort();
+    const statuses = ["current", "modified", "missing"] as const;
+    const counts = statuses.flatMap((status) => {
+      const count = installedSkills.filter(
+        (installedSkill) => installedSkill.status === status,
+      ).length;
+      return count ? [`${count} ${status}`] : [];
     });
+    const harnesses = [
+      ...new Set(installedSkills.flatMap((installedSkill) => installedSkill.harnesses)),
+    ]
+      .sort()
+      .map(harnessLabel);
+    return [
+      `  ${displayName} · ${names.length} skill${names.length === 1 ? "" : "s"}${installedSkills.length === names.length ? "" : ` · ${installedSkills.length} installed copies`}`,
+      ...(names.length <= setupExpandedSkillLimit ? [`    ${names.join(", ")}`] : []),
+      `    ${counts.join(" · ")}${harnesses.length ? ` · ${harnesses.join(", ")}` : ""}`,
+    ];
+  });
 }
 
-function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v12">): string[] {
-  return data.authoredCollections.flatMap((collection) => {
-    const installedSkills = data.installedSkills.filter(
-      (installedSkill) => installedSkill.collectionId === collection.collectionId,
-    );
+function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v13">): string[] {
+  return data.collectionGroups.authored.flatMap((collection) => {
+    const installedSkills = collection.installedSkills;
     const statuses = ["current", "modified", "missing"] as const;
     const installedSkillSummary = statuses.flatMap((status) => {
       const count = installedSkills.filter(
@@ -180,7 +122,7 @@ function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v12"
   });
 }
 
-function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v12">): string[] {
+function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v13">): string[] {
   const candidates = data.instances.filter(
     (instance) => instance.owner.kind === "unknown" && instance.locks.length === 0,
   );
@@ -223,7 +165,7 @@ function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v12">): s
 }
 
 /** What `skit setup --apply` would do, and the exact command that does it. */
-function renderSetupRecommendation(data: ContractDataForId<"skit.setup.v12">): string[] {
+function renderSetupRecommendation(data: ContractDataForId<"skit.setup.v13">): string[] {
   const { candidates, recommended } = data.onboarding;
   if (!recommended.sources.length && !recommended.copies.length) return [];
   const duplicates = recommended.copies.filter((copy) =>
@@ -303,7 +245,7 @@ function renderSetupApplied(data: ContractDataForId<"skit.setup.applied.v4">): s
   return lines.join("\n");
 }
 
-export function renderSetup(data: ContractDataForId<"skit.setup.v12">): string {
+export function renderSetup(data: ContractDataForId<"skit.setup.v13">): string {
   const lines = [
     `Observed ${data.instances.length} skill instance(s) in ${data.repositories.length} repositories across ${data.machineConfig.repositoryRoots.length} configured root(s)${data.machineConfig.persisted ? " · roots saved for this machine" : ""}`,
     `Scan ${data.scan.complete ? "complete" : "incomplete"} · ${data.scan.directoriesExamined} directories examined · repository depth ${data.scan.repositorySearchDepth}`,
@@ -339,21 +281,11 @@ export function renderSetup(data: ContractDataForId<"skit.setup.v12">): string {
   }
   if (data.authoredCollections.length)
     lines.push("", "Authored SKITs", ...renderSetupAuthoredCollections(data));
-  const authoredCollectionIds = new Set(
-    data.authoredCollections.flatMap((collection) =>
-      collection.collectionId ? [collection.collectionId] : [],
-    ),
-  );
-  const externalInstalledSkills = data.installedSkills.filter(
-    (installedSkill) =>
-      installedSkill.collectionId === undefined ||
-      !authoredCollectionIds.has(installedSkill.collectionId),
-  );
-  if (externalInstalledSkills.length)
+  if (data.collectionGroups.installed.length)
     lines.push(
       "",
       "Existing SKIT installed skills",
-      ...renderSetupInstalledSkills(externalInstalledSkills),
+      ...renderSetupInstalledSkills(data.collectionGroups.installed),
     );
   if (data.changes?.length)
     lines.push(

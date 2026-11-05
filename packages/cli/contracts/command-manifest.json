@@ -2294,7 +2294,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.setup.v12",
+        "skit.setup.v13",
         "skit.setup.applied.v4",
         "skit.setup.review.v3",
         "skit.setup.failed.v1",
