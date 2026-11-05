@@ -1,5 +1,5 @@
 import { Hash } from "@smolai/skit-core/shared";
-import { SourceDiscoveryDiagnostic } from "@smolai/skit-core";
+import { SourceDiscoveryDiagnostic } from "@smolai/skit-core/library/source";
 import { Schema } from "effect";
 
 const AddSkill = Schema.Struct({

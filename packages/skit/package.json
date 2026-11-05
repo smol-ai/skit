@@ -81,6 +81,10 @@
     "./sync": {
       "types": "./dist/sync/sync.d.ts",
       "import": "./dist/sync/sync.js"
+    },
+    "./library/source": {
+      "types": "./dist/library/source.d.ts",
+      "import": "./dist/library/source.js"
     }
   },
   "scripts": {

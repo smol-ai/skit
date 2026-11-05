@@ -254,12 +254,6 @@ export { type Unusable as MachineSettingsUnusable } from "./library/machine-sett
 export * as InstalledSkills from "./library/installed-skills.js";
 export * as InstalledSkillStatus from "./library/installed-skill-status.js";
 export * as Library from "./library/library.js";
-export {
-  type AddNoSkills,
-  leaveResolvedPnpmSkills,
-  describeSourceSkills,
-  inspectResolvedSource,
-} from "./library/source-inspection.js";
 
 export { observePathEvidence, recoveryFingerprint } from "./library/folder-evidence.js";
 export type { ApplyError as LibraryApplyError } from "./library/library.js";

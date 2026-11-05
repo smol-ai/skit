@@ -1,6 +1,6 @@
 import { EditImportPlan, EditImportResult } from "@smolai/skit-core/library/session";
 import { Hash } from "@smolai/skit-core/shared";
-import { SourceDiscoveryDiagnostic } from "@smolai/skit-core";
+import { SourceDiscoveryDiagnostic } from "@smolai/skit-core/library/source";
 import { Schema } from "effect";
 
 /** What a refresh means for the Skills this device enables. */

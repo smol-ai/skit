@@ -1,29 +1,18 @@
-import { Library } from "@smolai/skit-core/library";
 import { officialRegistryOrigin } from "../registry/accounts.js";
 import {
-  describeSourceSkills,
-  inspectResolvedSource,
-  leaveResolvedPnpmSkills,
+  inspectSource,
+  importSource as importLibrarySource,
   parseSkitSource,
   sourceLocator,
-  resolveSkitSource,
-  type ResolvedSkitSource,
   type SkitSource,
-  leavePnpmSkill,
-} from "@smolai/skit-core";
-import { Clock, Effect, Result } from "effect";
+} from "@smolai/skit-core/library/source";
+import { Effect, Result } from "effect";
 import { Registry, type ResolvedAuth } from "../registry/index.js";
 
-/** Resolve once inside the lifetime of the operation consuming the staged source. */
-const withResolvedSource = Effect.fn("SourceAcquisition.withResolvedSource")(function* <A, E, R>(
+/** Registry credential selection stays with the frontend; Library owns acquired source bytes. */
+const sourceRequest = Effect.fn("CLI.sourceRequest")(function* (
   input: string | SkitSource,
   previousSkillPaths: readonly string[] | undefined,
-  use: (prepared: {
-    parsed: SkitSource;
-    resolved: ResolvedSkitSource;
-    historicalInput: string;
-    registryOrigin: string | undefined;
-  }) => Effect.Effect<A, E, R>,
   selectedRegistry?: ResolvedAuth,
 ) {
   const authState =
@@ -31,40 +20,28 @@ const withResolvedSource = Effect.fn("SourceAcquisition.withResolvedSource")(fun
       ? yield* Registry.credentials().pipe(Effect.result)
       : Result.succeed(selectedRegistry);
   const resolvedRegistry = Result.isSuccess(authState) ? authState.success : undefined;
-  const parsed = typeof input === "string" ? yield* parseSkitSource(input) : input;
-  // `skit:` shorthand with no Registry configured means the hosted Registry, read anonymously.
+  const source = typeof input === "string" ? yield* parseSkitSource(input) : input;
   const registry: ResolvedAuth | undefined =
-    resolvedRegistry?.origin === undefined && parsed.type === "registry"
+    resolvedRegistry?.origin === undefined && source.type === "registry"
       ? { origin: officialRegistryOrigin, source: "none" }
       : resolvedRegistry;
-  if (parsed.type === "local") yield* leavePnpmSkill(parsed.path);
-  if (parsed.type === "registry" && Result.isFailure(authState))
+  if (source.type === "registry" && Result.isFailure(authState))
     return yield* Effect.fail(authState.failure);
-  const resolved = yield* resolveSkitSource(input, {
+  return {
+    source,
+    input: typeof input === "string" ? input : sourceLocator(input),
     registryBaseUrl: registry?.origin,
     registryToken: registry?.token,
     ...(previousSkillPaths === undefined ? {} : { previousSkillPaths }),
-  });
-  yield* leaveResolvedPnpmSkills(parsed, resolved);
-  return yield* use({
-    parsed,
-    resolved,
-    historicalInput: typeof input === "string" ? input : sourceLocator(input),
-    registryOrigin: registry?.origin,
-  });
-}, Effect.scoped);
+  };
+});
 
-export const inspectLibrarySource = Effect.fn("Library.inspectSource")(function* (
+export const inspectLibrarySource = Effect.fn("CLI.inspectSource")(function* (
   input: string | SkitSource,
   previousSkillPaths?: readonly string[],
   registry?: ResolvedAuth,
 ) {
-  return yield* withResolvedSource(
-    input,
-    previousSkillPaths,
-    ({ parsed, resolved }) => inspectResolvedSource(parsed, resolved),
-    registry,
-  );
+  return yield* inspectSource(yield* sourceRequest(input, previousSkillPaths, registry));
 });
 
 export const previewLibrarySource = Effect.fn("Library.previewSource")(function* (
@@ -79,60 +56,11 @@ export const previewLibrarySource = Effect.fn("Library.previewSource")(function*
   };
 });
 
-/** Keep source staging alive through Library import, then clean it up. */
-export const importSource = Effect.fn("Library.addSource")(function* (
+/** Library keeps staging alive until retention finishes. */
+export const importSource = Effect.fn("CLI.importSource")(function* (
   input: string | SkitSource,
   previousSkillPaths?: readonly string[],
   registry?: ResolvedAuth,
 ) {
-  return yield* withResolvedSource(
-    input,
-    previousSkillPaths,
-    ({ resolved, historicalInput, registryOrigin }) =>
-      Effect.gen(function* () {
-        const authority =
-          resolved.source.type === "registry"
-            ? (resolved.source.authority ?? registryOrigin)
-            : undefined;
-        const declaration =
-          resolved.descriptorKind === "declared" && resolved.source.type === "registry"
-            ? {
-                namespace: resolved.source.namespace,
-                slug: resolved.source.slug,
-                ...(authority === undefined ? {} : { authority }),
-              }
-            : undefined;
-        const request = {
-          source: resolved.source,
-          ...(declaration === undefined ? {} : { declaration }),
-          input: historicalInput,
-          revision: resolved.revision,
-          importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
-        };
-        const library = yield* Library.Service;
-        const imported =
-          resolved.descriptorKind === "declared"
-            ? yield* library.import.authored({ ...request, root: resolved.root })
-            : yield* library.import.collection({
-                ...request,
-                skills: yield* describeSourceSkills(resolved, historicalInput),
-                lockFileEntries: [],
-              });
-        return {
-          action: imported.action,
-          collection_id: imported.collection.collection_id,
-          skill_ids: imported.skills.map((skill) => skill.skill_id),
-          collection_version_id: imported.collectionVersionId,
-          snapshot_digest: imported.snapshotDigest,
-          ...(resolved.descriptorKind !== "declared" && resolved.diagnostics?.length
-            ? { diagnostics: resolved.diagnostics }
-            : {}),
-          skills: imported.members.map((member) => ({
-            name: member.name,
-            verbatim_path: member.sourcePath,
-          })),
-        };
-      }),
-    registry,
-  );
+  return yield* importLibrarySource(yield* sourceRequest(input, previousSkillPaths, registry));
 });

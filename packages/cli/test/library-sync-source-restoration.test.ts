@@ -9,8 +9,8 @@ import {
   libraryManifestFromLocalState,
   LibraryState,
   collectionVersionPath,
-  type SkitSource,
 } from "@smolai/skit-core";
+import { type SkitSource } from "@smolai/skit-core/library/source";
 import { Library } from "@smolai/skit-core/library";
 import { SourceProcess } from "@smolai/skit-core/platform";
 import { importSource } from "../src/library/source.js";

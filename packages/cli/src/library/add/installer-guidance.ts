@@ -1,4 +1,4 @@
-import { parseSkitSource, type SkitSource } from "@smolai/skit-core";
+import { parseSkitSource, type SkitSource } from "@smolai/skit-core/library/source";
 import { Data, Effect } from "effect";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 

@@ -51,6 +51,7 @@ export const owners = [
       "packages/skit/src/library/store/step-error-compat.",
       "packages/skit/src/library/internal/",
       "packages/skit/src/library/subject-resolution.",
+      "packages/skit/src/library/source-inspection.",
     ],
     testOwner: "packages/skit/test/",
     private: [
@@ -58,6 +59,9 @@ export const owners = [
       "matchingLibrarySubjects",
       "libraryView",
       "calculateSetEnabled",
+      "leaveResolvedPnpmSkills",
+      "describeSourceSkills",
+      "inspectResolvedSource",
       "mergeLibraryManifests",
       "prepareLibraryMerge",
       "planLibrarySync",
