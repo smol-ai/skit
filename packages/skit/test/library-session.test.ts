@@ -72,6 +72,16 @@ it.effect(
       );
       // The selection's earlier read model remains the evidence from before applying.
       assert.deepStrictEqual(selection.view.installedSkills, []);
+      assert.deepStrictEqual((yield* selection.view.readManifest()).enabled, []);
+      const portable = yield* view.readManifest();
+      assert.strictEqual(portable.enabled.length, 1);
+      for (const field of ["operations", "installed_skills", "repositories", "sync_ancestry"])
+        assert.isFalse(Object.hasOwn(portable, field));
+      const collection = portable.collections[0];
+      assert.ok(collection);
+      const label = collection.label;
+      Reflect.set(collection, "label", "Changed by the reader");
+      assert.strictEqual((yield* view.readManifest()).collections[0]?.label, label);
       const snapshot = yield* Effect.flatMap(Library.Service, (library) => library.read).pipe(
         Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
       );
@@ -125,6 +135,9 @@ it.effect("an absent Library exposes empty read facts without creating persisted
     );
     assert.deepStrictEqual(view.installedSkills, []);
     assert.deepStrictEqual(view.skillsShCollectionIds, []);
+    const portable = yield* view.readManifest();
+    assert.deepStrictEqual(portable.collections, []);
+    assert.deepStrictEqual(portable.enabled, []);
     assert.isFalse(yield* fs.exists(home));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

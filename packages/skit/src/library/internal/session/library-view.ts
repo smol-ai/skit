@@ -12,7 +12,11 @@ import {
 import { removalSummary } from "./remove.js";
 import { securityReview } from "../security/review.js";
 import * as Library from "../../library.js";
-import { emptyLibraryState, type LibraryState } from "../../library-state.js";
+import {
+  emptyLibraryState,
+  libraryManifestFromLocalState,
+  type LibraryState,
+} from "../../library-state.js";
 import { join } from "node:path";
 
 import { globalEnabled } from "../../enabled.js";
@@ -108,6 +112,10 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
     });
   });
   return {
+    /** Portable data from this captured revision; returned documents cannot change the view. */
+    readManifest: Effect.fn("LibraryView.readManifest")(function* () {
+      return structuredClone(yield* libraryManifestFromLocalState(state));
+    }),
     readWorkspaceClaims: (root: string) => readWorkspaceClaims(state, root),
     previewSourceUpdates: <E, R>(
       query: string | undefined,

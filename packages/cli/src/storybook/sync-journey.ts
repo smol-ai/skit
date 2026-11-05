@@ -2,7 +2,7 @@ import { Library } from "@smolai/skit-core/library";
 import { Effect, FileSystem, Layer, Result, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { join } from "node:path";
-import { libraryManifestFromLocalState } from "@smolai/skit-core";
+import { openLibraryView } from "@smolai/skit-core/library/session";
 import { makeMachineId } from "@smolai/skit-core/universal/consumer";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { skitLayer } from "@smolai/skit-core/platform";
@@ -52,12 +52,12 @@ export const syncJourney = (failDownload: boolean) =>
         }
         const snapshot = yield* library.read;
         if (snapshot._tag === "Absent") return yield* Effect.die("Expected seeded Library");
-        const state = snapshot.state;
-        const bound = {
-          ...state,
-          enabled: state.skills.map((skill) => ({ skill: skill.skill_id })),
+        const view = yield* openLibraryView(seedHome);
+        const portable = yield* view.readManifest();
+        const manifest = {
+          ...portable,
+          enabled: portable.skills.map((skill) => ({ skill: skill.skill_id })),
         };
-        const manifest = yield* libraryManifestFromLocalState(bound);
         const archives = yield* library.content.pack(snapshot);
         return { manifest, archives };
       }).pipe(Effect.provide(Library.layer({ home: seedHome, routing: { _tag: "None" } })));
