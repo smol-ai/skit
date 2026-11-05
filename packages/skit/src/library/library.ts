@@ -92,7 +92,18 @@ import {
   type Plan,
   type PlanError as ExistingPlanError,
 } from "./library-plan.js";
-export * from "./library-plan.js";
+export {
+  Enabled,
+  Intent,
+  Approval,
+  StalePlan,
+  type DestinationsIncomplete,
+  type InstalledSkillWouldReplaceLink,
+  type InstalledSkillWouldDuplicate,
+  EnabledChange,
+  Plan,
+  type InstalledSkillResult,
+} from "./library-plan.js";
 export { UndoPlan } from "./internal/setup/undo-plan.js";
 
 export { reviewInstalledSkillChanges } from "./installed-skill-review.js";
