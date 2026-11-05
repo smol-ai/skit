@@ -1,8 +1,10 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import"],
   "ignorePatterns": ["packages/cli/test/fixtures/source-regressions/humanlayer/**"],
   "jsPlugins": ["./lint/oxlint-plugin-skit.mjs"],
   "rules": {
+    "oxc/no-barrel-file": "error",
     "skit/no-record-any": "error",
     "skit/no-record-unknown": "error",
     "skit/library-contract-complete": "error",
@@ -43,7 +45,10 @@
     },
     {
       "files": ["packages/cli/src/**/*.ts"],
-      "excludeFiles": ["packages/cli/src/terminal/renderer.ts", "packages/cli/src/terminal/prompter.ts"],
+      "excludeFiles": [
+        "packages/cli/src/terminal/renderer.ts",
+        "packages/cli/src/terminal/prompter.ts"
+      ],
       "rules": {
         "skit/no-direct-cli-output": "error"
       }
