@@ -312,11 +312,7 @@ describe("skit/library-recorded-execution", () => {
     `export * from "./operations/apply.js";`,
   ])("the public runtime cannot call or relay the folder executor: %s", async (source) => {
     expect(
-      await reported(
-        "library-recorded-execution",
-        `${library}internal/runtime.ts`,
-        source,
-      ),
+      await reported("library-recorded-execution", `${library}internal/runtime.ts`, source),
     ).toHaveLength(1);
   });
 
