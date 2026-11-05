@@ -74,48 +74,13 @@ export function renderDoctor(data: typeof DoctorReport.Type, context: RenderCont
           ...(skill.path ? [`      ${path(skill.path)}`] : []),
         );
     }
-    // Group OpenCode's repeated collision log lines into one useful finding per skill.
-    // Unknown warning formats remain visible; the exact native logs remain in JSON.
-    const collisions = new Map<string, Set<string>>();
-    const otherWarnings: string[] = [];
-    for (const warning of check.warnings.flatMap((warning) =>
-      warning.split("\n").filter(Boolean),
-    )) {
-      const field = (key: string) => {
-        const value = warning.match(
-          new RegExp(`(?:^|\\s)${key}=("(?:\\\\.|[^"\\\\])*"|\\S+)`),
-        )?.[1];
-        if (!value) return undefined;
-        if (!value.startsWith('"')) return value;
-        try {
-          return String(JSON.parse(value));
-        } catch {
-          return undefined;
-        }
-      };
-      const name = field("name");
-      const existing = field("existing");
-      const duplicate = field("duplicate");
-      if (
-        check.harness === "opencode" &&
-        warning.includes("duplicate skill name") &&
-        name &&
-        existing &&
-        duplicate
-      ) {
-        const paths = collisions.get(name) ?? new Set<string>();
-        paths.add(existing);
-        paths.add(duplicate);
-        collisions.set(name, paths);
-      } else otherWarnings.push(warning);
-    }
-    if (collisions.size) hasCollisions = true;
-    for (const [name, paths] of collisions) {
+    const collisions = check.findings.filter((finding) => finding._tag === "NameCollision");
+    if (collisions.length) hasCollisions = true;
+    for (const { name, paths, selectedPath } of collisions) {
       findings.push(
-        `  ${color.yellow("!")} ${color.bold(name)} ${color.dim(`· OpenCode · ${paths.size} locations`)}`,
+        `  ${color.yellow("!")} ${color.bold(name)} ${color.dim(`· OpenCode · ${paths.length} locations`)}`,
         "      Same skill name · OpenCode selects one copy",
       );
-      const selected = check.skills.find((skill) => skill.name === name)?.path;
       findings.push(
         ...[...paths].sort().map((value) => {
           const location = check.locations?.find(
@@ -124,14 +89,16 @@ export function renderDoctor(data: typeof DoctorReport.Type, context: RenderCont
               item.aliases.some((alias) => alias.path === dirname(value)),
           );
           const aliases = location?.aliases.filter((alias) => alias.via === "symlink") ?? [];
-          return `      ${path(value)}${value === selected ? color.dim(" · selected") : ""}${aliases.length ? `\n${aliases.map((alias) => `      ${path(alias.path)} → ${path(location?.canonicalPath ?? dirname(value))} ${color.dim("(symlink)")}`).join("\n")}` : ""}`;
+          return `      ${path(value)}${value === selectedPath ? color.dim(" · selected") : ""}${aliases.length ? `\n${aliases.map((alias) => `      ${path(alias.path)} → ${path(location?.canonicalPath ?? dirname(value))} ${color.dim("(symlink)")}`).join("\n")}` : ""}`;
         }),
       );
     }
     findings.push(
-      ...otherWarnings.map(
-        (warning) => `  ${color.yellow("!")} ${harnessLabel(check.harness)} · ${warning}`,
-      ),
+      ...check.findings
+        .filter((finding) => finding._tag === "Warning")
+        .map(
+          (warning) => `  ${color.yellow("!")} ${harnessLabel(check.harness)} · ${warning.message}`,
+        ),
     );
   }
   if (findings.length) lines.push("", section("Needs attention"), ...findings);

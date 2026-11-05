@@ -48,6 +48,21 @@ type HarnessDoctorSkill = typeof HarnessDoctorSkill.Type;
 /** The Harnesses doctor checks through their own discovery; Codex has its own check. */
 const NativeDoctorHarness = HarnessName.pick(["claude-code", "opencode", "devin"]);
 type NativeDoctorHarness = typeof NativeDoctorHarness.Type;
+const NativeDiscoveryFinding = Schema.Union([
+  Schema.Struct({ _tag: Schema.Literal("Warning"), message: Schema.String }),
+  Schema.Struct({
+    _tag: Schema.Literal("NameCollision"),
+    name: Schema.String,
+    paths: Schema.Array(Schema.String),
+    selectedPath: Schema.optionalKey(Schema.String),
+  }),
+]);
+type NativeDiscoveryFinding = typeof NativeDiscoveryFinding.Type;
+const warningFindings = (warnings: readonly string[]): NativeDiscoveryFinding[] =>
+  warnings
+    .flatMap((warning) => warning.split("\n").filter(Boolean))
+    .map((message) => ({ _tag: "Warning", message }));
+
 export const HarnessDoctorCheck = Schema.Struct({
   harness: NativeDoctorHarness,
   status: Schema.Literals(["checked", "missing", "failed", "skipped"]),
@@ -58,6 +73,7 @@ export const HarnessDoctorCheck = Schema.Struct({
   limitations: Schema.Array(Schema.String),
   skills: Schema.Array(HarnessDoctorSkill),
   locations: Schema.optionalKey(Schema.Array(DuplicateCopy)),
+  findings: Schema.Array(NativeDiscoveryFinding),
   warnings: Schema.Array(Schema.String),
 });
 export type HarnessDoctorCheck = typeof HarnessDoctorCheck.Type;
@@ -355,6 +371,7 @@ const doctorHarnessCheck = Effect.fn("Doctor.harness")(function* (
     cwd,
     coverage,
     limitations: discovery.limitations(),
+    findings: [],
     skills: [],
     warnings: [],
   };
@@ -380,7 +397,12 @@ const doctorHarnessCheck = Effect.fn("Doctor.harness")(function* (
     limitations: discovery.limitations(probe.version ?? undefined),
   };
   return yield* discovery.read(probe.executablePath, cwd, probe.version ?? undefined).pipe(
-    Effect.map((result) => ({ ...native, ...result, status: "checked" as const })),
+    Effect.map((result) => ({
+      ...native,
+      ...result,
+      findings: warningFindings(result.warnings),
+      status: "checked" as const,
+    })),
     Effect.catch((error) =>
       Effect.succeed({ ...native, status: "failed" as const, detail: String(error) }),
     ),
@@ -392,7 +414,7 @@ export function classifyOpenCodeWarnings(
   check: HarnessDoctorCheck,
   state: LibraryState,
 ): HarnessDoctorCheck {
-  if (check.status !== "checked") return check;
+  if (check.harness !== "opencode" || check.status !== "checked") return check;
   const lines = check.warnings.flatMap((warning) => warning.split("\n").filter(Boolean));
   const field = (line: string, key: string) => {
     const value = line.match(new RegExp(`(?:^|\\s)${key}=("(?:\\\\.|[^"\\\\])*"|\\S+)`))?.[1];
@@ -447,11 +469,41 @@ export function classifyOpenCodeWarnings(
     )
       expected.add(skill.name);
   }
+  const remaining = collisions.filter(
+    (collision) => !collision.name || !expected.has(collision.name),
+  );
+  const grouped = new Map<string, Set<string>>();
+  const findings: NativeDiscoveryFinding[] = [];
+  for (const collision of remaining) {
+    if (
+      collision.line.includes("duplicate skill name") &&
+      collision.name &&
+      collision.existing &&
+      collision.duplicate
+    ) {
+      const paths = grouped.get(collision.name) ?? new Set<string>();
+      paths.add(collision.existing);
+      paths.add(collision.duplicate);
+      grouped.set(collision.name, paths);
+    } else findings.push({ _tag: "Warning", message: collision.line });
+  }
   return {
     ...check,
-    warnings: collisions
-      .filter((collision) => !collision.name || !expected.has(collision.name))
-      .map(({ line }) => line),
+    warnings: remaining.map(({ line }) => line),
+    findings: [
+      ...[...grouped]
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([name, paths]): NativeDiscoveryFinding => {
+          const selectedPath = check.skills.find((skill) => skill.name === name)?.path;
+          return {
+            _tag: "NameCollision",
+            name,
+            paths: [...paths].sort(),
+            ...(selectedPath ? { selectedPath } : {}),
+          };
+        }),
+      ...findings,
+    ],
   };
 }
 
@@ -494,15 +546,17 @@ export const inspectNativeDiscovery = Effect.fn("Doctor.inspectNativeDiscovery")
       claude.budget,
     ],
     harnesses: harnesses.map((check) => {
+      const warnings = [
+        ...check.warnings,
+        ...aliasErrors.map(
+          (error) => `Could not inspect skill aliases at ${error.path}: ${error.message}`,
+        ),
+      ];
       const located = {
         ...check,
         locations: locations.filter((location) => location.harness === check.harness),
-        warnings: [
-          ...check.warnings,
-          ...aliasErrors.map(
-            (error) => `Could not inspect skill aliases at ${error.path}: ${error.message}`,
-          ),
-        ],
+        warnings,
+        findings: warningFindings(warnings),
       };
       return nativeDiscovery[check.harness].classifyWarnings?.(located, inventory) ?? located;
     }),

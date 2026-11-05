@@ -382,6 +382,7 @@ const collisionFixture = () => {
     coverage: "resolved-skills",
     limitations: [],
     warnings: [warning],
+    findings: [],
     skills: [
       { name: "review", path: "/home/.agents/skills/review/SKILL.md", warnings: [], errors: [] },
     ],
@@ -392,6 +393,7 @@ const collisionFixture = () => {
 test("doctor treats matching managed targets with the shared copy selected as healthy", () => {
   const { state, check } = collisionFixture();
   expect(classifyOpenCodeWarnings(check, state).warnings).toEqual([]);
+  expect(classifyOpenCodeWarnings(check, state).findings).toEqual([]);
   expect(check.warnings).toHaveLength(1);
 });
 
@@ -433,4 +435,29 @@ test("doctor accepts intact target-specific invocation renderings of the same Ve
     expected_hash: claudeHash,
   };
   expect(classifyOpenCodeWarnings(check, state).warnings).toEqual([]);
+  expect(classifyOpenCodeWarnings(check, state).findings).toEqual([]);
+});
+
+test("doctor exposes deduplicated collision facts, selected copy and unclassified native warnings", () => {
+  const { check } = collisionFixture();
+  const first = "/home/Project skills/review/SKILL.md";
+  const second = '/home/A "quoted" folder/review/SKILL.md';
+  check.skills = [{ name: "review guide", path: second, warnings: [], errors: [] }];
+  const collision = `WARN duplicate skill name name="review guide" existing=${JSON.stringify(first)} duplicate=${JSON.stringify(second)}`;
+  const unknown = "unknown native warning name=review";
+  const malformed = "WARN duplicate skill name name=review existing=/missing-duplicate";
+  check.warnings = [collision, `${collision}\n${unknown}`, malformed];
+  const result = classifyOpenCodeWarnings(check, emptyLibraryState());
+  expect(result.warnings).toEqual([collision, collision, unknown, malformed]);
+  expect(result.findings).toEqual([
+    {
+      _tag: "NameCollision",
+      name: "review guide",
+      paths: [second, first].sort(),
+      selectedPath: second,
+    },
+    { _tag: "Warning", message: unknown },
+    { _tag: "Warning", message: malformed },
+  ]);
+  expect(check.warnings).toEqual([collision, `${collision}\n${unknown}`, malformed]);
 });

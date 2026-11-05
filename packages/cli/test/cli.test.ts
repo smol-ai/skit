@@ -505,9 +505,11 @@ describe("CLI contracts", () => {
     );
     expect(result.status).toBe(12);
     expect(result.stderr).toBe("");
-    expect(JSON.parse(result.stdout)).toEqual(
+    const document = Schema.decodeUnknownSync(DoctorDocument)(result.stdout);
+    expect(document.data.harnesses.map((check) => check.findings)).toEqual([[], [], []]);
+    expect(document).toEqual(
       expect.objectContaining({
-        schema: "skit.doctor.v9",
+        schema: "skit.doctor.v10",
         data: expect.objectContaining({ ok: false, issues: expect.any(Array) }),
       }),
     );

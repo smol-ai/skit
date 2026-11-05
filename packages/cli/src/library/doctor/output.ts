@@ -1,5 +1,5 @@
 import { DoctorReport } from "./harnesses.js";
 
 export const doctorOutputContracts = {
-  doctor: { id: "skit.doctor.v9", schema: DoctorReport },
+  doctor: { id: "skit.doctor.v10", schema: DoctorReport },
 } as const;

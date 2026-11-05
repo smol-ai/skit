@@ -559,6 +559,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       harnesses: [
         {
           harness: "claude-code",
+          findings: [],
           status: "checked",
           cwd: "/home/story/project",
           version: "2.1.284",
@@ -571,6 +572,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
         },
         {
           harness: "opencode",
+          findings: [],
           status: "checked",
           cwd: "/home/story/project",
           version: "1.18.18",
@@ -588,6 +590,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
         },
         {
           harness: "devin",
+          findings: [],
           status: "missing",
           cwd: "/home/story/project",
           coverage: "native-skills",
@@ -672,6 +675,17 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       harnesses: [
         {
           harness: "opencode",
+          findings: [
+            {
+              _tag: "NameCollision",
+              name: "review",
+              paths: [
+                "/home/story/.agents/skills/review/SKILL.md",
+                "/home/story/.claude/skills/review/SKILL.md",
+              ],
+              selectedPath: "/home/story/.agents/skills/review/SKILL.md",
+            },
+          ],
           status: "checked",
           cwd: "/home/story/project",
           version: "1.18.18",

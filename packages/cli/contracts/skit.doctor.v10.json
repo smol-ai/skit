@@ -1,5 +1,5 @@
 {
-  "$id": "skit.doctor.v9",
+  "$id": "skit.doctor.v10",
   "type": "object",
   "properties": {
     "ok": {
@@ -938,6 +938,61 @@
               "additionalProperties": true
             }
           },
+          "findings": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "Warning"
+                      ]
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "message"
+                  ],
+                  "additionalProperties": true
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "_tag": {
+                      "type": "string",
+                      "enum": [
+                        "NameCollision"
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "paths": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "selectedPath": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "_tag",
+                    "name",
+                    "paths"
+                  ],
+                  "additionalProperties": true
+                }
+              ]
+            }
+          },
           "warnings": {
             "type": "array",
             "items": {
@@ -952,6 +1007,7 @@
           "coverage",
           "limitations",
           "skills",
+          "findings",
           "warnings"
         ],
         "additionalProperties": true
