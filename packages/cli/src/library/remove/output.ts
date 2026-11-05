@@ -16,3 +16,8 @@ export const RemoveResult = Schema.Struct({
   uninstalled: Schema.Number,
 });
 export type RemoveResult = typeof RemoveResult.Type;
+
+export const removeOutputContracts = {
+  remove: { id: "skit.remove.v5", schema: RemoveResult },
+  removePlan: { id: "skit.remove.plan.v5", schema: RemovePlan },
+} as const;

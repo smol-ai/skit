@@ -20,7 +20,7 @@ import { planUpdates, updateSubjects } from "../src/library/application/update.j
 import { checkSubjects } from "../src/library/workflows/check.js";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { planLibrarySync } from "../src/library/workflows/library-sync-plan.js";
-import { executeRemove } from "../src/library/workflows/remove.js";
+import { executeRemove } from "../src/library/remove/operation.js";
 
 import {
   archiveBytes,

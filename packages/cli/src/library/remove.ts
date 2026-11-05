@@ -1,13 +1,13 @@
 import { skitConfigurationLayer } from "@smolai/skit-core";
 import { Option, Effect } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { handleLibraryCommand } from "../../commands/handler.js";
-import { CommandMetadata } from "../../commands/metadata.js";
-import { outputContracts } from "../../commands/output-contracts.js";
-import { localFlags } from "../../commands/parameters.js";
-import { Renderer } from "../../terminal/renderer.js";
-import { executeRemove } from "../workflows/remove.js";
-import { result } from "../../commands/result.js";
+import { handleLibraryCommand } from "../commands/handler.js";
+import { CommandMetadata } from "../commands/metadata.js";
+import { removeOutputContracts } from "./remove/output.js";
+import { localFlags } from "../commands/parameters.js";
+import { Renderer } from "../terminal/renderer.js";
+import { executeRemove } from "./remove/operation.js";
+import { encodeResult as result } from "../commands/encode-result.js";
 
 const subject = Argument.String("skill-or-collection");
 const dryRun = Flag.Boolean("dry-run").pipe(
@@ -30,8 +30,10 @@ export const removeCliCommand = Command.make(
           }),
         );
         if (outcome.kind === "plan")
-          return yield* renderer.result(result("removePlan", outcome.value));
-        yield* renderer.result(result("remove", outcome.value));
+          return yield* renderer.result(
+            result("removePlan", removeOutputContracts.removePlan, outcome.value),
+          );
+        yield* renderer.result(result("remove", removeOutputContracts.remove, outcome.value));
       }),
     ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
@@ -41,8 +43,11 @@ export const removeCliCommand = Command.make(
   Command.withExamples([{ command: "skit remove owner/tools --dry-run" }]),
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read", "filesystem.write"] },
-    outputSchemas: [outputContracts.remove, outputContracts.removePlan],
+    outputSchemas: [removeOutputContracts.remove, removeOutputContracts.removePlan],
     exitCodes: [0, 11, 12, 64, 65],
     interactive: false,
   }),
 );
+
+export { removeOutputContracts } from "./remove/output.js";
+export { renderRemove, renderRemovePlan } from "./remove/present.js";

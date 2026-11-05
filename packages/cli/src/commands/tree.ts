@@ -7,7 +7,7 @@ import { authLoginCliCommand } from "../registry/commands/login.js";
 import { authStatusCliCommand } from "../registry/commands/status.js";
 import { listCliCommand } from "../library/commands/list.js";
 import { addCliCommand } from "../library/commands/add.js";
-import { removeCliCommand } from "../library/commands/remove.js";
+import { removeCliCommand } from "../library/remove.js";
 import { updateCliCommand } from "../library/commands/update.js";
 import { librarySyncCliCommand } from "../library/commands/sync.js";
 import { disableCliCommand, enableCliCommand } from "../library/enable.js";

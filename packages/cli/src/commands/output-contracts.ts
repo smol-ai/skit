@@ -21,7 +21,7 @@ import { AuditReportV1Alpha4 } from "@smolai/skit-core/audit";
 import { HarnessProbeReport } from "@smolai/skit-core/harnesses";
 import { RegistryRemoteChange, RegistryRemoteList } from "../registry/contracts.js";
 import { AuthorSyncResult } from "../author/contracts.js";
-import { RemovePlan, RemoveResult } from "../library/workflows/remove-contract.js";
+import { removeOutputContracts } from "../library/remove.js";
 import { CheckResult } from "../library/workflows/check-contract.js";
 import { AddPreview, AddResult } from "../library/workflows/add-contract.js";
 import { UpdatePlan, UpdateResult } from "../library/workflows/update-contract.js";
@@ -120,8 +120,8 @@ export const outputContracts = {
   updatePlan: effectOutput("skit.update.plan.v6", UpdatePlan),
   projectionRetention: effectOutput("skit.update.projection-retention.v4", EditImportResult),
   projectionRetentionPlan: effectOutput("skit.update.projection-retention.plan.v4", EditImportPlan),
-  remove: effectOutput("skit.remove.v5", RemoveResult),
-  removePlan: effectOutput("skit.remove.plan.v5", RemovePlan),
+  remove: removeOutputContracts.remove,
+  removePlan: removeOutputContracts.removePlan,
   enable: enableOutputContracts.enable,
   enablePlan: enableOutputContracts.enablePlan,
   disable: enableOutputContracts.disable,
