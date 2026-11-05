@@ -17,11 +17,7 @@ import {
   releasePublishResponseSchema,
   skitValidationDiagnosticsSchema,
 } from "./authoring-contracts.js";
-export {
-  AuthorSkitDeleteResponse,
-  AuthorSkitListResponse,
-  AuthorSkitSummary,
-} from "./authoring-contracts.js";
+export { AuthorSkitDeleteResponse, AuthorSkitSummary } from "./authoring-contracts.js";
 import { PrincipalAuthentication, RequestDecoding } from "./authentication.js";
 import {
   apiErrorStatuses,
@@ -39,7 +35,7 @@ import {
   StorageFailureResponse,
 } from "./errors.js";
 
-export const ArtifactTooLargeResponse = Schema.Struct({
+const ArtifactTooLargeResponse = Schema.Struct({
   error: Schema.Literal("ARTIFACT_TOO_LARGE"),
 }).pipe(HttpApiSchema.status(apiErrorStatuses.ARTIFACT_TOO_LARGE));
 /** Another device moved `current` first; this is where it points now. */
@@ -59,7 +55,7 @@ const dedicatedRevisionErrorCodes = new Set([
   "skit_exists",
   "skit_not_found",
 ]);
-export const InvalidRevisionResponse = Schema.Struct({
+const InvalidRevisionResponse = Schema.Struct({
   error: Schema.String.check(
     Schema.makeFilter((value) => !dedicatedRevisionErrorCodes.has(value), {
       message: "Invalid SKIT errors must not overlap dedicated HTTP responses",
@@ -67,7 +63,7 @@ export const InvalidRevisionResponse = Schema.Struct({
   ),
 }).pipe(HttpApiSchema.status(400));
 
-export class AuthorInventoryApi extends HttpApiGroup.make("authorInventory")
+class AuthorInventoryApi extends HttpApiGroup.make("authorInventory")
   .add(
     HttpApiEndpoint.get("read", "/api/author/skits", {
       query: {
@@ -101,7 +97,7 @@ const revisionReadErrors = [
  * A SKIT's revisions and its one `current` pointer. Posting a revision never changes what is
  * current; only `move` does, and only if `current` still points where the caller expects.
  */
-export class SkitAuthoringApi extends HttpApiGroup.make("skits")
+class SkitAuthoringApi extends HttpApiGroup.make("skits")
   .add(
     HttpApiEndpoint.post("create", "/api/skits", {
       payload: SkitCreateRequest,
@@ -150,7 +146,7 @@ export class SkitAuthoringApi extends HttpApiGroup.make("skits")
   .middleware(PrincipalAuthentication) {}
 
 const DeleteQuery = { dry_run: Schema.optionalKey(Schema.Literal("true")) };
-export class SkitDeleteApi extends HttpApiGroup.make("skitDelete")
+class SkitDeleteApi extends HttpApiGroup.make("skitDelete")
   .add(
     HttpApiEndpoint.delete("deletePrivate", "/api/skits/:owner/:slug", {
       params: { owner: Schema.String, slug: Schema.String },
@@ -198,7 +194,7 @@ export type IntegrityErrorCode = typeof IntegrityErrorCode.Type;
 export const IntegrityFailureResponse = Schema.Struct({ error: IntegrityErrorCode }).pipe(
   HttpApiSchema.status(400),
 );
-export class PublicationApi extends HttpApiGroup.make("publication")
+class PublicationApi extends HttpApiGroup.make("publication")
   .add(
     HttpApiEndpoint.post("publish", "/api/skits/:owner/:slug/releases", {
       params: { owner: Schema.String, slug: Schema.String },

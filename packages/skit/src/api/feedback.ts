@@ -36,7 +36,7 @@ export const FeedbackResult = Schema.Struct({
 });
 export interface FeedbackResult extends Schema.Schema.Type<typeof FeedbackResult> {}
 
-export class FeedbackGroup extends HttpApiGroup.make("feedback").add(
+class FeedbackGroup extends HttpApiGroup.make("feedback").add(
   HttpApiEndpoint.post("send", "/api/feedback", {
     payload: FeedbackInput,
     success: FeedbackResult.pipe(HttpApiSchema.status(201)),

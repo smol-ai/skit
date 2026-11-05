@@ -66,13 +66,13 @@ export const Readiness = Schema.Struct({
 });
 export interface Readiness extends Schema.Schema.Type<typeof Readiness> {}
 
-export const CreateTokenRequest = Schema.Struct({
+const CreateTokenRequest = Schema.Struct({
   name: Schema.String,
   scopes: Schema.Array(Scope),
   expires_at: Schema.optionalKey(Schema.String),
 });
-export const TokenList = Schema.Struct({ tokens: Schema.Array(ListedPat) });
-export class TokensApi extends HttpApiGroup.make("tokens")
+const TokenList = Schema.Struct({ tokens: Schema.Array(ListedPat) });
+class TokensApi extends HttpApiGroup.make("tokens")
   .add(
     HttpApiEndpoint.post("create", "/api/tokens", {
       payload: CreateTokenRequest,
@@ -105,11 +105,11 @@ export class TokensApi extends HttpApiGroup.make("tokens")
   .middleware(RequestDecoding)
   .middleware(PrincipalAuthentication) {}
 
-export const CreateTeamRequest = Schema.Struct({ slug: Schema.String, name: Schema.String });
-export const AddTeamMemberRequest = Schema.Struct({ email: Schema.String });
-export const TeamResponse = Schema.Struct({ team: Team });
-export const TeamMemberResponse = Schema.Struct({ member: TeamMember });
-export class TeamsApi extends HttpApiGroup.make("teams")
+const CreateTeamRequest = Schema.Struct({ slug: Schema.String, name: Schema.String });
+const AddTeamMemberRequest = Schema.Struct({ email: Schema.String });
+const TeamResponse = Schema.Struct({ team: Team });
+const TeamMemberResponse = Schema.Struct({ member: TeamMember });
+class TeamsApi extends HttpApiGroup.make("teams")
   .add(
     HttpApiEndpoint.post("create", "/api/teams", {
       payload: CreateTeamRequest,
@@ -153,7 +153,7 @@ export class TeamsApi extends HttpApiGroup.make("teams")
   .middleware(RequestDecoding)
   .middleware(PrincipalAuthentication) {}
 
-export class LibrarySnapshotsApi extends HttpApiGroup.make("librarySnapshots")
+class LibrarySnapshotsApi extends HttpApiGroup.make("librarySnapshots")
   .add(
     HttpApiEndpoint.post("upload", "/api/library/snapshots", {
       payload: SnapshotArchive,
@@ -174,7 +174,7 @@ export class LibrarySnapshotsApi extends HttpApiGroup.make("librarySnapshots")
   .middleware(RequestDecoding)
   .middleware(PrincipalAuthentication) {}
 
-export class LibrarySyncApi extends HttpApiGroup.make("librarySync")
+class LibrarySyncApi extends HttpApiGroup.make("librarySync")
   .add(
     HttpApiEndpoint.get("read", "/api/library/portable", {
       success: LibraryResponse,
@@ -200,9 +200,9 @@ const readinessResponse = <const Ready extends boolean>(ready: Ready, status: nu
     ...Readiness.fields,
     ready: Schema.Literal(ready),
   }).pipe(HttpApiSchema.status(status));
-export const ReadyResponse = readinessResponse(true, 200);
-export const NotReadyResponse = readinessResponse(false, 503);
-export class ReadinessApi extends HttpApiGroup.make("readiness")
+const ReadyResponse = readinessResponse(true, 200);
+const NotReadyResponse = readinessResponse(false, 503);
+class ReadinessApi extends HttpApiGroup.make("readiness")
   .add(
     HttpApiEndpoint.get("inspect", "/api/operator/readiness", {
       success: [ReadyResponse, NotReadyResponse],
