@@ -26,6 +26,7 @@ import type {
   SetupGitStatus,
   SetupRepositoryConfig,
   SetupSuppressed,
+  SetupScanIssue,
 } from "./contract.js";
 const SUPPRESSED_NAMES = new Map<string, SetupSuppressed["reason"]>([
   ["node_modules", "dependency"],
@@ -87,19 +88,54 @@ interface WalkResult {
   readonly repositories: readonly string[];
   readonly suppressed: readonly SetupSuppressed[];
   readonly complete: boolean;
+  readonly issues: readonly SetupScanIssue[];
   readonly directoriesExamined: number;
 }
 
-const entriesOf = Effect.fn("Setup.entries")(function* (directory: string) {
+// Only expected filesystem gaps are observations. Other errors and defects stay failures.
+const entriesOf = Effect.fn("Setup.entries")(function* (directory: string, optional = false) {
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
-  const names = yield* fs.readDirectory(directory).pipe(Effect.orElseSucceed(() => [] as string[]));
-  return yield* Effect.forEach(names, (name) =>
-    links.lstat(join(directory, name)).pipe(
-      Effect.map((info) => ({ name, info }) satisfies DirectoryEntry),
-      Effect.orElseSucceed(() => undefined),
-    ),
-  ).pipe(Effect.map((entries) => entries.filter((entry) => entry !== undefined)));
+  const entries: DirectoryEntry[] = [];
+  const issues: SetupScanIssue[] = [];
+  const listing = yield* Effect.result(fs.readDirectory(directory));
+  if (Result.isFailure(listing)) {
+    const reason = listing.failure.reason._tag;
+    if (reason === "NotFound") {
+      if (!optional) issues.push({ path: directory, code: "MISSING_ROOT" });
+    } else if (reason === "PermissionDenied")
+      issues.push({ path: directory, code: "UNREADABLE_PATH" });
+    else return yield* Effect.fail(listing.failure);
+  } else {
+    for (const name of listing.success.sort()) {
+      const path = join(directory, name);
+      const observed = yield* Effect.result(links.lstat(path));
+      if (Result.isSuccess(observed)) entries.push({ name, info: observed.success });
+      else if (observed.failure.reason._tag === "NotFound")
+        issues.push({ path, code: "MISSING_PATH" });
+      else if (observed.failure.reason._tag === "PermissionDenied")
+        issues.push({ path, code: "UNREADABLE_PATH" });
+      else return yield* Effect.fail(observed.failure);
+    }
+  }
+  return { entries, issues, complete: issues.length === 0 };
+});
+
+const repositoryMarker = Effect.fn("Setup.repositoryMarker")(function* (
+  directory: string,
+  issues: SetupScanIssue[],
+  required = false,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = join(directory, ".git");
+  const marker = yield* Effect.result(fs.stat(path));
+  if (Result.isSuccess(marker)) return true;
+  if (marker.failure.reason._tag === "NotFound") {
+    if (required) issues.push({ path, code: "MISSING_ROOT" });
+  } else if (marker.failure.reason._tag === "PermissionDenied")
+    issues.push({ path, code: "UNREADABLE_PATH" });
+  else return yield* Effect.fail(marker.failure);
+  return false;
 });
 
 /** Folders people commonly keep their repositories in, relative to their home. */
@@ -125,19 +161,21 @@ export const suggestRepositoryRoots = Effect.fn("Setup.suggestRepositoryRoots")(
   home: string,
 ) {
   const links = yield* LinkStat;
-  const fs = yield* FileSystem.FileSystem;
   const seen = new Set<string>();
   const suggestions: string[] = [];
   for (const folder of commonRepositoryFolders) {
     const path = join(home, folder);
     // On a case-insensitive volume `Work` and `work` are one folder; report it once.
-    const identity = yield* links.identity.lstat(path).pipe(Effect.orElseSucceed(() => undefined));
+    const identity = yield* links.identity.lstat(path).pipe(
+      Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
+      Effect.catchReason("PlatformError", "PermissionDenied", () => Effect.succeed(undefined)),
+    );
     if (identity?.type !== "Directory" || seen.has(`${identity.dev}:${identity.ino}`)) continue;
     seen.add(`${identity.dev}:${identity.ino}`);
-    for (const entry of yield* entriesOf(path))
+    for (const entry of (yield* entriesOf(path, true)).entries)
       if (
         entry.info.type === "Directory" &&
-        (yield* fs.exists(join(path, entry.name, ".git")).pipe(Effect.orElseSucceed(() => false)))
+        (yield* repositoryMarker(join(path, entry.name), []))
       ) {
         suggestions.push(path);
         break;
@@ -149,7 +187,7 @@ export const suggestRepositoryRoots = Effect.fn("Setup.suggestRepositoryRoots")(
 const walkRepositoryRoots = Effect.fn("Setup.walkRepositoryRoots")(function* (
   roots: readonly string[],
 ) {
-  const fs = yield* FileSystem.FileSystem;
+  const issues: SetupScanIssue[] = [];
   const visited = new Set<string>();
   const directories: string[] = [];
   const repositories = new Set<string>();
@@ -159,7 +197,7 @@ const walkRepositoryRoots = Effect.fn("Setup.walkRepositoryRoots")(function* (
       visited.add(directory);
       directories.push(directory);
     }
-    if (yield* fs.exists(join(directory, ".git"))) {
+    if (yield* repositoryMarker(directory, issues)) {
       repositories.add(directory);
       return true;
     }
@@ -167,8 +205,10 @@ const walkRepositoryRoots = Effect.fn("Setup.walkRepositoryRoots")(function* (
   });
   for (const configuredRoot of roots) {
     const root = resolve(configuredRoot);
+    const observation = yield* entriesOf(root);
+    issues.push(...observation.issues);
     if (yield* examine(root)) continue;
-    for (const entry of yield* entriesOf(root)) {
+    for (const entry of observation.entries) {
       if (entry.info.type !== "Directory") continue;
       const child = join(root, entry.name);
       const reason = SUPPRESSED_NAMES.get(entry.name);
@@ -187,7 +227,8 @@ const walkRepositoryRoots = Effect.fn("Setup.walkRepositoryRoots")(function* (
     directories,
     repositories: [...repositories].sort(),
     suppressed: [...suppressed.values()].sort((left, right) => left.path.localeCompare(right.path)),
-    complete: true,
+    complete: issues.length === 0,
+    issues,
     directoriesExamined: visited.size,
   } satisfies WalkResult;
 });
@@ -195,19 +236,19 @@ const walkRepositoryRoots = Effect.fn("Setup.walkRepositoryRoots")(function* (
 const inspectWatchedRepositories = Effect.fn("Setup.inspectWatchedRepositories")(function* (
   repositories: readonly string[],
 ) {
-  const fs = yield* FileSystem.FileSystem;
   const present: string[] = [];
-  let complete = true;
+  const issues: SetupScanIssue[] = [];
   for (const repository of repositories.map((path) => resolve(path)).sort()) {
-    if ((yield* fs.exists(repository)) && (yield* fs.exists(join(repository, ".git"))))
-      present.push(repository);
-    else complete = false;
+    const observation = yield* entriesOf(repository);
+    issues.push(...observation.issues);
+    if (yield* repositoryMarker(repository, issues, true)) present.push(repository);
   }
   return {
     directories: [...present],
     repositories: present,
     suppressed: [] as SetupSuppressed[],
-    complete,
+    complete: issues.length === 0,
+    issues,
     directoriesExamined: repositories.length,
   } satisfies WalkResult;
 });
@@ -441,24 +482,30 @@ const scanSetupLocations = Effect.fn("Setup.scanLocations")(function* (
   harnessRoots: ReturnType<typeof collectSkillsDirectories>,
 ) {
   const repositoryConfigs = yield* Effect.forEach(walk.repositories, readRepositoryConfig);
-  const roots = [
-    ...harnessRoots.map(({ root }) => root),
+  const roots = new Map<string, boolean>([
+    ...harnessRoots.map(({ root }) => [root, true] as const),
     ...repositoryConfigs.flatMap((config) =>
-      [...PROJECT_COLLECTION_ROOTS, ...config.collections.map((entry) => entry.path)].map((path) =>
-        join(config.repository, ...path.split("/")),
-      ),
+      PROJECT_COLLECTION_ROOTS.map((path) => [join(config.repository, path), true] as const),
     ),
-  ];
+  ]);
+  // Explicit collections are required even when their path is also a conventional root.
+  for (const config of repositoryConfigs)
+    for (const entry of config.collections)
+      roots.set(join(config.repository, ...entry.path.split("/")), false);
+  const issues: SetupScanIssue[] = [];
   const directories = new Set([
     ...walk.directories.filter(
       (directory) => nearestRepository(directory, walk.repositories) === undefined,
     ),
     ...walk.repositories,
   ]);
-  for (const root of new Set(roots))
-    for (const entry of yield* entriesOf(root))
+  for (const [root, optional] of roots) {
+    const observation = yield* entriesOf(root, optional);
+    issues.push(...observation.issues);
+    for (const entry of observation.entries)
       if (entry.info.type === "Directory" || entry.info.type === "SymbolicLink")
         directories.add(join(root, entry.name));
+  }
   const candidates = yield* collectSkillHits([...directories], walk.repositories);
   const scans = yield* Effect.forEach(
     repositoryConfigs,
@@ -471,7 +518,8 @@ const scanSetupLocations = Effect.fn("Setup.scanLocations")(function* (
       ...candidates.filter((hit) => hit.repository === undefined),
       ...scans.flatMap((scan) => scan.hits),
     ],
-    complete: scans.every((scan) => scan.complete),
+    complete: issues.length === 0 && scans.every((scan) => scan.complete),
+    issues,
   };
 });
 
@@ -480,12 +528,31 @@ export const collectBrokenLinks = Effect.fn("Setup.brokenLinks")(function* (
 ) {
   const fs = yield* FileSystem.FileSystem;
   const byPath = new Map<string, SetupBrokenLink>();
+  const issues: SetupScanIssue[] = [];
   for (const { harness, root } of roots) {
-    for (const entry of yield* entriesOf(root)) {
+    const observation = yield* entriesOf(root, true);
+    issues.push(...observation.issues);
+    for (const entry of observation.entries) {
       if (entry.info.type !== "SymbolicLink") continue;
       const path = join(root, entry.name);
-      if (yield* fs.exists(path)) continue;
-      const target = yield* fs.readLink(path).pipe(Effect.orElseSucceed(() => ""));
+      const targetInfo = yield* Effect.result(fs.stat(path));
+      if (Result.isSuccess(targetInfo)) continue;
+      if (targetInfo.failure.reason._tag === "PermissionDenied") {
+        issues.push({ path, code: "UNREADABLE_PATH" });
+        continue;
+      }
+      if (targetInfo.failure.reason._tag !== "NotFound")
+        return yield* Effect.fail(targetInfo.failure);
+      const targetRead = yield* Effect.result(fs.readLink(path));
+      if (Result.isFailure(targetRead)) {
+        if (targetRead.failure.reason._tag === "NotFound")
+          issues.push({ path, code: "MISSING_PATH" });
+        else if (targetRead.failure.reason._tag === "PermissionDenied")
+          issues.push({ path, code: "UNREADABLE_PATH" });
+        else return yield* Effect.fail(targetRead.failure);
+        continue;
+      }
+      const target = targetRead.success;
       const prior = byPath.get(path);
       byPath.set(path, {
         path,
@@ -494,7 +561,10 @@ export const collectBrokenLinks = Effect.fn("Setup.brokenLinks")(function* (
       });
     }
   }
-  return [...byPath.values()].sort((left, right) => left.path.localeCompare(right.path));
+  return {
+    links: [...byPath.values()].sort((left, right) => left.path.localeCompare(right.path)),
+    issues,
+  };
 });
 
 const collectAuthoredCollections = Effect.fn("Setup.authoredCollections")(function* (
@@ -617,7 +687,11 @@ export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function*
     library,
     harnessRoots.map(({ harness, root }) => ({ harness, root })),
   );
-  const { repositoryConfigs, hits, complete } = yield* scanSetupLocations(walk, harnessRoots);
+  const { repositoryConfigs, hits, complete, issues } = yield* scanSetupLocations(
+    walk,
+    harnessRoots,
+  );
+  const brokenLinks = yield* collectBrokenLinks(harnessRoots);
   const globalLockPath = options.skillsStateHome
     ? join(resolve(options.skillsStateHome), "skills", ".skill-lock.json")
     : join(resolve(options.inventory.home), ".agents", ".skill-lock.json");
@@ -640,7 +714,18 @@ export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function*
     snapshot,
     authoredCollections,
     libraryInventory,
-    discoveryComplete: complete,
+    brokenLinks: brokenLinks.links,
+    discoveryComplete: complete && brokenLinks.issues.length === 0,
+    discoveryIssues: [
+      ...new Map(
+        [...walk.issues, ...issues, ...brokenLinks.issues].map((issue) => [
+          `${issue.code}:${issue.path}`,
+          issue,
+        ]),
+      ).values(),
+    ].sort(
+      (left, right) => left.path.localeCompare(right.path) || left.code.localeCompare(right.code),
+    ),
     hits,
     locks,
   };

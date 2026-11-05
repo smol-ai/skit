@@ -14,7 +14,7 @@ import {
   type InventoryRootOptions,
 } from "../routing/roots.js";
 import type { SetupResult } from "./contract.js";
-import { collectBrokenLinks, collectSetupEvidence, suggestRepositoryRoots } from "./discovery.js";
+import { collectSetupEvidence, suggestRepositoryRoots } from "./discovery.js";
 import { scanSetupCopies } from "./copies.js";
 import {
   planInstalledSkillChanges,
@@ -72,10 +72,10 @@ const scanForSetup = Effect.fn("Library.setup")(
       discovering,
       walk,
       repositoryConfigs,
-      harnessRoots,
       library,
       authoredCollections,
       discoveryComplete,
+      discoveryIssues,
       locks,
     } = evidence;
     const { instances, onboardingInstances, probes, installedSkills } = yield* scanSetupCopies(
@@ -132,6 +132,7 @@ const scanForSetup = Effect.fn("Library.setup")(
         reconciliation: installedSkillChanges,
         repositoryConfigs,
         discoveryRoots,
+        discovery: { complete: walk.complete && discoveryComplete, issues: discoveryIssues },
         repositoryDecisions: [...existingDecisions].sort(([left], [right]) =>
           left.localeCompare(right),
         ),
@@ -168,6 +169,7 @@ const scanForSetup = Effect.fn("Library.setup")(
         directoriesExamined: walk.directoriesExamined,
         repositorySearchDepth: 1,
         ...(missingRepositories.length ? { missingRepositories } : {}),
+        ...(discoveryIssues.length ? { issues: discoveryIssues } : {}),
       },
       repositories: walk.repositories.flatMap((repository) => {
         const skills = [
@@ -223,7 +225,7 @@ const scanForSetup = Effect.fn("Library.setup")(
       locks: [...locks].sort((left, right) => left.path.localeCompare(right.path)),
       instances: sortedInstances,
       changes: installedSkillChanges,
-      brokenLinks: yield* collectBrokenLinks(harnessRoots),
+      brokenLinks: evidence.brokenLinks,
       suppressed: walk.suppressed,
     } satisfies SetupResult;
     return { scan, library };

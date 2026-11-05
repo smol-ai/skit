@@ -20,7 +20,7 @@ import {
   renderReviewedChanges,
 } from "../presentation/installed-skill-changes.js";
 
-function renderSetupCollections(data: ContractDataForId<"skit.setup.v11">): string[] {
+function renderSetupCollections(data: ContractDataForId<"skit.setup.v12">): string[] {
   type Instance = (typeof data.instances)[number];
   type Collection = {
     label: string;
@@ -125,7 +125,7 @@ function renderSetupCollections(data: ContractDataForId<"skit.setup.v11">): stri
 }
 
 function renderSetupInstalledSkills(
-  installedSkills: ContractDataForId<"skit.setup.v11">["installedSkills"],
+  installedSkills: ContractDataForId<"skit.setup.v12">["installedSkills"],
 ): string[] {
   const collections = new Map<string, (typeof installedSkills)[number][]>();
   for (const installedSkill of installedSkills) {
@@ -158,7 +158,7 @@ function renderSetupInstalledSkills(
     });
 }
 
-function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v11">): string[] {
+function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v12">): string[] {
   return data.authoredCollections.flatMap((collection) => {
     const installedSkills = data.installedSkills.filter(
       (installedSkill) => installedSkill.collectionId === collection.collectionId,
@@ -180,7 +180,7 @@ function renderSetupAuthoredCollections(data: ContractDataForId<"skit.setup.v11"
   });
 }
 
-function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v11">): string[] {
+function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v12">): string[] {
   const candidates = data.instances.filter(
     (instance) => instance.owner.kind === "unknown" && instance.locks.length === 0,
   );
@@ -223,7 +223,7 @@ function renderSetupContentMatches(data: ContractDataForId<"skit.setup.v11">): s
 }
 
 /** What `skit setup --apply` would do, and the exact command that does it. */
-function renderSetupRecommendation(data: ContractDataForId<"skit.setup.v11">): string[] {
+function renderSetupRecommendation(data: ContractDataForId<"skit.setup.v12">): string[] {
   const { candidates, recommended } = data.onboarding;
   if (!recommended.sources.length && !recommended.copies.length) return [];
   const duplicates = recommended.copies.filter((copy) =>
@@ -303,11 +303,18 @@ function renderSetupApplied(data: ContractDataForId<"skit.setup.applied.v4">): s
   return lines.join("\n");
 }
 
-export function renderSetup(data: ContractDataForId<"skit.setup.v11">): string {
+export function renderSetup(data: ContractDataForId<"skit.setup.v12">): string {
   const lines = [
     `Observed ${data.instances.length} skill instance(s) in ${data.repositories.length} repositories across ${data.machineConfig.repositoryRoots.length} configured root(s)${data.machineConfig.persisted ? " · roots saved for this machine" : ""}`,
     `Scan ${data.scan.complete ? "complete" : "incomplete"} · ${data.scan.directoriesExamined} directories examined · repository depth ${data.scan.repositorySearchDepth}`,
     "",
+    ...(data.scan.issues?.length
+      ? [
+          "Discovery issues",
+          ...data.scan.issues.map((issue) => `  ${issue.code} · ${issue.path}`),
+          "",
+        ]
+      : []),
     "Harnesses",
     ...data.probes.map(
       (probe) => `  ${harnessLabel(probe.harness)} · ${probe.status} · ${probe.command}`,

@@ -908,7 +908,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.inventory.v13"
+        "skit.inventory.v14"
       ],
       "exitCodes": [
         0,
@@ -2294,7 +2294,7 @@
         ]
       },
       "outputSchemas": [
-        "skit.setup.v11",
+        "skit.setup.v12",
         "skit.setup.applied.v4",
         "skit.setup.review.v3",
         "skit.setup.failed.v1",

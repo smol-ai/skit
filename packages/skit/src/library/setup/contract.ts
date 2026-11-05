@@ -320,6 +320,12 @@ export const SetupKnownSourceSelection = Schema.Struct({
 export type SetupKnownSourceSelection = typeof SetupKnownSourceSelection.Type;
 export type SetupOnboardingCandidate = typeof SetupOnboardingCandidate.Type;
 
+export const SetupScanIssue = Schema.Struct({
+  path: Schema.String,
+  code: Schema.Literals(["MISSING_ROOT", "MISSING_PATH", "UNREADABLE_PATH"]),
+});
+export type SetupScanIssue = typeof SetupScanIssue.Type;
+
 export const SetupResult = Schema.Struct({
   operationId: Schema.optionalKey(Schema.String),
   machineConfig: Schema.Struct({
@@ -343,6 +349,7 @@ export const SetupResult = Schema.Struct({
     directoriesExamined: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     repositorySearchDepth: Schema.Literal(1),
     missingRepositories: Schema.optionalKey(Schema.Array(Schema.String)),
+    issues: Schema.optionalKey(Schema.Array(SetupScanIssue)),
   }),
   repositories: Schema.Array(SetupRepository),
   repositoryConfigs: Schema.Array(SetupRepositoryConfig),

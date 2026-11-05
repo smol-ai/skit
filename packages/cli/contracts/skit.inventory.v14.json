@@ -1,5 +1,5 @@
 {
-  "$id": "skit.inventory.v13",
+  "$id": "skit.inventory.v14",
   "type": "object",
   "properties": {
     "unmanaged": {
@@ -663,6 +663,30 @@
               "type": "array",
               "items": {
                 "type": "string"
+              }
+            },
+            "issues": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "code": {
+                    "type": "string",
+                    "enum": [
+                      "MISSING_ROOT",
+                      "MISSING_PATH",
+                      "UNREADABLE_PATH"
+                    ]
+                  }
+                },
+                "required": [
+                  "path",
+                  "code"
+                ],
+                "additionalProperties": true
               }
             }
           },
