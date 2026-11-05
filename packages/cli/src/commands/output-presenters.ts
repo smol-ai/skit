@@ -8,7 +8,7 @@ import { renderUsage } from "../library/presentation/usage.js";
 import { renderInventory } from "../library/presentation/inventory.js";
 import { renderSetEnabled } from "../library/enable.js";
 import { renderRemove, renderRemovePlan } from "../library/remove.js";
-import { renderCheck } from "../library/presentation/check.js";
+import { renderCheck } from "../library/check.js";
 import { renderLibrarySync } from "../library/presentation/sync.js";
 import { renderLibraryList } from "../library/presentation/list.js";
 import { renderAuditV1Alpha4 } from "../audit/presentation/report.js";

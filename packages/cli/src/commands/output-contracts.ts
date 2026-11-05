@@ -22,7 +22,7 @@ import { HarnessProbeReport } from "@smolai/skit-core/harnesses";
 import { RegistryRemoteChange, RegistryRemoteList } from "../registry/contracts.js";
 import { AuthorSyncResult } from "../author/contracts.js";
 import { removeOutputContracts } from "../library/remove.js";
-import { CheckResult } from "../library/workflows/check-contract.js";
+import { checkOutputContracts } from "../library/check.js";
 import { AddPreview, AddResult } from "../library/workflows/add-contract.js";
 import { UpdatePlan, UpdateResult } from "../library/workflows/update-contract.js";
 import { SyncResult } from "../library/workflows/library-sync-contract.js";
@@ -115,7 +115,7 @@ export const outputContracts = {
   securityAccept: effectOutput("skit.security.accept.v4", SkillSecurityReview),
   inventory: effectOutput("skit.inventory.v13", MachineInventoryResult),
   doctor: effectOutput("skit.doctor.v9", DoctorReport),
-  check: effectOutput("skit.check.v8", CheckResult),
+  check: checkOutputContracts.check,
   update: effectOutput("skit.update.v9", UpdateResult),
   updatePlan: effectOutput("skit.update.plan.v6", UpdatePlan),
   projectionRetention: effectOutput("skit.update.projection-retention.v4", EditImportResult),

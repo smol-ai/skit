@@ -1,13 +1,13 @@
 import { skitConfigurationLayer } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
-import { Renderer } from "../../terminal/renderer.js";
-import { handleSourceCommand } from "../../commands/handler.js";
-import { CommandMetadata } from "../../commands/metadata.js";
-import { outputContracts } from "../../commands/output-contracts.js";
-import { localFlags } from "../../commands/parameters.js";
-import { result } from "../../commands/result.js";
-import { checkSubjects } from "../workflows/check.js";
+import { Renderer } from "../terminal/renderer.js";
+import { handleSourceCommand } from "../commands/handler.js";
+import { CommandMetadata } from "../commands/metadata.js";
+import { checkOutputContracts } from "./check/output.js";
+import { localFlags } from "../commands/parameters.js";
+import { encodeResult as result } from "../commands/encode-result.js";
+import { checkSubjects } from "./check/operation.js";
 
 const subject = Argument.String("skill-or-collection").pipe(Argument.optional);
 
@@ -21,7 +21,7 @@ export const checkCliCommand = Command.make("check", { subject, ...localFlags },
           renderer.updateStatus(`Checking ${collection.display_name}`),
         ),
       );
-      yield* renderer.result(result("check", value));
+      yield* renderer.result(result("check", checkOutputContracts.check, value));
     }),
   ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
 ).pipe(
@@ -39,8 +39,12 @@ export const checkCliCommand = Command.make("check", { subject, ...localFlags },
         "git log",
       ],
     },
-    outputSchemas: [outputContracts.check],
+    outputSchemas: [checkOutputContracts.check],
     exitCodes: [0, 11, 12, 64, 65],
     interactive: false,
   }),
 );
+
+export { checkOutputContracts } from "./check/output.js";
+export { renderCheck } from "./check/present.js";
+export { checkSubjects } from "./check/operation.js";

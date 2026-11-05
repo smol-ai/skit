@@ -43,8 +43,7 @@ import {
 
 import { OptionCombinationInvalid } from "../commands/input-failures.js";
 
-import { checkSubjects } from "./workflows/check.js";
-import { renderCheck } from "./presentation/check.js";
+import { checkSubjects, renderCheck } from "./check.js";
 import { setupReviewSkillChoices } from "./setup/skills.js";
 
 import { renderChangeResult } from "./presentation/installed-skill-changes.js";

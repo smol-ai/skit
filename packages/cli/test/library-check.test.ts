@@ -5,7 +5,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Ref } from "effect";
 import { join } from "node:path";
 
-import { checkSubjects } from "../src/library/workflows/check.js";
+import { checkSubjects } from "../src/library/check/operation.js";
 import { importSource } from "../src/library/application/import-source.js";
 import { initializeLibraryMachine } from "./helpers/library-home.js";
 

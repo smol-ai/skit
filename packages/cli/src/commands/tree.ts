@@ -1,6 +1,6 @@
 import { usageCliCommand } from "../library/commands/usage.js";
 import { Command } from "effect/cli";
-import { checkCliCommand } from "../library/commands/check.js";
+import { checkCliCommand } from "../library/check.js";
 import { serverBootstrapCliCommand } from "../registry/commands/bootstrap.js";
 import { authLogoutCliCommand } from "../registry/commands/logout.js";
 import { authLoginCliCommand } from "../registry/commands/login.js";

@@ -1,6 +1,6 @@
-import type { ContractDataForId } from "../../commands/output-contracts.js";
+import type { CheckResult } from "./output.js";
 
-export function renderCheck(data: ContractDataForId<"skit.check.v8">) {
+export function renderCheck(data: CheckResult) {
   if (data.length === 0) return "The Library has no retained Library subjects.";
   const lines = data.flatMap((item) => {
     const originalIntact = item.collection_versions.every((tree) => tree.original_intact);

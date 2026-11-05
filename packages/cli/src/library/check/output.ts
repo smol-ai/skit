@@ -48,3 +48,7 @@ export const CheckResult = Schema.Array(
   }),
 );
 export type CheckResult = typeof CheckResult.Type;
+
+export const checkOutputContracts = {
+  check: { id: "skit.check.v8", schema: CheckResult },
+} as const;
