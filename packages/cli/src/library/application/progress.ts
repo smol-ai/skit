@@ -6,7 +6,6 @@ import type {
   LibraryProgressReporter,
 } from "@smolai/skit-core/library/session";
 export type {
-  LibraryProgressSubject,
   LibraryProgressStage,
   LibraryProgressCompletion,
   LibraryProgressReporter,

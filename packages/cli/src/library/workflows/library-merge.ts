@@ -421,7 +421,7 @@ export function mergeLibraryManifests(
   return { manifest, conflicts: [...new Set(conflicts)].sort(), unresolvable };
 }
 
-export function describeLibraryMergeConflicts(
+function describeLibraryMergeConflicts(
   conflicts: readonly string[],
   manifest: LibraryManifest,
   unresolvable: readonly string[] = [],

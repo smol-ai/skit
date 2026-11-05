@@ -46,7 +46,7 @@ const abandonOnCancel = <E, R>(
   state: LibrarySessionState,
 ) => effect.pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(state)));
 
-export function pendingReviewText(pending: PendingLibraryChange): string {
+function pendingReviewText(pending: PendingLibraryChange): string {
   return pending.facts
     .map((fact, index) => {
       const policy = pending.policies[index] ?? pending.policies[0];

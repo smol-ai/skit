@@ -23,10 +23,6 @@ export function conditionNextStep(code: string): string | undefined {
   return conditionNextSteps[code];
 }
 
-export function changeActionLabel(action: "add" | "update" | "remove"): string {
-  return { add: "Add", update: "Update", remove: "Remove" }[action];
-}
-
 export function installedSkillStatusLabel(status: string): string {
   return (
     {
@@ -36,18 +32,5 @@ export function installedSkillStatusLabel(status: string): string {
       conflicted: "conflicts with local changes",
       unsupported: "not supported by this Harness",
     }[status] ?? "status unavailable"
-  );
-}
-
-export function operationLabel(operation: string): string {
-  return (
-    {
-      install: "Installed",
-      update: "Updated",
-      repair: "Repaired",
-      disable: "Disabled",
-      uninstall: "Uninstalled",
-      adopt: "Adopted",
-    }[operation] ?? "Changed"
   );
 }

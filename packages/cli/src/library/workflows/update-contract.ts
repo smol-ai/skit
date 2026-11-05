@@ -17,7 +17,7 @@ const SkillChanges = {
   kept: Schema.Array(Schema.String),
 };
 
-export const UpdateFailure = Schema.Struct({
+const UpdateFailure = Schema.Struct({
   status: Schema.tag("failed"),
   subject_id: Schema.String,
   subject_kind: Schema.Literals(["collection", "skill"]),
@@ -32,7 +32,6 @@ export const UpdateFailure = Schema.Struct({
     remediation: Schema.String,
   }),
 });
-export type UpdateFailure = typeof UpdateFailure.Type;
 
 export const UpdateResult = Schema.Array(
   Schema.Union([

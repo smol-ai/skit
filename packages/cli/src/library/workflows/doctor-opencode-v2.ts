@@ -4,7 +4,7 @@ import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
-export class OpenCodeDiscoveryFailure
+class OpenCodeDiscoveryFailure
   extends Data.TaggedError("OpenCodeDiscoveryFailure")<{
     message: string;
   }>

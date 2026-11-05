@@ -9,9 +9,9 @@ export const setupStepTitles = {
   confirm: "Review and confirm changes",
 } as const;
 
-export type SetupStepKey = keyof typeof setupStepTitles;
+type SetupStepKey = keyof typeof setupStepTitles;
 
-export interface SetupStep {
+interface SetupStep {
   readonly index: number;
   readonly total: number;
   readonly title: string;

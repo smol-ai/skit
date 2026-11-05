@@ -7,7 +7,6 @@ import { importSource, inspectLibrarySource } from "./import-source.js";
 import { openLibraryView } from "@smolai/skit-core/library/session";
 import { LibraryProgress } from "./progress.js";
 import { commandFailure } from "../../commands/failure-classification.js";
-export { CollectionNotUpdatable } from "@smolai/skit-core/library/session";
 export interface UpdateOptions {
   readonly roots: InventoryRootOptions;
 }

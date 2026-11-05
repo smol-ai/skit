@@ -45,7 +45,7 @@ export class LibraryApiRejected
     return `The Registry rejected the Library request (${this.status})${this.reason === undefined ? "" : `: ${this.reason}`}`;
   }
 }
-export class LibraryApiInvalidResponse
+class LibraryApiInvalidResponse
   extends Data.TaggedError("Library.LibraryApiInvalidResponse")<{
     operation: string;
   }>
@@ -72,7 +72,7 @@ export class LibraryManifestTooNew
     return `The Registry's Library is ${this.observed}, written by a newer SKIT; this CLI supports ${this.supported}`;
   }
 }
-export class LibraryApiInvalidRequest
+class LibraryApiInvalidRequest
   extends Data.TaggedError("Library.LibraryApiInvalidRequest")<{}>
   implements SkitFailure
 {
@@ -197,3 +197,6 @@ export const librarySyncApi = Effect.fn("Library.librarySyncApi")(function* (opt
   });
   return { read, upload, write, download };
 });
+
+// Required to name inferred sync errors in generated declarations.
+export type { LibraryApiInvalidResponse, LibraryApiInvalidRequest };

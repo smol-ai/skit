@@ -110,7 +110,7 @@ export const inventoryCommand = Effect.fn("CLI.inventory")(function* (
 });
 
 /** Diagnose the same freshly persisted observation; report construction is pure. */
-export const doctorCommand = Effect.fn("CLI.doctor")(function* (options: CliInventoryOptions) {
+const doctorCommand = Effect.fn("CLI.doctor")(function* (options: CliInventoryOptions) {
   const inventory = yield* refreshLibraryInventoryCommand(options);
   const report = libraryDoctorReport(inventory);
   const renderer = yield* Renderer;
