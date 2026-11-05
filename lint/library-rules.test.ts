@@ -305,17 +305,17 @@ describe("skit/library-private-api", () => {
 
 describe("skit/library-recorded-execution", () => {
   test.each([
-    `import { apply as run } from "../apply-plan.js";`,
-    `import * as executor from "../apply-plan.js";`,
-    `const executor = import("../apply-plan.js");`,
-    `export { apply as run } from "../apply-plan.js";`,
-    `export * from "../apply-plan.js";`,
+    `import { apply as run } from "./operations/apply.js";`,
+    `import * as executor from "./operations/apply.js";`,
+    `const executor = import("./operations/apply.js");`,
+    `export { apply as run } from "./operations/apply.js";`,
+    `export * from "./operations/apply.js";`,
   ])("the public runtime cannot call or relay the folder executor: %s", async (source) => {
     expect(
       await reported(
         "library-recorded-execution",
         `${library}internal/runtime.ts`,
-        `import { runUndo } from "./setup/undo-execution.js";`,
+        source,
       ),
     ).toHaveLength(1);
   });
