@@ -8,12 +8,12 @@ import {
 
 import { Clock, Effect, FileSystem, Option, Path } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { handleLibraryCommand } from "../../commands/handler.js";
-import { CommandMetadata } from "../../commands/metadata.js";
-import { outputContracts } from "../../commands/output-contracts.js";
-import { localFlags } from "../../commands/parameters.js";
-import { result } from "../../commands/result.js";
-import { Renderer } from "../../terminal/renderer.js";
+import { handleLibraryCommand } from "../commands/handler.js";
+import { CommandMetadata } from "../commands/metadata.js";
+import { outputContracts } from "../commands/output-contracts.js";
+import { localFlags } from "../commands/parameters.js";
+import { result } from "../commands/result.js";
+import { Renderer } from "../terminal/renderer.js";
 import {
   AuthorWorkspaceAlreadyRegistered,
   AuthorWorkspace,
@@ -24,7 +24,7 @@ import {
 import {
   AuthorWorkspaceRemovalUnfinished,
   DirectoryAlreadyInLibrary,
-} from "../../library/failures.js";
+} from "../library/failures.js";
 
 import { adoptFrom, authoredId, collectionsAt } from "./library-claims.js";
 

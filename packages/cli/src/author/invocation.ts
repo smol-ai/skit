@@ -2,12 +2,12 @@ import { generateInvocationMetadata } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { resolve } from "node:path";
 import { Argument, Command, Flag } from "effect/cli";
-import { handlePlatformCommand } from "../../commands/handler.js";
-import { CommandMetadata } from "../../commands/metadata.js";
-import { outputContracts } from "../../commands/output-contracts.js";
-import { jsonFlag } from "../../commands/parameters.js";
-import { Renderer } from "../../terminal/renderer.js";
-import { result } from "../../commands/result.js";
+import { handlePlatformCommand } from "../commands/handler.js";
+import { CommandMetadata } from "../commands/metadata.js";
+import { outputContracts } from "../commands/output-contracts.js";
+import { jsonFlag } from "../commands/parameters.js";
+import { Renderer } from "../terminal/renderer.js";
+import { result } from "../commands/result.js";
 import { AuthorWorkspace } from "@smolai/skit-core/author";
 
 export const authorInvocationCommand = Effect.fn("CLI.authorInvocation")(function* (

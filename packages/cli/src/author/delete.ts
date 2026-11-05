@@ -18,27 +18,27 @@ import { HttpApiClient } from "effect/http-api";
 import { Argument, Command, Flag } from "effect/cli";
 
 import type { AuthorRemoteHome } from "@smolai/skit-core/author";
-import { parseAuthorDestination } from "./sync.js";
+import { parseAuthorDestination } from "../workflows/author/sync.js";
 import {
   AuthenticationRequired,
   CredentialLacksScope,
   DeleteRequiresPrivate,
   RegistryUnreachable,
-} from "../../registry/failures.js";
-import { Registry, type ResolvedAuth } from "../../registry/index.js";
+} from "../registry/failures.js";
+import { Registry, type ResolvedAuth } from "../registry/index.js";
 import {
   authenticatedApiMiddleware,
   isSuccessfulResponseDecodeFailure,
   registryApiFailureMessage,
-} from "../../registry/api-client.js";
-import { isRegistryTransportError, RegistryHttp } from "../../registry/registry-http.js";
-import { Renderer } from "../../terminal/renderer.js";
-import { handleRegistryCommand } from "../../commands/handler.js";
+} from "../registry/api-client.js";
+import { isRegistryTransportError, RegistryHttp } from "../registry/registry-http.js";
+import { Renderer } from "../terminal/renderer.js";
+import { handleRegistryCommand } from "../commands/handler.js";
 
-import { CommandMetadata } from "../../commands/metadata.js";
-import { outputContracts } from "../../commands/output-contracts.js";
-import { homeFlag, jsonFlag } from "../../commands/parameters.js";
-import { result } from "../../commands/result.js";
+import { CommandMetadata } from "../commands/metadata.js";
+import { outputContracts } from "../commands/output-contracts.js";
+import { homeFlag, jsonFlag } from "../commands/parameters.js";
+import { result } from "../commands/result.js";
 
 export class AuthorSkitNotFound
   extends Data.TaggedError("AuthorSkitNotFound")<{}>

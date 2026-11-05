@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { skitLayer } from "@smolai/skit-core";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { validateCommand } from "../src/handlers/author/validate.js";
+import { validateCommand } from "../src/author/validate.js";
 
 it.effect("preserves a malformed Descriptor as its named validation failure", () =>
   Effect.scoped(

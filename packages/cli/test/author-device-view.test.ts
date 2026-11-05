@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { DateTime, Option } from "effect";
 import { type History, Merge } from "@smolai/skit-core";
-import { authorDecider, authorTree } from "../src/workflows/author/device-view.js";
+import { authorDecider, authorTree } from "../src/author/device-view.js";
 
 const entry = (path: string, text: string): History.Tree[number] => ({
   path,

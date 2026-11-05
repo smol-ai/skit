@@ -2,7 +2,7 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Result } from "effect";
 import { join } from "node:path";
-import { authorDeleteCommand, deleteAuthorSkit } from "../src/workflows/author/delete.js";
+import { authorDeleteCommand, deleteAuthorSkit } from "../src/author/delete.js";
 import { DeleteRequiresPrivate } from "../src/registry/failures.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer } from "./helpers/http-test-client.js";

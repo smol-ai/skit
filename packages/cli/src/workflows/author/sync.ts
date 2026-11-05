@@ -48,9 +48,9 @@ import {
 import { Registry } from "../../registry/index.js";
 import type { AuthorSyncResult } from "./sync-contract.js";
 
-import { authorDecider, authorTree } from "./device-view.js";
+import { authorDecider, authorTree } from "../../author/device-view.js";
 
-import { adoptFrom, collectionsAt } from "./library-claims.js";
+import { adoptFrom, collectionsAt } from "../../author/library-claims.js";
 
 import {
   Library,

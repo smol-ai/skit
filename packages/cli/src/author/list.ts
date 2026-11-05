@@ -15,28 +15,28 @@ import { Data, Effect, Option, Result, Schema, Scope } from "effect";
 import { HttpApiClient } from "effect/http-api";
 import { Command } from "effect/cli";
 
-import { Registry, type ResolvedAuth } from "../../registry/index.js";
+import { Registry, type ResolvedAuth } from "../registry/index.js";
 import {
   authenticatedApiMiddleware,
   isSuccessfulResponseDecodeFailure,
   registryApiFailure,
   registryApiFailureMessage,
-} from "../../registry/api-client.js";
-import { isRegistryTransportError, RegistryHttp } from "../../registry/registry-http.js";
-import { Renderer } from "../../terminal/renderer.js";
-import { skitLocator } from "./sync.js";
+} from "../registry/api-client.js";
+import { isRegistryTransportError, RegistryHttp } from "../registry/registry-http.js";
+import { Renderer } from "../terminal/renderer.js";
+import { skitLocator } from "../workflows/author/sync.js";
 import {
   AuthenticationRequired,
   CredentialLacksScope,
   RegistryOriginInvalid,
   RegistryUnreachable,
-} from "../../registry/failures.js";
-import { handleRegistryCommand } from "../../commands/handler.js";
+} from "../registry/failures.js";
+import { handleRegistryCommand } from "../commands/handler.js";
 
-import { CommandMetadata } from "../../commands/metadata.js";
-import { outputContracts } from "../../commands/output-contracts.js";
-import { homeFlag, jsonFlag, optionalString } from "../../commands/parameters.js";
-import { result } from "../../commands/result.js";
+import { CommandMetadata } from "../commands/metadata.js";
+import { outputContracts } from "../commands/output-contracts.js";
+import { homeFlag, jsonFlag, optionalString } from "../commands/parameters.js";
+import { result } from "../commands/result.js";
 
 export type AuthorSkitInventory = typeof outputContracts.authorList.schema.Type;
 

@@ -110,7 +110,7 @@ describe("optional capability boundaries", () => {
     const offending = roots
       .flatMap(sourceImports)
       .filter(({ dependency }) =>
-        /\/authoring\/|\/author\/(?:scaffold\.ts$|invocation\/)|\/api\/authoring(?:-contracts)?\.ts$|\/workflows\/author\//.test(
+        /\/authoring\/|\/author\/(?:scaffold\.ts$|invocation\/)|\/api\/authoring(?:-contracts)?\.ts$|\/workflows\/author\/|\/cli\/src\/author\//.test(
           dependency,
         ),
       );

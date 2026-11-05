@@ -3,11 +3,7 @@ import { NodeServices } from "@effect/platform-node";
 import { HttpClientError } from "effect/http";
 import { assert, it } from "@effect/vitest";
 import { expect } from "vitest";
-import {
-  authorListCommand,
-  listAuthorSkits,
-  AuthorListIdentityError,
-} from "../src/workflows/author/list.js";
+import { authorListCommand, listAuthorSkits, AuthorListIdentityError } from "../src/author/list.js";
 import { SkitContractError } from "@smolai/skit-core";
 
 import { renderCommandFailures } from "../src/application.js";
