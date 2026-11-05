@@ -210,6 +210,8 @@ export const planChanges = Effect.fn("Library.planChanges")(function* (
 ) {
   const files = yield* InstalledSkills.Service;
   const { next, requests } = yield* edit(base, intent);
+  const selected = (skillId: SkillId) =>
+    intent._tag !== "Update" || intent.skills === undefined || intent.skills.includes(skillId);
   const enabling = requests.filter(({ request }) => request.enabled);
   // Enabling a Skill puts back its deleted folders; otherwise only an approved one comes back.
   const enabled = new Set<string>(enabling.flatMap(({ calculated }) => calculated.skillIds));
@@ -254,7 +256,7 @@ export const planChanges = Effect.fn("Library.planChanges")(function* (
   }[] = [];
   for (const scoped of intended) {
     for (const target of routeAt(scoped.scope)?.destinations ?? [])
-      for (const skillId of enabledSkillIds(next, scoped.enabled)) {
+      for (const skillId of enabledSkillIds(next, scoped.enabled).filter(selected)) {
         const skill = next.skills.find((item) => item.skill_id === skillId);
         const version = skill === undefined ? undefined : currentSkillVersion(next, skill);
         if (
@@ -310,6 +312,7 @@ export const planChanges = Effect.fn("Library.planChanges")(function* (
     ? base.installed_skills.filter((item) => intent.copies.includes(item.installed_skill_id))
     : base.installed_skills.filter(
         (item) =>
+          selected(item.skill_id) &&
           !installing.some(({ change }) => change.skillId === item.skill_id && at(item, change)),
       )) {
     const folder = yield* files.inspect(recorded.path);

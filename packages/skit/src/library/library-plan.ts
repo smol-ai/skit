@@ -27,8 +27,8 @@ export const Enabled = Schema.TaggedStruct("Enabled", {
 export type Enabled = typeof Enabled.Type;
 /** Remove a Collection with its Skills, imports, enabled entries and installed copies. */
 const Remove = Schema.TaggedStruct("Remove", { collectionId: CollectionId });
-/** Change nothing; bring every installed copy on this device up to date. */
-const Update = Schema.TaggedStruct("Update", {});
+/** Bring installed copies up to date; omitted skills means all, an empty list means none. */
+const Update = Schema.TaggedStruct("Update", { skills: Schema.optional(Schema.Array(SkillId)) });
 /**
  * Uninstall these recorded copies ahead of a sync. Their records stay, as pending, unless listed
  * to drop.

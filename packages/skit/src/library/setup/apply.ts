@@ -219,7 +219,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(function* (
   if (updating) {
     steps.push({
       _tag: "Update",
-      changes: scanChanges.map(recordedChange),
+      changes: installedSkillChanges.map(recordedChange),
       versionChoices: versionChoices.map((choice) => ({
         skillId: choice.skillId,
         version: choice.version,

@@ -95,6 +95,10 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
   scope: OperationScope,
 ) {
   const { home } = scope;
+  const intent = {
+    _tag: "Update",
+    skills: [...new Set(reviewed.map((fact) => fact.skillId))],
+  } as const;
   const chosen = new Set<string>(choices.map((choice) => choice.skillId));
   const local = reviewed.filter((fact) =>
     choices.some(
@@ -124,10 +128,7 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
     });
   }
   const inspected = yield* inspectLocalLibraryState(home);
-  const planned = yield* planIntent(
-    { _tag: "Update" },
-    { home: home, base: snapshotOf(inspected) },
-  );
+  const planned = yield* planIntent(intent, { home: home, base: snapshotOf(inspected) });
   const marker = (path: string) => {
     const entry = planned.folders.find((folder) => folder.path === path)?.entry;
     return entry?._tag === "Present" && entry.facts?.marker.kind === "valid"
@@ -164,10 +165,7 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
       ? [...accept, { _tag: "ReplaceEdit", installedSkillId, currentHash: change.currentHash }]
       : accept;
   });
-  const plan = yield* planIntent(
-    { _tag: "Update" },
-    { home: home, base: snapshotOf(inspected), approvals },
-  );
+  const plan = yield* planIntent(intent, { home: home, base: snapshotOf(inspected), approvals });
   const facts = reviewInstalledSkillChanges(plan);
 
   // Outside the chosen Skills, each copy is as reviewed, or (after an earlier run) already the
