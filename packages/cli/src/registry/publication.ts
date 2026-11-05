@@ -10,19 +10,16 @@ import {
 } from "@smolai/skit-core";
 import type { AuthorRemoteHome } from "@smolai/skit-core/author";
 import {
-  ForbiddenOriginResponse,
-  ForbiddenResponse,
-  InsufficientScopeResponse,
   IntegrityFailureResponse,
   PublicationAuthenticatedApi,
   PublishBlockedResponse,
   ReleaseConflictResponse,
-  UnauthorizedResponse,
 } from "@smolai/skit-core/universal/api";
-import { isRegistryTransportError, RegistryHttp } from "./registry-http.js";
+import { RegistryHttp } from "./registry-http.js";
 import {
   authenticatedApiMiddleware,
-  isSuccessfulResponseDecodeFailure,
+  classifyRegistryApiFailure,
+  markRegistryResponseDecoding,
   registryApiFailure,
   registryApiFailureMessage,
 } from "./api-client.js";
@@ -102,6 +99,7 @@ export const publishRelease = Effect.fn("Registry.publishRelease")(function* (in
   if (discovered) publishUrl = discovered;
   const transport = yield* (yield* RegistryHttp).client;
   const client = yield* HttpApiClient.makeWith(PublicationAuthenticatedApi, {
+    transformResponse: markRegistryResponseDecoding,
     httpClient: HttpClient.mapRequest(transport, HttpClientRequest.setUrl(publishUrl)),
   }).pipe(Effect.provide(authenticatedApiMiddleware(token)));
   return yield* client.publication.publish({ params: { owner, slug }, payload: body }).pipe(
@@ -131,21 +129,22 @@ export const publishRelease = Effect.fn("Registry.publishRelease")(function* (in
       },
     ),
     Effect.mapError((error) => {
+      const classified = classifyRegistryApiFailure(error, [201]);
       if (
         Predicate.isTagged(error, "PublicationResponseError") ||
         Predicate.isTagged(error, "RegistryRejectedWrite")
       )
         return error;
-      if (Schema.is(UnauthorizedResponse)(error))
+      if (classified.kind === "unauthorized")
         return new AuthenticationRequired({
           scopes: "library:sync,authoring:write,publication:write",
         });
-      if (Schema.is(InsufficientScopeResponse)(error))
+      if (classified.kind === "insufficient_scope")
         return new CredentialLacksScope({
           scope: "publication:write",
           scopes: "library:sync,authoring:write,publication:write",
         });
-      if (Schema.is(ForbiddenResponse)(error) || Schema.is(ForbiddenOriginResponse)(error))
+      if (classified.kind === "forbidden")
         return new PrincipalNotAuthorized({ action: "publish this SKIT" });
       if (Schema.is(PublishBlockedResponse)(error)) {
         const details = error.diagnostics
@@ -159,10 +158,10 @@ export const publishRelease = Effect.fn("Registry.publishRelease")(function* (in
       }
       if (Schema.is(IntegrityFailureResponse)(error) && error.error === "ARCHIVE_MANIFEST_MISMATCH")
         return new AuthorSyncRequired({ commandPath });
-      if (isRegistryTransportError(error)) return error;
-      if (isSuccessfulResponseDecodeFailure(error, [201]))
+      if (classified.kind === "transport") return classified.error;
+      if (classified.kind === "response_decode" || classified.kind === "request_encoding")
         return new SkitContractError({
-          contract: "publish response",
+          contract: classified.kind === "request_encoding" ? "publish request" : "publish response",
           issues: [{ path: "", message: String(error) }],
         });
       const failure = registryApiFailure(error, { defaultStatus: 400 });

@@ -1,10 +1,8 @@
 import {
   ConsumerAuthenticatedApi,
   CURRENT_PORTABLE_LIBRARY_SCHEMA,
-  InsufficientScopeResponse,
   LibraryNotFoundResponse,
   RevisionConflictResponse,
-  UnauthorizedResponse,
   type LibraryManifest,
   type SnapshotArchive,
 } from "@smolai/skit-core/api";
@@ -20,14 +18,11 @@ import {
 } from "../../registry/failures.js";
 import {
   authenticatedApiMiddleware,
-  isSuccessfulResponseDecodeFailure,
+  classifyRegistryApiFailure,
+  markRegistryResponseDecoding,
   registryApiFailure,
 } from "../../registry/api-client.js";
-import {
-  isRegistryTransportError,
-  RegistryHttp,
-  RegistryTransportError,
-} from "../../registry/registry-http.js";
+import { RegistryHttp, RegistryTransportError } from "../../registry/registry-http.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
 
 export class LibraryApiRejected
@@ -95,6 +90,7 @@ export const librarySyncApi = Effect.fn("Library.librarySyncApi")(function* (opt
   // newer one as malformed. Its schema discriminator is read first, from the raw body, so a head a
   // newer SKIT wrote is refused as such before sync reads or writes anything else.
   const client = yield* HttpApiClient.makeWith(ConsumerAuthenticatedApi, {
+    transformResponse: markRegistryResponseDecoding,
     httpClient: HttpClient.transformResponse(
       transport,
       Effect.tap((response) =>
@@ -135,11 +131,13 @@ export const librarySyncApi = Effect.fn("Library.librarySyncApi")(function* (opt
     new RegistryUnreachable({ origin, cause: error });
   const invalidResponse = (operation: string) => new LibraryApiInvalidResponse({ operation });
   const mapGeneratedFailure = (operation: string, error: unknown) => {
-    if (isRegistryTransportError(error)) return transportFailure(error);
-    if (Schema.is(UnauthorizedResponse)(error)) return new AuthenticationRequired({ origin });
-    if (Schema.is(InsufficientScopeResponse)(error))
+    const classified = classifyRegistryApiFailure(error, [200]);
+    if (classified.kind === "transport") return transportFailure(classified.error);
+    if (classified.kind === "request_encoding") return new LibraryApiInvalidRequest();
+    if (classified.kind === "unauthorized") return new AuthenticationRequired({ origin });
+    if (classified.kind === "insufficient_scope")
       return new CredentialLacksScope({ scope: "library:sync" });
-    if (isSuccessfulResponseDecodeFailure(error, [200])) return invalidResponse(operation);
+    if (classified.kind === "response_decode") return invalidResponse(operation);
     const failure = registryApiFailure(error);
     if (failure.status !== undefined)
       return new LibraryApiRejected({

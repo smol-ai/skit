@@ -2,20 +2,19 @@ import { SkitContractError, FailureTypeId, type SkitFailure } from "@smolai/skit
 import {
   AuthoringAuthenticatedApi,
   DeleteRequiresPrivateResponse,
-  InsufficientScopeResponse,
   SkitNotFoundResponse,
-  UnauthorizedResponse,
 } from "@smolai/skit-core/universal/api";
 import type { AuthorRemoteHome } from "@smolai/skit-core/author";
 import { Data, Effect, Schema } from "effect";
 import { HttpApiClient } from "effect/http-api";
 import {
   authenticatedApiMiddleware,
-  isSuccessfulResponseDecodeFailure,
+  classifyRegistryApiFailure,
+  markRegistryResponseDecoding,
   registryApiFailure,
   registryApiFailureMessage,
 } from "./api-client.js";
-import { isRegistryTransportError, RegistryHttp } from "./registry-http.js";
+import { RegistryHttp } from "./registry-http.js";
 import {
   AuthenticationRequired,
   CredentialLacksScope,
@@ -54,11 +53,15 @@ export class AuthorDeleteResponseError
 }
 
 /** Common authoring failures; endpoint-specific status and decode rules stay below. */
-const authoringFailure = (origin: string, error: unknown) => {
-  if (isRegistryTransportError(error)) return new RegistryUnreachable({ origin, cause: error });
-  if (Schema.is(UnauthorizedResponse)(error))
+const authoringFailure = (
+  origin: string,
+  failure: ReturnType<typeof classifyRegistryApiFailure>,
+) => {
+  if (failure.kind === "transport")
+    return new RegistryUnreachable({ origin, cause: failure.error });
+  if (failure.kind === "unauthorized")
     return new AuthenticationRequired({ origin, scopes: "authoring:write" });
-  if (Schema.is(InsufficientScopeResponse)(error))
+  if (failure.kind === "insufficient_scope")
     return new CredentialLacksScope({ scope: "authoring:write", origin });
   return undefined;
 };
@@ -68,6 +71,7 @@ const authoringClient = Effect.fn("Registry.authoringClient")(function* (
 ) {
   const transport = yield* (yield* RegistryHttp).client;
   return yield* HttpApiClient.makeWith(AuthoringAuthenticatedApi, {
+    transformResponse: markRegistryResponseDecoding,
     httpClient: transport,
     baseUrl: origin,
   }).pipe(Effect.provide(authenticatedApiMiddleware(token)));
@@ -92,12 +96,18 @@ export const authorInventoryApi = Effect.fn("Registry.authorInventory")(function
     readPage: Effect.fn("Registry.readAuthorInventoryPage")(function* (cursor: string | null) {
       return yield* client.authorInventory.read({ query: cursor === null ? {} : { cursor } }).pipe(
         Effect.mapError((error) => {
-          const common = authoringFailure(origin, error);
+          const classified = classifyRegistryApiFailure(error, [200]);
+          const common = authoringFailure(origin, classified);
           if (common) return common;
+          if (classified.kind === "request_encoding")
+            return new SkitContractError({
+              contract: "author SKIT list request",
+              issues: [{ path: "", message: String(error) }],
+            });
           const failure = registryApiFailure(error);
           if (failure.status === 401)
             return new AuthenticationRequired({ origin, scopes: "authoring:write" });
-          if (isSuccessfulResponseDecodeFailure(error, [200]))
+          if (classified.kind === "response_decode")
             return new SkitContractError({
               contract: "author SKIT list response",
               issues: [{ path: "", message: String(error) }],
@@ -129,11 +139,17 @@ export const deletePrivateAuthorSkit = Effect.fn("Registry.deletePrivateAuthorSk
     })
     .pipe(
       Effect.mapError((error) => {
-        const common = authoringFailure(remote.origin, error);
+        const classified = classifyRegistryApiFailure(error, [200]);
+        const common = authoringFailure(remote.origin, classified);
         if (common) return common;
+        if (classified.kind === "request_encoding")
+          return new SkitContractError({
+            contract: "author SKIT delete request",
+            issues: [{ path: "", message: String(error) }],
+          });
         if (Schema.is(SkitNotFoundResponse)(error)) return new AuthorSkitNotFound();
         if (Schema.is(DeleteRequiresPrivateResponse)(error)) return new DeleteRequiresPrivate();
-        if (isSuccessfulResponseDecodeFailure(error, [200]))
+        if (classified.kind === "response_decode")
           return new SkitContractError({
             contract: "author SKIT delete response",
             issues: [{ path: "", message: String(error) }],

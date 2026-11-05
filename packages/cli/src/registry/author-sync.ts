@@ -3,10 +3,6 @@ import {
   CurrentMovedResponse,
   SkitExistsResponse,
   SkitNotFoundResponse,
-  ForbiddenOriginResponse,
-  ForbiddenResponse,
-  InsufficientScopeResponse,
-  UnauthorizedResponse,
 } from "@smolai/skit-core/universal/api";
 import type { AuthorRemoteHome, AuthorVisibility } from "@smolai/skit-core/author";
 import { FailureTypeId, SkitContractError, Sync, type SkitFailure } from "@smolai/skit-core";
@@ -14,10 +10,11 @@ import { Data, Effect, Option, Result, Schema, Stream } from "effect";
 import { HttpApiClient } from "effect/http-api";
 import {
   authenticatedApiMiddleware,
-  isSuccessfulResponseDecodeFailure,
+  classifyRegistryApiFailure,
+  markRegistryResponseDecoding,
   registryApiFailureMessage,
 } from "./api-client.js";
-import { isRegistryTransportError, RegistryHttp } from "./registry-http.js";
+import { RegistryHttp } from "./registry-http.js";
 import {
   AuthenticationRequired,
   CredentialLacksScope,
@@ -48,26 +45,28 @@ export const authorSyncApi = Effect.fn("Registry.authorSyncApi")(function* (inpu
   const slug = remote.skit;
   const transport = yield* (yield* RegistryHttp).client;
   const client = yield* HttpApiClient.makeWith(AuthoringAuthenticatedApi, {
+    transformResponse: markRegistryResponseDecoding,
     httpClient: transport,
     baseUrl: remote.origin,
   }).pipe(Effect.provide(authenticatedApiMiddleware(input.token)));
   const failure = (context: string, successStatus: number) => (error: unknown) => {
-    if (isRegistryTransportError(error))
-      return new RegistryUnreachable({ origin: remote.origin, cause: error.cause });
-    if (Schema.is(UnauthorizedResponse)(error))
+    const classified = classifyRegistryApiFailure(error, [successStatus]);
+    if (classified.kind === "transport")
+      return new RegistryUnreachable({ origin: remote.origin, cause: classified.error.cause });
+    if (classified.kind === "unauthorized")
       return new AuthenticationRequired({ scopes: "library:sync,authoring:write" });
-    if (Schema.is(InsufficientScopeResponse)(error))
+    if (classified.kind === "insufficient_scope")
       return new CredentialLacksScope({
         scope: "authoring:write",
         scopes: "library:sync,authoring:write",
       });
-    if (Schema.is(ForbiddenResponse)(error) || Schema.is(ForbiddenOriginResponse)(error))
+    if (classified.kind === "forbidden")
       return new PrincipalNotAuthorized({ action: "author this Namespace or SKIT" });
     if (Schema.is(SkitNotFoundResponse)(error))
       return new RemoteSkitUnavailable({ identity: locator });
-    if (isSuccessfulResponseDecodeFailure(error, [successStatus]))
+    if (classified.kind === "response_decode" || classified.kind === "request_encoding")
       return new SkitContractError({
-        contract: `${context} response`,
+        contract: `${context} ${classified.kind === "request_encoding" ? "request" : "response"}`,
         issues: [{ path: "", message: String(error) }],
       });
     return new SyncRejected({

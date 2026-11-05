@@ -1,12 +1,18 @@
 import {
   ApiErrorBody,
+  UnauthorizedResponse,
+  InsufficientScopeResponse,
+  ForbiddenResponse,
+  ForbiddenOriginResponse,
   apiErrorStatuses,
   PrincipalAuthentication,
   RequestDecoding,
 } from "@smolai/skit-core/universal/api";
-import { Layer, Schema } from "effect";
+import { Data, Effect, Layer, Predicate, Schema } from "effect";
 import { HttpClientError, HttpClientRequest } from "effect/http";
 import { HttpApiMiddleware } from "effect/http-api";
+
+import { isRegistryTransportError } from "./registry-http.js";
 
 const requestDecodingClient = HttpApiMiddleware.layerClient(RequestDecoding, ({ next, request }) =>
   next(request),
@@ -63,12 +69,46 @@ export const registryApiFailureMessage = (
     : `${operation} failed (${failure.status}): ${reason}`;
 };
 
+const isResponseBodyReadFailure = (error: unknown, successStatuses: readonly number[]) =>
+  HttpClientError.isHttpClientError(error) &&
+  error.response !== undefined &&
+  successStatuses.includes(error.response.status) &&
+  (error.reason._tag === "DecodeError" || error.reason._tag === "EmptyBodyError");
+
+/** Legacy auth/bootstrap clients do not yet mark decoding. Named adapters use the classifier below. */
 export const isSuccessfulResponseDecodeFailure = (
   error: unknown,
   successStatuses: readonly number[],
-) =>
-  Schema.isSchemaError(error) ||
-  (HttpClientError.isHttpClientError(error) &&
-    error.response !== undefined &&
-    successStatuses.includes(error.response.status) &&
-    (error.reason._tag === "DecodeError" || error.reason._tag === "EmptyBodyError"));
+) => Schema.isSchemaError(error) || isResponseBodyReadFailure(error, successStatuses);
+
+/** Marks only decoding: generated request encoders run before this hook. */
+class RegistryResponseDecodeError extends Data.TaggedError("RegistryResponseDecodeError")<{
+  cause: Schema.SchemaError;
+}> {
+  override toString() {
+    return String(this.cause);
+  }
+}
+
+export const markRegistryResponseDecoding = (effect: Effect.Effect<unknown, unknown, unknown>) =>
+  effect.pipe(
+    Effect.mapError((error) =>
+      Schema.isSchemaError(error) ? new RegistryResponseDecodeError({ cause: error }) : error,
+    ),
+  );
+
+/** Shared protocol facts; each named operation retains its own public errors and fields. */
+export const classifyRegistryApiFailure = (error: unknown, successStatuses: readonly number[]) => {
+  if (isRegistryTransportError(error)) return { kind: "transport" as const, error };
+  if (Schema.is(UnauthorizedResponse)(error)) return { kind: "unauthorized" as const };
+  if (Schema.is(InsufficientScopeResponse)(error)) return { kind: "insufficient_scope" as const };
+  if (Schema.is(ForbiddenResponse)(error) || Schema.is(ForbiddenOriginResponse)(error))
+    return { kind: "forbidden" as const };
+  if (
+    Predicate.isTagged(error, "RegistryResponseDecodeError") ||
+    isResponseBodyReadFailure(error, successStatuses)
+  )
+    return { kind: "response_decode" as const };
+  if (Schema.isSchemaError(error)) return { kind: "request_encoding" as const };
+  return { kind: "other" as const };
+};
