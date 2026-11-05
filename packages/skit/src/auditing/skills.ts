@@ -54,12 +54,12 @@ export interface SkillCandidate {
   provenance?: AuditEntry["provenance"];
 }
 
-export interface InspectSkillInput extends SkillCandidate {
+interface InspectSkillInput extends SkillCandidate {
   aliases: string[];
   provenance: AuditEntry["provenance"];
 }
 
-export const inspectSkill = Effect.fn("Audit.inspectSkill")(function* (input: InspectSkillInput) {
+const inspectSkill = Effect.fn("Audit.inspectSkill")(function* (input: InspectSkillInput) {
   const body = (yield* read(input.path)) ?? "";
   const directoryName = basename(dirname(input.path));
   const compatibility = input.harnesses.map((harness) =>
