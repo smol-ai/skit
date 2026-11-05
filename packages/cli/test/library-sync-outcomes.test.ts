@@ -2,7 +2,7 @@ import { Library } from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, Schema, Option, Exit, type Layer, type Scope } from "effect";
-import type { SkillId } from "@smolai/skit-core";
+import type { SkillId } from "@smolai/skit-core/universal/consumer";
 import { join } from "node:path";
 import {
   LibraryState,

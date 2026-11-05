@@ -4,15 +4,13 @@ import { Effect, FileSystem } from "effect";
 import { systemError } from "effect/PlatformError";
 import { join } from "node:path";
 import { expect } from "vitest";
+import { emptyLibraryState, libraryDoctorReport, scanInventory } from "@smolai/skit-core";
 import {
-  emptyLibraryState,
-  libraryDoctorReport,
   makeCollectionId,
   makeInstalledSkillId,
   makeSkillId,
   makeSkillVersionId,
-  scanInventory,
-} from "@smolai/skit-core";
+} from "@smolai/skit-core/universal/consumer";
 import { nativeLibraryFixture } from "./helpers/native-library.js";
 
 it.effect(

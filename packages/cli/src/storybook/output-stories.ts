@@ -6,7 +6,7 @@ import {
   makeCollectionVersionId,
   makeSkillId,
   makeSkillVersionId,
-} from "@smolai/skit-core";
+} from "@smolai/skit-core/universal/consumer";
 import * as History from "@smolai/skit-core/history";
 import { estimateCodexListing } from "@smolai/skit-core/harnesses";
 import { Data } from "effect";

@@ -7,13 +7,12 @@ import {
   MachineId,
   OperationId,
   InstalledSkillId,
-  AdoptionReceiptId,
   CollectionVersionId,
   SkillId,
   SkillVersionId,
-  deterministicMigrationId,
   makeCollectionId,
-} from "../src/library/entity-ids.js";
+} from "@smolai/skit-core/universal/consumer";
+import { AdoptionReceiptId, deterministicMigrationId } from "../src/library/entity-ids.js";
 
 it("generates and strictly validates namespaced entity TypeIDs", () => {
   const id = makeCollectionId();

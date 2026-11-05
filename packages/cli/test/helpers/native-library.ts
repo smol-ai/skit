@@ -1,5 +1,5 @@
 import { Effect, FileSystem } from "effect";
-import { makeMachineId } from "@smolai/skit-core";
+import { makeMachineId } from "@smolai/skit-core/universal/consumer";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 

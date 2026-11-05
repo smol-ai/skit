@@ -7,12 +7,12 @@ import { SourceProcess } from "@smolai/skit-core/platform";
 import { ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
 import { expect, test } from "vitest";
+import { currentLibraryState } from "@smolai/skit-core";
 import {
-  currentLibraryState,
   makeInstalledSkillId,
   makeSkillId,
   makeSkillVersionId,
-} from "@smolai/skit-core";
+} from "@smolai/skit-core/universal/consumer";
 import {
   classifyOpenCodeWarnings,
   type HarnessDoctorCheck,

@@ -1,7 +1,7 @@
 import { join, resolve } from "node:path";
 import { Effect, FileSystem, Schema } from "effect";
 import { it } from "@effect/vitest";
-import { makeCollectionId, makeSkillId } from "@smolai/skit-core";
+import { makeCollectionId, makeSkillId } from "@smolai/skit-core/universal/consumer";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { describe, expect, test } from "vitest";
 import { commandContractArtifacts } from "../src/commands/artifacts.js";

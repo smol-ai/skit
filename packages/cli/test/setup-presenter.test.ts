@@ -5,7 +5,7 @@ import {
   makeInstalledSkillId,
   makeSkillId,
   makeSkillVersionId,
-} from "@smolai/skit-core";
+} from "@smolai/skit-core/universal/consumer";
 import { renderContract } from "../src/commands/output-presenters.js";
 import { result } from "../src/commands/result.js";
 import { classifySetupOnboarding, type SetupSkillInstance } from "@smolai/skit-core/library/setup";

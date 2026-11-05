@@ -1,7 +1,7 @@
 import type { ContractData } from "../../commands/output-contracts.js";
 import { terminalData } from "../../terminal/text.js";
 import { Schema } from "effect";
-import { CollectionId } from "@smolai/skit-core";
+import { CollectionId } from "@smolai/skit-core/universal/consumer";
 import { Hash } from "@smolai/skit-core/shared";
 import { CommandAction } from "../../commands/command-actions.js";
 

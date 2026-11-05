@@ -9,8 +9,8 @@ import {
   LibraryManifest,
   LibraryState,
   collectionVersionPath,
-  type SkillId,
 } from "@smolai/skit-core";
+import { type SkillId } from "@smolai/skit-core/universal/consumer";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
 import { devices } from "./helpers/library-sync-devices.js";
 

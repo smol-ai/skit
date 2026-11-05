@@ -6,10 +6,9 @@ import {
   currentSkillVersion,
   inspectOwnershipMarker,
   scanInventory,
-  makeImportId,
   collectionVersionPath,
-  type SkillId,
 } from "@smolai/skit-core";
+import { makeImportId, type SkillId } from "@smolai/skit-core/universal/consumer";
 import { RegistryUnreachable } from "../src/registry/failures.js";
 import { captureDisk, assertDiskUnchanged } from "./helpers/disk-snapshot.js";
 import { renderLibrarySyncPlan } from "../src/library/sync/present.js";

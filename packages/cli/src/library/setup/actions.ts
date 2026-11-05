@@ -1,7 +1,7 @@
 import { basename, dirname, resolve } from "node:path";
 import { Schema } from "effect";
 import { Hash } from "@smolai/skit-core/shared";
-import { SkillId } from "@smolai/skit-core";
+import { SkillId } from "@smolai/skit-core/universal/consumer";
 import {
   SetupApplied,
   SetupResult,

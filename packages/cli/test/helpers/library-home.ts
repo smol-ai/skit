@@ -1,10 +1,6 @@
 import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
-import {
-  type LibraryState,
-  makeMachineId,
-  emptyLibraryState,
-  type ImportRequest,
-} from "@smolai/skit-core";
+import { type LibraryState, emptyLibraryState, type ImportRequest } from "@smolai/skit-core";
+import { makeMachineId } from "@smolai/skit-core/universal/consumer";
 import {
   createSkitArchive,
   deterministicTreeHash,

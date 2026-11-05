@@ -6,9 +6,8 @@ import { it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Result, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { expect } from "vitest";
+import { CURRENT_LIBRARY_STATE_VERSION, LibraryState } from "@smolai/skit-core";
 import {
-  CURRENT_LIBRARY_STATE_VERSION,
-  LibraryState,
   makeImportId,
   makeCollectionId,
   makeMachineId,
@@ -16,7 +15,7 @@ import {
   makeCollectionVersionId,
   makeSkillId,
   makeSkillVersionId,
-} from "@smolai/skit-core";
+} from "@smolai/skit-core/universal/consumer";
 import * as MachineSettings from "@smolai/skit-core/machine-settings";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { type Hash } from "@smolai/skit-core/shared";

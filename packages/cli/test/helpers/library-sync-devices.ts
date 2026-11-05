@@ -8,10 +8,10 @@ import { systemError } from "effect/PlatformError";
 import {
   type InstalledSkill,
   emptyLibraryState,
-  makeMachineId,
   LibraryState,
   type InstallDestination,
 } from "@smolai/skit-core";
+import { makeMachineId } from "@smolai/skit-core/universal/consumer";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { Library } from "@smolai/skit-core/library";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";

@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest";
-import { makeMachineId } from "@smolai/skit-core";
+import { makeMachineId } from "@smolai/skit-core/universal/consumer";
 import { sourceFromUpstream } from "@smolai/skit-core/library/session";
 
 it("refreshes the whole Git Source from its tracking and collection root", () => {

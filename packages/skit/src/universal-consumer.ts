@@ -12,13 +12,22 @@ export {
 } from "./library/library-contracts.js";
 export { StoredLibraryManifest } from "./library/store/stored-manifest.js";
 export {
+  CollectionId,
+  SkillId,
+  SkillVersionId,
+  CollectionVersionId,
+  ImportId,
+  InstalledSkillId,
   MachineId,
+  OperationId,
   makeCollectionId,
   makeSkillId,
   makeSkillVersionId,
   makeCollectionVersionId,
   makeImportId,
+  makeInstalledSkillId,
   makeMachineId,
+  makeOperationId,
 } from "./library/entity-ids.js";
 export {
   SnapshotArchiveInvalid,
