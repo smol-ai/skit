@@ -5,9 +5,6 @@ export type { AuthorInvocationRead } from "./internal/session/invocation-source.
 export {
   AuthorInvocation,
   InvocationReadModel,
-  policyLabel,
-  policyExplanation,
-  authorPolicyLabel,
   destinationLabel,
   invocationReadModel,
   type InvocationPolicyChoice,

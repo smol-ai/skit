@@ -47,20 +47,20 @@ export const InvocationReadModel = Schema.Struct({
 });
 export type InvocationReadModel = typeof InvocationReadModel.Type;
 
-export function policyLabel(policy: InvocationPolicy): string {
+function policyLabel(policy: InvocationPolicy): string {
   if (policy === "implicit") return "Automatically";
   if (policy === "explicit") return "Only when asked";
   return "Agent default";
 }
 
-export function policyExplanation(policy: InvocationPolicy): string {
+function policyExplanation(policy: InvocationPolicy): string {
   if (policy === "implicit") return "Agents may choose this skill on their own when it fits.";
   if (policy === "explicit")
     return "Agents use this skill only when you ask for it. OpenCode V1 ignores this setting.";
   return "Each agent decides, using its own default.";
 }
 
-export function authorPolicyLabel(policy: ResolvedDeclaredPolicy): string {
+function authorPolicyLabel(policy: ResolvedDeclaredPolicy): string {
   return policy === "unspecified" ? "Not specified" : policyLabel(policy);
 }
 
