@@ -9,7 +9,7 @@ const OwnedLibraryRow = Schema.Struct({
   current_revision_id: Schema.NullOr(Schema.String),
 });
 
-export type OwnedLibrary = typeof OwnedLibraryRow.Type;
+type OwnedLibrary = typeof OwnedLibraryRow.Type;
 
 export const decodeOwnedLibrary = (row: unknown) =>
   Schema.decodeUnknownEffect(OwnedLibraryRow)(row).pipe(

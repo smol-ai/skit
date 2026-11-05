@@ -2,7 +2,7 @@ import { HttpApi, HttpApiEndpoint, HttpApiGroup } from "effect/http-api";
 import { ServerDiscovery } from "../discovery.js";
 import { HealthResponse } from "../health.js";
 
-export class SystemApi extends HttpApiGroup.make("system").add(
+class SystemApi extends HttpApiGroup.make("system").add(
   HttpApiEndpoint.get("health", "/health", { success: HealthResponse }),
   HttpApiEndpoint.get("agentSkillsDiscovery", "/.well-known/agent-skills/", {
     success: ServerDiscovery,

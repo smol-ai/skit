@@ -11,18 +11,18 @@ const TEAM_SLUG = /^[a-z0-9][a-z0-9-]{2,38}$/;
 const TeamIdRow = Schema.Struct({ team_id: Schema.String });
 const PrincipalIdRow = Schema.Struct({ principal_id: Schema.String });
 
-export class TeamSessionRequired extends Schema.TaggedError<TeamSessionRequired>()(
+class TeamSessionRequired extends Schema.TaggedError<TeamSessionRequired>()(
   "Team.SessionRequired",
   {},
 ) {}
-export class InvalidTeam extends Schema.TaggedError<InvalidTeam>()("Team.Invalid", {}) {}
-export class TeamConflict extends Schema.TaggedError<TeamConflict>()("Team.Conflict", {}) {}
-export class TeamForbidden extends Schema.TaggedError<TeamForbidden>()("Team.Forbidden", {}) {}
-export class TeamPrincipalNotFound extends Schema.TaggedError<TeamPrincipalNotFound>()(
+class InvalidTeam extends Schema.TaggedError<InvalidTeam>()("Team.Invalid", {}) {}
+class TeamConflict extends Schema.TaggedError<TeamConflict>()("Team.Conflict", {}) {}
+class TeamForbidden extends Schema.TaggedError<TeamForbidden>()("Team.Forbidden", {}) {}
+class TeamPrincipalNotFound extends Schema.TaggedError<TeamPrincipalNotFound>()(
   "Team.PrincipalNotFound",
   {},
 ) {}
-export class OwnerRoleImmutable extends Schema.TaggedError<OwnerRoleImmutable>()(
+class OwnerRoleImmutable extends Schema.TaggedError<OwnerRoleImmutable>()(
   "Team.OwnerRoleImmutable",
   {},
 ) {}

@@ -23,7 +23,7 @@ import {
   projectSkillFiles,
 } from "./descriptor.js";
 
-export interface ValidatedArtifactBundle {
+interface ValidatedArtifactBundle {
   readonly descriptor: RegistrySkitDescriptor;
   readonly diagnostics: ReadonlyArray<ValidationDiagnostic>;
 }

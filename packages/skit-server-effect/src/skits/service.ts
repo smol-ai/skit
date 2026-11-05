@@ -37,12 +37,12 @@ import {
 
 class SkitForbidden extends Schema.TaggedError<SkitForbidden>()("SKIT.Forbidden", {}) {}
 
-export class SkitExists extends Schema.TaggedError<SkitExists>()("SKIT.Exists", {}) {}
+class SkitExists extends Schema.TaggedError<SkitExists>()("SKIT.Exists", {}) {}
 
-export class SkitNotFound extends Schema.TaggedError<SkitNotFound>()("SKIT.NotFound", {}) {}
+class SkitNotFound extends Schema.TaggedError<SkitNotFound>()("SKIT.NotFound", {}) {}
 
 /** A revision the SKIT refuses to record or point at. `code` is the wire error. */
-export class InvalidRevision extends Schema.TaggedError<InvalidRevision>()("SKIT.InvalidRevision", {
+class InvalidRevision extends Schema.TaggedError<InvalidRevision>()("SKIT.InvalidRevision", {
   code: Schema.Literals([
     "UNSAFE_PATH",
     "TREE_HASH_MISMATCH",
@@ -53,34 +53,23 @@ export class InvalidRevision extends Schema.TaggedError<InvalidRevision>()("SKIT
 }) {}
 
 /** Another device moved `current` first; this is where it points now. */
-export class CurrentMoved extends Schema.TaggedError<CurrentMoved>()("SKIT.CurrentMoved", {
+class CurrentMoved extends Schema.TaggedError<CurrentMoved>()("SKIT.CurrentMoved", {
   current: Schema.NullOr(History.RevisionId),
 }) {}
 
-export class RevisionBlobMissing extends Schema.TaggedError<RevisionBlobMissing>()(
-  "SKIT.BlobMissing",
-  {
-    path: Schema.String,
-  },
-) {}
+class RevisionBlobMissing extends Schema.TaggedError<RevisionBlobMissing>()("SKIT.BlobMissing", {
+  path: Schema.String,
+}) {}
 
-export class RevisionBlobCorrupt extends Schema.TaggedError<RevisionBlobCorrupt>()(
-  "SKIT.BlobCorrupt",
-  {
-    path: Schema.String,
-  },
-) {}
+class RevisionBlobCorrupt extends Schema.TaggedError<RevisionBlobCorrupt>()("SKIT.BlobCorrupt", {
+  path: Schema.String,
+}) {}
 
-export class RevisionTooLarge extends Schema.TaggedError<RevisionTooLarge>()("SKIT.TooLarge", {}) {}
+class RevisionTooLarge extends Schema.TaggedError<RevisionTooLarge>()("SKIT.TooLarge", {}) {}
 
-export type PostError =
-  | SkitNotFound
-  | InvalidRevision
-  | IntegrityError
-  | DatabaseError
-  | BlobStorageError;
+type PostError = SkitNotFound | InvalidRevision | IntegrityError | DatabaseError | BlobStorageError;
 
-export type ReadError =
+type ReadError =
   | DatabaseError
   | BlobStorageError
   | RevisionBlobMissing

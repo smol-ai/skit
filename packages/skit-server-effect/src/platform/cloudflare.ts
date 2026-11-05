@@ -41,7 +41,7 @@ export class BlobStorageError extends Schema.TaggedError<BlobStorageError>()(
 /** R2 deletes at most this many keys per call. */
 const MAX_DELETE_KEYS = 1_000;
 
-export interface BlobPutOptions {
+interface BlobPutOptions {
   readonly contentType?: string;
   /** Write only when no object has the key yet. */
   readonly onlyIfAbsent?: boolean;

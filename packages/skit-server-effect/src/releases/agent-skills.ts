@@ -8,8 +8,7 @@ import { Effect, Schema } from "effect";
 import { unzipSync, zipSync } from "fflate";
 import { projectionLimitExceeded } from "../integrity/projection-limits.js";
 
-export const AGENT_SKILLS_DISCOVERY_SCHEMA =
-  "https://schemas.agentskills.io/discovery/0.2.0/schema.json";
+const AGENT_SKILLS_DISCOVERY_SCHEMA = "https://schemas.agentskills.io/discovery/0.2.0/schema.json";
 
 const DISCOVERABLE_NAME = /^(?!-)(?!.*--)[a-z0-9-]{1,64}(?<!-)$/;
 const ARTIFACT_TIMESTAMP = Date.UTC(1980, 0, 1);
@@ -21,7 +20,7 @@ export interface DiscoverableSkill {
   readonly files: ReadonlyMap<string, { readonly bytes: Uint8Array }>;
 }
 
-export class AgentSkillsArchiveInvalid extends Schema.TaggedError<AgentSkillsArchiveInvalid>()(
+class AgentSkillsArchiveInvalid extends Schema.TaggedError<AgentSkillsArchiveInvalid>()(
   "AgentSkills.ArchiveInvalid",
   { cause: Schema.Defect() },
 ) {}
