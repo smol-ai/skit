@@ -16,7 +16,6 @@ export {
   DuplicateScanError,
   SkillAlias,
   isEntryLink,
-  readSkillSymlink,
   scanSkillsDirectory,
 } from "../duplicates.js";
 export { DuplicateScanIncomplete } from "../installed-skill-facts.js";

@@ -94,7 +94,7 @@ const ManagePlan = Schema.Struct({
 });
 export interface ManagePlan extends Schema.Schema.Type<typeof ManagePlan> {}
 
-export const manageBlockers = Effect.fn("Library.manageBlockers")(function* (root: string) {
+const manageBlockers = Effect.fn("Library.manageBlockers")(function* (root: string) {
   const normalized = yield* inspectNormalizedTree(root);
   const verbatim = yield* walkTree(root, "verbatim");
   const blockers: Array<{ path: string; reason: ManageBlocker }> = normalized.excluded

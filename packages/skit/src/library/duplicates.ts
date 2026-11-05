@@ -22,7 +22,7 @@ export const isEntryLink = (alias: SkillAlias): boolean =>
   alias.via === "symlink" && alias.linkPath === alias.path;
 
 /** Preserve the listing path even when a parent/root itself is a symlink. */
-export const readSkillSymlink = Effect.fn("Install.readSkillSymlink")(function* (path: string) {
+const readSkillSymlink = Effect.fn("Install.readSkillSymlink")(function* (path: string) {
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
   for (let component = resolve(path); ; component = dirname(component)) {

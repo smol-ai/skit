@@ -312,7 +312,7 @@ export const apply = Effect.fn("Library.applyRecordedChanges")(function* (
   });
 }, Effect.scoped);
 /** Called only after committing state, including when startup verifies a completed apply. */
-export const settleBackups = Effect.fn("Library.settleApplyBackups")(function* (
+const settleBackups = Effect.fn("Library.settleApplyBackups")(function* (
   prior: LibraryState,
   rows: readonly InstalledSkill[],
 ) {
