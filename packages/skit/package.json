@@ -61,6 +61,10 @@
     "./platform": {
       "types": "./dist/platform/index.d.ts",
       "import": "./dist/platform/index.js"
+    },
+    "./library/usage": {
+      "types": "./dist/library/usage.d.ts",
+      "import": "./dist/library/usage.js"
     }
   },
   "scripts": {

@@ -53,6 +53,30 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
         : { collectionSource: { kind: source.kind, locator: sourceIdentityLabel(source) } }),
     };
   });
+  const names = new Map(state.skills.map((skill) => [skill.skill_id, skill.name]));
+  const installedSkills = state.installed_skills.flatMap((copy) => {
+    const name = names.get(copy.skill_id);
+    return name === undefined
+      ? []
+      : [
+          {
+            skillId: copy.skill_id,
+            name,
+            destination: copy.destination,
+            path: copy.path,
+            status: copy.status,
+          },
+        ];
+  });
+  const skillsShCollectionIds = [
+    ...new Set(
+      state.imports
+        .filter((sourceImport) =>
+          sourceImport.lock_file_entries.some((entry) => entry.type === "skills.sh-lock"),
+        )
+        .map((sourceImport) => sourceImport.collection_id),
+    ),
+  ];
   const collections = state.collections.map((collection) => ({
     id: collection.collection_id,
     label: collection.label,
@@ -112,6 +136,10 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
     removalSummary: (query: string) => removalSummary(state, query),
     securityReview: (query: string) => securityReview(state, originalsPath, query),
     collections: structuredClone(collections),
+    /** Named installed folders for setup reporting and exact usage attribution. */
+    installedSkills,
+    /** Collections whose retained imports carry skills.sh lock-file evidence. */
+    skillsShCollectionIds,
     placements: structuredClone(placements),
     placementsAt: (scope: EnabledCollection["scope"] | undefined) =>
       structuredClone(atScope(scope)),

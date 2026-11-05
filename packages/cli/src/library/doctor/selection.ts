@@ -134,7 +134,11 @@ export const openDoctorCleanupSelection = Effect.fn("Doctor.openCleanupSelection
     configuration,
   );
   const state = selection.state;
-  const usage = yield* scanLocalUsage(state, { userHome: configuration.home, days, progress });
+  const usage = yield* scanLocalUsage(selection.view.installedSkills, {
+    userHome: configuration.home,
+    days,
+    progress,
+  });
   const candidates = suggestDoctorCleanup(state, budgets, usage, configuration);
   return {
     usage,

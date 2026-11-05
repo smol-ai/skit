@@ -10,7 +10,7 @@ import { type LibraryState } from "@smolai/skit-core";
 import { Library } from "@smolai/skit-core/library";
 import { runSetup } from "@smolai/skit-core/library/setup";
 import { applySetupSelections } from "./helpers/setup-apply.js";
-import { libraryView } from "@smolai/skit-core/library/session";
+import { libraryView, openLibraryView } from "@smolai/skit-core/library/session";
 import { inspectLibrarySource } from "../src/library/source.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
@@ -86,6 +86,8 @@ it.effect("checks skills.sh status against real Git history without saving Libra
     expect(saved._tag).toBe("Present");
     if (saved._tag !== "Present") return;
     const member = saved.state.skills[0]!;
+    const view = yield* home.owned(openLibraryView(home.home));
+    expect(view.skillsShCollectionIds).toEqual([member.collection_id]);
     const collection = {
       ...saved.state.collections[0]!,
       upstream: {

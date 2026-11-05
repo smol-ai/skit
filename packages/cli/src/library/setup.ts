@@ -1,8 +1,7 @@
 import { openSetupCommandReview, prepareSetupCommand, setupApplyCommand } from "./setup/apply.js";
 export { setupApplyCommand } from "./setup/apply.js";
 import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
-import { emptyLibraryState } from "@smolai/skit-core";
-import { skillModificationTime } from "@smolai/skit-core/library/session";
+import { openLibraryView, skillModificationTime } from "@smolai/skit-core/library/session";
 import { Cause, Effect, FileSystem, Option } from "effect";
 import { Command, Flag } from "effect/cli";
 import { join, resolve } from "node:path";
@@ -14,7 +13,6 @@ import { inventoryRootOptions, localFlags, optionalString } from "../commands/pa
 import { Prompter, terminalPrompterLayer } from "../terminal/prompter.js";
 import { promptsAllowed } from "../terminal/interactivity.js";
 import { compactHomePath } from "../terminal/home-path.js";
-import { Library } from "@smolai/skit-core/library";
 import { Renderer } from "../terminal/renderer.js";
 import {
   setupOverviewTitle,
@@ -259,20 +257,8 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
 });
 
 const offerSkillsShUpdateCheck = Effect.fn("CLI.setup.offerSkillsShUpdateCheck")(function* () {
-  const library = yield* Library.Service;
-  const snapshot = yield* library.read;
-  const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
-  const collectionIds = [
-    ...new Set(
-      state.imports
-        .filter((sourceImport) =>
-          sourceImport.lock_file_entries.some(
-            (lockFileEntry) => lockFileEntry.type === "skills.sh-lock",
-          ),
-        )
-        .map((sourceImport) => sourceImport.collection_id),
-    ),
-  ];
+  const view = yield* openLibraryView((yield* SkitConfiguration).skitHome);
+  const collectionIds = view.skillsShCollectionIds;
   if (!collectionIds.length) return;
   const prompter = yield* Prompter;
   if (

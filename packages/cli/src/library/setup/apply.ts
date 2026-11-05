@@ -1,8 +1,7 @@
 import { resolve } from "node:path";
 import { Effect, Option, Schema } from "effect";
 import { Hash } from "@smolai/skit-core/shared";
-import { emptyLibraryState } from "@smolai/skit-core";
-import { Library } from "@smolai/skit-core/library";
+import { openLibraryView } from "@smolai/skit-core/library/session";
 import { Renderer } from "../../terminal/renderer.js";
 import { OptionCombinationInvalid } from "../../commands/input-failures.js";
 import {
@@ -89,10 +88,7 @@ export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (
     ...reconnects.map((copy) => copy.name),
     ...removals.entries.map((copy) => copy.name),
   ]);
-  const library = yield* Library.Service;
-  const snapshot = yield* library.read;
-  const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
-  const names = new Map(state.skills.map((skill) => [skill.skill_id, skill.name]));
+  const view = yield* openLibraryView(input.options.libraryHome);
   return {
     planId,
     changes: applied?.changes ?? changeResults(plan.summary.changes, false),
@@ -105,19 +101,9 @@ export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (
     imported: sources.map(({ source, names }) => ({ source, names })),
     added: additions,
     reconnected: reconnects,
-    installedSkills: state.installed_skills.flatMap((installedSkill) => {
-      const name = names.get(installedSkill.skill_id);
-      return name !== undefined && taken.has(name)
-        ? [
-            {
-              name,
-              destination: installedSkill.destination,
-              path: installedSkill.path,
-              status: installedSkill.status,
-            },
-          ]
-        : [];
-    }),
+    installedSkills: view.installedSkills
+      .filter((copy) => taken.has(copy.name))
+      .map(({ name, destination, path, status }) => ({ name, destination, path, status })),
     leftAlone: scan.onboarding.candidates
       .filter((candidate) => !taken.has(candidate.name))
       .map((candidate) => ({

@@ -2,7 +2,11 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
 import { join } from "node:path";
 import * as Library from "../src/library/library.js";
-import { applySetEnabledPlan, openSetEnabledSession } from "../src/library/session.js";
+import {
+  applySetEnabledPlan,
+  openSetEnabledSession,
+  openLibraryView,
+} from "../src/library/session.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
 
@@ -47,6 +51,27 @@ it.effect(
       const applying: Effect.Effect<unknown, unknown> = applySetEnabledPlan(home, plan);
       yield* applying;
       assert.strictEqual(yield* fs.readFileString(join(destination, "review", "SKILL.md")), bytes);
+      const view = yield* openLibraryView(home).pipe(
+        Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      );
+      assert.deepStrictEqual(
+        view.installedSkills.map(({ name, path, destination, status }) => ({
+          name,
+          path,
+          destination,
+          status,
+        })),
+        [
+          {
+            name: "review",
+            path: join(destination, "review"),
+            destination: "agents",
+            status: "installed",
+          },
+        ],
+      );
+      // The selection's earlier read model remains the evidence from before applying.
+      assert.deepStrictEqual(selection.view.installedSkills, []);
       const snapshot = yield* Effect.flatMap(Library.Service, (library) => library.read).pipe(
         Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
       );
@@ -88,4 +113,18 @@ it.effect(
         Effect.provide(Library.layer({ home, routing: { _tag: "Configured", ...configuration } })),
       );
     }).pipe(Effect.provide(skitLayer)),
+);
+
+it.effect("an absent Library exposes empty read facts without creating persisted state", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-empty-view-" });
+    const home = join(root, "absent");
+    const view = yield* openLibraryView(home).pipe(
+      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+    );
+    assert.deepStrictEqual(view.installedSkills, []);
+    assert.deepStrictEqual(view.skillsShCollectionIds, []);
+    assert.isFalse(yield* fs.exists(home));
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
