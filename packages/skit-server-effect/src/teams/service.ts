@@ -1,6 +1,7 @@
 import { D1Client } from "@effect/sql-d1";
 import { Clock, Context, Effect, Layer, Schema } from "effect";
 import type { Principal } from "../identity/service.js";
+import { prepareTeamNamespaceClaim } from "../identity/team-namespace.js";
 import { normalizeNamespace } from "../domain/identifiers.js";
 import { DatabaseError, databaseError, type DatabaseSqlClient } from "../platform/cloudflare.js";
 import { SecureRandom } from "effect/crypto";
@@ -109,6 +110,7 @@ export const layer = Layer.effect(
       if (slug === undefined || !TEAM_SLUG.test(slug) || !name) return yield* new InvalidTeam();
       const teamId = `team_${(yield* random.uuidV4()).replaceAll("-", "")}`;
       const now = new Date(yield* clock.currentTimeMillis).toISOString();
+      const namespace = prepareTeamNamespaceClaim(sql, { namespace: slug, teamId, createdAt: now });
       const committed = yield* db(
         "create team",
         sql.batch([
@@ -116,17 +118,18 @@ export const layer = Layer.effect(
             VALUES (${teamId}, ${slug}, ${name}, ${now})`,
           sql`INSERT INTO team_memberships (team_id, principal_id, role, created_at)
             VALUES (${teamId}, ${principal.id}, 'owner', ${now})`,
-          sql`INSERT INTO namespaces (namespace_slug, subject_kind, subject_id, created_at)
-            VALUES (${slug}, 'team', ${teamId}, ${now})`,
+          namespace.statement,
         ]),
       ).pipe(Effect.result);
       if (committed._tag === "Failure") {
-        const conflict = yield* db(
-          "check team conflict",
-          sql`SELECT 1 found FROM teams WHERE slug = ${slug}
-              UNION ALL SELECT 1 found FROM namespaces WHERE namespace_slug = ${slug} LIMIT 1`,
-        );
-        if (conflict.length !== 0) return yield* new TeamConflict();
+        const [teamExists, namespaceTaken] = yield* Effect.all([
+          db(
+            "check team conflict",
+            sql`SELECT 1 found FROM teams WHERE slug = ${slug} LIMIT 1`,
+          ).pipe(Effect.map((rows) => rows.length !== 0)),
+          namespace.isTaken,
+        ]);
+        if (teamExists || namespaceTaken) return yield* new TeamConflict();
         return yield* Effect.fail(committed.failure);
       }
       return { team_id: teamId, slug, name };

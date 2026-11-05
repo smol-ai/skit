@@ -12,6 +12,14 @@
  */
 export const owners = [
   {
+    // Identity defines namespace SQL; only Teams may compose this claim with its own atomic write.
+    name: "Identity team namespace commit",
+    owner: "packages/skit-server-effect/src/teams/",
+    privateModules: ["packages/skit-server-effect/src/identity/team-namespace."],
+    testOwner: "packages/skit-server-effect/test/",
+    private: [],
+  },
+  {
     name: "Identity",
     owner: "packages/skit-server-effect/src/identity/",
     privateModules: ["packages/skit-server-effect/src/identity/internal/"],

@@ -336,6 +336,8 @@ Namespaces are controlled by an individual Principal or a registry-local team. C
 
 Identity owns namespace access queries and obtains current membership IDs from Teams. Resource owners use these queries to enforce their own access rules; there is no separate Authorization service. Namespace reads do not require constructing the account/session SDK, so public Release reads remain available when accounts are not configured.
 
+For team creation, Identity prepares the namespace claim and its conflict lookup. Teams commits the prepared claim with the team and initial owner membership in one three-statement D1 batch, so a namespace failure rolls all three back. Import rules restrict this commit API to Teams and package-local tests. This preserves atomicity with the installed D1 driver, which supports atomic batches but not transactions across separate Effects.
+
 The server retains immutable revisions of each principal's portable Library Manifest using optimistic concurrency. These revisions contain Library Entries and Bindings only. In accordance with ADR-0001 they reject device-local Projection, Custody, paths, observations, ownership markers, drift, conflicts, suppression, and audit history rather than importing those fields into portable intent.
 
 Private Library snapshots require the Library's owning Principal or current membership in its owning team. Per-resource grants do not authorize Library snapshot reads. Removing team membership removes access on the next request.

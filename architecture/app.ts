@@ -239,6 +239,7 @@ export const owners = {
       "claimUsername",
       "createOperator",
       "makeNamespaceAccess → {ownsNamespace, ownedNamespaces}",
+      "prepareTeamNamespaceClaim (private atomic commit contract for Teams)",
       "tokens.{create, list, revoke}",
       "DESIGNED, NOT IMPLEMENTED: suspend, reinstate, invalidateCredentials (writes state, authorization_generation)", // decisions.md "One Identity owner"
     ],
@@ -258,7 +259,7 @@ export const owners = {
     owns: ["teams", "team_memberships"],
     ops: ["create", "addMember", "removeMember", "isMember", "memberTeamIds"],
     removes: [
-      "direct INSERT into namespaces (via Identity)",
+      "direct INSERT into namespaces (done: Identity prepares its claim and conflict lookup; Teams commits the opaque claim with its own two writes in one D1 batch)",
       "membership lookup outside Teams (done: namespace access uses Teams.memberTeamIds; owner-role checks stay private to Teams)",
     ],
   },

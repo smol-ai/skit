@@ -50,6 +50,36 @@ async function reported(
 }
 
 describe("skit/owner-boundaries", () => {
+  test("only Teams may compose Identity's team namespace claim into a commit", async () => {
+    for (const statement of [
+      `import { prepareTeamNamespaceClaim } from "../identity/team-namespace.js";`,
+      `export * from "../identity/team-namespace.js";`,
+      `const claim = import("../identity/team-namespace.js");`,
+    ]) {
+      expect(
+        await reported(
+          statement,
+          "owner-boundaries",
+          "packages/skit-server-effect/src/api/teams-http.ts",
+        ),
+      ).toHaveLength(1);
+    }
+    expect(
+      await reported(
+        `import { prepareTeamNamespaceClaim } from "../identity/team-namespace.js";`,
+        "owner-boundaries",
+        "packages/skit-server-effect/src/teams/service.ts",
+      ),
+    ).toEqual([]);
+    expect(
+      await reported(
+        `import { prepareTeamNamespaceClaim } from "../src/identity/team-namespace.js";`,
+        "owner-boundaries",
+        "packages/skit-server-effect/test/teams.test.ts",
+      ),
+    ).toEqual([]);
+  });
+
   test("server adapters use Identity instead of its SDK or credential implementation", async () => {
     for (const statement of [
       `import { makeBetterAuth } from "../identity/internal/better-auth.js";`,

@@ -1593,6 +1593,35 @@ describe("Better Auth adapter", () => {
         "content-type": "application/json",
       };
 
+      const collision = yield* request("/api/teams", {
+        method: "POST",
+        headers: sessionHeaders,
+        body: JSON.stringify({ slug: "operator", name: "Cannot take the Principal namespace" }),
+      });
+      expect(collision.status).toBe(409);
+      const sql = yield* D1Client.D1Client;
+      expect(yield* sql`SELECT COUNT(*) count FROM teams`).toEqual([{ count: 0 }]);
+      expect(yield* sql`SELECT COUNT(*) count FROM team_memberships`).toEqual([{ count: 0 }]);
+      expect(
+        yield* sql`SELECT subject_kind FROM namespaces WHERE namespace_slug = 'operator'`,
+      ).toEqual([{ subject_kind: "principal" }]);
+      yield* sql.unsafe(`CREATE TRIGGER refuse_team_namespace BEFORE INSERT ON namespaces
+        WHEN NEW.subject_kind = 'team' AND NEW.namespace_slug = 'blocked-team'
+        BEGIN SELECT RAISE(ABORT, 'namespace storage unavailable'); END`);
+      const failed = yield* request("/api/teams", {
+        method: "POST",
+        headers: sessionHeaders,
+        body: JSON.stringify({ slug: "blocked-team", name: "Must roll back" }),
+      });
+      expect(failed.status).toBe(500);
+      expect(yield* webPromise(() => failed.json())).toEqual({ error: "storage_failure" });
+      expect(yield* sql`SELECT COUNT(*) count FROM teams`).toEqual([{ count: 0 }]);
+      expect(yield* sql`SELECT COUNT(*) count FROM team_memberships`).toEqual([{ count: 0 }]);
+      expect(
+        yield* sql`SELECT namespace_slug FROM namespaces WHERE namespace_slug = 'blocked-team'`,
+      ).toEqual([]);
+      yield* sql.unsafe("DROP TRIGGER refuse_team_namespace");
+
       const created = yield* request("/api/teams", {
         method: "POST",
         headers: sessionHeaders,
@@ -1602,6 +1631,12 @@ describe("Better Auth adapter", () => {
       expect(yield* webPromise(() => created.json())).toMatchObject({
         team: { slug: "tool-makers", name: "Tool Makers" },
       });
+      expect(
+        yield* sql`SELECT n.subject_kind, n.subject_id = t.team_id same_subject, m.role
+        FROM teams t JOIN namespaces n ON n.namespace_slug = t.slug
+        JOIN team_memberships m ON m.team_id = t.team_id
+        WHERE t.slug = 'tool-makers'`,
+      ).toEqual([{ subject_kind: "team", same_subject: 1, role: "owner" }]);
       expect(
         (yield* request("/api/teams", {
           method: "POST",
