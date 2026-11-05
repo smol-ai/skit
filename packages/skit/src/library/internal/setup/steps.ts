@@ -14,7 +14,7 @@ import { InvalidIntent } from "../../enabled-plan.js";
 import type { CollectionId, OperationId } from "../../entity-ids.js";
 import { absentUnder, holdsEvidence, parentIsAsRecorded } from "../../folder-evidence.js";
 import { importCollection } from "../../import-collection.js";
-import { InstalledSkills } from "../../installed-skills.js";
+import * as InstalledSkills from "../../installed-skills.js";
 import {
   ReviewedChangeDiffers,
   updateInstalledSkills,

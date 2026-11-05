@@ -6,7 +6,7 @@ import { snapshotOf } from "../../snapshot.js";
 import { canonicalJson } from "../../../shared/json.js";
 import { inspectInstalledSkill } from "../../../installed-skills/files.js";
 import * as InstalledSkillStatus from "../../installed-skill-status.js";
-import { InstalledSkills } from "../../installed-skills.js";
+import * as InstalledSkills from "../../installed-skills.js";
 import { operationScope } from "../operations/operations.js";
 import { planIntent } from "../../plan-changes.js";
 import { currentSkillVersion, enabledSkillIds } from "../../library-contracts.js";

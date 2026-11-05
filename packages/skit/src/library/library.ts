@@ -99,7 +99,7 @@ import {
 import type { LibraryManifest, SnapshotArchive } from "./library-contracts.js";
 import type { CollectionVersionPlan } from "./collection-version-plan.js";
 import type { Digest } from "effect/crypto";
-import { InstalledSkills } from "./installed-skills.js";
+import * as InstalledSkills from "./installed-skills.js";
 import type { InventoryRootOptions } from "./routing/roots.js";
 import type { LibraryLayerError, LibraryStateReadError } from "./store/library-store.js";
 import type {

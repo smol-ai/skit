@@ -4,7 +4,7 @@ import { Hash } from "../../../shared/hash.js";
 import { SkillAssessmentAcceptance } from "../../assessment-acceptance.js";
 import { type SkillSecurityReview } from "../../../auditing/skill-contracts.js";
 import { AcceptanceIncomplete, SecurityFindingAbsent } from "../../failures.js";
-import { InstalledSkills } from "../../installed-skills.js";
+import * as InstalledSkills from "../../installed-skills.js";
 import { collectionVersionPath } from "../../collection-version.js";
 import { InvalidIntent } from "../../enabled-plan.js";
 import { StalePlan } from "../../library-plan.js";

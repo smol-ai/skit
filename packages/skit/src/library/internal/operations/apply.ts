@@ -1,6 +1,6 @@
 import { samePathChain } from "../../../platform/path-evidence.js";
 import { Effect } from "effect";
-import { InstalledSkills } from "../../installed-skills.js";
+import * as InstalledSkills from "../../installed-skills.js";
 import * as Status from "../../installed-skill-status.js";
 import {
   LibraryWriter,

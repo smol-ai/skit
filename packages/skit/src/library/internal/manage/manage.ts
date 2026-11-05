@@ -8,7 +8,7 @@ import { InvalidIntent } from "../../enabled-plan.js";
 import { makeOperationId, OperationId } from "../../entity-ids.js";
 import { holdsEvidence, parentIsAsRecorded } from "../../folder-evidence.js";
 import type { ImportedCollection } from "../../import-collection.js";
-import { InstalledSkills } from "../../installed-skills.js";
+import * as InstalledSkills from "../../installed-skills.js";
 import { planManage } from "../../manage-plan.js";
 import { Plan, StalePlan } from "../../library-plan.js";
 import { planManageEnable, duplicatesToMove, installedPaths } from "../setup/steps.js";

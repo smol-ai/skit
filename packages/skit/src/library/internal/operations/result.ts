@@ -1,7 +1,7 @@
 import { same, type ApplyStep } from "./program.js";
 import { enabledAt } from "../../enabled.js";
 import { join } from "node:path";
-import { InstalledSkills } from "../../installed-skills.js";
+import * as InstalledSkills from "../../installed-skills.js";
 import { libraryStateRevision, type LibraryState } from "../../library-state.js";
 import { type SkillId } from "../../entity-ids.js";
 import {

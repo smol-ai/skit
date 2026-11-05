@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { InstalledSkills } from "../src/library/installed-skills.js";
+import * as InstalledSkills from "../src/library/installed-skills.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 it.effect(

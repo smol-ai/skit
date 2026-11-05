@@ -20,7 +20,7 @@ import {
 } from "./content/content.js";
 import type { LibraryManifest } from "../library-contracts.js";
 import { Digest } from "effect/crypto";
-import { InstalledSkills } from "../installed-skills.js";
+import * as InstalledSkills from "../installed-skills.js";
 import {
   LibraryWriter,
   libraryStatePath,

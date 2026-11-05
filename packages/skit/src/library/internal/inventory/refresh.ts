@@ -4,7 +4,7 @@ import { Hash } from "../../../shared/hash.js";
 import { HarnessName } from "../../../harnesses/contracts.js";
 import { InvalidLibraryState } from "../../failures.js";
 import { OwnershipMarkerInspection } from "../../../installed-skills/files.js";
-import { InstalledSkills } from "../../installed-skills.js";
+import * as InstalledSkills from "../../installed-skills.js";
 import { emptyLibraryState, InstalledSkill, LibraryState } from "../../library-state.js";
 import { InventoryScanIssue } from "../../store/state-schema.js";
 import { OwnershipIssue } from "../../../installed-skills/metadata.js";

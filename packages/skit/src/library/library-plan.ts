@@ -1,6 +1,6 @@
 import { Revision } from "./snapshot.js";
 import { Schema } from "effect";
-import { InstalledSkills } from "./installed-skills.js";
+import * as InstalledSkills from "./installed-skills.js";
 import type { LibraryStateReadError, LibraryStateWriteError } from "./store/library-store.js";
 import { InstalledSkill, LibraryState } from "./library-state.js";
 import { Intent as EnabledIntent, Invocation, type InvalidIntent } from "./enabled-plan.js";

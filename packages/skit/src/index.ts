@@ -251,7 +251,7 @@ export * as Sync from "./sync/sync.js";
 export { mergeAuthorTree, conflictKind } from "./author/merge/files.js";
 export { type Unusable as MachineSettingsUnusable } from "./library/machine-settings.js";
 
-export { InstalledSkills } from "./library/installed-skills.js";
+export * as InstalledSkills from "./library/installed-skills.js";
 export * as InstalledSkillStatus from "./library/installed-skill-status.js";
 export { Library } from "./library/library.js";
 export {

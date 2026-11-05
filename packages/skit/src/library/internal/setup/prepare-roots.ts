@@ -6,7 +6,7 @@ import { ensureSkillsDirectoryWritable } from "../../../installed-skills/writabl
 import { LinkStat } from "../../../platform/link-stat.js";
 import { installedPaths } from "./steps.js";
 import { changeWrites } from "../../installed-update.js";
-import { InstalledSkills } from "../../installed-skills.js";
+import * as InstalledSkills from "../../installed-skills.js";
 import { absentEvidence, holdsEvidence, parentIsAsRecorded } from "../../folder-evidence.js";
 import type { SetupStep, SetupPreparation, RecordedSetupStep } from "../../store/state-schema.js";
 

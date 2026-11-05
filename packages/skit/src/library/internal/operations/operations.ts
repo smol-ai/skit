@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
 import { canonicalJson } from "../../../shared/json.js";
-import { InstalledSkills } from "../../installed-skills.js";
+import * as InstalledSkills from "../../installed-skills.js";
 import { StalePlan, type Plan } from "../../library-plan.js";
 import { LibraryWriter, loadLibrary } from "../../store/library-store.js";
 import { OperationStatus, type StepRouting } from "../../store/state-schema.js";

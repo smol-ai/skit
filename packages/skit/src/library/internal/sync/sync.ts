@@ -9,7 +9,7 @@ import { FailureTypeId } from "../../../shared/failure.js";
 import { InvalidLibraryState, LibraryChanged } from "../../failures.js";
 import { HomeBusy } from "../../../platform/lock-failures.js";
 import { TreeError } from "../../../shared/tree-error.js";
-import { InstalledSkills } from "../../installed-skills.js";
+import * as InstalledSkills from "../../installed-skills.js";
 import { InvalidIntent } from "../../enabled-plan.js";
 import { StalePlan } from "../../library-plan.js";
 import {

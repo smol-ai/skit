@@ -565,5 +565,3 @@ export const recordedRouting = Effect.fn("recordedRouting")(function* (state: Li
     duplicates: { scan: () => Effect.succeed({ copies: [], warnings: [], roots: [] }) },
   } satisfies Routing;
 });
-
-export * as InstalledSkills from "./installed-skills.js";

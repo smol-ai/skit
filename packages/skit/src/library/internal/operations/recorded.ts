@@ -1,5 +1,5 @@
 import { DateTime, Effect, Schema } from "effect";
-import { InstalledSkills } from "../../installed-skills.js";
+import * as InstalledSkills from "../../installed-skills.js";
 import * as Status from "../../installed-skill-status.js";
 import { makeInstalledSkillId, type OperationId } from "../../entity-ids.js";
 import { reviewApply } from "./review.js";

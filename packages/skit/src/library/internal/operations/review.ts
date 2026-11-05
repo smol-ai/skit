@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { Effect, Schema } from "effect";
-import { InstalledSkills } from "../../installed-skills.js";
+import * as InstalledSkills from "../../installed-skills.js";
 import { inspectLocalLibraryState } from "../../store/library-store.js";
 import { emptyLibraryState } from "../../library-state.js";
 import { Revision, snapshotOf } from "../../snapshot.js";

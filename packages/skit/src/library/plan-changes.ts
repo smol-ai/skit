@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { Effect, Schema, type Scope } from "effect";
-import { InstalledSkills } from "./installed-skills.js";
+import * as InstalledSkills from "./installed-skills.js";
 import { libraryOriginalsPath } from "./store/library-store.js";
 import { emptyLibraryState, type LibraryState, type InstalledSkill } from "./library-state.js";
 import type { Snapshot } from "./snapshot.js";
