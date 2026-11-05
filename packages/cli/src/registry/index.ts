@@ -1,6 +1,22 @@
 /** Registry owns account selection, credentials and device-login state. */
 import { Effect } from "effect";
-import { resolveAuth, resolveAuthForOrigin, resolveRegistryLocator } from "./auth.js";
+import {
+  resolveAuth,
+  resolveAuthForOrigin,
+  resolveRegistryLocator,
+  registryStatus,
+  logoutEffect,
+  loginEffect,
+  reuseLogin,
+  resolveLoginTarget,
+  listRegistryRemotes,
+  addRegistryRemote,
+  defaultRegistryRemote,
+  removeRegistryRemote,
+} from "./auth.js";
+
+import { prepareDeviceLogin, completeDeviceLogin } from "./device-login.js";
+export type { PendingDeviceLogin } from "./device-login.js";
 
 export type { ResolvedAuth } from "./accounts.js";
 
@@ -20,5 +36,18 @@ const credentials = Effect.fn("Registry.credentials")(function* (
 
 export const Registry = {
   credentials,
+  remotes: {
+    list: listRegistryRemotes,
+    add: addRegistryRemote,
+    setDefault: defaultRegistryRemote,
+    remove: removeRegistryRemote,
+  },
+  status: registryStatus,
+  logout: logoutEffect,
+  login: loginEffect,
+  reuseLogin,
+  loginTarget: resolveLoginTarget,
+  prepareDeviceLogin,
+  completeDeviceLogin,
   source: resolveRegistryLocator,
 } as const;

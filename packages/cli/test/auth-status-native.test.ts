@@ -2,7 +2,7 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { authStatusCommand } from "../src/registry/auth.js";
+import { registryStatus } from "../src/registry/auth.js";
 
 it.effect("returns every stored authentication record", () =>
   Effect.gen(function* () {
@@ -30,7 +30,7 @@ it.effect("returns every stored authentication record", () =>
         },
       }),
     );
-    const value = yield* authStatusCommand(home);
+    const value = yield* registryStatus(home);
     assert.deepStrictEqual(value, {
       credentials: [
         {
@@ -65,7 +65,7 @@ it.effect("preserves an invalid credential-file failure", () =>
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-auth-status-invalid-" });
     yield* fs.writeFileString(join(home, "auth.json"), "{");
-    const actual = yield* Effect.flip(authStatusCommand(home));
+    const actual = yield* Effect.flip(registryStatus(home));
     assert.strictEqual(actual._tag, "CredentialsUnusable");
   }).pipe(Effect.provide(testPlatformLayer)),
 );

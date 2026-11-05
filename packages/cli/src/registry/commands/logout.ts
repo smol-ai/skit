@@ -2,12 +2,23 @@ import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
 import { handleRegistryCommand } from "../../commands/handler.js";
-import { authLogoutCommand } from "../auth.js";
+import { Registry } from "../index.js";
 import { CommandMetadata, credentialStoreSubprocesses } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homeFlag, jsonFlag } from "../../commands/parameters.js";
 import { Renderer } from "../../terminal/renderer.js";
 import { result } from "../../commands/result.js";
+
+export const authLogoutCommand = Effect.fn("CLI.authLogout")(function* (
+  home?: string,
+  selectedOrigin?: string,
+) {
+  const renderer = yield* Renderer;
+  return yield* renderer.withStatus(
+    "Revoking CLI credential",
+    Effect.scoped(Registry.logout(home, selectedOrigin)),
+  );
+});
 
 const origin = Argument.String("origin").pipe(Argument.optional);
 

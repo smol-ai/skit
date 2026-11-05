@@ -6,7 +6,7 @@ import { ConfigProvider, Effect, FileSystem, Layer, Schema } from "effect";
 import { HttpClientResponse } from "effect/http";
 import {
   addRegistryRemote,
-  authStatusCommand,
+  registryStatus,
   loginEffect,
   logoutEffect,
   resolveLoginTarget,
@@ -756,7 +756,7 @@ describe("CLI authentication journey", () => {
         },
         successfulServer(requests),
       );
-      const status = yield* authStatusCommand(home).pipe(withEnvironment(environmentCredential));
+      const status = yield* registryStatus(home).pipe(withEnvironment(environmentCredential));
       expect(status.credentials).toMatchObject([
         { origin: "https://stored.example", source: "stored" },
         { origin: "https://environment.example", source: "environment" },

@@ -130,8 +130,8 @@ export const owners = {
       "exported resolveAuth / resolveAuthForOrigin (7 bypassing callers)",
       "credential-store.ts as a public module (private to Registry)",
       "borrowing the Library lock via withConfigurationWriter (removed; takes HomeLock.withLock)",
-      "unlocked savePendingLogin/clearPendingLogin, orchestrated in handlers/auth/login.ts",
-      "CLI.* command functions living inside registry/auth.ts",
+      "unlocked savePendingLogin/clearPendingLogin (removed; Registry.prepareDeviceLogin/completeDeviceLogin own atomic pending writes and matching-code cleanup, polling outside the writer)",
+      "CLI.* command functions living inside registry/auth.ts (removed; Registry.status/logout are owner operations, rendering lives in commands/)",
     ],
   },
 

@@ -9,12 +9,7 @@ import {
 } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homeFlag, jsonFlag } from "../../commands/parameters.js";
-import {
-  addRegistryRemote,
-  defaultRegistryRemote,
-  listRegistryRemotes,
-  removeRegistryRemote,
-} from "../auth.js";
+import { Registry } from "../index.js";
 import { Renderer } from "../../terminal/renderer.js";
 import { result } from "../../commands/result.js";
 
@@ -32,7 +27,7 @@ export const registryAddCliCommand = Command.make(
       return yield* handlePlatformCommand(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
-          const value = yield* addRegistryRemote(name, origin, selectedHome);
+          const value = yield* Registry.remotes.add(name, origin, selectedHome);
           yield* renderer.result(result("registryRemote", { ...value, action: "added" }));
         }),
       );
@@ -62,7 +57,7 @@ export const registryListCliCommand = Command.make(
       return yield* handlePlatformCommand(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
-          const registries = yield* listRegistryRemotes(selectedHome);
+          const registries = yield* Registry.remotes.list(selectedHome);
           yield* renderer.result(result("registryList", { registries }));
         }),
       );
@@ -92,7 +87,7 @@ export const registryDefaultCliCommand = Command.make(
       return yield* handlePlatformCommand(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
-          const value = yield* defaultRegistryRemote(name, selectedHome);
+          const value = yield* Registry.remotes.setDefault(name, selectedHome);
           yield* renderer.result(
             result("registryRemote", {
               ...value,
@@ -127,7 +122,7 @@ export const registryRemoveCliCommand = Command.make(
       return yield* handlePlatformCommand(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
-          const value = yield* removeRegistryRemote(name, selectedHome);
+          const value = yield* Registry.remotes.remove(name, selectedHome);
           yield* renderer.result(
             result("registryRemote", {
               ...value,

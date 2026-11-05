@@ -2,7 +2,7 @@ import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
 import { Option, Effect } from "effect";
 import { Command } from "effect/cli";
 import { handlePlatformCommand } from "../../commands/handler.js";
-import { authStatusCommand } from "../auth.js";
+import { Registry } from "../index.js";
 import { CommandMetadata, credentialStoreReadSubprocesses } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homeFlag, jsonFlag, optionalString, optionValue } from "../../commands/parameters.js";
@@ -24,7 +24,7 @@ export const authStatusCliCommand = Command.make(
       return yield* handlePlatformCommand(
         Effect.gen(function* () {
           const renderer = yield* Renderer;
-          const value = yield* authStatusCommand(selectedHome, optionValue(registry));
+          const value = yield* Registry.status(selectedHome, optionValue(registry));
           yield* renderer.result(result("authStatus", value));
         }),
       );

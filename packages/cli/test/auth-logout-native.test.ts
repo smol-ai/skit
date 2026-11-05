@@ -3,7 +3,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer } from "effect";
 import type { HttpClientRequest } from "effect/http";
 import { join } from "node:path";
-import { authLogoutCommand } from "../src/registry/auth.js";
+import { authLogoutCommand } from "../src/registry/commands/logout.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer } from "./helpers/http-test-client.js";
 import { rendererTestLayer } from "./helpers/renderer.js";

@@ -2,17 +2,7 @@ import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
 import { Effect, Option, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleRegistryCommand } from "../../commands/handler.js";
-import {
-  awaitDeviceApproval,
-  clearPendingLogin,
-  loginEffect,
-  type PendingDeviceLogin,
-  readPendingLogin,
-  resolveLoginTarget,
-  reuseLogin,
-  savePendingLogin,
-  startDeviceLogin,
-} from "../auth.js";
+import { Registry, type PendingDeviceLogin } from "../index.js";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { SelectionCancelled } from "../../terminal/interaction-failures.js";
 import { CommandMetadata, credentialStoreSubprocesses } from "../../commands/metadata.js";
@@ -72,10 +62,10 @@ export const authLoginCommand = Effect.fn("CLI.authLogin")(
       return yield* new ScopesInvalid({
         allowed: ["library:sync", "authoring:write", "publication:write"],
       });
-    const origin = yield* resolveLoginTarget(options.registry, options.home);
+    const origin = yield* Registry.loginTarget(options.registry, options.home);
     if (!options.relogin) {
       const existing = yield* Effect.scoped(
-        reuseLogin({
+        Registry.reuseLogin({
           origin,
           scopes,
           alias: options.alias,
@@ -106,7 +96,7 @@ export const authLoginCommand = Effect.fn("CLI.authLogin")(
       method: { email: string; password: string } | { approvedSessionToken: string },
     ) =>
       Effect.scoped(
-        loginEffect({
+        Registry.login({
           origin,
           ...method,
           scopes: [...scopes],
@@ -115,17 +105,17 @@ export const authLoginCommand = Effect.fn("CLI.authLogin")(
         }),
       );
     /** Show the code, wait for approval outside the configuration writer, then mint and store. */
-    const deviceLogin = (pending?: PendingDeviceLogin) =>
+    const deviceLogin = (pending: PendingDeviceLogin) =>
       renderer.withStatus(
         "Signing in",
         Effect.gen(function* () {
-          const started = pending ?? (yield* Effect.scoped(startDeviceLogin({ origin, scopes })));
-          yield* announce(started);
-          const approvedSessionToken = yield* Effect.scoped(awaitDeviceApproval(started, scopes));
-          // Redemption consumes the device code. Later credential failures must start a fresh
-          // login instead of retrying a code the Registry can no longer accept.
-          yield* clearPendingLogin(options.home);
-          return yield* login({ approvedSessionToken });
+          yield* announce(pending);
+          return yield* Registry.completeDeviceLogin({
+            pending,
+            scopes,
+            alias: options.alias,
+            home: options.home,
+          });
         }),
       );
     const promptForPassword = Effect.gen(function* () {
@@ -137,23 +127,20 @@ export const authLoginCommand = Effect.fn("CLI.authLogin")(
     });
     if (!(options.browserApproval ?? options.interactive)) return yield* promptForPassword;
 
-    const pending = yield* readPendingLogin(origin, options.home);
-    if (pending)
-      return yield* deviceLogin(pending).pipe(
-        Effect.catchTag("DeviceLoginEnded", (ended) =>
-          clearPendingLogin(options.home).pipe(Effect.andThen(Effect.fail(ended))),
-        ),
-      );
-    if (options.interactive)
-      return yield* deviceLogin().pipe(
-        Effect.catchTag("DeviceLoginUnavailable", () => promptForPassword),
-      );
-    // An agent's user sees its command's output only once the command ends, so start the login,
-    // hand back the code, and leave waiting for approval to the next run.
-    const started = yield* startDeviceLogin({ origin, scopes }).pipe(
-      Effect.catchTag("DeviceLoginUnavailable", () => new InteractiveLoginUnavailable()),
+    const prepared = yield* Registry.prepareDeviceLogin({
+      origin,
+      scopes,
+      home: options.home,
+    }).pipe(
+      Effect.catchTag("DeviceLoginUnavailable", () =>
+        options.interactive ? promptForPassword : new InteractiveLoginUnavailable(),
+      ),
     );
-    yield* savePendingLogin(started, options.home);
+    // Password fallback is already complete; a prepared browser login is ready to show or resume.
+    if (!("pending" in prepared)) return prepared;
+    const { pending: started, resumed } = prepared;
+    if (resumed || options.interactive) return yield* deviceLogin(started);
+    // An agent sees the code once this command ends; its next run resumes through the owner.
     return {
       origin,
       userCode: displayUserCode(started.userCode),
