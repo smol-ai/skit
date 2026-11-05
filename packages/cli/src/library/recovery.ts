@@ -1,15 +1,15 @@
 import { Cause, Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
 import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
-import { handleLibraryCommand, commandFailure } from "../../commands/handler.js";
+import { handleLibraryCommand, commandFailure } from "../commands/handler.js";
 
-import { CommandMetadata } from "../../commands/metadata.js";
-import { outputContracts } from "../../commands/output-contracts.js";
-import { recoveryActions } from "../../commands/recovery-contract.js";
-import { homeFlag, jsonFlag, optionalString } from "../../commands/parameters.js";
+import { CommandMetadata } from "../commands/metadata.js";
+import { recoveryOutputContracts } from "./recovery/output.js";
+import { recoveryActions } from "./recovery/output.js";
+import { homeFlag, jsonFlag, optionalString } from "../commands/parameters.js";
 import { Library } from "@smolai/skit-core/library";
-import { Renderer } from "../../terminal/renderer.js";
-import { result } from "../../commands/result.js";
+import { Renderer } from "../terminal/renderer.js";
+import { encodeResult as result } from "../commands/encode-result.js";
 
 const flags = { home: homeFlag, json: jsonFlag };
 const operation = Argument.String("operation");
@@ -27,7 +27,7 @@ const list = Command.make("list", flags, (input) =>
       const operations = yield* library.recovery.list;
       const renderer = yield* Renderer;
       yield* renderer.result(
-        result("recoveryList", {
+        result("recoveryList", recoveryOutputContracts.recoveryList, {
           operations: operations.map((operationId) => ({
             operationId,
             actions: recoveryActions(home, operationId).filter(
@@ -44,7 +44,7 @@ const list = Command.make("list", flags, (input) =>
   ),
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read"] },
-    outputSchemas: [outputContracts.recoveryList],
+    outputSchemas: [recoveryOutputContracts.recoveryList],
     exitCodes: [0, 11, 12, 64],
     interactive: false,
   }),
@@ -59,7 +59,7 @@ const inspect = Command.make("inspect", { operation, ...flags }, (input) =>
       const inspection = yield* library.recovery.inspect(input.operation);
       const renderer = yield* Renderer;
       yield* renderer.result(
-        result("recovery", {
+        result("recovery", recoveryOutputContracts.recovery, {
           ...inspection,
           phase: "inspection",
           actions: recoveryActions(home, input.operation),
@@ -73,7 +73,7 @@ const inspect = Command.make("inspect", { operation, ...flags }, (input) =>
   ),
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read"] },
-    outputSchemas: [outputContracts.recovery],
+    outputSchemas: [recoveryOutputContracts.recovery],
     exitCodes: [0, 11, 12, 64],
     interactive: false,
   }),
@@ -93,7 +93,7 @@ const restore = Command.make("restore", { operation, apply, ...flags }, (input) 
       const approved = Option.getOrUndefined(input.apply);
       if (approved === undefined)
         return yield* renderer.result(
-          result("recovery", {
+          result("recovery", recoveryOutputContracts.recovery, {
             ...plan.change,
             phase: "preview",
             actions: recoveryActions(
@@ -109,6 +109,7 @@ const restore = Command.make("restore", { operation, apply, ...flags }, (input) 
         return yield* renderer.result(
           result(
             "recovery",
+            recoveryOutputContracts.recovery,
             {
               ...plan.change,
               phase: "stale",
@@ -130,6 +131,7 @@ const restore = Command.make("restore", { operation, apply, ...flags }, (input) 
       yield* renderer.result(
         result(
           "recovery",
+          recoveryOutputContracts.recovery,
           {
             ...inspection,
             phase: failed
@@ -154,7 +156,7 @@ const restore = Command.make("restore", { operation, apply, ...flags }, (input) 
   Command.withExamples([{ command: "skit library recovery restore OPERATION --json" }]),
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read", "filesystem.write"] },
-    outputSchemas: [outputContracts.recovery],
+    outputSchemas: [recoveryOutputContracts.recovery],
     exitCodes: [0, 11, 12, 64],
     interactive: false,
   }),
@@ -166,3 +168,7 @@ export const libraryRecoveryCliCommand = Command.make("recovery").pipe(
   ),
   Command.withSubcommands([list, inspect, restore]),
 );
+
+export { recoveryOutputContracts } from "./recovery/output.js";
+export { recoveryActions } from "./recovery/output.js";
+export { renderRecovery, renderRecoveryList } from "./recovery/present.js";

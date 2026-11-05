@@ -24,8 +24,8 @@ import {
   renderSetupFailed,
   renderSetupUndo,
 } from "../library/setup.js";
-import { renderRecoveryList, renderRecovery } from "../library/presentation/recovery.js";
-import { renderLibraryHistory } from "../library/presentation/history.js";
+import { renderRecoveryList, renderRecovery } from "../library/recovery.js";
+import { renderLibraryHistory } from "../library/history.js";
 import { renderProjectionRetention, renderProjectionRetentionPlan } from "../library/update.js";
 
 type ContractPresenters = {

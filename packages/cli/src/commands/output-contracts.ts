@@ -4,7 +4,6 @@ import {
   AuthorSkitSummary,
   Hash,
   InvocationMetadataGeneration,
-  LibraryAuditEvent,
   releasePublishResponseSchema,
   SkillAssessmentDecision,
   SkillAudit,
@@ -16,7 +15,8 @@ import { VersionReport } from "../releases.js";
 import { Schema } from "effect";
 import { setupOutputContracts } from "../library/setup.js";
 import { enableOutputContracts } from "../library/enable.js";
-import { RecoveryList, RecoveryOutput } from "./recovery-contract.js";
+import { recoveryOutputContracts } from "../library/recovery.js";
+import { historyOutputContracts } from "../library/history.js";
 import { AuditReportV1Alpha4 } from "@smolai/skit-core/audit";
 import { HarnessProbeReport } from "@smolai/skit-core/harnesses";
 import { RegistryRemoteChange, RegistryRemoteList } from "../registry/contracts.js";
@@ -58,8 +58,8 @@ export const outputContracts = {
   setupComparison: setupOutputContracts.setupComparison,
   setupReview: setupOutputContracts.setupReview,
   setupFailed: setupOutputContracts.setupFailed,
-  recoveryList: effectOutput("skit.recovery.list.v1", RecoveryList),
-  recovery: effectOutput("skit.recovery.v1", RecoveryOutput),
+  recoveryList: recoveryOutputContracts.recoveryList,
+  recovery: recoveryOutputContracts.recovery,
   usage: effectOutput("skit.usage.v4", UsageReport),
   versionReport: effectOutput("skit.version.v2", VersionReport),
   version: effectOutput("skit.version.v1", Schema.Struct({ version: Schema.String })),
@@ -128,10 +128,7 @@ export const outputContracts = {
   publish: effectOutput("skit.publish.v1", releasePublishResponseSchema),
   sync: effectOutput("skit.author.sync.v5", AuthorSyncResult),
   librarySync: syncOutputContracts.librarySync,
-  libraryHistory: effectOutput(
-    "skit.library.history.v1",
-    Schema.Struct({ events: Schema.Array(LibraryAuditEvent) }),
-  ),
+  libraryHistory: historyOutputContracts.libraryHistory,
   setup: setupOutputContracts.setup,
   setupApplied: setupOutputContracts.setupApplied,
   repositoryPolicy: effectOutput("skit.repository.policy.v1", RepositoryPolicyResult),

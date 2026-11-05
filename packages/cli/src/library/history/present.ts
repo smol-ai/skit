@@ -1,8 +1,6 @@
-import { type ContractData, type ContractDataForId } from "../../commands/output-contracts.js";
+import type { HistoryResult } from "./output.js";
 
-const renderLibraryHistoryEvent = (
-  event: ContractDataForId<"skit.library.history.v1">["events"][number],
-) => {
+const renderLibraryHistoryEvent = (event: HistoryResult["events"][number]) => {
   const actions = new Map<string, number>();
   for (const change of event.changes)
     actions.set(change.action, (actions.get(change.action) ?? 0) + 1);
@@ -14,7 +12,7 @@ const renderLibraryHistoryEvent = (
   return `${event.occurredAt}  ${event.type}  ${count}${summary ? ` · ${summary}` : ""}`;
 };
 
-export const renderLibraryHistory = (data: ContractData<"libraryHistory">) =>
+export const renderLibraryHistory = (data: HistoryResult) =>
   data.events.length
     ? data.events.map(renderLibraryHistoryEvent).join("\n")
     : "No Library history recorded.";

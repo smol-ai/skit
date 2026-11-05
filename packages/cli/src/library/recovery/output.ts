@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { RecoveryInspection } from "@smolai/skit-core";
 
-import { CommandAction } from "./command-actions.js";
+import { CommandAction } from "../../commands/command-actions.js";
 
 export const RecoveryList = Schema.Struct({
   operations: Schema.Array(
@@ -48,3 +48,11 @@ export function recoveryActions(home: string, operationId: string, previewPlanId
       : []),
   ];
 }
+
+export type RecoveryList = typeof RecoveryList.Type;
+export type RecoveryOutput = typeof RecoveryOutput.Type;
+
+export const recoveryOutputContracts = {
+  recoveryList: { id: "skit.recovery.list.v1", schema: RecoveryList },
+  recovery: { id: "skit.recovery.v1", schema: RecoveryOutput },
+} as const;

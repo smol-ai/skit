@@ -21,8 +21,8 @@ import {
   repositoryListCliCommand,
   repositoryWatchCliCommand,
 } from "../library/commands/repository.js";
-import { libraryRecoveryCliCommand } from "../library/commands/recovery.js";
-import { libraryHistoryCliCommand } from "../library/commands/history.js";
+import { libraryRecoveryCliCommand } from "../library/recovery.js";
+import { libraryHistoryCliCommand } from "../library/history.js";
 import { versionCliCommand } from "./version.js";
 import { feedbackSendCliCommand } from "../feedback.js";
 import {

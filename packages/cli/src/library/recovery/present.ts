@@ -1,11 +1,11 @@
-import { type ContractData } from "../../commands/output-contracts.js";
+import type { RecoveryList, RecoveryOutput } from "./output.js";
 
-export const renderRecoveryList = (data: ContractData<"recoveryList">) =>
+export const renderRecoveryList = (data: RecoveryList) =>
   data.operations.length
     ? data.operations.map((operation) => operation.operationId).join("\n")
     : "No saved-file recovery operations.";
 
-export const renderRecovery = (data: ContractData<"recovery">) =>
+export const renderRecovery = (data: RecoveryOutput) =>
   [
     `File recovery: ${data.phase} (Library bindings and settings are unchanged)`,
     ...data.entries.map(
