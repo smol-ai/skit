@@ -93,3 +93,5 @@ export { SyncChanges, SyncChange, SyncEnabledItem } from "./sync-changes.js";
 
 // Canonical read-query errors keep inferred frontend declarations portable.
 export type { LibrarySubjectNotFound, LibrarySubjectAmbiguous } from "./subject-resolution.js";
+
+export type { CleanupBudget, CleanupCandidate } from "./internal/session/cleanup-selection.js";

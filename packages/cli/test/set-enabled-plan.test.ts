@@ -42,10 +42,7 @@ import {
 } from "@smolai/skit-core/library/session";
 
 import { presentDoctorCleanup } from "../src/library/doctor/cleanup.js";
-import {
-  suggestDoctorCleanup,
-  openDoctorCleanupSelection,
-} from "../src/library/doctor/selection.js";
+import { openDoctorCleanupSelection } from "../src/library/doctor/selection.js";
 import { usageStory } from "../src/storybook/usage-stories.js";
 import { presentSetEnabled } from "../src/library/enable.js";
 import { libraryCommandConfiguration } from "../src/commands/library-configuration.js";
@@ -491,8 +488,9 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* cleanupFixture;
-      const suggest = (usage = f.usage) =>
-        suggestDoctorCleanup(f.state, [f.budget], usage, f.home.installOptions);
+      const selection = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
+      assert.isFalse(Object.hasOwn(selection, "state"));
+      const suggest = (usage = f.usage) => selection.suggestCleanup([f.budget], usage);
       assert.deepStrictEqual(
         suggest().map((c) => [c.name, c.selected]),
         [
@@ -745,8 +743,8 @@ it.effect(
           p.skill_id === state.skills.find((s) => s.name === "alpha")?.skill_id,
       );
       assert.ok(local);
-      const candidates = suggestDoctorCleanup(
-        state,
+      const selection = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
+      const candidates = selection.suggestCleanup(
         [
           {
             ...f.budget,
@@ -754,7 +752,6 @@ it.effect(
           },
         ],
         f.usage,
-        f.home.installOptions,
       );
       assert.strictEqual(candidates.length, 1);
       assert.deepStrictEqual(candidates[0]?.scope, scope);

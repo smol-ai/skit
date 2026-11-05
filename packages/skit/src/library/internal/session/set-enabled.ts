@@ -13,10 +13,17 @@ import { failureDetails } from "../../../shared/failure.js";
 import { setEnabledResults, SetEnabledChange, SetEnabledResult } from "./set-enabled-contract.js";
 
 import { canonicalJson } from "../../../shared/json.js";
-import { emptyLibraryState, type LibraryState } from "../../library-state.js";
+import { emptyLibraryState } from "../../library-state.js";
 import type { Snapshot } from "../../snapshot.js";
 import { resolveLibrarySubject } from "../../subject-resolution.js";
 import { libraryView } from "./library-view.js";
+
+import {
+  suggestDoctorCleanup,
+  type CleanupBudget,
+  type CleanupCandidate,
+} from "./cleanup-selection.js";
+import type { UsageReport } from "../../usage/contracts.js";
 
 export type SetEnabledConfiguration = InventoryRootOptions;
 
@@ -66,7 +73,10 @@ type SelectionRequirements = never;
 export interface LibraryChangeSelection {
   readonly configuration: SetEnabledConfiguration;
   readonly home: string;
-  readonly state: LibraryState;
+  readonly suggestCleanup: (
+    budgets: readonly CleanupBudget[],
+    usage: UsageReport,
+  ) => readonly CleanupCandidate[];
   readonly view: ReturnType<typeof libraryView>;
   readonly planMany: (
     intents: readonly SetEnabledIntent[],
@@ -162,7 +172,7 @@ function libraryChangeSelection(
   return {
     configuration: routing,
     home,
-    state,
+    suggestCleanup: (budgets, usage) => suggestDoctorCleanup(state, budgets, usage, routing),
     view: libraryView(state, originalsPath),
     planMany,
     plan: (intent: SetEnabledIntent, configuration: SetEnabledConfiguration) =>
