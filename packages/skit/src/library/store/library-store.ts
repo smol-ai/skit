@@ -69,10 +69,21 @@ const historyWorkflow = Effect.map(References.CurrentLogAnnotations, (annotation
   return typeof workflow === "string" ? workflow : "unattributed";
 });
 
-/** Retry is safe: undelivered events remain in the same durable file as the Library state. */
+/**
+ * Expected delivery failures are best-effort: the durable queue retains their events for retry.
+ * Defects and interruption still escape, including from the post-write finalizer. Such an exit
+ * does not undo a published Library state; recovery can deliver its recorded event on the next healthy open.
+ */
 export const recoverLibraryHistory = (home: string, actionId?: OperationId) =>
   deliverLibraryHistory(home, actionId).pipe(
-    Effect.catchCause((cause) => Effect.logWarning("Library history delivery is pending", cause)),
+    Effect.catchTags({
+      PlatformError: (error) => Effect.logWarning("Library history delivery is pending", error),
+      InvalidLibraryState: (error) =>
+        Effect.logWarning("Library history delivery is pending", error),
+      LibraryAuditInvalid: (error) =>
+        Effect.logWarning("Library history delivery is pending", error),
+      HomeBusy: (error) => Effect.logWarning("Library history delivery is pending", error),
+    }),
   );
 
 /**

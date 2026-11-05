@@ -1,6 +1,7 @@
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Option, Schema } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Option, Schema } from "effect";
 import { join } from "node:path";
+import { systemError } from "effect/PlatformError";
 import * as Library from "../src/library/library.js";
 import { LibraryState } from "../src/library/library-state.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
@@ -9,6 +10,7 @@ import {
   inspectLocalLibraryState,
   writeLibrary,
   LibraryWriter,
+  recoverLibraryHistory,
 } from "../src/library/store/library-store.js";
 import { snapshotOf } from "../src/library/snapshot.js";
 import { skitLayer } from "../src/platform/layer.js";
@@ -90,7 +92,8 @@ for (const boundary of ["state", "before-log", "after-log", "after-ack"] as cons
         Effect.provide(f.layer.pipe(Layer.provide(Layer.succeed(FileSystem.FileSystem, files)))),
       );
       const outcome = yield* Effect.exit(owner.import.collection(f.request));
-      assert.strictEqual(outcome._tag, boundary === "state" ? "Failure" : "Success");
+      assert.strictEqual(outcome._tag, "Failure");
+      if (Exit.isFailure(outcome)) assert.isTrue(Cause.hasDies(outcome.cause));
       assert.isTrue(interrupted);
       const beforeText = yield* f.fs.readFileString(f.statePath);
       const before = snapshotOf(yield* inspectLocalLibraryState(f.home));
@@ -263,5 +266,129 @@ it.effect("refuses an unsupported delivery format without changing its state fil
       "InvalidLibraryState",
     );
     assert.strictEqual(yield* f.fs.readFileString(f.statePath), invalid);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+for (const failure of ["storage", "defect"] as const)
+  it.effect(`retains committed state and settles the writer after history ${failure}`, () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const defect = new Error("history publication defect");
+      const files: FileSystem.FileSystem = {
+        ...f.fs,
+        rename: (from, to) =>
+          to === f.logPath
+            ? failure === "storage"
+              ? Effect.fail(
+                  systemError({
+                    _tag: "PermissionDenied",
+                    module: "FileSystem",
+                    method: "rename",
+                    pathOrDescriptor: to,
+                  }),
+                )
+              : Effect.die(defect)
+            : f.fs.rename(from, to),
+      };
+      const owner = yield* Effect.flatMap(Library.Service, Effect.succeed).pipe(
+        Effect.provide(f.layer.pipe(Layer.provide(Layer.succeed(FileSystem.FileSystem, files)))),
+      );
+      const exit = yield* Effect.exit(owner.import.collection(f.request));
+      assert.strictEqual(exit._tag, failure === "storage" ? "Success" : "Failure");
+      if (Exit.isFailure(exit))
+        assert.isTrue(
+          exit.cause.reasons.some(
+            (reason) => Cause.isDieReason(reason) && reason.defect === defect,
+          ),
+        );
+      const committed = yield* inspectLocalLibraryState(f.home);
+      assert.isTrue(committed.present);
+      if (committed.present) assert.strictEqual(committed.state.collections.length, 1);
+      const revision = snapshotOf(committed).revision;
+      const queued = (yield* readEnvelope(yield* f.fs.readFileString(f.statePath))).historyDelivery;
+      assert.strictEqual(queued?.pending.length, 1);
+      if (failure === "defect") {
+        // Startup recovery must expose the same defect, rather than hiding it as a warning.
+        const startup = yield* Effect.exit(
+          Effect.flatMap(Library.Service, Effect.succeed).pipe(
+            Effect.provide(
+              f.layer.pipe(Layer.provide(Layer.succeed(FileSystem.FileSystem, files))),
+            ),
+          ),
+        );
+        assert.isTrue(Exit.isFailure(startup) && Cause.hasDies(startup.cause));
+      }
+      // Acquiring a fresh writer proves both the home and replacement locks settled.
+      yield* writeLibrary(f.home, Effect.void);
+      yield* Effect.gen(function* () {
+        const recovered = yield* Library.Service;
+        assert.strictEqual((yield* recovered.read).revision, revision);
+        assert.strictEqual((yield* recovered.history).events.length, 1);
+        assert.strictEqual(
+          (yield* recovered.history).events[0]?.eventId,
+          queued?.pending[0]?.event.eventId,
+        );
+      }).pipe(Effect.provide(f.layer));
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  );
+
+it.effect("preserves caller interruption after committed state and settles history locks", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const committed = yield* Deferred.make<void>();
+    const owner = yield* Effect.flatMap(Library.Service, Effect.succeed).pipe(
+      Effect.provide(f.layer),
+    );
+    const writing = yield* writeLibrary(
+      f.home,
+      Effect.gen(function* () {
+        yield* owner.import.collection(f.request);
+        yield* Deferred.succeed(committed, undefined);
+        yield* Effect.never;
+      }),
+    ).pipe(Effect.forkChild);
+    yield* Deferred.await(committed);
+    yield* Fiber.interrupt(writing);
+    const exit = yield* Fiber.await(writing);
+    assert.isTrue(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause));
+    yield* writeLibrary(f.home, Effect.void);
+    const after = yield* owner.read;
+    assert.strictEqual(after._tag, "Present");
+    if (after._tag === "Present") assert.strictEqual(after.state.collections.length, 1);
+    assert.strictEqual((yield* owner.history).events.length, 1);
+    assert.isUndefined(
+      (yield* readEnvelope(yield* f.fs.readFileString(f.statePath))).historyDelivery,
+    );
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("does not recover an interrupted history delivery as a successful retry", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    // A known storage failure keeps a committed event queued.
+    yield* f.fs.makeDirectory(f.logPath, { recursive: true });
+    yield* Effect.flatMap(Library.Service, (owner) => owner.import.collection(f.request)).pipe(
+      Effect.provide(f.layer),
+    );
+    yield* f.fs.remove(f.logPath, { recursive: true });
+    const exit = yield* Effect.exit(
+      recoverLibraryHistory(f.home).pipe(
+        Effect.provideService(FileSystem.FileSystem, {
+          ...f.fs,
+          readFileString: (path, ...args) =>
+            path === f.logPath ? Effect.interrupt : f.fs.readFileString(path, ...args),
+        }),
+      ),
+    );
+    assert.isTrue(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause));
+    assert.strictEqual(
+      (yield* readEnvelope(yield* f.fs.readFileString(f.statePath))).historyDelivery?.pending
+        .length,
+      1,
+    );
+    yield* recoverLibraryHistory(f.home);
+    assert.isUndefined(
+      (yield* readEnvelope(yield* f.fs.readFileString(f.statePath))).historyDelivery,
+    );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
