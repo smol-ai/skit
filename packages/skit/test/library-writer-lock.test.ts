@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { expect } from "vitest";
 import { withLock as withHomeLock } from "../src/platform/home-lock.js";
 import { acquireFileLock } from "../src/platform/file-lock.js";
-import { skitLayer } from "../src/index.js";
+import { skitLayer } from "../src/platform/layer.js";
 
 /** Whether another holder could take the home lock now. */
 const lockIsFree = (home: string) =>

@@ -5,16 +5,18 @@ import { skitLayer } from "../src/platform/layer.js";
 import { invocationMetadataAdapters } from "../src/harnesses/invocation-metadata.js";
 import { join } from "node:path";
 import { expect, test } from "vitest";
+import { applyInvocationPolicy } from "../src/installed-skills/policy.js";
 import {
-  applyInvocationPolicy,
   assessInvocationConformance,
-  createSkitArchive,
+  resolveDeclaredInvocation,
+} from "../src/invocation/conformance.js";
+import { createSkitArchive } from "../src/artifact/archive.js";
+import {
   generateInvocationMetadata,
   isAuthorWorkspace,
-  resolveDeclaredInvocation,
-  validateSkitDirectory,
-  type InvocationPolicy,
-} from "../src/index.js";
+} from "../src/author/invocation/generation.js";
+import { validateSkitDirectory } from "../src/artifact/skit.js";
+import { type InvocationPolicy } from "../src/artifact/invocation-policy.js";
 
 const CODEX_PATH = "skills/review/agents/openai.yaml";
 const CODEX = join("skills", "review", "agents", "openai.yaml");

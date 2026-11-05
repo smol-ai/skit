@@ -1,7 +1,10 @@
 import { expect, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { deterministicTreeHash, LinkStat, scanAuthorTree, skitLayer } from "../src/index.js";
+import { deterministicTreeHash } from "../src/artifact/skit.js";
+import { LinkStat } from "../src/platform/link-stat.js";
+import { scanAuthorTree } from "../src/artifact/tree.js";
+import { skitLayer } from "../src/platform/layer.js";
 
 it.effect("physical identity changes do not change the content hash or native filename", () =>
   Effect.gen(function* () {

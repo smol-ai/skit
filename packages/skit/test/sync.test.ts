@@ -3,16 +3,13 @@ import { describe, expect, it } from "@effect/vitest";
 import { Data, DateTime, Effect, Option, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { describe as group, expect as check, test } from "vitest";
-import {
-  FailureTypeId,
-  History,
-  mergeAuthorTree,
-  makeMachineId,
-  Sync,
-  type SkitFailure,
-  type Merge,
-  type TreeEntry,
-} from "../src/index.js";
+import * as History from "../src/history/history.js";
+import * as Sync from "../src/sync/sync.js";
+import type * as Merge from "../src/sync/merge.js";
+import { FailureTypeId, type SkitFailure } from "../src/shared/failure.js";
+import { mergeAuthorTree } from "../src/author/merge/files.js";
+import { makeMachineId } from "../src/library/entity-ids.js";
+import { type TreeEntry } from "../src/artifact/tree-entry.js";
 import { memoryStore } from "./helpers/memory-store.js";
 
 const file = (path: string, text: string): TreeEntry => ({

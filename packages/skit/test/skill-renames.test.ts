@@ -2,7 +2,10 @@ import { join, relative } from "node:path";
 import { describe, expect, test } from "vitest";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { it } from "@effect/vitest";
-import { mergeAuthorTree, Merge, skitLayer, TreeFile } from "../src/index.js";
+import * as Merge from "../src/sync/merge.js";
+import { mergeAuthorTree } from "../src/author/merge/files.js";
+import { skitLayer } from "../src/platform/layer.js";
+import { TreeFile } from "../src/artifact/tree-entry.js";
 
 // Every pure skill rename in github.com/mattpocock/skills (MIT): one folder per rename, holding
 // the skill before and after. Regenerate with fixtures/skill-renames/extract.mjs.

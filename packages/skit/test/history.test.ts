@@ -1,7 +1,9 @@
 import { NodeCrypto } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Stream } from "effect";
-import { History, makeMachineId, type TreeEntry } from "../src/index.js";
+import * as History from "../src/history/history.js";
+import { makeMachineId } from "../src/library/entity-ids.js";
+import { type TreeEntry } from "../src/artifact/tree-entry.js";
 import { memoryStore } from "./helpers/memory-store.js";
 
 const device = makeMachineId();

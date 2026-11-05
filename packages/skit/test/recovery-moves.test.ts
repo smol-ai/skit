@@ -8,7 +8,9 @@ import { Effect, FileSystem } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { systemError } from "effect/PlatformError";
-import { LinkStat, skitLayer, deterministicTreeHash } from "../src/index.js";
+import { LinkStat } from "../src/platform/link-stat.js";
+import { skitLayer } from "../src/platform/layer.js";
+import { deterministicTreeHash } from "../src/artifact/skit.js";
 import {
   listRecoveryOperations,
   inspectRecoveryOperation,

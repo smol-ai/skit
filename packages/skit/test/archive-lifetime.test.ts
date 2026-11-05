@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { expect, vi } from "vitest";
 import { ZipFile } from "yazl";
-import { createSkitArchive, skitLayer } from "../src/index.js";
+import { createSkitArchive } from "../src/artifact/archive.js";
+import { skitLayer } from "../src/platform/layer.js";
 import { copySkitFixtureEffect } from "./helpers/skit-fixture.js";
 
 it.effect.each([

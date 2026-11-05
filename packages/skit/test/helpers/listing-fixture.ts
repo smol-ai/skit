@@ -1,5 +1,5 @@
 import { Effect, FileSystem } from "effect";
-import { makeMachineId } from "../../src/index.js";
+import { makeMachineId } from "../../src/library/entity-ids.js";
 import { join } from "node:path";
 export const nativeLibraryFixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;

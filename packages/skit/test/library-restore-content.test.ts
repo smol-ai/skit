@@ -5,18 +5,15 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { dirname, join } from "node:path";
-import {
-  readSnapshotArchive,
-  deterministicTreeHash,
-  libraryManifestFromLocalState,
-  makeMachineId,
-  planCollectionVersions,
-  type RestorePhase,
-  type RestoreTick,
-  collectionVersionPath,
-  SourceProcess,
-  type SnapshotArchive,
-} from "../src/index.js";
+import { readSnapshotArchive } from "../src/library/snapshot-archive.js";
+import { deterministicTreeHash } from "../src/artifact/skit.js";
+import { libraryManifestFromLocalState } from "../src/library/library-state.js";
+import { makeMachineId } from "../src/library/entity-ids.js";
+import { planCollectionVersions } from "../src/library/collection-version-plan.js";
+import { type RestorePhase, type RestoreTick } from "../src/library/restore-progress.js";
+import { collectionVersionPath } from "../src/library/collection-version.js";
+import { SourceProcess } from "../src/platform/source-process.js";
+import { type SnapshotArchive } from "../src/library/library-contracts.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 const origin = "https://registry.example";

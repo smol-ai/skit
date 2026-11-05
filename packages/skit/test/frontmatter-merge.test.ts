@@ -1,6 +1,8 @@
 import { DateTime, Option, Schema } from "effect";
 import { describe, expect, test } from "vitest";
-import { conflictKind, mergeAuthorTree, Merge, TreeFile } from "../src/index.js";
+import * as Merge from "../src/sync/merge.js";
+import { conflictKind, mergeAuthorTree } from "../src/author/merge/files.js";
+import { TreeFile } from "../src/artifact/tree-entry.js";
 
 const file = (text: string): TreeFile => {
   const bytes = new TextEncoder().encode(text);

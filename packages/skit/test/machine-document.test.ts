@@ -1,14 +1,14 @@
 import { Effect, FileSystem, Schema } from "effect";
 import { assert, it } from "@effect/vitest";
+import * as MachineSettings from "../src/library/machine-settings.js";
 import {
   LegacyMachineId,
-  MachineDocumentJson,
   makeMachineId,
   makeOperationId,
-  MachineSettings,
-  skitLayer,
   migratedMachineId,
-} from "../src/index.js";
+} from "../src/library/entity-ids.js";
+import { MachineDocumentJson } from "../src/library/machine-document.js";
+import { skitLayer } from "../src/platform/layer.js";
 
 import { join } from "node:path";
 

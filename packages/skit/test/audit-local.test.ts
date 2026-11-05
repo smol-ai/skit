@@ -5,13 +5,13 @@ import { describe, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem, Layer, Schema } from "effect";
 import * as TestClock from "effect/testing/TestClock";
+import { CURRENT_LIBRARY_STATE_VERSION } from "../src/library/library-state.js";
 import {
-  CURRENT_LIBRARY_STATE_VERSION,
   makeCollectionId,
   makeInstalledSkillId,
   makeSkillId,
   makeSkillVersionId,
-} from "@smolai/skit-core";
+} from "../src/library/entity-ids.js";
 import { auditLocalCapabilities, auditLocalCapabilitiesV1Alpha4 } from "../src/auditing/local.js";
 import { AuditReportV1Alpha4 } from "../src/auditing/schema.js";
 import { normalizeAuditReport } from "../src/auditing/normalize.js";

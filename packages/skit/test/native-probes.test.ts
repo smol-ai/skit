@@ -6,7 +6,7 @@
 // the TUI composes the same Effect workflows on its own host runtime.
 
 import { join } from "node:path";
-import { skitLayer } from "@smolai/skit-core";
+import { skitLayer } from "../src/platform/layer.js";
 import { Deferred, Effect, Fiber, FileSystem, Schedule } from "effect";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";

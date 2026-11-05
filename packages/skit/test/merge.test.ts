@@ -1,6 +1,6 @@
 import { DateTime, Equivalence, Option } from "effect";
 import { describe, expect, test } from "vitest";
-import { Merge } from "../src/index.js";
+import * as Merge from "../src/sync/merge.js";
 
 const some = Option.some;
 const none = Option.none;

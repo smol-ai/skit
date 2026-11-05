@@ -2,7 +2,9 @@ import { it, expect } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Result } from "effect";
 import { systemError } from "effect/PlatformError";
 import { join } from "node:path";
-import { skitLayer, SourceProcess, walkAuthorTree } from "../src/index.js";
+import { skitLayer } from "../src/platform/layer.js";
+import { SourceProcess } from "../src/platform/source-process.js";
+import { walkAuthorTree } from "../src/artifact/tree.js";
 import { authorIgnoreRepositoryLayer } from "../src/artifact/plain-author-ignore.js";
 
 it.effect("plain Author scope honors native nested rules before reading bytes or descending", () =>

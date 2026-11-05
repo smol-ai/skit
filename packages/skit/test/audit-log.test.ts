@@ -3,7 +3,7 @@ import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { expect } from "vitest";
 import { makeOperationId } from "../src/library/entity-ids.js";
-import { skitLayer } from "../src/index.js";
+import { skitLayer } from "../src/platform/layer.js";
 import { appendLibraryAudit, readLibraryAudit } from "../src/library/audit/audit-log.js";
 
 it.effect("appends and reads validated JSONL events outside Library state", () =>

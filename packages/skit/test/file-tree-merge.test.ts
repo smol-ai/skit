@@ -1,6 +1,9 @@
 import { Option, Schema } from "effect";
 import { describe, expect, test } from "vitest";
-import { conflictKind, mergeAuthorTree, type History, Merge, TreeFile } from "../src/index.js";
+import type * as History from "../src/history/history.js";
+import * as Merge from "../src/sync/merge.js";
+import { conflictKind, mergeAuthorTree } from "../src/author/merge/files.js";
+import { TreeFile } from "../src/artifact/tree-entry.js";
 
 // An edit beats a deletion, then our version wins.
 const oursWins = Merge.prefer(Merge.present, Merge.always("ours"));

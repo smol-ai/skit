@@ -1,20 +1,20 @@
 import { Cause, Deferred, Effect, Fiber, FileSystem, Layer, Result, Stream } from "effect";
 import { it } from "@effect/vitest";
 import { ChildProcessSpawner } from "effect/process";
-import { skitLayer, sourceProcessLayer, validateSkitDirectory } from "../src/index.js";
+import { skitLayer } from "../src/platform/layer.js";
+import { sourceProcessLayer } from "../src/platform/source-process.js";
+import { validateSkitDirectory } from "../src/artifact/skit.js";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { expect, test, vi } from "vitest";
+import { deterministicTreeHash } from "../src/artifact/skit.js";
 import {
-  deterministicTreeHash,
   hashInstalledSkillFiles,
-  LinkStat,
   parseSkitConfig,
   parseSkitReadme,
-  inspectNormalizedTree,
-  walkTree,
-  walkAuthorTree,
-} from "../src/index.js";
+} from "../src/artifact/descriptor.js";
+import { LinkStat } from "../src/platform/link-stat.js";
+import { inspectNormalizedTree, walkTree, walkAuthorTree } from "../src/artifact/tree.js";
 import { invocationMetadataAdapters } from "../src/harnesses/invocation-metadata.js";
 import { copySkitFixtureEffect } from "./helpers/skit-fixture.js";
 

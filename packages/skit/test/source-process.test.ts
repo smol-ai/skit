@@ -1,6 +1,7 @@
 import { Deferred, Effect, Fiber, Predicate, Stream } from "effect";
 import { assert, it } from "@effect/vitest";
-import { SourceProcess, skitLayer } from "../src/index.js";
+import { SourceProcess } from "../src/platform/source-process.js";
+import { skitLayer } from "../src/platform/layer.js";
 import { execPath } from "node:process";
 
 it.effect("pipes binary chunks and closes stdin while draining both output streams", () =>

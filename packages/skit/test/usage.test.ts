@@ -3,7 +3,8 @@ import { expect, test } from "vitest";
 import { Clock, Deferred, Effect, Fiber, FileSystem, Stream } from "effect";
 import { join } from "node:path";
 import { zstdCompressSync } from "node:zlib";
-import { scanUsage, skitLayer } from "../src/index.js";
+import { scanUsage } from "../src/library/usage/scanner.js";
+import { skitLayer } from "../src/platform/layer.js";
 import {
   claudeTranscriptGrammar,
   codexTranscriptGrammar,

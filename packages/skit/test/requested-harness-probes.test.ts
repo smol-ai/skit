@@ -1,5 +1,5 @@
 import { assert, it } from "@effect/vitest";
-import { skitLayer } from "../src/index.js";
+import { skitLayer } from "../src/platform/layer.js";
 import { Effect } from "effect";
 import { probeRequestedHarnesses } from "../src/harnesses/index.js";
 

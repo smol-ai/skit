@@ -3,22 +3,17 @@ import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import {
-  enabledSkillIds,
-  currentSkillVersion,
-  MachineSettings,
-  skitLayer,
-  type LibraryState,
-  type Hash,
-} from "../src/index.js";
+import * as MachineSettings from "../src/library/machine-settings.js";
+import { enabledSkillIds, currentSkillVersion } from "../src/library/library-contracts.js";
+import { skitLayer } from "../src/platform/layer.js";
+import { type LibraryState } from "../src/library/library-state.js";
+import { type Hash } from "../src/shared/hash.js";
 import { reverseSetupIntent } from "../src/library/internal/setup/undo-intent.js";
-import {
-  deterministicTreeHash,
-  emptyLibraryState,
-  makeMachineId,
-  Library,
-  type ImportRequest,
-} from "../src/index.js";
+import * as Library from "../src/library/library.js";
+import { deterministicTreeHash } from "../src/artifact/skit.js";
+import { emptyLibraryState } from "../src/library/library-state.js";
+import { makeMachineId } from "../src/library/entity-ids.js";
+import { type ImportRequest } from "../src/library/import-collection.js";
 import { libraryLayer } from "./helpers/library-store.js";
 
 const machineId = makeMachineId();

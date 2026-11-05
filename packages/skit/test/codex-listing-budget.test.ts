@@ -8,9 +8,9 @@ import {
   makeInstalledSkillId,
   makeSkillId,
   makeSkillVersionId,
-  Hash,
-  AbsoluteDevicePath,
-} from "../src/index.js";
+} from "../src/library/entity-ids.js";
+import { Hash } from "../src/shared/hash.js";
+import { AbsoluteDevicePath } from "../src/library/device-state.js";
 import {
   estimateCodexListing,
   type CodexListingSkill,

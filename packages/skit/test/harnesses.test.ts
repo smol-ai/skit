@@ -1,19 +1,21 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, test } from "vitest";
+import { defaultSkillsRoot } from "../src/harnesses/default-roots.js";
+import { evaluateSkillFrontmatter } from "../src/harnesses/frontmatter.js";
 import {
-  defaultSkillsRoot,
-  evaluateSkillFrontmatter,
   harnessProfile,
   harnessProfileIds,
   skillsDirectory,
   installSkillsDirectory,
   resolveSkillsDirectory,
+} from "../src/harnesses/catalog.js";
+import {
   type HarnessDocumentationSource,
   type HarnessName,
   type HarnessProfile,
   type SkillsDirectory,
-} from "../src/index.js";
+} from "../src/harnesses/contracts.js";
 
 const harnessProfiles = Object.fromEntries(
   harnessProfileIds().map((id) => [id, harnessProfile(id)]),

@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { auditSkill, evaluateSkillAudit, skillFindingFingerprint } from "../src/index.js";
+import {
+  auditSkill,
+  evaluateSkillAudit,
+  skillFindingFingerprint,
+} from "../src/auditing/skill-audit.js";
 import { makeSkillVersionId } from "../src/library/entity-ids.js";
 
 describe("static capability evidence", () => {
