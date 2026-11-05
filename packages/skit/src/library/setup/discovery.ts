@@ -3,7 +3,6 @@ import { basename, join, posix, relative, resolve, sep } from "node:path";
 import { Effect, FileSystem, Result, Schema } from "effect";
 import { LinkStat } from "../../platform/link-stat.js";
 import { emptyLibraryState, type LibraryState } from "../library-state.js";
-import { harnessProfile, resolveSkillsDirectory } from "../../harnesses/catalog.js";
 import { inspectOwnershipMarker } from "../../installed-skills/files.js";
 import { scanInventory } from "../inventory/refresh.js";
 import { parseSkillFrontmatter } from "../../harnesses/frontmatter.js";
@@ -13,7 +12,6 @@ import { sourceLocator } from "../../sources/resolve.js";
 import { SourceIdentity } from "../library-contracts.js";
 import { SourceProcess } from "../../platform/source-process.js";
 import { HarnessName, type HarnessName as Harness } from "../../harnesses/contracts.js";
-import { type OperationId } from "../entity-ids.js";
 import * as MachineSettings from "../machine-settings.js";
 import { readSkillsLock } from "./skills-sh/lock-source.js";
 import { readableSkillsDirectories } from "../routing/duplicates.js";
@@ -258,17 +256,6 @@ const nearestRepository = (path: string, repositories: readonly string[]) =>
     .filter((repository) => pathIsWithin(repository, path))
     .sort((left, right) => right.length - left.length)[0];
 
-function catalogRoots(
-  harness: Harness,
-  scope: "global" | "project",
-  context: { home: string; configHome: string; repository?: string },
-): string[] {
-  if (scope === "project" && !context.repository) return [];
-  return harnessProfile(harness)
-    .roots.filter((root) => root.scope === scope && root.readable)
-    .map((root) => resolveSkillsDirectory(root, context));
-}
-
 const skillNameAt = Effect.fn("Setup.skillName")(function* (directory: string) {
   const fs = yield* FileSystem.FileSystem;
   const text = yield* fs
@@ -466,11 +453,11 @@ export const collectSkillsDirectories = (
     for (const { root } of readableSkillsDirectories(inventory, { kind: "global" }, [harness]))
       roots.push({ harness, scope: "global", root });
     for (const repository of repositories)
-      for (const root of catalogRoots(harness, "project", {
-        home: inventory.home,
-        configHome: inventory.configHome,
-        repository,
-      }))
+      for (const { root } of readableSkillsDirectories(
+        inventory,
+        { kind: "repository", root: repository },
+        [harness],
+      ))
         roots.push({ harness, scope: "project", root });
   }
   return roots;
@@ -639,31 +626,6 @@ const setupMachineScope = (options: SetupOptions, prior: MachineSettings.Setting
   return { discoveryRoots, existingDecisions };
 };
 
-/** Save the roots and repository decisions setup observes, creating this machine's identity. */
-export const saveSetupMachineConfig = Effect.fn("Setup.saveMachineConfig")(function* <
-  E = never,
-  R = never,
->(
-  options: SetupOptions,
-  beforeSave?: MachineSettings.BeforeSave<E, R>,
-  /** The setup this save belongs to, so undoing it can put the discovery folders back. */
-  operationId?: OperationId,
-) {
-  return yield* MachineSettings.updateDiscovery(
-    options.libraryHome,
-    {
-      // An empty selection narrows this scan; it never clears saved discovery roots.
-      ...(options.repositoryRoots?.length ? { discoveryRoots: options.repositoryRoots } : {}),
-      repositories: options.repositoryDecisions,
-      ...(options.machineDisplayName === undefined
-        ? {}
-        : { displayName: options.machineDisplayName }),
-    },
-    beforeSave,
-    operationId,
-  );
-});
-
 export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function* (
   options: SetupOptions,
 ) {
@@ -677,7 +639,7 @@ export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function*
     : yield* inspectWatchedRepositories(
         [...existingDecisions].filter(([, status]) => status === "watched").map(([path]) => path),
       );
-  const machineConfig = options.persistRoots ? yield* saveSetupMachineConfig(options) : prior;
+  const machineConfig = prior;
   const harnessRoots = collectSkillsDirectories(options.inventory, walk.repositories);
   const owner = yield* Library.Service;
   const snapshot = yield* owner.read;

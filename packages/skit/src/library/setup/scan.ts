@@ -1,4 +1,3 @@
-import { withLock as withHomeLock } from "../../platform/home-lock.js";
 import { join } from "node:path";
 
 import { Data, Effect } from "effect";
@@ -50,6 +49,7 @@ export interface SetupOptions {
   readonly libraryHome: string;
   readonly repositoryRoots?: readonly string[];
   readonly inventory: InventoryRootOptions;
+  /** Request saving discovery settings when approved; scanning does not save these settings. */
   readonly persistRoots: boolean;
   readonly probePath?: string;
   readonly skillsStateHome?: string;
@@ -158,7 +158,7 @@ const scanForSetup = Effect.fn("Library.setup")(
         repositoryDecisions: [...existingDecisions]
           .map(([path, status]) => ({ path, status }))
           .sort((left, right) => left.path.localeCompare(right.path)),
-        persisted: options.persistRoots,
+        persisted: false,
       },
       suggestedRepositoryRoots: discoveryRoots.length
         ? []
@@ -231,9 +231,7 @@ const scanForSetup = Effect.fn("Library.setup")(
     return { scan, library };
   },
   (effect, options) =>
-    (options.persistRoots ? withHomeLock(options.libraryHome, Effect.scoped(effect)) : effect).pipe(
-      // Build the configured owner before taking the settings lock. Startup recovery may itself
-      // need the writer, and the scan must review the same roots setup was asked to use.
+    effect.pipe(
       Effect.provide(
         Library.layer({
           home: options.libraryHome,

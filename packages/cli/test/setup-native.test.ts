@@ -28,6 +28,7 @@ import {
   computeSkillsLockCompatibleHash,
   revalidateSetupPlan,
   runSetup,
+  openSetupReview,
   type SetupOptions,
 } from "@smolai/skit-core/library/setup";
 import type { SetupSkillInstance } from "@smolai/skit-core/library/setup";
@@ -91,6 +92,24 @@ const setupLock = (
 
 const scanForSetup = (options: SetupOptions) =>
   runSetup(options).pipe(
+    withLibraryOwner,
+    Effect.provide(
+      skitConfigurationLayer(options.libraryHome).pipe(Layer.provide(testPlatformLayer)),
+    ),
+  );
+
+const saveSettingsForSetup = (options: SetupOptions) =>
+  Effect.gen(function* () {
+    const scan = yield* runSetup(options);
+    const review = yield* openSetupReview(options, scan, { installOptions: options.inventory });
+    const plan = yield* review.prepare({
+      sources: [],
+      copies: [],
+      decisions: [],
+      reconcileExisting: false,
+    });
+    return (yield* plan.apply((_message, effect) => effect)).scan;
+  }).pipe(
     withLibraryOwner,
     Effect.provide(
       skitConfigurationLayer(options.libraryHome).pipe(Layer.provide(testPlatformLayer)),
@@ -168,10 +187,14 @@ it.effect(
     }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect("persists repository roots only when requested and reuses the machine config", () =>
+it.effect("scans passively and saves repository roots only through an approved setup", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
-    const first = yield* scanForSetup({ ...f.options, persistRoots: true });
+    const before = yield* f.fs.exists(join(f.libraryHome, "machine.json"));
+    const passive = yield* scanForSetup({ ...f.options, persistRoots: true });
+    expect(passive.machineConfig.persisted).toBe(false);
+    expect(yield* f.fs.exists(join(f.libraryHome, "machine.json"))).toBe(before);
+    const first = yield* saveSettingsForSetup({ ...f.options, persistRoots: true });
     expect(first.machineConfig).toEqual({
       path: join(f.libraryHome, "machine.json"),
       machineId: expect.any(String),
@@ -224,7 +247,7 @@ it.effect("migrates the version-one machine config only when setup persists", ()
       repositoryRoots: [f.work],
     });
 
-    const migrated = yield* scanForSetup({
+    const migrated = yield* saveSettingsForSetup({
       ...f.options,
       repositoryRoots: undefined,
       persistRoots: true,
@@ -244,7 +267,7 @@ it.effect("migrates the version-one machine config only when setup persists", ()
       displayName: "Test machine",
       discoveryRoots: [f.work],
       repositories: [],
-      setups: [],
+      setups: [expect.objectContaining({ operationId: expect.any(String) })],
     });
   }).pipe(Effect.provide(testPlatformLayer)),
 );
@@ -263,7 +286,7 @@ it.effect("scans only repositories watched by machine configuration", () =>
       join(ignored, ".agents", "skills", "hidden", "SKILL.md"),
       skillDocument("hidden"),
     );
-    yield* scanForSetup({
+    yield* saveSettingsForSetup({
       ...f.options,
       persistRoots: true,
       repositoryDecisions: [

@@ -205,6 +205,7 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
       machineDisplayName: "Test machine",
       inventory: home.inventory,
     };
+    const machineId = yield* MachineSettings.ensureIdentity(home.home);
     const preview = yield* home.owned(runSetup(setup));
     const candidate = preview.onboarding.candidates.find(
       (item) => item.name === "review" && item.action === "import-observed-collection",
@@ -213,7 +214,6 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
     if (!candidate || candidate.action !== "import-observed-collection") return;
     const lockPath = join(repository, "skills-lock.json");
     const lockSnapshot = yield* fs.readFileString(lockPath);
-    const machineId = yield* MachineSettings.ensureIdentity(home.home);
     for (const change of ["changed", "missing"] as const) {
       if (change === "changed") yield* fs.writeFileString(lockPath, "changed lock snapshot\n");
       else yield* fs.remove(lockPath);

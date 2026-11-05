@@ -329,3 +329,28 @@ it.effect("propagates discovery interruption", () =>
     expect(Exit.hasInterrupts(exit)).toBe(true);
   }).pipe(Effect.provide(skitLayer)),
 );
+
+it.effect("evidence collection never writes machine settings even with save intent", () =>
+  Effect.gen(function* () {
+    const f = yield* discoveryFixture();
+    const path = join(f.home.home, "machine.json");
+    const legacy = JSON.stringify({ schemaVersion: 1, repositoryRoots: [f.projects] });
+    yield* f.fs.writeFileString(path, legacy);
+    const options = {
+      ...f.options,
+      persistRoots: true,
+      machineDisplayName: "Requested name",
+      repositoryDecisions: [{ path: f.projects, status: "watched" as const }],
+    };
+    const evidence = yield* f.home.owned(collectSetupEvidence(options));
+    expect(evidence.existingDecisions.get(f.projects)).toBe("watched");
+    expect(evidence.machineConfig.machineId).toBeUndefined();
+    expect(yield* f.fs.readFileString(path)).toBe(legacy);
+    const preview = yield* f.home.owned(runSetup(options));
+    expect(preview.machineConfig.persisted).toBe(false);
+    expect(preview.machineConfig.machineId).toBeUndefined();
+    expect(yield* f.fs.readFileString(path)).toBe(legacy);
+    const repeated = yield* f.home.owned(runSetup({ ...options, persistRoots: false }));
+    expect(repeated.onboarding.planId).toBe(preview.onboarding.planId);
+  }).pipe(Effect.provide(skitLayer)),
+);

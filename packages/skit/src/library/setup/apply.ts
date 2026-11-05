@@ -8,9 +8,9 @@ import { stepRouting } from "../routing/step.js";
 import * as Library from "../library.js";
 import type { ManageOptions } from "./manage-existing.js";
 import { revalidateSetupPlan, type SetupOptions } from "./scan.js";
-import { saveSetupMachineConfig } from "./discovery.js";
 import type {
   SetupKnownSourceSelection,
+  SetupResult,
   InstalledSkillChange,
   SetupVersionChoice,
   InstalledSkillChangeResult,
@@ -250,12 +250,22 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(function* (
       detail: stopDetail(outcome.reason),
     });
 
-  let current = revalidated.scan;
+  let current: SetupResult = revalidated.scan;
   if (approval.persistRoots || (needsIdentity && !revalidated.scan.machineConfig.machineId)) {
     const saved = yield* options.withStatus(
       "Saving this machine's discovery roots",
-      saveSetupMachineConfig(
-        { ...approval.setup, persistRoots: true },
+      MachineSettings.updateDiscovery(
+        approval.setup.libraryHome,
+        {
+          // An empty scan selection never clears saved discovery roots.
+          ...(approval.setup.repositoryRoots?.length
+            ? { discoveryRoots: approval.setup.repositoryRoots }
+            : {}),
+          repositories: approval.setup.repositoryDecisions,
+          ...(approval.setup.machineDisplayName === undefined
+            ? {}
+            : { displayName: approval.setup.machineDisplayName }),
+        },
         undefined,
         outcome.operationId,
       ),
