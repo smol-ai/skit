@@ -2,15 +2,14 @@ import { recoveryInspection } from "./helpers/recovery.js";
 import { join } from "node:path";
 import { Effect, Exit, FileSystem, Option } from "effect";
 import { assert, it } from "@effect/vitest";
-import {
-  inspectOwnershipMarker,
-  MachineSettings,
-  SkillsDirectoryNotWritable,
-  skitLayer,
-} from "@smolai/skit-core";
+import { inspectOwnershipMarker, MachineSettings, skitLayer } from "@smolai/skit-core";
 import { setupApplyCommand, setupCommand } from "../src/library/setup/command.js";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
-import { SetupPlanStale, type SetupDuplicateAction } from "@smolai/skit-core/library/setup";
+import {
+  SetupPlanStale,
+  SetupStopped,
+  type SetupDuplicateAction,
+} from "@smolai/skit-core/library/setup";
 import { OptionCombinationInvalid } from "../src/commands/input-failures.js";
 
 import { prepareSetupUndo } from "../src/library/setup/setup-undo.js";
@@ -125,7 +124,7 @@ const failure = (exit: Exit.Exit<unknown, unknown>) =>
   Exit.isFailure(exit) ? Option.getOrUndefined(Exit.findErrorOption(exit)) : undefined;
 
 it.effect(
-  "retain-only works without write access to skills directories, while enabling still fails before retention",
+  "denied enabling records a stopped setup without retention; a fresh retain-only review needs no skills-directory writes",
   () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -139,11 +138,33 @@ it.effect(
       const refused = yield* f
         .run({ planId: reviewed.onboarding.planId, duplicates: "retire-aliases" })
         .pipe(denied);
-      assert.instanceOf(failure(refused), SkillsDirectoryNotWritable);
-      assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
+      assert.instanceOf(failure(refused), SetupStopped);
+      const changes = yield* diskChanges(before);
+      assert.deepStrictEqual(
+        changes.created.map(({ path }) => join(...path)).sort(),
+        ["audit.jsonl", "machine.json", "state.json"].map((name) => join(f.home.home, name)).sort(),
+      );
+      assert.deepStrictEqual(changes.changed, []);
+      assert.deepStrictEqual(changes.deleted, []);
+      const stopped = yield* f.home.durable;
+      assert.deepStrictEqual(stopped.skills, []);
+      assert.deepStrictEqual(stopped.installed_skills, []);
+      assert.deepStrictEqual(
+        stopped.operations.map((operation) => operation._tag),
+        ["Stopped"],
+      );
+      assert.isFalse(yield* fs.exists(join(f.root, ".agents")));
 
-      const imported = yield* f
+      // The stopped record changes the Library revision; the old plan grants no further consent.
+      const afterRefusal = yield* captureDisk(f.disk);
+      const staleRetry = yield* f
         .run({ planId: reviewed.onboarding.planId, duplicates: "retain-only" })
+        .pipe(denied);
+      assert.instanceOf(failure(staleRetry), SetupPlanStale);
+      assert.deepStrictEqual(yield* diskChanges(afterRefusal), noDiskChanges);
+      const refreshed = yield* f.review;
+      const imported = yield* f
+        .run({ planId: refreshed.onboarding.planId, duplicates: "retain-only" })
         .pipe(denied);
       assert.isTrue(Exit.isSuccess(imported));
       const state = yield* f.home.durable;

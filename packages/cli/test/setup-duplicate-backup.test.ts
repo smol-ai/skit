@@ -176,23 +176,58 @@ it.effect("a duplicate changed after selection invalidates the approval without 
   }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect(
-  "an installed replacement edited before cleanup leaves the old copy active and reports why",
-  () =>
+it.effect.each(["installing", "cleanup"] as const)(
+  "an installed replacement edited during %s preserves both copies and reports why",
+  (boundary) =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const applied = yield* f.home.owned(
-        f.apply.pipe(
-          withLibraryOwner,
-          afterSaves(f.home.statePath, (next) =>
-            next.installed_skills.some((installedSkill) => installedSkill.status === "installed")
-              ? f.fs.writeFileString(join(f.source, "SKILL.md"), "New user edits")
-              : Effect.void,
+      let edited = false;
+      const outcome = yield* f.home
+        .owned(
+          f.apply.pipe(
+            withLibraryOwner,
+            afterSaves(f.home.statePath, (next) => {
+              const operation = next.operations.find((operation) => operation._tag === "Pending");
+              const apply =
+                operation?._tag === "Pending"
+                  ? operation.steps.find((step) => step.step._tag === "Manage")?.applies?.at(-1)
+                      ?.apply
+                  : undefined;
+              const atBoundary =
+                apply !== undefined &&
+                (boundary === "cleanup"
+                  ? apply.phase._tag === "Done"
+                  : apply.phase._tag !== "Done" &&
+                    next.installed_skills.some((copy) => copy.status === "installed"));
+              return !edited && atBoundary
+                ? f.fs.writeFileString(join(f.source, "SKILL.md"), "New user edits").pipe(
+                    Effect.tap(() =>
+                      Effect.sync(() => {
+                        edited = true;
+                      }),
+                    ),
+                  )
+                : Effect.void;
+            }),
           ),
-        ),
-      );
+        )
+        .pipe(Effect.result);
+      expect(edited).toBe(true);
       expect(yield* f.fs.exists(f.duplicate)).toBe(true);
       expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe("New user edits");
+      expect(yield* f.fs.exists(join(f.home.home, "removed"))).toBe(false);
+      if (boundary === "installing") {
+        expect(outcome._tag).toBe("Failure");
+        if (outcome._tag !== "Failure") return;
+        expect(outcome.failure._tag).toBe("SetupStopped");
+        expect((yield* f.home.durable).operations.map((operation) => operation._tag)).toEqual([
+          "Stopped",
+        ]);
+        return;
+      }
+      expect(outcome._tag).toBe("Success");
+      if (outcome._tag !== "Success") return;
+      const applied = outcome.success;
       expect(
         applied.backupWarnings?.some((warning) =>
           warning.message.includes("changed before preservation"),

@@ -311,7 +311,7 @@ it.effect("an approved apply scans once after approval, whatever stages it runs"
     assert.isTrue(Exit.isSuccess(exit));
     assert.deepStrictEqual(
       (yield* f.home.durable).skills.map((skill) => skill.name),
-      [],
+      ["alpha"],
     );
     assert.isFalse(yield* f.fs.exists(f.path("gamma")));
     assert.strictEqual(scansAfterApproval, 1);

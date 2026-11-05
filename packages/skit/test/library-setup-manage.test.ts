@@ -21,25 +21,19 @@ import { inspectLibrary, libraryLayer, saveLibrary } from "./helpers/library-sto
 const machineId = migratedMachineId("019950c0-4c00-7000-8000-000000000001", "setup-manage-test");
 const skill = "---\nname: review\n---\nReview.\n";
 
-/** Renames and links pass `commits` times, then the next crashes, as the process dying would. */
-const crashingAfter = (commits: number) =>
-  Layer.effect(
-    FileSystem.FileSystem,
-    Effect.map(FileSystem.FileSystem, (fs) => {
-      let left = commits;
-      const crash = Effect.suspend(() => (left-- <= 0 ? Effect.die("crash") : Effect.void));
-      return {
-        ...fs,
-        rename: (from: string, to: string) => Effect.andThen(crash, fs.rename(from, to)),
-        link: (from: string, to: string) => Effect.andThen(crash, fs.link(from, to)),
-      };
-    }),
-  );
-
 /** Interrupt after a named durable state or filesystem change, independent of write counts. */
 const crashingAt = (
   home: string,
-  boundary: "intent" | "pending" | "marker" | "installed" | "step" | "backup" | "successor",
+  boundary:
+    | "intent"
+    | "pending"
+    | "marker"
+    | "installed"
+    | "step"
+    | "backup"
+    | "successor"
+    | "import-done"
+    | "edit-imported",
 ) =>
   Layer.effect(
     FileSystem.FileSystem,
@@ -66,6 +60,16 @@ const crashingAt = (
                 state.operations,
               ).pipe(Effect.orDie)).find((item) => item._tag === "Pending");
               if (operation?._tag === "Pending") {
+                stop ||=
+                  boundary === "import-done" &&
+                  operation.steps[0]?.step._tag === "Import" &&
+                  operation.steps[0].status === "Done";
+                stop ||=
+                  boundary === "edit-imported" &&
+                  operation.steps.some(
+                    (step) => step.step._tag === "Update" && step.status === "Pending",
+                  ) &&
+                  state.imports.some((sourceImport) => sourceImport.kind === "edit");
                 const step = operation.steps.find(
                   (item) => item.step._tag === "Manage" || item.step._tag === "Update",
                 );
@@ -94,10 +98,11 @@ const crashingAt = (
 const withLibrary = <A, E, R>(
   home: string,
   use: (library: Library.Interface) => Effect.Effect<A, E, R>,
-  fileSystem = crashingAfter(Number.POSITIVE_INFINITY),
+  fileSystem?: Layer.Layer<FileSystem.FileSystem, never, FileSystem.FileSystem>,
 ) =>
   Effect.gen(function* () {
-    const layer = libraryLayer(home).pipe(Layer.provide(fileSystem));
+    const owner = libraryLayer(home);
+    const layer = fileSystem ? owner.pipe(Layer.provide(fileSystem)) : owner;
     return yield* use(Context.get(yield* Layer.build(layer), Library.Service));
   });
 
@@ -206,8 +211,7 @@ it.effect("imports a source, then manages the matching copy in place, routed as 
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-// One Import then one Manage commits: the record; the Collection Version and the import's state;
-// the Import's Done mark; the managed copy's marker and its state; the Manage Done mark; Done.
+// Interrupt only after the Import's Done write also saved the later Manage step's retained evidence.
 it.effect("the Import's Done mark saves what it retained in the Manage step that uses it", () =>
   Effect.gen(function* () {
     const { home, copy, imported, manage } = yield* fixture;
@@ -216,7 +220,7 @@ it.effect("the Import's Done mark saves what it retained in the Manage step that
       withLibrary(
         home,
         (library) => Effect.flatMap(library.read, (base) => library.setup(steps, { base })),
-        crashingAfter(4),
+        crashingAt(home, "import-done"),
       ),
     );
     const inspected = yield* inspectLocalLibraryState(home);
@@ -344,7 +348,7 @@ it.effect("a re-run stops when the copy to manage changed after the record", () 
       withLibrary(
         home,
         (library) => Effect.flatMap(library.read, (base) => library.setup(steps, { base })),
-        crashingAfter(4),
+        crashingAt(home, "import-done"),
       ),
     );
     const [operation] = yield* recordedOperations(home);
@@ -562,13 +566,12 @@ it.effect("a re-run imports a chosen local edit once", () =>
         metadataChanged: change.metadataChanged,
       })),
     };
-    // The record and the edit's import are the first four commits: the crash comes before the
-    // update itself writes anything.
+    // Stop after the edit import is durable, before the Update applies its recorded changes.
     yield* Effect.exit(
       withLibrary(
         home,
         (library) => Effect.flatMap(library.read, (base) => library.setup([update], { base })),
-        crashingAfter(4),
+        crashingAt(home, "edit-imported"),
       ),
     );
     const edits = Effect.map(inspectLocalLibraryState(home), (inspected) =>

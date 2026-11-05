@@ -745,7 +745,8 @@ it.effect.each(["source", "alias"] as const)(
           ).pipe(Effect.result);
           // The Library recorded the steps, then stopped at the copy that no longer matches them.
           expect(result._tag === "Failure" && result.failure._tag).toBe("SetupStopped");
-          expect(yield* f.fs.exists(join(f.home.home, "originals"))).toBe(changed === "alias");
+          // Root preparation validates every reviewed entry before any retention or installation.
+          expect(yield* f.fs.exists(join(f.home.home, "originals"))).toBe(false);
           expect(yield* f.fs.exists(join(f.home.home, "removed"))).toBe(false);
           expect(yield* f.fs.exists(f.destination)).toBe(false);
           expect(yield* f.fs.readLink(f.alias)).toBe(f.source);
