@@ -8,7 +8,7 @@ import { skitCommand } from "../src/commands/tree.js";
 import { commandApplicationLayer } from "../src/application.js";
 import { result } from "../src/commands/result.js";
 import { defaultTerminalEnvironment, renderResultFrame } from "../src/commands/output-frame.js";
-import { renderUsage } from "../src/library/presentation/usage.js";
+import { renderUsage } from "../src/library/usage/present.js";
 import { emptyUsageStory, usageStory } from "../src/storybook/usage-stories.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import { rendererTestLayer } from "./helpers/renderer.js";

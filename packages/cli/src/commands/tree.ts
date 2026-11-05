@@ -1,4 +1,4 @@
-import { usageCliCommand } from "../library/commands/usage.js";
+import { usageCliCommand } from "../library/usage.js";
 import { Command } from "effect/cli";
 import { checkCliCommand } from "../library/check.js";
 import { serverBootstrapCliCommand } from "../registry/commands/bootstrap.js";
@@ -20,7 +20,7 @@ import {
   repositoryIgnoreCliCommand,
   repositoryListCliCommand,
   repositoryWatchCliCommand,
-} from "../library/commands/repository.js";
+} from "../library/repository.js";
 import { libraryRecoveryCliCommand } from "../library/recovery.js";
 import { libraryHistoryCliCommand } from "../library/history.js";
 import { versionCliCommand } from "./version.js";

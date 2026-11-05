@@ -1,10 +1,11 @@
+import { renderRepositoryPolicy } from "../library/repository.js";
 import type { ContractData, ContractDataForId, ContractKey } from "./output-contracts.js";
 import type { CommandResult } from "./types.js";
 import type { RenderContext } from "../terminal/contracts.js";
 import { terminalData } from "../terminal/text.js";
 import { harnessLabel } from "@smolai/skit-core/harnesses";
 import { createColors } from "picocolors";
-import { renderUsage } from "../library/presentation/usage.js";
+import { renderUsage } from "../library/usage.js";
 import { renderInventory } from "../library/presentation/inventory.js";
 import { renderSetEnabled } from "../library/enable.js";
 import { renderRemove, renderRemovePlan } from "../library/remove.js";
@@ -317,14 +318,7 @@ const contractPresenters: ContractPresenters = {
   setupFailed: renderSetupFailed,
   setup: renderSetup,
   setupApplied: renderSetupApplied,
-  repositoryPolicy: (data) =>
-    data.action === "list"
-      ? data.repositories.length
-        ? data.repositories
-            .map((repository) => `${repository.status} · ${repository.path}`)
-            .join("\n")
-        : "No repository decisions are stored for this machine."
-      : `${data.action} · ${data.path}`,
+  repositoryPolicy: renderRepositoryPolicy,
   authLogout: (data) => `Logged out from ${data.origin}`,
   feedbackSend: (data) => {
     const from = [

@@ -1,5 +1,4 @@
 import {
-  UsageReport,
   AuthorSkitDeleteResponse,
   AuthorSkitSummary,
   Hash,
@@ -27,7 +26,8 @@ import { addOutputContracts } from "../library/add.js";
 import { updateOutputContracts } from "../library/update.js";
 import { syncOutputContracts } from "../library/sync.js";
 import { listOutputContracts } from "../library/list.js";
-import { RepositoryPolicyResult } from "@smolai/skit-core/library/setup";
+import { repositoryOutputContracts } from "../library/repository.js";
+import { usageOutputContracts } from "../library/usage.js";
 
 import { MachineInventoryResult } from "../library/workflows/machine-inventory-contract.js";
 import { DoctorReport } from "../library/workflows/doctor-harnesses.js";
@@ -60,7 +60,7 @@ export const outputContracts = {
   setupFailed: setupOutputContracts.setupFailed,
   recoveryList: recoveryOutputContracts.recoveryList,
   recovery: recoveryOutputContracts.recovery,
-  usage: effectOutput("skit.usage.v4", UsageReport),
+  usage: usageOutputContracts.usage,
   versionReport: effectOutput("skit.version.v2", VersionReport),
   version: effectOutput("skit.version.v1", Schema.Struct({ version: Schema.String })),
   init: effectOutput(
@@ -131,7 +131,7 @@ export const outputContracts = {
   libraryHistory: historyOutputContracts.libraryHistory,
   setup: setupOutputContracts.setup,
   setupApplied: setupOutputContracts.setupApplied,
-  repositoryPolicy: effectOutput("skit.repository.policy.v1", RepositoryPolicyResult),
+  repositoryPolicy: repositoryOutputContracts.repositoryPolicy,
   serverBootstrap: effectOutput(
     "skit.server.bootstrap.v1",
     Schema.Struct({

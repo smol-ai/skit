@@ -14,7 +14,7 @@ import {
   existingRepositorySkillsDirectory,
   type InventoryRootOptions,
 } from "@smolai/skit-core/library/routing";
-import { scanLocalUsage } from "./local-usage.js";
+import { scanLocalUsage } from "../usage.js";
 
 type Estimated = Extract<ListingBudget, { _tag: "Estimated" }>;
 export interface CleanupCandidate {

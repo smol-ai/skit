@@ -2,13 +2,13 @@ import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
 import { Option, Effect } from "effect";
 import { Argument, Command } from "effect/cli";
 import { resolve } from "node:path";
-import { handlePlatformCommand } from "../../commands/handler.js";
-import { CommandMetadata } from "../../commands/metadata.js";
-import { outputContracts } from "../../commands/output-contracts.js";
-import { homeFlag, jsonFlag } from "../../commands/parameters.js";
-import { Renderer } from "../../terminal/renderer.js";
+import { handlePlatformCommand } from "../commands/handler.js";
+import { CommandMetadata } from "../commands/metadata.js";
+import { repositoryOutputContracts } from "./repository/output.js";
+import { homeFlag, jsonFlag } from "../commands/parameters.js";
+import { Renderer } from "../terminal/renderer.js";
 import { MachineSettings } from "@smolai/skit-core";
-import { result } from "../../commands/result.js";
+import { encodeResult as result } from "../commands/encode-result.js";
 
 const path = Argument.String("path");
 const flags = { home: homeFlag, json: jsonFlag };
@@ -29,7 +29,7 @@ const mutate = (name: "watch" | "ignore" | "forget") =>
             name === "watch" ? "watched" : name === "ignore" ? "ignored" : undefined,
           );
           yield* renderer.result(
-            result("repositoryPolicy", {
+            result("repositoryPolicy", repositoryOutputContracts.repositoryPolicy, {
               action: name,
               path: repository,
               repositories: config.repositories,
@@ -48,7 +48,7 @@ const mutate = (name: "watch" | "ignore" | "forget") =>
     ),
     Command.annotate(CommandMetadata, {
       effects: { capabilities: ["filesystem.read", "filesystem.write"] },
-      outputSchemas: [outputContracts.repositoryPolicy],
+      outputSchemas: [repositoryOutputContracts.repositoryPolicy],
       exitCodes: [0, 12, 64],
       interactive: false,
     }),
@@ -64,7 +64,7 @@ export const repositoryListCliCommand = Command.make("list", flags, (input) =>
         const renderer = yield* Renderer;
         const config = yield* MachineSettings.read(selectedHome);
         yield* renderer.result(
-          result("repositoryPolicy", {
+          result("repositoryPolicy", repositoryOutputContracts.repositoryPolicy, {
             action: "list",
             path: "",
             repositories: [...config.repositories],
@@ -77,7 +77,7 @@ export const repositoryListCliCommand = Command.make("list", flags, (input) =>
   Command.withDescription("List repository decisions stored for this machine."),
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read"] },
-    outputSchemas: [outputContracts.repositoryPolicy],
+    outputSchemas: [repositoryOutputContracts.repositoryPolicy],
     exitCodes: [0, 64],
     interactive: false,
   }),
@@ -86,3 +86,6 @@ export const repositoryListCliCommand = Command.make("list", flags, (input) =>
 export const repositoryWatchCliCommand = mutate("watch");
 export const repositoryIgnoreCliCommand = mutate("ignore");
 export const repositoryForgetCliCommand = mutate("forget");
+
+export { repositoryOutputContracts } from "./repository/output.js";
+export { renderRepositoryPolicy } from "./repository/present.js";

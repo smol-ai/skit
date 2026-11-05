@@ -2,13 +2,13 @@ import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
 import { Library, emptyLibraryState, UsageHarness } from "@smolai/skit-core";
 import { Effect, Option } from "effect";
 import { Command, Flag } from "effect/cli";
-import { scanLocalUsage } from "../application/local-usage.js";
-import { handleLibraryCommand } from "../../commands/handler.js";
-import { CommandMetadata } from "../../commands/metadata.js";
-import { outputContracts } from "../../commands/output-contracts.js";
-import { homeFlag, jsonFlag, optionalString } from "../../commands/parameters.js";
-import { Renderer } from "../../terminal/renderer.js";
-import { result } from "../../commands/result.js";
+import { scanLocalUsage } from "./usage/scan.js";
+import { handleLibraryCommand } from "../commands/handler.js";
+import { CommandMetadata } from "../commands/metadata.js";
+import { usageOutputContracts } from "./usage/output.js";
+import { homeFlag, jsonFlag, optionalString } from "../commands/parameters.js";
+import { Renderer } from "../terminal/renderer.js";
+import { encodeResult as result } from "../commands/encode-result.js";
 
 export const usageCliCommand = Command.make(
   "usage",
@@ -59,7 +59,7 @@ export const usageCliCommand = Command.make(
                 renderer.updateStatus(`Scanning local transcripts: ${completed}/${total} files`),
             }),
           );
-          yield* renderer.result(result("usage", report));
+          yield* renderer.result(result("usage", usageOutputContracts.usage, report));
         }),
       );
     }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
@@ -75,8 +75,12 @@ export const usageCliCommand = Command.make(
   Command.annotate(CommandMetadata, {
     stability: "experimental",
     effects: { capabilities: ["filesystem.read"] },
-    outputSchemas: [outputContracts.usage],
+    outputSchemas: [usageOutputContracts.usage],
     exitCodes: [0, 12, 64, 65],
     interactive: false,
   }),
 );
+
+export { usageOutputContracts } from "./usage/output.js";
+export { renderUsage } from "./usage/present.js";
+export { scanLocalUsage } from "./usage/scan.js";
