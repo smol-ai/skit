@@ -25,7 +25,6 @@ export {
   AUTHOR_WORKSPACE_METADATA_FILE,
 } from "./artifact/control-files.js";
 
-export { OwnershipMarker } from "./installed-skills/ownership-marker.js";
 export {
   SkillAudit,
   SkillAssessmentDecision,
@@ -104,7 +103,6 @@ export {
   type InstalledSkillFailure,
   inspectOwnershipMarker,
   prepareInstalledSkillRebuild,
-  type ManageApproval,
 } from "./installed-skills/files.js";
 
 export {
@@ -244,7 +242,6 @@ export * as Sync from "./sync/sync.js";
 export { mergeAuthorTree, conflictKind } from "./author/merge/files.js";
 export { type Unusable as MachineSettingsUnusable } from "./library/machine-settings.js";
 
-export * as InstalledSkills from "./library/installed-skills.js";
 export * as InstalledSkillStatus from "./library/installed-skill-status.js";
 export * as Library from "./library/library.js";
 
@@ -256,7 +253,6 @@ export {
   type InstalledSkillWouldDuplicate,
 } from "./library/library.js";
 
-export { type DuplicateScanIncomplete } from "./library/installed-skills.js";
 export { type InvalidIntent, StalePlan, type DestinationsIncomplete } from "./library/library.js";
 
 // Recovery vocabulary is public; reading and mutating recovery evidence belongs to Library.

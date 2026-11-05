@@ -249,9 +249,8 @@ describe("skit/library-private-api", () => {
         "library-private-api",
         "packages/cli/src/library/example.ts",
         `
-      import { Library } from "@smolai/skit-core/library";
-      import { inspectRecoveryOperation } from "@smolai/skit-core";
-      export const use = [Library.layer, inspectRecoveryOperation];
+      import { Library, RecoveryInspection } from "@smolai/skit-core/library";
+      export const use = [Library.layer, RecoveryInspection];
     `,
       ),
     ).toEqual([]);
@@ -269,13 +268,18 @@ describe("skit/library-private-api", () => {
       // Yield belongs to an actual generator, as it does in a handler.
       const split = body.indexOf(";") + 1;
       const source = `${body.slice(0, split)} function* handler() { yield 0; ${body.slice(split)} }`;
-      expect(
-        await reported("library-private-api", "packages/cli/src/library/example.ts", source),
-      ).toHaveLength(1);
+      const reports = await reported(
+        "library-private-api",
+        "packages/cli/src/library/example.ts",
+        source,
+      );
+      expect(reports).toHaveLength(2);
+      expect(reports.some((message) => message.includes("private implementation"))).toBe(true);
+      expect(reports.some((message) => message.includes("Library-only capability"))).toBe(true);
     },
   );
 
-  test("InstalledSkills facts stay available outside Library; mutations stay usable inside it", async () => {
+  test("InstalledSkills implementation is private even for inspection; mutations stay usable inside Library", async () => {
     const source = `
       import { InstalledSkills } from "@smolai/skit-core";
       function* inspect() {
@@ -286,13 +290,13 @@ describe("skit/library-private-api", () => {
     `;
     expect(
       await reported("library-private-api", "packages/cli/src/library/example.ts", source),
-    ).toEqual([]);
+    ).toHaveLength(1);
     expect(
       await reported(
         "library-private-api",
         `${library}apply-plan.ts`,
         `
-      import { InstalledSkills } from "./installed-skills.js";
+      import * as InstalledSkills from "./installed-skills.js";
       function* execute() {
         const files = yield* InstalledSkills.Service;
         yield* files.install();

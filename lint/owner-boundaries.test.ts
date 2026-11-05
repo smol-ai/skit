@@ -50,6 +50,24 @@ async function reported(
 }
 
 describe("skit/owner-boundaries", () => {
+  test("callers cannot import the installed-skill implementation namespace", async () => {
+    for (const statement of [
+      'import { InstalledSkills } from "@smolai/skit-core";',
+      'import * as Files from "../../../skit/src/library/installed-skills.js";',
+      'export * from "../../../skit/src/library/installed-skills.js";',
+    ])
+      expect(
+        await reported(statement, "owner-boundaries", "packages/cli/test/helpers/installed.ts"),
+      ).toHaveLength(1);
+    expect(
+      await reported(
+        'import * as Files from "../src/library/installed-skills.js";',
+        "owner-boundaries",
+        "packages/skit/test/library-configured-routing.test.ts",
+      ),
+    ).toEqual([]);
+  });
+
   test("pnpm ownership checks stay behind Library and Audit reports", async () => {
     for (const statement of [
       'import { makePnpmSkillCheck } from "@smolai/skit-core";',
@@ -404,9 +422,7 @@ describe("skit/owner-boundaries", () => {
   });
 
   test("calling the owner is allowed", async () => {
-    expect(await reported(`import { Library, InstalledSkills } from "@smolai/skit-core";`)).toEqual(
-      [],
-    );
+    expect(await reported(`import { Library } from "@smolai/skit-core/library";`)).toEqual([]);
   });
 
   test.each(["local-tree", "write-tree"])(
