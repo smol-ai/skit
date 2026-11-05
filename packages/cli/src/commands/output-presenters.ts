@@ -1,3 +1,4 @@
+import { renderSecurityReview } from "../library/security.js";
 import { renderRepositoryPolicy } from "../library/repository.js";
 import type { ContractData, ContractDataForId, ContractKey } from "./output-contracts.js";
 import type { CommandResult } from "./types.js";
@@ -50,14 +51,6 @@ function renderValidation(data: ContractDataForId<"skit.validate.v3">): string {
       `  ${diagnostic.message}`,
     ]),
   ].join("\n");
-}
-
-function renderSecurityReview(data: ContractDataForId<"skit.security.review.v4">): string {
-  return data.audit.findings.length
-    ? data.assessment.findingDecisions
-        .map((finding) => `${finding.fingerprint} ${finding.disposition} (${finding.ruleId})`)
-        .join("\n")
-    : "No security findings";
 }
 
 function renderAuthorInit(data: ContractDataForId<"skit.init.v1">): string {

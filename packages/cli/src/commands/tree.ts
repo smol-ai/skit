@@ -11,8 +11,7 @@ import { removeCliCommand } from "../library/remove.js";
 import { updateCliCommand } from "../library/update.js";
 import { librarySyncCliCommand } from "../library/sync.js";
 import { disableCliCommand, enableCliCommand } from "../library/enable.js";
-import { securityAcceptCliCommand } from "../library/commands/security-accept.js";
-import { securityReviewCliCommand } from "../library/commands/security-review.js";
+import { securityAcceptCliCommand, securityReviewCliCommand } from "../library/security.js";
 import { setupCliCommand, librarySetupUndoCliCommand } from "../library/setup.js";
 import { doctorCliCommand, inventoryCliCommand } from "../library/commands/inventory.js";
 import {

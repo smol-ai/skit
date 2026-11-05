@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { securityReviewCommand } from "../src/library/commands/security-review.js";
+import { securityReviewCommand } from "../src/library/security/review.js";
 
 it.effect("requires an exact retained Skill", () =>
   securityReviewCommand({ securityReviewEffect: () => Effect.die("unreachable") }).pipe(

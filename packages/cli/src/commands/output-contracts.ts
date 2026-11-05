@@ -1,3 +1,4 @@
+import { securityOutputContracts } from "../library/security.js";
 import {
   AuthorSkitDeleteResponse,
   AuthorSkitSummary,
@@ -6,7 +7,6 @@ import {
   releasePublishResponseSchema,
   SkillAssessmentDecision,
   SkillAudit,
-  SkillSecurityReview,
   SkitValidationDiagnostic,
 } from "@smolai/skit-core";
 import { VersionReport } from "../releases.js";
@@ -110,8 +110,8 @@ export const outputContracts = {
   add: addOutputContracts.add,
   addPreview: addOutputContracts.addPreview,
   list: listOutputContracts.list,
-  securityReview: effectOutput("skit.security.review.v4", SkillSecurityReview),
-  securityAccept: effectOutput("skit.security.accept.v4", SkillSecurityReview),
+  securityReview: securityOutputContracts.securityReview,
+  securityAccept: securityOutputContracts.securityAccept,
   inventory: effectOutput("skit.inventory.v13", MachineInventoryResult),
   doctor: effectOutput("skit.doctor.v9", DoctorReport),
   check: checkOutputContracts.check,

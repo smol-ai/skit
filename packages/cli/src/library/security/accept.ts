@@ -3,14 +3,14 @@ import type { Hash } from "@smolai/skit-core";
 import { Effect, Option, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleLibraryCommand } from "../../commands/handler.js";
-import { FindingFingerprintInvalid } from "../../audit/failures.js";
+import { FindingFingerprintInvalid } from "./failures.js";
 import { MissingRequirement } from "../../commands/input-failures.js";
 import { CommandMetadata } from "../../commands/metadata.js";
-import { outputContracts } from "../../commands/output-contracts.js";
+import { securityOutputContracts } from "./output.js";
 import { localFlags } from "../../commands/parameters.js";
-import { acceptLibrarySecurityFinding } from "../security.js";
+import { acceptLibrarySecurityFinding } from "./operation.js";
 import { Renderer } from "../../terminal/renderer.js";
-import { result } from "../../commands/result.js";
+import { encodeResult as result } from "../../commands/encode-result.js";
 
 const FindingFingerprint = Schema.TemplateLiteral([
   "sha256:",
@@ -99,7 +99,9 @@ export const securityAcceptCliCommand = Command.make(
             expiresAt: Option.getOrUndefined(expiresAt),
           },
         );
-        yield* renderer.result(result("securityAccept", value));
+        yield* renderer.result(
+          result("securityAccept", securityOutputContracts.securityAccept, value),
+        );
       }),
     ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
 ).pipe(
@@ -114,7 +116,7 @@ export const securityAcceptCliCommand = Command.make(
   ]),
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read", "filesystem.write"] },
-    outputSchemas: [outputContracts.securityAccept],
+    outputSchemas: [securityOutputContracts.securityAccept],
     exitCodes: [0, 11, 12, 64, 65],
     interactive: false,
   }),

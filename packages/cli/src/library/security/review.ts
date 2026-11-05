@@ -4,11 +4,11 @@ import { Argument, Command } from "effect/cli";
 import { handleLibraryCommand } from "../../commands/handler.js";
 import { MissingRequirement } from "../../commands/input-failures.js";
 import { CommandMetadata } from "../../commands/metadata.js";
-import { outputContracts } from "../../commands/output-contracts.js";
+import { securityOutputContracts } from "./output.js";
 import { localFlags } from "../../commands/parameters.js";
-import { reviewLibrarySecurity as reviewSecurity } from "../security.js";
+import { reviewLibrarySecurity as reviewSecurity } from "./operation.js";
 import { Renderer } from "../../terminal/renderer.js";
-import { result } from "../../commands/result.js";
+import { encodeResult as result } from "../../commands/encode-result.js";
 
 export interface SecurityReviewLibrary<Review, ReviewError, ReviewServices> {
   readonly securityReviewEffect: (
@@ -40,7 +40,9 @@ export const securityReviewCliCommand = Command.make(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const value = yield* securityReviewCommand({ securityReviewEffect: reviewSecurity }, skill);
-        yield* renderer.result(result("securityReview", value));
+        yield* renderer.result(
+          result("securityReview", securityOutputContracts.securityReview, value),
+        );
       }),
     ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
 ).pipe(
@@ -48,7 +50,7 @@ export const securityReviewCliCommand = Command.make(
   Command.withExamples([{ command: "skit security review owner/tools:review --json" }]),
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read"] },
-    outputSchemas: [outputContracts.securityReview],
+    outputSchemas: [securityOutputContracts.securityReview],
     exitCodes: [0, 11, 12, 64, 65],
     interactive: false,
   }),
