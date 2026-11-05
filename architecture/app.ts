@@ -243,7 +243,7 @@ export const owners = {
     removes: [
       "auth/provisioning.ts helper written from two services",
       "Bootstrap as a separate writer: its atomic claim batch moves into Identity.createOperator unchanged (self-hosting.md:261,269)",
-      "NativeClock service (one consumer; use Clock)",
+      "NativeClock service (done: Better Auth captures the built-in Clock)",
       "nested runPromise in Better Auth hooks (the Promise boundary itself stays; keep the hook invariants at better-auth.ts:264,286,325)",
       "rateLimit table (Better Auth rate limiting disabled)",
       "Authentication.authenticatePat in the public API",

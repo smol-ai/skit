@@ -13,7 +13,6 @@ import { layer as skitsLayer } from "./skits/service.js";
 import { layer as feedbackServiceLayer } from "./feedback/service.js";
 import { layer as serverLibraryLayer } from "./library/service.js";
 import { blobStoreLayer, databaseLayer, type RuntimeEnv } from "./platform/cloudflare.js";
-import { layer as nativeClockLayer } from "./platform/native-clock.js";
 import { layer as nativeCryptoLayer } from "./platform/native-crypto.js";
 import {
   bootstrapLayer as bootstrapRateLimiterLayer,
@@ -77,7 +76,6 @@ export const applicationLayers = (
     databaseLayer(env.DB),
     BrowserCrypto.layer,
     nativeCryptoLayer,
-    nativeClockLayer,
   );
   const authorization = authorizationLayer.pipe(Layer.provideMerge(platform));
   const release = skitsLayer.pipe(Layer.provide(authorization));

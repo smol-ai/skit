@@ -3,12 +3,11 @@ import { bearer } from "better-auth/plugins/bearer";
 import { deviceAuthorization } from "better-auth/plugins/device-authorization";
 import { APIError } from "better-auth/api";
 import { D1Client } from "@effect/sql-d1";
-import { Context, Effect, Layer, Option, Schema } from "effect";
+import { Clock, Context, Effect, Layer, Option, Schema } from "effect";
 import { HttpServerRequest, HttpServerResponse } from "effect/http";
 import { schemaBodyJsonLimited } from "../api/request-body.js";
 import { normalizeNamespace } from "../domain/identifiers.js";
 import { rateLimit, type DatabaseSqlClient, type RuntimeEnv } from "../platform/cloudflare.js";
-import { NativeClock } from "../platform/native-clock.js";
 import { ServerConfiguration } from "../configuration.js";
 import { NativeCrypto } from "../platform/native-crypto.js";
 import { passwordCallbacks } from "./password.js";
@@ -107,7 +106,8 @@ export const layer = (configuration: BetterAuthConfiguration) =>
     Effect.gen(function* () {
       const sql: DatabaseSqlClient = yield* D1Client.D1Client;
       const crypto = yield* NativeCrypto;
-      const { now } = yield* NativeClock;
+      const clock = yield* Clock.Clock;
+      const now = () => new Date(clock.currentTimeMillisUnsafe());
       const passwords = passwordCallbacks(crypto);
       const email = configuration.email;
 
