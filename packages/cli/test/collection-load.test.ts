@@ -1,3 +1,4 @@
+import { readDescriptionLoad } from "@smolai/skit-core/library/session";
 import {
   SkitConfiguration,
   deterministicTreeHash,
@@ -11,10 +12,9 @@ import { Effect, FileSystem, Option } from "effect";
 import { join } from "node:path";
 
 import {
-  readDescriptionLoad,
   descriptionLoadMessage,
   largeCollectionWarning,
-} from "../src/library/workflows/collection-load.js";
+} from "../src/library/presentation/description-size.js";
 import { importSource } from "../src/library/source.js";
 import { openLibraryView } from "@smolai/skit-core/library/session";
 import {

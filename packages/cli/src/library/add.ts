@@ -1,7 +1,7 @@
 import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core";
 
 import { Effect, Option } from "effect";
-import { descriptionLoadMessage } from "./workflows/collection-load.js";
+import { descriptionLoadMessage } from "./presentation/description-size.js";
 import { openLibraryView } from "@smolai/skit-core/library/session";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleSourceCommand } from "../commands/handler.js";
@@ -17,7 +17,7 @@ import { Renderer } from "../terminal/renderer.js";
 import { encodeResult as result } from "../commands/encode-result.js";
 import { Registry, type ResolvedAuth } from "../registry/index.js";
 import { importSource, previewLibrarySource } from "./source.js";
-import { rejectDedicatedInstallerSource } from "./workflows/dedicated-installer-catalog.js";
+import { rejectDedicatedInstallerSource } from "./add/installer-guidance.js";
 
 const source = Argument.String("source");
 const registry = optionalString("registry", "Resolve a Registry source through a name or URL.");

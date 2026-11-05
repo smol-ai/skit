@@ -18,7 +18,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { FetchHttpClient, type HttpClient } from "effect/http";
 
-import type { InstalledSkillOptions } from "../../src/library/workflows/installed-skill-options.js";
+import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { testHttpClientLayer, type TestHttpHandler } from "./http-test-client.js";
 import { RegistryHttp, registryHttpLayer } from "../../src/registry/registry-http.js";
 
@@ -83,7 +83,7 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
     configHome: join(input.inventoryHome ?? home, "config"),
     overrides: roots,
   };
-  const installOptions: InstalledSkillOptions = inventory;
+  const installOptions: InventoryRootOptions = inventory;
   const transport: Layer.Layer<HttpClient.HttpClient> = input.transport
     ? testHttpClientLayer(input.transport)
     : FetchHttpClient.layer;

@@ -29,7 +29,7 @@ import { promptForScope } from "./presentation/scope-prompt.js";
 import { failureExitCodes } from "../commands/failure-classification.js";
 import { encodeResult as result } from "../commands/encode-result.js";
 
-import { largeCollectionWarning, descriptionLoadMessage } from "./workflows/collection-load.js";
+import { largeCollectionWarning, descriptionLoadMessage } from "./presentation/description-size.js";
 
 const subject = Argument.String("skill-or-collection").pipe(Argument.optional);
 const repo = optionalString("repo", "Use repository scope.");

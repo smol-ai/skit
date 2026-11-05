@@ -16,7 +16,7 @@ import {
   invocationBriefing,
   invocationRowSummary,
 } from "@smolai/skit-core/library/session";
-import type { InstalledSkillOptions } from "../workflows/installed-skill-options.js";
+import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import {
   cancelLibraryChange,
   confirmLibraryChange,
@@ -74,7 +74,7 @@ function pendingReviewText(pending: PendingLibraryChange): string {
 
 const applyWithConfirmation = Effect.fn("CLI.libraryBrowse.apply")(function* (
   session: LibrarySessionState,
-  configuration: InstalledSkillOptions,
+  configuration: InventoryRootOptions,
   progress: string,
 ) {
   const prompter = yield* Prompter;
@@ -116,7 +116,7 @@ const applyWithConfirmation = Effect.fn("CLI.libraryBrowse.apply")(function* (
 
 const enableSkill = Effect.fn("CLI.libraryBrowse.enable")(function* (
   session: LibrarySessionState,
-  configuration: InstalledSkillOptions,
+  configuration: InventoryRootOptions,
   row: LibrarySkillRow,
 ) {
   const scope = yield* promptForScope(resolve(process.cwd()));
@@ -143,7 +143,7 @@ const chooseScope = Effect.fn("CLI.libraryBrowse.chooseScope")(function* (
 
 const changeInvocation = Effect.fn("CLI.libraryBrowse.invocation")(function* (
   session: LibrarySessionState,
-  configuration: InstalledSkillOptions,
+  configuration: InventoryRootOptions,
   row: LibrarySkillRow,
 ) {
   const renderer = yield* Renderer;
@@ -178,7 +178,7 @@ const changeInvocation = Effect.fn("CLI.libraryBrowse.invocation")(function* (
 
 const disableSkill = Effect.fn("CLI.libraryBrowse.disable")(function* (
   session: LibrarySessionState,
-  configuration: InstalledSkillOptions,
+  configuration: InventoryRootOptions,
   row: LibrarySkillRow,
 ) {
   const options = row.scopes.map((scopeRow, index) => ({
@@ -201,7 +201,7 @@ const disableSkill = Effect.fn("CLI.libraryBrowse.disable")(function* (
 /** Interactive Library browser backed by the portable enable and disable workflows. */
 export const browseLibrary = Effect.fn("CLI.libraryBrowse")(function* (
   initial: LibrarySessionState,
-  configuration: InstalledSkillOptions,
+  configuration: InventoryRootOptions,
 ) {
   const prompter = yield* Prompter;
   const renderer = yield* Renderer;
