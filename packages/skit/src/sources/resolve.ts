@@ -80,7 +80,7 @@ function canonicalizeDirectGithubUrl(value: string): string {
   return `https://raw.githubusercontent.com/${owner}/${repository}/${ref}/${path}`;
 }
 
-export interface SourceLocatorProfile {
+interface SourceLocatorProfile {
   readonly id: string;
   readonly priority: number;
   readonly aliases: readonly string[];

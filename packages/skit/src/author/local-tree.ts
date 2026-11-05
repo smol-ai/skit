@@ -186,7 +186,7 @@ export const scanWorkspaceWrite = Effect.fn("AuthorWorkspace.scanWriteTree")(fun
   return { tree, verbatimHash: yield* History.treeHash(snapshot.entries), checkTarget };
 });
 
-export interface SyncScan {
+interface SyncScan {
   readonly tree: History.Tree;
   readonly verbatimHash: History.TreeHash;
 }

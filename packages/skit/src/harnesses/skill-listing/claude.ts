@@ -56,7 +56,7 @@ export interface ClaudeListingSettings {
   readonly overrides: Readonly<Record<string, string>>;
   readonly notes: readonly string[];
 }
-export interface ClaudeListingSnapshot {
+interface ClaudeListingSnapshot {
   readonly budget: ListingBudget;
   readonly entries: readonly ClaudeListingEntry[];
   readonly settings?: ClaudeListingSettings;

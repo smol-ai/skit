@@ -128,5 +128,4 @@ export const releasePublishRequestSchema = Schema.Struct({
   archive_base64: base64.check(Schema.isMaxLength(MAX_RELEASE_ARCHIVE_BASE64_LENGTH)),
 });
 export const releasePublishResponseSchema = Schema.Struct({ release: releaseSchema });
-export type ReleasePublishRequest = typeof releasePublishRequestSchema.Type;
 export type ReleasePublishResponse = typeof releasePublishResponseSchema.Type;

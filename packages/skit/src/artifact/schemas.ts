@@ -90,7 +90,6 @@ export const containedSkillSchema = Schema.Struct({
   approval: Schema.optionalKey(Schema.Literals(["always", "on_request", "never"])),
   expected_outputs: Schema.optionalKey(Schema.Array(atMost(200))),
 });
-export type ContainedSkillDescriptor = typeof containedSkillSchema.Type;
 
 const author = Schema.Struct({
   name: nonEmpty,

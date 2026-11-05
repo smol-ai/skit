@@ -72,7 +72,7 @@ export type WorkspaceId = typeof WorkspaceId.Type;
  * opt-out nothing automatic resurrects.
  */
 const Registration = Schema.Literals(["IdentityOnly", "Registered", "Removing", "Removed"]);
-export type Registration = typeof Registration.Type;
+type Registration = typeof Registration.Type;
 
 export const Identity = Schema.Struct({ workspaceId: WorkspaceId, registration: Registration });
 export type Identity = typeof Identity.Type;
@@ -127,7 +127,7 @@ const Leftover = Schema.Union([
   Schema.TaggedStruct("Mismatched", { checkpoint: Connecting }),
   Schema.TaggedStruct("Invalid", { error: AuthorSyncStateInvalid }),
 ]);
-export type Leftover = typeof Leftover.Type;
+type Leftover = typeof Leftover.Type;
 
 /** One logical state over two files: a valid skit.remote.json is Connected whatever else is there. */
 const Connection = Schema.Union([
@@ -135,7 +135,7 @@ const Connection = Schema.Union([
   Connecting,
   Schema.TaggedStruct("Connected", { remote: AuthorRemoteHome, leftover: Leftover }),
 ]);
-export type Connection = typeof Connection.Type;
+type Connection = typeof Connection.Type;
 type Connected = Extract<Connection, { _tag: "Connected" }>;
 
 /** One read of all four files. */
@@ -144,7 +144,7 @@ const Workspace = Schema.Struct({
   identity: Schema.Option(Identity),
   connection: Connection,
 });
-export type Workspace = typeof Workspace.Type;
+type Workspace = typeof Workspace.Type;
 
 /** Which sync checkpoint: workspace identity plus SKIT locator (A5). */
 export const SyncKey = Schema.Struct({ workspaceId: WorkspaceId, locator: Schema.String });
@@ -157,7 +157,7 @@ export interface CreateReceipt {
 }
 
 /** The connection's one transition: each case is a pair the code really performs. */
-export type ConnectionTransition =
+type ConnectionTransition =
   | {
       readonly from: Extract<Connection, { _tag: "Unconnected" }>;
       readonly to: {
@@ -181,7 +181,7 @@ export type ConnectionTransition =
     };
 
 /** The registration lifecycle's one transition (A2). Only the first case may adopt an id. */
-export type RegistrationTransition =
+type RegistrationTransition =
   | {
       readonly from: Extract<Option.Option<Identity>, { _tag: "None" }>;
       readonly to: "IdentityOnly" | "Registered";
@@ -306,7 +306,7 @@ export type WorkspaceReadError =
   | AuthorSyncStateInvalid
   | PlatformError.PlatformError;
 
-export type WriteTreeError =
+type WriteTreeError =
   | AuthorWriteNotPrepared
   | LocalFilesChangedDuringSync
   | SkitContractError

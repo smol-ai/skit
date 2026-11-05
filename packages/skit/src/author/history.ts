@@ -172,7 +172,7 @@ export type CaptureError =
   | TreeError
   | PlatformError.PlatformError;
 
-export type SyncStateError = AuthorSyncStateInvalid | PlatformError.PlatformError;
+type SyncStateError = AuthorSyncStateInvalid | PlatformError.PlatformError;
 
 // ── Journal ────────────────────────────────────────────────────────────────────────────────────
 
