@@ -1,10 +1,9 @@
 export * from "./harnesses/skill-listing/codex-discovery.js";
 export * from "./harnesses/skill-listing/contracts.js";
 export * from "./harnesses/skill-listing/discovery.js";
-export * from "./harnesses/skill-listing/claude.js";
-export * from "./harnesses/skill-listing/codex.js";
+export { readClaudeListingSnapshot } from "./harnesses/skill-listing/claude.js";
+export { readCodexListingBudget } from "./harnesses/skill-listing/codex.js";
 export * from "./harnesses/skill-listing/codex-allocation.js";
-export * from "./harnesses/model-context-windows.js";
 export * from "./shared/build-info.js";
 export * from "./api/consumer-contracts.js";
 export * from "./api/authoring-contracts.js";
@@ -119,16 +118,13 @@ export * from "./installed-skills/policy.js";
 export {
   InstalledSkillFailure,
   inspectOwnershipMarker,
-  inspectInstalledSkill,
-  installedSkillDisplaced,
-  installedSkillName,
   prepareInstalledSkillRebuild,
   type InstalledSkillMutationError,
   type ManageApproval,
 } from "./installed-skills/files.js";
-export { inspectInstalledSkillBackups } from "./installed-skills/backups.js";
+
 export * from "./installed-skills/pnpm-skills.js";
-export { discoveryPathExcluded } from "./sources/discovery-exclusions.js";
+
 export * from "./artifact/registry-identity.js";
 export * from "./artifact/descriptor.js";
 export * from "./artifact/skit.js";
@@ -137,35 +133,25 @@ export * from "./platform/tree-requirements.js";
 export * from "./shared/tree-error.js";
 export * from "./artifact/tree.js";
 export * from "./artifact/tree-entry.js";
-export {
-  AuthorIgnoreRepository,
-  authorIgnoreRepositoryLayer,
-} from "./artifact/plain-author-ignore.js";
+export { AuthorIgnoreRepository } from "./artifact/plain-author-ignore.js";
 
 export type {
   LibraryLayerError,
   LibraryStateReadError,
   LibraryStateWriteError,
 } from "./library/library.js";
-export {
-  scanInventory,
-  deduplicateInventoryRoots,
-  type InventoryScanRoot,
-} from "./library/inventory/refresh.js";
-export { originalTreeHash, collectionVersionPath } from "./library/collection-version.js";
+export { scanInventory, type InventoryScanRoot } from "./library/inventory/refresh.js";
+export { collectionVersionPath } from "./library/collection-version.js";
 export * from "./library/library-contracts.js";
 export * from "./library/source-identity.js";
-export { skillsShLockFileEntry } from "./library/skills-sh-lock-file.js";
+
 export * from "./library/library-state.js";
 export { setupIntent } from "./library/setup.js";
 export * from "./library/enabled.js";
 export { RestoreInvalid, SourceRestoreInvalid } from "./library/library.js";
 export * from "./library/collection-version-plan.js";
 export * from "./library/restore-progress.js";
-export {
-  repositorySelectsInstalledSkill,
-  leftoverSkills,
-} from "./library/installation/uninstall.js";
+
 export {
   CollectionRemovalMissing,
   SkillRemovalRequiresCollection,
@@ -193,10 +179,9 @@ export {
   LibraryAuditChange,
   LibraryAuditInvalid,
 } from "./library/audit/audit-log.js";
-export { syncPaths } from "./platform/atomic-write.js";
+
 export { errnoOf, isErrno } from "./shared/errno.js";
-export { sha256Hash, hashHex } from "./shared/hash.js";
-export { isCanonicalRelativePath, parentDirectories } from "./shared/relative-path.js";
+
 export * from "./library/usage/contracts.js";
 export { scanUsage } from "./library/usage/scanner.js";
 
@@ -218,17 +203,11 @@ export * from "./library/duplicates.js";
 export * from "./library/source-inspection.js";
 export {
   ReviewedChangeDiffers,
-  changeWrites,
   type ReviewedChange,
   type UpdateChoice,
   type UpdatedCopy,
 } from "./library/installed-update.js";
-export {
-  incompleteManageWarning,
-  manageBlockers,
-  planManage,
-  type ManagePlan,
-} from "./library/manage-plan.js";
+export type { ManagePlan } from "./library/manage-plan.js";
 export { observePathEvidence, recoveryFingerprint } from "./library/folder-evidence.js";
 export type {
   PlanError as LibraryPlanError,
