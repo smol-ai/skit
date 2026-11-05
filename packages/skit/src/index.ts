@@ -180,6 +180,7 @@ export {
   emptyLibraryState,
   libraryStateRevision,
   LibraryInventory,
+  libraryInventory,
   libraryManifestFromLocalState,
 } from "./library/library-state.js";
 export { globalEnabled, enabledAt } from "./library/enabled.js";

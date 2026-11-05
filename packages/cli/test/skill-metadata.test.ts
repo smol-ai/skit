@@ -206,6 +206,10 @@ it.effect("inventory distinguishes physical copy dates and follows symlink targe
         Effect.provide(interaction.layer),
       ),
     );
+    // Check the read model before the JSON codec can hide excess state fields.
+    expect(inventory).not.toHaveProperty("operations");
+    expect(inventory).not.toHaveProperty("schemaVersion");
+    expect(inventory).not.toHaveProperty("device_skill_selection");
     expect(
       inventory.machine.instances.map((instance) => instance.skill_md_modified_at).sort(),
     ).toEqual(["2026-01-03T00:00:00.000Z", "2026-09-20T00:00:00.000Z"]);

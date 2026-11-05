@@ -121,7 +121,6 @@ export type {
   ManageNewSelection,
   ReviewedInstalledSkillChange,
   SetupStep,
-  StoredInstalledApply,
   SetupStopReason,
 } from "./store/state-schema.js";
 /** History reports steps and evidence, without private installed-change checkpoints. */

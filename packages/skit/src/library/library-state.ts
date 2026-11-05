@@ -92,6 +92,10 @@ export const LibraryInventory = LibraryState.mapFields(
 );
 export type LibraryInventory = typeof LibraryInventory.Type;
 
+/** Project the public inventory without carrying private Library operations or device choices. */
+export const libraryInventory = (state: LibraryState): LibraryInventory =>
+  Struct.pick(state, Struct.keys(LibraryInventory.fields));
+
 // State schemas validate JSON without transformations. Refining the original value keeps
 // unknown fields at every depth now that Effect no longer offers `preserve` parsing, so loading
 // and saving state preserve them. A workflow that rebuilds state through `LibraryState`, as

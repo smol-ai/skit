@@ -2,6 +2,7 @@ import {
   SkitConfiguration,
   skitConfigurationLayer,
   libraryDoctorReport,
+  libraryInventory,
   Library,
   emptyLibraryState,
   type InventoryScanRoot,
@@ -74,7 +75,7 @@ const refreshLibraryInventoryCommand = Effect.fn("CLI.refreshLibraryInventory")(
 export const inventoryCommand = Effect.fn("CLI.inventory")(function* (
   options: CliInventoryOptions,
 ) {
-  const library = yield* refreshLibraryInventoryCommand(options);
+  const library = libraryInventory(yield* refreshLibraryInventoryCommand(options));
   const renderer = yield* Renderer;
   const scan = yield* renderer.withStatus(
     "Scanning repository and harness skills",
@@ -145,17 +146,7 @@ export const inventoryCliCommand = Command.make("inventory", localFlags, (input)
     return yield* handleLibraryCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
-        const value = yield* inventoryCommand(options);
-        const {
-          schemaVersion: _schemaVersion,
-          sync_ancestry: _syncAncestry,
-          assessmentAcceptances: _,
-          collections: __,
-          enabled: ___,
-          invocation_policies: ____,
-          repositories: _____,
-          ...inventory
-        } = value;
+        const inventory = yield* inventoryCommand(options);
         yield* renderer.result(result("inventory", inventory));
       }),
     );
