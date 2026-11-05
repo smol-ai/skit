@@ -286,6 +286,7 @@ export const owners = {
       "HTTP publication authorization (done: Skits prepares a target-bound publication, enforcing namespace ownership before request decoding and again before publication)",
       "HTTP private release selection and grant authorization (done: Skits.releases.findDownload owns visibility, namespace/team access and latest fallback; private candidate queries no longer escape)",
       "HTTP authoring authorization and credential provenance (done: prepareAuthoring captures caller and target, rechecks every operation and takes credential_id from the Principal)",
+      "per-SKIT inventory grant scope (done: list filters only owned Principal/team namespaces, with current membership and bounded keyset pagination)",
       "publication/archive.ts reading Skits' tables directly (done: private skits/internal/release-archive.ts)",
       "ReleaseStore.readArchive leaking R2ObjectBody (done: BlobStore returns bytes or a stream)",
       "releases.adopted_content_digest (no reader or writer)",

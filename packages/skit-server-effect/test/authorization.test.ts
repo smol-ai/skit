@@ -51,7 +51,7 @@ describe("authorization", () => {
     }).pipe(Effect.provide(testLayer)),
   );
 
-  it.effect("derives the deduplicated author inventory scope", () =>
+  it.effect("lists owned namespaces without interpreting legacy grants", () =>
     Effect.gen(function* () {
       yield* prepareDatabase;
       const authorization = yield* Authorization;
@@ -69,10 +69,9 @@ describe("authorization", () => {
         ]),
       );
 
-      const scope = yield* authorization.authorInventoryScope(principal);
+      const namespaces = yield* authorization.ownedNamespaces(principal);
 
-      expect(new Set(scope.namespaces)).toEqual(new Set(["personal", "teamspace"]));
-      expect(scope.skits).toEqual(["shared/tool"]);
+      expect(new Set(namespaces)).toEqual(new Set(["personal", "teamspace"]));
     }).pipe(Effect.provide(testLayer)),
   );
 });

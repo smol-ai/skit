@@ -4,27 +4,20 @@ import type { Principal } from "../identity/service.js";
 import { normalizeNamespace } from "../domain/identifiers.js";
 import { DatabaseError, databaseError, type DatabaseSqlClient } from "../platform/cloudflare.js";
 
-const READ_PERMISSIONS = ["read", "change", "advance", "admin"] as const;
 const SUBJECT_BATCH_SIZE = 40;
 const SUBREQUEST_CONCURRENCY = 4;
 const TeamMembership = Schema.Struct({ team_id: Schema.String });
 const NamespaceRow = Schema.Struct({ namespace_slug: Schema.String });
-const ResourceRow = Schema.Struct({ resource_id: Schema.String });
 
 interface AuthorizationSubject {
   readonly kind: "principal" | "team";
   readonly id: string;
 }
 
-export interface AuthorInventoryScope {
-  readonly namespaces: ReadonlyArray<string>;
-  readonly skits: ReadonlyArray<string>;
-}
-
 export interface AuthorizationService {
-  readonly authorInventoryScope: (
+  readonly ownedNamespaces: (
     principal: Principal,
-  ) => Effect.Effect<AuthorInventoryScope, DatabaseError>;
+  ) => Effect.Effect<ReadonlyArray<string>, DatabaseError>;
   readonly ownsNamespace: (
     principal: Principal,
     namespace: string,
@@ -104,56 +97,32 @@ export const layer = Layer.effect(
       return yield* ownsForSubjects(yield* subjects(principal), namespace);
     });
 
-    const authorInventoryScope = Effect.fn("Authorization.authorInventoryScope")(function* (
+    const ownedNamespaces = Effect.fn("Authorization.ownedNamespaces")(function* (
       principal: Principal,
     ) {
       const candidates = yield* subjects(principal);
-      const allowed = READ_PERMISSIONS;
-      const placeholders = allowed.map(() => "?").join(", ");
       const rows = yield* Effect.all(
         batches(candidates).map((batch) => {
           const where = predicate(batch);
-          return Effect.all([
-            db(
-              "list owned namespaces",
-              sql.unsafe(
-                `SELECT namespace_slug FROM namespaces WHERE ${where.sql}`,
-                where.bindings,
-              ),
-            ),
-            db(
-              "list granted skits",
-              sql.unsafe(
-                `SELECT resource_id FROM resource_grants
-                 WHERE resource_kind = 'skit' AND permission IN (${placeholders})
-                   AND (${where.sql})`,
-                [...allowed, ...where.bindings],
-              ),
-            ),
-          ]);
+          return db(
+            "list owned namespaces",
+            sql.unsafe(`SELECT namespace_slug FROM namespaces WHERE ${where.sql}`, where.bindings),
+          );
         }),
         { concurrency: SUBREQUEST_CONCURRENCY },
       );
-      const decoded = yield* Effect.forEach(rows, ([namespaceRows, skitRows]) =>
-        Effect.all([
-          Schema.decodeUnknownEffect(Schema.Array(NamespaceRow))(namespaceRows),
-          Schema.decodeUnknownEffect(Schema.Array(ResourceRow))(skitRows),
-        ]).pipe(
+      const decoded = yield* Effect.forEach(rows, (result) =>
+        Schema.decodeUnknownEffect(Schema.Array(NamespaceRow))(result).pipe(
           Effect.mapError(
-            (cause) => new DatabaseError({ operation: "decode author scope", cause }),
+            (cause) => new DatabaseError({ operation: "decode owned namespaces", cause }),
           ),
         ),
       );
-      return {
-        namespaces: [
-          ...new Set(decoded.flatMap(([values]) => values.map((row) => row.namespace_slug))),
-        ],
-        skits: [...new Set(decoded.flatMap(([, values]) => values.map((row) => row.resource_id)))],
-      };
+      return [...new Set(decoded.flatMap((values) => values.map((row) => row.namespace_slug)))];
     });
 
     return Authorization.of({
-      authorInventoryScope,
+      ownedNamespaces,
       ownsNamespace,
     });
   }),

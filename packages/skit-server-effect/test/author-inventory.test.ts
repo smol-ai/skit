@@ -46,14 +46,45 @@ const prepareDatabase = Effect.flatMap(D1Client.D1Client, (sql) =>
 );
 
 describe("author inventory", () => {
-  it.effect("merges owned and granted skits into a stable cursor page", () =>
+  it.effect("keeps keyset pagination complete across namespace and membership batches", () =>
+    Effect.gen(function* () {
+      yield* prepareDatabase;
+      const sql = yield* D1Client.D1Client;
+      const skits = yield* Skits;
+      const expected: string[] = [];
+      for (let index = 0; index < 45; index++) {
+        const namespace = `team-${String(index).padStart(2, "0")}`;
+        const team = `team_${index}`;
+        expected.push(`${namespace}/tools`);
+        yield* sql.batch([
+          sql`INSERT INTO team_memberships VALUES (${team}, ${principal.id})`,
+          sql`INSERT INTO namespaces VALUES (${namespace}, 'team', ${team})`,
+          sql`INSERT INTO skits VALUES (${namespace}, 'tools', 'private', 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')`,
+        ]);
+      }
+      const seen: string[] = [];
+      let cursor: string | undefined;
+      for (let page = 0; page < 10; page++) {
+        const result = yield* skits.list(principal, { limit: "7", cursor });
+        if (result.outcome !== "page")
+          return yield* Effect.die("unexpected invalid fixture cursor");
+        seen.push(...result.skits.map((skit) => skit.skit_id));
+        if (result.next_cursor === null) break;
+        cursor = result.next_cursor;
+      }
+      expect(seen).toEqual(expected);
+    }).pipe(Effect.provide(testLayer)),
+  );
+
+  it.effect("merges principal and team namespaces into a stable cursor page, ignoring grants", () =>
     Effect.gen(function* () {
       yield* prepareDatabase;
       const skits = yield* Skits;
       yield* Effect.flatMap(D1Client.D1Client, (sql) =>
         sql.batch([
-          sql`INSERT INTO namespaces VALUES ('tim', 'principal', 'principal_test')`,
-          sql`INSERT INTO resource_grants VALUES ('grant_external', 'principal', 'principal_test', 'skit', 'zed/shared', 'read')`,
+          sql`INSERT INTO namespaces VALUES ('tim', 'principal', 'principal_test'), ('zed', 'team', 'team_shared')`,
+          sql`INSERT INTO team_memberships VALUES ('team_shared', 'principal_test')`,
+          sql`INSERT INTO resource_grants VALUES ('grant_external', 'principal', 'principal_test', 'skit', 'other/hidden', 'admin')`,
           sql`INSERT INTO skits VALUES ('tim', 'alpha', 'private', 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')`,
           sql`INSERT INTO skits VALUES ('tim', 'tools', 'unlisted', 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')`,
           sql`INSERT INTO skits VALUES ('zed', 'shared', 'public', 'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc')`,
@@ -102,6 +133,21 @@ describe("author inventory", () => {
         ],
         next_cursor: null,
       });
+      yield* Effect.flatMap(
+        D1Client.D1Client,
+        (sql) =>
+          sql`DELETE FROM team_memberships WHERE team_id = 'team_shared' AND principal_id = 'principal_test'`,
+      );
+      expect(yield* skits.list(principal, { limit: "2", cursor: "tim/tools" })).toEqual({
+        outcome: "page",
+        skits: [],
+        next_cursor: null,
+      });
+      yield* Effect.flatMap(D1Client.D1Client, (sql) => sql`DROP TABLE resource_grants`);
+      const withoutGrants = yield* skits.list(principal, { limit: "2" });
+      expect(
+        withoutGrants.outcome === "page" && withoutGrants.skits.map((skit) => skit.skit_id),
+      ).toEqual(["tim/alpha", "tim/tools"]);
       expect(yield* skits.list(principal, { cursor: "invalid" })).toEqual({
         outcome: "invalid_cursor",
       });

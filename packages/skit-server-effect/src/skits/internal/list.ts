@@ -1,6 +1,5 @@
-import { Effect, Schema } from "effect";
+import { Array as EffectArray, Effect, Schema } from "effect";
 import type { Principal } from "../../identity/service.js";
-import type { AuthorizationService } from "../../authorization/service.js";
 import { DatabaseError, databaseError, type DatabaseSqlClient } from "../../platform/cloudflare.js";
 import type { AuthorSkitSummary } from "@smolai/skit-core/universal/api";
 import { History } from "@smolai/skit-core/universal/authoring";
@@ -22,10 +21,6 @@ interface Position {
   readonly owner: string;
   readonly skit: string;
 }
-interface AccessBatch {
-  readonly namespaces: ReadonlyArray<string>;
-  readonly skits: ReadonlyArray<string>;
-}
 interface AuthorInventoryQuery {
   readonly limit?: string | null;
   readonly cursor?: string | null;
@@ -43,12 +38,6 @@ export type List = (
   query?: AuthorInventoryQuery,
 ) => Effect.Effect<AuthorInventoryPage, DatabaseError>;
 
-const batchesOf = <A>(values: ReadonlyArray<A>, size: number): ReadonlyArray<ReadonlyArray<A>> => {
-  const batches: Array<ReadonlyArray<A>> = [];
-  for (let index = 0; index < values.length; index += size)
-    batches.push(values.slice(index, index + size));
-  return batches;
-};
 const compareAscii = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0);
 const comparePosition = (left: Position, right: Position) =>
   compareAscii(left.owner, right.owner) || compareAscii(left.skit, right.skit);
@@ -64,31 +53,19 @@ const parseLimit = (value: string | null | undefined) => {
   if (!Number.isInteger(requested)) return DEFAULT_LIMIT;
   return Math.min(Math.max(requested, 1), MAX_LIMIT);
 };
-const accessBatches = (scope: {
-  readonly namespaces: ReadonlyArray<string>;
-  readonly skits: ReadonlyArray<string>;
-}): ReadonlyArray<AccessBatch> => [
-  ...batchesOf(scope.namespaces, ACCESS_BATCH_SIZE).map((namespaces) => ({
-    namespaces,
-    skits: [],
-  })),
-  ...batchesOf(scope.skits, ACCESS_BATCH_SIZE).map((skits) => ({ namespaces: [], skits })),
-];
-
-/** Skits owns this query; Authorization supplies the caller's allowed namespace/SKIT scope. */
-export const makeList = (sql: DatabaseSqlClient, authorization: AuthorizationService): List => {
+/** Skits owns inventory filtering; access is limited to the caller's owned namespaces. */
+export const makeList = (
+  sql: DatabaseSqlClient,
+  ownedNamespaces: (principal: Principal) => Effect.Effect<ReadonlyArray<string>, DatabaseError>,
+): List => {
   const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
     effect.pipe(databaseError(operation));
 
-  const accessedSkits = (batch: AccessBatch, after: Position | null, limit: number) => {
-    const access = [
-      batch.namespaces.length > 0
-        ? `d.owner_slug IN (${batch.namespaces.map(() => "?").join(", ")})`
-        : undefined,
-      batch.skits.length > 0
-        ? `(d.owner_slug || '/' || d.skit_slug) IN (${batch.skits.map(() => "?").join(", ")})`
-        : undefined,
-    ].filter((value): value is string => value !== undefined);
+  const accessedSkits = (
+    namespaces: ReadonlyArray<string>,
+    after: Position | null,
+    limit: number,
+  ) => {
     return db(
       "read accessed skits",
       sql.unsafe(
@@ -101,12 +78,11 @@ export const makeList = (sql: DatabaseSqlClient, authorization: AuthorizationSer
              ORDER BY r.published_at DESC, r.rowid DESC LIMIT 1) most_recent_release_version
          FROM skits d
          WHERE d.current_revision_id IS NOT NULL
-           AND (${access.join(" OR ")})
+           AND d.owner_slug IN (${namespaces.map(() => "?").join(", ")})
            AND (? IS NULL OR d.owner_slug > ? OR (d.owner_slug = ? AND d.skit_slug > ?))
          ORDER BY d.owner_slug, d.skit_slug LIMIT ?`,
         [
-          ...batch.namespaces,
-          ...batch.skits,
+          ...namespaces,
           after === null ? null : formatCursor(after),
           after?.owner ?? null,
           after?.owner ?? null,
@@ -124,11 +100,12 @@ export const makeList = (sql: DatabaseSqlClient, authorization: AuthorizationSer
     const after = parseCursor(query.cursor);
     if (after === undefined) return { outcome: "invalid_cursor" as const };
     const limit = parseLimit(query.limit);
-    const scope = yield* authorization.authorInventoryScope(principal);
-    if (scope.namespaces.length === 0 && scope.skits.length === 0)
-      return { outcome: "page" as const, skits: [], next_cursor: null };
+    const namespaces = yield* ownedNamespaces(principal);
+    if (namespaces.length === 0) return { outcome: "page" as const, skits: [], next_cursor: null };
     const rowBatches = yield* Effect.all(
-      accessBatches(scope).map((batch) => accessedSkits(batch, after, limit)),
+      EffectArray.chunksOf(namespaces, ACCESS_BATCH_SIZE).map((batch) =>
+        accessedSkits(batch, after, limit),
+      ),
       { concurrency: SUBREQUEST_CONCURRENCY },
     );
     const decoded = yield* Effect.forEach(rowBatches, (rows) =>

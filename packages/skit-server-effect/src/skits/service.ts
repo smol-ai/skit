@@ -555,7 +555,7 @@ export const layer = Layer.effect(
 
     return Skits.of({
       prepareAuthoring,
-      list: makeList(sql, authorization),
+      list: makeList(sql, authorization.ownedNamespaces),
       releases: makeReleaseReads(sql, blobs, authorization.ownsNamespace),
       ...makeDeletion(sql, blobs, authorization.ownsNamespace),
       ...makePublication(sql, blobs, digests, random, current, authorization.ownsNamespace),
