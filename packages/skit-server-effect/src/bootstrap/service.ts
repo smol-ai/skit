@@ -6,7 +6,7 @@ import { normalizeNamespace } from "../domain/identifiers.js";
 import { DatabaseError, databaseError, type DatabaseSqlClient } from "../platform/cloudflare.js";
 import { NativeCrypto } from "../platform/native-crypto.js";
 import { BootstrapInput } from "./contracts.js";
-export { BootstrapInput, BootstrapResult } from "./contracts.js";
+export { BootstrapInput } from "./contracts.js";
 
 export interface BootstrapClaimResult {
   readonly email: string;
