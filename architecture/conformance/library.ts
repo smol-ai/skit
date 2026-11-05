@@ -4,7 +4,7 @@
  * Every method and constructor requirement must match exactly. No migration exemptions.
  */
 import type { Effect, Layer } from "effect";
-import type { Library as Implementation } from "../../packages/skit/src/library/library.js";
+import type * as Implementation from "../../packages/skit/src/library/library.js";
 import type { Library, LibraryRequires } from "../library.js";
 
 /** Exactly equal, including literal unions; `never` equals only `never`. */

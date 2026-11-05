@@ -49,10 +49,14 @@ export type RejectsPublicStorageConflict = [
 ];
 
 // The actual owner requires envelopes, and remote Sync can run only with its receipt.
-import type { Library as Implementation } from "../../packages/skit/src/library/library.js";
+import type * as Implementation from "../../packages/skit/src/library/library.js";
+import type { RemoteReceipt } from "../../packages/skit/src/library/internal/sync/sync.js";
+type LocalSyncPlan = Exclude<Implementation.SyncPlan, Implementation.RemoteSyncPlan>;
 type EnabledPlan = Extract<Implementation.ReviewedPlan, { readonly _tag: "Enabled" }>;
 type AcceptsRequest<Request> = Request extends Implementation.ApplyRequest ? true : false;
 export type ApplyConsentChecks = [
+  Assert<Equal<Equal<LocalSyncPlan, never>, false>>,
+  Assert<Equal<Equal<EnabledPlan, never>, false>>,
   Assert<Equal<AcceptsRequest<EnabledPlan>, false>>,
   Assert<Equal<AcceptsRequest<{ readonly _tag: "Apply"; readonly plan: EnabledPlan }>, true>>,
   Assert<
@@ -66,7 +70,7 @@ export type ApplyConsentChecks = [
       AcceptsRequest<{
         readonly _tag: "ApplySynced";
         readonly plan: Implementation.RemoteSyncPlan;
-        readonly receipt: Implementation.RemoteReceipt;
+        readonly receipt: RemoteReceipt;
       }>,
       true
     >
@@ -75,8 +79,8 @@ export type ApplyConsentChecks = [
     Equal<
       AcceptsRequest<{
         readonly _tag: "ApplySynced";
-        readonly plan: Implementation.LocalSyncPlan;
-        readonly receipt: Implementation.RemoteReceipt;
+        readonly plan: LocalSyncPlan;
+        readonly receipt: RemoteReceipt;
       }>,
       false
     >
@@ -86,7 +90,7 @@ export type ApplyConsentChecks = [
       AcceptsRequest<{
         readonly _tag: "Apply";
         readonly plan: EnabledPlan;
-        readonly receipt: Implementation.RemoteReceipt;
+        readonly receipt: RemoteReceipt;
       }>,
       false
     >

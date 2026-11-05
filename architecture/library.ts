@@ -30,12 +30,12 @@ import type {
  */
 
 import type { Digest } from "effect/crypto";
+import type { LibraryState } from "../packages/skit/src/library/library-state.js";
 import type {
   InstalledSkill,
-  LibraryState,
   DeviceSkillSelection,
-  SyncAncestry,
-} from "../packages/skit/src/library/library-state.js";
+} from "../packages/skit/src/library/device-state.js";
+import type { SyncAncestry } from "../packages/skit/src/library/store/state-schema.js";
 import type { SetupIntent } from "../packages/skit/src/library/internal/setup/intent.js";
 import type {
   Approval,

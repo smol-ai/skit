@@ -52,12 +52,12 @@ import type {
 import type { HomeBusy as StoredHomeBusy } from "../packages/skit/src/platform/lock-failures.js";
 import type { TreeError } from "../packages/skit/src/shared/tree-error.js";
 import type { Hash } from "../packages/skit/src/shared/hash.js";
+import type { LibraryState } from "../packages/skit/src/library/library-state.js";
 import type {
-  DeviceSkillSelection,
   InstalledSkill,
-  LibraryState,
-  SyncAncestry,
-} from "../packages/skit/src/library/library-state.js";
+  DeviceSkillSelection,
+} from "../packages/skit/src/library/device-state.js";
+import type { SyncAncestry } from "../packages/skit/src/library/store/state-schema.js";
 import type {
   CollectionId,
   ImportId,

@@ -8,10 +8,8 @@ import type { Effect, Layer } from "effect";
 import type {
   scanAuthorSyncTree,
   AuthorWorkspace as Implementation,
-  AuthorWorkspaceShape,
   WorkspaceLease as ImplementationLease,
   AuthorHistory as HistoryImplementation,
-  AuthorHistoryShape,
 } from "../../packages/skit/src/author/index.js";
 import type * as CoreHistory from "../../packages/skit/src/history/history.js";
 
@@ -28,6 +26,9 @@ import type {
   SyncScan,
 } from "../author.js";
 import type { Assert, ChangedMethods, Equal, ExtraMethods, MissingMethods } from "./library.js";
+
+import type { AuthorWorkspaceShape } from "../../packages/skit/src/author/workspace.js";
+import type { AuthorHistoryShape } from "../../packages/skit/src/author/history.js";
 
 type Layered = typeof Implementation.layer;
 type HistoryLayered = ReturnType<typeof HistoryImplementation.layer>;
