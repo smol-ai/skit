@@ -108,13 +108,6 @@ export {
 } from "./installed-skills/files.js";
 
 export {
-  makePnpmSkillCheck,
-  pnpmSkillOwner,
-  type PnpmSkillManaged,
-  leavePnpmSkill,
-} from "./installed-skills/pnpm-skills.js";
-
-export {
   hashParts,
   hashInstalledSkillFiles,
   parseSkitReadme,

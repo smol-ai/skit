@@ -12,6 +12,17 @@
  */
 export const owners = [
   {
+    name: "Installed Skill ownership facts",
+    owner: [
+      "packages/skit/src/installed-skills/",
+      "packages/skit/src/library/",
+      "packages/skit/src/auditing/",
+    ],
+    privateModules: ["packages/skit/src/installed-skills/pnpm-skills."],
+    testOwner: "packages/skit/test/",
+    private: ["makePnpmSkillCheck", "pnpmSkillOwner", "leavePnpmSkill"],
+  },
+  {
     name: "Home lock owners",
     owner: [
       "packages/skit/src/platform/",

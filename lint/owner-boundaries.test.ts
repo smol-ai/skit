@@ -50,6 +50,31 @@ async function reported(
 }
 
 describe("skit/owner-boundaries", () => {
+  test("pnpm ownership checks stay behind Library and Audit reports", async () => {
+    for (const statement of [
+      'import { makePnpmSkillCheck } from "@smolai/skit-core";',
+      'import { pnpmSkillOwner as owner } from "@smolai/skit-core";',
+      'export { leavePnpmSkill } from "@smolai/skit-core";',
+      'import * as Pnpm from "../../../skit/src/installed-skills/pnpm-skills.js";',
+      'const pnpm = import("../../../skit/src/installed-skills/pnpm-skills.js");',
+    ])
+      expect(
+        await reported(statement, "owner-boundaries", "packages/cli/src/library/source.ts"),
+      ).toHaveLength(1);
+    for (const [filename, source] of [
+      ["packages/skit/src/library/source.ts", "../installed-skills/pnpm-skills.js"],
+      ["packages/skit/src/auditing/skills.ts", "../installed-skills/pnpm-skills.js"],
+      ["packages/skit/test/pnpm-skills.test.ts", "../src/installed-skills/pnpm-skills.js"],
+    ])
+      expect(
+        await reported(
+          `import { pnpmSkillOwner } from ${JSON.stringify(source)};`,
+          "owner-boundaries",
+          filename,
+        ),
+      ).toEqual([]);
+  });
+
   test("home-lock authority is restricted to the owners, including direct package namespace imports", async () => {
     for (const statement of [
       'import { HomeLock } from "@smolai/skit-core";',

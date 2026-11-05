@@ -14,6 +14,7 @@ export { SkitSource } from "./library-contracts.js";
 export { parseSkitSource, sourceLocator, SourceDiscoveryDiagnostic } from "../sources/resolve.js";
 // Canonical failure alias keeps inferred frontend declarations on the public entry.
 export type { LibraryStateWriteError } from "./library.js";
+export type { PnpmSkillManaged } from "../installed-skills/pnpm-skills.js";
 export type { AddNoSkills } from "./source-inspection.js";
 
 export interface SourceRequest {
