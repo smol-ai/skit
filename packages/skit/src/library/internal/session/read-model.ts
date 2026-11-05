@@ -1,6 +1,5 @@
 import {
   destinationLabel,
-  invocationBriefing,
   invocationPolicyChoices,
   invocationRowSummary,
   type InvocationPolicyChoice,
@@ -57,6 +56,6 @@ export function scopeRowLabel(scopeRow: InvocationScopeRow): string {
   ].join(" · ");
 }
 
-export { destinationLabel, invocationBriefing, invocationRowSummary };
+export { destinationLabel };
 
 export { type InstallScope as Scope } from "../../scope.js";

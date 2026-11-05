@@ -25,7 +25,7 @@ import { libraryView } from "./library-view.js";
 export type SetEnabledConfiguration = InventoryRootOptions;
 
 /** Display facts plus the Library owner's plain plan for the exact intents and Library previewed. */
-export const planOwner = Symbol("LibrarySelection.owner");
+const planOwner = Symbol("LibrarySelection.owner");
 
 export interface SetEnabledPlan {
   readonly [planOwner]: Library.Interface;

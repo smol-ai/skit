@@ -21,7 +21,7 @@ export const RefreshInventoryIntent = Schema.TaggedStruct("RefreshInventory", {
   roots: Schema.Array(ScanRoot),
 });
 export type RefreshInventoryIntent = typeof RefreshInventoryIntent.Type;
-export const RefreshInventoryChange = Schema.Struct({
+const RefreshInventoryChange = Schema.Struct({
   roots: Schema.Array(ScanRoot),
   installedSkills: Schema.Array(InstalledSkill),
   unmanaged: LibraryState.fields.unmanaged.schema.schema,

@@ -18,7 +18,6 @@ export {
   isEntryLink,
   scanSkillsDirectory,
 } from "../duplicates.js";
-export { DuplicateScanIncomplete } from "../installed-skill-facts.js";
 
 /** Each Harness's readable skills directories for a scope; a global override stands in for its own. */
 export function readableSkillsDirectories(

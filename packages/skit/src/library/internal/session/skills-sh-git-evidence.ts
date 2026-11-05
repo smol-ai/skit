@@ -4,7 +4,7 @@ import { Effect, FileSystem, Result, Schema } from "effect";
 import { SourceProcess } from "../../../platform/source-process.js";
 import { FailureTypeId, type SkitFailure } from "../../../shared/failure.js";
 
-export class GitInspectionFailed
+class GitInspectionFailed
   extends Schema.TaggedError<GitInspectionFailed>()("SkillsSh.GitInspectionFailed", {
     operation: Schema.String,
   })
@@ -149,3 +149,5 @@ export const inspectSkillsShGitEvidence = Effect.fn("SkillsSh.inspectGitEvidence
     }),
   };
 });
+
+export type { GitInspectionFailed };

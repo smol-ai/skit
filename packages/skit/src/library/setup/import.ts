@@ -6,7 +6,7 @@ import { SetupKnownSourceSelection, type SetupResult } from "./contract.js";
 import { prepareSkillsShImportEvidence } from "./skills-sh/lock-source.js";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 
-export class SetupImportInvalid
+class SetupImportInvalid
   extends Data.TaggedError("SetupImportInvalid")<{
     name: string;
     reason:
@@ -107,3 +107,5 @@ export const setupImportRequests = Effect.fn("Setup.importRequests")(function* (
   }
   return requests;
 });
+
+export type { SetupImportInvalid };

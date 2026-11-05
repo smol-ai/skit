@@ -33,7 +33,7 @@ export interface LibraryProgressReporter {
   ) => Effect.Effect<A, E, R>;
 }
 
-export class CollectionNotUpdatable
+class CollectionNotUpdatable
   extends Data.TaggedError("Library.CollectionNotUpdatable")<{
     subject_id: string;
     label: string;
@@ -215,3 +215,5 @@ export const previewSourceUpdates = Effect.fn("Library.previewSourceUpdates")(fu
   );
 });
 export { selectSubjects };
+
+export type { CollectionNotUpdatable };

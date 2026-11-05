@@ -70,8 +70,6 @@ const MoveRecord = Schema.Union([
   CurrentMoveRecord,
 ]);
 
-export { RecoveryFact, RecoveryInspection } from "../../recovery-facts.js";
-
 export interface RecoveryMoveRequest {
   readonly name: string;
   readonly path: string;

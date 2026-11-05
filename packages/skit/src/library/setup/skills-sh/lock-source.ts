@@ -241,7 +241,7 @@ export const lockMatches = Effect.fn("Setup.lockMatches")(function* (
   return matches;
 });
 
-export class SkillsShImportEvidenceInvalid extends Schema.TaggedError<SkillsShImportEvidenceInvalid>()(
+class SkillsShImportEvidenceInvalid extends Schema.TaggedError<SkillsShImportEvidenceInvalid>()(
   "SkillsShImportEvidenceInvalid",
   {
     name: Schema.String,

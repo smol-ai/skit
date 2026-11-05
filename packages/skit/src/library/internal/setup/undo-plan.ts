@@ -8,7 +8,7 @@ import { LegacySetupDiscovery } from "../../machine-settings.js";
 export const UndoIntent = Schema.TaggedStruct("Undo", { operationId: Schema.NonEmptyString });
 export type UndoIntent = typeof UndoIntent.Type;
 
-export const UndoChange = Schema.Struct({
+const UndoChange = Schema.Struct({
   operationId: Schema.String,
   planId: Hash,
   status: Schema.Literals(["ready", "conflicted", "already-undone"]),
@@ -30,7 +30,7 @@ export const UndoChange = Schema.Struct({
   intentChanged: Schema.Boolean,
   next: LibraryState,
 });
-export type UndoChange = typeof UndoChange.Type;
+type UndoChange = typeof UndoChange.Type;
 
 /** Data only: apply verifies the state, folders, imports and legacy evidence all over again. */
 export const UndoPlan = Schema.TaggedStruct("Undo", {

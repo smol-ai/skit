@@ -11,7 +11,7 @@ import {
 } from "../harnesses/invocation-metadata.js";
 
 /** The command an Author runs to bring a Skill's native metadata into conformance. */
-export const INVOCATION_GENERATION_COMMAND = "skit author invocation";
+const INVOCATION_GENERATION_COMMAND = "skit author invocation";
 
 export type DeclaringSkill = Pick<SkitDescriptor["skills"][number], "name" | "path" | "invocation">;
 

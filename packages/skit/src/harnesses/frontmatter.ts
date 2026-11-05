@@ -11,7 +11,7 @@ import type { YamlMapping } from "../shared/json.js";
 
 import { harnessProfile } from "./catalog.js";
 
-export const FrontmatterCompatibilityIssue = Schema.Struct({
+const FrontmatterCompatibilityIssue = Schema.Struct({
   code: Schema.Literals([
     "frontmatter-missing",
     "frontmatter-invalid",
@@ -24,7 +24,7 @@ export const FrontmatterCompatibilityIssue = Schema.Struct({
   severity: Schema.Literals(["error", "unknown"]),
   sourceIds: Schema.Array(Schema.String),
 });
-export type FrontmatterCompatibilityIssue = typeof FrontmatterCompatibilityIssue.Type;
+type FrontmatterCompatibilityIssue = typeof FrontmatterCompatibilityIssue.Type;
 
 export const FrontmatterCompatibilityResult = Schema.Struct({
   harness: HarnessName,

@@ -6,11 +6,11 @@ import { CollectionId, SkillId } from "./entity-ids.js";
 import { InstallScope } from "./scope.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 import { resolve } from "node:path";
-export const Subject = Schema.Union([
+const Subject = Schema.Union([
   Schema.Struct({ _tag: Schema.Literal("Skill"), id: SkillId }),
   Schema.Struct({ _tag: Schema.Literal("Collection"), id: CollectionId }),
 ]);
-export type Subject = typeof Subject.Type;
+type Subject = typeof Subject.Type;
 import { Invocation } from "./device-state.js";
 export { Invocation } from "./device-state.js";
 /** What a setup review approved for one enable, and nothing else. */

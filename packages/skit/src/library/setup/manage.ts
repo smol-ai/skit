@@ -18,7 +18,7 @@ import type { SetupResult } from "./contract.js";
 
 const SetupManageSelections = Schema.Array(SetupCopySelection);
 
-export class SetupManageSelectionInvalid
+class SetupManageSelectionInvalid
   extends Data.TaggedError("SetupManageSelectionInvalid")<{
     name: string;
     reason:
@@ -209,3 +209,5 @@ export const setupNewSelections = Effect.fn("Setup.newSelections")(function* (
   }
   return result;
 });
+
+export type { SetupManageSelectionInvalid };

@@ -22,7 +22,7 @@ export const AcceptFindingIntent = Schema.TaggedStruct("AcceptFinding", {
   expiresAt: Schema.OptionFromOptionalKey(Schema.String),
 });
 export type AcceptFindingIntent = typeof AcceptFindingIntent.Type;
-export const AcceptFindingChange = Schema.Struct({
+const AcceptFindingChange = Schema.Struct({
   acceptance: SkillAssessmentAcceptance.mapFields(Struct.omit(["acceptedAt"])),
 });
 export const AcceptFindingPlan = Schema.TaggedStruct("AcceptFinding", {

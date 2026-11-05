@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { FailureTypeId, type SkitFailure } from "./failure.js";
 
-export const TreeErrorReason = Schema.Union([
+const TreeErrorReason = Schema.Union([
   Schema.Struct({
     _tag: Schema.Literal("GitCommandFailed"),
     command: Schema.String,
@@ -22,7 +22,7 @@ export const TreeErrorReason = Schema.Union([
     path: Schema.String,
   }),
 ]);
-export type TreeErrorReason = typeof TreeErrorReason.Type;
+type TreeErrorReason = typeof TreeErrorReason.Type;
 
 const renderReason = (reason: TreeErrorReason): string => {
   switch (reason._tag) {

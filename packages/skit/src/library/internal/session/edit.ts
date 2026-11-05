@@ -29,7 +29,7 @@ export class EditImportMissing
   readonly remediation = "Run `skit doctor` to inspect changed installed skills.";
 }
 
-export class EditImportAmbiguous
+class EditImportAmbiguous
   extends Data.TaggedError("Library.EditImportAmbiguous")<{ message: string }>
   implements SkitFailure
 {
@@ -298,3 +298,5 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
     }),
   );
 });
+
+export type { EditImportAmbiguous };

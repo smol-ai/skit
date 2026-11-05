@@ -193,13 +193,12 @@ export const Collection = Schema.Struct({
 });
 export interface Collection extends Schema.Schema.Type<typeof Collection> {}
 
-export const CollectionVersionSkill = Schema.Struct({
+const CollectionVersionSkill = Schema.Struct({
   source_path: CollectionRelativePath,
   source_hash: Hash,
   artifact_hash: Hash,
   materialization_profile: MaterializationProfile,
 });
-export type CollectionVersionSkill = typeof CollectionVersionSkill.Type;
 
 export const CollectionVersion = Schema.Struct({
   collection_version_id: CollectionVersionId,

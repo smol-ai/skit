@@ -77,7 +77,7 @@ const Change = Schema.Struct({
   mode: Schema.Literals(["existing", "new"]),
   selections: Schema.Array(SelectionChange),
 });
-export const ManageChange = Change.pipe(Schema.fieldsAssign({ planId: Hash }));
+const ManageChange = Change.pipe(Schema.fieldsAssign({ planId: Hash }));
 const Reviewed = Schema.TaggedStruct("Manage", {
   intent: ManageIntent,
   home: Schema.String,
@@ -103,7 +103,7 @@ export interface ManageOutcome {
   readonly result: ManageResult;
 }
 /** Work already recorded is visible by operationId; failure never implies rollback. */
-export class ManageStopped
+class ManageStopped
   extends Schema.TaggedError<ManageStopped>()("Library.ManageStopped", {
     operationId: OperationId,
     reason: SetupStopReason,
@@ -346,3 +346,5 @@ export const applyManaging = Effect.fn("Library.applyManaging")(function* (
 });
 export type ManagePlanError = Effect.Error<ReturnType<typeof planManaging>>;
 export type ManageApplyError = Effect.Error<ReturnType<typeof applyManaging>>;
+
+export type { ManageStopped };

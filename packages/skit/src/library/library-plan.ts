@@ -26,20 +26,17 @@ export const Enabled = Schema.TaggedStruct("Enabled", {
 });
 export type Enabled = typeof Enabled.Type;
 /** Remove a Collection with its Skills, imports, enabled entries and installed copies. */
-export const Remove = Schema.TaggedStruct("Remove", { collectionId: CollectionId });
-export type Remove = typeof Remove.Type;
+const Remove = Schema.TaggedStruct("Remove", { collectionId: CollectionId });
 /** Change nothing; bring every installed copy on this device up to date. */
-export const Update = Schema.TaggedStruct("Update", {});
-export type Update = typeof Update.Type;
+const Update = Schema.TaggedStruct("Update", {});
 /**
  * Uninstall these recorded copies ahead of a sync. Their records stay, as pending, unless listed
  * to drop.
  */
-export const Uninstall = Schema.TaggedStruct("Uninstall", {
+const Uninstall = Schema.TaggedStruct("Uninstall", {
   copies: Schema.Array(InstalledSkillId),
   drop: Schema.Array(InstalledSkillId),
 });
-export type Uninstall = typeof Uninstall.Type;
 export const Intent = Schema.Union([Enabled, Remove, Update, Uninstall]);
 export type Intent = typeof Intent.Type;
 

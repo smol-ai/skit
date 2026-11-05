@@ -143,7 +143,7 @@ export interface SyncOutcome {
   readonly _tag: "Sync";
   readonly result: SyncResult;
 }
-export class SyncStopped extends Schema.TaggedError<SyncStopped>()("Library.SyncStopped", {
+class SyncStopped extends Schema.TaggedError<SyncStopped>()("Library.SyncStopped", {
   operationId: OperationId,
   reason: SetupStopReason,
 }) {
@@ -543,3 +543,5 @@ export const applySync = Effect.fn("Library.applySync")(function* (
 });
 export type SyncPlanError = Effect.Error<ReturnType<typeof planSync>>;
 export type SyncApplyError = Effect.Error<ReturnType<typeof applySync>>;
+
+export type { SyncStopped };

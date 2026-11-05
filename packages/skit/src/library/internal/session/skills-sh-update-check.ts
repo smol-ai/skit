@@ -5,7 +5,6 @@ import type { LibraryState } from "../../library-state.js";
 import { computeSkillsLockCompatibleHash } from "../../setup.js";
 import type { LibrarySubject } from "../../subject-resolution.js";
 import { inspectSkillsShGitEvidence } from "./skills-sh-git-evidence.js";
-export { GitInspectionFailed } from "./skills-sh-git-evidence.js";
 
 export type SkillsShUpdateStatus =
   | "current"
