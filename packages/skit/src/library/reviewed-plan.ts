@@ -74,7 +74,7 @@ export const applyReviewed = <
       if (base.revision !== plan.baseRevision)
         return yield* new StalePlan({
           message: "The Library changed after this plan was reviewed",
-          expected: Revision(plan.baseRevision),
+          expected: Revision.make(plan.baseRevision),
           actual: base.revision,
         });
       const again = yield* replan(base);

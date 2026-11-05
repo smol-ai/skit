@@ -26,12 +26,12 @@ it.effect("a plan narrows by operation and a forged tag cannot redirect apply", 
       for (const _tag of ["Uninstall", "Undo"]) {
         Object.assign(plan, { _tag });
         assert.isFalse(Schema.is(Library.Plan)(plan));
-        const failure = yield* Effect.flip(library.apply(plan));
+        const failure = yield* Effect.flip(library.apply({ _tag: "Apply", plan: plan }));
         assert.strictEqual(failure._tag, "Library.StalePlan");
         assert.isFalse(yield* fs.exists(home));
       }
       Object.assign(plan, { _tag: "Update" });
-      const outcome = yield* library.apply(plan);
+      const outcome = yield* library.apply({ _tag: "Apply", plan: plan });
       expectTypeOf(outcome).toEqualTypeOf<Extract<Library.Outcome, { readonly _tag: "Update" }>>();
       assert.strictEqual(outcome._tag, "Update");
       assert.strictEqual(outcome.result._tag, "Applied");
@@ -78,7 +78,7 @@ for (const initiallyPresent of [false, true])
             yield* fs.makeDirectory(home);
             yield* fs.writeFileString(statePath, bytes);
           }
-          const result = yield* Effect.result(library.apply(plan));
+          const result = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
           assert.strictEqual(result._tag, "Failure");
           if (result._tag === "Failure") {
             assert.strictEqual(result.failure._tag, "Library.StalePlan");
@@ -116,7 +116,7 @@ it.effect("planning refuses a changed Snapshot revision without writing the Libr
         library.plan(
           { _tag: "Update" },
           {
-            base: { ...snapshot, revision: Library.Revision("absent-but-changed") },
+            base: { ...snapshot, revision: Library.Revision.make("absent-but-changed") },
           },
         ),
       );
@@ -124,7 +124,10 @@ it.effect("planning refuses a changed Snapshot revision without writing the Libr
       if (result._tag === "Failure") assert.strictEqual(result.failure._tag, "Library.StalePlan");
       assert.isFalse(yield* fs.exists(home));
       const plan = yield* library.plan({ _tag: "Update" }, { base: snapshot });
-      assert.strictEqual((yield* library.apply(plan)).result._tag, "Applied");
+      assert.strictEqual(
+        (yield* library.apply({ _tag: "Apply", plan: plan })).result._tag,
+        "Applied",
+      );
       assert.isFalse(yield* fs.exists(join(home, "skills")));
     }).pipe(
       Effect.provide(
@@ -163,7 +166,10 @@ it.effect("all planning validates captured state, and a delayed plan owns its Sn
       assert.strictEqual(inventoryError._tag, "Library.StalePlan");
       const captured = yield* planning;
       assert.strictEqual(captured.baseRevision, snapshot.revision);
-      assert.strictEqual((yield* library.apply(captured)).result._tag, "Applied");
+      assert.strictEqual(
+        (yield* library.apply({ _tag: "Apply", plan: captured })).result._tag,
+        "Applied",
+      );
       assert.strictEqual(yield* fs.readFileString(statePath), bytes);
     }).pipe(
       Effect.provide(

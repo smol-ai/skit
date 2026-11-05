@@ -37,7 +37,7 @@ it.effect(
         const portable = yield* Schema.decodeUnknownEffect(Library.RefreshInventoryPlan)(
           JSON.parse(JSON.stringify(plan)),
         );
-        const applied = yield* library.apply(portable);
+        const applied = yield* library.apply({ _tag: "Apply", plan: portable });
         assert.strictEqual(applied.result.state.unmanaged[0].path, join(f.skills, "review"));
         assert.deepStrictEqual(applied.result.keptBackups, []);
         assert.strictEqual(yield* f.fs.readFileString(f.path), f.bytes);
@@ -62,7 +62,7 @@ it.effect(
           { base },
         );
         yield* f.fs.writeFileString(f.path, "operator edit\n");
-        const changed = yield* Effect.result(library.apply(plan));
+        const changed = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
         assert.strictEqual(changed._tag, "Failure");
         if (changed._tag === "Failure")
           assert.strictEqual(changed.failure._tag, "Library.StalePlan");
@@ -71,19 +71,23 @@ it.effect(
         yield* f.fs.writeFileString(f.path, f.bytes);
         const altered = yield* Effect.result(
           library.apply({
-            ...plan,
-            change: { ...plan.change, next: { ...plan.change.next, unmanaged: [] } },
+            _tag: "Apply",
+            plan: {
+              ...plan,
+              change: { ...plan.change, next: { ...plan.change.next, unmanaged: [] } },
+            },
           }),
         );
         assert.strictEqual(altered._tag, "Failure");
         if (altered._tag === "Failure")
           assert.strictEqual(altered.failure._tag, "Library.StalePlan");
         assert.isFalse(yield* f.fs.exists(join(f.home, "state.json")));
-        yield* library.apply(
-          yield* library.plan({ _tag: "RefreshInventory", roots: [] }, { base }),
-        );
+        yield* library.apply({
+          _tag: "Apply",
+          plan: yield* library.plan({ _tag: "RefreshInventory", roots: [] }, { base }),
+        });
         const bytes = yield* f.fs.readFileString(join(f.home, "state.json"));
-        const stale = yield* Effect.result(library.apply(plan));
+        const stale = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
         assert.strictEqual(stale._tag, "Failure");
         if (stale._tag === "Failure") assert.strictEqual(stale.failure._tag, "Library.StalePlan");
         assert.strictEqual(yield* f.fs.readFileString(join(f.home, "state.json")), bytes);
@@ -96,7 +100,7 @@ it.effect(
         const decoded = yield* Schema.decodeUnknownEffect(Library.RefreshInventoryPlan)(
           JSON.parse(JSON.stringify(futurePlan)),
         );
-        yield* library.apply(decoded);
+        yield* library.apply({ _tag: "Apply", plan: decoded });
         assert.deepStrictEqual(
           JSON.parse(yield* f.fs.readFileString(join(f.home, "state.json"))).future,
           { keep: "future data" },
@@ -129,8 +133,9 @@ it.effect(
         const request = yield* localImportRequest(source, "2026-11-04T00:00:00.000Z");
         if (Option.isNone(request)) return yield* Effect.die("Expected a Skill source");
         const imported = yield* library.import.collection(request.value);
-        yield* library.apply(
-          yield* library.plan(
+        yield* library.apply({
+          _tag: "Apply",
+          plan: yield* library.plan(
             {
               _tag: "Enabled",
               changes: [
@@ -143,7 +148,7 @@ it.effect(
             },
             { base: yield* library.read },
           ),
-        );
+        });
         const snapshot = yield* library.read;
         if (snapshot._tag === "Absent") return yield* Effect.die("Expected installed state");
         const installed = snapshot.state.installed_skills[0];
@@ -156,12 +161,13 @@ it.effect(
         yield* f.fs.copy(installed.path, pending);
         yield* f.fs.writeFileString(join(pending, "operator-note"), "irreplaceable backup bytes\n");
         yield* f.fs.writeFileString(f.path, "changed installed bytes\n");
-        yield* library.apply(
-          yield* library.plan(
+        yield* library.apply({
+          _tag: "Apply",
+          plan: yield* library.plan(
             { _tag: "RefreshInventory", roots: [] },
             { base: yield* library.read },
           ),
-        );
+        });
         yield* f.fs.writeFileString(f.path, f.bytes);
         return {
           pending,
@@ -177,7 +183,7 @@ it.effect(
         );
         assert.strictEqual(plan.backups.length, 1);
         assert.isTrue(yield* f.fs.exists(backup.pending));
-        const failed = yield* Effect.result(library.apply(plan));
+        const failed = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
         assert.strictEqual(failed._tag, "Failure");
         if (failed._tag === "Failure") assert.strictEqual(failed.failure._tag, "PlatformError");
         const saved = yield* library.read;
@@ -188,9 +194,10 @@ it.effect(
         assert.isFalse(yield* f.fs.exists(backup.kept));
         const history = (yield* library.history).events;
         refuse = false;
-        const done = yield* library.apply(
-          yield* library.plan({ _tag: "RefreshInventory", roots: [] }, { base: saved }),
-        );
+        const done = yield* library.apply({
+          _tag: "Apply",
+          plan: yield* library.plan({ _tag: "RefreshInventory", roots: [] }, { base: saved }),
+        });
         assert.strictEqual(done.result.keptBackups.length, 1);
         assert.deepStrictEqual((yield* library.history).events, history);
         assert.strictEqual(

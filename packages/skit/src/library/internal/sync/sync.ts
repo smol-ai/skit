@@ -1,4 +1,5 @@
-import { Effect, Option, Schema } from "effect";
+import { Revision } from "../../snapshot.js";
+import { Effect, Option, Schema, type SchemaIssue } from "effect";
 import { isPlatformError } from "effect/PlatformError";
 import { Hash, type InstallScope } from "../../../vocabulary.js";
 import { canonicalJson } from "../../../shared/json.js";
@@ -79,7 +80,7 @@ const Remote = Schema.TaggedUnion({
 });
 const syncPlan = Schema.TaggedStruct("Sync", {
   intent: SyncIntent,
-  baseRevision: Schema.String,
+  baseRevision: Revision,
   planId: Hash,
   operationId: OperationId,
   home: Schema.String,
@@ -100,9 +101,21 @@ const syncPlan = Schema.TaggedStruct("Sync", {
     staged: Staged,
   }),
 });
-export interface SyncPlan extends Schema.Schema.Type<typeof syncPlan> {}
-export interface StoredSyncPlan extends Schema.Codec.Encoded<typeof syncPlan> {}
-export const SyncPlan: Schema.Codec<SyncPlan, StoredSyncPlan> = syncPlan;
+const localSyncPlan = syncPlan.mapFields((fields) => ({
+  ...fields,
+  change: fields.change.mapFields((change) => ({ ...change, remote: Remote.cases.None })),
+}));
+const remoteSyncPlan = syncPlan.mapFields((fields) => ({
+  ...fields,
+  change: fields.change.mapFields((change) => ({ ...change, remote: Remote.cases.Expected })),
+}));
+export type LocalSyncPlan = typeof localSyncPlan.Type;
+export type RemoteSyncPlan = typeof remoteSyncPlan.Type;
+export type SyncPlan = LocalSyncPlan | RemoteSyncPlan;
+export const SyncPlan = Schema.Union([localSyncPlan, remoteSyncPlan]);
+export type StoredSyncPlan = typeof SyncPlan.Encoded;
+export const isRemoteSyncPlan = (plan: SyncPlan): plan is RemoteSyncPlan =>
+  plan.change.remote._tag === "Expected";
 export const RemoteReceipt = Schema.Struct({
   origin: Schema.String,
   libraryId: Schema.String,
@@ -112,8 +125,12 @@ export const RemoteReceipt = Schema.Struct({
 });
 export type RemoteReceipt = typeof RemoteReceipt.Type;
 export type SyncApplyRequest =
-  | { readonly _tag: "Apply"; readonly plan: SyncPlan; readonly receipt?: never }
-  | { readonly _tag: "ApplySynced"; readonly plan: SyncPlan; readonly receipt: RemoteReceipt };
+  | { readonly _tag: "Apply"; readonly plan: LocalSyncPlan; readonly receipt?: never }
+  | {
+      readonly _tag: "ApplySynced";
+      readonly plan: RemoteSyncPlan;
+      readonly receipt: RemoteReceipt;
+    };
 export interface SyncResult {
   readonly installed: number;
   readonly uninstalled: number;
@@ -202,12 +219,19 @@ export const planSync = Effect.fn("Library.planSync")(function* (
     return yield* new RestoreInvalid({
       detail: `retained copies unavailable: ${intent.staged.missing.join(", ")}`,
     });
-  const manifest = normalized(yield* libraryManifestFromLocalState(intent.staged.state));
+  const manifestOf = (state: LibraryState) =>
+    libraryManifestFromLocalState(state).pipe(
+      Effect.mapError(
+        () =>
+          new InvalidLibraryState({ path: `${home}/state.json`, detail: "Invalid Sync manifest" }),
+      ),
+    );
+  const manifest = normalized(yield* manifestOf(intent.staged.state));
   if ((yield* digest(manifest)) !== intent.staged.manifestDigest)
     return yield* new StalePlan({ message: "The staged Sync manifest changed" });
   const state =
     options.base._tag === "Present" ? structuredClone(options.base.state) : emptyLibraryState();
-  const local = yield* libraryManifestFromLocalState(state);
+  const local = yield* manifestOf(state);
   if (!same(state.sync_ancestry ?? null, Option.getOrUndefined(intent.acceptedBase) ?? null))
     return yield* new StalePlan({ message: "The accepted Sync base changed" });
   const prior = Option.getOrUndefined(intent.acceptedBase);
@@ -242,7 +266,7 @@ export const planSync = Effect.fn("Library.planSync")(function* (
     rootFor,
     [],
     device,
-  );
+  ).pipe(Effect.mapError(() => new InvalidIntent({ detail: "Invalid Sync collision choices" })));
   const installedSkills =
     options.base._tag === "Absent"
       ? Option.none()
@@ -253,6 +277,8 @@ export const planSync = Effect.fn("Library.planSync")(function* (
             installation.manifest,
             rootFor,
             installation.independent,
+          ).pipe(
+            Effect.mapError(() => new InvalidIntent({ detail: "Invalid installed Sync preview" })),
           ),
         );
   const conflicts = [
@@ -348,9 +374,22 @@ export const planSync = Effect.fn("Library.planSync")(function* (
       staged: intent.staged,
     },
   };
-  return yield* syncPlan
-    .makeEffect({ ...data, planId: yield* digest(data) })
-    .pipe(Effect.mapError(() => new InvalidIntent({ detail: "Invalid local Sync plan" })));
+  const planId = yield* digest(data);
+  const reviewed: Effect.Effect<SyncPlan, SchemaIssue.Issue> =
+    data.change.remote._tag === "None"
+      ? localSyncPlan.makeEffect({
+          ...data,
+          planId,
+          change: { ...data.change, remote: data.change.remote },
+        })
+      : remoteSyncPlan.makeEffect({
+          ...data,
+          planId,
+          change: { ...data.change, remote: data.change.remote },
+        });
+  return yield* reviewed.pipe(
+    Effect.mapError(() => new InvalidIntent({ detail: "Invalid local Sync plan" })),
+  );
 });
 
 /** Verify the receipt and exact review before recording a replayable local program. */

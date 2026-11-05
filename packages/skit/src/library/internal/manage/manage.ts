@@ -1,3 +1,4 @@
+import { Revision } from "../../snapshot.js";
 import { Effect, Option, Schema, Struct } from "effect";
 import { join } from "node:path";
 import { FailureTypeId, type SkitFailure } from "../../../shared/failure.js";
@@ -80,7 +81,7 @@ export const ManageChange = Change.pipe(Schema.fieldsAssign({ planId: Hash }));
 const Reviewed = Schema.TaggedStruct("Manage", {
   intent: ManageIntent,
   home: Schema.String,
-  baseRevision: Schema.String,
+  baseRevision: Revision,
   operationId: OperationId,
   routing: StepRouting,
   change: Change,
@@ -285,7 +286,10 @@ export const planManaging = Effect.fn("Library.planManaging")(function* (
     steps,
     folders: yield* Effect.forEach([...paths].sort(), (path) => files.inspect(path)),
   };
-  const planId = yield* planIdOf(yield* Schema.encodeEffect(Reviewed)(reviewed));
+  const encoded = yield* Schema.encodeEffect(Reviewed)(reviewed).pipe(
+    Effect.mapError(() => new InvalidIntent({ detail: "Invalid Manage review" })),
+  );
+  const planId = yield* planIdOf(encoded);
   return { ...reviewed, planId, change: { ...reviewed.change, planId } } satisfies ManagePlan;
 });
 

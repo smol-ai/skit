@@ -50,6 +50,7 @@ export class SourceRestoreInvalid
   extends Data.TaggedError("Library.SyncSourceRestoreInvalid")<{
     hash: string;
     detail: string;
+    cause?: unknown;
   }>
   implements SkitFailure
 {
@@ -170,6 +171,12 @@ const refetchSourceArchive = Effect.fn("Library.restore.refetchSource")(function
       );
       return yield* readSnapshotArchive(prepared.staged);
     }),
+  ).pipe(
+    Effect.mapError((cause) =>
+      cause._tag === "Library.SyncSourceRestoreInvalid"
+        ? cause
+        : new SourceRestoreInvalid({ hash, detail: cause.message, cause }),
+    ),
   );
   if (archive.digest !== hash)
     return yield* new SourceRestoreInvalid({

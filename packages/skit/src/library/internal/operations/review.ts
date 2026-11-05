@@ -80,7 +80,7 @@ export const reviewApply = Effect.fn("Library.reviewApply")(function* (
   if (actual !== input.baseRevision)
     return yield* new StalePlan({
       message: "Library changed after this change was previewed",
-      expected: Revision(input.baseRevision),
+      expected: Revision.make(input.baseRevision),
       actual,
     });
   const again = yield* planChanges(home, base, input.intent, input.approvals);

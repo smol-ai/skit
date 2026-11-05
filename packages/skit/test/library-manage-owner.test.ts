@@ -71,7 +71,7 @@ it.effect(
         assert.isFalse(yield* f.fs.exists(join(f.copy, ".skit-ownership.json")));
         assert.isTrue(Option.isNone(plan.change.selections[0].enable));
         const decoded = yield* portable(plan);
-        const outcome = yield* library.apply(decoded);
+        const outcome = yield* library.apply({ _tag: "Apply", plan: decoded });
         assert.strictEqual(outcome.result.imported.length, 1);
         assert.strictEqual(outcome.result.results[0].application.status, "complete");
         assert.strictEqual(yield* f.fs.readFileString(join(f.copy, "SKILL.md")), f.bytes);
@@ -123,7 +123,7 @@ it.effect(
         );
         assert.isTrue(Option.isSome(plan.change.selections[0].enable));
         assert.strictEqual(yield* f.fs.readFileString(statePath), before);
-        const outcome = yield* library.apply(yield* portable(plan));
+        const outcome = yield* library.apply({ _tag: "Apply", plan: yield* portable(plan) });
         assert.strictEqual(outcome.result.imported.length, 0);
         assert.strictEqual(outcome.result.results.length, 1);
         assert.strictEqual(outcome.result.results[0].application.status, "complete");
@@ -157,7 +157,7 @@ it.effect("retaining alone uses no routing and keeps previous completed setups u
         ],
       };
       const plan = yield* library.plan(intent, { base: yield* library.read });
-      const result = (yield* library.apply(yield* portable(plan))).result;
+      const result = (yield* library.apply({ _tag: "Apply", plan: yield* portable(plan) })).result;
       assert.strictEqual(result.imported.length, 1);
       assert.deepStrictEqual(result.results, []);
       assert.isFalse(yield* f.fs.exists(join(f.copy, ".skit-ownership.json")));
@@ -184,7 +184,7 @@ for (const edit of [false, true])
         const stopped = yield* Effect.gen(function* () {
           const library = yield* Library.Service;
           const plan = yield* library.plan(f.intent, { base: yield* library.read });
-          const result = yield* Effect.exit(library.apply(plan));
+          const result = yield* Effect.exit(library.apply({ _tag: "Apply", plan: plan }));
           assert.isTrue(Exit.isFailure(result));
           return plan.operationId;
         }).pipe(
@@ -232,12 +232,15 @@ it.effect("changed folders, altered plans and another Library are refused before
       const library = yield* Library.Service;
       const plan = yield* library.plan(f.intent, { base: yield* library.read });
       const altered = yield* Effect.result(
-        library.apply({ ...plan, change: { ...plan.change, selections: [] } }),
+        library.apply({
+          _tag: "Apply",
+          plan: { ...plan, change: { ...plan.change, selections: [] } },
+        }),
       );
       assert.strictEqual(altered._tag, "Failure");
       if (altered._tag === "Failure") assert.strictEqual(altered.failure._tag, "Library.StalePlan");
       yield* f.fs.writeFileString(join(f.copy, "SKILL.md"), "operator edit\n");
-      const stale = yield* Effect.result(library.apply(plan));
+      const stale = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
       assert.strictEqual(stale._tag, "Failure");
       if (stale._tag === "Failure") assert.strictEqual(stale.failure._tag, "Library.StalePlan");
       assert.isFalse(yield* f.fs.exists(join(f.home, "state.json")));
@@ -246,7 +249,7 @@ it.effect("changed folders, altered plans and another Library are refused before
     }).pipe(Effect.provide(Library.layer(f.config)));
     yield* Effect.gen(function* () {
       const library = yield* Library.Service;
-      const refused = yield* Effect.result(library.apply(plan));
+      const refused = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
       assert.strictEqual(refused._tag, "Failure");
       if (refused._tag === "Failure") assert.strictEqual(refused.failure._tag, "Library.StalePlan");
       assert.isFalse(yield* f.fs.exists(join(f.root, "other-library", "state.json")));
@@ -262,7 +265,7 @@ it.effect(
       yield* Effect.gen(function* () {
         const library = yield* Library.Service;
         const plan = yield* library.plan(f.intent, { base: yield* library.read });
-        const result = yield* Effect.result(library.apply(plan));
+        const result = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
         assert.strictEqual(result._tag, "Failure");
         if (result._tag === "Failure") assert.strictEqual(result.failure._tag, "PlatformError");
         assert.isFalse(yield* f.fs.exists(join(f.home, "state.json")));
@@ -338,7 +341,7 @@ for (const readable of [true, false])
           if (Option.isNone(backup)) return yield* Effect.die("Expected backup preview");
           assert.isFalse(yield* f.fs.exists(backup.value.recoveryDirectory));
           assert.strictEqual(yield* f.fs.readFileString(join(duplicate, "SKILL.md")), f.bytes);
-          const outcome = yield* library.apply(yield* portable(plan));
+          const outcome = yield* library.apply({ _tag: "Apply", plan: yield* portable(plan) });
           if (readable) {
             assert.deepStrictEqual(outcome.result.recoveryDirectories, [
               backup.value.recoveryDirectory,
@@ -374,7 +377,7 @@ it.effect(
       yield* Effect.gen(function* () {
         const library = yield* Library.Service;
         const plan = yield* library.plan(f.intent, { base: yield* library.read });
-        const result = yield* Effect.result(library.apply(plan));
+        const result = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
         assert.strictEqual(result._tag, "Failure");
         if (result._tag === "Failure") {
           assert.strictEqual(result.failure._tag, "Library.ManageStopped");
@@ -461,7 +464,7 @@ it.effect(
       yield* Effect.gen(function* () {
         const library = yield* Library.Service;
         const plan = yield* library.plan(intent, { base: yield* library.read });
-        const result = (yield* library.apply(plan)).result;
+        const result = (yield* library.apply({ _tag: "Apply", plan: plan })).result;
         assert.isTrue(result.warnings.length > 0);
         assert.strictEqual(result.results[0].application.status, "incomplete");
         assert.ok(result.results[0].application.failure);
@@ -494,7 +497,7 @@ it.effect("a newly introduced duplicate invalidates Manage without moving either
       const duplicate = join(legacy, "review");
       yield* f.fs.makeDirectory(duplicate);
       yield* f.fs.writeFileString(join(duplicate, "SKILL.md"), f.bytes);
-      const result = yield* Effect.result(library.apply(plan));
+      const result = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
       assert.strictEqual(result._tag, "Failure");
       if (result._tag === "Failure") assert.strictEqual(result.failure._tag, "Library.StalePlan");
       assert.isFalse(yield* f.fs.exists(join(f.home, "state.json")));

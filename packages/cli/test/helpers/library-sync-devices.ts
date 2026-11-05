@@ -267,12 +267,13 @@ export const devices = Effect.gen(function* () {
             )?.collection_id;
             assert.ok(id);
             const library = yield* owner();
-            return yield* library.apply(
-              yield* library.plan(
+            return yield* library.apply({
+              _tag: "Apply",
+              plan: yield* library.plan(
                 { _tag: "Remove", collectionId: id },
                 { base: yield* library.read },
               ),
-            );
+            });
           }),
         ),
       project: (

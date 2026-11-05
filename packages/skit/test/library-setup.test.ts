@@ -331,7 +331,7 @@ it.effect("refuses a setup reviewed against another revision, writing nothing", 
     const error = yield* withLibrary(home, (library) =>
       Effect.flatMap(library.read, (base) =>
         library.setup([remove], {
-          base: { ...base, revision: Library.Revision("sha256:elsewhere") },
+          base: { ...base, revision: Library.Revision.make("sha256:elsewhere") },
         }),
       ),
     ).pipe(Effect.flip);

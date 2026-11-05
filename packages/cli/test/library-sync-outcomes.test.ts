@@ -876,7 +876,7 @@ const prepareLocalSync = Effect.gen(function* () {
     localArchives,
     registry: { origin: "https://registry.test", token: Option.none() },
   });
-  return yield* library.plan(
+  const plan = yield* library.plan(
     {
       _tag: "Sync",
       staged,
@@ -887,6 +887,8 @@ const prepareLocalSync = Effect.gen(function* () {
     },
     { base },
   );
+  if (Library.isRemoteSyncPlan(plan)) return yield* Effect.die("Expected local Sync review");
+  return plan;
 });
 
 it.effect("a Sync plan distinguishes an absent Library from a newly empty one", () =>

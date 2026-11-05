@@ -117,7 +117,7 @@ const restore = Command.make("restore", { operation, apply, ...flags }, (input) 
             12,
           ),
         );
-      const applied = yield* Effect.result(library.apply(plan));
+      const applied = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
       const inspection =
         applied._tag === "Success"
           ? applied.success.result.after

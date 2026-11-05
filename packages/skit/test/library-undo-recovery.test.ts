@@ -68,7 +68,7 @@ it.effect("Undo review is passive and stale approval cannot record or restore an
       assert.strictEqual(yield* f.fs.readFileString(f.statePath), before);
       yield* f.fs.makeDirectory(f.paths[1]!);
       yield* f.fs.writeFileString(join(f.paths[1]!, "SKILL.md"), "user edit");
-      const failure = yield* Effect.flip(owner.apply(f.plan));
+      const failure = yield* Effect.flip(owner.apply({ _tag: "Apply", plan: f.plan }));
       assert.strictEqual(failure._tag, "Library.StalePlan");
       assert.strictEqual(yield* f.fs.readFileString(f.statePath), before);
       assert.isFalse(yield* f.fs.exists(f.paths[0]!));
@@ -119,7 +119,9 @@ for (const boundary of ["record", "rename", "copy", "completion"] as const)
             }),
         };
         const exit = yield* Effect.exit(
-          Effect.flatMap(Library.Service, (owner) => owner.apply(f.plan)).pipe(
+          Effect.flatMap(Library.Service, (owner) =>
+            owner.apply({ _tag: "Apply", plan: f.plan }),
+          ).pipe(
             Effect.provide(
               f.layer.pipe(Layer.provide(Layer.succeed(FileSystem.FileSystem, faultFs))),
             ),
@@ -161,7 +163,10 @@ for (const boundary of ["record", "rename", "copy", "completion"] as const)
             yield* f.fs.writeFileString(join(f.paths[0]!, "SKILL.md"), "later edit");
             const before = yield* f.fs.readFileString(f.statePath);
             const again = yield* owner.plan(f.plan.intent, { base: yield* owner.read });
-            assert.strictEqual((yield* owner.apply(again)).result._tag, "AlreadyUndone");
+            assert.strictEqual(
+              (yield* owner.apply({ _tag: "Apply", plan: again })).result._tag,
+              "AlreadyUndone",
+            );
             assert.strictEqual(yield* f.fs.readFileString(f.statePath), before);
             assert.strictEqual(
               yield* f.fs.readFileString(join(f.paths[0]!, "SKILL.md")),

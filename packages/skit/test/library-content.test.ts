@@ -62,6 +62,37 @@ it.effect(
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
+it.effect("content inspection and packing refuse inconsistent snapshots without writing", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const source = join(f.root, "review");
+    yield* f.fs.writeFileString(
+      join(source, "SKILL.md"),
+      "---\nname: review\ndescription: Changed content\n---\nNew bytes.\n",
+    );
+    const request = yield* localImportRequest(source, "2026-11-05T00:00:00.000Z");
+    if (Option.isNone(request)) return yield* Effect.die("Expected changed source");
+    yield* f.library.import.collection(request.value);
+    const current = yield* f.library.read;
+    assert.notStrictEqual(current.revision, f.snapshot.revision);
+    const inconsistent = { ...current, revision: f.snapshot.revision };
+    const statePath = join(f.home, "state.json");
+    const auditPath = join(f.home, "audit.jsonl");
+    const state = yield* f.fs.readFileString(statePath);
+    const audit = yield* f.fs.readFileString(auditPath);
+    for (const read of [
+      Effect.asVoid(f.library.content.inspect(inconsistent)),
+      Effect.asVoid(f.library.content.pack(inconsistent)),
+    ]) {
+      const refused = yield* Effect.result(read);
+      assert.strictEqual(refused._tag, "Failure");
+      if (refused._tag === "Failure") assert.strictEqual(refused.failure._tag, "Library.StalePlan");
+    }
+    assert.strictEqual(yield* f.fs.readFileString(statePath), state);
+    assert.strictEqual(yield* f.fs.readFileString(auditPath), audit);
+  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
+);
+
 it.effect(
   "staging preserves download requirements, fetches without a writer and publishes bytes without state",
   () =>

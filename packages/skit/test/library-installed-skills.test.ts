@@ -578,7 +578,7 @@ const installedSkillFixture = (second = false, emptyDirectories: readonly string
         { _tag: "RefreshInventory", roots: [{ harness: "codex", root: targetRoot }] },
         { base: yield* library.read },
       );
-      return (yield* library.apply(plan)).result;
+      return (yield* library.apply({ _tag: "Apply", plan: plan })).result;
     }).pipe(Effect.provide(Library.layer({ home, routing: { _tag: "None" } })));
 
     return { ...bound, variantsPath, load, edit, project, retire, remove, refresh };

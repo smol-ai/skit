@@ -1,3 +1,4 @@
+import { withLock as withHomeLock } from "../platform/home-lock.js";
 import { runUndo } from "./internal/setup/undo-execution.js";
 // Setup: steps saved in state.json before any runs, run in order, each marked Done as it ends
 // (decisions.md D4, "Crash halfway" and "Setup records"). Never rolls back on its own.
@@ -96,7 +97,11 @@ export type SetupResult =
  * Failures before the operation is saved: nothing was written. Once state.json holds it, every
  * failure is a Stopped result; an interruption leaves it Pending.
  */
-export type SetupError = StalePlan | InvalidIntent | LibraryStateReadError | LibraryStateWriteError;
+export type SetupError =
+  | StalePlan
+  | InvalidIntent
+  | LibraryStateReadError
+  | Exclude<LibraryStateWriteError, LibraryChanged>;
 
 /** What is at each path, as evidence; a missing folder is recorded as "nothing here". */
 const observed = (paths: readonly string[]) =>
@@ -617,18 +622,29 @@ export const setupOperation = Effect.fn("Library.setupOperation")(function* (
         }),
     ),
   );
-  yield* writer.save(
-    {
-      ...state,
-      operations: [
-        ...state.operations.filter(
-          (operation) => !options.replaceDone || operation._tag !== "Done",
+  yield* writer
+    .save(
+      {
+        ...state,
+        operations: [
+          ...state.operations.filter(
+            (operation) => !options.replaceDone || operation._tag !== "Done",
+          ),
+          pending,
+        ],
+      },
+      state,
+    )
+    .pipe(
+      Effect.catchTag("LibraryChanged", () =>
+        Effect.fail(
+          new StalePlan({
+            message: "The Library changed before setup was recorded",
+            expected: options.base.revision,
+          }),
         ),
-        pending,
-      ],
-    },
-    state,
-  );
+      ),
+    );
   return yield* runOperation(operationId);
 });
 
@@ -726,14 +742,16 @@ export const recover = Effect.fn("Library.recover")(function* (home: string) {
     }));
   if (!found.some((operation) => operation._tag === "Pending"))
     return { finished: [], stopped: reportStopped(migrationStopped) } satisfies StartupRecovery;
-  return yield* writeLibrary(
+  return yield* withHomeLock(
     home,
     Effect.gen(function* () {
       const finished: OperationId[] = [];
       const stopped: StoppedOperation[] = [...migrationStopped];
       for (const operation of yield* operations) {
         if (operation._tag !== "Pending") continue;
-        const result = yield* runOperation(operation.operationId);
+        const result = yield* writeLibrary(home, runOperation(operation.operationId), {
+          resume: operation.operationId,
+        });
         if (result._tag === "Done") {
           finished.push(operation.operationId);
           continue;

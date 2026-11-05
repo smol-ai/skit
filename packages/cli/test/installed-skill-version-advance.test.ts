@@ -236,7 +236,7 @@ for (const followedCollection of [false, true])
               { _tag: "RefreshInventory", roots: [] },
               { base: yield* owner.read },
             );
-            return yield* owner.apply(plan);
+            return yield* owner.apply({ _tag: "Apply", plan: plan });
           }),
         );
         const suppressed = yield* load;

@@ -48,7 +48,10 @@ const fixture = Effect.fn("test.applyRecovery.fixture")(function* (
       ],
     };
     if (operation !== "enable")
-      yield* library.apply(yield* library.plan(intent, { base: yield* library.read }));
+      yield* library.apply({
+        _tag: "Apply",
+        plan: yield* library.plan(intent, { base: yield* library.read }),
+      });
     if (operation === "update") {
       yield* fs.writeFileString(join(source, "SKILL.md"), bytes("Updated"));
       const changed = yield* localImportRequest(source, "2026-11-05T01:00:00.000Z");
@@ -135,9 +138,9 @@ const interrupt = Effect.fn("test.applyRecovery.interrupt")(function* (
       }),
   };
   const result = yield* Effect.exit(
-    Effect.flatMap(Library.Service, (library) => library.apply(f.plan)).pipe(
-      Effect.provide(f.layer.pipe(Layer.provide(Layer.succeed(FileSystem.FileSystem, fs)))),
-    ),
+    Effect.flatMap(Library.Service, (library) =>
+      library.apply({ _tag: "Apply", plan: f.plan }),
+    ).pipe(Effect.provide(f.layer.pipe(Layer.provide(Layer.succeed(FileSystem.FileSystem, fs))))),
   );
   assert.strictEqual(result._tag, "Failure");
   assert.isTrue(crashed);
@@ -314,7 +317,7 @@ it.effect("apply returns the final journal revision and rebuilds the next state 
     f.plan.next.repositories.push({ root: join(f.root, "unreviewed"), enabled: [] });
     yield* Effect.gen(function* () {
       const library = yield* Library.Service;
-      const outcome = yield* library.apply(f.plan);
+      const outcome = yield* library.apply({ _tag: "Apply", plan: f.plan });
       assert.strictEqual(outcome.result._tag, "Applied");
       const snapshot = yield* library.read;
       if (snapshot._tag !== "Present") return yield* Effect.die("Missing Library");

@@ -50,7 +50,10 @@ import type {
   LibraryStateReadError,
   LibraryStateWriteError,
 } from "../packages/skit/src/library/store/library-store.js";
-import type { LibraryAuditEvent } from "../packages/skit/src/library/audit/audit-log.js";
+import type {
+  LibraryAuditEvent,
+  LibraryAuditInvalid,
+} from "../packages/skit/src/library/audit/audit-log.js";
 import type { InventoryScanRoot } from "../packages/skit/src/library/inventory/refresh.js";
 import type {
   DeviceSkillSelection,
@@ -89,6 +92,9 @@ import type {
 import type { SkillsDirectoryOverrides } from "../packages/skit/src/harnesses/contracts.js";
 import type { LinkStat } from "../packages/skit/src/platform/link-stat.js";
 import type { SourceProcess } from "../packages/skit/src/platform/source-process.js";
+import type { CollectionVersionPlan } from "../packages/skit/src/library/collection-version-plan.js";
+import type { RestoreProgress } from "../packages/skit/src/library/restore-progress.js";
+import type { StalePlan } from "./library-results.js";
 
 // ── Library ────────────────────────────────────────────────────────────────────────────────────
 // The only writer of the Library: state.json, originals/, variants/, audit.jsonl and removed/.
@@ -219,8 +225,8 @@ export type ManageIntent =
 /** Every change, as one value. EXISTS: today's four. NEW: today's bypassing writers, as intents. */
 export type Intent =
   | ExistingIntent // EXISTS: Enabled | Remove | Update | Uninstall (library-plan.ts:40)
-  | { readonly _tag: "Undo"; readonly operationId: OperationId } // NEW: setup-undo.ts:272
-  | { readonly _tag: "Restore"; readonly operationId: OperationId } // NEW: recovery-moves.ts; revalidates saved folders (:557-585)
+  | { readonly _tag: "Undo"; readonly operationId: string } // NEW: setup-undo.ts:272
+  | { readonly _tag: "Restore"; readonly operationId: string } // NEW: recovery-moves.ts; revalidates saved folders (:557-585)
   | {
       // NEW: security/review.ts:146
       readonly _tag: "AcceptFinding";
@@ -558,7 +564,12 @@ export interface Library {
    * folder work, each move rechecked, idempotent by installed-skill id; then the record is marked
    * done. One history event.
    */
-  readonly apply: (request: ApplyRequest) => Effect.Effect<TargetOutcome, TargetApplyError>;
+  readonly apply: <Request extends ApplyRequest>(
+    request: Request,
+  ) => Effect.Effect<
+    Extract<TargetOutcome, { readonly _tag: Request["plan"]["_tag"] }>,
+    TargetApplyError
+  >;
   /**
    * Additive: stores a Source's files as a new Collection Version. It touches no skill folders
    * and needs no base revision: it applies to the latest state under the writer, retains prior
@@ -588,32 +599,43 @@ export interface Library {
    * prepareRestore (library-sync.ts:104-107, library-sync-snapshots.ts:15-57).
    */
   readonly content: {
+    /** Passive availability preview for sync; no downloads, hashing, or writes. */
+    readonly plan: (
+      target: LibraryManifest,
+      localArchives: readonly SnapshotArchive[],
+    ) => Effect.Effect<CollectionVersionPlan, LibraryStateReadError>;
     readonly inspect: (
       snapshot: Snapshot,
     ) => Effect.Effect<
       { readonly _tag: "Intact" } | { readonly _tag: "Changed"; readonly hash: Hash },
-      LibraryStateReadError
+      LibraryStateReadError | StalePlan
     >;
     readonly pack: (
       snapshot: Snapshot,
-    ) => Effect.Effect<readonly SnapshotArchive[], LibraryStateReadError>;
+    ) => Effect.Effect<readonly SnapshotArchive[], LibraryStateReadError | StalePlan>;
     /**
      * Before the remote write: retain everything `target` needs from local archives, originals/
      * and `download`. Additive only; existing originals are immutable. Missing content is
      * reported in StagedContent.missing (library-sync-snapshots.ts:30-57, library-sync.ts:292).
      * Sync keeps transport: it supplies `download` over its own API.
      */
-    readonly stage: <E, R>(
+    readonly stage: <E = never, R = never>(
       target: LibraryManifest,
       source: {
-        readonly localArchives: readonly SnapshotArchive[];
-        readonly download?: (digest: Hash) => Effect.Effect<SnapshotArchive, E, R>; // library-restore.ts:332-333
-        readonly registry: { readonly origin: string; readonly token: Option.Option<string> }; // library-sync-snapshots.ts:53-54
-      },
+        readonly download?: (digest: Hash) => Effect.Effect<SnapshotArchive, E, R>;
+        readonly registry: { readonly origin: string; readonly token: Option.Option<string> };
+        readonly progress?: RestoreProgress;
+      } & (
+        | { readonly localArchives: readonly SnapshotArchive[]; readonly plan?: never }
+        | { readonly plan: CollectionVersionPlan; readonly localArchives?: never }
+      ),
     ) => Effect.Effect<StagedContent, ContentStageError | E, R>;
   };
-  /** NEW: replaces the LibraryAuditLog service. Includes pending and stopped operations. */
-  readonly history: Effect.Effect<History, LibraryStateReadError>;
+  /**
+   * Includes pending and stopped operations. Malformed audit data reports its path and line;
+   * reading history must never silently discard evidence or repair the log.
+   */
+  readonly history: Effect.Effect<History, LibraryStateReadError | LibraryAuditInvalid>;
   /** What startup recovery did when the layer was built. */
   readonly startup: StartupRecovery;
 }

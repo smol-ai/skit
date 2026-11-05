@@ -1,12 +1,17 @@
+import type { HistoryAction } from "./history-delivery.js";
+import type { OperationId } from "../entity-ids.js";
 import { LibraryActor } from "../actor.js";
-import { Context, DateTime, Effect, FileSystem, Option } from "effect";
+import { Context, Effect, FileSystem, Option } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { join, resolve } from "node:path";
 import type { InvalidLibraryState, LibraryBusy, LibraryChanged } from "../../failures.js";
 import { emptyLibraryState, type LibraryState } from "../library-state.js";
-import { inspectLocalLibraryState, saveLibraryState } from "./state-file.js";
-import { appendLibraryAudit, type LibraryAuditChange } from "../audit/audit-log.js";
-import { classifyLibraryAuditEvent, diffLibraryState } from "../audit/state-diff.js";
+import {
+  inspectLocalLibraryState,
+  saveLibraryState,
+  libraryHistoryAction,
+  deliverLibraryHistory,
+} from "./state-file.js";
 import { withLock as withHomeLock } from "../../platform/home-lock.js";
 
 // Reads and the one-time migration go through here too: only this module touches state-file.
@@ -58,25 +63,11 @@ export class LibraryWriter extends Context.Service<
   }
 >()("skit/library/LibraryWriter") {}
 
-/** Append one event to a Library's history. Reported, never raised: the change is durable. */
-const recordLibraryHistory = Effect.fn("Library.recordHistory")(function* (
-  home: string,
-  changes: readonly LibraryAuditChange[],
-) {
-  const workflow = yield* LibraryActor;
-  yield* appendLibraryAudit(home, {
-    schemaVersion: 1,
-    occurredAt: DateTime.formatIso(yield* DateTime.now),
-    type: classifyLibraryAuditEvent(workflow, changes),
-    workflow,
-    changes,
-  }).pipe(
-    Effect.asVoid,
-    Effect.catchCause((cause) =>
-      Effect.logWarning("Library changed, but history could not be recorded", cause),
-    ),
+/** Retry is safe: undelivered events remain in the same durable file as the Library state. */
+export const recoverLibraryHistory = (home: string, actionId?: OperationId) =>
+  deliverLibraryHistory(home, actionId).pipe(
+    Effect.catchCause((cause) => Effect.logWarning("Library history delivery is pending", cause)),
   );
-});
 
 /**
  * Run `program` holding the home lock, with a `LibraryWriter` for `home`. Every change saved under
@@ -88,34 +79,50 @@ const recordLibraryHistory = Effect.fn("Library.recordHistory")(function* (
 export const writeLibrary = <A, E, R>(
   home: string,
   program: Effect.Effect<A, E, R | LibraryWriter>,
+  options: { readonly resume?: OperationId } = {},
 ) =>
   Effect.gen(function* () {
     const root = resolve(home);
     const outer = yield* Effect.serviceOption(LibraryWriter);
-    if (Option.isSome(outer) && outer.value.home === root)
+    if (Option.isSome(outer) && outer.value.home === root && options.resume === undefined)
       return yield* program.pipe(Effect.provideService(LibraryWriter, outer.value));
     const fs = yield* FileSystem.FileSystem;
-    const changes: LibraryAuditChange[] = [];
     let live = true;
-    const writer = LibraryWriter.of({
-      home: root,
-      save: Effect.fn("Library.save")(
-        function* (next: LibraryState, base: LibraryState) {
-          yield* saveLibraryState(root, next, base);
-          const saved = diffLibraryState(base, next);
-          if (live) changes.push(...saved);
-          else if (saved.length) yield* recordLibraryHistory(root, saved);
-        },
-        Effect.provideService(FileSystem.FileSystem, fs),
-      ),
-    });
+    let currentAction: HistoryAction | undefined;
     return yield* withHomeLock(
       root,
-      program.pipe(Effect.provideService(LibraryWriter, writer)),
+      Effect.gen(function* () {
+        const action = yield* libraryHistoryAction(root, yield* LibraryActor, options.resume);
+        currentAction = action;
+        const writer = LibraryWriter.of({
+          home: root,
+          save: Effect.fn("Library.save")(
+            function* (next: LibraryState, base: LibraryState) {
+              if (live) return yield* saveLibraryState(root, next, base, action);
+              // An escaped writer cannot extend an action that already delivered its event.
+              let late: HistoryAction | undefined;
+              yield* withHomeLock(
+                root,
+                Effect.gen(function* () {
+                  late = yield* libraryHistoryAction(root, yield* LibraryActor);
+                  yield* saveLibraryState(root, next, base, late);
+                }),
+              ).pipe(
+                Effect.onExit(() =>
+                  late ? recoverLibraryHistory(root, late.eventId) : Effect.void,
+                ),
+              );
+            },
+            Effect.provideService(FileSystem.FileSystem, fs),
+          ),
+        });
+        return yield* program.pipe(Effect.provideService(LibraryWriter, writer));
+      }),
     ).pipe(
       Effect.onExit(() => {
+        // withHomeLock has drained the save leases, so the whole action's draft is now final.
         live = false;
-        return changes.length === 0 ? Effect.void : recordLibraryHistory(root, changes);
+        return currentAction ? recoverLibraryHistory(root, currentAction.eventId) : Effect.void;
       }),
     );
   });

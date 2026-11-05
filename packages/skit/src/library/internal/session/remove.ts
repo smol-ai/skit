@@ -82,9 +82,10 @@ export const openRemoveSession = Effect.fn("Library.openRemoveSession")(
       workspace:
         workspaceId === undefined || path === undefined ? undefined : { workspaceId, path },
       apply: Effect.fn("Library.removeSelection")(function* () {
-        const outcome = (yield* library.apply(
-          yield* library.plan({ _tag: "Remove", collectionId }, { base: snapshot }),
-        )).result;
+        const outcome = (yield* library.apply({
+          _tag: "Apply",
+          plan: yield* library.plan({ _tag: "Remove", collectionId }, { base: snapshot }),
+        })).result;
         const uninstalled =
           outcome._tag === "Applied"
             ? outcome.copies.filter((copy) => copy._tag === "Uninstalled").length

@@ -257,8 +257,9 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
       }
       if (preview.installed_skills.length > 0) {
         const snapshot = yield* library.read;
-        yield* library.apply(
-          yield* library.plan(
+        yield* library.apply({
+          _tag: "Apply",
+          plan: yield* library.plan(
             { _tag: "Update" },
             {
               base: snapshot,
@@ -269,7 +270,7 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
               })),
             },
           ),
-        );
+        });
       }
       const settled = yield* loadLibrary(home);
       return {

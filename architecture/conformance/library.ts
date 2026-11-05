@@ -28,16 +28,11 @@ export type Checks = [
   Assert<Equal<MissingMethods<Library, Implementation.Interface>, never>>,
   Assert<Equal<ExtraMethods<Library, Implementation.Interface>, never>>,
   Assert<Equal<Library["read"], Implementation.Interface["read"]>>,
-  // Generic target vs overloads; revision and legacy operation-id types still differ.
   Assert<Equal<Library["plan"], Implementation.Interface["plan"]>>,
-  // The target wraps every plan in Apply/ApplySynced; ordinary implementation calls take a plan.
   Assert<Equal<Library["apply"], Implementation.Interface["apply"]>>,
   Assert<Equal<Library["import"], Implementation.Interface["import"]>>,
-  // Step inputs agree. Restore result identifiers and the public error union still differ.
   Assert<Equal<Library["setup"], Implementation.Interface["setup"]>>,
-  // Extra content.plan; inspect/pack add StalePlan, and stage accepts progress or a precomputed content plan.
   Assert<Equal<Library["content"], Implementation.Interface["content"]>>,
-  // The implementation also reports LibraryAuditInvalid.
   Assert<Equal<Library["history"], Implementation.Interface["history"]>>,
   Assert<Equal<Library["startup"], Implementation.Interface["startup"]>>,
   Assert<

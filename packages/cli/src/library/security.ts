@@ -21,5 +21,5 @@ export const acceptLibrarySecurityFinding = Effect.fn("Library.acceptSecurity")(
     { _tag: "AcceptFinding", query, ...input, expiresAt: Option.fromNullishOr(input.expiresAt) },
     { base: yield* library.read },
   );
-  return (yield* library.apply(plan)).result.review;
+  return (yield* library.apply({ _tag: "Apply", plan: plan })).result.review;
 });

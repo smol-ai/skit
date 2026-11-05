@@ -1,3 +1,4 @@
+import { Revision } from "./snapshot.js";
 import { Schema } from "effect";
 import { InstalledSkills } from "./installed-skills.js";
 import type { LibraryStateReadError, LibraryStateWriteError } from "./store/library-store.js";
@@ -204,7 +205,7 @@ export type Route = typeof Route.Type;
  * refuses a different revision, different changes or different folders.
  */
 const planFields = {
-  baseRevision: Schema.String,
+  baseRevision: Revision,
   approvals: Schema.Array(Approval),
   routes: Schema.Array(Route),
   /** Every folder the changes were decided on, and every original they are built from. */

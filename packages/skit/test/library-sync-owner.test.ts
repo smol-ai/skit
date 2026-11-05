@@ -61,6 +61,8 @@ it.effect(
         );
         const encoded = yield* Schema.encodeEffect(Library.SyncPlan)(plan);
         const portable = yield* Schema.decodeUnknownEffect(Library.SyncPlan)(encoded);
+        if (!Library.isRemoteSyncPlan(portable))
+          return yield* Effect.die("Expected remote Sync review");
         const ancestry = {
           origin: "https://registry.fixture",
           library_id: "library_fixture",
@@ -123,6 +125,8 @@ it.effect(
           },
           { base: snapshot },
         );
+        if (!Library.isRemoteSyncPlan(clean))
+          return yield* Effect.die("Expected remote Sync review");
         const repeated = yield* library.apply({ _tag: "ApplySynced", plan: clean, receipt });
         assert.strictEqual(repeated.result.installed, 0);
         assert.strictEqual((yield* library.read).revision, snapshot.revision);
@@ -218,6 +222,8 @@ for (const boundary of ["retired", "retired-edited", "published", "installed", "
               revision_id: revisionId,
               base_manifest: manifest,
             };
+            if (!Library.isRemoteSyncPlan(plan))
+              return yield* Effect.die("Expected remote Sync review");
             return yield* library.apply({
               _tag: "ApplySynced",
               plan,

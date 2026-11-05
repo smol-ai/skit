@@ -126,7 +126,7 @@ const previewDoctorCleanup = Effect.scoped(
         },
         { base: yield* library.read },
       );
-      const installed = (yield* library.apply(plan)).result;
+      const installed = (yield* library.apply({ _tag: "Apply", plan: plan })).result;
       if (installed._tag !== "Applied" || !(yield* fs.exists(join(path, "SKILL.md"))))
         return yield* Effect.die("Expected the review Skill to be installed");
       const before = yield* library.read;

@@ -31,7 +31,16 @@
  * silently change this contract.
  */
 import type { Option, PlatformError as PlatformErrors } from "effect";
-import type { FolderEvidence, Intent, LinkEvidence, OperationId, Revision } from "./library.js";
+import type {
+  ApplyFolder,
+  FolderEvidence,
+  Intent,
+  LinkEvidence,
+  OperationId,
+  Revision,
+  SetupStep,
+  StepRouting,
+} from "./library.js";
 import type {
   AcceptanceIncomplete,
   ContentAddressCollision,
@@ -51,6 +60,7 @@ import type {
 } from "../packages/skit/src/library/library-state.js";
 import type {
   CollectionId,
+  ImportId,
   CollectionVersionId,
   InstalledSkillId,
 } from "../packages/skit/src/library/entity-ids.js";
@@ -80,10 +90,10 @@ import type {
 } from "../packages/skit/src/library/store/library-store.js";
 import type { InvalidIntent } from "../packages/skit/src/library/enabled-plan.js";
 import type { RecoveryInvalid } from "../packages/skit/src/library/internal/recovery/evidence.js";
-import type { RestoreInvalid } from "../packages/skit/src/library/internal/content/restore.js";
-import type { SetupManageSelectionInvalid } from "../packages/skit/src/library/setup/setup-manage.js";
-import type { SetEnabledIncomplete } from "../packages/skit/src/library/internal/session/set-enabled.js";
-import type { ChangeChoiceRequired } from "../packages/skit/src/library/setup/setup-installed-skills.js";
+import type {
+  RestoreInvalid,
+  SourceRestoreInvalid,
+} from "../packages/skit/src/library/internal/content/restore.js";
 
 type UnmanagedEntry = LibraryState["unmanaged"][number];
 /** Apply stamps acceptedAt; a preview cannot claim the acceptance already happened. */
@@ -117,7 +127,7 @@ export interface UndoSourceSelection {
 
 /** Preview. setup-undo.ts:196-222 (summary), consumed by handlers/library/setup-undo.ts:55-69. */
 export interface UndoChange {
-  readonly operationId: OperationId; // setup-undo.ts:198
+  readonly operationId: string; // Historical recovery directory id, including UUIDs.
   /** Folder-evidence digest; apply refuses a different one with StalePlan (setup-undo.ts:181-195, :246). */
   readonly planId: Hash;
   readonly status: "ready" | "conflicted" | "already-undone"; // setup-undo.ts:200-204
@@ -138,7 +148,7 @@ export type UndoResult =
       readonly _tag: "Undone"; // setup-undo.ts:295 status "undone"
       readonly change: UndoChange;
       /** Recovery operation holding copies undo moved aside. setup-undo.ts:296; handler :107-123. */
-      readonly backupId: OperationId;
+      readonly backupId: string;
     };
 
 /** setup-undo.ts:246 stale; :249, :260, :286 RecoveryInvalid; :272 save; readUndo reads (:57-103). */
@@ -166,7 +176,8 @@ export interface RecoveryEntry {
 
 /** Preview. RecoveryInspection, recovery-moves.ts:84-90, :534; consumed at handlers/library/recovery.ts:92-105. */
 export interface RestoreChange {
-  readonly operationId: OperationId;
+  /** Recovery directory identity; older releases used UUIDs rather than Library operation ids. */
+  readonly operationId: string;
   readonly directory: string;
   /** Folder-evidence digest; apply refuses another with StalePlan, rechecked after every move (recovery-moves.ts:568-585). */
   readonly planId: Hash;
@@ -273,9 +284,12 @@ export interface StagedContent {
 /** internal/content/restore.ts RestoreInvalid; :59 collision; originals writes. Download failures are the caller's E. */
 export type ContentStageError =
   | RestoreInvalid
+  | SourceRestoreInvalid
+  | import("../packages/skit/src/library/snapshot-archive-universal.js").SnapshotArchiveInvalid
   | ContentAddressCollision
   | PlatformError
-  | TreeError;
+  | TreeError
+  | StoredLibraryBusy;
 
 // ── Sync (local half) ───────────────────────────────────────────────────────────────────────────
 // Source: cli/src/workflows/library/library-sync.ts, library-sync-installed-skills.ts.
@@ -287,6 +301,7 @@ export interface SyncInstalledSkillsChange {
   readonly retire: readonly InstalledSkillId[]; // uninstalled before the save (:371)
   readonly remove: readonly InstalledSkillId[]; // records dropped (:371 `drop`)
   /** Deferred device conflicts when a device selection is in use (:155, :167, :415). */
+  readonly conflicts: readonly SyncConflictDetail[];
   readonly issues: readonly SyncConflictDetail[];
 }
 
@@ -407,12 +422,11 @@ export interface ManageResult {
   readonly warnings: readonly { readonly name: string; readonly message: string }[];
 }
 
-/** manage-existing.ts:362, :378, :386, :564-595 stale; :373, :394, :399, :402 InvalidIntent; :534 SetEnabledIncomplete. */
+/** Review failures are returned before recording; recorded step failures report their operation. */
 export type ManageError =
   | StalePlan
   | InvalidIntent
-  | SetupManageSelectionInvalid // setup-manage.ts:51-70, :128-132 (selection validation)
-  | SetEnabledIncomplete
+  | import("../packages/skit/src/library/internal/manage/manage.js").ManageStopped
   | RecoveryInvalid // prepareRecoveryMoves, recovery-moves.ts:119-169
   | ExistingApplyError
   | PlatformError
@@ -424,7 +438,7 @@ export type ManageError =
 
 /** One finished step, by step tag. Apply, Sync and Restore use the same recorded runner. */
 export type SetupStepResult =
-  | { readonly _tag: "Undo"; readonly operationId: OperationId; readonly backupId: string }
+  | { readonly _tag: "Undo"; readonly operationId: string; readonly backupId: string }
   | { readonly _tag: "Restore"; readonly after: RestoreChange }
   | { readonly _tag: "Apply"; readonly outcome: ExistingOutcome }
   | {
@@ -521,8 +535,6 @@ export type SetupResult =
  */
 export type SetupError =
   | StalePlan // setup-apply.ts:84, :93, :103 (reviewed changes / version choices no longer match); base revision moved
-  | ChangeChoiceRequired // :105
-  | SetupManageSelectionInvalid // selections checked before any step (setup-manage.ts:48-56)
   | InvalidIntent // steps out of order, or a removal inside or over the Library home (skit/src/library/setup.ts)
   | LibraryStateReadError
   | LibraryStateWriteError; // the write that persists the operation
@@ -530,37 +542,76 @@ export type SetupError =
 // ── Target plan / outcome / errors ──────────────────────────────────────────────────────────────
 
 interface PlanBase<Tag extends Intent["_tag"], Change> {
-  /** Mirrors intent._tag so the plan narrows without nested discrimination. */
   readonly _tag: Tag;
-  /** Covers state.json; apply refuses a moved revision with StalePlan. library-plan.ts:221. */
   readonly baseRevision: Revision;
   readonly intent: IntentOf<Tag>;
-  /**
-   * Changes that touch folders also carry planId (folder evidence). Apply rechecks state
-   * (baseRevision) and filesystem evidence (planId) under the writer, and again before each move.
-   */
+  /** Digest of the exact reviewed data; apply recomputes it under the writer. */
+  readonly planId: Hash;
   readonly change: Change;
 }
 
-export type ExistingTargetPlan = {
-  [Tag in ExistingIntentTag]: ExistingPlan & { readonly _tag: Tag; readonly intent: IntentOf<Tag> };
-}[ExistingIntentTag]; // library-plan.ts:219-230, unchanged but for the mirrored _tag
+/** The ordinary intents already share the canonical reviewed folder/approval vocabulary. */
+export type ExistingTargetPlan = ExistingPlan;
 
-export type LocalSyncPlan = PlanBase<"Sync", SyncChange<Extract<SyncRemote, { _tag: "None" }>>>;
-export type RemoteSyncPlan = PlanBase<
-  "Sync",
-  SyncChange<Extract<SyncRemote, { _tag: "Expected" }>>
->;
-
-export type TargetPlan =
+export interface UndoPlan extends PlanBase<"Undo", UndoChange> {
+  /** A planned recovery destination, not allocated until apply records the inverse. */
+  readonly backupId: string;
+  readonly observations: readonly {
+    readonly collectionId: CollectionId;
+    readonly importId: ImportId;
+    readonly checkedAt: string;
+  }[];
+  /** Handoff to MachineSettings when undoing a setup written before the owners were split. */
+  readonly settingsCompleted: boolean;
+  readonly legacyDiscovery?: import("../packages/skit/src/library/machine-settings.js").LegacySetupDiscovery;
+}
+export interface RestorePlan extends PlanBase<"Restore", RestoreChange> {
+  readonly program: Extract<SetupStep, { readonly _tag: "Restore" }>["program"];
+}
+export interface AcceptFindingPlan extends PlanBase<"AcceptFinding", AcceptFindingChange> {
+  readonly folders: readonly import("../packages/skit/src/library/installed-skills.js").Folder[];
+}
+export interface RefreshInventoryPlan extends PlanBase<"RefreshInventory", RefreshInventoryChange> {
+  /** Reuse the preview time when checking expiry and inventory again. */
+  readonly observedAt: string;
+  readonly backups: readonly {
+    readonly backup: {
+      readonly path: string;
+      readonly marker: import("../packages/skit/src/install/files.js").OwnershipMarkerInspection;
+    };
+    readonly copy: import("../packages/skit/src/library/installed-skills.js").Folder;
+    readonly folder: import("../packages/skit/src/library/installed-skills.js").Folder;
+  }[];
+}
+export interface ManagePlan extends PlanBase<"Manage", ManageChange> {
+  readonly home: string;
+  /** Stable identity also binds the recovery destinations shown in the preview. */
+  readonly operationId: OperationId;
+  readonly routing: StepRouting;
+  readonly steps: readonly SetupStep[];
+  readonly folders: readonly import("../packages/skit/src/library/installed-skills.js").Folder[];
+}
+interface SyncPlan<Remote extends SyncRemote> extends PlanBase<"Sync", SyncChange<Remote>> {
+  readonly operationId: OperationId;
+  readonly home: string;
+  readonly routing: StepRouting;
+  readonly folders: readonly ApplyFolder[];
+  readonly next: Omit<LibraryState, "operations">;
+  readonly installationIssues: readonly string[];
+}
+export type LocalSyncPlan = SyncPlan<Extract<SyncRemote, { readonly _tag: "None" }>>;
+export type RemoteSyncPlan = SyncPlan<Extract<SyncRemote, { readonly _tag: "Expected" }>>;
+type PlanShape<P> = { readonly [K in keyof P]: P[K] };
+export type TargetPlan = PlanShape<
   | ExistingTargetPlan
-  | PlanBase<"Undo", UndoChange>
-  | PlanBase<"Restore", RestoreChange>
-  | PlanBase<"AcceptFinding", AcceptFindingChange>
-  | PlanBase<"RefreshInventory", RefreshInventoryChange>
+  | UndoPlan
+  | RestorePlan
+  | AcceptFindingPlan
+  | RefreshInventoryPlan
+  | ManagePlan
   | LocalSyncPlan
   | RemoteSyncPlan
-  | PlanBase<"Manage", ManageChange>;
+>;
 
 /** `_tag` is the intent applied; `result` is that intent's result (Match.tag / Schema.TaggedUnion ready). */
 export type TargetOutcome =
@@ -574,6 +625,7 @@ export type TargetOutcome =
   | { readonly _tag: "Sync"; readonly result: SyncResult }
   | { readonly _tag: "Manage"; readonly result: ManageResult };
 
+/** Failures while observing retained state, exact local sources, routing, and historical recovery. */
 export type TargetPlanError =
   | ExistingPlanError
   | AcceptanceIncomplete
@@ -582,9 +634,29 @@ export type TargetPlanError =
   | RecoveryInvalid
   | RestoreInvalid
   | InvalidIntent
-  | SetupManageSelectionInvalid;
+  | ContentAddressCollision
+  | import("effect").Schema.SchemaError
+  | import("../packages/skit/src/library/machine-settings.js").Unusable
+  | import("../packages/skit/src/library/source-inspection.js").AddNoSkills
+  | import("../packages/skit/src/library/import-collection.js").ImportRequestInvalid
+  | import("../packages/skit/src/library/installed-skill-hash.js").SkillMaterializationInvalid
+  | import("../packages/skit/src/library/subject-resolution.js").LibrarySubjectAmbiguous
+  | import("../packages/skit/src/library/subject-resolution.js").LibrarySubjectNotFound
+  | import("../packages/skit/src/install/pnpm-skills.js").PnpmSkillManaged
+  | import("../packages/skit/src/sources/resolve.js").ParseSourceFailure
+  | import("../packages/skit/src/sources/resolve.js").CommandFailed
+  | import("../packages/skit/src/sources/resolve.js").SourcePolicyViolation
+  | import("../packages/skit/src/sources/resolve.js").PluginManifestInvalid
+  | import("../packages/skit/src/sources/resolve.js").PluginSkillConflict
+  | import("../packages/skit/src/failures.js").UnsafeArchivePath
+  | import("../packages/skit/src/failures.js").ArchiveEntryLimitExceeded
+  | import("../packages/skit/src/failures.js").DirectSkillDocumentInvalid
+  | import("../packages/skit/src/failures.js").NoSkitDescriptorFound
+  | import("../packages/skit/src/failures.js").RegistryNotConfigured;
 
 export type TargetApplyError =
+  | TargetPlanError
+  | import("../packages/skit/src/library/internal/sync/sync.js").SyncStopped
   | ExistingApplyError
   | UndoError
   | RestoreError

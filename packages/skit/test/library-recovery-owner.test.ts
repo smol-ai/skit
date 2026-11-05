@@ -49,7 +49,7 @@ it.effect(
         const owner = yield* Library.Service;
         yield* owner.plan(f.plan.intent, { base: yield* owner.read });
         assert.strictEqual(yield* f.fs.readFileString(join(f.home, "state.json")), before);
-        const outcome = yield* owner.apply(f.plan);
+        const outcome = yield* owner.apply({ _tag: "Apply", plan: f.plan });
         assert.strictEqual(outcome.result.phase, "restored");
       }).pipe(Effect.provide(f.layer));
       const old = yield* f.read(before);
@@ -96,7 +96,9 @@ for (const diverge of [false, true])
             }),
         };
         const exit = yield* Effect.exit(
-          Effect.flatMap(Library.Service, (owner) => owner.apply(f.plan)).pipe(
+          Effect.flatMap(Library.Service, (owner) =>
+            owner.apply({ _tag: "Apply", plan: f.plan }),
+          ).pipe(
             Effect.provide(
               f.layer.pipe(Layer.provide(Layer.succeed(FileSystem.FileSystem, filesystem))),
             ),

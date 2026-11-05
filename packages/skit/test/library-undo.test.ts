@@ -41,7 +41,7 @@ it.effect(
         assert.strictEqual(decoded.change.status, "ready");
         assert.isFalse(yield* fs.exists(folder));
         assert.isFalse(yield* fs.exists(join(home, "removed", plan.backupId)));
-        const outcome = yield* library.apply(decoded);
+        const outcome = yield* library.apply({ _tag: "Apply", plan: decoded });
         assert.strictEqual(outcome._tag, "Undo");
         const result = outcome.result;
         assert.strictEqual(result._tag, "Undone");
@@ -49,22 +49,27 @@ it.effect(
           yield* fs.readFileString(join(folder, "SKILL.md")),
           "Original review bytes.\n",
         );
-        const undoPath = join(home, "removed", operationId, "undo");
-        const attemptName = (yield* fs.readDirectory(undoPath)).find(
-          (name) => !name.endsWith(".done.json"),
+        const inverse = (yield* library.history).operations.find((operation) =>
+          operation.steps.some(
+            ({ step }) => step._tag === "Undo" && step.program.operationId === operationId,
+          ),
         );
-        if (attemptName === undefined) return yield* Effect.die("Missing durable inverse");
-        const attempt = JSON.parse(yield* fs.readFileString(join(undoPath, attemptName)));
-        assert.strictEqual(attempt.schemaVersion, 3);
-        assert.isFalse("settingsBefore" in attempt);
-        assert.isFalse("settingsAfter" in attempt);
+        assert.strictEqual(inverse?._tag, "Done");
+        const step = inverse?.steps.find(({ step }) => step._tag === "Undo")?.step;
+        if (step?._tag !== "Undo") return yield* Effect.die("Missing recorded inverse");
+        assert.isFalse(Object.hasOwn(step.program, "settingsBefore"));
+        assert.isFalse(Object.hasOwn(step.program, "settingsAfter"));
+        assert.isFalse(yield* fs.exists(join(home, "removed", operationId, "undo")));
         assert.isFalse(yield* fs.exists(join(home, "machine.json")));
         yield* fs.writeFileString(join(folder, "SKILL.md"), "Later independent bytes.\n");
         const repeated = yield* library.plan(
           { _tag: "Undo", operationId },
           { base: yield* library.read },
         );
-        assert.strictEqual((yield* library.apply(repeated)).result._tag, "AlreadyUndone");
+        assert.strictEqual(
+          (yield* library.apply({ _tag: "Apply", plan: repeated })).result._tag,
+          "AlreadyUndone",
+        );
         assert.strictEqual(
           yield* fs.readFileString(join(folder, "SKILL.md")),
           "Later independent bytes.\n",
@@ -85,7 +90,10 @@ it.effect("an occupied original refuses the displayed plan before any undo effec
       const bytes = yield* fs.readFileString(join(home, "state.json"));
       yield* fs.makeDirectory(folder);
       yield* fs.writeFileString(join(folder, "independent.txt"), "User's newer folder.\n");
-      assert.strictEqual((yield* Effect.flip(library.apply(plan)))._tag, "Library.StalePlan");
+      assert.strictEqual(
+        (yield* Effect.flip(library.apply({ _tag: "Apply", plan: plan })))._tag,
+        "Library.StalePlan",
+      );
       assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), bytes);
       assert.strictEqual(
         yield* fs.readFileString(join(folder, "independent.txt")),
@@ -116,9 +124,14 @@ it.effect(
             next: { ...plan.change.next, repositories: [{ root: "/unreviewed", enabled: [] }] },
           },
         };
-        assert.strictEqual((yield* Effect.flip(library.apply(forged)))._tag, "Library.StalePlan");
         assert.strictEqual(
-          (yield* Effect.flip(library.apply({ ...plan, backupId: "../../outside" })))._tag,
+          (yield* Effect.flip(library.apply({ _tag: "Apply", plan: forged })))._tag,
+          "Library.StalePlan",
+        );
+        assert.strictEqual(
+          (yield* Effect.flip(
+            library.apply({ _tag: "Apply", plan: { ...plan, backupId: "../../outside" } }),
+          ))._tag,
           "RecoveryInvalid",
         );
         assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), bytes);

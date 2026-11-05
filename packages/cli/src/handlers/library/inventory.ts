@@ -64,7 +64,7 @@ const refreshLibraryInventoryCommand = Effect.fn("CLI.refreshLibraryInventory")(
     "Scanning harness installations",
     Effect.gen(function* () {
       const plan = yield* library.plan({ _tag: "RefreshInventory", roots }, { base: before });
-      return yield* library.apply(plan);
+      return yield* library.apply({ _tag: "Apply", plan: plan });
     }),
   );
   return inventoryForRoots(outcome.result.state, outcome.result.roots);

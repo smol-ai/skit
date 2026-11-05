@@ -106,9 +106,10 @@ export const installEnabledSkills = (options: {
             ];
       }),
     ];
-    const outcome = (yield* owner.apply(
-      yield* owner.plan({ _tag: "Update" }, { base: yield* owner.read, approvals }),
-    )).result;
+    const outcome = (yield* owner.apply({
+      _tag: "Apply",
+      plan: yield* owner.plan({ _tag: "Update" }, { base: yield* owner.read, approvals }),
+    })).result;
     if (outcome._tag === "Incomplete") return yield* Effect.fail(outcome.cause);
     return count(outcome, "Installed");
   });
@@ -118,8 +119,9 @@ export const updateInstalledSkills = (_options: { readonly variantsPath?: string
   Effect.gen(function* () {
     const state = yield* currentState;
     const owner = yield* library(state);
-    const outcome = (yield* owner.apply(
-      yield* owner.plan({ _tag: "Update" }, { base: yield* owner.read }),
-    )).result;
+    const outcome = (yield* owner.apply({
+      _tag: "Apply",
+      plan: yield* owner.plan({ _tag: "Update" }, { base: yield* owner.read }),
+    })).result;
     return { installed: count(outcome, "Installed"), uninstalled: count(outcome, "Uninstalled") };
   });

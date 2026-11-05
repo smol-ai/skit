@@ -179,7 +179,9 @@ const recordedSetup = Effect.fn("SetupUndo.recordedSetup")(function* (
             ? ["Setup has not finished. Run any SKIT command to finish or stop it, then undo it."]
             : [],
     discovery: { _tag: "MachineSettings", operationId: operation.operationId },
-    evidence: yield* Schema.encodeEffect(OperationStatus)(operation),
+    evidence: yield* Schema.encodeEffect(OperationStatus)(operation).pipe(
+      Effect.mapError(() => new RecoveryInvalid({ detail: "Invalid recorded setup evidence" })),
+    ),
   } satisfies SetupRecord;
 });
 

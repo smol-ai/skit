@@ -1,3 +1,4 @@
+import { Revision } from "../../snapshot.js";
 import { Clock, Effect, Schema } from "effect";
 import { Hash, HarnessName } from "../../../vocabulary.js";
 import { InvalidLibraryState } from "../../../failures.js";
@@ -20,7 +21,7 @@ export type RefreshInventoryIntent = typeof RefreshInventoryIntent.Type;
 export const RefreshInventoryChange = Schema.Struct({
   roots: Schema.Array(ScanRoot),
   installedSkills: Schema.Array(InstalledSkill),
-  unmanaged: LibraryState.fields.unmanaged,
+  unmanaged: LibraryState.fields.unmanaged.schema.schema,
   ownershipIssues: Schema.Array(OwnershipIssue),
   scanIssues: Schema.Array(InventoryScanIssue),
   next: LibraryState,
@@ -31,7 +32,7 @@ export const RefreshInventoryPlan = Schema.Unknown.pipe(
     Schema.is(
       Schema.TaggedStruct("RefreshInventory", {
         intent: RefreshInventoryIntent,
-        baseRevision: Schema.String,
+        baseRevision: Revision,
         planId: Hash,
         observedAt: Schema.String,
         change: RefreshInventoryChange,

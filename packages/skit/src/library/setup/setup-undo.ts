@@ -49,7 +49,7 @@ export const prepareSetupUndo = Effect.fn("SetupUndo.prepare")(function* (
             });
         }
         const owner = yield* Library.Service;
-        const undone = yield* owner.apply(plan).pipe(
+        const undone = yield* owner.apply({ _tag: "Apply", plan: plan }).pipe(
           Effect.map((outcome) => outcome.result),
           Effect.catchTag("Library.StalePlan", () =>
             Effect.fail(new StalePlan({ message: "The Library changed since this was previewed" })),

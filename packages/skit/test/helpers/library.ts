@@ -56,12 +56,13 @@ export const removeCollection = (state: LibraryState, collectionId: string) =>
     if (id === undefined)
       return yield* new CollectionRemovalMissing({ collection_id: collectionId });
     const owner = yield* library((yield* LibraryWriter).home, state);
-    return (yield* owner.apply(
-      yield* owner.plan(
+    return (yield* owner.apply({
+      _tag: "Apply",
+      plan: yield* owner.plan(
         { _tag: "Remove", collectionId: id },
         { base: snapshotOf({ present: true, state }) },
       ),
-    )).result;
+    })).result;
   });
 
 /** Update every installed copy, with what is enabled at `scope` also routed to this destination. */
@@ -108,9 +109,10 @@ export const installEnabledSkills = (options: {
             ];
       }),
     ];
-    const outcome = (yield* owner.apply(
-      yield* owner.plan({ _tag: "Update" }, { base: snapshot, approvals }),
-    )).result;
+    const outcome = (yield* owner.apply({
+      _tag: "Apply",
+      plan: yield* owner.plan({ _tag: "Update" }, { base: snapshot, approvals }),
+    })).result;
     if (outcome._tag === "Incomplete") return yield* Effect.fail(outcome.cause);
     return applied(outcome, "Installed");
   });
@@ -135,7 +137,7 @@ export const planUpdate = (options: {
       { _tag: "Update" },
       { base: snapshot, approvals: options.approvals },
     );
-    return { plan, apply: owner.apply(plan) };
+    return { plan, apply: owner.apply({ _tag: "Apply", plan: plan }) };
   });
 
 /** Update every installed copy with only these destinations active. */
@@ -148,8 +150,10 @@ export const uninstallLeftovers = (options: {
     const snapshot = snapshotOf(yield* inspectLocalLibraryState(home));
     const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
     const owner = yield* library(home, state, { active: options.activeTargets });
-    const outcome = (yield* owner.apply(yield* owner.plan({ _tag: "Update" }, { base: snapshot })))
-      .result;
+    const outcome = (yield* owner.apply({
+      _tag: "Apply",
+      plan: yield* owner.plan({ _tag: "Update" }, { base: snapshot }),
+    })).result;
     return applied(outcome, "Uninstalled");
   });
 
@@ -157,8 +161,9 @@ export const uninstallLeftovers = (options: {
 export const uninstallCopies = (state: LibraryState, copies: readonly InstalledSkill[]) =>
   Effect.gen(function* () {
     const owner = yield* library((yield* LibraryWriter).home, state);
-    return (yield* owner.apply(
-      yield* owner.plan(
+    return (yield* owner.apply({
+      _tag: "Apply",
+      plan: yield* owner.plan(
         {
           _tag: "Uninstall",
           copies: copies.map((copy) => copy.installed_skill_id),
@@ -166,5 +171,5 @@ export const uninstallCopies = (state: LibraryState, copies: readonly InstalledS
         },
         { base: snapshotOf({ present: true, state }) },
       ),
-    )).result;
+    })).result;
   });

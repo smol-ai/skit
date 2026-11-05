@@ -61,7 +61,7 @@ it.effect("passive portable acceptance plans stamp apply time and preserve unkno
       );
       assert.isTrue(Option.isNone(portable.intent.expiresAt));
       yield* TestClock.adjust("2 seconds");
-      const result = (yield* library.apply(portable)).result;
+      const result = (yield* library.apply({ _tag: "Apply", plan: portable })).result;
       assert.strictEqual(result.acceptance.acceptedAt, "1970-01-01T00:00:02.000Z");
       assert.strictEqual(result.acceptance.principal, "owner@example.test");
       assert.strictEqual(result.acceptance.rationale, "reviewed subprocess use");
@@ -110,7 +110,7 @@ it.effect(
         assert.deepStrictEqual(portable.intent.expiresAt, plan.intent.expiresAt);
         assert.strictEqual(portable.change.acceptance.expiresAt, "1970-01-01T00:00:01.000Z");
         yield* TestClock.adjust("1 second");
-        const expired = yield* Effect.result(library.apply(portable));
+        const expired = yield* Effect.result(library.apply({ _tag: "Apply", plan: portable }));
         assert.strictEqual(expired._tag, "Failure");
         if (expired._tag === "Failure") {
           assert.strictEqual(expired.failure._tag, "AcceptanceIncomplete");
@@ -142,8 +142,11 @@ it.effect(
           assert.strictEqual(missing.failure._tag, "SecurityFindingAbsent");
         const altered = yield* Effect.result(
           library.apply({
-            ...plan,
-            change: { acceptance: { ...plan.change.acceptance, rationale: "unreviewed" } },
+            _tag: "Apply",
+            plan: {
+              ...plan,
+              change: { acceptance: { ...plan.change.acceptance, rationale: "unreviewed" } },
+            },
           }),
         );
         assert.strictEqual(altered._tag, "Failure");
@@ -151,7 +154,7 @@ it.effect(
           assert.strictEqual(altered.failure._tag, "Library.StalePlan");
         const original = join(plan.folders[0].path, "SKILL.md");
         yield* f.fs.writeFileString(original, "operator changed retained bytes\n");
-        const changed = yield* Effect.result(library.apply(plan));
+        const changed = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
         assert.strictEqual(changed._tag, "Failure");
         if (changed._tag === "Failure")
           assert.strictEqual(changed.failure._tag, "Library.StalePlan");
@@ -167,10 +170,11 @@ it.effect(
         );
         assert.strictEqual(yield* f.fs.readFileString(join(f.home, "state.json")), before);
         yield* f.fs.writeFileString(original, f.bytes);
-        yield* library.apply(
-          yield* library.plan({ _tag: "RefreshInventory", roots: [] }, { base }),
-        );
-        const stale = yield* Effect.result(library.apply(plan));
+        yield* library.apply({
+          _tag: "Apply",
+          plan: yield* library.plan({ _tag: "RefreshInventory", roots: [] }, { base }),
+        });
+        const stale = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
         assert.strictEqual(stale._tag, "Failure");
         if (stale._tag === "Failure") assert.strictEqual(stale.failure._tag, "Library.StalePlan");
       }).pipe(Effect.provide(Library.layer({ home: f.home, routing: { _tag: "None" } })));
@@ -188,7 +192,7 @@ it.effect("state publication failure leaves no acceptance and preserves reviewed
     yield* Effect.gen(function* () {
       const library = yield* Library.Service;
       const plan = yield* library.plan(yield* intentFor(f.home), { base: yield* library.read });
-      const failed = yield* Effect.result(library.apply(plan));
+      const failed = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
       assert.strictEqual(failed._tag, "Failure");
       if (failed._tag === "Failure") assert.strictEqual(failed.failure._tag, "PlatformError");
       assert.strictEqual(yield* f.fs.readFileString(statePath), before);

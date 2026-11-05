@@ -1,3 +1,4 @@
+import { Revision } from "../../snapshot.js";
 import { Clock, Effect, Option, Schema, Struct } from "effect";
 import { Hash, SkillAssessmentAcceptance, type SkillSecurityReview } from "../../../contracts.js";
 import { AcceptanceIncomplete, SecurityFindingAbsent } from "../../../failures.js";
@@ -24,7 +25,7 @@ export const AcceptFindingChange = Schema.Struct({
 });
 export const AcceptFindingPlan = Schema.TaggedStruct("AcceptFinding", {
   intent: AcceptFindingIntent,
-  baseRevision: Schema.String,
+  baseRevision: Revision,
   planId: Hash,
   change: AcceptFindingChange,
   folders: Schema.Array(InstalledSkills.Folder),

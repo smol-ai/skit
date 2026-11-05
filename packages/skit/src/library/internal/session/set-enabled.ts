@@ -240,7 +240,7 @@ export const applySetEnabledPlan = Effect.fn("SetEnabled.applyPlan")(function* (
     return yield* new Library.StalePlan({
       message: "This plan belongs to another Library selection",
     });
-  const outcome = (yield* plan[planOwner].apply(plan.owner.plan)).result;
+  const outcome = (yield* plan[planOwner].apply({ _tag: "Apply", plan: plan.owner.plan })).result;
   const results = setEnabledResults(outcome);
   if (outcome._tag === "Incomplete")
     return yield* new SetEnabledIncomplete({

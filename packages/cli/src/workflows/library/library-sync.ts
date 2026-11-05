@@ -127,6 +127,7 @@ export const syncLibrary = Effect.fn("Library.sync")(function* (options: {
         },
         { base: snapshot },
       );
+      if (Library.isRemoteSyncPlan(plan)) return yield* new SyncLocalChanged();
       yield* library.apply({ _tag: "Apply", plan });
     }
     return { status: "clean" as const, changed: false };
@@ -219,22 +220,24 @@ export const syncLibrary = Effect.fn("Library.sync")(function* (options: {
   if (transition?.conflicts.length) return conflicted(transition.conflicts, remote?.revision_id);
 
   const prepareLocal = (staged: Library.StagedContent) =>
-    library.plan(
-      {
-        _tag: "Sync",
-        staged,
-        acceptedBase: Option.fromUndefinedOr(ancestry),
-        deviceSelection: Option.fromUndefinedOr(selected),
-        pendingOrigin: Option.none(),
-        remote: Option.some({
-          origin: options.origin,
-          libraryId: Option.fromNullishOr(remote?.library_id),
-        }),
-      },
-      { base: snapshot },
-    );
+    library
+      .plan(
+        {
+          _tag: "Sync",
+          staged,
+          acceptedBase: Option.fromUndefinedOr(ancestry),
+          deviceSelection: Option.fromUndefinedOr(selected),
+          pendingOrigin: Option.none(),
+          remote: Option.some({
+            origin: options.origin,
+            libraryId: Option.fromNullishOr(remote?.library_id),
+          }),
+        },
+        { base: snapshot },
+      )
+      .pipe(Effect.filterOrFail(Library.isRemoteSyncPlan, () => new SyncLocalChanged()));
   const applyLocal = (
-    plan: Library.SyncPlan,
+    plan: Library.RemoteSyncPlan,
     saved: { readonly library_id: string; readonly revision_id: string },
     desired: LibraryManifest,
   ) =>
@@ -252,7 +255,6 @@ export const syncLibrary = Effect.fn("Library.sync")(function* (options: {
       })
       .pipe(
         Effect.map((outcome) => outcome.result),
-        Effect.catchTag("LibraryChanged", () => Effect.fail(new SyncLocalChanged())),
         Effect.catchTag("Library.StalePlan", () => Effect.fail(new SyncLocalChanged())),
       );
 

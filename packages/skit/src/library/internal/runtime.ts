@@ -1,53 +1,11 @@
-import {
-  planRestore,
-  applyRestore,
-  type RestoreIntent,
-  type RestorePlan,
-  type RestoreOutcome,
-  type RestorePlanError,
-  type RestoreApplyError,
-} from "./recovery/restore.js";
-import {
-  planSync,
-  applySync,
-  type SyncIntent,
-  type SyncPlan,
-  type SyncOutcome,
-  type SyncApplyRequest,
-  type SyncPlanError,
-  type SyncApplyError,
-} from "./sync/sync.js";
-import {
-  planManaging,
-  applyManaging,
-  checkedManageIntent,
-  type ManageIntent,
-  type ManagePlan,
-  type ManageOutcome,
-  type ManagePlanError,
-  type ManageApplyError,
-} from "./manage/manage.js";
+import { resolve } from "node:path";
+import { planRestore, applyRestore } from "./recovery/restore.js";
+import { planSync, applySync, type SyncApplyRequest } from "./sync/sync.js";
+import { planManaging, applyManaging, checkedManageIntent } from "./manage/manage.js";
 import { stepRouting } from "../routing/step.js";
-import {
-  planAcceptance,
-  applyAcceptance,
-  type AcceptFindingIntent,
-  type AcceptFindingPlan,
-  type AcceptFindingOutcome,
-  type AcceptFindingPlanError,
-  type AcceptFindingApplyError,
-} from "./security/accept.js";
-import {
-  planInventory,
-  applyInventory,
-  type RefreshInventoryIntent,
-  type RefreshInventoryPlan,
-  type RefreshInventoryOutcome,
-  type RefreshInventoryPlanError,
-  type RefreshInventoryApplyError,
-} from "./inventory/refresh.js";
-import { planUndo, applyUndo, type UndoPlanError, type UndoApplyError } from "./setup/undo.js";
-import type { UndoIntent, UndoPlan } from "./setup/undo-plan.js";
+import { planAcceptance, applyAcceptance } from "./security/accept.js";
+import { planInventory, applyInventory } from "./inventory/refresh.js";
+import { planUndo, applyUndo } from "./setup/undo.js";
 import { Context, Effect, FileSystem, Layer, Option, Path, Schema } from "effect";
 import { LinkStat } from "../../platform/link-stat.js";
 import { SourceProcess } from "../../platform/source-process.js";
@@ -64,13 +22,15 @@ import { Digest } from "effect/crypto";
 import { InstalledSkills } from "../installed-skills.js";
 import { treeHasherLayer } from "../../artifact/tree-hasher.js";
 import {
+  LibraryWriter,
   libraryStatePath,
   loadLibrary,
   writeLibrary,
   inspectLocalLibraryState,
   migrateLocalLibraryState,
+  recoverLibraryHistory,
 } from "../store/library-store.js";
-import { InvalidLibraryState } from "../../failures.js";
+import { InvalidLibraryState, type LibraryChanged } from "../../failures.js";
 import { type StepRouting, OperationStatus } from "../store/state-schema.js";
 import { readLibraryAudit } from "../audit/audit-log.js";
 import { snapshotOf, type Snapshot } from "../snapshot.js";
@@ -78,14 +38,7 @@ import { recover, setup, applyRecorded } from "../setup.js";
 import { planningState } from "../reviewed-plan.js";
 import { importCollection, importAuthoredCollection, importEdit } from "../import-collection.js";
 import type { TreeRequirements } from "../../platform/tree-requirements.js";
-import {
-  StalePlan,
-  type ApplyError,
-  type Approval,
-  type Intent,
-  type Plan,
-  type PlanError,
-} from "../library-plan.js";
+import { StalePlan, type Approval } from "../library-plan.js";
 import { planIntent } from "../plan-changes.js";
 import {
   Service,
@@ -93,7 +46,11 @@ import {
   type Routing,
   type History,
   type Outcome,
-  type UndoOutcome,
+  type PlanningIntent,
+  type ReviewedPlan,
+  type PlanError as PlanningError,
+  type ApplyRequest,
+  type ApplyError as ApplyingError,
 } from "../library.js";
 
 /**
@@ -105,6 +62,9 @@ export const make = Effect.fn("Library.make")(function* (
   configuration: Routing = { _tag: "Recorded" },
 ) {
   yield* migrateLocalLibraryState(home);
+  const activeWriter = yield* Effect.serviceOption(LibraryWriter);
+  if (Option.isNone(activeWriter) || activeWriter.value.home !== resolve(home))
+    yield* recoverLibraryHistory(home);
   const startup = yield* recover(home).pipe(Effect.provide(treeHasherLayer));
   const files = yield* InstalledSkills.Service;
   // Only the platform services: an owner built inside a write must never carry that writer out.
@@ -147,60 +107,14 @@ export const make = Effect.fn("Library.make")(function* (
     }).pipe(Effect.provide(writer), Effect.provide(importing), Effect.provide(contentHttp));
   });
 
-  function planFor(
-    intent: RestoreIntent,
-    options: { readonly base: Snapshot },
-  ): Effect.Effect<RestorePlan, RestorePlanError>;
-  function planFor(
-    intent: SyncIntent,
-    options: { readonly base: Snapshot },
-  ): Effect.Effect<SyncPlan, SyncPlanError>;
-  function planFor(
-    intent: ManageIntent,
-    options: { readonly base: Snapshot },
-  ): Effect.Effect<ManagePlan, ManagePlanError | InstalledSkills.Cause>;
-  function planFor(
-    intent: AcceptFindingIntent,
-    options: { readonly base: Snapshot },
-  ): Effect.Effect<AcceptFindingPlan, AcceptFindingPlanError>;
-  function planFor(
-    intent: RefreshInventoryIntent,
-    options: { readonly base: Snapshot },
-  ): Effect.Effect<RefreshInventoryPlan, RefreshInventoryPlanError>;
-  function planFor(
-    intent: UndoIntent,
-    options: { readonly base: Snapshot },
-  ): Effect.Effect<UndoPlan, UndoPlanError>;
-  function planFor<I extends Intent>(
+  function planFor<I extends PlanningIntent>(
     intent: I,
     options: { readonly base: Snapshot; readonly approvals?: readonly Approval[] },
-  ): Effect.Effect<Extract<Plan, { readonly _tag: I["_tag"] }>, PlanError>;
+  ): Effect.Effect<Extract<ReviewedPlan, { readonly _tag: I["_tag"] }>, PlanningError>;
   function planFor(
-    intent:
-      | RestoreIntent
-      | SyncIntent
-      | ManageIntent
-      | AcceptFindingIntent
-      | RefreshInventoryIntent
-      | UndoIntent
-      | Intent,
+    intent: PlanningIntent,
     options: { readonly base: Snapshot; readonly approvals?: readonly Approval[] },
-  ): Effect.Effect<
-    | RestorePlan
-    | SyncPlan
-    | ManagePlan
-    | AcceptFindingPlan
-    | RefreshInventoryPlan
-    | UndoPlan
-    | Plan,
-    | RestorePlanError
-    | SyncPlanError
-    | ManagePlanError
-    | AcceptFindingPlanError
-    | RefreshInventoryPlanError
-    | UndoPlanError
-    | PlanError
-  > {
+  ): Effect.Effect<ReviewedPlan, PlanningError> {
     // The plan owns its Snapshot from the call, not from when its Effect runs.
     const base = structuredClone(options.base);
     if (intent._tag === "Restore")
@@ -260,50 +174,38 @@ export const make = Effect.fn("Library.make")(function* (
       return yield* planIntent(intent, { home, base, approvals: options.approvals });
     }).pipe(planning, Effect.provide(writer));
   }
-  function applyFor(plan: RestorePlan): Effect.Effect<RestoreOutcome, RestoreApplyError>;
-  function applyFor(request: SyncApplyRequest): Effect.Effect<SyncOutcome, SyncApplyError>;
-  function applyFor(plan: ManagePlan): Effect.Effect<ManageOutcome, ManageApplyError>;
-  function applyFor(
-    plan: AcceptFindingPlan,
-  ): Effect.Effect<AcceptFindingOutcome, AcceptFindingApplyError>;
-  function applyFor(
-    plan: RefreshInventoryPlan,
-  ): Effect.Effect<RefreshInventoryOutcome, RefreshInventoryApplyError>;
-  function applyFor(plan: UndoPlan): Effect.Effect<UndoOutcome, UndoApplyError>;
-  function applyFor<P extends Plan>(
-    plan: P,
-  ): Effect.Effect<Extract<Outcome, { readonly _tag: P["_tag"] }>, ApplyError>;
-  function applyFor(
-    plan:
-      | RestorePlan
-      | SyncApplyRequest
-      | ManagePlan
-      | AcceptFindingPlan
-      | RefreshInventoryPlan
-      | UndoPlan
-      | Plan,
-  ): Effect.Effect<
-    Outcome,
-    | RestoreApplyError
-    | SyncApplyError
-    | ManageApplyError
-    | AcceptFindingApplyError
-    | RefreshInventoryApplyError
-    | UndoApplyError
-    | ApplyError
-  > {
+  function applyFor<Request extends ApplyRequest>(
+    request: Request,
+  ): Effect.Effect<Extract<Outcome, { readonly _tag: Request["plan"]["_tag"] }>, ApplyingError>;
+  function applyFor(request: ApplyRequest): Effect.Effect<Outcome, ApplyingError> {
+    return applyRequest(request).pipe(
+      Effect.catchTag("LibraryChanged", () =>
+        Effect.fail(
+          new StalePlan({
+            message: "The Library changed before the reviewed change could be saved",
+          }),
+        ),
+      ),
+    );
+  }
+  function applyRequest(
+    request: ApplyRequest,
+  ): Effect.Effect<Outcome, ApplyingError | LibraryChanged> {
     const applying = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
       effect.pipe(
         Effect.provideService(InstalledSkills.Service, files),
         Effect.provide(writer),
         Effect.provide(importing),
       );
-    if (plan._tag === "Restore") return applyRestore(home, plan).pipe(applying);
-    if (plan._tag === "Apply" || plan._tag === "ApplySynced")
-      return applySync(home, plan, {
+    const syncing = (request: SyncApplyRequest) =>
+      applySync(home, request, {
         none: configuration._tag === "None",
         ...(configuration._tag === "Configured" ? { roots: configuration } : {}),
       }).pipe(applying, Effect.provide(treeHasherLayer));
+    if (request._tag === "ApplySynced") return syncing(request);
+    const plan = request.plan;
+    if (plan._tag === "Sync") return syncing({ _tag: "Apply", plan });
+    if (plan._tag === "Restore") return applyRestore(home, plan).pipe(applying);
     if (plan._tag !== plan.intent._tag)
       return Effect.fail(
         new StalePlan({ message: "The plan tag does not match its reviewed intent" }),
@@ -338,7 +240,13 @@ export const make = Effect.fn("Library.make")(function* (
         ),
       );
       const events = yield* readLibraryAudit(home);
-      return { events, operations } satisfies History;
+      return {
+        events,
+        operations: operations.map(({ steps, ...operation }) => ({
+          ...operation,
+          steps: steps.map(({ applies: _applies, ...step }) => step),
+        })),
+      } satisfies History;
     }).pipe(Effect.provide(writer)),
     plan: planFor,
     apply: applyFor,

@@ -1,3 +1,4 @@
+import type { LibraryChanged } from "../failures.js";
 import type {
   RestoreIntent,
   RestorePlan,
@@ -16,7 +17,8 @@ import {
   type SyncIntent,
   type SyncPlan,
   type SyncOutcome,
-  type SyncApplyRequest,
+  type RemoteSyncPlan,
+  type RemoteReceipt,
   type SyncPlanError,
   type SyncApplyError,
 } from "./internal/sync/sync.js";
@@ -24,6 +26,9 @@ export {
   SyncIntent,
   SyncPlan,
   RemoteReceipt,
+  isRemoteSyncPlan,
+  type LocalSyncPlan,
+  type RemoteSyncPlan,
   SyncStopped,
   type SyncResult,
   type SyncOutcome,
@@ -95,7 +100,10 @@ import type { Digest } from "effect/crypto";
 import { InstalledSkills } from "./installed-skills.js";
 import type { InventoryRootOptions } from "./routing/roots.js";
 import type { LibraryLayerError, LibraryStateReadError } from "./store/library-store.js";
-import { OperationStatus } from "./store/state-schema.js";
+import type {
+  OperationStatus as StoredOperationStatus,
+  RecordedSetupStep,
+} from "./store/state-schema.js";
 import { type LibraryAuditEvent, type LibraryAuditInvalid } from "./audit/audit-log.js";
 import { type Snapshot } from "./snapshot.js";
 import { type SetupError, type SetupResult, type StartupRecovery } from "./setup.js";
@@ -112,13 +120,13 @@ import {
 } from "./import-collection.js";
 import type { TreeRequirements } from "../platform/tree-requirements.js";
 import {
-  type ApplyError,
+  type ApplyError as ExistingApplyError,
   type Approval,
   type StalePlan,
   type Intent,
   type Outcome as ExistingOutcome,
   type Plan,
-  type PlanError,
+  type PlanError as ExistingPlanError,
 } from "./library-plan.js";
 export * from "./library-plan.js";
 export { UndoIntent, UndoPlan, UndoChange, type UndoResult } from "./internal/setup/undo-plan.js";
@@ -153,7 +161,11 @@ export type {
   StepRouting,
   VersionChoice,
 } from "./store/state-schema.js";
-export { OperationStatus } from "./store/state-schema.js";
+/** History reports steps and evidence, without private installed-change checkpoints. */
+type ReportedOperation<O> = {
+  readonly [K in keyof O]: K extends "steps" ? readonly Omit<RecordedSetupStep, "applies">[] : O[K];
+};
+export type OperationStatus = ReportedOperation<StoredOperationStatus>;
 
 export interface History {
   readonly events: readonly LibraryAuditEvent[];
@@ -193,6 +205,55 @@ export type Outcome =
   | AcceptFindingOutcome
   | RefreshInventoryOutcome;
 
+/** Every intent uses the same planning entry point and the same reviewed-data boundary. */
+export type PlanningIntent =
+  | Intent
+  | RestoreIntent
+  | SyncIntent
+  | ManageIntent
+  | AcceptFindingIntent
+  | RefreshInventoryIntent
+  | UndoIntent;
+export type ReviewedPlan =
+  | Plan
+  | RestorePlan
+  | SyncPlan
+  | ManagePlan
+  | AcceptFindingPlan
+  | RefreshInventoryPlan
+  | UndoPlan;
+export type PlanError =
+  | ExistingPlanError
+  | RestorePlanError
+  | SyncPlanError
+  | ManagePlanError
+  | AcceptFindingPlanError
+  | RefreshInventoryPlanError
+  | UndoPlanError
+  | InstalledSkills.Cause;
+
+export type ApplyRequest =
+  | {
+      readonly _tag: "Apply";
+      readonly plan: Exclude<ReviewedPlan, RemoteSyncPlan>;
+      readonly receipt?: never;
+    }
+  | {
+      readonly _tag: "ApplySynced";
+      readonly plan: RemoteSyncPlan;
+      readonly receipt: RemoteReceipt;
+    };
+export type ApplyError = Exclude<
+  | ExistingApplyError
+  | RestoreApplyError
+  | SyncApplyError
+  | ManageApplyError
+  | AcceptFindingApplyError
+  | RefreshInventoryApplyError
+  | UndoApplyError,
+  LibraryChanged
+>;
+
 export interface Interface {
   /**
    * One read. Never writes: a legacy state.json was migrated when the layer was built, and a read
@@ -203,49 +264,13 @@ export interface Interface {
    * Plan against the Snapshot the front end showed, including whether the Library existed.
    * Captures its state; apply refuses the plan if the Library has changed since.
    */
-  readonly plan: {
-    (
-      intent: RestoreIntent,
-      options: { readonly base: Snapshot },
-    ): Effect.Effect<RestorePlan, RestorePlanError>;
-    (
-      intent: SyncIntent,
-      options: { readonly base: Snapshot },
-    ): Effect.Effect<SyncPlan, SyncPlanError>;
-    (
-      intent: ManageIntent,
-      options: { readonly base: Snapshot },
-    ): Effect.Effect<ManagePlan, ManagePlanError | InstalledSkills.Cause>;
-    (
-      intent: AcceptFindingIntent,
-      options: { readonly base: Snapshot },
-    ): Effect.Effect<AcceptFindingPlan, AcceptFindingPlanError>;
-    (
-      intent: RefreshInventoryIntent,
-      options: { readonly base: Snapshot },
-    ): Effect.Effect<RefreshInventoryPlan, RefreshInventoryPlanError>;
-    (
-      intent: UndoIntent,
-      options: { readonly base: Snapshot },
-    ): Effect.Effect<UndoPlan, UndoPlanError>;
-    <I extends Intent>(
-      intent: I,
-      options: { readonly base: Snapshot; readonly approvals?: readonly Approval[] },
-    ): Effect.Effect<Extract<Plan, { readonly _tag: I["_tag"] }>, PlanError>;
-  };
-  readonly apply: {
-    (plan: RestorePlan): Effect.Effect<RestoreOutcome, RestoreApplyError>;
-    (request: SyncApplyRequest): Effect.Effect<SyncOutcome, SyncApplyError>;
-    (plan: ManagePlan): Effect.Effect<ManageOutcome, ManageApplyError>;
-    (plan: AcceptFindingPlan): Effect.Effect<AcceptFindingOutcome, AcceptFindingApplyError>;
-    (
-      plan: RefreshInventoryPlan,
-    ): Effect.Effect<RefreshInventoryOutcome, RefreshInventoryApplyError>;
-    (plan: UndoPlan): Effect.Effect<UndoOutcome, UndoApplyError>;
-    <P extends Plan>(
-      plan: P,
-    ): Effect.Effect<Extract<Outcome, { readonly _tag: P["_tag"] }>, ApplyError>;
-  };
+  readonly plan: <I extends PlanningIntent>(
+    intent: I,
+    options: { readonly base: Snapshot; readonly approvals?: readonly Approval[] },
+  ) => Effect.Effect<Extract<ReviewedPlan, { readonly _tag: I["_tag"] }>, PlanError>;
+  readonly apply: <Request extends ApplyRequest>(
+    request: Request,
+  ) => Effect.Effect<Extract<Outcome, { readonly _tag: Request["plan"]["_tag"] }>, ApplyError>;
   /**
    * Store a Source's files as a Collection Version and save it. Nothing to preview or recheck: it
    * touches no skill folders, and what it imports exists only while the fetched Source does.

@@ -675,8 +675,9 @@ it.effect(
             );
             const read = yield* library.read;
             if (read._tag !== "Present") return yield* Effect.die("no Library");
-            return yield* library.apply(
-              yield* library.plan(
+            return yield* library.apply({
+              _tag: "Apply",
+              plan: yield* library.plan(
                 {
                   _tag: "Enabled",
                   changes: [
@@ -692,7 +693,7 @@ it.effect(
                   approvals: [{ _tag: "Manage", manage: { path: copy, currentHash } }],
                 },
               ),
-            );
+            });
           }),
         ).pipe(Effect.provide(fileSystem));
       const beforeMarker = Layer.effect(
@@ -724,7 +725,10 @@ it.effect(
           );
           const read = yield* library.read;
           if (read._tag !== "Present") return yield* Effect.die("no Library");
-          yield* library.apply(yield* library.plan({ _tag: "Update" }, { base: read }));
+          yield* library.apply({
+            _tag: "Apply",
+            plan: yield* library.plan({ _tag: "Update" }, { base: read }),
+          });
         }),
       );
 
@@ -865,6 +869,12 @@ for (const boundary of ["backup", "successor"] as const)
         finished: [operation.operationId],
         stopped: [],
       });
+      const reported = yield* withLibrary(home, (library) => library.history);
+      const reportedStep = reported.operations.find(
+        (item) => item.operationId === operation.operationId,
+      )?.steps[0];
+      assert.isDefined(reportedStep);
+      assert.isFalse(Object.hasOwn(reportedStep ?? {}, "applies"));
       const state = yield* inspectLibrary(home);
       assert.strictEqual(
         state.present &&

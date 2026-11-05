@@ -1,3 +1,4 @@
+import { Revision } from "../../snapshot.js";
 import { Schema } from "effect";
 import { Hash } from "../../../vocabulary.js";
 import { CollectionId, ImportId } from "../../entity-ids.js";
@@ -34,7 +35,7 @@ export type UndoChange = typeof UndoChange.Type;
 /** Data only: apply verifies the state, folders, imports and legacy evidence all over again. */
 export const UndoPlan = Schema.TaggedStruct("Undo", {
   intent: UndoIntent,
-  baseRevision: Schema.String,
+  baseRevision: Revision,
   planId: Hash,
   backupId: Schema.String.check(Schema.isUUID(4)),
   observations: Schema.Array(

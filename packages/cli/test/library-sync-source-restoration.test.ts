@@ -197,6 +197,25 @@ it.effect("changed declared source bytes fail before saving a fresh Library", ()
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
+it.effect("invalid restored source metadata reports its hash and cause before saving", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const state = yield* f.seed(registrySource);
+    const remote = f.server.stored;
+    yield* f.fs.writeFileString(join(f.sourceRoot, "skit.json"), "{ invalid JSON");
+    yield* f.repack;
+    const error = yield* f.sync().pipe(Effect.flip);
+    assert.strictEqual(error._tag, "Library.SyncSourceRestoreInvalid");
+    if (error._tag === "Library.SyncSourceRestoreInvalid") {
+      assert.strictEqual(error.hash, state.collection_versions[0]!.hash);
+      assert.isDefined(error.cause);
+      assert.isNotEmpty(error.detail);
+    }
+    assert.isFalse(yield* f.fs.exists(join(f.freshHome, "state.json")));
+    assert.deepStrictEqual(f.server.stored, remote);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
 it.effect("a declared copy rejects a source that no longer declares a SKIT", () =>
   Effect.gen(function* () {
     const f = yield* fixture;

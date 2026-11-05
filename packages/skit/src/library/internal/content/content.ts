@@ -2,7 +2,15 @@ import { Effect, FileSystem, Option, Schema } from "effect";
 import type { Digest } from "effect/crypto";
 import type { HttpClient } from "effect/http";
 import type { TreeRequirements } from "../../../platform/tree-requirements.js";
-import { InvalidLibraryState } from "../../../failures.js";
+import {
+  InvalidLibraryState,
+  type LibraryBusy,
+  type ContentAddressCollision,
+} from "../../../failures.js";
+import type { PlatformError } from "effect/PlatformError";
+import type { TreeError } from "../../../shared/tree-error.js";
+import type { SnapshotArchiveInvalid } from "../../snapshot-archive-universal.js";
+import { withLock as withHomeLock } from "../../../platform/home-lock.js";
 import { canonicalJson } from "../../../shared/json.js";
 import { sha256Hash } from "../../../shared/hash.js";
 import type { Hash } from "../../../vocabulary.js";
@@ -23,17 +31,13 @@ import type { RestoreProgress } from "../../restore-progress.js";
 import type { Snapshot } from "../../snapshot.js";
 import { planningState } from "../../reviewed-plan.js";
 import { readSnapshotArchive, verifySnapshotArchive } from "../../snapshot-archive.js";
-import {
-  libraryOriginalsPath,
-  libraryStatePath,
-  writeLibrary,
-  type LibraryStateWriteError,
-} from "../../store/library-store.js";
+import { libraryOriginalsPath, libraryStatePath } from "../../store/library-store.js";
 import {
   completeRestoreArchives,
   retainRestoreArchives,
   restoredState,
   RestoreInvalid,
+  type SourceRestoreInvalid,
 } from "./restore.js";
 
 export interface StagedContent {
@@ -180,7 +184,7 @@ export const stageContent = Effect.fn("Library.content.stage")(function* <E = ne
     ...(source.download === undefined ? {} : { download: source.download }),
   };
   const available = yield* completeRestoreArchives(manifest, plan, options);
-  const { state } = yield* writeLibrary(
+  const { state } = yield* withHomeLock(
     home,
     Effect.scoped(retainRestoreArchives(manifest, available, options)),
   );
@@ -193,6 +197,10 @@ export const stageContent = Effect.fn("Library.content.stage")(function* <E = ne
   } satisfies StagedContent;
 });
 export type ContentStageError =
-  | Effect.Error<ReturnType<typeof completeRestoreArchives<never, never>>>
-  | Effect.Error<ReturnType<typeof retainRestoreArchives>>
-  | LibraryStateWriteError;
+  | RestoreInvalid
+  | SourceRestoreInvalid
+  | SnapshotArchiveInvalid
+  | ContentAddressCollision
+  | PlatformError
+  | TreeError
+  | LibraryBusy;

@@ -213,9 +213,13 @@ it.effect("application layers consume the supplied paths without re-reading conf
     );
     yield* Effect.gen(function* () {
       const library = yield* Library.Service;
-      yield* library.apply(
-        yield* library.plan({ _tag: "RefreshInventory", roots: [] }, { base: yield* library.read }),
-      );
+      yield* library.apply({
+        _tag: "Apply",
+        plan: yield* library.plan(
+          { _tag: "RefreshInventory", roots: [] },
+          { base: yield* library.read },
+        ),
+      });
       assert.isTrue(yield* fs.exists(join(paths.skitHome, "state.json")));
       const supplied = yield* SkitConfiguration;
       assert.strictEqual(supplied.userHome, paths.userHome);
@@ -241,12 +245,13 @@ it.effect("separate application boundaries retain their own storage roots", () =
       Effect.gen(function* () {
         const library = yield* Library.Service;
         assert.strictEqual((yield* library.read)._tag, "Absent");
-        yield* library.apply(
-          yield* library.plan(
+        yield* library.apply({
+          _tag: "Apply",
+          plan: yield* library.plan(
             { _tag: "RefreshInventory", roots: [] },
             { base: yield* library.read },
           ),
-        );
+        });
         assert.isTrue(yield* fs.exists(join(home, "state.json")));
         return home;
       }).pipe(

@@ -117,7 +117,6 @@ export {
   LibraryAuditEvent,
   LibraryAuditChange,
   LibraryAuditInvalid,
-  type LibraryAuditDraft,
 } from "./library/audit/audit-log.js";
 export {
   writeRawAtomic,
@@ -195,7 +194,7 @@ export {
 
 export { normalizeLibraryManifest } from "./library/manifest.js";
 
-export { SyncStopped } from "./library/internal/sync/sync.js";
+export { ManageStopped, SyncStopped } from "./library/library.js";
 export type {
   SyncProgram,
   StoredSyncProgram,
