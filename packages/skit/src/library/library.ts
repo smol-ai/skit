@@ -8,13 +8,7 @@ import type {
   RestorePlanError,
   RestoreApplyError,
 } from "./internal/recovery/restore.js";
-export type {
-  RestoreIntent,
-  RestorePlan,
-  RestoreOutcome,
-  RestorePlanError,
-  RestoreApplyError,
-} from "./internal/recovery/restore.js";
+
 import {
   type SyncIntent,
   type SyncPlan,
@@ -25,18 +19,10 @@ import {
   type SyncApplyError,
 } from "./internal/sync/sync.js";
 export {
-  SyncIntent,
   SyncPlan,
-  RemoteReceipt,
   isRemoteSyncPlan,
-  type LocalSyncPlan,
   type RemoteSyncPlan,
-  SyncStopped,
-  type SyncResult,
-  type SyncOutcome,
-  type SyncApplyRequest,
-  type SyncPlanError,
-  type SyncApplyError,
+  type SyncStopped,
 } from "./internal/sync/sync.js";
 import { makeOwner } from "./internal/runtime.js";
 import {
@@ -46,16 +32,7 @@ import {
   type ManagePlanError,
   type ManageApplyError,
 } from "./internal/manage/manage.js";
-export {
-  ManageIntent,
-  ManagePlan,
-  ManageChange,
-  ManageStopped,
-  type ManageResult,
-  type ManageOutcome,
-  type ManagePlanError,
-  type ManageApplyError,
-} from "./internal/manage/manage.js";
+export { ManageIntent, ManagePlan, type ManageStopped } from "./internal/manage/manage.js";
 import {
   type AcceptFindingIntent,
   type AcceptFindingPlan,
@@ -63,15 +40,7 @@ import {
   type AcceptFindingPlanError,
   type AcceptFindingApplyError,
 } from "./internal/security/accept.js";
-export {
-  AcceptFindingIntent,
-  AcceptFindingPlan,
-  AcceptFindingChange,
-  type AcceptFindingResult,
-  type AcceptFindingOutcome,
-  type AcceptFindingPlanError,
-  type AcceptFindingApplyError,
-} from "./internal/security/accept.js";
+export { AcceptFindingPlan } from "./internal/security/accept.js";
 import {
   type RefreshInventoryIntent,
   type RefreshInventoryPlan,
@@ -79,15 +48,7 @@ import {
   type RefreshInventoryPlanError,
   type RefreshInventoryApplyError,
 } from "./internal/inventory/refresh.js";
-export {
-  RefreshInventoryIntent,
-  RefreshInventoryPlan,
-  RefreshInventoryChange,
-  type RefreshInventoryResult,
-  type RefreshInventoryOutcome,
-  type RefreshInventoryPlanError,
-  type RefreshInventoryApplyError,
-} from "./internal/inventory/refresh.js";
+export { RefreshInventoryPlan } from "./internal/inventory/refresh.js";
 import { type UndoPlanError, type UndoApplyError } from "./internal/setup/undo.js";
 import type { UndoIntent, UndoPlan, UndoResult } from "./internal/setup/undo-plan.js";
 import { Context, Effect, Layer } from "effect";
@@ -132,8 +93,8 @@ import {
   type PlanError as ExistingPlanError,
 } from "./library-plan.js";
 export * from "./library-plan.js";
-export { UndoIntent, UndoPlan, UndoChange, type UndoResult } from "./internal/setup/undo-plan.js";
-export type { UndoPlanError, UndoApplyError } from "./internal/setup/undo.js";
+export { UndoPlan } from "./internal/setup/undo-plan.js";
+
 export { reviewInstalledSkillChanges } from "./installed-skill-review.js";
 export {
   InvalidIntent,
@@ -142,7 +103,7 @@ export {
   uniqueInstallScopes,
   sameInstallScope,
 } from "./enabled-plan.js";
-export type { Subject, Invocation, EnabledCollection, SetupApproval } from "./enabled-plan.js";
+export type { SetupApproval } from "./enabled-plan.js";
 
 export { Revision, type Snapshot } from "./snapshot.js";
 export type {
@@ -150,20 +111,10 @@ export type {
   LibraryStateReadError,
   LibraryStateWriteError,
 } from "./store/library-store.js";
-export type {
-  SetupError,
-  SetupResult,
-  SetupStepResult,
-  StartupRecovery,
-} from "./internal/setup/run.js";
+export type { SetupResult } from "./internal/setup/run.js";
 export { RestoreInvalid, SourceRestoreInvalid } from "./internal/content/restore.js";
+export type { StagedContent, ContentStageError } from "./internal/content/content.js";
 export type {
-  StagedContent,
-  ContentSource,
-  ContentStageError,
-} from "./internal/content/content.js";
-export type {
-  AbsentEvidence,
   FolderEvidence,
   LinkEvidence,
   ManageExistingSelection,
@@ -172,8 +123,6 @@ export type {
   SetupStep,
   StoredInstalledApply,
   SetupStopReason,
-  StepRouting,
-  VersionChoice,
 } from "./store/state-schema.js";
 /** History reports steps and evidence, without private installed-change checkpoints. */
 type ReportedOperation<O> = {
