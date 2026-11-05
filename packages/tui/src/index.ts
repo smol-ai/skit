@@ -20,7 +20,7 @@ import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import { resolve } from "node:path";
 import { Effect, FileSystem, Layer, Schema } from "effect";
 import { openLibrarySession, readLibrarySkillContent } from "@smolai/skit-core/library/session";
-import { createLibraryController, type Chooser } from "./library/controller";
+import { createLibraryController } from "./library/controller";
 import {
   errorMessage,
   HarnessName,
@@ -37,17 +37,16 @@ import { auditLocalCapabilitiesV1Alpha4 } from "@smolai/skit-core/audit";
 import { budgetDetails } from "./harness/budget-details";
 import { createLibraryHost } from "./library/host";
 import { createRenderer, writeFrame } from "./shell/render";
-import { createInteractionController, type Overlay, type ScrollKey } from "./shell/interaction";
+import { createInteractionController } from "./shell/interaction";
+import { createViewPrimitives } from "./shell/view";
+import { createLibraryOverlays } from "./library/overlays";
 import { copySelectedText, isCopySelectionKey } from "./shell/selection-copy";
 import {
-  chip,
   ink,
   keybar,
-  kv,
   listColors,
   panelColors,
   panelTitle,
-  detailsBlock,
   sep,
   surface,
   tone,
@@ -57,12 +56,10 @@ import {
   auditPresentation,
   inventoryPresentation,
   detailPresentation,
-  confirmationPresentation,
   harnessProbePresentation,
   type AuditItem,
   type InventoryItem,
   type SkillNavigation,
-  type DetailField,
 } from "./shell/presentation";
 
 const args = process.argv.slice(2);
@@ -160,14 +157,27 @@ const requestedItemIndex =
       )?.findIndex((item) => item.name === requestedItem);
 let auditSelectedIndex =
   requestedItemIndex !== undefined && requestedItemIndex >= 0 ? requestedItemIndex : 0;
+const interaction = createInteractionController(renderInventory);
+const view = createViewPrimitives(renderer);
+const {
+  box,
+  text,
+  statusColor,
+  detailFields,
+  isCompact,
+  modalWidth,
+  overlayHandle,
+  scrollOverlay,
+} = view;
+const libraryOverlays = createLibraryOverlays(renderer, interaction, view);
 const libraryController = createLibraryController({
   host: libraryHost,
   home: paths.skitHome,
   configuration: libraryConfiguration,
   active: () => sections[variant]?.key === "library",
-  openChooser,
-  openConfirm,
-  closeConfirm,
+  openChooser: libraryOverlays.openChooser,
+  openConfirm: libraryOverlays.openConfirm,
+  closeConfirm: libraryOverlays.closeConfirm,
   render,
   refreshListingBudgets,
 });
@@ -185,62 +195,11 @@ const selection = {
 if (sections[variant]?.key === "library" && requestedItem)
   libraryController.selectRequestedItem(requestedItem);
 let currentView: BoxRenderable | null = null;
-const interaction = createInteractionController(renderInventory);
 let pendingSkillPreview: Promise<void> | undefined;
-
-function box(
-  id: string,
-  options: ConstructorParameters<typeof BoxRenderable>[1] = {},
-): BoxRenderable {
-  return new BoxRenderable(renderer, {
-    id,
-    backgroundColor: "transparent",
-    ...options,
-  });
-}
-
-function text(
-  id: string,
-  content: string,
-  options: Omit<ConstructorParameters<typeof TextRenderable>[1], "content"> = {},
-): TextRenderable {
-  return new TextRenderable(renderer, {
-    id,
-    content,
-    fg: ink.DEFAULT,
-    ...options,
-  });
-}
-
-function statusColor(status: AuditItem["status"]): string {
-  return {
-    clear: tone.success,
-    warning: tone.warning,
-    error: tone.danger,
-  }[status];
-}
-
-function detailFields(fields: readonly DetailField[]) {
-  return detailsBlock(
-    fields.map((field) =>
-      kv(
-        field.label,
-        field.status ? chip(field.value, statusColor(field.status)) : field.value,
-        14,
-      ),
-    ),
-  );
-}
 
 let narrowDetails = false;
 let detailsScroll: ScrollBoxRenderable | null = null;
 const isNarrow = () => renderer.width < 80;
-const isCompact = () => renderer.width < 110;
-function modalWidth() {
-  return isCompact()
-    ? { left: 1, width: Math.max(1, renderer.width - 2) }
-    : { left: "16%" as const, width: "68%" as const };
-}
 function fitLabel(value: string, width: number): string {
   const chars = Array.from(value);
   return chars.length <= width ? value : `${chars.slice(0, Math.max(0, width - 1)).join("")}…`;
@@ -801,126 +760,6 @@ function probeSelectedHarness(all: boolean): void {
   })();
 }
 
-function closeChooser(): void {
-  interaction.close("chooser");
-}
-
-function openChooser(chooser: Chooser): void {
-  const overlay = box("library-chooser", {
-    position: "absolute",
-    ...modalWidth(),
-    top: "15%",
-    height: "70%",
-    zIndex: 110,
-    border: true,
-    backgroundColor: surface.canvas,
-    ...panelColors(true),
-    title: panelTitle(chooser.title),
-    flexDirection: "column",
-    padding: 1,
-    gap: 1,
-  });
-  if (chooser.briefing)
-    overlay.add(
-      new TextRenderable(renderer, {
-        id: "library-chooser-briefing",
-        content: chooser.briefing,
-        fg: ink.faint,
-      }),
-    );
-  const select = new SelectRenderable(renderer, {
-    id: "library-chooser-results",
-    width: "100%",
-    flexGrow: 1,
-    textColor: ink.DEFAULT,
-    descriptionColor: ink.faint,
-    ...listColors(true),
-    focusedBackgroundColor: "transparent",
-    showScrollIndicator: true,
-    wrapSelection: true,
-    options: chooser.options.map((option) => ({
-      name: option.label,
-      description: option.hint ?? "",
-      value: option.value,
-    })),
-  });
-  select.on(SelectRenderableEvents.ITEM_SELECTED, (_index: number, option: { value?: unknown }) => {
-    if (typeof option?.value !== "string") return;
-    const value = option.value;
-    closeChooser();
-    void chooser.choose(value);
-  });
-  overlay.add(select);
-  overlay.add(
-    text("library-chooser-help", "↑↓ browse   enter select   esc cancel", { fg: ink.faint }),
-  );
-  interaction.open({
-    kind: "chooser",
-    view: {
-      ...overlayHandle(overlay, () => select.focus()),
-      move: (direction) => (direction === "up" ? select.moveUp() : select.moveDown()),
-    },
-  });
-}
-
-function closeConfirm(): void {
-  interaction.close("confirm");
-}
-
-/** Every Library write passes through this preview before it is applied. */
-function openConfirm(): void {
-  const pending = libraryController.pending;
-  if (!pending) return;
-  const model = confirmationPresentation(pending, false, isCompact());
-  const overlay = box("library-confirm", {
-    position: "absolute",
-    ...modalWidth(),
-    top: "15%",
-    height: "70%",
-    zIndex: 120,
-    border: true,
-    backgroundColor: surface.canvas,
-    ...panelColors(true),
-    title: panelTitle(model.title),
-    flexDirection: "column",
-    padding: 1,
-    gap: 1,
-  });
-  const scroll = new ScrollBoxRenderable(renderer, {
-    id: "library-confirm-scroll",
-    width: "100%",
-    flexGrow: 1,
-    scrollY: true,
-    scrollX: false,
-    contentOptions: { gap: 1, flexShrink: 0 },
-  });
-  scroll.add(text("library-confirm-summary", model.summary, { fg: ink.strong }));
-  const confirmDetails = new TextRenderable(renderer, {
-    id: "library-confirm-details",
-    content: detailFields(model.fields),
-  });
-  scroll.add(confirmDetails);
-  overlay.add(scroll);
-  const confirmHelp = text("library-confirm-help", model.help, {
-    fg: ink.faint,
-    flexShrink: 0,
-  });
-  overlay.add(confirmHelp);
-  interaction.open({
-    kind: "confirm",
-    canShowSkills: model.canShowSkills,
-    view: {
-      ...overlayHandle(overlay, () => scroll.focus()),
-      scroll: (key) => scrollOverlay(scroll, key),
-      update: (showSkills) => {
-        const next = confirmationPresentation(pending, showSkills, isCompact());
-        confirmDetails.content = detailFields(next.fields);
-        confirmHelp.content = next.help;
-      },
-    },
-  });
-}
-
 function openPalette(): void {
   if (interaction.kind === "palette") return;
 
@@ -987,30 +826,6 @@ function openPalette(): void {
       move: (direction) => (direction === "up" ? select.moveUp() : select.moveDown()),
     },
   });
-}
-
-/** Translate renderer handles to the small capabilities each mode needs. */
-function overlayHandle(overlay: BoxRenderable, focus: () => void, modal = true): Overlay {
-  return {
-    mount: () => renderer.root.add(overlay),
-    dispose: () => {
-      renderer.root.remove(overlay);
-      overlay.destroyRecursively();
-    },
-    focus,
-    resize: () => {
-      if (!modal) return;
-      const dimensions = modalWidth();
-      overlay.left = dimensions.left;
-      overlay.width = dimensions.width;
-    },
-  };
-}
-
-function scrollOverlay(scroll: ScrollBoxRenderable, key: ScrollKey): void {
-  if (key === "home") scroll.scrollTo(0);
-  else if (key === "end") scroll.scrollTo(scroll.scrollHeight);
-  else scroll.scrollBy(key === "pageup" ? -1 : 1, "viewport");
 }
 
 function handleGlobalKey(key: KeyEvent): void {

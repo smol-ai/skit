@@ -18,6 +18,7 @@ import {
   invocationRowSummary,
   scopeChoices,
   type LibrarySessionState,
+  type PendingLibraryChange,
   type LibraryActionOutcome,
   type LibrarySkillRow,
   type ScopeRow,
@@ -53,7 +54,7 @@ interface Options {
   readonly configuration: InventoryRootOptions;
   readonly active: () => boolean;
   readonly openChooser: (chooser: Chooser) => void;
-  readonly openConfirm: () => void;
+  readonly openConfirm: (pending: PendingLibraryChange) => void;
   readonly closeConfirm: () => void;
   readonly render: () => void;
   readonly refreshListingBudgets: () => Promise<void>;
@@ -88,8 +89,8 @@ export function createLibraryController(options: Options) {
     if (!outcome) return;
     showNoChangeNotice = outcome.kind === "unchanged";
     render();
-    if (outcome.kind === "preview") {
-      openConfirm();
+    if (outcome.kind === "preview" && libraryHost.state?.pending) {
+      openConfirm(libraryHost.state.pending);
     }
   }
 
@@ -329,9 +330,6 @@ export function createLibraryController(options: Options) {
     },
     get showNoChangeNotice() {
       return showNoChangeNotice;
-    },
-    get pending() {
-      return libraryHost.state?.pending;
     },
     get skills() {
       return libraryHost.state?.skills ?? [];
