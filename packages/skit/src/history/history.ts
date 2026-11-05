@@ -18,6 +18,7 @@ import { TreeEntry } from "../artifact/tree-entry.js";
 import { MachineId } from "../library/entity-ids.js";
 import { sha256Hash, Hash } from "../shared/hash.js";
 import { canonicalJson } from "../shared/json.js";
+import { parentDirectories } from "../shared/relative-path.js";
 
 export const TreeHash = Hash.pipe(Schema.brand("TreeHash"));
 export type TreeHash = typeof TreeHash.Type;
@@ -28,6 +29,25 @@ export type RevisionId = typeof RevisionId.Type;
 /** Entries in path order. Paths are relative and use `/`. */
 export const Tree = Schema.Array(TreeEntry);
 export type Tree = typeof Tree.Type;
+
+/** A physical namespace may have directory parents, never file or symlink parents. Raw
+ * history remains unrestricted; sync and ingress call this before accepting a writable tree. */
+export const treePathIssue = (
+  tree: Tree,
+): { readonly path: string; readonly message: string } | undefined => {
+  const entries = new Map<string, TreeEntry["kind"]>();
+  for (const entry of tree) {
+    if (entries.has(entry.path)) return { path: entry.path, message: "Duplicate tree path" };
+    entries.set(entry.path, entry.kind);
+  }
+  for (const entry of tree)
+    for (const parent of parentDirectories(entry.path)) {
+      const kind = entries.get(parent);
+      if (kind !== undefined && kind !== "directory")
+        return { path: entry.path, message: `A ${kind} at ${parent} cannot contain descendants` };
+    }
+  return undefined;
+};
 
 /** Which device made a revision, and when, in milliseconds since the epoch. */
 export const Author = Schema.Struct({ device: MachineId, at: Schema.Int });

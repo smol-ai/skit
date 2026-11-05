@@ -45,6 +45,7 @@ class SkitNotFound extends Schema.TaggedError<SkitNotFound>()("SKIT.NotFound", {
 class InvalidRevision extends Schema.TaggedError<InvalidRevision>()("SKIT.InvalidRevision", {
   code: Schema.Literals([
     "UNSAFE_PATH",
+    "PATH_COLLISION",
     "TREE_HASH_MISMATCH",
     "REVISION_ID_MISMATCH",
     "PARENT_MISSING",
@@ -289,6 +290,8 @@ export const layer = Layer.effect(
           return yield* new IntegrityError({ code: "DUPLICATE_FILE_PATH" });
         if (!tree.every(({ path }) => Schema.is(safePathSchema)(path)))
           return yield* new InvalidRevision({ code: "UNSAFE_PATH" });
+        if (History.treePathIssue(tree))
+          return yield* new InvalidRevision({ code: "PATH_COLLISION" });
         const files = yield* Effect.forEach(
           tree.filter((entry) => entry.kind === "file"),
           (entry) =>

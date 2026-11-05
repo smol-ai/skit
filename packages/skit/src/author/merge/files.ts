@@ -147,14 +147,60 @@ const file: Merge.Merger<TreeFile> = Merge.make(sameFile, (base, ours, theirs, a
   };
 });
 
-/**
- * Merge the canonical author tree. A path index holds the same file entries; rename alignment
- * changes their paths, never their representation. Directories or symlinks retain the existing
- * whole-tree policy.
- */
+/** A subtree stays a flat file list; directories are implicit in its common path prefix. */
+const fileTree = Schema.Array(TreeFile);
+const wholeSubtree = Merge.whole(Schema.toEquivalence(fileTree));
+const subtree: Merge.Merger<ReadonlyArray<TreeFile>> = (versions, at, choose) => {
+  const prefix = String(at.at(-1) ?? "");
+  const leaf = (files: ReadonlyArray<TreeFile>) => files.find((entry) => entry.path === prefix);
+  const asFile = (files: Option.Option<ReadonlyArray<TreeFile>>) =>
+    Option.flatMap(files, (files) => Option.fromUndefinedOr(leaf(files)));
+  if (Option.isSome(asFile(versions.ours)) || Option.isSome(asFile(versions.theirs))) {
+    if (Option.isSome(asFile(versions.ours)) && Option.isSome(asFile(versions.theirs))) {
+      const result = file(
+        {
+          base: asFile(versions.base),
+          ours: asFile(versions.ours),
+          theirs: asFile(versions.theirs),
+        },
+        at,
+        choose,
+      );
+      return { ...result, value: Option.map(result.value, (file) => [file]) };
+    }
+    // A file and descendants cannot coexist. The ordinary chooser keeps one entire side.
+    return wholeSubtree(versions, at, choose);
+  }
+  const depth = prefix === "" ? 1 : prefix.split("/").length + 1;
+  const group = (files: ReadonlyArray<TreeFile>) => {
+    const groups = new Map<string, TreeFile[]>();
+    for (const entry of files) {
+      if (entry.path === prefix) continue; // Both devices replaced this base file with directories.
+      const key = entry.path.split("/").slice(0, depth).join("/");
+      const children = groups.get(key) ?? [];
+      children.push(entry);
+      groups.set(key, children);
+    }
+    return Record.fromEntries(groups);
+  };
+  // Even if one directory was deleted, merge its children individually: unchanged children
+  // stay deleted, while edited children keep the existing edit-versus-delete policy.
+  const result = Merge.record(subtree)(
+    {
+      base: Option.map(versions.base, group),
+      ours: Option.map(versions.ours, group),
+      theirs: Option.map(versions.theirs, group),
+    },
+    [],
+    choose,
+  );
+  return { ...result, value: Option.map(result.value, (groups) => Object.values(groups).flat()) };
+};
+
+/** Align Skill moves first, then merge the hierarchy. Non-file trees keep whole-tree policy. */
 export const mergeAuthorTree: Merge.Merger<History.Tree> = Merge.via<
   History.Tree,
-  Readonly<Record<string, TreeFile>>
+  ReadonlyArray<TreeFile>
 >(
   {
     decode: (tree) =>
@@ -162,21 +208,31 @@ export const mergeAuthorTree: Merge.Merger<History.Tree> = Merge.via<
         Option.all(
           tree.map((entry) => (entry.kind === "file" ? Option.some(entry) : Option.none())),
         ),
-        (files) => Record.fromEntries(files.map((file) => [file.path, file])),
+        (files) => files.sort((left, right) => left.path.localeCompare(right.path)),
       ),
-    encode: Object.values,
+    encode: (files) => files,
   },
   (versions, at, choose) => {
-    const aligned = followSkillMoves({
-      base: Option.getOrElse(versions.base, Record.empty),
-      ours: Option.getOrElse(versions.ours, Record.empty),
-      theirs: Option.getOrElse(versions.theirs, Record.empty),
-    });
-    return Merge.record(file)(
+    const index = (files: Option.Option<ReadonlyArray<TreeFile>>) =>
+      Record.fromEntries(Option.getOrElse(files, () => []).map((file) => [file.path, file]));
+    const trees = {
+      base: index(versions.base),
+      ours: index(versions.ours),
+      theirs: index(versions.theirs),
+    };
+    const moved = followSkillMoves(trees);
+    // A rename into the other side's file must stay an explicit path conflict. Alignment
+    // must not invent a side containing both that file and the relocated descendants.
+    const aligned = Object.values(moved).some((side) => History.treePathIssue(Object.values(side)))
+      ? trees
+      : moved;
+    const files = (side: Readonly<Record<string, TreeFile>>) =>
+      Object.values(side).sort((left, right) => left.path.localeCompare(right.path));
+    return subtree(
       {
-        base: Option.some(aligned.base),
-        ours: Option.some(aligned.ours),
-        theirs: Option.some(aligned.theirs),
+        base: Option.some(files(aligned.base)),
+        ours: Option.some(files(aligned.ours)),
+        theirs: Option.some(files(aligned.theirs)),
       },
       at,
       choose,
@@ -192,6 +248,11 @@ export const conflictKind = (found: Merge.Conflict): SyncConflict["kind"] => {
   if (Option.isNone(found.ours) || Option.isNone(found.theirs)) return "delete_modify";
   // A whole tree that held something other than files.
   if (found.at.length === 0) return "both_modified";
+  if (
+    Option.exists(found.ours, Schema.is(fileTree)) ||
+    Option.exists(found.theirs, Schema.is(fileTree))
+  )
+    return "both_modified";
   if (found.at[0] === "README.md") return "descriptor";
   const text = (side: Option.Option<unknown>) =>
     Option.isSome(Option.flatMap(Option.filter(side, Schema.is(TreeFile)), textOf));

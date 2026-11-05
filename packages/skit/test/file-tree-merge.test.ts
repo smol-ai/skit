@@ -358,3 +358,93 @@ describe("modes and trees", () => {
     expect(result.choices.map((choice) => choice.kept)).toEqual(["theirs"]);
   });
 });
+
+describe("directory hierarchy", () => {
+  for (const prefix of ["notes", "deep/notes"])
+    test.each(["ours", "theirs"] as const)(
+      `chooses %s for ${prefix} file versus subtree`,
+      (winner) => {
+        const base = { "README.md": file("README.md", "base") };
+        const ours = {
+          ...base,
+          [prefix]: file(prefix, "file side"),
+          "ours.txt": file("ours.txt", "ours"),
+        };
+        const theirs = {
+          ...base,
+          [`${prefix}/a.txt`]: file(`${prefix}/a.txt`, "child side"),
+          "theirs.txt": file("theirs.txt", "theirs"),
+        };
+        for (const [left, right, kept] of [
+          [ours, theirs, winner],
+          [theirs, ours, winner === "ours" ? "theirs" : "ours"],
+        ] as const) {
+          const result = merge(base, left, right, Merge.always(kept));
+          const files = merged(result);
+          expect(Object.keys(files).sort()).toEqual(
+            [
+              "README.md",
+              "ours.txt",
+              "theirs.txt",
+              winner === "ours" ? prefix : `${prefix}/a.txt`,
+            ].sort(),
+          );
+          expect(choices(result)).toEqual([{ path: prefix, kind: "both_modified", kept }]);
+        }
+      },
+    );
+
+  test("removes unchanged children but keeps edited children when a directory was deleted", () => {
+    const base = {
+      "notes/a.txt": file("notes/a.txt", "a"),
+      "notes/b.txt": file("notes/b.txt", "b"),
+    };
+    const remote = { ...base, "notes/b.txt": file("notes/b.txt", "edited") };
+    for (const [left, right] of [
+      [{}, remote],
+      [remote, {}],
+    ]) {
+      const result = merge(base, left, right, oursWins);
+      expect(Object.keys(merged(result))).toEqual(["notes/b.txt"]);
+      expect(choices(result)).toEqual([
+        { path: "notes/b.txt", kind: "delete_modify", kept: left === remote ? "ours" : "theirs" },
+      ]);
+    }
+  });
+
+  test("independent directory children combine when both sides replaced a base file", () => {
+    const result = merge(
+      { notes: file("notes", "base file") },
+      { "notes/a.txt": file("notes/a.txt", "a") },
+      { "notes/b.txt": file("notes/b.txt", "b") },
+    );
+    expect(conflicts(result)).toEqual([]);
+    expect(Object.keys(merged(result))).toEqual(["notes/a.txt", "notes/b.txt"]);
+  });
+
+  test("a structural conflict remains explicit without a chooser", () => {
+    expect(
+      conflicts(
+        merge(
+          {},
+          { notes: file("notes", "file") },
+          { "notes/a.txt": file("notes/a.txt", "child") },
+        ),
+      ),
+    ).toEqual([{ path: "notes", kind: "both_modified" }]);
+  });
+});
+
+for (const winner of ["ours", "theirs"] as const)
+  test(`a Skill rename into a concurrent file remains writable when ${winner} wins`, () => {
+    const bytes = "---\nname: review\ndescription: Review code\n---\nReview all changes.\n";
+    const base = { "skills/old/SKILL.md": file("skills/old/SKILL.md", bytes) };
+    const ours = { "skills/new/SKILL.md": file("skills/new/SKILL.md", bytes) };
+    const theirs = { ...base, "skills/new": file("skills/new", "concurrent file") };
+    const result = merge(base, ours, theirs, Merge.prefer(Merge.present, Merge.always(winner)));
+    const output = merged(result);
+    expect(choices(result).some(({ path }) => path === "skills/new")).toBe(true);
+    const paths = Object.keys(output);
+    expect(paths.includes("skills/new")).toBe(winner === "theirs");
+    expect(paths.includes("skills/new/SKILL.md")).toBe(winner === "ours");
+  });

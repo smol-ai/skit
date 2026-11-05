@@ -582,7 +582,7 @@ export interface AuthorHistory {
     >;
     /**
      * NEW (A13): the step into Writing, with transition's checks, after checking both trees are in
-     * the store (missing, unreadable or wrong-hash trees are AuthorHistoryInvalid). Returns the
+     * the store (missing, unreadable, wrong-hash or impossible path namespaces are AuthorHistoryInvalid). Returns the
      * PreparedWrite that lease.writeTree requires, bound to the lease's ownerId and new revision. One method
      * per kind of step, as t3code's outbox has one compare-and-set per transition
      * (EffectOutbox.ts#L586-L637). Both methods call lease.advance after saving, under the home lock.

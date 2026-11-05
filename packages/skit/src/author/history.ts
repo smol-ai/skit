@@ -695,9 +695,22 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
     if (!Sync.allowsStep(change.from, change.to))
       return yield* new AuthorSyncStateIllegal({ key, from: change.from, to: change.to });
     // Reading verifies each tree against its hash, so a missing or corrupt tree refuses here.
-    yield* Effect.forEach([change.to.from, change.to.to], engineStore.tree, {
-      discard: true,
-    }).pipe(Effect.catchIf(Schema.is(History.StoreError), storeFailure));
+    yield* Effect.forEach(
+      [change.to.from, change.to.to],
+      (hash) =>
+        Effect.gen(function* () {
+          const tree = yield* engineStore.tree(hash);
+          const issue = History.treePathIssue(tree);
+          if (issue)
+            return yield* new AuthorHistoryInvalid({
+              path: bindingsPath,
+              reason: `${issue.path}: ${issue.message}`,
+            });
+        }),
+      {
+        discard: true,
+      },
+    ).pipe(Effect.catchIf(Schema.is(History.StoreError), storeFailure));
     const revision = yield* step(lease, key, change.from, change.to);
     return PreparedWrite.make({
       key,

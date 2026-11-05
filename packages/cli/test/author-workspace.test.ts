@@ -281,3 +281,48 @@ const otherLease = Effect.gen(function* () {
   const folder = yield* fs.makeTempDirectoryScoped({ prefix: "skit-author-other-" });
   return yield* workspaces.acquire(yield* workspaces.resolveRoot(folder));
 });
+
+it.effect("prepareWrite refuses an impossible namespace without saving a checkpoint", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const home = yield* f.fs.makeTempDirectoryScoped({ prefix: "skit-invalid-write-" });
+    yield* Effect.gen(function* () {
+      const history = yield* AuthorHistory;
+      const lease = yield* f.workspaces.acquire(f.root);
+      const { workspaceId } = yield* identified(lease);
+      const { from } = yield* trees(f.root);
+      const to: History.Tree = [
+        { path: "notes", kind: "file", mode: 0o644, bytes: new TextEncoder().encode("parent") },
+        {
+          path: "notes/a.txt",
+          kind: "file",
+          mode: 0o644,
+          bytes: new TextEncoder().encode("child"),
+        },
+      ];
+      const fromHash = yield* history.retain(from);
+      const toHash = yield* history.retain(to);
+      const key = { workspaceId, locator: "skit://registry.example/swyx/tools" };
+      const writing = Sync.Writing.make({
+        base: null,
+        from: fromHash,
+        to: toHash,
+        next: Sync.Sending.make({ base: null, revision: History.RevisionId.make(toHash) }),
+        merged: false,
+      });
+      expect(
+        yield* Effect.flip(
+          history.syncState.prepareWrite(lease, key, {
+            from: Sync.Idle.make({ base: null }),
+            to: writing,
+          }),
+        ),
+      ).toMatchObject({
+        _tag: "AuthorHistoryInvalid",
+        reason: expect.stringContaining("cannot contain descendants"),
+      });
+      expect(yield* f.fs.exists(join(home, "sync-bindings.json"))).toBe(false);
+      expect(yield* f.fs.readFileString(join(f.root, "notes.txt"))).toBe("before\n");
+    }).pipe(Effect.provide(authorLayer(home)));
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);

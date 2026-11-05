@@ -131,3 +131,18 @@ for (const race of ["new-parent", "new-child", "new-target"] as const)
       ).toBe("editor");
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
+
+it.effect("refuses a file/descendant target before staging or mutating files", () =>
+  Effect.gen(function* () {
+    const { fs, root, put } = yield* fixture;
+    const from = files({ original: "untouched" });
+    yield* put(from);
+    expect(
+      yield* Effect.flip(
+        writeWorkspaceTree(root, from, files({ notes: "parent", "notes/a.txt": "child" })),
+      ),
+    ).toMatchObject({ _tag: "SkitContractError", contract: "Author sync tree" });
+    expect(yield* fs.readFileString(join(root, "original"))).toBe("untouched");
+    expect(yield* fs.readDirectory(join(root, ".skit"))).toEqual([]);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);

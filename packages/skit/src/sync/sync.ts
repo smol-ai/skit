@@ -22,6 +22,7 @@ import * as History from "../history/history.js";
 import * as Merge from "./merge.js";
 import { TreeEntry } from "../artifact/tree-entry.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
+import { parentDirectories } from "../shared/relative-path.js";
 
 export const Idle = Schema.TaggedStruct("Idle", { base: Schema.NullOr(History.RevisionId) });
 export const Sending = Schema.TaggedStruct("Sending", {
@@ -87,6 +88,23 @@ class RemoteInvalid
   }
   readonly remediation = "Sync again; if it keeps failing, report the Registry's response.";
 }
+
+class InvalidTree
+  extends Schema.TaggedError<InvalidTree>()("Sync.InvalidTree", {
+    path: Schema.String,
+    message: Schema.String,
+  })
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Keep the local files and history; report this invalid sync tree.";
+}
+
+const checkTree = (tree: History.Tree) => {
+  const issue = History.treePathIssue(tree);
+  return issue === undefined ? Effect.void : Effect.fail(new InvalidTree(issue));
+};
 
 /** Other devices kept moving `current` while this one tried to sync. */
 class Unsettled
@@ -290,14 +308,19 @@ export const loadPlanInput = Effect.fn("Sync.loadPlanInput")(function* ({
   /** The device's tree. */
   readonly local: { readonly hash: History.TreeHash; readonly tree: History.Tree };
 }): Effect.fn.Return<PlanInput, History.StoreError | SkitFailure> {
-  if (state._tag === "Writing")
+  if (state._tag === "Writing") {
+    const from = yield* store.tree(state.from);
+    const to = yield* store.tree(state.to);
+    yield* checkTree(from);
+    yield* checkTree(to);
     return {
       _tag: "Writing",
       state,
       local,
-      from: yield* store.tree(state.from),
-      to: yield* store.tree(state.to),
+      from,
+      to,
     };
+  }
   const currentId = yield* remote.current;
   const current =
     currentId === null
@@ -320,6 +343,7 @@ export const loadPlanInput = Effect.fn("Sync.loadPlanInput")(function* ({
             }),
           ),
         );
+  if (current !== null) yield* checkTree(current.tree);
   const common = {
     local,
     base: state.base === null ? null : yield* loadRevision(store, state.base),
@@ -461,15 +485,29 @@ const authoredTree = (input: Extract<PlanInput, { readonly _tag: "Writing" }>) =
   const local = new Map(input.local.tree.map((entry) => [entry.path, entry]));
   const same = Option.makeEquivalence(Schema.toEquivalence(TreeEntry));
   const authored: TreeEntry[] = [];
+  const edits: TreeEntry[] = [];
   for (const path of new Set([...from.keys(), ...to.keys(), ...local.keys()])) {
     const before = Option.fromUndefinedOr(from.get(path));
     const after = Option.fromUndefinedOr(to.get(path));
     const current = Option.fromUndefinedOr(local.get(path));
     const edited = !same(current, before) && !same(current, after);
+    if (edited && Option.isSome(current)) edits.push(current.value);
     const input = edited ? current : before;
     if (Option.isSome(input)) authored.push(input.value);
   }
-  return History.sortTree(authored);
+  // A real structural edit replaces its implicit parents/descendants too. Do not resurrect
+  // an original file beside the editor's new children while undoing downloaded progress.
+  const parents = new Set(edits.flatMap((edit) => parentDirectories(edit.path)));
+  const leaves = new Set(
+    edits.filter((edit) => edit.kind !== "directory").map((edit) => edit.path),
+  );
+  return History.sortTree(
+    authored.filter(
+      (entry) =>
+        (entry.kind === "directory" || !parents.has(entry.path)) &&
+        !parentDirectories(entry.path).some((parent) => leaves.has(parent)),
+    ),
+  );
 };
 
 /**
@@ -483,6 +521,7 @@ export const run = <Prepared, SaveError, WriteError, R>(
   Effect.fn("Sync.run")(function* () {
     const { store, remote } = options;
     const start = { hash: options.local, tree: yield* store.tree(options.local) };
+    yield* checkTree(start.tree);
     // A send whose outcome is unknown is posted again first, so every later step may rely on it.
     if (options.state._tag === "Sending") {
       const sent = yield* loadRevision(store, options.state.revision);
@@ -519,6 +558,7 @@ export const run = <Prepared, SaveError, WriteError, R>(
           case "Write": {
             const { state } = next.input;
             const authored = authoredTree(next.input);
+            yield* checkTree(authored);
             // A real edit made during an unfinished write keeps its original ancestry, without
             // claiming the already downloaded files as new authored content.
             const edited = (yield* store.putTree(authored)) !== state.from;
@@ -531,8 +571,9 @@ export const run = <Prepared, SaveError, WriteError, R>(
               );
               yield* remote.post(recorded.id, recorded.revision, authored);
             }
-            // Apply the pending changes through the same merger as an ordinary sync. A real
-            // edit and an independent downloaded edit in one file must both survive.
+            // Apply pending changes to the authored input, not our own partial application.
+            // Otherwise removing one child during a directory replacement looks like a newer
+            // structural edit and can defeat the pending file. Real edits still participate.
             const target = yield* loadRevision(
               store,
               state.next._tag === "Sending" ? state.next.revision : state.next.base,
@@ -541,7 +582,7 @@ export const run = <Prepared, SaveError, WriteError, R>(
               options.merger,
               {
                 base: Option.some(next.input.from),
-                ours: Option.some(progress.local.tree),
+                ours: Option.some(authored),
                 theirs: Option.some(next.input.to),
               },
               options.decide({
@@ -550,6 +591,7 @@ export const run = <Prepared, SaveError, WriteError, R>(
               }),
             );
             const files = History.sortTree(Option.getOrElse(merged.value, () => []));
+            yield* checkTree(files);
             const hash = yield* store.putTree(files);
             // The merged tree is not the one the interrupted Writing names: save a Writing for
             // exactly this write before it starts, so it is recoverable too (A12).
@@ -658,6 +700,7 @@ export const run = <Prepared, SaveError, WriteError, R>(
               }),
             );
             const tree = History.sortTree(Option.getOrElse(merged.value, () => []));
+            yield* checkTree(tree);
             const recorded = yield* History.record(store, tree, [theirs.id, ours.id], {
               device: options.author.device,
               at: yield* Clock.currentTimeMillis,

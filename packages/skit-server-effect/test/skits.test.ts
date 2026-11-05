@@ -282,6 +282,34 @@ it.effect("rejects a tree or revision whose identity does not match", () =>
   ),
 );
 
+it.effect("rejects file and symlink ancestor collisions before recording revisions", () =>
+  withRegistry(({ skits }) =>
+    Effect.gen(function* () {
+      yield* skits.create({ payload: { ...params, visibility: "private" } });
+      for (const parent of [
+        { path: "notes", kind: "file", mode: 0o644, bytes: new TextEncoder().encode("parent") },
+        { path: "notes", kind: "symlink", target: "elsewhere" },
+      ] as const) {
+        const posted = yield* revisionRequest([
+          ...skillTree,
+          parent,
+          {
+            path: "notes/a.txt",
+            kind: "file",
+            mode: 0o644,
+            bytes: new TextEncoder().encode("child"),
+          },
+        ]);
+        expect(yield* Effect.flip(skits.post({ params, payload: posted }))).toEqual({
+          error: "PATH_COLLISION",
+        });
+      }
+      expect(yield* countRows("revisions")).toBe(0);
+      expect(yield* countRows("revision_trees")).toBe(0);
+    }),
+  ),
+);
+
 it.effect("moves current only from the revision the caller expects", () =>
   withRegistry(({ skits }) =>
     Effect.gen(function* () {

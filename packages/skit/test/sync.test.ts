@@ -1,6 +1,6 @@
 import { NodeCrypto } from "@effect/platform-node";
 import { describe, expect, it } from "@effect/vitest";
-import { Data, DateTime, Effect, Stream } from "effect";
+import { Data, DateTime, Effect, Option, Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { describe as group, expect as check, test } from "vitest";
 import {
@@ -10,6 +10,7 @@ import {
   makeMachineId,
   Sync,
   type SkitFailure,
+  type Merge,
   type TreeEntry,
 } from "../src/index.js";
 import { memoryStore } from "./helpers/memory-store.js";
@@ -311,7 +312,7 @@ const makeDevice = Effect.fn("Test.makeDevice")(function* (
   const self = Object.assign(held, {
     saved,
     store,
-    sync: (options: { at: number; approved?: Sync.Removal }) =>
+    sync: (options: { at: number; approved?: Sync.Removal; merger?: Merge.Merger<History.Tree> }) =>
       Effect.gen(function* () {
         const local = yield* store.putTree(self.files);
         const result = yield* Sync.run({
@@ -320,7 +321,7 @@ const makeDevice = Effect.fn("Test.makeDevice")(function* (
           state: self.state,
           local,
           author: { device, at: options.at },
-          merger: mergeAuthorTree,
+          merger: options.merger ?? mergeAuthorTree,
           // The later edit wins; this device breaks a tie.
           decide: (editedAt) => () =>
             DateTime.isGreaterThan(editedAt.theirs, editedAt.ours) ? "theirs" : "ours",
@@ -667,3 +668,35 @@ describe("run", () => {
     }),
   );
 });
+
+it.effect(
+  "rejects a faulty merger's impossible namespace before posting or preparing Writing",
+  () =>
+    Effect.gen(function* () {
+      const registry = makeRegistry();
+      const a = yield* makeDevice(registry, [file("base.txt", "base")]);
+      const b = yield* makeDevice(registry, []);
+      yield* a.sync({ at: 1 });
+      yield* b.sync({ at: 2 });
+      a.files = [file("base.txt", "local")];
+      b.files = [file("base.txt", "remote")];
+      yield* b.sync({ at: 3 });
+      const saved = a.saved.length;
+      const invalid = [file("notes", "file"), file("notes/a.txt", "child")];
+      expect(
+        yield* Effect.flip(
+          a.sync({
+            at: 4,
+            merger: () => ({ value: Option.some(invalid), choices: [], conflicts: [] }),
+          }),
+        ),
+      ).toMatchObject({ _tag: "Sync.InvalidTree", path: "notes/a.txt" });
+      expect(a.saved.slice(saved).some((state) => state._tag === "Writing")).toBe(false);
+      expect(
+        [...registry.registry.revisions.values()].some(
+          ({ tree }) => History.treePathIssue(tree) !== undefined,
+        ),
+      ).toBe(false);
+      expect(text(a.files)).toEqual({ "base.txt": "local" });
+    }),
+);

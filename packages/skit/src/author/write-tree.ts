@@ -23,6 +23,8 @@ export const writeWorkspaceTree = Effect.fn("AuthorWorkspace.writeTree")(functio
   from: History.Tree,
   to: History.Tree,
 ) {
+  const issue = History.treePathIssue(to);
+  if (issue) return yield* new SkitContractError({ contract: "Author sync tree", issues: [issue] });
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const links = yield* LinkStat;
