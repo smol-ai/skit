@@ -9,7 +9,8 @@ import { requestDecodingLayer } from "../src/api/request-decoding.js";
 import { Authorization } from "../src/authorization/service.js";
 import { ServerConfiguration } from "../src/configuration.js";
 import { DatabaseError } from "../src/platform/cloudflare.js";
-import { Publication, ReleaseConflict } from "../src/publication/service.js";
+import { Skits } from "../src/skits/service.js";
+import { ReleaseConflict } from "../src/skits/internal/publication.js";
 
 const principal = {
   id: "principal_test",
@@ -29,25 +30,22 @@ const dependencies = Layer.mergeAll(
     canPublish: () => Effect.succeed(true),
   }),
   Layer.succeed(ServerConfiguration, { publicAppOrigin: "https://registry.test" }),
-  Layer.succeed(
-    Publication,
-    Publication.of({
-      publish: (input) =>
-        input.version === "2.0.0"
-          ? Effect.fail(new ReleaseConflict())
-          : input.version === "3.0.0"
-            ? Effect.fail(
-                new DatabaseError({ operation: "publish test release", cause: "unavailable" }),
-              )
-            : Effect.succeed({
-                release_id: "release_test",
-                version: input.version,
-                revision_id: "revision_test",
-                archive_digest:
-                  "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              }),
-    }),
-  ),
+  Layer.mock(Skits, {
+    publish: (input) =>
+      input.version === "2.0.0"
+        ? Effect.fail(new ReleaseConflict())
+        : input.version === "3.0.0"
+          ? Effect.fail(
+              new DatabaseError({ operation: "publish test release", cause: "unavailable" }),
+            )
+          : Effect.succeed({
+              release_id: "release_test",
+              version: input.version,
+              revision_id: "revision_test",
+              archive_digest:
+                "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            }),
+  }),
 );
 
 const handlers = Layer.mergeAll(

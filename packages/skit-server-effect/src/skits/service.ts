@@ -1,3 +1,4 @@
+import { makePublication, type Publication } from "./internal/publication.js";
 import { makeDeletion, type Deletion } from "./internal/deletion.js";
 import { D1Client } from "@effect/sql-d1";
 import {
@@ -14,7 +15,7 @@ import {
 } from "@smolai/skit-core/universal/authoring";
 import { Hash, safePathSchema, sha256Hash } from "@smolai/skit-core/universal/consumer";
 import { Clock, Context, Effect, Layer, Option, Schema } from "effect";
-import { Digest } from "effect/crypto";
+import { Digest, SecureRandom } from "effect/crypto";
 import { IntegrityError } from "../integrity/contracts.js";
 import {
   readArtifactDescriptor,
@@ -81,6 +82,8 @@ export type ReadError =
   | RevisionTooLarge;
 
 export interface SkitService {
+  /** Publish the current revision after checking the complete release archive. */
+  readonly publish: Publication["publish"];
   /** Passive deletion facts; no state or archives change. */
   readonly planDelete: Deletion["planDelete"];
   /** Delete private lifecycle state atomically, then clean up release archives. */
@@ -168,6 +171,7 @@ export const layer = Layer.effect(
     const blobs = yield* BlobStore;
     const sql: DatabaseSqlClient = yield* D1Client.D1Client;
     const digests = yield* Digest.Digest;
+    const random = yield* SecureRandom.SecureRandom;
     const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
       effect.pipe(databaseError(operation));
 
@@ -521,6 +525,7 @@ export const layer = Layer.effect(
       revision,
       ancestors,
       ...makeDeletion(sql, blobs),
+      ...makePublication(sql, blobs, digests, random, current),
     });
   }),
 );

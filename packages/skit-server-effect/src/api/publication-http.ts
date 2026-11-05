@@ -6,7 +6,7 @@ import {
   MAX_RELEASE_ARCHIVE_BYTES,
   releasePublishRequestSchema,
 } from "@smolai/skit-core/universal/authoring";
-import { Publication } from "../publication/service.js";
+import { Skits } from "../skits/service.js";
 import { CurrentPrincipal } from "./authentication.js";
 import { PublicationAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import {
@@ -32,7 +32,7 @@ export const publicationHandlers = HttpApiBuilder.group(
   (handlers) =>
     Effect.gen(function* () {
       const authorization = yield* Authorization;
-      const publication = yield* Publication;
+      const skits = yield* Skits;
 
       return handlers.handleRaw("publish", ({ params, request: rawRequest }) =>
         Effect.gen(function* () {
@@ -70,7 +70,7 @@ export const publicationHandlers = HttpApiBuilder.group(
           if (archive.byteLength > MAX_RELEASE_ARCHIVE_BYTES)
             return yield* Effect.fail(archiveTooLargeResponse);
 
-          const release = yield* publication
+          const release = yield* skits
             .publish({
               owner: params.owner,
               slug: params.slug,

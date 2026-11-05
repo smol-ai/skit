@@ -1,14 +1,14 @@
 import { Effect, Schema } from "effect";
 import { D1Client } from "@effect/sql-d1";
 import { unzipSync } from "fflate";
-import { databaseError } from "../platform/cloudflare.js";
+import { databaseError } from "../../platform/cloudflare.js";
 import {
   MAX_ARTIFACT_CONTENT_BYTES,
   MAX_ARTIFACT_FILES,
 } from "@smolai/skit-core/universal/authoring";
 import { Hash, sha256Hash } from "@smolai/skit-core/universal/consumer";
-import { IntegrityError } from "../integrity/contracts.js";
-import { unpublishableEntries, validateArtifactBundle } from "../integrity/validate.js";
+import { IntegrityError } from "../../integrity/contracts.js";
+import { unpublishableEntries, validateArtifactBundle } from "../../integrity/validate.js";
 
 const invalidArchive = () => new IntegrityError({ code: "INVALID_ARCHIVE" });
 const manifestMismatch = () => new IntegrityError({ code: "ARCHIVE_MANIFEST_MISMATCH" });

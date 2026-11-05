@@ -4,7 +4,7 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { zipSync } from "fflate";
-import { readArchive, verifyReleaseArchive } from "../src/publication/archive.js";
+import { readArchive, verifyReleaseArchive } from "../src/skits/internal/release-archive.js";
 import { sha256Hash } from "@smolai/skit-core/universal/consumer";
 import { databaseLayer } from "../src/platform/cloudflare.js";
 

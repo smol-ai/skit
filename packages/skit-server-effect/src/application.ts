@@ -22,7 +22,6 @@ import {
   feedbackLayer as feedbackRateLimiterLayer,
   patLayer as patRateLimiterLayer,
 } from "./platform/rate-limiter.js";
-import { layer as publicationServiceLayer } from "./publication/service.js";
 import { layer as readinessLayer } from "./readiness/service.js";
 import { layer as releaseStoreLayer } from "./releases/store.js";
 import { layer as teamsLayer } from "./teams/service.js";
@@ -105,7 +104,6 @@ export const applicationLayers = (
     releaseStoreLayer,
     authorInventoryLayer,
     skitsLayer,
-    publicationServiceLayer.pipe(Layer.provide(skitsLayer)),
     patRateLimiterLayer(env.PAT_RATE_LIMITER),
     Layer.succeed(ServerConfiguration, { publicAppOrigin: configured.publicAppOrigin }),
   ).pipe(

@@ -6,11 +6,9 @@ import { Effect, Layer } from "effect";
 import { zipSync } from "fflate";
 import { sha256Hash } from "@smolai/skit-core/universal/consumer";
 import { BlobStore, blobStoreLayer, databaseLayer } from "../src/platform/cloudflare.js";
-import { layer as skitsLayer } from "../src/skits/service.js";
-import { Publication, layer as publicationLayer } from "../src/publication/service.js";
+import { Skits, layer as skitsLayer } from "../src/skits/service.js";
 
-const testLayer = publicationLayer.pipe(
-  Layer.provide(skitsLayer),
+const testLayer = skitsLayer.pipe(
   Layer.provideMerge(
     Layer.mergeAll(blobStoreLayer(env.SKIT_BLOBS), databaseLayer(env.DB), BrowserCrypto.layer),
   ),
@@ -82,9 +80,9 @@ describe("Publication", () => {
   it.effect("publishes the exact current skit snapshot to D1 and R2", () =>
     Effect.gen(function* () {
       yield* prepareDatabase();
-      const publication = yield* Publication;
+      const skits = yield* Skits;
       const archive = zipSync(Object.fromEntries(files));
-      const published = yield* publication.publish({
+      const published = yield* skits.publish({
         owner: "alice",
         slug: "tools",
         version: "1.2.3",
@@ -123,10 +121,10 @@ describe("Publication", () => {
   it.effect("rejects stale revisions and duplicate versions without writing archives", () =>
     Effect.gen(function* () {
       yield* prepareDatabase();
-      const publication = yield* Publication;
+      const skits = yield* Skits;
       const archive = zipSync(Object.fromEntries(files));
       const stale = yield* Effect.result(
-        publication.publish({
+        skits.publish({
           owner: "alice",
           slug: "tools",
           version: "1.0.0",
@@ -137,9 +135,9 @@ describe("Publication", () => {
       expect(stale._tag).toBe("Failure");
       if (stale._tag === "Failure") expect(stale.failure._tag).toBe("Publication.StaleRevision");
 
-      yield* publication.publish({ owner: "alice", slug: "tools", version: "1.0.0", archive });
+      yield* skits.publish({ owner: "alice", slug: "tools", version: "1.0.0", archive });
       const conflict = yield* Effect.result(
-        publication.publish({ owner: "alice", slug: "tools", version: "1.0.0", archive }),
+        skits.publish({ owner: "alice", slug: "tools", version: "1.0.0", archive }),
       );
       expect(conflict._tag).toBe("Failure");
       if (conflict._tag === "Failure")

@@ -283,9 +283,9 @@ export const owners = {
     ],
     removes: [
       "SkitDeletion service (done: planDelete/delete are Skits operations; implementation private under skits/internal)",
-      "Publication service + ReleaseStore service as separate owners of releases",
+      "Publication service (done: Skits.publish); ReleaseStore still a separate owner of release reads",
       "AuthorInventory service (cross-owner join → Skits.list)",
-      "publication/archive.ts reading Skits' tables directly",
+      "publication/archive.ts reading Skits' tables directly (done: private skits/internal/release-archive.ts)",
       "ReleaseStore.readArchive leaking R2ObjectBody (done: BlobStore returns bytes or a stream)",
       "releases.adopted_content_digest (no reader or writer)",
     ],
