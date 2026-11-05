@@ -325,24 +325,67 @@ export const owners = {
 } as const;
 
 /**
- * Core subpaths with approved state owners and exact source entries. The root export is an
- * aggregate compatibility surface, not a subpath. Unmapped subpaths fail check-structure;
- * stateless contract exports need an explicit architecture decision, not an invented owner.
+ * Every core subpath is an owner API or an explicitly approved shared API. Shared describes
+ * responsibility, not purity: harness probes can run processes but own no persisted SKIT state.
+ * These declarations do not prove implementation behavior; existing owner/import boundaries
+ * and universal-entry checks still apply. Both kinds require exact source/conditional targets.
+ * The root export is an aggregate compatibility surface, not a subpath.
  */
 export const coreExports = {
-  "./library": { owners: ["Library"], source: "packages/skit/src/library/index.ts" },
+  "./library": { kind: "owner", owners: ["Library"], source: "packages/skit/src/library/index.ts" },
   "./library/routing": {
+    kind: "owner",
     owners: ["Library"],
     source: "packages/skit/src/library/routing/index.ts",
   },
-  "./library/setup": { owners: ["Library"], source: "packages/skit/src/library/setup.ts" },
-  "./library/session": { owners: ["Library"], source: "packages/skit/src/library/session.ts" },
+  "./library/setup": {
+    kind: "owner",
+    owners: ["Library"],
+    source: "packages/skit/src/library/setup.ts",
+  },
+  "./library/session": {
+    kind: "owner",
+    owners: ["Library"],
+    source: "packages/skit/src/library/session.ts",
+  },
   "./author": {
+    kind: "owner",
     owners: ["AuthorWorkspace", "AuthorHistory"],
     source: "packages/skit/src/author/index.ts",
   },
+  "./harnesses": {
+    kind: "shared",
+    purpose:
+      "Harness metadata, detection and caller-scoped process probes; owns no persisted SKIT state.",
+    source: "packages/skit/src/harnesses/index.ts",
+  },
+  "./audit": {
+    kind: "shared",
+    purpose: "Passive local capability scans and versioned audit report schemas.",
+    source: "packages/skit/src/auditing/index.ts",
+  },
+  "./universal/consumer": {
+    kind: "shared",
+    purpose:
+      "Runtime-neutral consumer contracts and artifact behavior shared by device and Registry.",
+    source: "packages/skit/src/universal-consumer.ts",
+  },
+  "./universal/authoring": {
+    kind: "shared",
+    purpose:
+      "Runtime-neutral authoring/publication protocols and history algorithms over the consumer surface.",
+    source: "packages/skit/src/universal-authoring.ts",
+  },
+  "./universal/api": {
+    kind: "shared",
+    purpose: "Shared HTTP endpoint definitions, middleware contracts and domain schemas.",
+    source: "packages/skit/src/api/index.ts",
+  },
 } as const satisfies {
-  [subpath: string]: { owners: readonly (keyof typeof owners)[]; source: string };
+  [subpath: string]: { source: string } & (
+    | { kind: "owner"; owners: readonly [keyof typeof owners, ...(keyof typeof owners)[]] }
+    | { kind: "shared"; purpose: string }
+  );
 };
 
 /** Workflows: plain functions that coordinate owners. They own no state and are not services. */

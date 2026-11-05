@@ -38,16 +38,24 @@ describe("declared feature layout", () => {
   });
 });
 
-describe("core exports and declared owners", () => {
+describe("core exports and declared API roles", () => {
   const source = "packages/skit/src/library/setup.ts";
-  const declarations = { "./library/setup": { owners: ["Library"], source } };
+  const declarations = { "./library/setup": { kind: "owner", owners: ["Library"], source } };
+  const sharedDeclarations = {
+    "./library/setup": { kind: "shared", purpose: "Shared contract fixture.", source },
+  };
   const owners = { Library: {} };
   const entry = { types: "./dist/library/setup.d.ts", import: "./dist/library/setup.js" };
 
-  test("matching conditional types/runtime targets pass without dist", () => {
+  test.each(["owner", "shared"])("matching %s API targets pass without dist", (kind) => {
     const root = fixture([source]);
     expect(
-      checkCoreExports(root, { exports: { "./library/setup": entry } }, declarations, owners),
+      checkCoreExports(
+        root,
+        { exports: { "./library/setup": entry } },
+        kind === "owner" ? declarations : sharedDeclarations,
+        owners,
+      ),
     ).toEqual([]);
   });
   test("new, removed and ownerless subpaths cannot silently change the public surface", () => {
@@ -55,7 +63,7 @@ describe("core exports and declared owners", () => {
     expect(
       checkCoreExports(root, { exports: { "./unknown": entry } }, declarations, owners),
     ).toEqual([
-      "./unknown: no owner/source declaration in architecture/app.ts coreExports",
+      "./unknown: no API declaration in architecture/app.ts coreExports",
       "./library/setup: declared in app.ts but absent from core exports",
     ]);
     expect(
@@ -63,7 +71,7 @@ describe("core exports and declared owners", () => {
         root,
         { exports: { "./library/setup": entry } },
         {
-          "./library/setup": { owners: [], source },
+          "./library/setup": { kind: "owner", owners: [], source },
         },
         owners,
       ),
@@ -78,7 +86,7 @@ describe("core exports and declared owners", () => {
       `./library/setup: missing source ${source}`,
     ]);
   });
-  test("nested conditions and type targets cannot expose a different module", () => {
+  test.each(["owner", "shared"])("%s API conditions cannot expose a different module", (kind) => {
     const root = fixture([source]);
     const exports = {
       "./library/setup": {
@@ -87,15 +95,79 @@ describe("core exports and declared owners", () => {
         default: "./dist/library/internal/writer.js",
       },
     };
-    expect(checkCoreExports(root, { exports }, declarations, owners)).toEqual([
+    expect(
+      checkCoreExports(
+        root,
+        { exports },
+        kind === "owner" ? declarations : sharedDeclarations,
+        owners,
+      ),
+    ).toEqual([
       "./library/setup (types): expected ./dist/library/setup.d.ts, got ./dist/library/setup/index.d.ts",
       "./library/setup (default): expected ./dist/library/setup.js, got ./dist/library/internal/writer.js",
     ]);
   });
-  test("invalid export target shapes fail rather than disappear from the check", () => {
+  test.each(["owner", "shared"])(
+    "invalid %s export target shapes fail rather than disappear",
+    (kind) => {
+      const root = fixture([source]);
+      expect(() =>
+        checkCoreExports(
+          root,
+          { exports: { "./library/setup": null } },
+          kind === "owner" ? declarations : sharedDeclarations,
+          owners,
+        ),
+      ).toThrow("Unsupported exports target");
+    },
+  );
+
+  test("shared APIs require no invented owner", () => {
     const root = fixture([source]);
-    expect(() =>
-      checkCoreExports(root, { exports: { "./library/setup": null } }, declarations, owners),
-    ).toThrow("Unsupported exports target");
+    expect(
+      checkCoreExports(root, { exports: { "./library/setup": entry } }, sharedDeclarations, {}),
+    ).toEqual([]);
   });
+  test.each([
+    { declaration: { source, owners: ["Library"] }, message: "API kind must be owner or shared" },
+    { declaration: { kind: "other", source }, message: "API kind must be owner or shared" },
+    { declaration: { kind: "owner", source }, message: "must name at least one owner" },
+    { declaration: { kind: "shared", source }, message: "shared API must describe its purpose" },
+    {
+      declaration: { kind: "shared", source, purpose: "   " },
+      message: "shared API must describe its purpose",
+    },
+    {
+      declaration: { kind: "shared", source, purpose: "Contracts", owners: [] },
+      message: "shared API must not declare state owners",
+    },
+    {
+      declaration: { kind: "owner", source, owners: ["Library"], purpose: "Contracts" },
+      message: "owner API must declare owners, not a shared purpose",
+    },
+  ])("invalid or mixed API roles fail: $message", ({ declaration, message }) => {
+    const root = fixture([source]);
+    expect(
+      checkCoreExports(
+        root,
+        { exports: { "./library/setup": entry } },
+        { "./library/setup": declaration },
+        owners,
+      ),
+    ).toEqual([`./library/setup: ${message}`]);
+  });
+  test.each(["owner", "shared"])(
+    "%s declarations still require their exact source file",
+    (kind) => {
+      const root = fixture([]);
+      expect(
+        checkCoreExports(
+          root,
+          { exports: { "./library/setup": entry } },
+          kind === "owner" ? declarations : sharedDeclarations,
+          owners,
+        ),
+      ).toEqual([`./library/setup: missing source ${source}`]);
+    },
+  );
 });

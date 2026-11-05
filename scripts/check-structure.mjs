@@ -40,13 +40,26 @@ export function checkCoreExports(root, manifest, declarations, declaredOwners) {
     if (subpath === ".") continue;
     const declaration = declarations[subpath];
     if (!declaration) {
-      failures.push(`${subpath}: no owner/source declaration in architecture/app.ts coreExports`);
+      failures.push(`${subpath}: no API declaration in architecture/app.ts coreExports`);
       continue;
     }
-    if (!declaration.owners.length) failures.push(`${subpath}: must name at least one owner`);
-    for (const owner of declaration.owners)
-      if (!Object.hasOwn(declaredOwners, owner))
-        failures.push(`${subpath}: unknown owner ${owner}`);
+    if (declaration.kind === "owner") {
+      if (!Array.isArray(declaration.owners) || !declaration.owners.length)
+        failures.push(`${subpath}: must name at least one owner`);
+      else
+        for (const owner of declaration.owners)
+          if (!Object.hasOwn(declaredOwners, owner))
+            failures.push(`${subpath}: unknown owner ${owner}`);
+      if (Object.hasOwn(declaration, "purpose"))
+        failures.push(`${subpath}: owner API must declare owners, not a shared purpose`);
+    } else if (declaration.kind === "shared") {
+      if (typeof declaration.purpose !== "string" || !declaration.purpose.trim())
+        failures.push(`${subpath}: shared API must describe its purpose`);
+      if (Object.hasOwn(declaration, "owners"))
+        failures.push(`${subpath}: shared API must not declare state owners`);
+    } else {
+      failures.push(`${subpath}: API kind must be owner or shared`);
+    }
     const source = declaration.source;
     if (
       !source.startsWith("packages/skit/src/") ||
