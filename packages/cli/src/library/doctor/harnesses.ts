@@ -9,7 +9,7 @@ import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { Data, Effect, FileSystem, Option, Record, Schema, Stream } from "effect";
 import { dirname, join, resolve } from "node:path";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { HarnessName, readClaudeListingSnapshot, ListingBudget } from "@smolai/skit-core";
+import { HarnessName, readClaudeListingSnapshot, ListingBudget } from "@smolai/skit-core/harnesses";
 import { SourceProcess, type SourceProcessResult } from "@smolai/skit-core/platform";
 import { probeHarness } from "@smolai/skit-core/harnesses";
 import { CodexDoctorCheck, doctorCodexCheck } from "./codex.js";

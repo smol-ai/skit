@@ -7,9 +7,9 @@ import {
   enabledAt,
   enabledSkillIds,
   SkillsDirectoryNotWritable,
-  type ListingBudget,
   type UsageReport,
 } from "@smolai/skit-core";
+import { type ListingBudget } from "@smolai/skit-core/harnesses";
 import { assert, it } from "@effect/vitest";
 import { systemError } from "effect/PlatformError";
 import {

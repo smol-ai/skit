@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import type { ListingBudget } from "@smolai/skit-core";
+import type { ListingBudget } from "@smolai/skit-core/harnesses";
 import {
   renderDoctorListingBudget,
   renderDoctorBudgetSelection,

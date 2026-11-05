@@ -10,13 +10,13 @@ import { describe, expect, test } from "vitest";
 import {
   DescriptorMalformed,
   DirectSkillDocumentInvalid,
-  HarnessMetadataInvalid,
   InvalidLibraryState,
   NoSkitDescriptorFound,
   InstalledSkillFileMissing,
   ReadmeFrontmatterMissing,
   resolveSkitSource,
 } from "@smolai/skit-core";
+import { HarnessMetadataInvalid } from "@smolai/skit-core/harnesses";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { productionUrlTestClient } from "./helpers/http-test-client.js";
 import { commandApplicationLayer } from "../src/application.js";

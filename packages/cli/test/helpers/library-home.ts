@@ -5,13 +5,12 @@ import {
   initSkit,
   readSkitDescriptor,
   validateSkitDirectory,
-  type HarnessName,
-  type SkillsDirectoryOverrides,
   type LibraryState,
   makeMachineId,
   emptyLibraryState,
   type ImportRequest,
 } from "@smolai/skit-core";
+import { type HarnessName, type SkillsDirectoryOverrides } from "@smolai/skit-core/harnesses";
 import { Effect, FileSystem, Layer } from "effect";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";

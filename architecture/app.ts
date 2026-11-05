@@ -387,7 +387,7 @@ export const coreExports = {
   "./harnesses": {
     kind: "shared",
     purpose:
-      "Harness metadata, detection and caller-scoped process probes; owns no persisted SKIT state.",
+      "Harness catalog, detection, listing budgets from inventory reports and caller-scoped process probes; owns no persisted SKIT state.",
     source: "packages/skit/src/harnesses/index.ts",
   },
   "./audit": {

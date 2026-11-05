@@ -1,4 +1,4 @@
-import type { ListingBudget } from "@smolai/skit-core";
+import type { ListingBudget } from "@smolai/skit-core/harnesses";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Array, Effect } from "effect";
 import { resolve } from "node:path";

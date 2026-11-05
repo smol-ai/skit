@@ -5,7 +5,7 @@ import {
   type UsageOptions,
   type InstalledSkillUsage,
 } from "@smolai/skit-core/library/usage";
-import { harnessDrivers } from "@smolai/skit-core";
+import { harnessDrivers } from "@smolai/skit-core/harnesses";
 import { Config, Effect } from "effect";
 import { join, resolve } from "node:path";
 

@@ -1,6 +1,6 @@
 import { Match } from "effect";
 import { createColors } from "picocolors";
-import { largeListingEntries, type ListingBudget } from "@smolai/skit-core";
+import { largeListingEntries, type ListingBudget } from "@smolai/skit-core/harnesses";
 import { harnessLabel } from "@smolai/skit-core/harnesses";
 import { compactHomePath } from "../../terminal/home-path.js";
 

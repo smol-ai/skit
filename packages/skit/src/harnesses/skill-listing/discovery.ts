@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { HarnessName, type SkillsDirectoryOverrides } from "../contracts.js";
-import type { LibraryState } from "../../library/library-state.js";
+import type { LibraryInventory } from "../../library/library-state.js";
 
 import { harnessDrivers } from "../drivers.js";
 
@@ -13,7 +13,7 @@ export interface ListingOptions {
 
 /** Every listing-capable Harness's estimate, in Harness order. */
 export const readListingBudgets = Effect.fn("Listing.budgets")(function* (
-  state: LibraryState,
+  state: LibraryInventory,
   options: ListingOptions,
 ) {
   return yield* Effect.all(

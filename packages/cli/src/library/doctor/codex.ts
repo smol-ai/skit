@@ -10,8 +10,12 @@ import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { Effect, FileSystem, Schema } from "effect";
-import { readCodexSkills, readCodexListingBudget, type ListingBudget } from "@smolai/skit-core";
-export { readCodexSkills } from "@smolai/skit-core";
+import {
+  readCodexSkills,
+  readCodexListingBudget,
+  type ListingBudget,
+} from "@smolai/skit-core/harnesses";
+export { readCodexSkills } from "@smolai/skit-core/harnesses";
 import { probeHarness } from "@smolai/skit-core/harnesses";
 
 export const CodexDoctorInstance = Schema.Struct({

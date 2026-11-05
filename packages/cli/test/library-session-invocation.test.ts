@@ -6,10 +6,10 @@ import { join } from "node:path";
 import { Library } from "@smolai/skit-core/library";
 import {
   deterministicTreeHash,
-  HarnessName,
   collectionVersionPath,
   resolveDeclaredInvocation,
 } from "@smolai/skit-core";
+import { HarnessName } from "@smolai/skit-core/harnesses";
 import { skitLayer } from "@smolai/skit-core/platform";
 import {
   confirmLibraryChange,

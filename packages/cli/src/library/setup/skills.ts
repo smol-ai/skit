@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import type { HarnessName } from "@smolai/skit-core";
+import type { HarnessName } from "@smolai/skit-core/harnesses";
 import { compactHomePath } from "../../terminal/home-path.js";
 import type { Choice } from "../../terminal/prompter.js";
 import {
