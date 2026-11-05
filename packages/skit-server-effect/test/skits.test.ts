@@ -462,6 +462,12 @@ it.effect("deleting a SKIT removes its revisions and the trees no other SKIT rec
       yield* skits.post({ params: other, payload: shared });
       yield* skits.move({ params, payload: { expected: null, id: own.id } });
 
+      expect(yield* skitDelete.deletePrivate({ params, query: { dry_run: "true" } })).toMatchObject(
+        { status: "delete_ready", changed: false, revisions: 2 },
+      );
+      expect(yield* countRows("revisions")).toBe(3);
+      expect(yield* countRows("skits")).toBe(2);
+
       expect(yield* skitDelete.deletePrivate({ params, query: {} })).toMatchObject({
         status: "deleted",
         revisions: 2,

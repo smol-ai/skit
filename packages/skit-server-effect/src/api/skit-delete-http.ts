@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { Authorization } from "../authorization/service.js";
-import { SkitDeletion } from "../skit-delete/service.js";
+import { Skits } from "../skits/service.js";
 import { CurrentPrincipal } from "./authentication.js";
 import { AuthoringAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import {
@@ -18,7 +18,7 @@ export const skitDeleteHandlers = HttpApiBuilder.group(
   (handlers) =>
     Effect.gen(function* () {
       const authorization = yield* Authorization;
-      const deletion = yield* SkitDeletion;
+      const skits = yield* Skits;
 
       return handlers.handle("deletePrivate", ({ params, query }) =>
         Effect.gen(function* () {
@@ -40,7 +40,7 @@ export const skitDeleteHandlers = HttpApiBuilder.group(
 
           const operation =
             query.dry_run === "true"
-              ? deletion.plan(params.owner, params.slug).pipe(
+              ? skits.planDelete(params.owner, params.slug).pipe(
                   Effect.map((plan) =>
                     plan === undefined
                       ? {
@@ -54,7 +54,7 @@ export const skitDeleteHandlers = HttpApiBuilder.group(
                       : { status: "delete_ready" as const, changed: false, ...plan },
                   ),
                 )
-              : deletion.delete(params.owner, params.slug);
+              : skits.delete(params.owner, params.slug);
 
           const result = yield* operation.pipe(
             Effect.tapError((error) => Effect.logError("SKIT deletion failed", error)),

@@ -12,6 +12,13 @@
  */
 export const owners = [
   {
+    name: "Skits",
+    owner: "packages/skit-server-effect/src/skits/",
+    privateModules: ["packages/skit-server-effect/src/skits/internal/"],
+    testOwner: "packages/skit-server-effect/test/",
+    private: [],
+  },
+  {
     name: "Library",
     owner: "packages/skit/src/library/",
     // Storage and recovery implementation modules belong to Library, whatever they export.

@@ -1,12 +1,17 @@
+import { BrowserCrypto } from "@effect/platform-browser";
 import { env } from "cloudflare:test";
 import { D1Client } from "@effect/sql-d1";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { BlobStore, blobStoreLayer, databaseLayer } from "../src/platform/cloudflare.js";
-import { SkitDeletion, layer as skitDeletionLayer } from "../src/skit-delete/service.js";
+import { Skits, layer as skitsLayer } from "../src/skits/service.js";
 
-const platformLayer = Layer.merge(blobStoreLayer(env.SKIT_BLOBS), databaseLayer(env.DB));
-const testLayer = skitDeletionLayer.pipe(Layer.provideMerge(platformLayer));
+const platformLayer = Layer.mergeAll(
+  blobStoreLayer(env.SKIT_BLOBS),
+  databaseLayer(env.DB),
+  BrowserCrypto.layer,
+);
+const testLayer = skitsLayer.pipe(Layer.provideMerge(platformLayer));
 
 const prepareDatabase = Effect.flatMap(D1Client.D1Client, (sql) =>
   sql.batch([
@@ -47,7 +52,7 @@ describe("private SKIT deletion", () => {
   it.effect("previews and atomically deletes relational state and archives", () =>
     Effect.gen(function* () {
       yield* prepareDatabase;
-      const deletion = yield* SkitDeletion;
+      const skits = yield* Skits;
       yield* Effect.flatMap(D1Client.D1Client, (sql) =>
         sql.batch([
           sql.unsafe("INSERT INTO skits VALUES ('tim', 'tools', 'private')"),
@@ -79,13 +84,13 @@ describe("private SKIT deletion", () => {
         new TextEncoder().encode("private archive"),
       );
 
-      expect(yield* deletion.plan("tim", "tools")).toEqual({
+      expect(yield* skits.planDelete("tim", "tools")).toEqual({
         skit_id: "tim/tools",
         revisions: 2,
         releases: 1,
         release_versions: ["1.0.0"],
       });
-      expect(yield* deletion.delete("tim", "tools")).toEqual({
+      expect(yield* skits.delete("tim", "tools")).toEqual({
         status: "deleted",
         changed: true,
         archive_cleanup: "complete",
@@ -113,7 +118,7 @@ describe("private SKIT deletion", () => {
         expect(rows[0]).toEqual({ count: 0 });
       }
       expect(yield* blobs.exists("check deleted archive", "releases/one.zip")).toBe(false);
-      expect(yield* deletion.delete("tim", "tools")).toMatchObject({
+      expect(yield* skits.delete("tim", "tools")).toMatchObject({
         status: "absent",
         changed: false,
       });
@@ -123,10 +128,14 @@ describe("private SKIT deletion", () => {
   it.effect("refuses deletion if either the skit or a release is visible", () =>
     Effect.gen(function* () {
       yield* prepareDatabase;
-      const deletion = yield* SkitDeletion;
+      const skits = yield* Skits;
+      yield* Effect.flatMap(D1Client.D1Client, (sql) =>
+        sql.unsafe("INSERT INTO skits VALUES ('tim', 'tools', 'private')"),
+      );
+      expect(yield* skits.planDelete("tim", "tools")).toMatchObject({ releases: 0 });
+      // Publication after the passive preview must still prevent deletion in the SQL batch.
       yield* Effect.flatMap(D1Client.D1Client, (sql) =>
         sql.batch([
-          sql.unsafe("INSERT INTO skits VALUES ('tim', 'tools', 'private')"),
           sql.unsafe(
             `INSERT INTO releases VALUES
              ('tim', 'tools', '1.0.0', 'rel_one', 'releases/one.zip',
@@ -135,10 +144,10 @@ describe("private SKIT deletion", () => {
         ]),
       );
 
-      expect(yield* Effect.flip(deletion.plan("tim", "tools"))).toMatchObject({
+      expect(yield* Effect.flip(skits.planDelete("tim", "tools"))).toMatchObject({
         _tag: "SkitDelete.RequiresPrivate",
       });
-      expect(yield* Effect.flip(deletion.delete("tim", "tools"))).toMatchObject({
+      expect(yield* Effect.flip(skits.delete("tim", "tools"))).toMatchObject({
         _tag: "SkitDelete.RequiresPrivate",
       });
       const rows = yield* Effect.flatMap(

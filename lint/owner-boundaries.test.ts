@@ -50,6 +50,36 @@ async function reported(
 }
 
 describe("skit/owner-boundaries", () => {
+  test("server HTTP adapters cannot acquire private SKIT deletion authority", async () => {
+    for (const statement of [
+      `import { makeDeletion as createWriter } from "../skits/internal/deletion.js";`,
+      `export * from "../skits/internal/deletion.js";`,
+      `const loading = import("../skits/internal/deletion.js");`,
+    ]) {
+      expect(
+        await reported(
+          statement,
+          "owner-boundaries",
+          "packages/skit-server-effect/src/api/skit-delete-http.ts",
+        ),
+      ).toHaveLength(1);
+    }
+    expect(
+      await reported(
+        `import { makeDeletion } from "./internal/deletion.js";`,
+        "owner-boundaries",
+        "packages/skit-server-effect/src/skits/service.ts",
+      ),
+    ).toEqual([]);
+    expect(
+      await reported(
+        `import { Skits } from "../skits/service.js";`,
+        "owner-boundaries",
+        "packages/skit-server-effect/src/api/skit-delete-http.ts",
+      ),
+    ).toEqual([]);
+  });
+
   test("Library's private modules reject renamed helpers, namespace and side-effect imports", async () => {
     const module = (directory: string) =>
       relative(directory, join(root, "packages/skit/src/library/store/state-file.js"));

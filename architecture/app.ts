@@ -282,7 +282,7 @@ export const owners = {
       "delete",
     ],
     removes: [
-      "SkitDeletion service (writes 8 tables owned by others)",
+      "SkitDeletion service (done: planDelete/delete are Skits operations; implementation private under skits/internal)",
       "Publication service + ReleaseStore service as separate owners of releases",
       "AuthorInventory service (cross-owner join → Skits.list)",
       "publication/archive.ts reading Skits' tables directly",

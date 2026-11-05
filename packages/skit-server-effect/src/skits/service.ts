@@ -1,3 +1,4 @@
+import { makeDeletion, type Deletion } from "./internal/deletion.js";
 import { D1Client } from "@effect/sql-d1";
 import {
   type SkitCurrentResponse,
@@ -80,6 +81,10 @@ export type ReadError =
   | RevisionTooLarge;
 
 export interface SkitService {
+  /** Passive deletion facts; no state or archives change. */
+  readonly planDelete: Deletion["planDelete"];
+  /** Delete private lifecycle state atomically, then clean up release archives. */
+  readonly delete: Deletion["delete"];
   /** Create an empty SKIT, or replay its saved creation request without changing it. */
   readonly create: (
     owner: string,
@@ -508,6 +513,14 @@ export const layer = Layer.effect(
       };
     });
 
-    return Skits.of({ create, current, post, move, revision, ancestors });
+    return Skits.of({
+      create,
+      current,
+      post,
+      move,
+      revision,
+      ancestors,
+      ...makeDeletion(sql, blobs),
+    });
   }),
 );

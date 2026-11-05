@@ -25,7 +25,6 @@ import {
 import { layer as publicationServiceLayer } from "./publication/service.js";
 import { layer as readinessLayer } from "./readiness/service.js";
 import { layer as releaseStoreLayer } from "./releases/store.js";
-import { layer as skitDeletionLayer } from "./skit-delete/service.js";
 import { layer as teamsLayer } from "./teams/service.js";
 
 export interface AuthenticatedConfiguration {
@@ -105,7 +104,6 @@ export const applicationLayers = (
     readinessLayer(env),
     releaseStoreLayer,
     authorInventoryLayer,
-    skitDeletionLayer,
     skitsLayer,
     publicationServiceLayer.pipe(Layer.provide(skitsLayer)),
     patRateLimiterLayer(env.PAT_RATE_LIMITER),
