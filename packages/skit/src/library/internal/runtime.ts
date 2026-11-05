@@ -40,24 +40,24 @@ import { importCollection, importAuthoredCollection, importEdit } from "../impor
 import type { TreeRequirements } from "../../platform/tree-requirements.js";
 import { StalePlan, type Approval } from "../library-plan.js";
 import { planIntent } from "../plan-changes.js";
-import {
-  Service,
-  type Config,
-  type Routing,
-  type History,
-  type Outcome,
-  type PlanningIntent,
-  type ReviewedPlan,
-  type PlanError as PlanningError,
-  type ApplyRequest,
-  type ApplyError as ApplyingError,
+import type {
+  Interface,
+  Config,
+  Routing,
+  History,
+  Outcome,
+  PlanningIntent,
+  ReviewedPlan,
+  PlanError as PlanningError,
+  ApplyRequest,
+  ApplyError as ApplyingError,
 } from "../library.js";
 
 /**
  * The Library over `home`, writing installed skills through the `InstalledSkills` it is given:
  * migrates a legacy state.json, then resumes any operation left Pending.
  */
-export const make = Effect.fn("Library.make")(function* (
+const make = Effect.fn("Library.make")(function* (
   home: string,
   configuration: Routing = { _tag: "Recorded" },
 ) {
@@ -221,7 +221,7 @@ export const make = Effect.fn("Library.make")(function* (
     );
   }
 
-  return Service.of({
+  return {
     read: Effect.map(inspectLocalLibraryState(home), snapshotOf).pipe(Effect.provide(writer)),
     history: Effect.gen(function* () {
       const state = yield* loadLibrary(home);
@@ -275,24 +275,22 @@ export const make = Effect.fn("Library.make")(function* (
         Effect.provide(writer),
         Effect.provide(importing),
       ),
-  });
+  } satisfies Interface;
 });
 
 /** Routes installed skills as `config.routing` says; recorded routing is read after migration. */
-export const ownerLayer = (config: Config) =>
-  Layer.effect(Service, make(config.home, config.routing)).pipe(
-    Layer.provide(
-      Layer.effect(
-        InstalledSkills.Service,
-        Effect.gen(function* () {
-          if (config.routing._tag === "None") return yield* InstalledSkills.make();
-          if (config.routing._tag === "Configured")
-            return yield* InstalledSkills.make(config.routing);
-          yield* migrateLocalLibraryState(config.home);
-          return yield* InstalledSkills.make(
-            yield* InstalledSkills.recordedRouting(yield* loadLibrary(config.home)),
-          );
-        }),
-      ),
+export const makeOwner = (config: Config) =>
+  make(config.home, config.routing).pipe(
+    Effect.provideServiceEffect(
+      InstalledSkills.Service,
+      Effect.gen(function* () {
+        if (config.routing._tag === "None") return yield* InstalledSkills.make();
+        if (config.routing._tag === "Configured")
+          return yield* InstalledSkills.make(config.routing);
+        yield* migrateLocalLibraryState(config.home);
+        return yield* InstalledSkills.make(
+          yield* InstalledSkills.recordedRouting(yield* loadLibrary(config.home)),
+        );
+      }),
     ),
   );

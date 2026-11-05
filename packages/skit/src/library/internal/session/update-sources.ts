@@ -2,7 +2,6 @@ import { Cause, Effect, FileSystem, Predicate } from "effect";
 import { isPlatformError } from "effect/PlatformError";
 import { dirname, join, resolve } from "node:path";
 import { Library } from "../../library.js";
-import { ownerLayer } from "../runtime.js";
 import { emptyLibraryState, type LibraryState } from "../../library-state.js";
 import { loadLibrary, writeLibrary } from "../../store/library-store.js";
 import { latestSourceImport, type LibrarySubject } from "../../subject-resolution.js";
@@ -247,6 +246,6 @@ export const updateSources = Effect.fn("Library.updateSources")(
   },
   (effect, home, roots) =>
     Effect.scoped(effect).pipe(
-      Effect.provide(ownerLayer({ home, routing: { _tag: "Configured", ...roots } })),
+      Effect.provide(Library.layer({ home, routing: { _tag: "Configured", ...roots } })),
     ),
 );

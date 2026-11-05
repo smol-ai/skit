@@ -1,5 +1,4 @@
 import { Library } from "../../library.js";
-import { ownerLayer } from "../runtime.js";
 import { canonicalJson } from "../../../shared/json.js";
 import { deterministicTreeHash } from "../../../artifact/skit.js";
 import { inspectOwnershipMarker } from "../../../installed-skills/files.js";
@@ -182,7 +181,9 @@ export const openEditImport = Effect.fn("Library.openEditImport")(
     };
   },
   (effect, home) =>
-    Effect.scoped(effect).pipe(Effect.provide(ownerLayer({ home, routing: { _tag: "Recorded" } }))),
+    Effect.scoped(effect).pipe(
+      Effect.provide(Library.layer({ home, routing: { _tag: "Recorded" } })),
+    ),
 );
 
 const applyEditImport = Effect.fn("Library.applyEditImport")(function* (

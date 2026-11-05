@@ -38,7 +38,7 @@ export {
   type SyncPlanError,
   type SyncApplyError,
 } from "./internal/sync/sync.js";
-import { ownerLayer } from "./internal/runtime.js";
+import { makeOwner } from "./internal/runtime.js";
 import {
   type ManageIntent,
   type ManagePlan,
@@ -359,5 +359,6 @@ export interface Config {
 /** One public constructor owns migration, startup recovery, storage and installed-skill routing. */
 export const layer = (
   config: Config,
-): Layer.Layer<Service, LibraryLayerError, TreeRequirements | Digest.Digest> => ownerLayer(config);
+): Layer.Layer<Service, LibraryLayerError, TreeRequirements | Digest.Digest> =>
+  Layer.effect(Service, makeOwner(config));
 export * as Library from "./library.js";
