@@ -13,7 +13,7 @@ import {
 } from "../../library-plan.js";
 
 /** The public result of one enabled change, derived only from what the Library recorded. */
-export const finishChange = (
+const finishChange = (
   change: EnabledChange,
   skillIds: readonly SkillId[],
   targets: readonly InstalledSkills.Destination[],

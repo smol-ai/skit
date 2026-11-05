@@ -125,10 +125,7 @@ export const subjectImportIds = (
       .map((sourceImport) => sourceImport.import_id),
   );
 
-export const owningCollectionSubject = (
-  state: LibraryState,
-  subject: LibrarySubject,
-): LibrarySubject =>
+const owningCollectionSubject = (state: LibraryState, subject: LibrarySubject): LibrarySubject =>
   subject.kind === "collection"
     ? subject
     : (collectionSubjects(state).find(

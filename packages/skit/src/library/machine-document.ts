@@ -1,12 +1,5 @@
 import { Schema, SchemaGetter } from "effect";
-import {
-  LegacyMachineId,
-  MachineId,
-  migratedMachineId,
-  OperationId,
-  type LegacyMachineId as LegacyMachineIdType,
-  type MachineId as MachineIdType,
-} from "./entity-ids.js";
+import { LegacyMachineId, MachineId, migratedMachineId, OperationId } from "./entity-ids.js";
 
 export const MachineRepositoryDecision = Schema.Struct({
   path: Schema.String,
@@ -213,17 +206,3 @@ export const emptyMachineDocument = (): CurrentMachineDocument => ({
 export const currentMachineDocument = (
   fields: Omit<MachineDocumentV7, "schemaVersion">,
 ): MachineDocumentV7 => ({ ...fields, schemaVersion: 7 });
-
-export const machineDocumentIdentity = (
-  document: CurrentMachineDocument,
-):
-  | { readonly machineId: MachineIdType; readonly legacyMachineId?: LegacyMachineIdType }
-  | undefined =>
-  document.machineId === undefined
-    ? undefined
-    : {
-        machineId: document.machineId,
-        ...(document.legacyMachineId === undefined
-          ? {}
-          : { legacyMachineId: document.legacyMachineId }),
-      };

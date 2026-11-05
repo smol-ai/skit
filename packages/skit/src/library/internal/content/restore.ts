@@ -429,7 +429,7 @@ export const retainRestoreArchives = Effect.fn("Library.retainRestoreArchives")(
 });
 
 /** Preview device facts that replacement of portable Library state would strand. */
-export function strandedByRestore(current: LibraryState, manifest: LibraryManifest) {
+function strandedByRestore(current: LibraryState, manifest: LibraryManifest) {
   const skillIds = new Set(manifest.skills.map((item) => item.skill_id));
   const versionIds = new Set(
     manifest.skills.flatMap((skill) => skill.versions.map((version) => version.skill_version_id)),

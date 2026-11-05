@@ -1,5 +1,4 @@
 import { resolve } from "node:path";
-import { canonicalJson } from "../shared/json.js";
 import type { InstallScope } from "./scope.js";
 import type { Enabled, LibraryManifest } from "./library-contracts.js";
 import type { CollectionId, SkillId } from "./entity-ids.js";
@@ -82,10 +81,6 @@ export function withDeviceSkillSelection(
     ...(pendingOrigin === undefined ? {} : { pending_device_selection_origin: pendingOrigin }),
   };
 }
-
-export const sameDeviceSkillSelection = (left: LibraryState, right: LibraryState): boolean =>
-  canonicalJson(left.device_skill_selection ?? null) ===
-  canonicalJson(right.device_skill_selection ?? null);
 
 /** Explicit device enablement verifies every requested Skill, including unchanged intent. */
 export function skillsToCheckForDuplicates(
