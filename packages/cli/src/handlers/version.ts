@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { cliBuild } from "../commands/build-info.js";
-import { ReleaseChecker, releaseCheckerLive } from "../releases/checker.js";
+import { checkRelease } from "../releases.js";
 import { Command } from "effect/cli";
 import { handlePlatformCommand } from "../commands/handler.js";
 import { CommandMetadata } from "../commands/metadata.js";
@@ -13,8 +13,7 @@ export const versionCliCommand = Command.make("version", { json: jsonFlag }, () 
   handlePlatformCommand(
     Effect.gen(function* () {
       const renderer = yield* Renderer;
-      const checker = yield* ReleaseChecker;
-      const update = yield* checker.check(cliBuild, true);
+      const update = yield* checkRelease(cliBuild, true);
       yield* renderer.result(
         result("versionReport", {
           version: cliBuild.version,
@@ -22,7 +21,7 @@ export const versionCliCommand = Command.make("version", { json: jsonFlag }, () 
           update,
         }),
       );
-    }).pipe(Effect.provide(releaseCheckerLive)),
+    }),
   ),
 ).pipe(
   Command.withDescription("Show build details and check npm for an upgrade."),

@@ -1,5 +1,10 @@
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
-import { Data, Console, Effect } from "effect";
+import {
+  FailureTypeId,
+  SkitConfiguration,
+  resolveSkitConfiguration,
+  type SkitFailure,
+} from "@smolai/skit-core";
+import { Data, Console, Effect, Option } from "effect";
 import { CliError, CliOutput, Command, type HelpDoc } from "effect/cli";
 import { skitCliConfigLayer } from "./parameters.js";
 
@@ -64,7 +69,14 @@ export function runCommandTree<Name extends string, Input, ContextInput, E, R>(
 
   return Effect.gen(function* () {
     const renderer = yield* Renderer;
+    // Standalone command runners share the same configuration boundary as main.
+    // Keep an already resolved application snapshot when one was supplied.
+    const supplied = yield* Effect.serviceOption(SkitConfiguration);
+    const configuration = Option.isSome(supplied)
+      ? supplied.value
+      : yield* resolveSkitConfiguration();
     yield* Command.runWith(command, { version, renderErrors: false })(argv).pipe(
+      Effect.provideService(SkitConfiguration, configuration),
       Effect.provideService(CliOutput.Formatter, formatter),
       Effect.provide(skitCliConfigLayer),
       Effect.provideService(Console.Console, quietConsole),

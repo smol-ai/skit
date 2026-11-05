@@ -1,14 +1,17 @@
 import * as TestClock from "effect/testing/TestClock";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, FileSystem, ConfigProvider, Layer, Deferred, Fiber } from "effect";
+import {
+  skitConfigurationLayer,
+  SkitConfiguration,
+  resolveSkitConfiguration,
+} from "@smolai/skit-core";
 import { NodeServices } from "@effect/platform-node";
 import { HttpClient, HttpClientResponse } from "effect/http";
-import {
-  defaultChannel,
-  decideRelease,
-  ReleaseChecker,
-  releaseCheckerLayer,
-} from "../src/releases/checker.js";
+import { defaultChannel, decideRelease, checkRelease, noticeRelease } from "../src/releases.js";
+const releaseContext = (http: HttpClient.HttpClient) =>
+  Layer.merge(Layer.succeed(HttpClient.HttpClient, http), skitConfigurationLayer());
+
 const release = (version: string) => ({ kind: "release" as const, version, commit: "abc" });
 
 describe("release decisions", () => {
@@ -60,10 +63,7 @@ it.effect("persists successful checks, deduplicates notices, and backs off faile
           ),
         );
       });
-      const layer = releaseCheckerLayer.pipe(
-        // Replace the transport at the adapter boundary.
-        Layer.provide(Layer.succeed(HttpClient.HttpClient, http)),
-      );
+      const layer = releaseContext(http);
       const config = ConfigProvider.layer(
         ConfigProvider.fromUnknown({
           XDG_STATE_HOME: root,
@@ -71,14 +71,13 @@ it.effect("persists successful checks, deduplicates notices, and backs off faile
         }),
       );
       yield* Effect.gen(function* () {
-        const checker = yield* ReleaseChecker;
-        expect((yield* checker.notice(release("0.1.0")))?.status).toBe("update-available");
-        expect(yield* checker.notice(release("0.1.0"))).toBeUndefined();
+        expect((yield* noticeRelease(release("0.1.0")))?.status).toBe("update-available");
+        expect(yield* noticeRelease(release("0.1.0"))).toBeUndefined();
         expect(calls).toBe(1);
         yield* TestClock.adjust("24 hours");
         failure = true;
-        expect((yield* checker.check(release("0.1.0"), true)).status).toBe("check-unavailable");
-        yield* checker.check(release("0.1.0"), false);
+        expect((yield* checkRelease(release("0.1.0"), true)).status).toBe("check-unavailable");
+        yield* checkRelease(release("0.1.0"), false);
         expect(calls).toBe(2);
       }).pipe(Effect.provide(layer), Effect.provide(config));
     }),
@@ -97,24 +96,21 @@ it.effect("records a timeout as a failed attempt and retries after the daily bac
         return Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never));
       });
       yield* Effect.gen(function* () {
-        const checker = yield* ReleaseChecker;
-        const pending = yield* checker.check(release("0.1.0"), false).pipe(Effect.forkScoped);
+        const pending = yield* checkRelease(release("0.1.0"), false).pipe(Effect.forkScoped);
         yield* Deferred.await(started);
         yield* TestClock.adjust("1500 millis");
         expect((yield* Fiber.join(pending)).status).toBe("check-unavailable");
-        expect((yield* checker.check(release("0.1.0"), false)).status).toBe("check-unavailable");
+        expect((yield* checkRelease(release("0.1.0"), false)).status).toBe("check-unavailable");
         expect(calls).toBe(1);
         yield* TestClock.adjust("24 hours");
         started = yield* Deferred.make<void>();
-        const retry = yield* checker.check(release("0.1.0"), false).pipe(Effect.forkScoped);
+        const retry = yield* checkRelease(release("0.1.0"), false).pipe(Effect.forkScoped);
         yield* Deferred.await(started);
         yield* TestClock.adjust("1500 millis");
         yield* Fiber.join(retry);
         expect(calls).toBe(2);
       }).pipe(
-        Effect.provide(
-          releaseCheckerLayer.pipe(Layer.provide(Layer.succeed(HttpClient.HttpClient, http))),
-        ),
+        Effect.provide(releaseContext(http)),
         Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ XDG_STATE_HOME: root }))),
       );
     }),
@@ -135,16 +131,13 @@ it.effect("skips passive network access when state cannot be persisted", () =>
         );
       });
       yield* Effect.gen(function* () {
-        const checker = yield* ReleaseChecker;
-        expect(yield* checker.notice(release("0.1.0"))).toBeUndefined();
-        expect(yield* checker.notice(release("0.1.0"))).toBeUndefined();
+        expect(yield* noticeRelease(release("0.1.0"))).toBeUndefined();
+        expect(yield* noticeRelease(release("0.1.0"))).toBeUndefined();
         expect(calls).toBe(0);
-        expect((yield* checker.check(release("0.1.0"), true)).status).toBe("update-available");
+        expect((yield* checkRelease(release("0.1.0"), true)).status).toBe("update-available");
         expect(calls).toBe(1);
       }).pipe(
-        Effect.provide(
-          releaseCheckerLayer.pipe(Layer.provide(Layer.succeed(HttpClient.HttpClient, http))),
-        ),
+        Effect.provide(releaseContext(http)),
         Effect.provide(
           ConfigProvider.layer(ConfigProvider.fromUnknown({ XDG_STATE_HOME: `${root}/blocked` })),
         ),
@@ -174,19 +167,16 @@ it.effect("ignores corrupt caches, repeats notices after a day, and expires stal
         );
       });
       yield* Effect.gen(function* () {
-        const checker = yield* ReleaseChecker;
-        expect((yield* checker.notice(release("0.1.0")))?.status).toBe("update-available");
+        expect((yield* noticeRelease(release("0.1.0")))?.status).toBe("update-available");
         yield* TestClock.adjust("24 hours");
-        expect((yield* checker.notice(release("0.1.0")))?.status).toBe("update-available");
+        expect((yield* noticeRelease(release("0.1.0")))?.status).toBe("update-available");
         expect(calls).toBe(2);
         failure = true;
         yield* TestClock.adjust("8 days");
-        expect(yield* checker.notice(release("0.1.0"))).toBeUndefined();
+        expect(yield* noticeRelease(release("0.1.0"))).toBeUndefined();
         expect(calls).toBe(3);
       }).pipe(
-        Effect.provide(
-          releaseCheckerLayer.pipe(Layer.provide(Layer.succeed(HttpClient.HttpClient, http))),
-        ),
+        Effect.provide(releaseContext(http)),
         Effect.provide(
           ConfigProvider.layer(
             ConfigProvider.fromUnknown({
@@ -196,6 +186,41 @@ it.effect("ignores corrupt caches, repeats notices after a day, and expires stal
           ),
         ),
       );
+    }),
+  ).pipe(Effect.provide(NodeServices.layer)),
+);
+
+it.effect("uses the supplied application state directory instead of rereading XDG", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* fs.makeTempDirectoryScoped();
+      const configuration = yield* resolveSkitConfiguration(undefined, root);
+      const http = HttpClient.make((request) =>
+        Effect.succeed(HttpClientResponse.fromWeb(request, new Response('{"latest":"1.0.0"}'))),
+      );
+      const checked = yield* checkRelease(release("0.1.0"), true).pipe(
+        Effect.provideService(HttpClient.HttpClient, http),
+        Effect.provideService(SkitConfiguration, {
+          ...configuration,
+          stateHome: `${root}/configured`,
+        }),
+        Effect.provide(
+          ConfigProvider.layer(
+            ConfigProvider.fromUnknown({
+              XDG_STATE_HOME: `${root}/changed`,
+              SKIT_NPM_REGISTRY: "https://example.test",
+            }),
+          ),
+        ),
+      );
+      expect(checked.status).toBe("update-available");
+      expect(
+        yield* fs.exists(
+          `${root}/configured/skit/releases-${encodeURIComponent("https://example.test")}.json`,
+        ),
+      ).toBe(true);
+      expect(yield* fs.exists(`${root}/changed`)).toBe(false);
     }),
   ).pipe(Effect.provide(NodeServices.layer)),
 );

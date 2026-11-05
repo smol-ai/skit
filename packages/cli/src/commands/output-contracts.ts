@@ -11,7 +11,7 @@ import {
   SkillSecurityReview,
   SkitValidationDiagnostic,
 } from "@smolai/skit-core";
-import { VersionReport } from "../releases/checker.js";
+import { VersionReport } from "../releases.js";
 
 import { Schema } from "effect";
 import { setupOutputContracts } from "../library/setup.js";

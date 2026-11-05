@@ -205,14 +205,14 @@ export const owners = {
   },
 
   ReleaseNotice: {
-    status: "RESHAPE",
-    module: "packages/cli/src/releases/checker.ts",
+    status: "EXISTS",
+    module: "packages/cli/src/releases.ts",
     owns: ["$XDG_STATE_HOME/skit/releases-<registry>.json"],
-    ops: ["check", "notice"],
+    ops: ["checkRelease", "noticeRelease"],
     requires: ["FileSystem", "HttpClient", "SkitConfiguration"],
     removes: [
-      "ReleaseChecker Context.Service (one impl, provided ad hoc in 2 handlers)",
-      "direct XDG_STATE_HOME read",
+      "ReleaseChecker Context.Service (done: callers use plain owner functions)",
+      "direct XDG_STATE_HOME read (done: uses SkitConfiguration.stateHome)",
     ],
   },
 

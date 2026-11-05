@@ -1,4 +1,6 @@
-import { passiveCheckEnabled } from "./releases/policy.js";
+import { noticeRelease, passiveCheckEnabled } from "./releases.js";
+import { skitConfigurationLayer } from "@smolai/skit-core";
+import { FetchHttpClient } from "effect/http";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Effect, Fiber, Runtime } from "effect";
 import { commandActor } from "./commands/actor.js";
@@ -9,7 +11,6 @@ import { Renderer } from "./terminal/renderer.js";
 import { consoleRendererLayer } from "./terminal/console-renderer.js";
 
 import { cliBuild } from "./commands/build-info.js";
-import { ReleaseChecker, releaseCheckerLive } from "./releases/checker.js";
 
 const argv = process.argv.slice(2);
 const json = jsonRequested(argv);
@@ -25,8 +26,7 @@ const program = (
   passive
     ? Effect.scoped(
         Effect.gen(function* () {
-          const checker = yield* ReleaseChecker;
-          const refresh = yield* checker.notice(cliBuild).pipe(Effect.forkScoped);
+          const refresh = yield* noticeRelease(cliBuild).pipe(Effect.forkScoped);
           yield* command;
           const update = yield* Fiber.join(refresh);
           if (update) {
@@ -37,10 +37,11 @@ const program = (
             );
           }
         }),
-      ).pipe(Effect.provide(releaseCheckerLive))
+      ).pipe(Effect.provide(FetchHttpClient.layer))
     : command
 ).pipe(
   Effect.annotateLogs({ "skit.library.workflow": commandActor(skitCommand, argv) }),
+  Effect.provide(skitConfigurationLayer()),
   Effect.provide(consoleRendererLayer(json)),
   Effect.provide(NodeServices.layer),
 );
