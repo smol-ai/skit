@@ -608,7 +608,7 @@ function commandOutputEffect(
 /** Every downloaded archive is checked before extraction, then audited without following links. */
 const extractArchive = Effect.fn("Source.extractArchive")(function* (
   bytes: Uint8Array,
-  format: "zip" | "tar.gz" | "tar",
+  format: ArchiveFormat,
   into: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
@@ -981,6 +981,281 @@ const fetchDiscovery = Effect.fn("Discovery.fetch")(function* (
   };
 });
 
+type ArchiveFormat = "zip" | "tar.gz" | "tar";
+type GitPin = { commit: string; tracking_ref: string | null };
+
+const fetchLocalSource = Effect.fn("Source.fetchLocal")(function* (
+  source: Extract<SkitSource, { type: "local" }>,
+  previousSkillPaths?: readonly string[],
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const probe = yield* LinkStat;
+
+  const info = yield* probe.identity.stat(source.path);
+  const selectedStart =
+    info.type === "File" && basename(source.path) === "SKILL.md"
+      ? dirname(source.path)
+      : source.path;
+  // An explicitly selected directory link names its target's content. Retaining
+  // the relative link itself at a new staging root would make it dangling.
+  // The observed local Git revision likewise belongs to the retained target.
+  const start =
+    (yield* probe.identity.lstat(selectedStart)).type === "SymbolicLink"
+      ? yield* fs.realPath(selectedStart)
+      : selectedStart;
+  const discovered = yield* discoverRoot(start, undefined, undefined, previousSkillPaths, start);
+  // Plain local directories have no upstream revision to pin.
+  const head = yield* Effect.option(commandOutputEffect("git", ["rev-parse", "HEAD"], start));
+  return {
+    source,
+    ...discovered,
+    originalRoot: start,
+    revision:
+      head._tag === "Some" ? { kind: "commit" as const, commit: head.value.trim() } : undefined,
+  };
+});
+
+const fetchGitSource = Effect.fn("Source.fetchGit")(function* (
+  source: Extract<SkitSource, { type: "git" | "github" }>,
+  workspace: string,
+  pin?: GitPin,
+  previousSkillPaths?: readonly string[],
+) {
+  const fs = yield* FileSystem.FileSystem;
+
+  const cloneUrl =
+    source.type === "github"
+      ? `https://github.com/${source.owner}/${source.repository}`
+      : source.remote;
+  const { ref, subpath } = source;
+  const skillPaths = (source.skillDirectories ?? []).map((directory) =>
+    join(directory, "SKILL.md"),
+  );
+  const checkout = join(workspace, "checkout");
+  if (
+    pin &&
+    (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(pin.commit) || pin.tracking_ref !== (ref ?? null))
+  )
+    return yield* sourcePinMismatch("Invalid Git commit or tracking ref disagrees with locator");
+  // Fetch a commit explicitly: clone --branch cannot acquire an object ID.
+  // No depth limit: normalization preserves each Skill's committed modification time.
+  const revision = pin?.commit ?? ref ?? "HEAD";
+  const ordinaryHead = pin === undefined && ref === undefined;
+  yield* Effect.gen(function* () {
+    // Let Git negotiate the repository object format (SHA-1 or SHA-256).
+    // No worktree is materialized until the requested commit has been fetched.
+    yield* runEffect("git", [
+      "clone",
+      "--filter=blob:none",
+      "--no-checkout",
+      "--single-branch",
+      "--",
+      cloneUrl,
+      checkout,
+    ]);
+    if (!ordinaryHead)
+      yield* runEffect("git", ["fetch", "--filter=blob:none", "--", "origin", revision], checkout);
+  }).pipe(
+    Effect.catchTag("CommandFailed", (error) =>
+      Effect.fail(
+        new CommandFailed({
+          ...error,
+          stderr: `Cannot acquire Git revision ${revision} from ${cloneUrl}. Restore access to that revision or explicitly run skit update on the retaining device and sync again. No newer revision was substituted. ${error.stderr}`,
+        }),
+      ),
+    ),
+  );
+  yield* runEffect("git", ["checkout", "--detach", ordinaryHead ? "HEAD" : "FETCH_HEAD"], checkout);
+  const sourceRevision = (yield* commandOutputEffect(
+    "git",
+    ["rev-parse", "HEAD"],
+    checkout,
+  )).trim();
+  if (pin && sourceRevision !== pin.commit)
+    return yield* sourcePinMismatch(
+      `Git returned ${sourceRevision} instead of pinned commit ${pin.commit}`,
+    );
+  const checkoutRoot = yield* fs.realPath(checkout);
+  const root = yield* checkoutPath(
+    checkoutRoot,
+    subpath ? join(checkoutRoot, ...subpath.split("/")) : checkoutRoot,
+  ).pipe(
+    Effect.catchTag("PlatformError", (error) =>
+      Effect.fail(
+        error.reason._tag === "NotFound"
+          ? invalidSource(
+              `Selected Git path is missing or its symlink target is unavailable: ${subpath ?? "."}. Verify the directory and link target, then retry.`,
+            )
+          : error,
+      ),
+    ),
+  );
+  const selectedPaths = skillPaths.length ? skillPaths : undefined;
+  const selectedDirectories = new Map<string, string>();
+  for (const path of [...new Set(selectedPaths)].sort()) {
+    const requested = yield* lockedSkillDirectory(root, path);
+    const directory = yield* checkoutPath(checkoutRoot, requested).pipe(
+      Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
+    );
+    if (directory !== undefined) selectedDirectories.set(path, directory);
+  }
+  const discovered = yield* discoverRoot(
+    root,
+    selectedPaths,
+    selectedDirectories,
+    previousSkillPaths,
+    checkoutRoot,
+    // Enforce declarations for an explicitly selected plugin root.
+    Boolean(source.subpath),
+  );
+  let originalRoot = root;
+  if (selectedPaths?.length) {
+    originalRoot = join(workspace, "git-selected-original");
+    for (const path of [...new Set(selectedPaths)].sort()) {
+      const selectedDirectory = selectedDirectories.get(path);
+      if (selectedDirectory === undefined)
+        return yield* invalidSource(
+          `Locked Skill path is missing from the acquired Source: ${path}`,
+        );
+      const destination = join(originalRoot, dirname(path));
+      yield* fs.makeDirectory(dirname(destination), { recursive: true });
+      yield* copyLocalTree(selectedDirectory, destination, undefined, true);
+    }
+  }
+  return {
+    source,
+    ...discovered,
+    originalRoot,
+    revision: { kind: "commit" as const, commit: sourceRevision },
+  };
+});
+
+/** Scoped redirect/status handling; request construction stays with the specific fetcher. */
+const getWithin = Effect.fn("Source.getWithin")(function* (
+  request: HttpClientRequest.HttpClientRequest,
+) {
+  const client = HttpClient.followRedirects(HttpClient.withScope(yield* HttpClient.HttpClient));
+  const response = yield* client
+    .execute(request)
+    .pipe(Effect.mapError((error) => sourceTransportRejected(error.message)));
+  if (response.status === 404) return yield* new SourceNotFound({ source: request.url });
+  if (response.status < 200 || response.status >= 300)
+    return yield* sourceTransportRejected(
+      `SKIT download failed: ${response.status}`,
+      response.status,
+    );
+  return response;
+});
+
+const readDownloadBody = Effect.fn("Source.readDownloadBody")(function* (
+  response: HttpClientResponse.HttpClientResponse,
+  direct: boolean,
+) {
+  if (Number(response.headers["content-length"] ?? "0") > 256 * 1024 * 1024)
+    return yield* sourceLimitExceeded("SKIT source exceeds 256 MiB limit");
+  return yield* readBodyWithin(
+    response,
+    direct ? 2 * 1024 * 1024 : 256 * 1024 * 1024,
+    direct ? "Direct SKILL.md exceeds 2 MiB limit" : "SKIT source exceeds 256 MiB limit",
+  );
+});
+
+/** Only response-to-tree work is shared; Registry never selects the document branch. */
+const readDownloadedSource = Effect.fn("Source.readDownloadedSource")(function* (
+  content:
+    | { type: "document"; bytes: Uint8Array; contentType: string }
+    | { type: "archive"; bytes: Uint8Array; format: ArchiveFormat },
+  workspace: string,
+  previousSkillPaths?: readonly string[],
+) {
+  const fs = yield* FileSystem.FileSystem;
+  if (content.type === "document") {
+    const directory = join(workspace, "direct-skill");
+    yield* fs.makeDirectory(directory);
+    const text = new TextDecoder().decode(content.bytes);
+    yield* assertDirectSkillDocument(text, content.contentType);
+    yield* fs.writeFileString(join(directory, "SKILL.md"), text);
+    return { originalRoot: directory, descriptorKind: "observed" as const, foundSkillPaths: ["."] };
+  }
+  const extracted = join(workspace, "extracted");
+  yield* extractArchive(content.bytes, content.format, extracted);
+  const discovered = yield* discoverRoot(
+    extracted,
+    undefined,
+    undefined,
+    previousSkillPaths,
+    extracted,
+  );
+  return { ...discovered, originalRoot: extracted };
+});
+
+const fetchHttpSource = Effect.fn("Source.fetchHttp")(function* (
+  source: Extract<SkitSource, { type: "url" | "archive" }>,
+  workspace: string,
+  previousSkillPaths?: readonly string[],
+) {
+  const response = yield* getWithin(HttpClientRequest.get(source.url));
+  const contentType = response.headers["content-type"] ?? "";
+  const direct =
+    /markdown|text\/plain/.test(contentType) ||
+    source.url.toLowerCase().split("?")[0].endsWith("/skill.md");
+  const bytes = yield* readDownloadBody(response, direct);
+  const format: ArchiveFormat = source.url.match(/\.(?:tar\.gz|tgz)(?:\?|$)/)
+    ? "tar.gz"
+    : source.url.match(/\.tar(?:\?|$)/)
+      ? "tar"
+      : "zip";
+  const content = direct
+    ? { type: "document" as const, bytes, contentType }
+    : { type: "archive" as const, bytes, format };
+  return { source, ...(yield* readDownloadedSource(content, workspace, previousSkillPaths)) };
+});
+
+const fetchRegistrySource = Effect.fn("Source.fetchRegistry")(function* (
+  source: Extract<SkitSource, { type: "registry" }>,
+  workspace: string,
+  registry: { baseUrl?: string; token?: string },
+  previousSkillPaths?: readonly string[],
+) {
+  const baseUrl = source.authority ?? registry.baseUrl;
+  if (!baseUrl) return yield* new RegistryNotConfigured();
+  const authority = baseUrl.replace(/\/$/, "");
+  const importedSource = { ...source, authority };
+  const selectedVersion = source.version ?? "latest";
+  const reference = `${authority}/api/skits/${source.namespace}/${source.slug}/releases/${selectedVersion}/download`;
+  let request = HttpClientRequest.get(reference);
+  const credentialMatches =
+    !source.authority ||
+    (registry.baseUrl &&
+      source.authority.replace(/\/$/, "") === registry.baseUrl.replace(/\/$/, ""));
+  if (registry.token && credentialMatches)
+    request = HttpClientRequest.bearerToken(request, registry.token);
+  const response = yield* getWithin(request);
+  const reportedVersion = response.headers["skit-release-version"]?.trim();
+  const releaseVersion =
+    reportedVersion ?? (selectedVersion === "latest" ? undefined : selectedVersion);
+  if (!releaseVersion || !Schema.is(semver)(releaseVersion))
+    return yield* sourceVersionDisagreement(
+      "Registry download did not identify an immutable Release version. Upgrade the Registry or select an explicit version.",
+    );
+  if (selectedVersion !== "latest" && selectedVersion !== releaseVersion)
+    return yield* sourceVersionDisagreement(
+      `Registry served Release ${releaseVersion} when ${selectedVersion} was requested.`,
+    );
+  const bytes = yield* readDownloadBody(response, false);
+  if (bytes[0] !== 0x50 || bytes[1] !== 0x4b)
+    return yield* invalidSource("Registry download must be a ZIP archive");
+  return {
+    source: importedSource,
+    ...(yield* readDownloadedSource(
+      { type: "archive", bytes, format: "zip" },
+      workspace,
+      previousSkillPaths,
+    )),
+    revision: { kind: "release" as const, version: releaseVersion },
+  };
+});
+
 export function resolveSkitSource(
   input: string | SkitSource,
   options: {
@@ -988,7 +1263,7 @@ export function resolveSkitSource(
     registryBaseUrl?: string;
     registryToken?: string;
     /** Exact commit to acquire when restoring; `tracking_ref` must match the Source's `ref`. */
-    git?: { commit: string; tracking_ref: string | null };
+    git?: GitPin;
     requireGitRevision?: boolean;
     /** Existing Collection membership to preserve while discovering newly added Skills. */
     previousSkillPaths?: readonly string[];
@@ -1012,7 +1287,6 @@ export function resolveSkitSource(
 > {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const probe = yield* LinkStat;
     const source = typeof input === "string" ? yield* parseSkitSource(input, options.cwd) : input;
     const gitSource = source.type === "git" || source.type === "github";
     if (options.git && !gitSource)
@@ -1024,249 +1298,25 @@ export function resolveSkitSource(
     const workspace = yield* fs.makeTempDirectoryScoped({ prefix: "skit-source-" });
 
     const resolved = yield* Effect.gen(function* () {
-      if (source.type === "local") {
-        const info = yield* probe.identity.stat(source.path);
-        const selectedStart =
-          info.type === "File" && basename(source.path) === "SKILL.md"
-            ? dirname(source.path)
-            : source.path;
-        // An explicitly selected directory link names its target's content. Retaining
-        // the relative link itself at a new staging root would make it dangling.
-        // The observed local Git revision likewise belongs to the retained target.
-        const start =
-          (yield* probe.identity.lstat(selectedStart)).type === "SymbolicLink"
-            ? yield* fs.realPath(selectedStart)
-            : selectedStart;
-        const discovered = yield* discoverRoot(
-          start,
-          undefined,
-          undefined,
-          options.previousSkillPaths,
-          start,
-        );
-        // Plain local directories have no upstream revision to pin.
-        const head = yield* Effect.option(commandOutputEffect("git", ["rev-parse", "HEAD"], start));
-        return {
-          source,
-          ...discovered,
-          originalRoot: start,
-          revision:
-            head._tag === "Some"
-              ? { kind: "commit" as const, commit: head.value.trim() }
-              : undefined,
-        };
-      }
-      if (source.type === "git" || source.type === "github") {
-        const cloneUrl =
-          source.type === "github"
-            ? `https://github.com/${source.owner}/${source.repository}`
-            : source.remote;
-        const { ref, subpath } = source;
-        const skillPaths = (source.skillDirectories ?? []).map((directory) =>
-          join(directory, "SKILL.md"),
-        );
-        const checkout = join(workspace, "checkout");
-        if (
-          options.git &&
-          (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(options.git.commit) ||
-            options.git.tracking_ref !== (ref ?? null))
-        )
-          return yield* sourcePinMismatch(
-            "Invalid Git commit or tracking ref disagrees with locator",
+      switch (source.type) {
+        case "local":
+          return yield* fetchLocalSource(source, options.previousSkillPaths);
+        case "git":
+        case "github":
+          return yield* fetchGitSource(source, workspace, options.git, options.previousSkillPaths);
+        case "well-known":
+          return yield* fetchDiscovery(source, workspace);
+        case "url":
+        case "archive":
+          return yield* fetchHttpSource(source, workspace, options.previousSkillPaths);
+        case "registry":
+          return yield* fetchRegistrySource(
+            source,
+            workspace,
+            { baseUrl: options.registryBaseUrl, token: options.registryToken },
+            options.previousSkillPaths,
           );
-        // Fetch a commit explicitly: clone --branch cannot acquire an object ID.
-        // No depth limit: normalization preserves each Skill's committed modification time.
-        const revision = options.git?.commit ?? ref ?? "HEAD";
-        const ordinaryHead = options.git === undefined && ref === undefined;
-        yield* Effect.gen(function* () {
-          // Let Git negotiate the repository object format (SHA-1 or SHA-256).
-          // No worktree is materialized until the requested commit has been fetched.
-          yield* runEffect("git", [
-            "clone",
-            "--filter=blob:none",
-            "--no-checkout",
-            "--single-branch",
-            "--",
-            cloneUrl,
-            checkout,
-          ]);
-          if (!ordinaryHead)
-            yield* runEffect(
-              "git",
-              ["fetch", "--filter=blob:none", "--", "origin", revision],
-              checkout,
-            );
-        }).pipe(
-          Effect.catchTag("CommandFailed", (error) =>
-            Effect.fail(
-              new CommandFailed({
-                ...error,
-                stderr: `Cannot acquire Git revision ${revision} from ${cloneUrl}. Restore access to that revision or explicitly run skit update on the retaining device and sync again. No newer revision was substituted. ${error.stderr}`,
-              }),
-            ),
-          ),
-        );
-        yield* runEffect(
-          "git",
-          ["checkout", "--detach", ordinaryHead ? "HEAD" : "FETCH_HEAD"],
-          checkout,
-        );
-        const sourceRevision = (yield* commandOutputEffect(
-          "git",
-          ["rev-parse", "HEAD"],
-          checkout,
-        )).trim();
-        if (options.git && sourceRevision !== options.git.commit)
-          return yield* sourcePinMismatch(
-            `Git returned ${sourceRevision} instead of pinned commit ${options.git.commit}`,
-          );
-        const checkoutRoot = yield* fs.realPath(checkout);
-        const root = yield* checkoutPath(
-          checkoutRoot,
-          subpath ? join(checkoutRoot, ...subpath.split("/")) : checkoutRoot,
-        ).pipe(
-          Effect.catchTag("PlatformError", (error) =>
-            Effect.fail(
-              error.reason._tag === "NotFound"
-                ? invalidSource(
-                    `Selected Git path is missing or its symlink target is unavailable: ${subpath ?? "."}. Verify the directory and link target, then retry.`,
-                  )
-                : error,
-            ),
-          ),
-        );
-        const selectedPaths = skillPaths.length ? skillPaths : undefined;
-        const selectedDirectories = new Map<string, string>();
-        for (const path of [...new Set(selectedPaths)].sort()) {
-          const requested = yield* lockedSkillDirectory(root, path);
-          const directory = yield* checkoutPath(checkoutRoot, requested).pipe(
-            Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
-          );
-          if (directory !== undefined) selectedDirectories.set(path, directory);
-        }
-        const discovered = yield* discoverRoot(
-          root,
-          selectedPaths,
-          selectedDirectories,
-          options.previousSkillPaths,
-          checkoutRoot,
-          // Enforce declarations for an explicitly selected plugin root.
-          Boolean(source.subpath),
-        );
-        let originalRoot = root;
-        if (selectedPaths?.length) {
-          originalRoot = join(workspace, "git-selected-original");
-          for (const path of [...new Set(selectedPaths)].sort()) {
-            const selectedDirectory = selectedDirectories.get(path);
-            if (selectedDirectory === undefined)
-              return yield* invalidSource(
-                `Locked Skill path is missing from the acquired Source: ${path}`,
-              );
-            const destination = join(originalRoot, dirname(path));
-            yield* fs.makeDirectory(dirname(destination), { recursive: true });
-            yield* copyLocalTree(selectedDirectory, destination, undefined, true);
-          }
-        }
-        return {
-          source,
-          ...discovered,
-          originalRoot,
-          revision: { kind: "commit" as const, commit: sourceRevision },
-        };
       }
-      if (source.type === "well-known") return yield* fetchDiscovery(source, workspace);
-      const registryBaseUrl =
-        source.type === "registry" ? (source.authority ?? options.registryBaseUrl) : undefined;
-      if (source.type === "registry" && !registryBaseUrl)
-        return yield* Effect.fail(new RegistryNotConfigured());
-      const importedSource: SkitSource =
-        source.type === "registry"
-          ? { ...source, authority: registryBaseUrl!.replace(/\/$/, "") }
-          : source;
-      const selectedVersion = (source.type === "registry" ? source.version : undefined) ?? "latest";
-      const registryReference =
-        source.type === "registry"
-          ? `${registryBaseUrl!.replace(/\/$/, "")}/api/skits/${source.namespace}/${source.slug}/releases/${selectedVersion}/download`
-          : source.url;
-      // The scoped client owns the response body alongside the temporary workspace.
-      let request = HttpClientRequest.get(registryReference);
-      const registryCredentialMatches =
-        source.type === "registry" &&
-        (!source.authority ||
-          (options.registryBaseUrl &&
-            source.authority.replace(/\/$/, "") === options.registryBaseUrl.replace(/\/$/, "")));
-      if (source.type === "registry" && options.registryToken && registryCredentialMatches)
-        request = HttpClientRequest.bearerToken(request, options.registryToken);
-      const client = HttpClient.followRedirects(HttpClient.withScope(yield* HttpClient.HttpClient));
-      const response = yield* client
-        .execute(request)
-        .pipe(Effect.mapError((error) => sourceTransportRejected(error.message)));
-      if (response.status === 404) return yield* new SourceNotFound({ source: registryReference });
-      if (response.status < 200 || response.status >= 300) {
-        return yield* sourceTransportRejected(
-          `SKIT download failed: ${response.status}`,
-          response.status,
-        );
-      }
-      let revision: SourceRevision | undefined;
-      if (source.type === "registry") {
-        const reportedVersion = response.headers["skit-release-version"]?.trim();
-        const releaseVersion =
-          reportedVersion ?? (selectedVersion === "latest" ? undefined : selectedVersion);
-        if (!releaseVersion || !Schema.is(semver)(releaseVersion))
-          return yield* sourceVersionDisagreement(
-            "Registry download did not identify an immutable Release version. Upgrade the Registry or select an explicit version.",
-          );
-        if (selectedVersion && selectedVersion !== "latest" && selectedVersion !== releaseVersion)
-          return yield* sourceVersionDisagreement(
-            `Registry served Release ${releaseVersion} when ${selectedVersion} was requested.`,
-          );
-        revision = { kind: "release", version: releaseVersion };
-      }
-      const contentLength = Number(response.headers["content-length"] ?? "0");
-      if (contentLength > 256 * 1024 * 1024) {
-        return yield* sourceLimitExceeded("SKIT source exceeds 256 MiB limit");
-      }
-      const type = response.headers["content-type"] ?? "";
-      const direct =
-        /markdown|text\/plain/.test(type) ||
-        registryReference.toLowerCase().split("?")[0].endsWith("/skill.md");
-      // Which limit applies is known from the headers and the URL, so the real byte count can be
-      // enforced while reading instead of after the whole response is already in memory.
-      const body = yield* readBodyWithin(
-        response,
-        direct ? 2 * 1024 * 1024 : 256 * 1024 * 1024,
-        direct ? "Direct SKILL.md exceeds 2 MiB limit" : "SKIT source exceeds 256 MiB limit",
-      );
-      if (direct) {
-        const directory = join(workspace, "direct-skill");
-        yield* fs.makeDirectory(directory);
-        const skillText = new TextDecoder().decode(body);
-        yield* assertDirectSkillDocument(skillText, type);
-        yield* fs.writeFileString(join(directory, "SKILL.md"), skillText);
-        return {
-          source: importedSource,
-          revision,
-          originalRoot: directory,
-          descriptorKind: "observed" as const,
-          foundSkillPaths: ["."],
-        };
-      }
-      const format = registryReference.match(/\.(?:tar\.gz|tgz)(?:\?|$)/)
-        ? "tar.gz"
-        : registryReference.match(/\.tar(?:\?|$)/)
-          ? "tar"
-          : "zip";
-      const extracted = join(workspace, "extracted");
-      yield* extractArchive(body, format, extracted);
-      const discovered = yield* discoverRoot(
-        extracted,
-        undefined,
-        undefined,
-        options.previousSkillPaths,
-        extracted,
-      );
-      return { source: importedSource, ...discovered, originalRoot: extracted, revision };
     }).pipe(
       Effect.catchTag("PluginSkillConflict", (error) =>
         Effect.fail(
