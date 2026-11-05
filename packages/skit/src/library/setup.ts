@@ -40,7 +40,7 @@ import {
  * Applying the recommended plan would create another agent-visible copy of these skills, and
  * nobody has said how to resolve that. Non-interactive setup never guesses.
  */
-export class SetupDuplicateDecisionRequired
+class SetupDuplicateDecisionRequired
   extends Data.TaggedError("SetupDuplicateDecisionRequired")<{
     names: readonly string[];
     retirable: boolean;
@@ -617,8 +617,11 @@ export { prepareSetupUndo } from "./setup/undo.js";
 export { computeSkillsShCompatibleHash as computeSkillsLockCompatibleHash } from "./setup/skills-sh/compatible-hash.js";
 // Inferred consumer declarations need public names for these nested choices and typed failures.
 export type { SetupCopyConflict } from "./setup/decisions.js";
-export { SetupImportInvalid } from "./setup/import.js";
-export { ChangeChoiceRequired } from "./setup/installed-skills.js";
-export { SetupManageSelectionInvalid } from "./setup/manage.js";
 // Legacy undo evidence still uses this read-only projection; recordedLibrary remains private.
 export { setupIntent } from "./internal/setup/intent.js";
+
+// Inferred consumer declarations require these failure names.
+export type { SetupDuplicateDecisionRequired };
+export type { SetupImportInvalid } from "./setup/import.js";
+export type { ChangeChoiceRequired } from "./setup/installed-skills.js";
+export type { SetupManageSelectionInvalid } from "./setup/manage.js";

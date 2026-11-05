@@ -11,7 +11,8 @@ import {
   DuplicateScanIncomplete,
   Warning,
 } from "./installed-skill-facts.js";
-export { Destination, Duplicate, DuplicateScanIncomplete } from "./installed-skill-facts.js";
+export { Destination, Duplicate } from "./installed-skill-facts.js";
+export type { DuplicateScanIncomplete } from "./installed-skill-facts.js";
 import { Context, Data, Effect, FileSystem, Option, Path, Schema, Scope } from "effect";
 import { dirname, join, resolve } from "node:path";
 import { Digest } from "effect/crypto";
@@ -53,8 +54,7 @@ import type { TreeError } from "../shared/tree-error.js";
  */
 
 /** Entries are compared by device identity, never by path alone. */
-export const Identity = Schema.Struct({ dev: Schema.String, ino: Schema.String });
-export type Identity = typeof Identity.Type;
+const Identity = Schema.Struct({ dev: Schema.String, ino: Schema.String });
 export const Protection = Schema.Literals(["repository", "authored", "package-manager"]);
 export type Protection = typeof Protection.Type;
 /** What the installer reads at an existing folder, following a link as it always has. */
@@ -79,7 +79,7 @@ export const Facts = Schema.Struct({
   protection: Schema.NullOr(Protection),
 });
 export type Facts = typeof Facts.Type;
-export const Entry = Schema.Union([
+const Entry = Schema.Union([
   Schema.Struct({ _tag: Schema.Literal("Absent") }),
   Schema.Struct({
     _tag: Schema.Literal("Present"),
@@ -93,7 +93,6 @@ export const Entry = Schema.Union([
     facts: Schema.NullOr(Facts),
   }),
 ]);
-export type Entry = typeof Entry.Type;
 /** One path as it was when inspected. Plain data: it survives cloning into a plan. */
 export const Folder = Schema.Struct({
   path: Schema.String,
