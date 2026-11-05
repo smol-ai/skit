@@ -134,6 +134,26 @@ describe("anonymous Release downloads", () => {
       expect(response.headers.get("skit-release-version")).toBe("1.0.0");
       expect(response.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
       expect(yield* responseText(response)).toBe("public archive");
+      // Public release reads must not require the authenticated application graph.
+      yield* Effect.acquireUseRelease(
+        Effect.sync(() =>
+          makeWebHandler({ ...env, PUBLIC_APP_ORIGIN: undefined, BETTER_AUTH_SECRET: undefined }),
+        ),
+        (anonymous) =>
+          Effect.gen(function* () {
+            const download = yield* webPromise(() =>
+              anonymous.handler(
+                new Request("https://registry.test/api/skits/tim/tools/releases/1.0.0/download"),
+              ),
+            );
+            expect(download.status).toBe(200);
+            expect(download.headers.get("cache-control")).toBe(
+              "public, max-age=31536000, immutable",
+            );
+            expect(yield* responseText(download)).toBe("public archive");
+          }),
+        (anonymous) => webPromise(() => anonymous.dispose()),
+      );
     }).pipe(Effect.provide(platformLayer)),
   );
 

@@ -6,7 +6,7 @@ import {
   type Principal,
 } from "../auth/authentication.js";
 import { Authorization, type AuthorizationService } from "../authorization/service.js";
-import { ReleaseStore } from "./store.js";
+import { Skits } from "../skits/service.js";
 
 const errorResponse = (error: string, status: number) =>
   HttpServerResponse.json({ error }, { status, headers: { "cache-control": "no-store" } }).pipe(
@@ -24,7 +24,7 @@ export const download = Effect.fn("ReleaseHttp.download")(function* (
   target: { readonly owner: string; readonly slug: string; readonly version: string },
   access?: DownloadAccess,
 ) {
-  const store = yield* ReleaseStore;
+  const releases = (yield* Skits).releases;
   const authenticate = access
     ? HttpServerRequest.HttpServerRequest.pipe(
         Effect.flatMap(HttpServerRequest.toWeb),
@@ -38,7 +38,7 @@ export const download = Effect.fn("ReleaseHttp.download")(function* (
 
   const lookup = Effect.gen(function* () {
     if (target.version !== "latest") {
-      const release = yield* store.findExactDownload(target);
+      const release = yield* releases.findExactDownload(target);
       if (release === null || release.visibility !== "private") return release;
       if (access === undefined) return null;
       const authenticated = yield* authenticate;
@@ -54,8 +54,8 @@ export const download = Effect.fn("ReleaseHttp.download")(function* (
         ? release
         : null;
     }
-    if (access === undefined) return yield* store.findAnonymousDownload(target);
-    const candidates = yield* store.listLatestDownloads(target);
+    if (access === undefined) return yield* releases.findAnonymousDownload(target);
+    const candidates = yield* releases.listLatestDownloads(target);
     const publicFallback = candidates.find((candidate) => candidate.visibility !== "private");
     if (candidates[0] === publicFallback) return publicFallback;
     const authenticated = yield* authenticate;
@@ -88,7 +88,7 @@ export const download = Effect.fn("ReleaseHttp.download")(function* (
       onSuccess: (release) => {
         if (release === authenticationFailure) return errorResponse("storage_failure", 500);
         if (release === null) return errorResponse("release_not_found", 404);
-        return store.streamArchive(release.archive_object_key).pipe(
+        return release.archive.stream.pipe(
           Effect.matchEffect({
             onFailure: (error) =>
               Effect.logError("release archive read failed", error).pipe(

@@ -25,12 +25,20 @@ const authentication = Layer.succeed(
   ),
 );
 
+const unexpectedReleaseRead = () => Effect.die("Publication HTTP must not read release archives");
+
 const dependencies = Layer.mergeAll(
   Layer.mock(Authorization, {
     canPublish: () => Effect.succeed(true),
   }),
   Layer.succeed(ServerConfiguration, { publicAppOrigin: "https://registry.test" }),
   Layer.mock(Skits, {
+    releases: {
+      findLatestPublic: unexpectedReleaseRead,
+      findAnonymousDownload: unexpectedReleaseRead,
+      findExactDownload: unexpectedReleaseRead,
+      listLatestDownloads: unexpectedReleaseRead,
+    },
     publish: (input) =>
       input.version === "2.0.0"
         ? Effect.fail(new ReleaseConflict())

@@ -32,7 +32,7 @@ import {
   handleUsernameClaim,
 } from "./auth/better-auth.js";
 import type { RuntimeEnv } from "./platform/cloudflare.js";
-import { artifactResponse, indexResponse } from "./releases/agent-skills-http.js";
+import { artifactResponse, indexResponse } from "./api/agent-skills-http.js";
 import { makeServerDiscovery, type ServerCapabilities } from "./discovery.js";
 
 type ApplicationLayers = ReturnType<typeof applicationLayers>;

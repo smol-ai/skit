@@ -50,13 +50,14 @@ async function reported(
 }
 
 describe("skit/owner-boundaries", () => {
-  test("server HTTP adapters cannot acquire private SKIT deletion authority", async () => {
+  test("server HTTP adapters cannot acquire private SKIT lifecycle authority", async () => {
     for (const statement of [
       `import { makeDeletion as createWriter } from "../skits/internal/deletion.js";`,
       `export * from "../skits/internal/deletion.js";`,
       `const loading = import("../skits/internal/deletion.js");`,
       `import { makePublication } from "../skits/internal/publication.js";`,
       `import { verifyReleaseArchive } from "../skits/internal/release-archive.js";`,
+      `import { makeReleaseReads } from "../skits/internal/releases.js";`,
     ]) {
       expect(
         await reported(

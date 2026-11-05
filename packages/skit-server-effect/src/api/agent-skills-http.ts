@@ -1,8 +1,8 @@
 import { sha256Hash } from "@smolai/skit-core/universal/consumer";
 import { Effect, Option } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
-import { agentSkillsIndex, discoverableSkills, skillArtifact } from "./agent-skills.js";
-import { ReleaseStore } from "./store.js";
+import { agentSkillsIndex, discoverableSkills, skillArtifact } from "../releases/agent-skills.js";
+import { Skits } from "../skits/service.js";
 
 const discoveryHeaders = { "cache-control": "public, no-cache" };
 
@@ -10,10 +10,10 @@ const jsonError = (error: string, status: number) =>
   HttpServerResponse.json({ error }, { status }).pipe(Effect.orDie);
 
 const loadSkills = Effect.fn("AgentSkillsHttp.loadSkills")(function* (owner: string, slug: string) {
-  const store = yield* ReleaseStore;
-  const release = yield* store.findLatestPublic({ owner, slug });
+  const releases = (yield* Skits).releases;
+  const release = yield* releases.findLatestPublic({ owner, slug });
   if (release === null) return yield* Effect.fail("not_found" as const);
-  const archive = yield* store.readArchive(release.archive_object_key);
+  const archive = yield* release.archive.read;
   if (Option.isNone(archive)) return yield* Effect.fail("not_found" as const);
   return yield* discoverableSkills(archive.value);
 });

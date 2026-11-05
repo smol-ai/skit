@@ -23,7 +23,6 @@ import {
   patLayer as patRateLimiterLayer,
 } from "./platform/rate-limiter.js";
 import { layer as readinessLayer } from "./readiness/service.js";
-import { layer as releaseStoreLayer } from "./releases/store.js";
 import { layer as teamsLayer } from "./teams/service.js";
 
 export interface AuthenticatedConfiguration {
@@ -82,7 +81,7 @@ export const applicationLayers = (
     nativeCryptoLayer,
     nativeClockLayer,
   );
-  const release = releaseStoreLayer.pipe(Layer.provide(platform));
+  const release = skitsLayer.pipe(Layer.provide(platform));
   // Feedback does not wait for authentication to be configured: reports can always be anonymous.
   const feedback =
     env.FEEDBACK_MODE === "open"
@@ -101,7 +100,6 @@ export const applicationLayers = (
     librarySnapshotsLayer,
     librarySyncLayer,
     readinessLayer(env),
-    releaseStoreLayer,
     authorInventoryLayer,
     skitsLayer,
     patRateLimiterLayer(env.PAT_RATE_LIMITER),

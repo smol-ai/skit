@@ -1,3 +1,4 @@
+import { makeReleaseReads, type Releases } from "./internal/releases.js";
 import { makePublication, type Publication } from "./internal/publication.js";
 import { makeDeletion, type Deletion } from "./internal/deletion.js";
 import { D1Client } from "@effect/sql-d1";
@@ -82,6 +83,8 @@ export type ReadError =
   | RevisionTooLarge;
 
 export interface SkitService {
+  /** Selected releases expose archive reads, never blob keys or arbitrary storage access. */
+  readonly releases: Releases;
   /** Publish the current revision after checking the complete release archive. */
   readonly publish: Publication["publish"];
   /** Passive deletion facts; no state or archives change. */
@@ -524,6 +527,7 @@ export const layer = Layer.effect(
       move,
       revision,
       ancestors,
+      releases: makeReleaseReads(sql, blobs),
       ...makeDeletion(sql, blobs),
       ...makePublication(sql, blobs, digests, random, current),
     });
