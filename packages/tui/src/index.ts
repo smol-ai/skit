@@ -19,29 +19,8 @@ import {
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import { resolve } from "node:path";
 import { Effect, FileSystem, Layer, Schema } from "effect";
-import {
-  openLibrarySession,
-  readLibrarySkillContent,
-  proposeLibraryEnable,
-  proposeLibraryCollectionChange,
-  libraryCollectionScopes,
-  proposeLibraryDisable,
-  proposeLibraryInvocation,
-  confirmLibraryChange,
-  cancelLibraryChange,
-  DESTINATION_QUESTION,
-  destinationLabel,
-  invocationChoices,
-  invocationBriefing,
-  invocationEligibleScopes,
-  invocationRowSummary,
-  scopeChoices,
-  type LibraryActionOutcome,
-  type ScopeRow,
-  type LibrarySkillRow,
-  type Scope,
-  type InvocationOption,
-} from "@smolai/skit-core/library/session";
+import { openLibrarySession, readLibrarySkillContent } from "@smolai/skit-core/library/session";
+import { createLibraryController, type Chooser } from "./library/controller";
 import {
   errorMessage,
   HarnessName,
@@ -77,18 +56,14 @@ import { groupForSkill } from "./audit/skill-groups";
 import {
   auditPresentation,
   inventoryPresentation,
-  libraryRows,
   detailPresentation,
   confirmationPresentation,
   harnessProbePresentation,
   type AuditItem,
   type InventoryItem,
-  type LibraryCollectionRow,
   type SkillNavigation,
   type DetailField,
 } from "./shell/presentation";
-
-let libraryCollectionId: string | undefined;
 
 const args = process.argv.slice(2);
 const flag = (name: string): string | undefined => {
@@ -145,11 +120,6 @@ async function refreshListingBudgets(): Promise<void> {
     }),
   );
 }
-const transitionLibrary: typeof libraryHost.transition = async (update) => {
-  const outcome = await libraryHost.transition(update);
-  if (outcome?.kind === "applied") await refreshListingBudgets();
-  return outcome;
-};
 try {
   await libraryHost.open();
   await refreshListingBudgets();
@@ -188,22 +158,32 @@ const requestedItemIndex =
         ? skillNavigation.group.skills
         : sections[variant]?.items
       )?.findIndex((item) => item.name === requestedItem);
-let selectedItem =
+let auditSelectedIndex =
   requestedItemIndex !== undefined && requestedItemIndex >= 0 ? requestedItemIndex : 0;
-if (sections[variant]?.key === "library" && requestedItem) {
-  const rows = libraryRows(libraryHost.state?.skills ?? [], libraryCollectionId);
-  const collectionIndex = rows.findIndex((row) => row.name === requestedItem);
-  if (collectionIndex >= 0) selectedItem = collectionIndex;
-  else {
-    const skill = libraryHost.state?.skills.find((row) => row.name === requestedItem);
-    if (skill) {
-      libraryCollectionId = skill.collectionId;
-      selectedItem = libraryRows(libraryHost.state?.skills ?? [], libraryCollectionId).findIndex(
-        (row) => row.kind === "library-skill" && row.row.skillVersionId === skill.skillVersionId,
-      );
-    }
-  }
-}
+const libraryController = createLibraryController({
+  host: libraryHost,
+  home: paths.skitHome,
+  configuration: libraryConfiguration,
+  active: () => sections[variant]?.key === "library",
+  openChooser,
+  openConfirm,
+  closeConfirm,
+  render,
+  refreshListingBudgets,
+});
+const selection = {
+  get index() {
+    return sections[variant]?.key === "library"
+      ? libraryController.selectedIndex
+      : auditSelectedIndex;
+  },
+  set index(index: number) {
+    if (sections[variant]?.key === "library") libraryController.selectedIndex = index;
+    else auditSelectedIndex = index;
+  },
+};
+if (sections[variant]?.key === "library" && requestedItem)
+  libraryController.selectRequestedItem(requestedItem);
 let currentView: BoxRenderable | null = null;
 const interaction = createInteractionController(renderInventory);
 let pendingSkillPreview: Promise<void> | undefined;
@@ -319,7 +299,7 @@ function footer(label: string): BoxRenderable {
                 : []),
               ...(sections[variant]!.key === "library"
                 ? [
-                    ...(libraryCollectionId === undefined
+                    ...(libraryController.collectionId === undefined
                       ? [
                           ["enter", "open collection"] as [string, string],
                           ["e", "enable"] as [string, string],
@@ -357,8 +337,8 @@ function footer(label: string): BoxRenderable {
 
 function currentSectionPresentation() {
   return inventoryPresentation(sections[variant]!, {
-    skills: libraryHost.state?.skills ?? [],
-    collectionId: libraryCollectionId,
+    skills: libraryController.skills,
+    collectionId: libraryController.collectionId,
     skillGroups,
     skillNavigation,
     findings: report.summary.findings,
@@ -370,18 +350,12 @@ function currentSectionItems(): InventoryItem[] {
   return currentSectionPresentation().items;
 }
 
-function selectedLibraryRow(): LibrarySkillRow | undefined {
-  if (sections[variant]?.key !== "library") return;
-  const item = currentSectionItems()[selectedItem];
-  return item?.kind === "library-skill" ? item.row : undefined;
-}
-
 function inventoryView(): BoxRenderable {
   detailsScroll = null;
   const section = sections[variant]!;
   const model = currentSectionPresentation();
   const sectionItems = model.items;
-  selectedItem = Math.min(selectedItem, Math.max(0, sectionItems.length - 1));
+  selection.index = Math.min(selection.index, Math.max(0, sectionItems.length - 1));
   const root = box("inventory-root", {
     width: "100%",
     height: "100%",
@@ -390,7 +364,7 @@ function inventoryView(): BoxRenderable {
   });
   root.add(header(section.title, model.subtitle));
 
-  if (section.key === "library" && showNoChangeNotice)
+  if (section.key === "library" && libraryController.showNoChangeNotice)
     root.add(
       text("library-no-change", "Already set this way. Nothing to change.", {
         height: 1,
@@ -420,14 +394,14 @@ function inventoryView(): BoxRenderable {
     ...panelColors(true),
     title: panelTitle(
       fitLabel(model.listTitle, listWidth - 4),
-      section.key === "library" && libraryCollectionId !== undefined,
+      section.key === "library" && libraryController.collectionId !== undefined,
     ),
   });
   const select = new SelectRenderable(renderer, {
     id: "inventory-select",
     width: "100%",
     height: "100%",
-    selectedIndex: selectedItem,
+    selectedIndex: selection.index,
     showDescription: model.showDescription,
     itemSpacing: 0,
     options: model.options.map((option) => ({
@@ -442,8 +416,8 @@ function inventoryView(): BoxRenderable {
     wrapSelection: true,
   });
   select.on(SelectRenderableEvents.SELECTION_CHANGED, (index: number) => {
-    if (selectedItem !== index) interaction.navigationChanged();
-    selectedItem = index;
+    if (selection.index !== index) interaction.navigationChanged();
+    selection.index = index;
     const item = sectionItems[index];
     if (detailsScroll && item) populateDetails(detailsScroll, item);
     else if (!isNarrow() || narrowDetails) render();
@@ -452,7 +426,7 @@ function inventoryView(): BoxRenderable {
   listPanel.add(select);
   if (!(isNarrow() && narrowDetails)) select.focus();
 
-  const item = sectionItems[selectedItem];
+  const item = sectionItems[selection.index];
   if (item && isNarrow() && !narrowDetails) {
     body.add(listPanel);
     root.add(body);
@@ -607,12 +581,11 @@ function renderInventory(): void {
 }
 
 function switchVariant(next: number): void {
-  showNoChangeNotice = false;
+  libraryController.reset();
   variant = (next + sections.length) % sections.length;
   skillNavigation = { view: "groups" };
-  libraryCollectionId = undefined;
   narrowDetails = false;
-  selectedItem = 0;
+  selection.index = 0;
   renderNavigation();
 }
 
@@ -712,17 +685,17 @@ function openSelectedSkill(): void {
     (!isNarrow() && !(sections[variant]?.key === "library" || sections[variant]?.key === "skills"))
   )
     return;
-  const item = currentSectionItems()[selectedItem];
+  const item = currentSectionItems()[selection.index];
   if (item?.kind === "library-collection") {
-    libraryCollectionId = item.collectionId;
+    libraryController.openCollection(item.collectionId);
     narrowDetails = false;
-    selectedItem = 0;
+    selection.index = 0;
     renderNavigation();
     return;
   }
   if (item?.kind === "skill-group") {
     skillNavigation = { view: "skills", group: item.group };
-    selectedItem = 0;
+    selection.index = 0;
     renderNavigation();
     return;
   }
@@ -742,7 +715,7 @@ function openSelectedSkill(): void {
       ),
     )
     .then((content) => {
-      const selected = currentSectionItems()[selectedItem];
+      const selected = currentSectionItems()[selection.index];
       if (!stillBrowsing() || selected?.kind !== "skill" || selected.location !== location) return;
       showDocument(name, location, content);
     });
@@ -820,31 +793,13 @@ function probeSelectedHarness(all: boolean): void {
   if (sections[variant]?.key !== "harnesses") return;
   const targets = all
     ? sections[variant].items
-    : sections[variant].items.slice(selectedItem, selectedItem + 1);
+    : sections[variant].items.slice(selection.index, selection.index + 1);
   // Probing is asynchronous now; render when it finishes rather than blocking the key handler.
   void (async () => {
     for (const item of targets) await runHarnessProbe(item);
     render();
   })();
 }
-
-const ALL_SCOPES = "all";
-
-interface ChooserOption {
-  value: string;
-  label: string;
-  hint?: string;
-}
-
-interface Chooser {
-  title: string;
-  /** What the operator needs to know before deciding, shown above the options. */
-  briefing?: string;
-  options: readonly ChooserOption[];
-  choose: (value: string) => void | Promise<void>;
-}
-
-let showNoChangeNotice = false;
 
 function closeChooser(): void {
   interaction.close("chooser");
@@ -914,7 +869,7 @@ function closeConfirm(): void {
 
 /** Every Library write passes through this preview before it is applied. */
 function openConfirm(): void {
-  const pending = libraryHost.state?.pending;
+  const pending = libraryController.pending;
   if (!pending) return;
   const model = confirmationPresentation(pending, false, isCompact());
   const overlay = box("library-confirm", {
@@ -964,242 +919,6 @@ function openConfirm(): void {
       },
     },
   });
-}
-
-function afterProposal(outcome: LibraryActionOutcome | undefined): void {
-  if (!outcome) return;
-  showNoChangeNotice = outcome.kind === "unchanged";
-  render();
-  if (outcome.kind === "preview") {
-    openConfirm();
-  }
-}
-
-function chooseScopeThen(next: (scope: Scope) => void | Promise<void>): void {
-  const choices = scopeChoices(resolve(process.cwd()));
-  if (choices.length === 1) {
-    void next(choices[0]!.scope);
-    return;
-  }
-  openChooser({
-    title: DESTINATION_QUESTION,
-    options: choices.map((choice) => ({
-      value: choice.value,
-      label: choice.label,
-      ...(choice.hint ? { hint: choice.hint } : {}),
-    })),
-    choose: (value) => next(choices.find((choice) => choice.value === value)!.scope),
-  });
-}
-
-function scopeChooserOptions(scopes: readonly ScopeRow[]): ChooserOption[] {
-  return scopes.map((scopeRow, index) => ({
-    value: String(index),
-    label: destinationLabel(scopeRow.scope),
-    ...(scopeRow.policy ? { hint: invocationRowSummary(scopeRow.policy) } : {}),
-  }));
-}
-
-function selectedLibraryCollection(): LibraryCollectionRow | undefined {
-  if (sections[variant]?.key !== "library") return;
-  const item = currentSectionItems()[selectedItem];
-  return item?.kind === "library-collection" ? item : undefined;
-}
-
-function startEnable(): void {
-  const collection = selectedLibraryCollection();
-  if (collection && libraryHost.state) {
-    chooseScopeThen(async (scope) =>
-      afterProposal(
-        await transitionLibrary((state) =>
-          proposeLibraryCollectionChange(
-            state,
-            libraryConfiguration,
-            collection.collectionId,
-            true,
-            [scope],
-          ),
-        ),
-      ),
-    );
-    return;
-  }
-  const row = selectedLibraryRow();
-  if (!row || !libraryHost.state) return;
-  openChooser({
-    title: "What would you like to enable?",
-    options: [
-      ...(row.hasCollection === false
-        ? []
-        : [
-            {
-              value: "collection",
-              label: `Enable whole collection · ${row.heading}`,
-              hint: "Include new skills and remove deleted ones when you update",
-            },
-          ]),
-      { value: "skill", label: `Enable ${row.name}`, hint: "Only this Skill" },
-    ],
-    choose: (value) =>
-      chooseScopeThen(async (scope) =>
-        afterProposal(
-          await transitionLibrary((state) =>
-            value === "collection"
-              ? proposeLibraryCollectionChange(
-                  state,
-                  libraryConfiguration,
-                  row.collectionId,
-                  true,
-                  [scope],
-                )
-              : proposeLibraryEnable(state, libraryConfiguration, row, { scope }),
-          ),
-        ),
-      ),
-  });
-}
-
-function disableCollection(collectionId: string): void {
-  if (!libraryHost.state) return;
-  const scopes = libraryCollectionScopes(libraryHost.state, collectionId);
-  if (!scopes.length) return;
-  const disable = async (selectedScopes: readonly Scope[]) =>
-    afterProposal(
-      await transitionLibrary((state) =>
-        proposeLibraryCollectionChange(
-          state,
-          libraryConfiguration,
-          collectionId,
-          false,
-          selectedScopes,
-        ),
-      ),
-    );
-  if (scopes.length === 1) void disable(scopes);
-  else
-    openChooser({
-      title: DESTINATION_QUESTION,
-      options: [
-        { value: ALL_SCOPES, label: "All shown" },
-        ...scopes.map((scope, index) => ({
-          value: String(index),
-          label: destinationLabel(scope),
-        })),
-      ],
-      choose: (value) => disable(value === ALL_SCOPES ? scopes : [scopes[Number(value)]!]),
-    });
-}
-
-function startDisable(): void {
-  const collection = selectedLibraryCollection();
-  if (collection) {
-    disableCollection(collection.collectionId);
-    return;
-  }
-  const row = selectedLibraryRow();
-  if (!row || !libraryHost.state) return;
-  const scopes = libraryCollectionScopes(libraryHost.state, row.collectionId);
-  if (!scopes.length) return;
-  openChooser({
-    title: "What would you like to disable?",
-    options: [
-      ...(row.hasCollection === false
-        ? []
-        : [
-            {
-              value: "collection",
-              label: `Disable whole collection · ${row.heading}`,
-              hint: "Disable every skill in this collection",
-            },
-          ]),
-      ...(row.scopes.length ? [{ value: "skill", label: `Disable ${row.name}` }] : []),
-    ],
-    choose: (value) => {
-      if (value === "collection") {
-        disableCollection(row.collectionId);
-        return;
-      }
-      const disable = async (scopes: readonly ScopeRow[]) =>
-        afterProposal(
-          await transitionLibrary((state) =>
-            proposeLibraryDisable(state, libraryConfiguration, row, scopes),
-          ),
-        );
-      if (row.scopes.length === 1) void disable(row.scopes);
-      else
-        openChooser({
-          title: DESTINATION_QUESTION,
-          options: [{ value: ALL_SCOPES, label: "All shown" }, ...scopeChooserOptions(row.scopes)],
-          choose: (chosen) =>
-            disable(chosen === ALL_SCOPES ? row.scopes : [row.scopes[Number(chosen)]!]),
-        });
-    },
-  });
-}
-
-function startInvocation(): void {
-  const row = selectedLibraryRow();
-  const session = libraryHost.state;
-  if (!row || !session) return;
-  const eligible = invocationEligibleScopes(row);
-  if (!eligible.length) return;
-  const choosePolicy = (scopeRow: ScopeRow) => {
-    if (!scopeRow.policy) return;
-    openChooser({
-      title: scopeRow.policy.question,
-      briefing: invocationBriefing(scopeRow.policy),
-      options: invocationChoices(scopeRow).map((choice) => ({
-        value: choice.value,
-        label: choice.label,
-        ...(choice.hint ? { hint: choice.hint } : {}),
-      })),
-      choose: async (value) =>
-        afterProposal(
-          await transitionLibrary((state) =>
-            proposeLibraryInvocation(
-              state,
-              libraryConfiguration,
-              row,
-              scopeRow,
-              value as InvocationOption,
-            ),
-          ),
-        ),
-    });
-  };
-  if (eligible.length === 1) choosePolicy(eligible[0]!);
-  else
-    openChooser({
-      title: DESTINATION_QUESTION,
-      options: scopeChooserOptions(eligible),
-      choose: (value) => choosePolicy(eligible[Number(value)]!),
-    });
-}
-
-async function applyPending(): Promise<void> {
-  closeConfirm();
-  if (!libraryHost.state) return;
-  await transitionLibrary((state) => confirmLibraryChange(state));
-  render();
-}
-
-async function cancelPending(): Promise<void> {
-  closeConfirm();
-  if (libraryHost.state)
-    await transitionLibrary((state) => Effect.succeed(cancelLibraryChange(state)));
-  render();
-}
-
-async function refreshLibrary(): Promise<void> {
-  if (!libraryHost.state) return;
-  await transitionLibrary((state) =>
-    Effect.map(openLibrarySession(paths.skitHome, libraryConfiguration), (session) => ({
-      ...session,
-      ...(state.outcome === undefined ? {} : { outcome: state.outcome }),
-    })),
-  );
-  await refreshListingBudgets();
-  render();
 }
 
 function openPalette(): void {
@@ -1303,7 +1022,7 @@ function handleGlobalKey(key: KeyEvent): void {
     narrowDetails,
     hasDetails: detailsScroll !== null,
     insideSkillGroup: skillNavigation.view === "skills",
-    insideCollection: libraryCollectionId !== undefined,
+    insideCollection: libraryController.collectionId !== undefined,
     copySelection: isCopySelectionKey(key, renderer.hasSelection),
   });
   if (result.preventDefault) key.preventDefault();
@@ -1318,10 +1037,10 @@ function handleGlobalKey(key: KeyEvent): void {
       copySelectedText(renderer);
       break;
     case "apply":
-      void applyPending();
+      void libraryController.applyPending();
       break;
     case "cancel":
-      void cancelPending();
+      void libraryController.cancelPending();
       break;
     case "open-palette":
       openPalette();
@@ -1335,15 +1054,11 @@ function handleGlobalKey(key: KeyEvent): void {
       break;
     case "back-skills":
       skillNavigation = { view: "groups" };
-      selectedItem = 0;
+      selection.index = 0;
       renderNavigation();
       break;
     case "back-collection": {
-      const previous = libraryCollectionId;
-      libraryCollectionId = undefined;
-      selectedItem = libraryRows(libraryHost.state?.skills ?? []).findIndex(
-        (row) => row.kind === "library-collection" && row.collectionId === previous,
-      );
+      libraryController.backCollection();
       renderNavigation();
       break;
     }
@@ -1354,16 +1069,16 @@ function handleGlobalKey(key: KeyEvent): void {
       probeSelectedHarness(command.all);
       break;
     case "enable":
-      startEnable();
+      libraryController.startEnable();
       break;
     case "disable":
-      startDisable();
+      libraryController.startDisable();
       break;
     case "invocation":
-      startInvocation();
+      libraryController.startInvocation();
       break;
     case "refresh":
-      void refreshLibrary();
+      void libraryController.refreshLibrary();
       break;
     case "switch-view":
       keymap.runCommand(viewCommandNames[command.index]!, { event: key });
@@ -1386,37 +1101,17 @@ if (process.env.SKIT_TUI_SNAPSHOT_PALETTE === "1") openPalette();
 if (process.env.SKIT_TUI_SNAPSHOT_DOCUMENT === "1") {
   if (sections[variant]?.key === "skills" && skillNavigation.view === "groups") {
     skillNavigation = { view: "skills", group: skillGroups[0]! };
-    selectedItem = 0;
+    selection.index = 0;
     render();
   }
   openSelectedSkill();
 }
 
 if (process.env.SKIT_TUI_SNAPSHOT_LIBRARY && sections[variant]?.key === "library") {
-  if (process.env.SKIT_TUI_SNAPSHOT_LIBRARY === "enable") startEnable();
-  if (process.env.SKIT_TUI_SNAPSHOT_LIBRARY === "disable") startDisable();
-  if (process.env.SKIT_TUI_SNAPSHOT_LIBRARY === "confirm") {
-    const collection = selectedLibraryCollection();
-    if (collection && libraryHost.state)
-      afterProposal(
-        await transitionLibrary((state) =>
-          proposeLibraryCollectionChange(
-            state,
-            libraryConfiguration,
-            collection.collectionId,
-            true,
-            [{ kind: "global" }],
-          ),
-        ),
-      );
-    const row = selectedLibraryRow();
-    if (row && libraryHost.state)
-      afterProposal(
-        await transitionLibrary((state) =>
-          proposeLibraryEnable(state, libraryConfiguration, row, { scope: { kind: "global" } }),
-        ),
-      );
-  }
+  if (process.env.SKIT_TUI_SNAPSHOT_LIBRARY === "enable") libraryController.startEnable();
+  if (process.env.SKIT_TUI_SNAPSHOT_LIBRARY === "disable") libraryController.startDisable();
+  if (process.env.SKIT_TUI_SNAPSHOT_LIBRARY === "confirm")
+    await libraryController.previewSelected({ kind: "global" });
 }
 
 if (test && snapshotPath) {
