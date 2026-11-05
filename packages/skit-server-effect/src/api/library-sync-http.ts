@@ -1,10 +1,9 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { ServerLibrary } from "../library/service.js";
-import { CurrentPrincipal } from "./authentication.js";
+import { requirePrincipalScope } from "./authentication.js";
 import { ConsumerAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import {
-  insufficientScopeResponse,
   invalidRequestResponse,
   libraryNotFoundResponse,
   revisionConflictResponse,
@@ -17,12 +16,7 @@ export const librarySyncHandlers = HttpApiBuilder.group(
   (handlers) =>
     Effect.gen(function* () {
       const libraries = yield* ServerLibrary;
-      const principalWithScope = Effect.gen(function* () {
-        const principal = yield* CurrentPrincipal;
-        if (!principal.scopes.has("library:sync"))
-          return yield* Effect.fail(insufficientScopeResponse);
-        return principal;
-      });
+      const principalWithScope = requirePrincipalScope("library:sync");
       return handlers.handleAll({
         read: () =>
           Effect.gen(function* () {

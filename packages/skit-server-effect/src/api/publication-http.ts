@@ -6,13 +6,12 @@ import {
   releasePublishRequestSchema,
 } from "@smolai/skit-core/universal/authoring";
 import { Skits } from "../skits/service.js";
-import { CurrentPrincipal } from "./authentication.js";
+import { requirePrincipalScope } from "./authentication.js";
 import { PublicationAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import {
   archiveTooLargeResponse,
   skitNotFoundResponse,
   forbiddenResponse,
-  insufficientScopeResponse,
   invalidRequestResponse,
   releaseConflictResponse,
   staleRevisionResponse,
@@ -34,9 +33,7 @@ export const publicationHandlers = HttpApiBuilder.group(
 
       return handlers.handleRaw("publish", ({ params, request: rawRequest }) =>
         Effect.gen(function* () {
-          const principal = yield* CurrentPrincipal;
-          if (!principal.scopes.has("publication:write"))
-            return yield* Effect.fail(insufficientScopeResponse);
+          const principal = yield* requirePrincipalScope("publication:write");
 
           const publication = yield* skits
             .preparePublication(principal, { owner: params.owner, slug: params.slug })

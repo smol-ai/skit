@@ -6,12 +6,11 @@ import {
 } from "@smolai/skit-core/universal/authoring";
 import { Skits } from "../skits/service.js";
 import { AuthoringAuthenticatedApi } from "@smolai/skit-core/universal/api";
-import { CurrentPrincipal } from "./authentication.js";
+import { requirePrincipalScope } from "./authentication.js";
 import {
   skitExistsResponse,
   skitNotFoundResponse,
   forbiddenResponse,
-  insufficientScopeResponse,
   invalidCursorResponse,
   invalidRequestResponse,
   storageFailureResponse,
@@ -35,12 +34,7 @@ export const skitAuthoringHandlers = HttpApiBuilder.group(
     Effect.gen(function* () {
       const skits = yield* Skits;
 
-      const requireAuthor = Effect.gen(function* () {
-        const principal = yield* CurrentPrincipal;
-        if (!principal.scopes.has("authoring:write"))
-          return yield* Effect.fail(insufficientScopeResponse);
-        return principal;
-      });
+      const requireAuthor = requirePrincipalScope("authoring:write");
       const prepareChange = Effect.fn("SkitHttp.prepareChange")(function* (
         owner: string,
         slug: string,
@@ -85,14 +79,12 @@ export const skitAuthoringHandlers = HttpApiBuilder.group(
         .handle("current", ({ params }) =>
           Effect.gen(function* () {
             const authoring = yield* prepareRead(params.owner, params.slug);
-            const current = yield* authoring
-              .current()
-              .pipe(
-                Effect.catchTags({
-                  "SKIT.Forbidden": () => Effect.fail(skitNotFoundResponse),
-                  "Cloudflare.DatabaseError": storageFailure("skit read failed"),
-                }),
-              );
+            const current = yield* authoring.current().pipe(
+              Effect.catchTags({
+                "SKIT.Forbidden": () => Effect.fail(skitNotFoundResponse),
+                "Cloudflare.DatabaseError": storageFailure("skit read failed"),
+              }),
+            );
             if (current === undefined) return yield* Effect.fail(skitNotFoundResponse);
             yield* noStore;
             return current;

@@ -1,13 +1,27 @@
 import { CurrentPrincipal, PrincipalAuthentication } from "@smolai/skit-core/universal/api";
 import { Effect, Layer } from "effect";
 import { HttpServerRequest } from "effect/http";
-import { Identity } from "../identity/service.js";
+import { Identity, type Principal, type Scope } from "../identity/service.js";
 import { authenticateRequest } from "../identity/request-context.js";
-import { forbiddenOriginResponse, storageFailureResponse, unauthorizedResponse } from "./errors.js";
+import {
+  forbiddenOriginResponse,
+  insufficientScopeResponse,
+  storageFailureResponse,
+  unauthorizedResponse,
+} from "./errors.js";
 import { ServerConfiguration } from "../configuration.js";
 import { noStore } from "./response.js";
 
 export { CurrentPrincipal, PrincipalAuthentication };
+
+/** Called by the matched adapter after its normal decoding, before entering an owner. */
+export const requirePrincipalScope = Effect.fn("Authentication.requirePrincipalScope")(function* (
+  scope: Scope,
+): Effect.fn.Return<Principal, typeof insufficientScopeResponse, CurrentPrincipal> {
+  const principal = yield* CurrentPrincipal;
+  if (!principal.scopes.has(scope)) return yield* Effect.fail(insufficientScopeResponse);
+  return principal;
+});
 
 export const principalAuthenticationLayer = Layer.effect(
   PrincipalAuthentication,
