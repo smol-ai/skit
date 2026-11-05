@@ -249,7 +249,7 @@ export const owners = {
       "Bootstrap as a separate writer (done: Identity.createOperator owns the unchanged atomic claim batch and post-commit verification email)",
       "NativeClock service (done: Better Auth captures the built-in Clock)",
       "nested runPromise in Better Auth hooks (the Promise boundary itself stays; keep the hook invariants at better-auth.ts:264,286,325)",
-      "rateLimit table (Better Auth rate limiting disabled)",
+      "rateLimit table (done: Better Auth rate limiting disabled; forward migration 0014 removes unused SDK counters, Cloudflare limiters remain)",
       "Authentication.authenticatePat in the public API (done: private to Identity credential implementation)",
     ],
   },
