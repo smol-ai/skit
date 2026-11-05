@@ -64,13 +64,13 @@ export const revisionId = (revision: Revision) =>
 export type Kind = "tree" | "revision";
 
 /** Something the store was asked for and does not hold. */
-export class StoreMissing extends Schema.TaggedError<StoreMissing>()("History.StoreMissing", {
+class StoreMissing extends Schema.TaggedError<StoreMissing>()("History.StoreMissing", {
   kind: Schema.Literals(["tree", "revision"]),
   hash: Hash,
 }) {}
 
 /** Stored bytes that no longer match the identity they are stored under. */
-export class StoreCorrupt extends Schema.TaggedError<StoreCorrupt>()("History.StoreCorrupt", {
+class StoreCorrupt extends Schema.TaggedError<StoreCorrupt>()("History.StoreCorrupt", {
   kind: Schema.Literals(["tree", "revision"]),
   hash: Hash,
   reason: Schema.String,
@@ -212,3 +212,6 @@ export const ancestors = (
     }),
   );
 };
+
+// Required to name inferred history failures in generated declarations.
+export type { StoreMissing, StoreCorrupt };
