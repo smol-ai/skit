@@ -63,7 +63,7 @@ export interface ClaudeListingSnapshot {
 }
 const characters = (value: string) => Array.from(value).length;
 
-export function deduplicateClaudeEntries(
+function deduplicateClaudeEntries(
   entries: readonly ClaudeListingEntry[],
 ): readonly ClaudeListingEntry[] {
   const selected = new Map<string, ClaudeListingEntry>();
@@ -176,7 +176,7 @@ export function claudeEntry(
   };
 }
 
-export function resolveClaudeListingSettings(
+function resolveClaudeListingSettings(
   contract: SkillListingContract,
   settings: typeof Settings.Type,
   sources: ReadonlyMap<string, string>,

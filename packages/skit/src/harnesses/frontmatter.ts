@@ -76,10 +76,7 @@ function constraintMatches(
   );
 }
 
-export function frontmatterContract(
-  harness: HarnessName,
-  variant?: string,
-): HarnessFrontmatterContract {
+function frontmatterContract(harness: HarnessName, variant?: string): HarnessFrontmatterContract {
   const contracts = harnessProfile(harness).frontmatter;
   const contract = variant
     ? contracts.find((candidate) => candidate.variant === variant)
