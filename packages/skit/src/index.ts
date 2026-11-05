@@ -9,7 +9,6 @@ export * from "./api/consumer-contracts.js";
 export * from "./api/authoring-contracts.js";
 export * from "./auditing/skill-audit.js";
 export * from "./artifact/control-files.js";
-export { LibraryInvocationOption } from "./library/invocation-option.js";
 export {
   type RegistrySkitDescriptor,
   type SkitFileRecord,
@@ -20,13 +19,7 @@ export {
 } from "./artifact/contracts.js";
 export { OwnershipMarker } from "./installed-skills/ownership-marker.js";
 export {
-  SkillAuditFinding,
   SkillAudit,
-  SkillAssessmentContext,
-  SkillAssessmentOutcome,
-  SkillAssessmentReason,
-  SkillAcceptanceReviewRecord,
-  SkillFindingDecision,
   SkillAssessmentDecision,
   SkillSecurityReview,
 } from "./auditing/skill-contracts.js";
@@ -37,14 +30,11 @@ export { InstallDestination } from "./installed-skills/destination.js";
 export { InstallScope } from "./library/scope.js";
 export { SkitValidationDiagnostic } from "./artifact/validation-diagnostic.js";
 export {
-  SKILL_EXAMPLE_SCHEMA_VERSION,
-  SKIT_DESCRIPTOR_VERSION,
   type ContainedSkillDescriptor,
   type SharedMapping,
   type SkillExampleManifest,
   type SkitDescriptor,
 } from "./artifact/schemas.js";
-export { SkillAssessmentAcceptance } from "./library/assessment-acceptance.js";
 export { type HarnessInstallStatus, type OwnershipIssue } from "./installed-skills/metadata.js";
 export * from "./shared/failure.js";
 export {
