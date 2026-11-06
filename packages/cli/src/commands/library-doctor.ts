@@ -1,7 +1,6 @@
-import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Option, Effect } from "effect";
 import { Command, Flag } from "effect/cli";
-import { terminalPrompterLayer } from "../terminal/prompter.js";
 import { presentDoctorCleanup, doctorOutputContracts, doctorCommand } from "../library/doctor.js";
 import { Renderer } from "../terminal/renderer.js";
 import { handleLibraryCommand } from "./handler.js";
@@ -34,35 +33,37 @@ export const doctorCliCommand = Command.make(
     ),
   },
   (input) =>
-    Effect.gen(function* () {
-      const paths = yield* SkitConfiguration;
+    handleLibraryCommand(
+      Effect.gen(function* () {
+        const paths = yield* SkitConfiguration;
 
-      const selectedHome = paths.skitHome;
-      const options = { ...inventoryRootOptions(input, paths), libraryHome: selectedHome };
-      return yield* handleLibraryCommand(
-        Effect.gen(function* () {
-          const renderer = yield* Renderer;
-          const value = yield* doctorCommand(options);
-          yield* renderer.result(
-            result("doctor", doctorOutputContracts.doctor, value, value.ok ? undefined : 12),
-          );
-          if (!input.reportOnly && promptsAllowed({ json: input.json })) {
-            const changed = yield* presentDoctorCleanup(
-              value.listing_budgets,
-              options,
-              input.days,
-              input.dryRun,
-            ).pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(false)));
-            if (changed) {
-              const checked = yield* doctorCommand(options);
-              yield* renderer.result(
-                result("doctor", doctorOutputContracts.doctor, checked, checked.ok ? 0 : 12),
-              );
-            }
+        const selectedHome = paths.skitHome;
+        const options = {
+          ...inventoryRootOptions(input, paths),
+          libraryHome: selectedHome,
+        };
+        const renderer = yield* Renderer;
+        const value = yield* doctorCommand(options);
+        yield* renderer.result(
+          result("doctor", doctorOutputContracts.doctor, value, value.ok ? undefined : 12),
+        );
+        if (!input.reportOnly && promptsAllowed({ json: input.json })) {
+          const changed = yield* presentDoctorCleanup(
+            value.listing_budgets,
+            options,
+            input.days,
+            input.dryRun,
+          ).pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(false)));
+          if (changed) {
+            const checked = yield* doctorCommand(options);
+            yield* renderer.result(
+              result("doctor", doctorOutputContracts.doctor, checked, checked.ok ? 0 : 12),
+            );
           }
-        }).pipe(Effect.provide(terminalPrompterLayer)),
-      );
-    }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
+        }
+      }),
+      Option.getOrUndefined(input.home),
+    ),
 ).pipe(
   Command.withDescription(
     "Diagnose local skills and interactively review over-budget skill context.",

@@ -1,4 +1,4 @@
-import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { readInstalledSkills } from "@smolai/skit-core/library/session";
 import { UsageHarness } from "@smolai/skit-core/library/usage";
 import { Effect, Option } from "effect";
@@ -36,32 +36,31 @@ export const usageCliCommand = Command.make(
     ),
   },
   (input) =>
-    Effect.gen(function* () {
-      const paths = yield* SkitConfiguration;
-      return yield* handleLibraryCommand(
-        Effect.gen(function* () {
-          const renderer = yield* Renderer;
-          const installedSkills = yield* readInstalledSkills(paths.skitHome);
-          const report = yield* renderer.withStatus(
-            "Scanning local transcripts",
-            scanLocalUsage(installedSkills, {
-              userHome: paths.userHome,
-              harness: input.harness,
-              homes: {
-                codex: Option.getOrUndefined(input.codexHome),
-                "claude-code": Option.getOrUndefined(input.claudeHome),
-              },
-              days: input.days,
-              end: Option.getOrUndefined(input.end),
-              project: Option.getOrUndefined(input.project),
-              progress: (completed, total) =>
-                renderer.updateStatus(`Scanning local transcripts: ${completed}/${total} files`),
-            }),
-          );
-          yield* renderer.result(result("usage", usageOutputContracts.usage, report));
-        }),
-      );
-    }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
+    handleLibraryCommand(
+      Effect.gen(function* () {
+        const paths = yield* SkitConfiguration;
+        const renderer = yield* Renderer;
+        const installedSkills = yield* readInstalledSkills(paths.skitHome);
+        const report = yield* renderer.withStatus(
+          "Scanning local transcripts",
+          scanLocalUsage(installedSkills, {
+            userHome: paths.userHome,
+            harness: input.harness,
+            homes: {
+              codex: Option.getOrUndefined(input.codexHome),
+              "claude-code": Option.getOrUndefined(input.claudeHome),
+            },
+            days: input.days,
+            end: Option.getOrUndefined(input.end),
+            project: Option.getOrUndefined(input.project),
+            progress: (completed, total) =>
+              renderer.updateStatus(`Scanning local transcripts: ${completed}/${total} files`),
+          }),
+        );
+        yield* renderer.result(result("usage", usageOutputContracts.usage, report));
+      }),
+      Option.getOrUndefined(input.home),
+    ),
 ).pipe(
   Command.withDescription(
     "Experimental: show skill activity from local Claude and Codex transcripts.",

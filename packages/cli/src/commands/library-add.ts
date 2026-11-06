@@ -1,4 +1,4 @@
-import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Effect, Option } from "effect";
 import { descriptionLoadMessage } from "../library/presentation/description-size.js";
 import { readLibraryDescriptionLoad } from "@smolai/skit-core/library/session";
@@ -91,7 +91,8 @@ export const addCliCommand = Command.make(
         }).pipe(Effect.orElseSucceed(() => "Description size unavailable."));
         yield* renderer.note(measurement, "Description size");
       }),
-    ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
+      Option.getOrUndefined(input.home),
+    ),
 ).pipe(
   Command.withDescription("Add a source to the local library without enabling it."),
   Command.withExamples([

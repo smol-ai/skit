@@ -1,4 +1,4 @@
-import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Option, Effect } from "effect";
 import { Command } from "effect/cli";
 import { handlePlatformCommand } from "../../commands/handler.js";
@@ -17,18 +17,17 @@ export const authStatusCliCommand = Command.make(
     json: jsonFlag,
   },
   ({ registry, home }) =>
-    Effect.gen(function* () {
-      const paths = yield* SkitConfiguration;
+    handlePlatformCommand(
+      Effect.gen(function* () {
+        const paths = yield* SkitConfiguration;
 
-      const selectedHome = paths.skitHome;
-      return yield* handlePlatformCommand(
-        Effect.gen(function* () {
-          const renderer = yield* Renderer;
-          const value = yield* Registry.status(selectedHome, optionValue(registry));
-          yield* renderer.result(result("authStatus", value));
-        }),
-      );
-    }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
+        const selectedHome = paths.skitHome;
+        const renderer = yield* Renderer;
+        const value = yield* Registry.status(selectedHome, optionValue(registry));
+        yield* renderer.result(result("authStatus", value));
+      }),
+      Option.getOrUndefined(home),
+    ),
 ).pipe(
   Command.withDescription("Show stored Registry credential metadata."),
   Command.withExamples([{ command: "skit auth status" }]),

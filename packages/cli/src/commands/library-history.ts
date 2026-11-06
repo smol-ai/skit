@@ -1,4 +1,3 @@
-import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { readLibraryHistory } from "@smolai/skit-core/library/session";
 import { Option, Effect } from "effect";
 import { Command } from "effect/cli";
@@ -18,10 +17,13 @@ export const libraryHistoryCliCommand = Command.make(
         const renderer = yield* Renderer;
         const { events } = yield* readLibraryHistory();
         yield* renderer.result(
-          result("libraryHistory", historyOutputContracts.libraryHistory, { events }),
+          result("libraryHistory", historyOutputContracts.libraryHistory, {
+            events,
+          }),
         );
       }),
-    ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
+      Option.getOrUndefined(input.home),
+    ),
 ).pipe(
   Command.withDescription("Show device-local Library change history."),
   Command.withExamples([

@@ -1,6 +1,5 @@
 import { OptionCombinationInvalid } from "./input-failures.js";
 import { promptsAllowed } from "../terminal/interactivity.js";
-import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { type InstallScope as Scope } from "@smolai/skit-core/library";
 
 import { Effect, Option } from "effect";
@@ -13,8 +12,6 @@ import { CommandMetadata } from "./metadata.js";
 import { enableOutputContracts, presentSetEnabled } from "../library/enable.js";
 import { localFlags, optionalString } from "./parameters.js";
 import { invocationOptions, type InvocationOption } from "@smolai/skit-core/library/session";
-
-import { terminalPrompterLayer } from "../terminal/prompter.js";
 
 const subject = Argument.String("skill-or-collection").pipe(Argument.optional);
 const repo = optionalString("repo", "Use repository scope.");
@@ -92,8 +89,9 @@ export const setEnabledCliCommand = (enabled: boolean) => {
             interactive,
             configuration,
           });
-        }).pipe(Effect.provide(terminalPrompterLayer)),
-      ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
+        }),
+        Option.getOrUndefined(input.home),
+      ),
   ).pipe(
     Command.withDescription(
       `${enabled ? "Enable" : "Disable"} Skills from your Library for every harness at a scope.`,

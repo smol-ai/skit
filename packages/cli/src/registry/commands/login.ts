@@ -18,7 +18,11 @@ const openInBrowser = (url: string) => {
   return Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const handle = yield* spawner.spawn(
-      ChildProcess.make(command!, args, { stdin: "ignore", stdout: "ignore", stderr: "ignore" }),
+      ChildProcess.make(command!, args, {
+        stdin: "ignore",
+        stdout: "ignore",
+        stderr: "ignore",
+      }),
     );
     yield* handle.exitCode;
   }).pipe(Effect.scoped, Effect.ignore);

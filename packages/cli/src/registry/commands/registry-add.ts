@@ -1,4 +1,4 @@
-import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Option, Effect } from "effect";
 import { Argument, Command } from "effect/cli";
 import { handlePlatformCommand } from "../../commands/handler.js";
@@ -17,18 +17,17 @@ export const registryAddCliCommand = Command.make(
   "add",
   { name, origin, home: homeFlag, json: jsonFlag },
   ({ name, origin, home }) =>
-    Effect.gen(function* () {
-      const paths = yield* SkitConfiguration;
+    handlePlatformCommand(
+      Effect.gen(function* () {
+        const paths = yield* SkitConfiguration;
 
-      const selectedHome = paths.skitHome;
-      return yield* handlePlatformCommand(
-        Effect.gen(function* () {
-          const renderer = yield* Renderer;
-          const value = yield* Registry.remotes.add(name, origin, selectedHome);
-          yield* renderer.result(result("registryRemote", { ...value, action: "added" }));
-        }),
-      );
-    }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
+        const selectedHome = paths.skitHome;
+        const renderer = yield* Renderer;
+        const value = yield* Registry.remotes.add(name, origin, selectedHome);
+        yield* renderer.result(result("registryRemote", { ...value, action: "added" }));
+      }),
+      Option.getOrUndefined(home),
+    ),
 ).pipe(
   Command.withDescription("Name a Registry for use in source references."),
   Command.withExamples([{ command: "skit registry add public https://registry.example.com" }]),

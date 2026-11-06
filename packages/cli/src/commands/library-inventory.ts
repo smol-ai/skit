@@ -1,4 +1,4 @@
-import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Option, Effect } from "effect";
 import { Command } from "effect/cli";
 import { Renderer } from "../terminal/renderer.js";
@@ -25,19 +25,21 @@ const machineInventoryMetadata = {
 } as const;
 
 export const inventoryCliCommand = Command.make("inventory", localFlags, (input) =>
-  Effect.gen(function* () {
-    const paths = yield* SkitConfiguration;
+  handleLibraryCommand(
+    Effect.gen(function* () {
+      const paths = yield* SkitConfiguration;
 
-    const selectedHome = paths.skitHome;
-    const options = { ...inventoryRootOptions(input, paths), libraryHome: selectedHome };
-    return yield* handleLibraryCommand(
-      Effect.gen(function* () {
-        const renderer = yield* Renderer;
-        const inventory = yield* inventoryCommand(options);
-        yield* renderer.result(result("inventory", inventoryOutputContracts.inventory, inventory));
-      }),
-    );
-  }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
+      const selectedHome = paths.skitHome;
+      const options = {
+        ...inventoryRootOptions(input, paths),
+        libraryHome: selectedHome,
+      };
+      const renderer = yield* Renderer;
+      const inventory = yield* inventoryCommand(options);
+      yield* renderer.result(result("inventory", inventoryOutputContracts.inventory, inventory));
+    }),
+    Option.getOrUndefined(input.home),
+  ),
 ).pipe(
   Command.withDescription(
     "Show every Skill folder found on this machine, its Git state, and refreshed installed skills.",

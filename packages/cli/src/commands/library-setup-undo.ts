@@ -1,7 +1,7 @@
 import { Cause, Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
 import { commandFailure, handleLibraryCommand } from "./handler.js";
-import { skitConfigurationLayer, SkitConfiguration } from "@smolai/skit-core/platform";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { CommandMetadata } from "./metadata.js";
 import { setupOutputContracts, setupUndoActions, prepareSetupUndo } from "../library/setup.js";
 import { homeFlag, jsonFlag, optionalString } from "./parameters.js";
@@ -128,7 +128,8 @@ export const librarySetupUndoCliCommand = Command.make(
           }),
         );
       }),
-    ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
+      Option.getOrUndefined(input.home),
+    ),
 ).pipe(
   Command.withDescription(
     "Preview or undo one setup's intent, installed copies and machine discovery settings while keeping what was imported into the Library.",

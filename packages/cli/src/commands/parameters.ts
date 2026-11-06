@@ -21,7 +21,9 @@ export const jsonFlag = Flag.Boolean("json").pipe(
 
 // Effect CLI only accepts flags on an intermediate command path when they are declared global.
 // The entrypoint still owns the value because it must select a renderer before parsing can fail.
-export const JsonOutputFlag = GlobalFlag.Setting("json-output")({ flag: jsonFlag });
+export const JsonOutputFlag = GlobalFlag.Setting("json-output")({
+  flag: jsonFlag,
+});
 
 export const jsonRequested = (argv: readonly string[] = process.argv.slice(2)): boolean => {
   const boundary = argv.indexOf("--");

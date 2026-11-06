@@ -1,5 +1,4 @@
 import { syncOutputContracts, librarySyncCommand } from "../library/sync.js";
-import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { Registry } from "../registry/index.js";
 import { Option, Effect } from "effect";
 import { Command, Flag } from "effect/cli";
@@ -117,7 +116,8 @@ export const librarySyncCliCommand = Command.make(
           ),
         );
       }),
-    ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
+      Option.getOrUndefined(input.home),
+    ),
 ).pipe(
   Command.withDescription("Sync your Library with skit-server."),
   Command.withExamples([{ command: "skit sync" }, { command: "skit sync --apply" }]),

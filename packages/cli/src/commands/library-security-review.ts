@@ -1,4 +1,3 @@
-import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { Option, Effect } from "effect";
 import { Argument, Command } from "effect/cli";
 import { handleLibraryCommand } from "./handler.js";
@@ -27,7 +26,8 @@ export const securityReviewCliCommand = Command.make(
           result("securityReview", securityOutputContracts.securityReview, value),
         );
       }),
-    ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
+      Option.getOrUndefined(home),
+    ),
 ).pipe(
   Command.withDescription("Review security findings for one exact Skill version in your Library."),
   Command.withExamples([{ command: "skit security review owner/tools:review --json" }]),

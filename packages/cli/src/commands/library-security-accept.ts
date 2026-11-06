@@ -1,4 +1,3 @@
-import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleLibraryCommand } from "./handler.js";
@@ -56,7 +55,8 @@ export const securityAcceptCliCommand = Command.make(
           result("securityAccept", securityOutputContracts.securityAccept, value),
         );
       }),
-    ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
+      Option.getOrUndefined(home),
+    ),
 ).pipe(
   Command.withDescription(
     "Accept one finding for installing one exact Skill version in your Library.",

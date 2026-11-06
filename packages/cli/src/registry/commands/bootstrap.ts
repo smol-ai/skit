@@ -1,4 +1,3 @@
-import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { Effect, Option } from "effect";
 import { Command } from "effect/cli";
 import { bootstrapServer } from "../bootstrap.js";
@@ -37,7 +36,8 @@ export const serverBootstrapCliCommand = Command.make(
           }),
         );
       }),
-    ).pipe(Effect.provide(skitConfigurationLayer())),
+      undefined,
+    ),
 ).pipe(
   Command.withDescription("Create the first operator for a deployed skit-server."),
   Command.withExamples([

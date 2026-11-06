@@ -6,11 +6,18 @@ import type { CommandDescription } from "./command-contracts.js";
 
 interface CommandDocument extends CommandDescription {
   readonly examples: readonly string[];
-  readonly positionals: readonly { readonly name: string; readonly required: boolean }[];
+  readonly positionals: readonly {
+    readonly name: string;
+    readonly required: boolean;
+  }[];
   readonly documentedFlags: Readonly<
     Record<
       string,
-      { readonly type: string; readonly valueName: string; readonly description: string }
+      {
+        readonly type: string;
+        readonly valueName: string;
+        readonly description: string;
+      }
     >
   >;
 }

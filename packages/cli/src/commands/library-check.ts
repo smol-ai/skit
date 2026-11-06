@@ -1,4 +1,3 @@
-import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
 import { Renderer } from "../terminal/renderer.js";
@@ -22,7 +21,8 @@ export const checkCliCommand = Command.make("check", { subject, ...localFlags },
       );
       yield* renderer.result(result("check", checkOutputContracts.check, value));
     }),
-  ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
+    Option.getOrUndefined(input.home),
+  ),
 ).pipe(
   Command.withDescription("Check the Library's stored files and whether their sources changed."),
   Command.withExamples([{ command: "skit check" }, { command: "skit check owner/tools" }]),

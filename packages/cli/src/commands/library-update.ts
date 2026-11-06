@@ -1,6 +1,4 @@
-import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import {
-  terminalLibraryProgressLayer,
   updateOutputContracts,
   planUpdates,
   updateSubjects,
@@ -79,14 +77,13 @@ export const updateCliCommand = Command.make(
           );
         }
         const configuration = yield* libraryCommandConfiguration(input);
-        const value = yield* updateSubjects({ roots: configuration.inventory }, query).pipe(
-          Effect.provide(terminalLibraryProgressLayer),
-        );
+        const value = yield* updateSubjects({ roots: configuration.inventory }, query);
         yield* renderer.result(
           result("update", updateOutputContracts.update, value, updateExitCode(value)),
         );
       }),
-    ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
+      Option.getOrUndefined(input.home),
+    ),
 ).pipe(
   Command.withDescription("Update sources from their recorded origins."),
   Command.withExamples([

@@ -1,4 +1,3 @@
-import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { Option, Effect } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleLibraryCommand } from "./handler.js";
@@ -36,7 +35,8 @@ export const removeCliCommand = Command.make(
           );
         yield* renderer.result(result("remove", removeOutputContracts.remove, outcome.value));
       }),
-    ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
+      Option.getOrUndefined(input.home),
+    ),
 ).pipe(
   Command.withDescription(
     "Remove a Collection from your Library and the skills SKIT installed from it.",

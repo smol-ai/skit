@@ -180,7 +180,7 @@ export const journeyStories: ReadonlyArray<JourneyStory<string, unknown, Prompte
     name: "library-sync/fresh-device",
     initialState: "Empty fixture device · remote has 3 Collections and 3 enabled Skills",
     answers: [],
-    run: syncJourney(false).pipe(Effect.provide(skitConfigurationLayer())),
+    run: syncJourney(false),
     finalState: (state) => state,
   },
   {
@@ -188,7 +188,7 @@ export const journeyStories: ReadonlyArray<JourneyStory<string, unknown, Prompte
     expectedOutcome: "failure",
     initialState: "Empty fixture device · Registry rejects the second download",
     answers: [],
-    run: syncJourney(true).pipe(Effect.provide(skitConfigurationLayer())),
+    run: syncJourney(true),
     finalState: (state) => state,
   },
 ];

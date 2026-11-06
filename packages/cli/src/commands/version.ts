@@ -22,12 +22,15 @@ export const versionCliCommand = Command.make("version", { json: jsonFlag }, () 
         }),
       );
     }),
+    undefined,
   ),
 ).pipe(
   Command.withDescription("Show build details and check npm for an upgrade."),
   Command.withExamples([{ command: "skit version" }]),
   Command.annotate(CommandMetadata, {
-    effects: { capabilities: ["filesystem.read", "filesystem.write", "network.read"] },
+    effects: {
+      capabilities: ["filesystem.read", "filesystem.write", "network.read"],
+    },
     outputSchemas: [outputContracts.versionReport],
     exitCodes: [0, 64],
     interactive: false,

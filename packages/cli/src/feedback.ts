@@ -4,7 +4,7 @@ import { handlePlatformCommand } from "./commands/handler.js";
 import { CommandMetadata, credentialStoreReadSubprocesses } from "./commands/metadata.js";
 import { outputContracts } from "./commands/output-contracts.js";
 import { homeFlag, jsonFlag, optionalString } from "./commands/parameters.js";
-import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { feedbackInput } from "./feedback/send.js";
 import { submitFeedback } from "./registry/feedback.js";
 import { Renderer } from "./terminal/renderer.js";
@@ -40,29 +40,33 @@ export const feedbackSendCliCommand = Command.make(
     json: jsonFlag,
   },
   (options) =>
-    Effect.gen(function* () {
-      const { skitHome } = yield* SkitConfiguration;
-      return yield* handlePlatformCommand(
-        Effect.gen(function* () {
-          const renderer = yield* Renderer;
-          const input = yield* feedbackInput({
-            text: Option.getOrUndefined(options.text),
-            message: Option.getOrUndefined(options.message),
-            harness: Option.getOrUndefined(options.harness),
-            model: Option.getOrUndefined(options.model),
-            email: Option.getOrUndefined(options.email),
-          });
-          const sent = yield* submitFeedback(input, { signedIn: options.signedIn, home: skitHome });
-          yield* renderer.result(result("feedbackSend", sent));
-        }).pipe(Effect.provide(registryHttpLayer())),
-      );
-    }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(options.home)))),
+    handlePlatformCommand(
+      Effect.gen(function* () {
+        const { skitHome } = yield* SkitConfiguration;
+        const renderer = yield* Renderer;
+        const input = yield* feedbackInput({
+          text: Option.getOrUndefined(options.text),
+          message: Option.getOrUndefined(options.message),
+          harness: Option.getOrUndefined(options.harness),
+          model: Option.getOrUndefined(options.model),
+          email: Option.getOrUndefined(options.email),
+        });
+        const sent = yield* submitFeedback(input, {
+          signedIn: options.signedIn,
+          home: skitHome,
+        });
+        yield* renderer.result(result("feedbackSend", sent));
+      }).pipe(Effect.provide(registryHttpLayer())),
+      Option.getOrUndefined(options.home),
+    ),
 ).pipe(
   Command.withDescription(
     "Tell SKIT's maintainers about friction with SKIT itself: an unclear error, a gap in the docs, a step that took longer than it should.",
   ),
   Command.withExamples([
-    { command: 'skit feedback send "skit add said the Source was invalid but not which part"' },
+    {
+      command: 'skit feedback send "skit add said the Source was invalid but not which part"',
+    },
     {
       command:
         'skit feedback send --message "setup --json had no field for skipped skills" --harness codex --model gpt-5.5',
