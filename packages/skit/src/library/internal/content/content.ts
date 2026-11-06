@@ -37,6 +37,7 @@ import {
   RestoreInvalid,
   type SourceRestoreInvalid,
 } from "./restore.js";
+import { readCollectionVersion } from "./read-collection-version.js";
 
 export interface StagedContent {
   readonly manifestDigest: Hash;
@@ -83,9 +84,12 @@ export const inspectContent = Effect.fn("Library.content.inspect")(function* (
   const originalsPath = libraryOriginalsPath(home);
   for (const tree of state.collection_versions) {
     const path = collectionVersionPath(originalsPath, tree.hash);
-    const hash = yield* originalTreeHash(path).pipe(
-      Effect.catchTag("TreeError", (error) =>
-        Effect.fail(new InvalidLibraryState({ path, detail: error.message })),
+    const hash = yield* Effect.scoped(
+      readCollectionVersion(originalsPath, tree.hash).pipe(
+        Effect.flatMap(originalTreeHash),
+        Effect.catchTag("TreeError", (error) =>
+          Effect.fail(new InvalidLibraryState({ path, detail: error.message })),
+        ),
       ),
     );
     if (hash !== tree.hash) return { _tag: "Changed" as const, hash: tree.hash };
@@ -103,9 +107,12 @@ export const packContent = Effect.fn("Library.content.pack")(function* (
   // Check every reference, even when several Collections share the same retained bytes.
   for (const tree of state.collection_versions) {
     const path = collectionVersionPath(originalsPath, tree.hash);
-    const archive = yield* readSnapshotArchive(path).pipe(
-      Effect.catchTag("TreeError", (error) =>
-        Effect.fail(new InvalidLibraryState({ path, detail: error.message })),
+    const archive = yield* Effect.scoped(
+      readCollectionVersion(originalsPath, tree.hash).pipe(
+        Effect.flatMap(readSnapshotArchive),
+        Effect.catchTag("TreeError", (error) =>
+          Effect.fail(new InvalidLibraryState({ path, detail: error.message })),
+        ),
       ),
     );
     if (archive.digest !== tree.hash)

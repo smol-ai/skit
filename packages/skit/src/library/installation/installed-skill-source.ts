@@ -4,10 +4,11 @@ import { validateSkitDirectory } from "../../artifact/skit.js";
 import { originalTreeHash, collectionVersionPath } from "../collection-version.js";
 import { versionBacking, type Skill, type SkillVersion } from "../library-contracts.js";
 import type { LibraryState } from "../library-state.js";
+import { readCollectionVersion } from "../internal/content/read-collection-version.js";
 
 /**
  * What one retained Skill Version installs from, read from its verified retained original. An
- * `invalid` source cannot be installed; a missing original fails as the filesystem reports it.
+ * `invalid` source cannot be installed; the read boundary reports damaged retained storage.
  */
 export const installedSkillSource = Effect.fn("Library.installedSkillSource")(function* (
   state: LibraryState,
@@ -18,7 +19,8 @@ export const installedSkillSource = Effect.fn("Library.installedSkillSource")(fu
   const backing = versionBacking(state, skill, version);
   if (backing === undefined)
     return { kind: "invalid" as const, detail: `retained Skill ${skill.name} has no backing` };
-  const root = collectionVersionPath(originalsPath, backing.copy.hash);
+  const retainedPath = collectionVersionPath(originalsPath, backing.copy.hash);
+  const root = yield* readCollectionVersion(originalsPath, backing.copy.hash);
   const authored = version.materialization_profile === "declared-skit-skill/v1";
   const validated = authored
     ? yield* validateSkitDirectory(root, "retained", {
@@ -48,6 +50,8 @@ export const installedSkillSource = Effect.fn("Library.installedSkillSource")(fu
   return {
     kind: "source" as const,
     libraryPath: root,
+    // Recovery records this stable reference, never a borrowed materialization's lifetime.
+    retainedPath,
     sourcePath: descriptorSkill === undefined ? importedPath : join(root, descriptorSkill.path),
     ...(descriptorSkill === undefined
       ? {}
