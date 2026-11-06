@@ -1,8 +1,7 @@
 import { LinkStat } from "@smolai/skit-core/platform";
 import { recoveryInspection } from "./helpers/recovery.js";
-import { recoveryFolderFixture, saveRecoveryFiles } from "./helpers/recovery-files.js";
 import { withLibraryOwner } from "./helpers/library-owner.js";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { systemError } from "effect/PlatformError";
 import { it } from "@effect/vitest";
@@ -11,15 +10,13 @@ import * as Library from "@smolai/skit-core/library";
 import * as MachineSettings from "@smolai/skit-core/machine-settings";
 import { skitLayer } from "@smolai/skit-core/platform";
 
-const { setupDiscoverySettings } = MachineSettings;
-
 import { prepareSetupUndo } from "../src/library/setup/undo.js";
 import { setupResultActions } from "../src/library/setup/actions.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import { renderContract } from "../src/commands/output-presenters.js";
 import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply.js";
-import { runSetup, setupIntent } from "@smolai/skit-core/library/setup";
+import { runSetup } from "@smolai/skit-core/library/setup";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import { libraryHome, scratch } from "./helpers/library-home.js";
 
@@ -100,109 +97,6 @@ it.effect("undo of an explicit removal restores the original inode and move reco
       }),
     );
   }).pipe(Effect.provide(skitLayer)),
-);
-
-// Setups from before state.json recorded operations left a journal under removed/<id>/; undo reads
-// it, in both formats it was written in. Here one is written as that SKIT wrote it for a removal.
-it.effect.each([3, 2] as const)(
-  "a setup journal from before records (v%s) still undoes",
-  (version) =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const root = yield* fs.realPath(yield* scratch("skit-setup-journal-"));
-      const source = join(root, "agents", "review");
-      const markdown = "---\nname: review\ndescription: review\n---\n\nOriginal bytes\n";
-      yield* fs.makeDirectory(source, { recursive: true });
-      yield* fs.writeFileString(join(source, "SKILL.md"), markdown);
-      expect(yield* fs.readDirectory(source)).toEqual(["SKILL.md"]);
-      const home = yield* libraryHome({ home: join(root, "library"), inventoryHome: root });
-      const operationId = "0f0e0d0c-0b0a-4908-8706-050403020100";
-      const directory = join(home.home, "removed", operationId);
-      const identity = (value: bigint) => (version === 3 ? String(value) : Number(value));
-      const observed = yield* recoveryFolderFixture(source);
-      if (observed._tag !== "Directory")
-        return yield* Effect.die("Expected legacy source directory");
-      // Build the released journal format from public filesystem evidence, not its private reader.
-      const file = {
-        path: source,
-        anchor: {
-          path: dirname(source),
-          physicalPath: observed.parent.path,
-          dev: observed.parent.dev,
-          ino: observed.parent.ino,
-        },
-        entry: {
-          type: "Directory",
-          dev: observed.dev,
-          ino: observed.ino,
-          hash: observed.contentHash,
-          // This released fixture has only SKILL.md, so no ownership marker is excluded.
-          unstampedHash: observed.contentHash,
-          marker: null,
-          markerType: null,
-          markerMode: null,
-          linkTarget: null,
-        },
-      };
-      const moves = yield* saveRecoveryFiles(home.home, [source]);
-      yield* fs.rename(moves.operationDirectory, directory);
-      // This fixture represents the older UUID journal layout, including its receipt paths.
-      for (const batch of yield* fs.readDirectory(directory)) {
-        const receipt = join(directory, batch, "receipt.json");
-        if (yield* fs.exists(receipt))
-          yield* fs.writeFileString(
-            receipt,
-            (yield* fs.readFileString(receipt)).replaceAll(moves.operationDirectory, directory),
-          );
-      }
-      const settings = setupDiscoverySettings(yield* MachineSettings.read(home.home));
-      const intent = setupIntent(yield* home.durable);
-      yield* fs.writeFileString(
-        join(directory, "setup.json"),
-        JSON.stringify({
-          schemaVersion: version,
-          kind: "setup",
-          planId: "sha256:f2e7a599c1ffd13691f3006fb8d7644aa90ea993195c724a24947d97cab68801",
-          settings,
-          machineId: null,
-          targets: [],
-          before: intent,
-          installedSkills: [],
-          installedSkillPaths: [],
-          files: [
-            {
-              ...file,
-              anchor: {
-                ...file.anchor,
-                dev: identity(file.anchor.dev),
-                ino: identity(file.anchor.ino),
-              },
-              entry: file.entry && {
-                ...file.entry,
-                dev: identity(file.entry.dev),
-                ino: identity(file.entry.ino),
-              },
-            },
-          ],
-        }),
-      );
-      yield* fs.writeFileString(
-        join(directory, "complete.json"),
-        JSON.stringify({ schemaVersion: 2, intent, settings, installedSkills: [] }),
-      );
-      // The v2 journal also covers a Library with no state.json: Undo records its first state.
-      if (version === 2) yield* fs.remove(home.statePath);
-      expect(yield* fs.exists(source)).toBe(false);
-      yield* home.owned(
-        Effect.gen(function* () {
-          const preview = yield* prepareSetupUndo(operationId);
-          expect(preview.summary.conflicts).toEqual([]);
-          expect(preview.summary.files).toEqual([{ path: source, kind: "restore" }]);
-          expect((yield* preview.apply()).status).toBe("undone");
-        }),
-      );
-      expect(yield* fs.readFileString(join(source, "SKILL.md"))).toBe(markdown);
-    }).pipe(Effect.provide(skitLayer)),
 );
 
 it.effect("undo refuses an occupied removal destination and redirected original parent", () =>
@@ -557,63 +451,5 @@ it.effect.each([".git", "skit.json", "skit.remote.json"])(
       expect(yield* MachineSettings.read(f.home.home)).toEqual(settings);
       expect(yield* f.fs.readFileString(join(f.successor, "SKILL.md"))).toBe(bytes);
       expect(yield* f.fs.exists(join(f.root, "claude", marker))).toBe(true);
-    }).pipe(Effect.provide(skitLayer)),
-);
-
-it.effect(
-  "a legacy completed inverse keeps later v5 settings without a machine completion record",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const settingsBefore = yield* MachineSettings.read(f.home.home);
-      const prepared = yield* f.home.owned(prepareSetupUndo(f.operationId));
-      yield* f.home.owned(prepared.apply());
-      const settingsAfter = yield* MachineSettings.read(f.home.home);
-      const undoDirectory = join(f.home.home, "removed", f.operationId, "undo");
-      const state = yield* f.home.durable;
-      const operation = state.operations.find((item) =>
-        item.steps.some(({ step }) => step._tag === "Undo"),
-      );
-      if (!operation) return yield* Effect.die("Missing recorded inverse");
-      // Construct the immutable pre-split evidence explicitly; new Undo writes no attempt files.
-      const attemptName = "10000000-0000-4000-8000-000000000001";
-      yield* f.fs.makeDirectory(undoDirectory, { recursive: true });
-      yield* f.fs.writeFileString(
-        join(undoDirectory, `${attemptName}.json`),
-        JSON.stringify({
-          schemaVersion: 2,
-          planId: prepared.summary.planId,
-          backupId: "10000000-0000-4000-8000-000000000002",
-          before: setupIntent(state),
-          after: setupIntent(state),
-          settingsBefore: setupDiscoverySettings(settingsBefore),
-          settingsAfter: setupDiscoverySettings(settingsAfter),
-        }),
-      );
-      yield* f.fs.writeFileString(
-        join(undoDirectory, `${attemptName}.done.json`),
-        JSON.stringify({ schemaVersion: 1, planId: prepared.summary.planId }),
-      );
-      yield* f.home.writeDurable({
-        ...state,
-        operations: state.operations.filter((item) => item.operationId !== operation.operationId),
-      });
-      const path = join(f.home.home, "machine.json");
-      const {
-        undoneSetups: _completed,
-        setups: _setups,
-        ...machine
-      } = JSON.parse(yield* f.fs.readFileString(path));
-      const later = JSON.stringify({
-        ...machine,
-        schemaVersion: 5,
-        discoveryRoots: settingsBefore.discoveryRoots,
-      });
-      yield* f.fs.writeFileString(path, later);
-      const repeated = yield* f.home.owned(prepareSetupUndo(f.operationId));
-      expect(repeated.summary.status).toBe("already-undone");
-      expect(repeated.summary.settingsChanged).toBe(false);
-      expect((yield* f.home.owned(repeated.apply())).status).toBe("already-undone");
-      expect(yield* f.fs.readFileString(path)).toBe(later);
     }).pipe(Effect.provide(skitLayer)),
 );

@@ -13,13 +13,11 @@ export const prepareSetupUndo = Effect.fn("SetupUndo.prepare")(function* (
 ) {
   const library = yield* Library.Service;
   const plan = yield* library.plan({ _tag: "Undo", operationId }, { base: yield* library.read });
-  const settings = plan.settingsCompleted
-    ? undefined
-    : yield* MachineSettings.planRestoreDiscovery(home, operationId, plan.legacyDiscovery);
+  const settings = yield* MachineSettings.planRestoreDiscovery(home, operationId);
   const { next: _next, ...change } = plan.change;
-  const conflicts = [...change.conflicts, ...(settings?.conflicts ?? [])];
-  const settingsChanged = settings?.changed ?? false;
-  const planId = hashParts([plan.planId, settings?.planId ?? "completed"]);
+  const conflicts = [...change.conflicts, ...settings.conflicts];
+  const settingsChanged = settings.changed;
+  const planId = hashParts([plan.planId, settings.planId]);
   const summary = {
     ...change,
     planId,
@@ -37,17 +35,11 @@ export const prepareSetupUndo = Effect.fn("SetupUndo.prepare")(function* (
       Effect.gen(function* () {
         if (conflicts.length) return yield* new RecoveryInvalid({ detail: conflicts.join("; ") });
         // Refuse an already-stale machine review before Library starts its file/state work.
-        if (settings !== undefined) {
-          const current = yield* MachineSettings.planRestoreDiscovery(
-            home,
-            operationId,
-            plan.legacyDiscovery,
-          );
-          if (canonicalJson(current) !== canonicalJson(settings))
-            return yield* new StalePlan({
-              message: "The Library changed since this was previewed",
-            });
-        }
+        const current = yield* MachineSettings.planRestoreDiscovery(home, operationId);
+        if (canonicalJson(current) !== canonicalJson(settings))
+          return yield* new StalePlan({
+            message: "The Library changed since this was previewed",
+          });
         const owner = yield* Library.Service;
         const undone = yield* owner.apply({ _tag: "Apply", plan: plan }).pipe(
           Effect.map((outcome) => outcome.result),
@@ -55,7 +47,7 @@ export const prepareSetupUndo = Effect.fn("SetupUndo.prepare")(function* (
             Effect.fail(new StalePlan({ message: "The Library changed since this was previewed" })),
           ),
         );
-        if (settings !== undefined) yield* MachineSettings.applyRestoreDiscovery(home, settings);
+        yield* MachineSettings.applyRestoreDiscovery(home, settings);
         if (undone._tag === "Undone")
           return { ...summary, status: "undone" as const, backupId: undone.backupId };
         return {

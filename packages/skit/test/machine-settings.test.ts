@@ -477,48 +477,6 @@ it.effect("a discovery inverse refuses stale or edited review data before public
 );
 
 it.effect(
-  "legacy journal inverses have machine-owned completion even with a legacy operation ID",
-  () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-settings-legacy-undo-" });
-      const before = yield* MachineSettings.updateDiscovery(home, { discoveryRoots: ["/before"] });
-      const after = yield* MachineSettings.updateDiscovery(home, { discoveryRoots: ["/after"] });
-      const legacy = {
-        before: MachineSettings.setupDiscoverySettings(before),
-        machineId: before.machineId ?? null,
-        changes: [
-          {
-            before: MachineSettings.setupDiscoverySettings(before),
-            after: MachineSettings.setupDiscoverySettings(after),
-            machineId: after.machineId ?? null,
-            confirmed: false,
-          },
-        ],
-      };
-      const plan = yield* MachineSettings.planRestoreDiscovery(
-        home,
-        "old-journal-operation",
-        legacy,
-      );
-      assert.deepStrictEqual(plan.conflicts, []);
-      yield* MachineSettings.applyRestoreDiscovery(home, plan);
-      assert.deepStrictEqual((yield* MachineSettings.read(home)).undoneSetups, [
-        "old-journal-operation",
-      ]);
-      yield* MachineSettings.updateDiscovery(home, { discoveryRoots: ["/later"] });
-      const repeated = yield* MachineSettings.planRestoreDiscovery(
-        home,
-        "old-journal-operation",
-        legacy,
-      );
-      assert.deepStrictEqual(repeated.conflicts, []);
-      assert.isFalse(repeated.recorded);
-      assert.isFalse(repeated.changed);
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect(
   "a failed discovery inverse publication keeps its completion unrecorded and retryable",
   () =>
     Effect.gen(function* () {

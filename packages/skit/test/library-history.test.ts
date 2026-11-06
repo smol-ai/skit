@@ -283,20 +283,20 @@ it.effect("owner history preserves a malformed audit line's path and number", ()
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("owner recovery lists legacy folders without rewriting their evidence", () =>
+it.effect("owner recovery lists recovery folders without rewriting their contents", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-history-recovery-" });
-    const legacyId = "0f0e0d0c-0b0a-4908-8706-050403020100";
-    const legacy = join(home, "removed", legacyId);
-    yield* fs.makeDirectory(legacy, { recursive: true });
-    const evidencePath = join(legacy, "setup.json");
-    const evidence = "Historical evidence, inspected only when its operation is selected.\n";
+    const operationId = "0f0e0d0c-0b0a-4908-8706-050403020100";
+    const directory = join(home, "removed", operationId);
+    yield* fs.makeDirectory(directory, { recursive: true });
+    const evidencePath = join(directory, "note.txt");
+    const evidence = "User notes kept beside recovery files.\n";
     yield* fs.writeFileString(evidencePath, evidence);
     yield* Effect.gen(function* () {
       const owner = yield* Library.Service;
       for (let read = 0; read < 2; read++) {
-        assert.deepStrictEqual(yield* owner.recovery.list, [legacyId]);
+        assert.deepStrictEqual(yield* owner.recovery.list, [operationId]);
       }
       assert.strictEqual(yield* fs.readFileString(evidencePath), evidence);
       assert.isFalse(yield* fs.exists(join(home, "state.json")));

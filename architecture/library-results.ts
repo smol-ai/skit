@@ -156,7 +156,7 @@ export type UndoError =
   | LibraryStateReadError
   | LibraryStateWriteError
   | PlatformError;
-// OPEN: inspectSetupOperation / prepareSetupSourceUndo error channels not traced.
+// OPEN: prepareSetupSourceUndo error channel not traced.
 
 // ── Restore ─────────────────────────────────────────────────────────────────────────────────────
 // Source: skit/src/library/internal/recovery/{moves,restore}.ts.
@@ -559,9 +559,6 @@ export interface UndoPlan extends PlanBase<"Undo", UndoChange> {
     readonly importId: ImportId;
     readonly checkedAt: string;
   }[];
-  /** Handoff to MachineSettings when undoing a setup written before the owners were split. */
-  readonly settingsCompleted: boolean;
-  readonly legacyDiscovery?: import("../packages/skit/src/library/machine-settings.js").LegacySetupDiscovery;
 }
 export interface RestorePlan extends PlanBase<"Restore", RestoreChange> {
   readonly program: Extract<SetupStep, { readonly _tag: "Restore" }>["program"];

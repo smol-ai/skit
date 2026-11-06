@@ -3,7 +3,6 @@ import { Schema } from "effect";
 import { Hash } from "../../../shared/hash.js";
 import { CollectionId, ImportId } from "../../entity-ids.js";
 import { LibraryState } from "../../library-state.js";
-import { LegacySetupDiscovery } from "../../machine-settings.js";
 
 export const UndoIntent = Schema.TaggedStruct("Undo", { operationId: Schema.NonEmptyString });
 export type UndoIntent = typeof UndoIntent.Type;
@@ -32,7 +31,7 @@ const UndoChange = Schema.Struct({
 });
 type UndoChange = typeof UndoChange.Type;
 
-/** Data only: apply verifies the state, folders, imports and legacy evidence all over again. */
+/** Data only: apply verifies the state, folders and imports all over again. */
 export const UndoPlan = Schema.TaggedStruct("Undo", {
   intent: UndoIntent,
   baseRevision: Revision,
@@ -42,10 +41,6 @@ export const UndoPlan = Schema.TaggedStruct("Undo", {
     Schema.Struct({ collectionId: CollectionId, importId: ImportId, checkedAt: Schema.String }),
   ),
   change: UndoChange,
-  /** A pre-split completion acknowledged both owners; a new completion acknowledges Library only. */
-  settingsCompleted: Schema.Boolean,
-  /** Opaque journal evidence passed to the machine owner; Library never restores it. */
-  legacyDiscovery: Schema.optionalKey(LegacySetupDiscovery),
 });
 export type UndoPlan = typeof UndoPlan.Type;
 export type UndoResult =

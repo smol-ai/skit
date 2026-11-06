@@ -14,7 +14,7 @@ import { collectionVersionPath } from "../../collection-version.js";
 import { versionBacking } from "../../library-contracts.js";
 import { writeRawAtomic } from "../../../platform/atomic-write.js";
 import { type InstalledSkill } from "../../device-state.js";
-import { readSkillPathDetails } from "./journal.js";
+import { readSkillPathDetails } from "./undo-evidence.js";
 import { inspectRecoveryOperation } from "../recovery/moves.js";
 import { checkSetupGlobalContent } from "./protection.js";
 import { recoveryFingerprint } from "../recovery/evidence.js";
@@ -25,19 +25,17 @@ type SkillPathDetails = Effect.Success<ReturnType<typeof readSkillPathDetails>>;
 /**
  * What a setup recorded at one path before it ran: the nearest existing folder above it, and the
  * entry, or null for nothing there. `unmarked` identifies its bytes without SKIT's marker, by the
- * hash the record kept: a recovery fingerprint (old journals) or a tree hash (state.json records).
+ * hash the record kept: a recovery fingerprint for a link, or a tree hash for a directory.
  */
 export type { UndoFile as SetupFile } from "./undo-evidence.js";
 import type { UndoFile as SetupFile } from "./undo-evidence.js";
 import { observePathEvidence } from "../../folder-evidence.js";
 
-/** What a setup changed and recorded, as undo needs it from either kind of record. */
+/** What a setup changed and recorded in state.json, as undo needs it. */
 export interface SetupChanges {
   readonly files: readonly SetupFile[];
   readonly installedSkillsBefore: readonly InstalledSkill[];
   readonly installedSkillsAfter: readonly InstalledSkill[];
-  /** Paths the setup was approved to install at; every recorded path when the record says none. */
-  readonly approvedPaths: ReadonlySet<string> | undefined;
   /** Paths where a save the setup confirmed installed a copy. */
   readonly claimedPaths: ReadonlySet<string>;
 }
@@ -169,9 +167,8 @@ export const planUndoFiles = Effect.fn("SetupUndo.planFiles")(function* (
       details.entry?.marker !== file.entry?.marker &&
       after?.status === "installed" &&
       (file.entry === null || file.entry.marker === null);
-    const approvedPath = setup.approvedPaths === undefined || setup.approvedPaths.has(file.path);
-    const claim = possibleClaim && approvedPath && setup.claimedPaths.has(file.path);
-    if (!saved.length && !changedInstalledSkill && possibleClaim && approvedPath && !claim) {
+    const claim = possibleClaim && setup.claimedPaths.has(file.path);
+    if (!saved.length && !changedInstalledSkill && possibleClaim && !claim) {
       conflicts.push(`Setup's ownership claim is not confirmed: ${file.path}`);
       continue;
     }
@@ -183,15 +180,6 @@ export const planUndoFiles = Effect.fn("SetupUndo.planFiles")(function* (
       continue;
     }
     affected.add(file.path);
-    if (
-      file.entry?.type === "Directory" &&
-      file.entry.marker === null &&
-      file.entry.unmarked.by === "fingerprint" &&
-      file.entry.hash !== file.entry.unmarked.hash
-    ) {
-      conflicts.push(`Original ownership marker is not reproducible: ${file.path}`);
-      continue;
-    }
     const anchor = yield* Effect.result(checkAnchor(file));
     if (anchor._tag === "Failure") {
       conflicts.push(`Original parent changed: ${file.path}`);

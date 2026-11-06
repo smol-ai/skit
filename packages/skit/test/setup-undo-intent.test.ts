@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import * as MachineSettings from "../src/library/machine-settings.js";
 import { enabledSkillIds, currentSkillVersion } from "../src/library/library-contracts.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { type LibraryState } from "../src/library/library-state.js";
@@ -32,8 +31,6 @@ const importCollectionIn = (home: string) => (request: Omit<ImportRequest, "mach
   Effect.flatMap(Library.Service, (library) =>
     library.import.collection({ ...request, machineId }),
   ).pipe(Effect.provide(libraryLayer(home)));
-
-const { setupDiscoverySettings, reverseSetupDiscovery } = MachineSettings;
 
 const fixture = Effect.fn("Test.undoIntentFixture")(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -277,54 +274,6 @@ it.effect(
       );
       expect(changedMode.conflicts).toContain("device binding selection mode");
       expect(changedMode.state.device_skill_selection).toEqual({ mode: "follow-account" });
-    }).pipe(Effect.provide(skitLayer)),
-);
-
-it.effect(
-  "machine settings inverse preserves later repository choices and reports newer roots instead of overwriting them",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const before = yield* MachineSettings.read(f.home.home);
-      const after = yield* MachineSettings.updateDiscovery(f.home.home, {
-        discoveryRoots: ["/chosen"],
-        repositories: [{ path: "/chosen/repo", status: "watched" }],
-      });
-      const later = yield* MachineSettings.updateDiscovery(f.home.home, {
-        repositories: [{ path: "/later/repo", status: "watched" }],
-      });
-      const inverse = reverseSetupDiscovery(
-        later,
-        setupDiscoverySettings(before),
-        setupDiscoverySettings(after),
-      );
-      expect(inverse.conflicts).toEqual([]);
-      expect(inverse.settings.discoveryRoots).toEqual([]);
-      expect(inverse.settings.repositories).toEqual([{ path: "/later/repo", status: "watched" }]);
-      expect(inverse.settings.repositoryDecisionsInitialized).toBe(true);
-      expect(inverse.settings.machineId).toBe(after.machineId);
-      expect(
-        reverseSetupDiscovery(
-          inverse.settings,
-          setupDiscoverySettings(before),
-          setupDiscoverySettings(after),
-        ).changed,
-      ).toBe(false);
-      const newer = yield* MachineSettings.updateDiscovery(f.home.home, {
-        discoveryRoots: ["/newer"],
-        repositories: [{ path: "/chosen/repo", status: "ignored" }],
-      });
-      const conflict = reverseSetupDiscovery(
-        newer,
-        setupDiscoverySettings(before),
-        setupDiscoverySettings(after),
-      );
-      expect(conflict.conflicts).toEqual(["discovery roots", "repository decision /chosen/repo"]);
-      expect(conflict.settings.discoveryRoots).toEqual(["/newer"]);
-      expect(conflict.settings.repositories).toContainEqual({
-        path: "/chosen/repo",
-        status: "ignored",
-      });
     }).pipe(Effect.provide(skitLayer)),
 );
 

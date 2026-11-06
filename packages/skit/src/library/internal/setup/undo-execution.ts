@@ -15,7 +15,7 @@ import { OperationStatus, type UndoProgram } from "../../store/state-schema.js";
 import type { OperationId } from "../../entity-ids.js";
 import { ensureRecoveryOperation } from "../recovery/moves.js";
 import { RecoveryInvalid } from "../../recovery-facts.js";
-import { readSkillPathDetails } from "./journal.js";
+import { readSkillPathDetails } from "./undo-evidence.js";
 import { checkSetupGlobalContent } from "./protection.js";
 import { checkAnchor, restoreMarker } from "./undo-files.js";
 import type { UndoPath, UndoAction } from "./undo-evidence.js";

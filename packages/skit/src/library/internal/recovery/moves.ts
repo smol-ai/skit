@@ -286,21 +286,6 @@ export const ensureRecoveryOperation = Effect.fn("Recovery.ensureOperation")(fun
   }
 });
 
-/** Passive location validation shared by file recovery and setup's guarded inverse. */
-export const recoveryOperationPath = Effect.fn("Recovery.operationPath")(function* (
-  home: string,
-  operationId: string,
-) {
-  if (!/^[a-zA-Z0-9_-]+$/.test(operationId))
-    return yield* new RecoveryInvalid({ detail: "Invalid operation identifier" });
-  const links = yield* LinkStat;
-  const removed = join(yield* links.realPathNative(home), "removed");
-  yield* checkedDirectory(removed);
-  const directory = join(removed, operationId);
-  yield* checkedDirectory(directory);
-  return directory;
-});
-
 const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
   home: string,
   operationId: string,
@@ -314,25 +299,15 @@ const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
   const directory = join(removed, operationId);
   yield* checkedDirectory(directory);
   const legacyMoveRecord = yield* missingStat(join(directory, "receipt.json"));
-  const metadata: string[] = [];
-  const names = legacyMoveRecord ? [] : (yield* fs.readDirectory(directory)).sort();
-  for (const name of names.filter((name) => name === "setup.json" || name === "complete.json")) {
-    const path = join(directory, name);
-    if ((yield* links.identity.lstat(path)).type !== "File")
-      return yield* new RecoveryInvalid({ detail: `Redirected setup evidence at ${path}` });
-    metadata.push(yield* fs.readFileString(path));
-  }
   const batches = legacyMoveRecord
     ? [directory]
-    : names
-        .filter((name) => name !== "setup.json" && name !== "complete.json")
-        .map((id) => join(directory, id));
+    : (yield* fs.readDirectory(directory)).sort().map((id) => join(directory, id));
   const facts: (typeof RecoveryFact.Type)[] = [];
   const witnesses: string[] = [];
-  const moveRecords: string[] = [...metadata];
+  const moveRecords: string[] = [];
   const content: { original: string | undefined; saved: string | undefined }[] = [];
-  const evidence: unknown[] = [...metadata];
-  const structure: unknown[] = [...metadata];
+  const evidence: unknown[] = [];
+  const structure: unknown[] = [];
   const parents: string[] = [];
   let legacy = false;
   const paths = new Set<string>();

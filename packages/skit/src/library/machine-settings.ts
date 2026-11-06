@@ -7,7 +7,7 @@ import { Hash } from "../shared/hash.js";
 import { canonicalJson } from "../shared/json.js";
 import { LibraryChanged } from "./failures.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
-import { MachineId, makeMachineId, type OperationId } from "./entity-ids.js";
+import { makeMachineId, type OperationId } from "./entity-ids.js";
 import {
   currentMachineDocument,
   emptyMachineDocument,
@@ -298,109 +298,13 @@ export const restoreSetupDiscovery = Effect.fn("MachineSettings.restoreSetupDisc
   );
 });
 
-export const SetupDiscoverySettings = Schema.Struct({
-  discoveryRoots: CurrentMachineDocument.fields.discoveryRoots,
-  repositories: CurrentMachineDocument.fields.repositories,
-  initialized: Schema.Boolean,
-  displayName: Schema.NullOr(Schema.NonEmptyString),
-});
-export type SetupDiscoverySettings = typeof SetupDiscoverySettings.Type;
-export const setupDiscoverySettings = (settings: Settings): SetupDiscoverySettings => ({
-  discoveryRoots: [...settings.discoveryRoots],
-  repositories: structuredClone(settings.repositories),
-  initialized: settings.repositoryDecisionsInitialized,
-  displayName: settings.displayName ?? null,
-});
-
 const equal = (left: unknown, right: unknown) =>
   canonicalJson(left ?? null) === canonicalJson(right ?? null);
-
-/** A later repository decision is independent of the paths setup touched. Identity stays local. */
-export const reverseSetupDiscovery = (
-  settings: Settings,
-  before: SetupDiscoverySettings,
-  expected: SetupDiscoverySettings,
-) => {
-  const conflicts: string[] = [];
-  const restore = <A>(label: string, prior: A, after: A, current: A): A => {
-    if (equal(prior, after) || equal(current, prior)) return current;
-    if (equal(current, after)) return prior;
-    conflicts.push(label);
-    return current;
-  };
-  const discoveryRoots = restore(
-    "discovery roots",
-    before.discoveryRoots,
-    expected.discoveryRoots,
-    settings.discoveryRoots,
-  );
-  const repositories = new Map(settings.repositories.map((item) => [item.path, item.status]));
-  const old = new Map(before.repositories.map((item) => [item.path, item.status]));
-  const after = new Map(expected.repositories.map((item) => [item.path, item.status]));
-  for (const path of new Set([...old.keys(), ...after.keys()])) {
-    const status = restore(
-      `repository decision ${path}`,
-      old.get(path),
-      after.get(path),
-      repositories.get(path),
-    );
-    if (status === undefined) repositories.delete(path);
-    else repositories.set(path, status);
-  }
-  const initialized = [...repositories.keys()].some((path) => !old.has(path) && !after.has(path))
-    ? settings.repositoryDecisionsInitialized
-    : restore(
-        "repository discovery initialization",
-        before.initialized,
-        expected.initialized,
-        settings.repositoryDecisionsInitialized,
-      );
-  // A newly created identity's default name is provenance, not a prior user setting to erase.
-  const displayName =
-    before.displayName === null
-      ? settings.displayName
-      : restore(
-          "machine display name",
-          before.displayName,
-          expected.displayName,
-          settings.displayName ?? null,
-        );
-  const next = {
-    ...settings,
-    discoveryRoots: [...discoveryRoots],
-    repositories: [...repositories]
-      .map(([path, status]) => ({ path, status }))
-      .sort((a, b) => a.path.localeCompare(b.path)),
-    repositoryDecisionsInitialized: initialized,
-    ...(displayName === null || displayName === undefined ? {} : { displayName }),
-  };
-  return {
-    settings: next,
-    conflicts,
-    changed: !equal(setupDiscoverySettings(settings), setupDiscoverySettings(next)),
-  };
-};
-
-/** Machine-owned evidence carried by a pre-state.json setup journal. */
-export const LegacySetupDiscovery = Schema.Struct({
-  before: SetupDiscoverySettings,
-  machineId: Schema.NullOr(MachineId),
-  changes: Schema.Array(
-    Schema.Struct({
-      before: SetupDiscoverySettings,
-      after: SetupDiscoverySettings,
-      machineId: Schema.NullOr(MachineId),
-      confirmed: Schema.Boolean,
-    }),
-  ),
-});
-export interface LegacySetupDiscovery extends Schema.Schema.Type<typeof LegacySetupDiscovery> {}
 
 /** Plain review data; apply recomputes it before saving anything. */
 export interface DiscoveryRestorePlan {
   readonly operationId: string;
   readonly planId: Hash;
-  readonly legacy?: LegacySetupDiscovery;
   readonly before: Settings;
   readonly after: Settings;
   readonly conflicts: readonly string[];
@@ -408,39 +312,17 @@ export interface DiscoveryRestorePlan {
   readonly recorded: boolean;
 }
 
-/** Preview only this owner's part of an undo. A legacy journal is evidence, never a writer. */
+/** Preview only this owner's part of an undo, from its saved setup record. */
 export const planRestoreDiscovery = Effect.fn("MachineSettings.planRestoreDiscovery")(function* (
   home: string,
   operationId: string,
-  legacy?: LegacySetupDiscovery,
 ) {
   const before = yield* read(home);
   const completed = before.undoneSetups.includes(operationId);
   const record = before.setups.find((saved) => saved.operationId === operationId);
   let after = before;
   let conflicts: readonly string[] = [];
-  if (!completed && legacy !== undefined && record !== undefined) {
-    conflicts = ["Legacy evidence cannot replace this setup's recorded machine settings"];
-  } else if (!completed && legacy !== undefined) {
-    const problems: string[] = [];
-    const expectedMachine = legacy.changes.reduce(
-      (id, change) => change.machineId,
-      legacy.machineId,
-    );
-    if (expectedMachine !== null && before.machineId !== expectedMachine)
-      problems.push("Setup belongs to a different machine identity");
-    let expected = legacy.before;
-    for (const change of legacy.changes) {
-      const current = setupDiscoverySettings(before);
-      const applied = change.confirmed || equal(current, change.after);
-      if (!applied && !equal(current, change.before))
-        problems.push("Unconfirmed setup settings save differs from both recorded values");
-      if (applied) expected = change.after;
-    }
-    const reversed = reverseSetupDiscovery(before, legacy.before, expected);
-    after = reversed.settings;
-    conflicts = [...problems, ...reversed.conflicts];
-  } else if (!completed && record !== undefined) {
+  if (!completed && record !== undefined) {
     if (before.machineId !== record.expectedAfter.machineId)
       conflicts = ["Setup belongs to a different machine identity"];
     else if (!equal(before.discoveryRoots, record.before.discoveryRoots)) {
@@ -451,12 +333,11 @@ export const planRestoreDiscovery = Effect.fn("MachineSettings.planRestoreDiscov
   }
   const plan = {
     operationId,
-    ...(legacy === undefined ? {} : { legacy: structuredClone(legacy) }),
     before,
     after,
     conflicts,
-    changed: !equal(setupDiscoverySettings(before), setupDiscoverySettings(after)),
-    recorded: !completed && (record !== undefined || legacy !== undefined),
+    changed: !equal(before.discoveryRoots, after.discoveryRoots),
+    recorded: !completed && record !== undefined,
   };
   return { ...plan, planId: hashParts([canonicalJson(plan)]) } satisfies DiscoveryRestorePlan;
 });
@@ -470,7 +351,7 @@ export const applyRestoreDiscovery = Effect.fn("MachineSettings.applyRestoreDisc
   return yield* withHomeLock(
     home,
     Effect.gen(function* () {
-      const current = yield* planRestoreDiscovery(home, approved.operationId, approved.legacy);
+      const current = yield* planRestoreDiscovery(home, approved.operationId);
       if (!equal(current, approved) || current.conflicts.length)
         return yield* new LibraryChanged({ path: current.before.path });
       if (!current.recorded) return "unchanged" as const;
