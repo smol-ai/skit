@@ -73,6 +73,7 @@ export const owners = [
       "packages/skit/src/library/store/writer-lock.",
       "packages/skit/src/library/store/step-error-compat.",
       "packages/skit/src/library/internal/",
+      "packages/skit/src/library/setup/",
       "packages/skit/src/library/installation/",
       "packages/skit/src/library/subject-resolution.",
       "packages/skit/src/library/source-inspection.",

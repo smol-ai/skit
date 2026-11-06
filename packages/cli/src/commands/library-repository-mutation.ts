@@ -4,7 +4,7 @@ import { Argument, Command } from "effect/cli";
 import { resolve } from "node:path";
 import { handlePlatformCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
-import { repositoryOutputContracts } from "../library/repository.js";
+import { repositoryOutputContracts } from "../library/repository/output.js";
 import { homeFlag, jsonFlag } from "./parameters.js";
 import { Renderer } from "../terminal/renderer.js";
 import * as MachineSettings from "@smolai/skit-core/machine-settings";

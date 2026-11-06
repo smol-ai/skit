@@ -6,7 +6,8 @@ import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
 import { inventoryRootOptions, localFlags } from "./parameters.js";
 import { encodeResult as result } from "./encode-result.js";
-import { inventoryOutputContracts, inventoryCommand } from "../library/inventory.js";
+import { inventoryOutputContracts } from "../library/inventory/output.js";
+import { inventoryCommand } from "../library/inventory/operation.js";
 
 const machineInventoryMetadata = {
   effects: {

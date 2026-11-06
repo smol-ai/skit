@@ -2,11 +2,9 @@ import { Option, Effect } from "effect";
 import { Argument, Command } from "effect/cli";
 import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
-import {
-  securityOutputContracts,
-  reviewLibrarySecurity as reviewSecurity,
-  securityReviewCommand,
-} from "../library/security.js";
+import { securityOutputContracts } from "../library/security/output.js";
+import { reviewLibrarySecurity as reviewSecurity } from "../library/security/operation.js";
+import { securityReviewCommand } from "../library/security/review.js";
 import { localFlags } from "./parameters.js";
 
 import { Renderer } from "../terminal/renderer.js";

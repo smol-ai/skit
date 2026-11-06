@@ -19,7 +19,8 @@ import {
   type SetupReview,
   type ManageOptions,
 } from "@smolai/skit-core/library/setup";
-import { checkSubjects, renderCheck } from "./check.js";
+import { checkSubjects } from "./check/operation.js";
+import { renderCheck } from "./check/present.js";
 import { setupReviewSkillChoices } from "./setup/skills.js";
 import { renderChangeResult } from "./presentation/installed-skill-changes.js";
 import {

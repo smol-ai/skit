@@ -2,7 +2,8 @@ import { Option, Effect } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
-import { removeOutputContracts, executeRemove } from "../library/remove.js";
+import { removeOutputContracts } from "../library/remove/output.js";
+import { executeRemove } from "../library/remove/operation.js";
 import { localFlags } from "./parameters.js";
 import { Renderer } from "../terminal/renderer.js";
 

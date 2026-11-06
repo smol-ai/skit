@@ -4,7 +4,6 @@ import { approvedServices, owners as boundaryOwners } from "../architecture/boun
 import { coreExports } from "../architecture/app.ts";
 import { layout, undecided } from "../architecture/layout.mjs";
 import { libraryRules } from "./library-rules.mjs";
-import { structureRules } from "./structure-rules.mjs";
 import { effectHygieneRules } from "./effect-hygiene-rules.mjs";
 import { frontendRules } from "./frontend-rules.mjs";
 
@@ -830,7 +829,6 @@ export default {
     ...effectRules,
     ...effectHygieneRules,
     ...libraryRules,
-    ...structureRules,
     ...frontendRules,
     "no-direct-cli-output": {
       meta: {

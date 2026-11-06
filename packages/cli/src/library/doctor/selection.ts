@@ -4,7 +4,7 @@ import { Array, Effect } from "effect";
 import { resolve } from "node:path";
 import { openSetEnabledSession, type SetEnabledIntent } from "@smolai/skit-core/library/enable";
 import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
-import { scanLocalUsage } from "../usage.js";
+import { scanLocalUsage } from "../usage/scan.js";
 
 type Estimated = Extract<ListingBudget, { _tag: "Estimated" }>;
 export const overBudget = (budgets: readonly ListingBudget[]): Estimated[] =>

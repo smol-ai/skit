@@ -1,18 +1,10 @@
 import { relative, resolve } from "node:path";
 import ts from "typescript-parser";
 import { coreExports } from "../architecture/app.ts";
-import { contains, effectImports } from "./effect-hygiene-rules.mjs";
+import { contains } from "./effect-hygiene-rules.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const cli = "packages/cli/src/";
-// Every published core owner is an entry point here. Contracts and platform wiring are not owners:
-// reading configuration or decoding a wire schema beside one owner call is not orchestration.
-const vocabulary = new Set(["./shared", "./api", "./universal/api", "./platform"]);
-const ownerEntries = new Set(
-  Object.keys(coreExports)
-    .filter((subpath) => !vocabulary.has(subpath))
-    .map((subpath) => `@smolai/skit-core/${subpath.slice(2)}`),
-);
 const member = (node) =>
   node?.type === "MemberExpression"
     ? node.computed
@@ -176,28 +168,6 @@ function failureUnions(context) {
   return reports;
 }
 
-/** Pure labels/choices exported beside owner operations do not perform owner work. */
-function ownerEffectCalls(context, calls) {
-  const { checker, source } = cliTypes(context);
-  const starts = new Set(calls.map((call) => call.range[0]));
-  let count = 0;
-  const visit = (node) => {
-    if (ts.isCallExpression(node) && starts.has(node.getStart(source))) {
-      const signature = checker.getResolvedSignature(node);
-      const result = signature && checker.getReturnTypeOfSignature(signature);
-      if (
-        !result ||
-        result.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown) ||
-        result.getProperty("~effect/Effect")
-      )
-        count++;
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(source);
-  return count;
-}
-
 function commandExport(context, exports) {
   const { checker, source } = cliTypes(context);
   const values = new Map(
@@ -327,53 +297,6 @@ export const frontendRules = {
             )
           )
             context.report({ node: r, messageId: "forbidden" });
-        },
-      };
-    },
-  },
-  "frontend-one-owner-call": {
-    meta: {
-      type: "problem",
-      docs: {
-        description: "Flag multiple directly imported owner operations in one frontend Effect body",
-      },
-      messages: {
-        forbidden:
-          "This Effect body yields multiple directly imported owner calls. Keep state-transition coordination in the owner; this check does not follow helpers or callbacks.",
-      },
-    },
-    create(context) {
-      if (
-        !/^packages\/cli\/src\/(author|library|feedback|commands)\//.test(
-          relative(root, context.filename),
-        )
-      )
-        return {};
-      const effect = effectImports();
-      const bindings = imports();
-      return {
-        ImportDeclaration(node) {
-          effect.ImportDeclaration(node);
-          bindings.add(node);
-        },
-        CallExpression(node) {
-          const callee = node.callee?.type === "CallExpression" ? node.callee.callee : node.callee;
-          if (!["fn", "gen"].some((name) => effect.is(callee, name))) return;
-          for (const callback of node.arguments.filter(isFunction)) {
-            const calls = [];
-            walkBody(callback.body, (child) => {
-              if (child.type !== "YieldExpression" || !child.delegate) return;
-              walkBody(child.argument, (call) => {
-                if (
-                  call.type === "CallExpression" &&
-                  ownerEntries.has(bindings.path(call.callee)?.[0])
-                )
-                  calls.push(call);
-              });
-            });
-            if (calls.length > 1 && ownerEffectCalls(context, calls) > 1)
-              context.report({ node: callback, messageId: "forbidden" });
-          }
         },
       };
     },

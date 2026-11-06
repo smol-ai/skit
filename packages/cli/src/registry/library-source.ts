@@ -29,3 +29,19 @@ export const sourceRequest = Effect.fn("CLI.sourceRequest")(function* (
     ...(previousSkillPaths === undefined ? {} : { previousSkillPaths }),
   };
 });
+
+/** Registry owns locator selection and the credentials carried into a Library source request. */
+export const addSourceRequest = Effect.fn("Registry.addSourceRequest")(function* (
+  input: string,
+  registry?: string,
+) {
+  const locator = yield* Registry.source(input, { registry });
+  const selected: ResolvedAuth | undefined = locator.origin
+    ? {
+        origin: locator.origin,
+        token: locator.token,
+        source: locator.token === undefined ? "none" : "stored",
+      }
+    : undefined;
+  return yield* sourceRequest(locator.input, undefined, selected);
+});

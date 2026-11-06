@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-import { checkCoreExports, checkFeatures } from "../scripts/check-structure.mjs";
+import { checkCoreExports } from "../scripts/check-structure.mjs";
 
 const roots: string[] = [];
 function fixture(files: string[]) {
@@ -16,26 +16,6 @@ function fixture(files: string[]) {
 }
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
-});
-
-describe("declared feature layout", () => {
-  const feature = "packages/skit/src/library/setup";
-  test("one sibling entry with private implementations passes without build output", () => {
-    const root = fixture([`${feature}.ts`, `${feature}/plan.ts`, `${feature}/undo/files.ts`]);
-    expect(checkFeatures(root, [feature])).toEqual([]);
-  });
-  test("missing sibling and both duplicate entries are reported", () => {
-    const root = fixture([`${feature}/index.ts`, `${feature}/setup.ts`]);
-    expect(checkFeatures(root, [feature])).toEqual([
-      `${feature}/: missing public entry ${feature}.ts`,
-      `${feature}/index.ts: duplicate entry; use ${feature}.ts`,
-      `${feature}/setup.ts: duplicate entry; use ${feature}.ts`,
-    ]);
-  });
-  test("a deleted feature directory is detected even though Oxlint has no files to inspect", () => {
-    const root = fixture([`${feature}.ts`]);
-    expect(checkFeatures(root, [feature])).toEqual([`${feature}/: missing feature directory`]);
-  });
 });
 
 describe("core exports and declared API roles", () => {

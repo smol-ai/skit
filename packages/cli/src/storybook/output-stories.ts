@@ -13,7 +13,7 @@ import { Data } from "effect";
 
 import type { CommandFailure, CommandResult } from "../commands/types.js";
 import { result } from "../commands/result.js";
-import { recoveryActions } from "../library/recovery.js";
+import { recoveryActions } from "../library/recovery/output.js";
 import { setupUndoActions } from "../library/setup.js";
 
 export type OutputStory = Data.TaggedEnum<{

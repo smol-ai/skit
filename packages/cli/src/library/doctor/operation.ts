@@ -1,7 +1,10 @@
 import { libraryDoctorReport, inspectNativeDiscovery } from "@smolai/skit-core/library/inventory";
 import { Effect } from "effect";
 import { Renderer } from "../../terminal/renderer.js";
-import { refreshLibraryInventory, type CliInventoryOptions } from "../inventory.js";
+import {
+  refreshLibraryInventoryCommand as refreshLibraryInventory,
+  type CliInventoryOptions,
+} from "../inventory/operation.js";
 
 /** Diagnose the same freshly persisted observation; report construction is pure. */
 export const doctorCommand = Effect.fn("CLI.doctor")(function* (options: CliInventoryOptions) {

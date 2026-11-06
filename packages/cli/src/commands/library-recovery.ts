@@ -3,7 +3,7 @@ import { Argument, Command } from "effect/cli";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { handleLibraryCommand, commandFailure } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
-import { recoveryOutputContracts, recoveryActions } from "../library/recovery.js";
+import { recoveryOutputContracts, recoveryActions } from "../library/recovery/output.js";
 
 import { homeFlag, jsonFlag, optionalString } from "./parameters.js";
 import {

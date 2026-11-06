@@ -3,7 +3,7 @@ import { Option, Effect } from "effect";
 import { Command } from "effect/cli";
 import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
-import { historyOutputContracts } from "../library/history.js";
+import { historyOutputContracts } from "../library/history/output.js";
 import { homeFlag, jsonFlag } from "./parameters.js";
 import { Renderer } from "../terminal/renderer.js";
 import { encodeResult as result } from "./encode-result.js";

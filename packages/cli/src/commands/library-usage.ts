@@ -3,7 +3,8 @@ import { readInstalledSkills } from "@smolai/skit-core/library/queries";
 import { UsageHarness } from "@smolai/skit-core/library/usage";
 import { Effect, Option } from "effect";
 import { Command, Flag } from "effect/cli";
-import { scanLocalUsage, usageOutputContracts } from "../library/usage.js";
+import { scanLocalUsage } from "../library/usage/scan.js";
+import { usageOutputContracts } from "../library/usage/output.js";
 import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
 

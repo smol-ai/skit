@@ -1,4 +1,4 @@
-import { securityOutputContracts } from "../library/security.js";
+import { securityOutputContracts } from "../library/security/output.js";
 import { SkillAssessmentDecision, SkillAudit } from "@smolai/skit-core/audit";
 import { InvocationMetadataGeneration, SkitValidationDiagnostic } from "@smolai/skit-core/author";
 import {
@@ -12,23 +12,23 @@ import { VersionReport } from "../releases.js";
 import { Schema } from "effect";
 import { setupOutputContracts } from "../library/setup.js";
 import { enableOutputContracts } from "../library/enable.js";
-import { recoveryOutputContracts } from "../library/recovery.js";
-import { historyOutputContracts } from "../library/history.js";
+import { recoveryOutputContracts } from "../library/recovery/output.js";
+import { historyOutputContracts } from "../library/history/output.js";
 import { AuditReportV1Alpha4 } from "@smolai/skit-core/audit";
 import { HarnessProbeReport } from "@smolai/skit-core/harnesses";
 import { RegistryRemoteChange, RegistryRemoteList } from "../registry/contracts.js";
 import { AuthorSyncResult } from "../author/contracts.js";
-import { removeOutputContracts } from "../library/remove.js";
-import { checkOutputContracts } from "../library/check.js";
-import { addOutputContracts } from "../library/add.js";
-import { updateOutputContracts } from "../library/update.js";
+import { removeOutputContracts } from "../library/remove/output.js";
+import { checkOutputContracts } from "../library/check/output.js";
+import { addOutputContracts } from "../library/add/output.js";
+import { updateOutputContracts } from "../library/update/output.js";
 import { syncOutputContracts } from "../library/sync.js";
 import { listOutputContracts } from "../library/list.js";
-import { repositoryOutputContracts } from "../library/repository.js";
-import { usageOutputContracts } from "../library/usage.js";
+import { repositoryOutputContracts } from "../library/repository/output.js";
+import { usageOutputContracts } from "../library/usage/output.js";
 
-import { inventoryOutputContracts } from "../library/inventory.js";
-import { doctorOutputContracts } from "../library/doctor.js";
+import { inventoryOutputContracts } from "../library/inventory/output.js";
+import { doctorOutputContracts } from "../library/doctor/output.js";
 
 function effectOutput<
   const TId extends string,

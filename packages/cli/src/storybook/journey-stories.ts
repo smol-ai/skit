@@ -6,7 +6,7 @@ import {
 import { SkitConfiguration, skitConfigurationLayer, skitLayer } from "@smolai/skit-core/platform";
 import * as Library from "@smolai/skit-core/library";
 
-import { presentDoctorCleanup } from "../library/doctor.js";
+import { presentDoctorCleanup } from "../library/doctor/cleanup.js";
 import { syncJourney } from "./sync-journey.js";
 import { join } from "node:path";
 import { ConfigProvider, Effect, Option } from "effect";

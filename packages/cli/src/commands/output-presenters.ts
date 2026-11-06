@@ -1,23 +1,23 @@
-import { renderSecurityReview } from "../library/security.js";
-import { renderRepositoryPolicy } from "../library/repository.js";
+import { renderSecurityReview } from "../library/security/present.js";
+import { renderRepositoryPolicy } from "../library/repository/present.js";
 import type { ContractData, ContractDataForId, ContractKey } from "./output-contracts.js";
 import type { CommandResult } from "./types.js";
 import type { RenderContext } from "../terminal/contracts.js";
 import { terminalData } from "../terminal/text.js";
 import { harnessLabel } from "@smolai/skit-core/harnesses";
 import { createColors } from "picocolors";
-import { renderUsage } from "../library/usage.js";
-import { renderInventory } from "../library/inventory.js";
+import { renderUsage } from "../library/usage/present.js";
+import { renderInventory } from "../library/inventory/present.js";
 import { renderSetEnabled } from "../library/enable.js";
-import { renderRemove, renderRemovePlan } from "../library/remove.js";
-import { renderCheck } from "../library/check.js";
+import { renderRemove, renderRemovePlan } from "../library/remove/present.js";
+import { renderCheck } from "../library/check/present.js";
 import { renderLibrarySync } from "../library/sync.js";
 import { renderLibraryList } from "../library/list.js";
 import { renderAuditV1Alpha4 } from "../audit/presentation/report.js";
 import { severityHeadline } from "../audit/presentation/language.js";
-import { renderAdd, renderAddPreview } from "../library/add.js";
-import { renderUpdate, renderUpdatePlan } from "../library/update.js";
-import { renderDoctor } from "../library/doctor.js";
+import { renderAdd, renderAddPreview } from "../library/add/present.js";
+import { renderUpdate, renderUpdatePlan } from "../library/update/present.js";
+import { renderDoctor } from "../library/doctor/present.js";
 import {
   renderSetup,
   renderSetupApplied,
@@ -26,9 +26,12 @@ import {
   renderSetupFailed,
   renderSetupUndo,
 } from "../library/setup.js";
-import { renderRecoveryList, renderRecovery } from "../library/recovery.js";
-import { renderLibraryHistory } from "../library/history.js";
-import { renderProjectionRetention, renderProjectionRetentionPlan } from "../library/update.js";
+import { renderRecoveryList, renderRecovery } from "../library/recovery/present.js";
+import { renderLibraryHistory } from "../library/history/present.js";
+import {
+  renderProjectionRetention,
+  renderProjectionRetentionPlan,
+} from "../library/update/retention.js";
 
 type ContractPresenters = {
   [K in ContractKey]: (data: ContractData<K>, context: RenderContext) => string;

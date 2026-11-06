@@ -11,11 +11,13 @@ direction. Existing debt is a list of violations, not approval of their design.
 plans, mutations, locks and recovery. `packages/cli` is the `@smolai/skit`
 application: command grammar, terminal interaction and process execution.
 
-Start at a command in `packages/cli/src/commands/`, follow its feature entry in
-`packages/cli/src/library/`, and then the named core API:
+Start at a command in `packages/cli/src/commands/` and follow its calls to core.
+CLI output schemas and rendering functions can be imported directly from their
+modules. A folder does not need a sibling re-export file.
 
 | Core entry | Responsibility |
 | --- | --- |
+| `library/source` | Source admissibility, acquisition, import lifetime and add reports |
 | `library/queries` | Passive reports and Skill metadata |
 | `library/session` | Interactive Library state, choices and transitions |
 | `library/enable` | Enable/disable selection, reviewed plans and outcomes |
@@ -40,16 +42,27 @@ commands/library-enable-command.ts       parse flags and scope
 ```
 
 The prompts stay outside writer scopes; core owns the plan and its application.
-Several calls across this interaction are legitimate. `frontend-one-owner-call`
-only flags multiple directly imported owner calls in one Effect body; it does
-not follow helpers or callbacks and is not proof of ownership.
+We enforce resource and owner privacy, not the number of calls in a generator.
+Several calls across a preview/prompt/apply interaction are legitimate.
+
+Add follows a shorter path:
+
+```text
+commands/library-add.ts              flags, preview/add choice, progress and rendering
+  → registry/library-source.ts       locator and credential selection → SourceRequest
+  → core library/source.ts           enforce source policy; preview or add
+    → addSource                      import and optional description report
+```
+
+The command passes the source result directly to its output schema. It does not
+reconstruct credentials, enforce source policy or issue a second Library query.
 
 `import-direction` rejects core dependencies on workspace applications,
 undeclared core package subpaths, and cross-package relative imports into core
 source or build output. It checks static imports/re-exports, literal dynamic
 imports and type-expression imports. Core and CLI have no tsconfig path aliases;
-arbitrary aliases and nonliteral dynamic targets are not resolved by this check. Export maps and these
-direct-edge checks do not prove transitive runtime safety; universal-entry tests
+Arbitrary aliases and nonliteral dynamic targets are not resolved by this check.
+Export maps and these direct-edge checks do not prove transitive runtime safety; universal-entry tests
 separately inspect the runtime-neutral graph.
 
 ## Check a working tree against an approved checkpoint

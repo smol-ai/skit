@@ -3,8 +3,8 @@
  * conformance types (architecture/conformance/). Existing violations fail those checks directly;
  * migration debt never authorizes a service, API difference, file placement or import.
  * Target folder layout: architecture/layout.mjs (Arc work_01m6jatvy5f21a7x5q214td7a3).
- * CLI setup and enable use public library/setup.ts and library/enable.ts entries; their
- * private command interaction, output definitions and presentation live in the matching folders.
+ * CLI interaction, output definitions and rendering stay in CLI modules. Folders do not require
+ * public sibling facades; core package APIs and state-owner privacy are explicit below.
  *
  * Every piece of persisted state has exactly one owner. Nothing outside an owner may import that
  * owner's private modules. `removes` lists what stops existing when the owner exists: the subtraction

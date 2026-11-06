@@ -1,11 +1,6 @@
-import {
-  updateOutputContracts,
-  planUpdates,
-  updateSubjects,
-  updateExitCode,
-  prepareEditImport,
-  EditImportMissing,
-} from "../library/update.js";
+import { updateOutputContracts } from "../library/update/output.js";
+import { planUpdates, updateSubjects, updateExitCode } from "../library/update/operation.js";
+import { prepareEditImport, EditImportMissing } from "../library/update/edit.js";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleSourceCommand } from "../application.js";

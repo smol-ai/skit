@@ -3,7 +3,8 @@ import { Argument, Command } from "effect/cli";
 import { Renderer } from "../terminal/renderer.js";
 import { handleSourceCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
-import { checkOutputContracts, checkSubjects } from "../library/check.js";
+import { checkOutputContracts } from "../library/check/output.js";
+import { checkSubjects } from "../library/check/operation.js";
 import { localFlags } from "./parameters.js";
 import { encodeResult as result } from "./encode-result.js";
 

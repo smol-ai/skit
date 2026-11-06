@@ -2,26 +2,6 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { coreExports, owners } from "../architecture/app.ts";
-import { features } from "../architecture/layout.mjs";
-
-/** Check required feature entries even when a directory contains no lintable source. */
-export function checkFeatures(root, declaredFeatures) {
-  const failures = [];
-  for (const feature of declaredFeatures) {
-    const directory = join(root, feature);
-    const entry = `${feature}.ts`;
-    if (!statSync(join(root, entry), { throwIfNoEntry: false })?.isFile())
-      failures.push(`${feature}/: missing public entry ${entry}`);
-    if (!statSync(directory, { throwIfNoEntry: false })?.isDirectory()) {
-      failures.push(`${feature}/: missing feature directory`);
-      continue;
-    }
-    for (const name of ["index.ts", `${feature.split("/").at(-1)}.ts`])
-      if (existsSync(join(directory, name)))
-        failures.push(`${feature}/${name}: duplicate entry; use ${entry}`);
-  }
-  return failures;
-}
 
 /** Every conditional target is checked, so an alternate condition cannot bypass the declaration. */
 function targets(value, condition = "") {
@@ -100,10 +80,7 @@ export function checkCoreExports(root, manifest, declarations, declaredOwners) {
 
 export function checkStructure(root) {
   const manifest = JSON.parse(readFileSync(join(root, "packages/skit/package.json"), "utf8"));
-  return [
-    ...checkFeatures(root, features),
-    ...checkCoreExports(root, manifest, coreExports, owners),
-  ];
+  return checkCoreExports(root, manifest, coreExports, owners);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

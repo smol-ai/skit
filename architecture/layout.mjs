@@ -69,30 +69,3 @@ export const undecided = [
   // The work item gives Storybook no layout, only an explicit CLI story export.
   "packages/storybook/src/",
 ];
-
-/**
- * Concrete features, distinct from grouping folders such as store/ or terminal/.
- * Each has one public sibling module; its directory is private implementation.
- * Add new features here when deciding their placement. No migration exemptions.
- */
-export const features = [
-  "packages/cli/src/library/inventory",
-  "packages/cli/src/library/doctor",
-  "packages/cli/src/library/security",
-  "packages/cli/src/library/repository",
-  "packages/cli/src/library/usage",
-  "packages/cli/src/library/history",
-  "packages/cli/src/library/recovery",
-  "packages/cli/src/library/sync",
-  "packages/cli/src/library/add",
-  "packages/cli/src/library/update",
-  "packages/cli/src/library/list",
-  "packages/cli/src/library/check",
-  "packages/cli/src/library/remove",
-  "packages/cli/src/feedback",
-  "packages/cli/src/author/sync",
-  "packages/cli/src/releases",
-  "packages/skit/src/library/setup",
-  "packages/cli/src/library/setup",
-  "packages/cli/src/library/enable",
-];

@@ -1,5 +1,8 @@
 /** Library owns source acquisition, pnpm protection, retained import and staging lifetime. */
 import { Clock, Effect } from "effect";
+import { checkSourceInstaller } from "../sources/installer-guidance.js";
+import { readLibraryDescriptionLoad } from "./internal/session/queries.js";
+export { DedicatedInstallerRequired } from "../sources/installer-guidance.js";
 import * as Library from "./library.js";
 import {
   describeSourceSkills,
@@ -37,6 +40,7 @@ const withResolvedSource = Effect.fn("Library.withResolvedSource")(function* <A,
   }) => Effect.Effect<A, E, R>,
 ) {
   const parsed = request.source;
+  yield* checkSourceInstaller(parsed);
   if (parsed.type === "local") yield* leavePnpmSkill(parsed.path);
   const resolved = yield* resolveSkitSource(parsed, {
     registryBaseUrl: request.registryBaseUrl,
@@ -120,3 +124,15 @@ export type {
 } from "../sources/resolve.js";
 
 export { sourceFromUpstream } from "./internal/session/upstream-source.js";
+
+/** Add owns the import and its optional report; a measurement failure cannot undo a saved import. */
+export const addSource = Effect.fn("Library.addSource")(function* (
+  home: string,
+  request: SourceRequest,
+) {
+  const added = yield* importSource(request);
+  const descriptionLoad = yield* readLibraryDescriptionLoad(home, { skills: added.skill_ids }).pipe(
+    Effect.orElseSucceed(() => undefined),
+  );
+  return { added, descriptionLoad };
+});

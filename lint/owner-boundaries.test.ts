@@ -298,6 +298,23 @@ describe("skit/owner-boundaries", () => {
     }
   });
 
+  test("setup storage decisions stay private to Library without a generic feature-facade rule", async () => {
+    expect(
+      await reported(
+        'import { setupImportRequests } from "../library/setup/import.js";',
+        "owner-boundaries",
+        "packages/skit/src/author/probe.ts",
+      ),
+    ).toHaveLength(1);
+    expect(
+      await reported(
+        'import { setupImportRequests } from "./setup/import.js";',
+        "owner-boundaries",
+        "packages/skit/src/library/probe.ts",
+      ),
+    ).toEqual([]);
+  });
+
   test.each(["libraryView", "calculateSetEnabled", "matchingLibrarySubjects", "librarySubjects"])(
     "raw-state %s cannot reopen through a public entry",
     async (name) => {

@@ -9,7 +9,7 @@ import { authorWorkspaceLayer, authorLayer } from "@smolai/skit-core/author";
 import * as Library from "@smolai/skit-core/library";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { terminalPrompterLayer } from "./terminal/prompter.js";
-import { terminalLibraryProgressLayer } from "./library/update.js";
+import { terminalLibraryProgressLayer } from "./library/update/present-progress.js";
 
 /** Every command runs with the terminal's prompts and progress; a command never provides them. */
 const withTerminal = <A, E, R>(program: Effect.Effect<A, E, R>) =>

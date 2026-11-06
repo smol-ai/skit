@@ -1,7 +1,9 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Option, Effect } from "effect";
 import { Command, Flag } from "effect/cli";
-import { presentDoctorCleanup, doctorOutputContracts, doctorCommand } from "../library/doctor.js";
+import { presentDoctorCleanup } from "../library/doctor/cleanup.js";
+import { doctorOutputContracts } from "../library/doctor/output.js";
+import { doctorCommand } from "../library/doctor/operation.js";
 import { Renderer } from "../terminal/renderer.js";
 import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";

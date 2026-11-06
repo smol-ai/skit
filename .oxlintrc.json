@@ -5,10 +5,8 @@
   "jsPlugins": ["./lint/oxlint-plugin-skit.mjs"],
   "rules": {
     "oxc/no-barrel-file": "error",
-    "skit/feature-entry": "error",
     "skit/frontend-no-resources": "error",
     "skit/frontend-no-library-service": "error",
-    "skit/frontend-one-owner-call": "error",
     "skit/no-failure-unions": "error",
     "skit/command-module-exports": "error",
     "skit/no-record-any": "error",

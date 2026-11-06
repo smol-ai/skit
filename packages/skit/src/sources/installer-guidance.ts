@@ -1,6 +1,6 @@
-import { parseSkitSource, type SkitSource } from "@smolai/skit-core/library/source";
+import type { SkitSource } from "../library/library-contracts.js";
 import { Data, Effect } from "effect";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
+import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 export interface DedicatedInstallerGuidance {
   readonly sourceCoordinate: string;
@@ -45,12 +45,10 @@ export function dedicatedInstallerForSource(
     : undefined;
 }
 
-/** Stop before acquisition when the Source explicitly requires its own installer. */
-export const rejectDedicatedInstallerSource = Effect.fn("Library.rejectDedicatedInstallerSource")(
-  function* (input: string) {
-    const source = yield* parseSkitSource(input);
-    const guidance = dedicatedInstallerForSource(source);
-    if (guidance) return yield* new DedicatedInstallerRequired(guidance);
-    return source;
-  },
-);
+/** Source admissibility is checked before any acquisition, for every caller. */
+export const checkSourceInstaller = Effect.fn("Library.checkSourceInstaller")(function* (
+  source: SkitSource,
+) {
+  const guidance = dedicatedInstallerForSource(source);
+  if (guidance) return yield* new DedicatedInstallerRequired(guidance);
+});
