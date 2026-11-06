@@ -62,7 +62,7 @@ class ImportRequestInvalid
   }
 }
 
-export interface ImportRequestSkill {
+interface ImportRequestSkill {
   readonly name: string;
   readonly sourcePath: string;
   readonly relativePath: string;

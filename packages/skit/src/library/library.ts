@@ -152,7 +152,7 @@ export interface RemoveOutcome {
   readonly result: ExistingOutcome;
 }
 
-export interface UpdateOutcome {
+interface UpdateOutcome {
   readonly _tag: "Update";
   readonly result: ExistingOutcome;
 }

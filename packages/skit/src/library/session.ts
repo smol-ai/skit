@@ -80,16 +80,10 @@ export type { LibraryChangeSelection } from "./internal/session/set-enabled.js";
 
 export type { SkillsShUpdateMember } from "./internal/session/skills-sh-update-check.js";
 
-export {
-  openSyncSession,
-  SyncLocalChanged,
-  type SyncSessionRequest,
-} from "./internal/sync/session.js";
+export { openSyncSession, SyncLocalChanged } from "./internal/sync/session.js";
 export { SyncChanges } from "./sync-changes.js";
 
 // Canonical read-query errors keep inferred frontend declarations portable.
 export type { LibrarySubjectNotFound, LibrarySubjectAmbiguous } from "./subject-resolution.js";
-
-export type { CleanupBudget, CleanupCandidate } from "./internal/session/cleanup-selection.js";
 
 export type { WorkspaceClaim } from "./internal/session/workspace-claims.js";

@@ -12,7 +12,7 @@ import {
   Warning,
 } from "./installed-skill-facts.js";
 export { Destination, Duplicate } from "./installed-skill-facts.js";
-export type { DuplicateScanIncomplete } from "./installed-skill-facts.js";
+
 import { Context, Data, Effect, FileSystem, Option, Path, Schema, Scope } from "effect";
 import { dirname, join, resolve } from "node:path";
 import { Digest } from "effect/crypto";
