@@ -11,9 +11,10 @@ import { acquireFileLock } from "../src/platform/file-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { libraryLayer } from "./helpers/library-store.js";
 
-// The built package, which a separate SKIT process loads: `pnpm build` runs before the tests.
-const core = pathToFileURL(
-  join(dirname(fileURLToPath(import.meta.url)), "..", "dist", "index.js"),
+// Package-local evidence reader for the crash fixture; the child uses public owner APIs.
+// `pnpm build` runs before the tests.
+const folderEvidence = pathToFileURL(
+  join(dirname(fileURLToPath(import.meta.url)), "..", "dist", "library", "folder-evidence.js"),
 ).href;
 
 /**
@@ -27,8 +28,10 @@ const setupProcess = (home: string, folder: string, commits: number) =>
       "--input-type=module",
       "-e",
       `import { Context, Effect, FileSystem, Layer, Option } from "effect";
+       import { Library } from "@smolai/skit-core/library";
+       import { skitLayer } from "@smolai/skit-core/platform";
        const [url, home, folder, commits] = process.argv.slice(1);
-       const core = await import(url);
+       const { observePathEvidence } = await import(url);
        const paused = Layer.effect(FileSystem.FileSystem, Effect.map(FileSystem.FileSystem, (fs) => {
          let left = Number(commits);
          const gate = Effect.suspend(() => left-- > 0 ? Effect.void
@@ -37,16 +40,18 @@ const setupProcess = (home: string, folder: string, commits: number) =>
            rename: (from, to) => Effect.andThen(gate, fs.rename(from, to)),
            link: (from, to) => Effect.andThen(gate, fs.link(from, to)) };
        }));
-       const layer = core.Library.layer({ home, routing: { _tag: "None" } }).pipe(
+       const layer = Library.layer({ home, routing: { _tag: "None" } }).pipe(
          Layer.provide(paused));
-       await Effect.runPromise(Effect.gen(function* () {
-         const library = Context.get(yield* Layer.build(layer), core.Library.Service);
-         const evidence = yield* core.observePathEvidence(folder);
+       const keepAlive = setInterval(() => {}, 60_000);
+       try { await Effect.runPromise(Effect.gen(function* () {
+         const library = Context.get(yield* Layer.build(layer), Library.Service);
+         const evidence = yield* observePathEvidence(folder);
          if (Option.isNone(evidence)) return yield* Effect.die("no folder");
          const base = yield* library.read;
          yield* library.setup([{ _tag: "Remove", folders: [evidence.value] }], { base });
-       }).pipe(Effect.provide(core.skitLayer), Effect.scoped));`,
-      core,
+       }).pipe(Effect.provide(skitLayer), Effect.scoped));
+       } finally { clearInterval(keepAlive); }`,
+      folderEvidence,
       home,
       folder,
       String(commits),
@@ -62,9 +67,18 @@ const killedAfter = Effect.fn("Test.killedAfter")(function* (
 ) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const child = yield* spawner.spawn(setupProcess(home, folder, commits));
-  yield* child.stdout.pipe(Stream.decodeText(), Stream.splitLines, Stream.take(1), Stream.runDrain);
+  const readiness = yield* child.stdout.pipe(
+    Stream.decodeText(),
+    Stream.splitLines,
+    Stream.take(1),
+    Stream.runCollect,
+  );
+  assert.deepStrictEqual(readiness, ["paused"]);
+  assert.isTrue(yield* child.isRunning);
   yield* child.kill({ killSignal: "SIGKILL" });
-  yield* child.exitCode.pipe(Effect.ignore);
+  const exit = yield* Effect.result(child.exitCode);
+  assert.strictEqual(exit._tag, "Failure");
+  if (exit._tag === "Failure") assert.include(String(exit.failure.cause), "SIGKILL");
 });
 
 const fixture = Effect.gen(function* () {
