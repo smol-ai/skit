@@ -2,7 +2,7 @@ import { openLibrary, inLibrary } from "./helpers/library-store.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { deterministicTreeHash } from "../src/artifact/skit.js";
+import { deterministicTreeHash, validateSkitDirectory } from "../src/artifact/skit.js";
 import { currentCollectionSkills, currentSkillVersion } from "../src/library/library-contracts.js";
 import { makeMachineId } from "../src/library/entity-ids.js";
 
@@ -356,3 +356,91 @@ for (const kind of ["observed", "authored"] as const) {
     );
   }
 }
+
+for (const change of ["valid-skill", "invalid-descriptor", "missing-skill"] as const)
+  it.effect(`authored import derives validation from retained bytes after ${change} changes`, () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-import-race-" });
+      const home = join(root, "library");
+      const source = join(root, "source");
+      const primary = join(source, "skills/review/SKILL.md");
+      const descriptor = { slug: "tools", skills: [{ name: "review", path: "skills/review" }] };
+      const original = "---\nname: review\ndescription: Review carefully\n---\nOriginal.\n";
+      const changed = original.replace("Original.", "Edited after validation read.");
+      yield* fs.makeDirectory(join(source, "skills/review"), { recursive: true });
+      yield* fs.writeFileString(primary, original);
+      yield* fs.writeFileString(join(source, "skit.json"), JSON.stringify(descriptor));
+      let edited = false;
+      const result = yield* Effect.gen(function* () {
+        const owner = yield* openLibrary(home);
+        const imported = yield* Effect.result(
+          owner.import.authored({
+            root: source,
+            source: { type: "local", path: source },
+            input: source,
+            importedAt: "2026-11-06T00:00:00.000Z",
+          }),
+        );
+        return { imported, snapshot: yield* owner.read };
+      }).pipe(
+        Effect.provideService(FileSystem.FileSystem, {
+          ...fs,
+          readFileString: (path, encoding) =>
+            fs.readFileString(path, encoding).pipe(
+              Effect.tap(() =>
+                Effect.gen(function* () {
+                  // Return the old validation read, then let the editor change the root before
+                  // retention hashes/copies it. No sleeps or changes to production scheduling.
+                  if (path !== primary || edited) return;
+                  edited = true;
+                  if (change === "valid-skill") yield* fs.writeFileString(primary, changed);
+                  else
+                    yield* fs.writeFileString(
+                      join(source, "skit.json"),
+                      change === "invalid-descriptor"
+                        ? "invalid JSON"
+                        : JSON.stringify({
+                            ...descriptor,
+                            skills: [{ name: "review", path: "skills/missing" }],
+                          }),
+                    );
+                }),
+              ),
+            ),
+        }),
+      );
+      assert.isTrue(edited);
+      if (change !== "valid-skill") {
+        if (result.imported._tag !== "Failure")
+          return yield* Effect.die("Invalid edited descriptor was imported");
+        assert.strictEqual(
+          result.imported.failure._tag,
+          change === "invalid-descriptor" ? "DescriptorMalformed" : "Library.ImportRequestInvalid",
+        );
+        assert.strictEqual(result.snapshot._tag, "Absent");
+      } else {
+        if (result.imported._tag !== "Success" || result.snapshot._tag !== "Present")
+          return yield* Effect.die("Valid edited bytes were not imported");
+        const imported = result.imported.success;
+        const retained = collectionVersionPath(libraryOriginalsPath(home), imported.snapshotDigest);
+        const validated = yield* validateSkitDirectory(retained, "retained", {
+          assessmentContext: "import",
+        });
+        const skill = result.snapshot.state.skills.find(
+          (skill) => skill.skill_id === imported.skills[0]?.skill_id,
+        );
+        const version =
+          skill === undefined ? undefined : currentSkillVersion(result.snapshot.state, skill);
+        assert.strictEqual(
+          version?.validation_identity_hash,
+          validated.identity.skills[0]?.contentHash,
+        );
+        assert.strictEqual(
+          yield* fs.readFileString(join(retained, "skills/review/SKILL.md")),
+          changed,
+        );
+        assert.strictEqual(yield* fs.readFileString(primary), changed);
+      }
+    }).pipe(Effect.provide(skitLayer)),
+  );

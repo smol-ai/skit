@@ -526,10 +526,10 @@ export interface AuthoredImport {
 }
 export const importAuthoredCollection = Effect.fn("Library.retainAuthoredCollectionUnderLock")(
   function* (request: AuthoredImport) {
-    const validated = yield* validateSkitDirectory(request.root, "retained", {
+    const candidate = yield* validateSkitDirectory(request.root, "retained", {
       assessmentContext: "import",
     });
-    if (validated.diagnostics.some((item) => item.severity === "error"))
+    if (candidate.diagnostics.some((item) => item.severity === "error"))
       return yield* new ImportRequestInvalid({
         reason: "authored Descriptor or Skill content is invalid",
       });
@@ -541,6 +541,15 @@ export const importAuthoredCollection = Effect.fn("Library.retainAuthoredCollect
       collectionVersionHash,
       true,
     );
+    // The editable root can change after the early rejection check. All selected facts
+    // must describe the immutable bytes we actually retained, including their descriptor.
+    const validated = yield* validateSkitDirectory(collectionVersionPath, "retained", {
+      assessmentContext: "import",
+    });
+    if (validated.diagnostics.some((item) => item.severity === "error"))
+      return yield* new ImportRequestInvalid({
+        reason: "authored Descriptor or Skill content is invalid",
+      });
     const validationByName = new Map(validated.identity.skills.map((skill) => [skill.name, skill]));
     const facts: ImportedSkillFact[] = [];
     for (const member of validated.descriptor.skills) {
