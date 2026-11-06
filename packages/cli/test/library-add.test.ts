@@ -1,6 +1,7 @@
+import { readLibraryManifest } from "./helpers/library-manifest.js";
 import { originalTreePath } from "./helpers/original-tree.js";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
-import { emptyLibraryState, libraryManifestFromLocalState } from "@smolai/skit-core";
+import { emptyLibraryState } from "@smolai/skit-core";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { Library } from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
@@ -553,6 +554,6 @@ it.effect("records the Registry Release a Collection is added from, so sync can 
       ["1.2.3"],
     );
     // A Release the Registry can serve again needs no snapshot of its own.
-    assert.deepStrictEqual((yield* libraryManifestFromLocalState(state)).snapshot_digests, []);
+    assert.deepStrictEqual((yield* readLibraryManifest(home)).snapshot_digests, []);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

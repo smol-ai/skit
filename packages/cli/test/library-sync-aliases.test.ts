@@ -1,10 +1,11 @@
+import { readLibraryManifest } from "./helpers/library-manifest.js";
 import { setupIntent } from "@smolai/skit-core/library/setup";
 import { originalArchive, originalTreePath } from "./helpers/original-tree.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Schema } from "effect";
 import { join } from "node:path";
-import { libraryManifestFromLocalState, LibraryState } from "@smolai/skit-core";
+import { LibraryState } from "@smolai/skit-core";
 import { LibraryManifest } from "@smolai/skit-core/library";
 import { type SkillId } from "@smolai/skit-core/universal/consumer";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
@@ -34,7 +35,7 @@ const assertIntact = Effect.fn("Test.assertIntact")(function* (
 ) {
   const state = yield* device.state;
   assert.isTrue(Schema.is(LibraryState)(state));
-  yield* libraryManifestFromLocalState(state);
+  yield* readLibraryManifest(device.home);
   const ancestry = state.sync_ancestry;
   if (ancestry !== undefined) assert.isTrue(Schema.is(LibraryManifest)(ancestry.base_manifest));
   for (const hash of new Set([...imported, ...state.collection_versions.map((copy) => copy.hash)]))

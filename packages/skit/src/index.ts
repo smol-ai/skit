@@ -7,7 +7,6 @@ export {
   LibraryState,
   emptyLibraryState,
   libraryStateRevision,
-  libraryManifestFromLocalState,
 } from "./library/library-state.js";
 export { InstalledSkill } from "./library/device-state.js";
 

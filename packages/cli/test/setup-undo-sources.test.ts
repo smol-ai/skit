@@ -1,3 +1,4 @@
+import { readLibraryManifest } from "./helpers/library-manifest.js";
 import { originalTreePath } from "./helpers/original-tree.js";
 import { withLibraryOwner } from "./helpers/library-owner.js";
 import { installEnabledSkills } from "./helpers/installed-skills.js";
@@ -9,7 +10,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { TestClock } from "effect/testing";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import { libraryManifestFromLocalState } from "@smolai/skit-core";
+
 import type { LibraryFixtureState as LibraryState } from "./helpers/library-home.js";
 import * as MachineSettings from "@smolai/skit-core/machine-settings";
 import { skitLayer } from "@smolai/skit-core/platform";
@@ -335,7 +336,7 @@ it.effect(
           (membership) => membership.collectionId === f.collectionId,
         )?.skillIds,
       ).toHaveLength(2);
-      const afterManifest = yield* libraryManifestFromLocalState(after);
+      const afterManifest = yield* readLibraryManifest(f.home.home);
       const head = {
         library_id: "source-undo-library",
         revision_id: "after-setup",
@@ -406,7 +407,7 @@ it.effect(
       expect(observation.input.value).toBe(
         originalTreePath(join(f.home.home, "originals"), copy.hash),
       );
-      const restoredManifest = yield* libraryManifestFromLocalState(restored);
+      const restoredManifest = yield* readLibraryManifest(f.home.home);
       expect(restoredManifest.imports).toEqual(restored.imports);
       const synced = yield* f.home.owned(
         Effect.gen(function* () {

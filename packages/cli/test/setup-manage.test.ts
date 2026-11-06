@@ -1,10 +1,11 @@
+import { readLibraryManifest } from "./helpers/library-manifest.js";
 import { originalTreePath } from "./helpers/original-tree.js";
 import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
-import { libraryManifestFromLocalState } from "@smolai/skit-core";
+
 import { inspectOwnershipMarker } from "@smolai/skit-core/library/inventory";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { importSource } from "../src/library/source.js";
@@ -105,7 +106,7 @@ it.effect("adds selected skills and takes ownership only of eligible global copi
     expect(yield* fs.readFileString(join(repositorySkill, "SKILL.md"))).toBe(
       skillDocument("repo-only", "Repository skill"),
     );
-    expect((yield* libraryManifestFromLocalState(state)).snapshot_digests).toEqual(
+    expect((yield* readLibraryManifest(home.home)).snapshot_digests).toEqual(
       state.collection_versions.map((copy) => copy.hash).sort(),
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),

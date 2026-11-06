@@ -1,3 +1,4 @@
+import { readLibraryManifest } from "./helpers/library-manifest.js";
 import { originalArchive, originalTreePath } from "./helpers/original-tree.js";
 import { Library } from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
@@ -5,7 +6,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, Schema, Option, Exit, type Layer, type Scope } from "effect";
 import type { SkillId } from "@smolai/skit-core/universal/consumer";
 import { join } from "node:path";
-import { LibraryState, libraryManifestFromLocalState, emptyLibraryState } from "@smolai/skit-core";
+import { LibraryState, emptyLibraryState } from "@smolai/skit-core";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { LibraryChangedOnServer, RegistryUnreachable } from "../src/registry/failures.js";
 import { LibraryApiRejected, LibraryManifestTooNew } from "../src/library/sync/api.js";
@@ -185,7 +186,7 @@ const cases: readonly {
         assert.strictEqual(server.respond("POST", "/api/library/snapshots", archive).status, 200);
         inject({
           _tag: "CompetingWrite",
-          manifest: yield* libraryManifestFromLocalState(competingState),
+          manifest: yield* readLibraryManifest(b.home),
         });
         const unchanged = yield* captureDisk(a.disk);
         assert.instanceOf(yield* Effect.flip(a.sync()), LibraryChangedOnServer);
@@ -928,36 +929,37 @@ it.effect("a failed snapshot download retains nothing and leaves the remote unch
 );
 
 /** Prepare through the owner; the resulting plan contains no writer callbacks. */
-const prepareLocalSync = Effect.gen(function* () {
-  const library = yield* Library.Service;
-  const base = yield* library.read;
-  const state = base._tag === "Present" ? base.state : emptyLibraryState();
-  const manifest = yield* libraryManifestFromLocalState(state);
-  const localArchives = base._tag === "Present" ? yield* library.content.pack(base) : [];
-  const staged = yield* library.content.stage(manifest, {
-    localArchives,
-    registry: { origin: "https://registry.test", token: Option.none() },
+const prepareLocalSync = (home: string) =>
+  Effect.gen(function* () {
+    const library = yield* Library.Service;
+    const base = yield* library.read;
+    const state = base._tag === "Present" ? base.state : emptyLibraryState();
+    const manifest = yield* readLibraryManifest(home);
+    const localArchives = base._tag === "Present" ? yield* library.content.pack(base) : [];
+    const staged = yield* library.content.stage(manifest, {
+      localArchives,
+      registry: { origin: "https://registry.test", token: Option.none() },
+    });
+    const plan = yield* library.plan(
+      {
+        _tag: "Sync",
+        staged,
+        deviceSelection: Option.none(),
+        pendingOrigin: Option.none(),
+        acceptedBase: Option.fromUndefinedOr(state.sync_ancestry),
+        remote: Option.none(),
+      },
+      { base },
+    );
+    if (Library.isRemoteSyncPlan(plan)) return yield* Effect.die("Expected local Sync review");
+    return plan;
   });
-  const plan = yield* library.plan(
-    {
-      _tag: "Sync",
-      staged,
-      deviceSelection: Option.none(),
-      pendingOrigin: Option.none(),
-      acceptedBase: Option.fromUndefinedOr(state.sync_ancestry),
-      remote: Option.none(),
-    },
-    { base },
-  );
-  if (Library.isRemoteSyncPlan(plan)) return yield* Effect.die("Expected local Sync review");
-  return plan;
-});
 
 it.effect("a Sync plan distinguishes an absent Library from a newly empty one", () =>
   Effect.gen(function* () {
     const { a, fs } = yield* devices;
     const layer = Library.layer({ home: a.home, routing: { _tag: "None" } });
-    const plan = yield* prepareLocalSync.pipe(Effect.provide(layer));
+    const plan = yield* prepareLocalSync(a.home).pipe(Effect.provide(layer));
     yield* fs.makeDirectory(a.home, { recursive: true });
     const statePath = join(a.home, "state.json");
     const bytes = JSON.stringify(emptyLibraryState());
@@ -976,7 +978,7 @@ it.effect("a Sync plan cannot save into another Library home", () =>
   Effect.gen(function* () {
     const { a, b } = yield* devices;
     yield* a.importSource("first");
-    const plan = yield* prepareLocalSync.pipe(
+    const plan = yield* prepareLocalSync(a.home).pipe(
       Effect.provide(Library.layer({ home: a.home, routing: { _tag: "None" } })),
     );
     const before = yield* captureDisk([...a.disk, ...b.disk], { identity: true });

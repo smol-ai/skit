@@ -1,3 +1,4 @@
+import { readLibraryManifest } from "./helpers/library-manifest.js";
 import { originalArchive, originalTreePath } from "./helpers/original-tree.js";
 import { installEnabledSkills } from "./helpers/installed-skills.js";
 import { testPlatformLayer } from "./helpers/platform.js";
@@ -5,7 +6,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Schema } from "effect";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { libraryManifestFromLocalState, LibraryState } from "@smolai/skit-core";
+import { LibraryState } from "@smolai/skit-core";
 import { type SkitSource } from "@smolai/skit-core/library/source";
 import { Library } from "@smolai/skit-core/library";
 import { SourceProcess } from "@smolai/skit-core/platform";
@@ -78,7 +79,7 @@ const fixture = Effect.gen(function* () {
     Effect.gen(function* () {
       yield* writingTo(home, importSource(source)).pipe(Effect.provide(http));
       const state = yield* load(home);
-      const manifest = yield* libraryManifestFromLocalState(state);
+      const manifest = yield* readLibraryManifest(home);
       assert.deepStrictEqual(manifest.snapshot_digests, []);
       assert.strictEqual(
         server.respond("PUT", "/api/library/portable", { expected_revision_id: null, manifest })
