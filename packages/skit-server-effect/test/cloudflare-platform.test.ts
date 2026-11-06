@@ -27,17 +27,31 @@ describe("BlobStore", () => {
     }).pipe(Effect.provide(blobStoreLayer(env.SKIT_BLOBS))),
   );
 
-  it.effect("deletes more keys than one R2 delete call accepts", () =>
-    Effect.gen(function* () {
+  it.effect("deletes more keys than one R2 delete call accepts", () => {
+    const bucket = env.SKIT_BLOBS;
+    // Miniflare does not enforce this Workers API limit. Keep the request
+    // boundary strict while forwarding the actual operations to the real binding.
+    const limited: Pick<R2Bucket, "get" | "put" | "head" | "delete" | "list"> = {
+      get: bucket.get.bind(bucket),
+      put: bucket.put.bind(bucket),
+      head: bucket.head.bind(bucket),
+      list: bucket.list.bind(bucket),
+      delete: (keys) =>
+        Array.isArray(keys) && keys.length > 1_000
+          ? Promise.reject(new Error("R2 accepts at most 1000 delete keys per request"))
+          : bucket.delete(keys),
+    };
+    return Effect.gen(function* () {
       const blobs = yield* BlobStore;
       const keys = Array.from({ length: 1_001 }, (_, index) => `batch/${index}`);
-      yield* Effect.forEach(keys, (key) => blobs.put("write batch object", key, bytes(key)), {
-        concurrency: 50,
-      });
+      // R2 limits keys per request regardless of whether the objects exist.
+      // Seed both sides of that boundary; the other keys need no upload.
+      const stored = ["batch/0", "batch/999", "batch/1000"];
+      yield* Effect.forEach(stored, (key) => blobs.put("write batch object", key, bytes(key)));
 
       yield* blobs.delete("delete batch objects", keys);
-      expect(yield* blobs.exists("find first batch object", keys[0] ?? "")).toBe(false);
-      expect(yield* blobs.exists("find last batch object", keys[1_000] ?? "")).toBe(false);
-    }).pipe(Effect.provide(blobStoreLayer(env.SKIT_BLOBS))),
-  );
+      for (const key of stored)
+        expect(yield* blobs.exists("find remaining batch object", key)).toBe(false);
+    }).pipe(Effect.provide(blobStoreLayer(limited)));
+  });
 });

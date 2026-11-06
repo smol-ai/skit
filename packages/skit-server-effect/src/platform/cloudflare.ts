@@ -78,7 +78,9 @@ export class BlobStore extends Context.Service<BlobStore, BlobStoreService>()(
 ) {}
 
 /** Owns the Promise boundary exposed by Cloudflare's R2 binding. */
-export const blobStoreLayer = (bucket: R2Bucket) => {
+export const blobStoreLayer = (
+  bucket: Pick<R2Bucket, "get" | "put" | "head" | "delete" | "list">,
+) => {
   const r2 = <A>(operation: string, run: () => Promise<A>) =>
     // oxlint-disable-next-line skit/no-promise-wrappers -- Wrangler's generated R2 binding is Promise-only; this platform module owns that SDK boundary.
     Effect.tryPromise({ try: run, catch: (cause) => new BlobStorageError({ operation, cause }) });
