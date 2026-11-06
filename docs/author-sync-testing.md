@@ -4,6 +4,37 @@ Terminology and ownership are updated by [ADR 0028](adr/0028-author-skills-throu
 SKIT identities own revisions and Releases; Draft is no longer a separate entity.
 The earlier implementation details below are retained as dated port/refactor evidence.
 
+## Current local Registry process proof
+
+`packages/skit-server-effect/test/e2e-author-sync.test.ts` runs the compiled Author
+workflow in separate Node processes against Wrangler's local Worker, authentication,
+D1 and R2 adapters. Its process fixture lives inside the CLI package; it does not
+add a shipped `author` command or enable the separately skipped author-CLI journey.
+
+```sh
+pnpm --filter @smolai/skit-core build
+pnpm --filter @smolai/skit build
+pnpm --filter @smolai/skit-server-effect exec vitest run --config vitest.e2e.config.ts test/e2e-author-sync.test.ts
+```
+
+The test uses disposable workspace/home directories and local Registry credentials.
+It verifies exact revision-ID readback for offline A → B → A observations, a new
+device joining from an empty workspace supplied only with `skit.remote.json`
+(no copied workspace/machine identity or sync checkpoints), independent edits converging, invalid
+descriptor backup, and symlink archival without moving current. It also holds an
+actual successful archival POST response, reads the stored revision back from the
+Registry, then SIGKILLs the client before its local acknowledgement. A new process
+replays that observation idempotently and completes sync; the other device receives
+the bytes. Repeating an unchanged refused sync adds no persisted revisions or blobs,
+and the test creates no Releases.
+
+This is local Worker/storage-adapter proof on the host running the test. It does not
+prove a deployed Cloudflare service, Linux filesystem behavior, server process-loss
+durability, last-valid per-skill installation, a watcher, or a persistent background
+process.
+
+## Earlier harness increments
+
 This is the first test-harness increment for automatic multi-device author sync.
 It exercises the existing, unexposed author-sync workflow and fixes its stale
 merge base after an accepted write's response disappears. It does not enable a

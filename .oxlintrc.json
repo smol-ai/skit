@@ -151,7 +151,8 @@
         "packages/cli/test/single-machine-journey.test.ts",
         "packages/cli/test/import-source.test.ts",
         "packages/skit-server-effect/test/e2e.test.ts",
-        "packages/skit-server-effect/test/e2e-skills-sh.test.ts"
+        "packages/skit-server-effect/test/e2e-skills-sh.test.ts",
+        "packages/skit-server-effect/test/e2e-author-sync.test.ts"
       ],
       "rules": {
         "skit/no-async-test-callback": "off",
