@@ -1,11 +1,5 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import {
-  LibraryState,
-  libraryStateRevision,
-  enabledAt,
-  enabledSkillIds,
-  SkillsDirectoryNotWritable,
-} from "@smolai/skit-core";
+import { LibraryState, libraryStateRevision, enabledAt, enabledSkillIds } from "@smolai/skit-core";
 import { inspectOwnershipMarker } from "@smolai/skit-core/library/inventory";
 import { type UsageReport } from "@smolai/skit-core/library/usage";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
@@ -297,8 +291,11 @@ it.effect("an unwritable root refuses enablement before saving Binding intent", 
       ),
     );
     const error = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
-    assert.instanceOf(error, SkillsDirectoryNotWritable);
-    assert.strictEqual(error.root, f.destination);
+    assert.deepInclude(error, {
+      _tag: "SkillsDirectoryNotWritable",
+      root: f.destination,
+      code: "OPERATION_FAILED",
+    });
     assert.deepStrictEqual((yield* f.home.durable).enabled, []);
     assert.strictEqual(yield* f.fs.exists(f.destination), false);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -1480,7 +1477,11 @@ it.effect("an unwritable root keeps bindings unchanged and records its stopped a
     );
     const before = yield* f.home.durable;
     const error = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
-    assert.instanceOf(error, SkillsDirectoryNotWritable);
+    assert.deepInclude(error, {
+      _tag: "SkillsDirectoryNotWritable",
+      root: f.destination,
+      code: "OPERATION_FAILED",
+    });
     const after = yield* f.home.durable;
     assert.deepStrictEqual({ ...after, operations: before.operations }, before);
     const attempt = after.operations.find(

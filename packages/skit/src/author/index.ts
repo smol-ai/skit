@@ -48,6 +48,7 @@ export {
 } from "../artifact/skit.js";
 export { createSkitArchive } from "../artifact/archive.js";
 export { type DescriptorFailure, SkitValidationFailed } from "../artifact/failures.js";
+export type { DescriptorMalformed, ReadmeFrontmatterMissing } from "../artifact/failures.js";
 export { SkitValidationDiagnostic } from "../artifact/validation-diagnostic.js";
 export {
   generateInvocationMetadata,

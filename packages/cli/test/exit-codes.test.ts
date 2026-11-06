@@ -7,15 +7,7 @@ import { Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { it } from "@effect/vitest";
 import { describe, expect, test } from "vitest";
-import {
-  DescriptorMalformed,
-  DirectSkillDocumentInvalid,
-  InvalidLibraryState,
-  NoSkitDescriptorFound,
-  InstalledSkillFileMissing,
-  ReadmeFrontmatterMissing,
-  resolveSkitSource,
-} from "@smolai/skit-core";
+import { inspectSource } from "@smolai/skit-core/library/source";
 import { HarnessMetadataInvalid } from "@smolai/skit-core/harnesses";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { productionUrlTestClient } from "./helpers/http-test-client.js";
@@ -103,23 +95,17 @@ describe("declared exit codes", () => {
   });
 });
 
-test("validation failures from shipped commands carry their own remediation", () => {
-  for (const failure of [
-    new ReadmeFrontmatterMissing(),
-    new DescriptorMalformed({ format: "json", detail: "unexpected token" }),
-    new DirectSkillDocumentInvalid(),
-    new NoSkitDescriptorFound(),
-    new InstalledSkillFileMissing({ path: "/skills/review/SKILL.md" }),
-    new HarnessMetadataInvalid({ path: "/skills/review/SKILL.md", kind: "SKILL.md frontmatter" }),
-    new InvalidLibraryState({ path: "/home/.skit/state.json", detail: "schema v2" }),
-  ]) {
-    expect(classifyFailure(failure)).toMatchObject({
-      code: "VALIDATION_FAILED",
-      exitCode: 65,
-      remediation: failure.remediation,
-    });
-    expect(failure.remediation).not.toContain("skit author");
-  }
+test("a named validation failure uses its owner's remediation and exits 65", () => {
+  const failure = new HarnessMetadataInvalid({
+    path: "/skills/review/SKILL.md",
+    kind: "SKILL.md frontmatter",
+  });
+  expect(classifyFailure(failure)).toMatchObject({
+    code: "VALIDATION_FAILED",
+    exitCode: 65,
+    remediation: failure.remediation,
+  });
+  expect(failure.remediation).not.toContain("skit author");
 });
 
 it.effect("malformed direct Skill downloads preserve the validation exit code", () =>
@@ -137,7 +123,10 @@ it.effect("malformed direct Skill downloads preserve the validation exit code", 
       Layer.provideMerge(NodeHttpServer.layer(createServer, { port: 0 })),
     );
     const outcome = yield* Effect.scoped(
-      resolveSkitSource("https://example.com/SKILL.md").pipe(Effect.flip),
+      inspectSource({
+        source: { type: "url", url: "https://example.com/SKILL.md" },
+        input: "https://example.com/SKILL.md",
+      }).pipe(Effect.flip),
     ).pipe(Effect.provide(routes.pipe(Layer.provideMerge(client))), Effect.provide(skitLayer));
     expect(classifyFailure(outcome)).toMatchObject({ code: "VALIDATION_FAILED", exitCode: 65 });
   }),

@@ -11,13 +11,6 @@ export {
 export { HarnessName } from "./harnesses/contracts.js";
 
 export { errorMessage } from "./shared/failure.js";
-export { ReadmeFrontmatterMissing, DescriptorMalformed } from "./artifact/failures.js";
-export { DirectSkillDocumentInvalid, NoSkitDescriptorFound } from "./sources/failures.js";
-export {
-  SkillsDirectoryNotWritable,
-  InstalledSkillFileMissing,
-} from "./installed-skills/failures.js";
-export { InvalidLibraryState } from "./library/failures.js";
 
 export { resolveDeclaredInvocation } from "./invocation/conformance.js";
 
@@ -29,7 +22,6 @@ export { skitLayer } from "./platform/layer.js";
 
 export { hashParts } from "./artifact/descriptor.js";
 export { deterministicTreeHash } from "./artifact/skit.js";
-export { resolveSkitSource } from "./sources/resolve.js";
 
 export { scanInventory } from "./library/inventory/refresh.js";
 export { collectionVersionPath } from "./library/collection-version.js";

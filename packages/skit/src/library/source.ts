@@ -12,6 +12,7 @@ import type { SkitSource } from "./library-contracts.js";
 
 export { SkitSource } from "./library-contracts.js";
 export { parseSkitSource, sourceLocator, SourceDiscoveryDiagnostic } from "../sources/resolve.js";
+export type { DirectSkillDocumentInvalid, NoSkitDescriptorFound } from "../sources/failures.js";
 // Canonical failure alias keeps inferred frontend declarations on the public entry.
 export type { LibraryStateWriteError } from "./library.js";
 export type { PnpmSkillManaged } from "../installed-skills/pnpm-skills.js";

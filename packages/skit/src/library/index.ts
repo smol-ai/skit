@@ -2,6 +2,11 @@
 export * as Library from "./library.js";
 export type { Service } from "./library.js";
 export { ImportContentInvalid } from "./failures.js";
+export type { InvalidLibraryState } from "./failures.js";
+export type {
+  SkillsDirectoryNotWritable,
+  InstalledSkillFileMissing,
+} from "../installed-skills/failures.js";
 export { InstallScope } from "./scope.js";
 export { InstallDestination } from "../installed-skills/destination.js";
 export { LibraryManifest, SnapshotArchive } from "./library-contracts.js";
