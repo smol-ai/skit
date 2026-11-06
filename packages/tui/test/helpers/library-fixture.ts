@@ -1,7 +1,10 @@
-import { Library, skitConfigurationLayer, skitLayer } from "@smolai/skit-core";
+import { LinkStat } from "@smolai/skit-core/platform";
+import { Library } from "@smolai/skit-core/library";
+import { skitConfigurationLayer, skitLayer } from "@smolai/skit-core/platform";
 import { join } from "node:path";
 import { Effect, FileSystem, Layer } from "effect";
-import { deterministicTreeHash, LinkStat, makeMachineId } from "@smolai/skit-core";
+import { deterministicTreeHash } from "@smolai/skit-core/author";
+import { makeMachineId } from "@smolai/skit-core/universal/consumer";
 import {
   confirmLibraryChange,
   openLibrarySession,

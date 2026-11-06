@@ -7,7 +7,7 @@ import { Effect, Exit, FileSystem, Layer, Scope } from "effect";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { expect, onTestFinished, test } from "vitest";
-import { skitLayer } from "@smolai/skit-core";
+import { skitLayer } from "@smolai/skit-core/platform";
 import {
   cancelLibraryChange,
   confirmLibraryChange,

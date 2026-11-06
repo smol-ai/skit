@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { systemError } from "effect/PlatformError";
 import { join } from "node:path";
-import { refreshInventory } from "../src/library/inventory.js";
+import { readInventory, refreshInventory } from "../src/library/inventory.js";
 import * as Library from "../src/library/library.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
@@ -29,6 +29,11 @@ it.effect(
       yield* Effect.gen(function* () {
         const library = yield* Library.Service;
         const base = yield* library.read;
+        assert.deepStrictEqual(yield* readInventory, {
+          skills: [],
+          unmanaged: [],
+          installed_skills: [],
+        });
         const plan = yield* library.plan(
           { _tag: "RefreshInventory", roots: [{ harness: "codex", root: f.skills }] },
           { base },
@@ -41,6 +46,7 @@ it.effect(
         const applied = yield* library.apply({ _tag: "Apply", plan: portable });
         assert.strictEqual(applied.result.inventory.unmanaged[0].path, join(f.skills, "review"));
         assert.deepStrictEqual(applied.result.keptBackups, []);
+        assert.deepStrictEqual(yield* readInventory, applied.result.inventory);
         assert.strictEqual(yield* f.fs.readFileString(f.path), f.bytes);
         const saved = yield* library.read;
         assert.strictEqual(saved._tag, "Present");

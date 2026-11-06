@@ -9,7 +9,7 @@ import {
   type LibrarySkillRow,
   type PendingLibraryChange,
 } from "@smolai/skit-core/library/session";
-import type { ListingBudget } from "@smolai/skit-core";
+import type { ListingBudget } from "@smolai/skit-core/harnesses";
 import { groupSkills, groupKindLabel, groupLocation, type SkillGroup } from "../audit/skill-groups";
 
 export type CapabilityKind = "skill" | "plugin" | "mcp-server" | "rule" | "marketplace";

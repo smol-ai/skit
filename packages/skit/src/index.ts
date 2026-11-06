@@ -12,8 +12,6 @@ export { HarnessName } from "./harnesses/contracts.js";
 
 export { errorMessage } from "./shared/failure.js";
 
-export { resolveDeclaredInvocation } from "./invocation/conformance.js";
-
 export { skitLayer } from "./platform/layer.js";
 
 export { hashParts } from "./artifact/descriptor.js";

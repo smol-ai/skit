@@ -19,17 +19,11 @@ import { resolve } from "node:path";
 import { Effect, FileSystem, Layer, Schema } from "effect";
 import { openLibrarySession, readLibrarySkillContent } from "@smolai/skit-core/library/session";
 import { createLibraryController } from "./library/controller";
-import {
-  errorMessage,
-  HarnessName,
-  Library,
-  SkitConfiguration,
-  skitConfigurationLayer,
-  skitLayer,
-  emptyLibraryState,
-  readListingBudgets,
-  type ListingBudget,
-} from "@smolai/skit-core";
+import { errorMessage } from "@smolai/skit-core/shared";
+import { HarnessName, readListingBudgets, type ListingBudget } from "@smolai/skit-core/harnesses";
+import { Library } from "@smolai/skit-core/library";
+import { readInventory } from "@smolai/skit-core/library/inventory";
+import { SkitConfiguration, skitConfigurationLayer, skitLayer } from "@smolai/skit-core/platform";
 import { auditLocalCapabilitiesV1Alpha4 } from "@smolai/skit-core/audit";
 
 import { budgetDetails } from "./harness/budget-details";
@@ -105,9 +99,7 @@ let listingBudgets: readonly ListingBudget[] = [];
 async function refreshListingBudgets(): Promise<void> {
   listingBudgets = await libraryHost.run(
     Effect.gen(function* () {
-      const snapshot = yield* (yield* Library.Service).read;
-      const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
-      return yield* readListingBudgets(state, {
+      return yield* readListingBudgets(yield* readInventory, {
         cwd: flag("--cwd") ?? process.cwd(),
         home: libraryConfiguration.home,
         configHome: libraryConfiguration.configHome,

@@ -1,5 +1,4 @@
 import type { HarnessProbeResult } from "@smolai/skit-core/harnesses";
-import { resolveDeclaredInvocation } from "@smolai/skit-core";
 import { Result } from "effect";
 import { expect, test } from "vitest";
 import type { AuditReportV1Alpha4 } from "@smolai/skit-core/audit";
@@ -131,9 +130,36 @@ const skill = (
   heading,
   skillId: `${collectionId}-skill-${name}`,
   skillVersionId: `${collectionId}-${name}`,
-  authorInvocation: resolveDeclaredInvocation({ name, path: "." }, () => undefined).pipe(
-    Result.mapError((error) => error.message),
-  ),
+  authorInvocation: Result.succeed({
+    "claude-code": {
+      harness: "claude-code",
+      policy: "unspecified",
+      source: { kind: "unspecified" },
+      declarations: [],
+      conformance: { state: "conforming" },
+    },
+    codex: {
+      harness: "codex",
+      policy: "unspecified",
+      source: { kind: "unspecified" },
+      declarations: [],
+      conformance: { state: "conforming" },
+    },
+    opencode: {
+      harness: "opencode",
+      policy: "unspecified",
+      source: { kind: "unspecified" },
+      declarations: [],
+      conformance: { state: "conforming" },
+    },
+    devin: {
+      harness: "devin",
+      policy: "unspecified",
+      source: { kind: "unspecified" },
+      declarations: [],
+      conformance: { state: "conforming" },
+    },
+  }),
   source: null,
   revision: null,
   imported_at: null,
