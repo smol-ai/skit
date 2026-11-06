@@ -7,12 +7,7 @@ const root = resolve(import.meta.dirname, "..");
 const cli = "packages/cli/src/";
 // Every published core owner is an entry point here. Contracts and platform wiring are not owners:
 // reading configuration or decoding a wire schema beside one owner call is not orchestration.
-const vocabulary = new Set([
-  "./shared",
-  "./api",
-  "./universal/api",
-  "./platform",
-]);
+const vocabulary = new Set(["./shared", "./api", "./universal/api", "./platform"]);
 const ownerEntries = new Set(
   Object.keys(coreExports)
     .filter((subpath) => !vocabulary.has(subpath))
@@ -28,11 +23,7 @@ const member = (node) =>
       : undefined;
 const object = (node) => node?.object ?? node?.left;
 const isFunction = (node) =>
-  [
-    "FunctionExpression",
-    "ArrowFunctionExpression",
-    "FunctionDeclaration",
-  ].includes(node?.type);
+  ["FunctionExpression", "ArrowFunctionExpression", "FunctionDeclaration"].includes(node?.type);
 
 /** Visit work executed by this body, leaving callbacks to their own Effect body check. */
 function walkBody(node, visit) {
@@ -53,10 +44,7 @@ function imports() {
       for (const specifier of node.specifiers) {
         names.set(specifier.local.name, {
           source: node.source.value,
-          name:
-            specifier.type === "ImportNamespaceSpecifier"
-              ? "*"
-              : specifier.imported?.name,
+          name: specifier.type === "ImportNamespaceSpecifier" ? "*" : specifier.imported?.name,
         });
       }
     },
@@ -64,17 +52,10 @@ function imports() {
       if (!node) return undefined;
       if (node?.type === "Identifier") {
         const binding = names.get(node.name);
-        return (
-          binding && [
-            binding.source,
-            ...(binding.name === "*" ? [] : [binding.name]),
-          ]
-        );
+        return binding && [binding.source, ...(binding.name === "*" ? [] : [binding.name])];
       }
       const parent = this.path(object(node));
-      return parent && member(node) !== undefined
-        ? [...parent, member(node)]
-        : undefined;
+      return parent && member(node) !== undefined ? [...parent, member(node)] : undefined;
     },
   };
 }
@@ -86,10 +67,7 @@ function cliTypes(context) {
   // Oxlint visits many files in one process. Resolve their shared graph only once. Refresh
   // if a host reuses the plugin for edited source (e.g. a subsequent editor lint pass).
   if (cliProgram?.getSourceFile(filename)?.text !== context.sourceCode.text) {
-    const config = ts.readConfigFile(
-      resolve(root, "packages/cli/tsconfig.json"),
-      ts.sys.readFile,
-    );
+    const config = ts.readConfigFile(resolve(root, "packages/cli/tsconfig.json"), ts.sys.readFile);
     const parsed = ts.parseJsonConfigFileContent(
       config.config,
       ts.sys,
@@ -97,16 +75,9 @@ function cliTypes(context) {
     );
     const host = ts.createCompilerHost(parsed.options);
     const read = host.readFile;
-    host.readFile = (file) =>
-      file === filename ? context.sourceCode.text : read(file);
+    host.readFile = (file) => (file === filename ? context.sourceCode.text : read(file));
     // Inspect current core source, never declarations from a previous dist/ build.
-    host.resolveModuleNameLiterals = (
-      literals,
-      from,
-      redirected,
-      options,
-      source,
-    ) =>
+    host.resolveModuleNameLiterals = (literals, from, redirected, options, source) =>
       literals.map((literal) => {
         const entry = literal.text.startsWith("@smolai/skit-core/")
           ? coreExports[`./${literal.text.slice("@smolai/skit-core/".length)}`]
@@ -131,9 +102,7 @@ function cliTypes(context) {
     cliProgram = ts.createProgram(
       [
         ...new Set([
-          ...parsed.fileNames.filter((file) =>
-            file.startsWith(resolve(root, cli) + "/"),
-          ),
+          ...parsed.fileNames.filter((file) => file.startsWith(resolve(root, cli) + "/")),
           filename,
         ]),
       ],
@@ -149,12 +118,7 @@ function cliTypes(context) {
 
 function failureUnions(context) {
   const { checker, source } = cliTypes(context);
-  const error = checker.resolveName(
-    "Error",
-    source,
-    ts.SymbolFlags.Type,
-    false,
-  );
+  const error = checker.resolveName("Error", source, ts.SymbolFlags.Type, false);
   const errorType = error && checker.getDeclaredTypeOfSymbol(error);
   const reports = [];
   const report = (node) =>
@@ -166,18 +130,14 @@ function failureUnions(context) {
     type.isUnion() &&
     type.types.every(
       (part) =>
-        part.getProperty("_tag") &&
-        errorType &&
-        checker.isTypeAssignableTo(part, errorType),
+        part.getProperty("_tag") && errorType && checker.isTypeAssignableTo(part, errorType),
     );
   const exported = new Set(
     source.symbol
       ? checker
           .getExportsOfModule(source.symbol)
           .map((symbol) =>
-            symbol.flags & ts.SymbolFlags.Alias
-              ? checker.getAliasedSymbol(symbol)
-              : symbol,
+            symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol,
           )
       : [],
   );
@@ -201,16 +161,14 @@ function failureUnions(context) {
         (declaration) =>
           (ts.isImportSpecifier(declaration) &&
             (declaration.propertyName ?? declaration.name).text === "Effect" &&
-            declaration.parent.parent.parent.moduleSpecifier.text ===
-              "effect") ||
+            declaration.parent.parent.parent.moduleSpecifier.text === "effect") ||
           (ts.isNamespaceImport(declaration) &&
             ["effect/Effect", "effect/Effect.js"].includes(
               declaration.parent.parent.moduleSpecifier.text,
             )),
       );
       const failure = node.typeArguments?.[1];
-      if (effect && failure && checker.getTypeAtLocation(failure).isUnion())
-        report(failure);
+      if (effect && failure && checker.getTypeAtLocation(failure).isUnion()) report(failure);
     }
     ts.forEachChild(node, visit);
   };
@@ -243,17 +201,12 @@ function ownerEffectCalls(context, calls) {
 function commandExport(context, exports) {
   const { checker, source } = cliTypes(context);
   const values = new Map(
-    exports
-      .filter((item) => item.value)
-      .map((item) => [item.value.range[0], item]),
+    exports.filter((item) => item.value).map((item) => [item.value.range[0], item]),
   );
   let command;
   const visit = (node) => {
     const item = values.get(node.getStart(source));
-    if (
-      item &&
-      checker.getTypeAtLocation(node).getProperty("~effect/cli/Command")
-    )
+    if (item && checker.getTypeAtLocation(node).getProperty("~effect/cli/Command"))
       command ??= item;
     ts.forEachChild(node, visit);
   };
@@ -266,8 +219,7 @@ export const frontendRules = {
     meta: {
       type: "problem",
       docs: {
-        description:
-          "Frontends call Library operations; one root constructs the Library",
+        description: "Frontends call Library operations; one root constructs the Library",
       },
       messages: {
         forbidden:
@@ -276,10 +228,7 @@ export const frontendRules = {
     },
     create(context) {
       const file = relative(root, context.filename);
-      if (
-        !file.startsWith(cli) ||
-        /^(storybook|platform)\//.test(file.slice(cli.length))
-      )
+      if (!file.startsWith(cli) || /^(storybook|platform)\//.test(file.slice(cli.length)))
         return {};
       const bindings = imports();
       // The executable composes its one Library in commands/handler.ts; nothing else constructs one.
@@ -295,19 +244,12 @@ export const frontendRules = {
           bindings.add(node);
           if (node.source.value !== "@smolai/skit-core/library") return;
           for (const specifier of node.specifiers)
-            if (
-              specifier.type === "ImportSpecifier" &&
-              owned.has(specifier.imported?.name)
-            )
+            if (specifier.type === "ImportSpecifier" && owned.has(specifier.imported?.name))
               report(specifier, specifier.imported.name);
         },
         MemberExpression(node) {
           const path = bindings.path(node);
-          if (
-            path?.length === 2 &&
-            path[0] === "@smolai/skit-core/library" &&
-            owned.has(path[1])
-          )
+          if (path?.length === 2 && path[0] === "@smolai/skit-core/library" && owned.has(path[1]))
             report(node, path[1]);
         },
       };
@@ -320,16 +262,12 @@ export const frontendRules = {
         description: "Frontends call owners instead of acquiring resources",
       },
       messages: {
-        forbidden:
-          "Resource access belongs to an owner. Call the owner and render its result.",
+        forbidden: "Resource access belongs to an owner. Call the owner and render its result.",
       },
     },
     create(context) {
       const file = relative(root, context.filename);
-      if (
-        !file.startsWith(cli) ||
-        /^(registry|platform|terminal)\//.test(file.slice(cli.length))
-      )
+      if (!file.startsWith(cli) || /^(registry|platform|terminal)\//.test(file.slice(cli.length)))
         return {};
       const bindings = imports();
       const resource = (node) => {
@@ -348,9 +286,7 @@ export const frontendRules = {
             /^(?:node:)?(?:fs(?:\/|$)|crypto$)/.test(node.source.value) ||
             node.source.value === "effect/process/ChildProcessSpawner" ||
             (node.source.value === "effect/process" &&
-              node.specifiers.some(
-                (s) => s.imported?.name === "ChildProcessSpawner",
-              ))
+              node.specifiers.some((s) => s.imported?.name === "ChildProcessSpawner"))
           )
             context.report({ node, messageId: "forbidden" });
         },
@@ -371,8 +307,7 @@ export const frontendRules = {
             context.report({ node, messageId: "forbidden" });
         },
         TSTypeReference(node) {
-          if (resource(node.typeName))
-            context.report({ node, messageId: "forbidden" });
+          if (resource(node.typeName)) context.report({ node, messageId: "forbidden" });
           const name = node.typeName;
           const path = bindings.path(name)?.join("/");
           const requirement =
@@ -381,18 +316,14 @@ export const frontendRules = {
               : path === "effect/Effect/Effect"
                 ? 2
                 : undefined;
-          const r =
-            requirement === undefined
-              ? undefined
-              : node.typeArguments?.params[requirement];
+          const r = requirement === undefined ? undefined : node.typeArguments?.params[requirement];
           if (
             r &&
             contains(
               r,
               (child) =>
                 child.type === "TSTypeReference" &&
-                bindings.path(child.typeName)?.join("/") ===
-                  "effect/Scope/Scope",
+                bindings.path(child.typeName)?.join("/") === "effect/Scope/Scope",
             )
           )
             context.report({ node: r, messageId: "forbidden" });
@@ -426,10 +357,7 @@ export const frontendRules = {
           bindings.add(node);
         },
         CallExpression(node) {
-          const callee =
-            node.callee?.type === "CallExpression"
-              ? node.callee.callee
-              : node.callee;
+          const callee = node.callee?.type === "CallExpression" ? node.callee.callee : node.callee;
           if (!["fn", "gen"].some((name) => effect.is(callee, name))) return;
           for (const callback of node.arguments.filter(isFunction)) {
             const calls = [];
@@ -454,8 +382,7 @@ export const frontendRules = {
     meta: {
       type: "problem",
       docs: {
-        description:
-          "Infer workflow failures instead of maintaining step-list unions",
+        description: "Infer workflow failures instead of maintaining step-list unions",
       },
       messages: {
         forbidden:
@@ -472,8 +399,7 @@ export const frontendRules = {
               node,
               (child) =>
                 child.type === "TSUnionType" ||
-                (child.type === "TSQualifiedName" &&
-                  child.right?.name === "Return"),
+                (child.type === "TSQualifiedName" && child.right?.name === "Return"),
             )
           )
             return;
@@ -513,8 +439,7 @@ export const frontendRules = {
             if (declaration.type === "VariableDeclaration")
               for (const variable of declaration.declarations)
                 declarations.set(variable.id.name, variable.init);
-            if (statement.type === "ExportAllDeclaration")
-              exports.push({ node: statement });
+            if (statement.type === "ExportAllDeclaration") exports.push({ node: statement });
             if (statement.type === "ExportDefaultDeclaration")
               exports.push({ node: statement, value: declaration });
             if (statement.type !== "ExportNamedDeclaration") continue;
@@ -540,8 +465,7 @@ export const frontendRules = {
             walkBody(value, (child) => {
               if (
                 child.type === "CallExpression" &&
-                bindings.path(child.callee)?.join("/") ===
-                  "effect/cli/Command/make"
+                bindings.path(child.callee)?.join("/") === "effect/cli/Command/make"
               )
                 found = true;
             });
@@ -552,8 +476,7 @@ export const frontendRules = {
             (exports.length > 1 ? commandExport(context, exports) : undefined);
           if (command)
             for (const item of exports)
-              if (item !== command)
-                context.report({ node: item.node, messageId: "forbidden" });
+              if (item !== command) context.report({ node: item.node, messageId: "forbidden" });
         },
       };
     },

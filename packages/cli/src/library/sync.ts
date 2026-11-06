@@ -13,9 +13,7 @@ import { renderLibrarySyncPlan } from "./sync/present.js";
 import { terminalData } from "../terminal/text.js";
 import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 
-export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <
-  AuthError,
->(options: {
+export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthError>(options: {
   readonly authState: Result.Result<ResolvedAuth, AuthError>;
   readonly apply: boolean;
   readonly takeRemote?: readonly string[];
@@ -48,16 +46,10 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <
             origin,
             ...(auth.token === undefined ? {} : { token: auth.token }),
             apply: options.apply,
-            ...(options.takeRemote === undefined
-              ? {}
-              : { takeRemote: options.takeRemote }),
-            ...(options.keepEnabled === undefined
-              ? {}
-              : { keepEnabled: options.keepEnabled }),
+            ...(options.takeRemote === undefined ? {} : { takeRemote: options.takeRemote }),
+            ...(options.keepEnabled === undefined ? {} : { keepEnabled: options.keepEnabled }),
             installedSkill: options.installedSkill,
-            ...(options.inventory === undefined
-              ? {}
-              : { inventory: options.inventory }),
+            ...(options.inventory === undefined ? {} : { inventory: options.inventory }),
             ...(options.deviceSelection === undefined
               ? {}
               : { deviceSelection: options.deviceSelection }),
@@ -66,17 +58,10 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <
             ...(options.apply
               ? {
                   onPlan: (plan) =>
-                    renderer.note(
-                      renderLibrarySyncPlan(plan),
-                      "Applying Library sync plan",
-                      {
-                        renderBody: (color) =>
-                          renderLibrarySyncPlan(
-                            terminalData(plan),
-                            createColors(color),
-                          ),
-                      },
-                    ),
+                    renderer.note(renderLibrarySyncPlan(plan), "Applying Library sync plan", {
+                      renderBody: (color) =>
+                        renderLibrarySyncPlan(terminalData(plan), createColors(color)),
+                    }),
                 }
               : {}),
           },

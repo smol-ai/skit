@@ -22,10 +22,7 @@ export const openRecoveryRestore = Effect.fn("Library.recovery.openRestore")(fun
   operationId: string,
 ) {
   const library = yield* Library.Service;
-  const plan = yield* library.plan(
-    { _tag: "Restore", operationId },
-    { base: yield* library.read },
-  );
+  const plan = yield* library.plan({ _tag: "Restore", operationId }, { base: yield* library.read });
   return {
     change: plan.change,
     apply: Effect.gen(function* () {

@@ -64,7 +64,4 @@ export const refreshMachineInventory = Effect.fn("Library.refreshMachineInventor
   };
 });
 
-export {
-  DoctorReport,
-  inspectNativeDiscovery,
-} from "./internal/doctor/harnesses.js";
+export { DoctorReport, inspectNativeDiscovery } from "./internal/doctor/harnesses.js";

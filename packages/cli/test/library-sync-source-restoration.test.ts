@@ -72,10 +72,12 @@ const fixture = Effect.gen(function* () {
       ),
     );
   const sync = () =>
-    writingTo(freshHome, Effect.flatMap(librarySyncApi({ origin }), (transport) => syncLibrary(freshHome, { origin, apply: true }, transport))).pipe(
-      Effect.provide(registryHttpLayer(http)),
-      Effect.provide(http),
-    );
+    writingTo(
+      freshHome,
+      Effect.flatMap(librarySyncApi({ origin }), (transport) =>
+        syncLibrary(freshHome, { origin, apply: true }, transport),
+      ),
+    ).pipe(Effect.provide(registryHttpLayer(http)), Effect.provide(http));
   const seed = (source: SkitSource) =>
     Effect.gen(function* () {
       yield* writingTo(home, importSource(source)).pipe(Effect.provide(http));

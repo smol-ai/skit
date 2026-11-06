@@ -11,11 +11,7 @@ export const publish = Effect.fn("CLI.publishWorkspace")(function* (
   revision: string | undefined,
   options: { readonly home?: string } = {},
 ) {
-  return yield* publishAuthorWorkspace(
-    root,
-    { version, revision },
-    authorRegistry(options.home),
-  );
+  return yield* publishAuthorWorkspace(root, { version, revision }, authorRegistry(options.home));
 });
 
 export const publishCommand = Effect.fn("CLI.publish")(function* (options: {

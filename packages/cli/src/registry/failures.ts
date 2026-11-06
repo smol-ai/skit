@@ -182,9 +182,7 @@ export class RegistrySelectionRequiresRegistrySource
 
 // -- Author destinations ------------------------------------------------------------------------
 
-
 // -- SKIT synchronization ----------------------------------------------------------------------
-
 
 export class RemoteSkitUnavailable
   extends Data.TaggedError("RemoteSkitUnavailable")<{
@@ -431,6 +429,5 @@ export class DeleteRequiresPrivate
 }
 
 // -- SKIT destinations ------------------------------------------------------------------------------
-
 
 export { DestinationExistsWithoutHistory } from "@smolai/skit-core/author";

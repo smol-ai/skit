@@ -42,18 +42,11 @@ export {
 } from "../artifact/skit.js";
 export { createSkitArchive } from "../artifact/archive.js";
 export { type DescriptorFailure } from "../artifact/failures.js";
-export type {
-  DescriptorMalformed,
-  ReadmeFrontmatterMissing,
-} from "../artifact/failures.js";
+export type { DescriptorMalformed, ReadmeFrontmatterMissing } from "../artifact/failures.js";
 export { SkitValidationDiagnostic } from "../artifact/validation-diagnostic.js";
 export { InvocationMetadataGeneration } from "./invocation/generation.js";
 
-export {
-  authorLayer,
-  authorWorkspaceLayer,
-  readAuthorWorkspace,
-} from "./operations.js";
+export { authorLayer, authorWorkspaceLayer, readAuthorWorkspace } from "./operations.js";
 export { syncAuthorWorkspace } from "./sync.js";
 export { initializeAuthorWorkspace } from "./initialize.js";
 export { removeAuthorCollection } from "./remove.js";

@@ -7,21 +7,12 @@ import { describe, expect, test } from "vitest";
 
 const root = join(import.meta.dirname, "..");
 const plugin = join(import.meta.dirname, "oxlint-plugin-skit.mjs");
-const oxlint = fileURLToPath(
-  new URL("bin/oxlint", import.meta.resolve("oxlint/package.json")),
-);
+const oxlint = fileURLToPath(new URL("bin/oxlint", import.meta.resolve("oxlint/package.json")));
 
 /** Exercise the real oxlint parser and plugin with a repository path and isolated config. */
-async function lint(
-  rule: string,
-  source: string,
-  path = "packages/cli/src/author/probe.ts",
-) {
+async function lint(rule: string, source: string, path = "packages/cli/src/author/probe.ts") {
   const directory = await mkdtemp(join(tmpdir(), "skit-frontend-rules-"));
-  const file = join(
-    root,
-    path.replace("probe", `lint-probe-${process.pid}-${Date.now()}`),
-  );
+  const file = join(root, path.replace("probe", `lint-probe-${process.pid}-${Date.now()}`));
   const config = join(directory, ".oxlintrc.json");
   try {
     await writeFile(

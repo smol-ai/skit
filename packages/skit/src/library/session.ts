@@ -1,8 +1,5 @@
 /** Shared Library choices/read models. Frontends own prompts, widgets and output. */
-export {
-  invocationOptions,
-  type InvocationOption,
-} from "./internal/session/invocation-option.js";
+export { invocationOptions, type InvocationOption } from "./internal/session/invocation-option.js";
 export {
   destinationLabel,
   invocationBriefing,
@@ -33,10 +30,7 @@ export {
   cancelLibraryChange,
   confirmLibraryChange,
 } from "./internal/session/session.js";
-export {
-  SetEnabledChange,
-  SetEnabledResult,
-} from "./internal/session/set-enabled-contract.js";
+export { SetEnabledChange, SetEnabledResult } from "./internal/session/set-enabled-contract.js";
 export {
   type SetEnabledRequest,
   type SetEnabledIntent,
@@ -61,10 +55,7 @@ export type { InstallScope as Scope } from "./scope.js";
 export { openRemoveSession } from "./internal/session/remove.js";
 
 export { openEditImport, EditImportMissing } from "./internal/session/edit.js";
-export {
-  EditImportPlan,
-  EditImportResult,
-} from "./internal/session/edit-contract.js";
+export { EditImportPlan, EditImportResult } from "./internal/session/edit-contract.js";
 
 export { sourceFromUpstream } from "./internal/session/upstream-source.js";
 
@@ -78,10 +69,7 @@ export { updateSources } from "./internal/session/update-sources.js";
 export { SyncConflictDetail } from "./internal/sync/conflict.js";
 export { syncLibrary } from "./internal/sync/library-sync.js";
 export { type SyncPhase, type SyncProgress } from "./internal/sync/progress.js";
-export {
-  readRepositoryDecisions,
-  decideRepository,
-} from "./internal/session/repositories.js";
+export { readRepositoryDecisions, decideRepository } from "./internal/session/repositories.js";
 export {
   listLibraryRecovery,
   inspectLibraryRecovery,
@@ -103,10 +91,7 @@ export { openSyncSession, SyncLocalChanged } from "./internal/sync/session.js";
 export { SyncChanges } from "./sync-changes.js";
 
 // Canonical read-query errors keep inferred frontend declarations portable.
-export type {
-  LibrarySubjectNotFound,
-  LibrarySubjectAmbiguous,
-} from "./subject-resolution.js";
+export type { LibrarySubjectNotFound, LibrarySubjectAmbiguous } from "./subject-resolution.js";
 
 export type { WorkspaceClaim } from "./internal/session/workspace-claims.js";
 

@@ -44,164 +44,147 @@ class SyncRejected
 }
 
 /** One scoped SKIT protocol session. Mutations never retry; recovery belongs to the workspace. */
-export const authorSyncApi = Effect.fn("Registry.authorSyncApi")(
-  function* (input: {
-    remote: AuthorRemoteHome;
-    locator: string;
-    token?: string;
-  }) {
-    const { remote, locator } = input;
-    const owner = remote.namespace;
-    const slug = remote.skit;
-    const transport = yield* (yield* RegistryHttp).client;
-    const client = yield* HttpApiClient.makeWith(AuthoringAuthenticatedApi, {
-      transformResponse: markRegistryResponseDecoding,
-      httpClient: transport,
-      baseUrl: remote.origin,
-    }).pipe(Effect.provide(authenticatedApiMiddleware(input.token)));
-    const failure =
-      (context: string, successStatus: number) => (error: unknown) => {
-        const classified = classifyRegistryApiFailure(error, [successStatus]);
-        if (classified.kind === "transport")
-          return new RegistryUnreachable({
-            origin: remote.origin,
-            cause: classified.error.cause,
-          });
-        if (classified.kind === "unauthorized")
-          return new AuthenticationRequired({
-            scopes: "library:sync,authoring:write",
-          });
-        if (classified.kind === "insufficient_scope")
-          return new CredentialLacksScope({
-            scope: "authoring:write",
-            scopes: "library:sync,authoring:write",
-          });
-        if (classified.kind === "forbidden")
-          return new PrincipalNotAuthorized({
-            action: "author this Namespace or SKIT",
-          });
-        if (Schema.is(SkitNotFoundResponse)(error))
-          return new RemoteSkitUnavailable({ identity: locator });
-        if (
-          classified.kind === "response_decode" ||
-          classified.kind === "request_encoding"
-        )
-          return new SkitContractError({
-            contract: `${context} ${classified.kind === "request_encoding" ? "request" : "response"}`,
-            issues: [{ path: "", message: String(error) }],
-          });
-        return new SyncRejected({
-          message: registryApiFailureMessage(context, error, {
-            defaultStatus: 400,
-          }),
-        });
-      };
-    // Bound the whole generated request, including decoding its body. A headers-only timeout
-    // leaves a stalled body holding the workspace lease. Do not retry an ambiguous mutation.
-    const withinDeadline = Effect.timeoutOrElse({
-      duration: "30 seconds",
-      orElse: () =>
-        Effect.fail(
-          new RegistryTransportError({
-            cause: new Error(
-              "Author Registry request timed out after 30 seconds; its outcome may be unknown",
-            ),
-          }),
-        ),
-    });
-    const params = { owner, slug };
-    // This SKIT on the Registry, for this command only. The transport never retries, so no retry
-    // delay waits while the lease is held.
-    const registry: SyncRemote = {
-      current: client.skits.current({ params }).pipe(
-        withinDeadline,
-        Effect.map((skit) => skit.current),
-        Effect.mapError(failure("skit current", 200)),
-      ),
-      revision: (id) =>
-        client.skits.revision({ params: { ...params, id } }).pipe(
-          withinDeadline,
-          Effect.map(({ revision, tree }) => ({ revision, tree })),
-          Effect.mapError(failure("skit revision", 200)),
-        ),
-      ancestors: (id) =>
-        Stream.paginate(Option.none<string>(), (cursor) =>
-          client.skits
-            .ancestors({
-              params,
-              query: Option.match(cursor, {
-                onNone: () => ({ ancestors: id }),
-                onSome: (next) => ({ ancestors: id, cursor: next }),
-              }),
-            })
-            .pipe(
-              withinDeadline,
-              Effect.map(
-                (page) =>
-                  [
-                    page.revisions.map(({ id, revision }) => ({
-                      id,
-                      revision,
-                    })),
-                    Option.map(
-                      Option.fromNullishOr(page.next_cursor),
-                      Option.some,
-                    ),
-                  ] as const,
-              ),
-              Effect.mapError(failure("skit history", 200)),
-            ),
-        ),
-      post: (id, revision, tree) =>
-        client.skits
-          .post({ params, payload: { id, revision, tree } })
-          .pipe(
-            withinDeadline,
-            Effect.asVoid,
-            Effect.mapError(failure("skit revision", 200)),
-          ),
-      move: (expected, id) =>
-        client.skits.move({ params, payload: { expected, id } }).pipe(
-          withinDeadline,
-          Effect.asVoid,
-          Effect.mapError((error) =>
-            Schema.is(CurrentMovedResponse)(error)
-              ? new Moved({ current: error.current })
-              : failure("skit move", 200)(error),
-          ),
-        ),
-    };
-    return {
-      remote: registry,
-      requireAvailable: Effect.gen(function* () {
-        const existing = yield* client.skits
-          .current({ params })
-          .pipe(withinDeadline, Effect.result);
-        if (Result.isSuccess(existing))
-          return yield* new DestinationExistsWithoutHistory({
-            identity: locator,
-          });
-        if (!Schema.is(SkitNotFoundResponse)(existing.failure))
-          return yield* Effect.fail(
-            failure("skit current", 200)(existing.failure),
-          );
+export const authorSyncApi = Effect.fn("Registry.authorSyncApi")(function* (input: {
+  remote: AuthorRemoteHome;
+  locator: string;
+  token?: string;
+}) {
+  const { remote, locator } = input;
+  const owner = remote.namespace;
+  const slug = remote.skit;
+  const transport = yield* (yield* RegistryHttp).client;
+  const client = yield* HttpApiClient.makeWith(AuthoringAuthenticatedApi, {
+    transformResponse: markRegistryResponseDecoding,
+    httpClient: transport,
+    baseUrl: remote.origin,
+  }).pipe(Effect.provide(authenticatedApiMiddleware(input.token)));
+  const failure = (context: string, successStatus: number) => (error: unknown) => {
+    const classified = classifyRegistryApiFailure(error, [successStatus]);
+    if (classified.kind === "transport")
+      return new RegistryUnreachable({
+        origin: remote.origin,
+        cause: classified.error.cause,
+      });
+    if (classified.kind === "unauthorized")
+      return new AuthenticationRequired({
+        scopes: "library:sync,authoring:write",
+      });
+    if (classified.kind === "insufficient_scope")
+      return new CredentialLacksScope({
+        scope: "authoring:write",
+        scopes: "library:sync,authoring:write",
+      });
+    if (classified.kind === "forbidden")
+      return new PrincipalNotAuthorized({
+        action: "author this Namespace or SKIT",
+      });
+    if (Schema.is(SkitNotFoundResponse)(error))
+      return new RemoteSkitUnavailable({ identity: locator });
+    if (classified.kind === "response_decode" || classified.kind === "request_encoding")
+      return new SkitContractError({
+        contract: `${context} ${classified.kind === "request_encoding" ? "request" : "response"}`,
+        issues: [{ path: "", message: String(error) }],
+      });
+    return new SyncRejected({
+      message: registryApiFailureMessage(context, error, {
+        defaultStatus: 400,
       }),
-      create: (visibility: AuthorVisibility, requestId: string) =>
+    });
+  };
+  // Bound the whole generated request, including decoding its body. A headers-only timeout
+  // leaves a stalled body holding the workspace lease. Do not retry an ambiguous mutation.
+  const withinDeadline = Effect.timeoutOrElse({
+    duration: "30 seconds",
+    orElse: () =>
+      Effect.fail(
+        new RegistryTransportError({
+          cause: new Error(
+            "Author Registry request timed out after 30 seconds; its outcome may be unknown",
+          ),
+        }),
+      ),
+  });
+  const params = { owner, slug };
+  // This SKIT on the Registry, for this command only. The transport never retries, so no retry
+  // delay waits while the lease is held.
+  const registry: SyncRemote = {
+    current: client.skits.current({ params }).pipe(
+      withinDeadline,
+      Effect.map((skit) => skit.current),
+      Effect.mapError(failure("skit current", 200)),
+    ),
+    revision: (id) =>
+      client.skits.revision({ params: { ...params, id } }).pipe(
+        withinDeadline,
+        Effect.map(({ revision, tree }) => ({ revision, tree })),
+        Effect.mapError(failure("skit revision", 200)),
+      ),
+    ancestors: (id) =>
+      Stream.paginate(Option.none<string>(), (cursor) =>
         client.skits
-          .create({
-            payload: { owner, slug, visibility, request_id: requestId },
+          .ancestors({
+            params,
+            query: Option.match(cursor, {
+              onNone: () => ({ ancestors: id }),
+              onSome: (next) => ({ ancestors: id, cursor: next }),
+            }),
           })
           .pipe(
             withinDeadline,
-            Effect.mapError((error) =>
-              Schema.is(SkitExistsResponse)(error)
-                ? new DestinationExistsWithoutHistory({ identity: locator })
-                : failure("skit create", 201)(error),
+            Effect.map(
+              (page) =>
+                [
+                  page.revisions.map(({ id, revision }) => ({
+                    id,
+                    revision,
+                  })),
+                  Option.map(Option.fromNullishOr(page.next_cursor), Option.some),
+                ] as const,
             ),
+            Effect.mapError(failure("skit history", 200)),
           ),
-    };
-  },
-);
+      ),
+    post: (id, revision, tree) =>
+      client.skits
+        .post({ params, payload: { id, revision, tree } })
+        .pipe(withinDeadline, Effect.asVoid, Effect.mapError(failure("skit revision", 200))),
+    move: (expected, id) =>
+      client.skits.move({ params, payload: { expected, id } }).pipe(
+        withinDeadline,
+        Effect.asVoid,
+        Effect.mapError((error) =>
+          Schema.is(CurrentMovedResponse)(error)
+            ? new Moved({ current: error.current })
+            : failure("skit move", 200)(error),
+        ),
+      ),
+  };
+  return {
+    remote: registry,
+    requireAvailable: Effect.gen(function* () {
+      const existing = yield* client.skits.current({ params }).pipe(withinDeadline, Effect.result);
+      if (Result.isSuccess(existing))
+        return yield* new DestinationExistsWithoutHistory({
+          identity: locator,
+        });
+      if (!Schema.is(SkitNotFoundResponse)(existing.failure))
+        return yield* Effect.fail(failure("skit current", 200)(existing.failure));
+    }),
+    create: (visibility: AuthorVisibility, requestId: string) =>
+      client.skits
+        .create({
+          payload: { owner, slug, visibility, request_id: requestId },
+        })
+        .pipe(
+          withinDeadline,
+          Effect.mapError((error) =>
+            Schema.is(SkitExistsResponse)(error)
+              ? new DestinationExistsWithoutHistory({ identity: locator })
+              : failure("skit create", 201)(error),
+          ),
+        ),
+  };
+});
 
 /** Transport composition for Author; credentials are selected only for the named Registry. */
 export const authorRegistry = (home?: string) => ({
@@ -221,9 +204,7 @@ export const authorRegistry = (home?: string) => ({
       ...options,
     });
   }, Effect.scoped),
-  publish: Effect.fn("Registry.publishAuthor")(function* (
-    remote: AuthorRemoteHome,
-  ) {
+  publish: Effect.fn("Registry.publishAuthor")(function* (remote: AuthorRemoteHome) {
     const credentials = yield* Registry.credentials({
       origin: remote.origin,
       home,
@@ -243,9 +224,7 @@ export const authorRegistry = (home?: string) => ({
       readonly archive: Uint8Array;
     }) => publishRelease(http, { ...input, remote, token }).pipe(Effect.scoped);
   }),
-  origin: Registry.credentials({ home }).pipe(
-    Effect.map(({ origin }) => origin),
-  ),
+  origin: Registry.credentials({ home }).pipe(Effect.map(({ origin }) => origin)),
   connect: Effect.fn("Registry.connectAuthor")(function* (input: {
     readonly remote: AuthorRemoteHome;
     readonly locator: string;
