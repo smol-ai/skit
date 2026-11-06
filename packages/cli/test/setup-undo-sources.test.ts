@@ -9,19 +9,14 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { TestClock } from "effect/testing";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import {
-  enabledSkillIds,
-  currentSkillVersion,
-  libraryManifestFromLocalState,
-  sourceImports,
-} from "@smolai/skit-core";
+import { enabledSkillIds, libraryManifestFromLocalState } from "@smolai/skit-core";
 import type { LibraryFixtureState as LibraryState } from "./helpers/library-home.js";
 import * as MachineSettings from "@smolai/skit-core/machine-settings";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { skillsDirectoryFor } from "@smolai/skit-core/library/routing";
 import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply.js";
 import { prepareSetupUndo } from "../src/library/setup/undo.js";
-import { setupSourceChoiceId, runSetup } from "@smolai/skit-core/library/setup";
+import { setupSourceChoiceId, runSetup, setupIntent } from "@smolai/skit-core/library/setup";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 
 import { skitCommand } from "../src/commands/tree.js";
@@ -301,8 +296,13 @@ it.effect(
       const restored = yield* f.home.durable;
       const skill = restored.skills.find((item) => item.skill_id === f.before.skills[0].skill_id)!;
       expect(skill.local_version_id).toBe(f.before.skills[0].local_version_id);
-      expect(currentSkillVersion(restored, skill)?.skill_version_id).toBe(
-        currentSkillVersion(f.before, f.before.skills[0])?.skill_version_id,
+      expect(
+        setupIntent(restored).versions.find((version) => version.skillId === skill.skill_id)
+          ?.selected,
+      ).toBe(
+        setupIntent(f.before).versions.find(
+          (version) => version.skillId === f.before.skills[0].skill_id,
+        )?.selected,
       );
       expect(enabledSkillIds(restored, f.enabled)).toHaveLength(1);
       expect(restored.collection_versions).toEqual(after.collection_versions);
@@ -353,12 +353,26 @@ it.effect(
         expect(restored.imports).toContainEqual(sourceImport);
       const prior = f.before.skills[0];
       const selected = restored.skills.find((skill) => skill.skill_id === prior.skill_id)!;
-      expect(currentSkillVersion(restored, selected)?.skill_version_id).toBe(
-        currentSkillVersion(f.before, prior)?.skill_version_id,
+      expect(
+        setupIntent(restored).versions.find((version) => version.skillId === selected.skill_id)
+          ?.selected,
+      ).toBe(
+        setupIntent(f.before).versions.find((version) => version.skillId === prior.skill_id)
+          ?.selected,
       );
       expect(selected.local_version_id).toBeUndefined();
-      const observation = sourceImports(restored, f.collectionId)[0];
-      const original = sourceImports(f.before, f.collectionId)[0];
+      const restoredSource = setupIntent(restored).sources.find(
+        (source) => source.collectionId === f.collectionId,
+      );
+      const originalSource = setupIntent(f.before).sources.find(
+        (source) => source.collectionId === f.collectionId,
+      );
+      const observation = restored.imports.find(
+        (sourceImport) => sourceImport.import_id === restoredSource?.importId,
+      )!;
+      const original = f.before.imports.find(
+        (sourceImport) => sourceImport.import_id === originalSource?.importId,
+      )!;
       expect(observation.collection_version_id).toBe(original.collection_version_id);
       expect(observation.lock_file_entries).toEqual([]);
       const copy = restored.collection_versions.find(
@@ -400,11 +414,12 @@ it.effect(
       const refreshed = yield* f.home.durable;
       expect(enabledSkillIds(refreshed, f.enabled)).toHaveLength(2);
       expect(
-        currentSkillVersion(
-          refreshed,
-          refreshed.skills.find((skill) => skill.skill_id === prior.skill_id)!,
-        )?.skill_version_id,
-      ).not.toBe(currentSkillVersion(f.before, prior)?.skill_version_id);
+        setupIntent(refreshed).versions.find((version) => version.skillId === prior.skill_id)
+          ?.selected,
+      ).not.toBe(
+        setupIntent(f.before).versions.find((version) => version.skillId === prior.skill_id)
+          ?.selected,
+      );
     }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -452,7 +467,12 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const original = sourceImports(f.before, f.collectionId)[0];
+      const originalSource = setupIntent(f.before).sources.find(
+        (source) => source.collectionId === f.collectionId,
+      );
+      const original = f.before.imports.find(
+        (sourceImport) => sourceImport.import_id === originalSource?.importId,
+      )!;
       const copy = f.before.collection_versions.find(
         (item) => item.collection_version_id === original.collection_version_id,
       )!;
