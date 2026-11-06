@@ -14,6 +14,8 @@ import { executeRemove } from "../src/library/remove/operation.js";
 import { authorInitCommand } from "../src/author/init.js";
 import { authorInvocationCommand } from "../src/author/invocation.js";
 import { AuthorWorkspace } from "@smolai/skit-core/author";
+import { Library } from "@smolai/skit-core/library";
+import { systemError } from "effect/PlatformError";
 import {
   copySkitFixtureEffect,
   initializeLibraryMachine,
@@ -360,5 +362,104 @@ it.effect(
         again.entry?.collection.collection_id,
         first.entry.collection.collection_id,
       );
+    }).pipe(Effect.provide(AuthorWorkspace.layer), Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect(
+  "refused folder removal keeps registration Removing across restart until an explicit retry",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* workspaceFixture;
+      const first = yield* f.init();
+      assert.ok(first.entry);
+      const agents = join(f.root, "agents");
+      const installed = join(agents, "review");
+      yield* Effect.gen(function* () {
+        const library = yield* Library.Service;
+        const plan = yield* library.plan(
+          {
+            _tag: "Enabled",
+            changes: [
+              {
+                _tag: "Enable",
+                subject: { _tag: "Collection", id: first.entry.collection.collection_id },
+                members: "whole",
+                where: [{ kind: "global" }],
+              },
+            ],
+          },
+          { base: yield* library.read },
+        );
+        assert.strictEqual((yield* library.apply({ _tag: "Apply", plan })).result._tag, "Applied");
+      }).pipe(
+        Effect.provide(
+          Library.layer({
+            home: f.home.home,
+            routing: { _tag: "Configured", ...f.home.inventory, overrides: { codex: [agents] } },
+          }),
+        ),
+      );
+      const bytes = yield* f.fs.readFileString(join(installed, "SKILL.md"));
+      const authored = yield* f.fs.readFileString(join(f.source, "skills/review/SKILL.md"));
+      let refusals = 0;
+      const failed = yield* f.home
+        .owned(
+          Effect.gen(function* () {
+            const result = yield* Effect.result(
+              executeRemove({ query: first.entry.collection.collection_id, dryRun: false }),
+            );
+            return { result, snapshot: yield* (yield* Library.Service).read };
+          }),
+        )
+        .pipe(
+          Effect.provideService(FileSystem.FileSystem, {
+            ...f.fs,
+            rename: (from, to) =>
+              from === installed
+                ? Effect.gen(function* () {
+                    refusals++;
+                    return yield* systemError({
+                      module: "FileSystem",
+                      method: "rename",
+                      _tag: "PermissionDenied",
+                      pathOrDescriptor: from,
+                      syscall: "rename",
+                      description: "Test refuses installed-folder removal",
+                    });
+                  })
+                : f.fs.rename(from, to),
+          }),
+        );
+      assert.isAbove(refusals, 0);
+      if (failed.result._tag !== "Failure") return yield* Effect.die("Removal falsely succeeded");
+      assert.strictEqual(failed.result.failure._tag, "PlatformError");
+      assert.strictEqual((yield* f.metadata).registration, "removing");
+      assert.strictEqual(failed.snapshot._tag, "Present");
+      if (failed.snapshot._tag === "Present") {
+        assert.strictEqual(failed.snapshot.state.collections.length, 1);
+        assert.isTrue(
+          failed.snapshot.state.operations.some((operation) => operation._tag === "Stopped"),
+        );
+      }
+      assert.strictEqual(yield* f.fs.readFileString(join(installed, "SKILL.md")), bytes);
+      assert.strictEqual(
+        yield* f.fs.readFileString(join(f.source, "skills/review/SKILL.md")),
+        authored,
+      );
+      // A typed refusal is Stopped, not a crash-Pending program. A fresh owner must not
+      // retry it silently or let init resurrect the registration before removal finishes.
+      const beforeRestart = yield* captureDisk([f.source, installed], { identity: true });
+      const restarted = yield* Effect.flip(f.init());
+      assert.strictEqual(restarted._tag, "AuthorWorkspaceRemovalUnfinished");
+      assert.strictEqual((yield* f.metadata).registration, "removing");
+      yield* assertDiskUnchanged(beforeRestart);
+      const retried = yield* f.home.owned(
+        executeRemove({ query: first.entry.collection.collection_id, dryRun: false }),
+      );
+      assert.strictEqual(retried.kind, "removed");
+      assert.strictEqual((yield* f.metadata).registration, "removed");
+      assert.strictEqual((yield* f.init()).entry, undefined);
+      assert.strictEqual((yield* f.home.durable).collections.length, 0);
+      assert.isFalse(yield* f.fs.exists(installed));
     }).pipe(Effect.provide(AuthorWorkspace.layer), Effect.provide(skitLayer), Effect.scoped),
 );
