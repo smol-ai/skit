@@ -6,7 +6,7 @@ import { it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Result, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { expect } from "vitest";
-import { LibraryState } from "@smolai/skit-core";
+import { LibraryState } from "@smolai/skit-core/library";
 import { emptyLibraryFixture } from "./helpers/library-home.js";
 import {
   makeImportId,

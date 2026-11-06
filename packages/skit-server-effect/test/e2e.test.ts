@@ -8,7 +8,7 @@ import { BrowserCrypto } from "@effect/platform-browser";
 import { Effect, Schema } from "effect";
 // This Node test reads the CLI's device state file; it never runs in the Worker.
 // oxlint-disable-next-line no-restricted-imports
-import { LibraryState } from "@smolai/skit-core";
+import { LibraryState } from "@smolai/skit-core/library";
 import { createTestHarness } from "wrangler";
 import { expect, test } from "vitest";
 import type { RuntimeEnv } from "../src/platform/cloudflare.js";

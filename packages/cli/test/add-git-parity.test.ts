@@ -16,7 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import { Schema } from "effect";
-import { LibraryState } from "@smolai/skit-core";
+import { LibraryState } from "@smolai/skit-core/library";
 import { outputContracts } from "../src/commands/output-contracts.js";
 import { isolatedRoots } from "./helpers/isolated-library.js";
 

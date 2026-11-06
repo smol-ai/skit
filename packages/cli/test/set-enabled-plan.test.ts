@@ -1,5 +1,5 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { LibraryState } from "@smolai/skit-core";
+import { LibraryState } from "@smolai/skit-core/library";
 import { canonicalJson } from "@smolai/skit-core/shared";
 import { createHash } from "node:crypto";
 import { inspectOwnershipMarker } from "@smolai/skit-core/library/inventory";

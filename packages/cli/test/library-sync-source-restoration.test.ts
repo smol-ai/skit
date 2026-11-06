@@ -6,7 +6,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Schema } from "effect";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { LibraryState } from "@smolai/skit-core";
+import { LibraryState } from "@smolai/skit-core/library";
 import { type SkitSource } from "@smolai/skit-core/library/source";
 import { Library } from "@smolai/skit-core/library";
 import { SourceProcess } from "@smolai/skit-core/platform";

@@ -5,7 +5,7 @@ import { assert } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Schema } from "effect";
 import { join } from "node:path";
 import { systemError } from "effect/PlatformError";
-import { LibraryState } from "@smolai/skit-core";
+import { LibraryState } from "@smolai/skit-core/library";
 import { emptyLibraryFixture, type LibraryFixtureState } from "./library-home.js";
 import { type InstallDestination } from "@smolai/skit-core/library";
 import { makeMachineId } from "@smolai/skit-core/universal/consumer";

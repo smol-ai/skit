@@ -4,7 +4,7 @@ import { basename, join, relative } from "node:path";
 import { Effect, Exit, FileSystem, Option, Schema } from "effect";
 import { PlatformError, systemError } from "effect/PlatformError";
 import { assert, it } from "@effect/vitest";
-import { LibraryState } from "@smolai/skit-core";
+import { LibraryState } from "@smolai/skit-core/library";
 import { Library } from "@smolai/skit-core/library";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { withSandboxDenying } from "./helpers/sandbox.js";

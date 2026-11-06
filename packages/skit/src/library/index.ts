@@ -10,6 +10,8 @@ export type {
 export { InstallScope } from "./scope.js";
 export { InstallDestination } from "../installed-skills/destination.js";
 export { LibraryManifest, SnapshotArchive } from "./library-contracts.js";
+// Current snapshot data codec; file access and historical migration stay private to Library.
+export { LibraryState } from "./library-state.js";
 export { LibraryAuditEvent } from "./audit/audit-log.js";
 export { RecoveryInspection } from "./recovery-facts.js";
 export { RestoreInvalid } from "./library.js";
