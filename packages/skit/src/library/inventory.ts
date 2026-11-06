@@ -29,7 +29,4 @@ export const refreshInventory = Effect.fn("Library.refreshInventory")(function* 
   return outcome.result.inventory;
 });
 
-export {
-  inspectOwnershipMarker,
-  OwnershipMarkerInspection,
-} from "../installed-skills/marker-inspection.js";
+export { inspectOwnershipMarker } from "../installed-skills/marker-inspection.js";

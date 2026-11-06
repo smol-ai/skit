@@ -109,7 +109,6 @@ export { UndoPlan } from "./internal/setup/undo-plan.js";
 export { reviewInstalledSkillChanges } from "./installed-skill-review.js";
 export {
   InvalidIntent,
-  calculateEnabled,
   enabledCollections,
   uniqueInstallScopes,
   sameInstallScope,

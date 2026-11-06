@@ -510,7 +510,7 @@ const scanSetupLocations = Effect.fn("Setup.scanLocations")(function* (
   };
 });
 
-export const collectBrokenLinks = Effect.fn("Setup.brokenLinks")(function* (
+const collectBrokenLinks = Effect.fn("Setup.brokenLinks")(function* (
   roots: readonly { harness: Harness; root: string }[],
 ) {
   const fs = yield* FileSystem.FileSystem;

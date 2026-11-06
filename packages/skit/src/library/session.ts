@@ -2,8 +2,6 @@
 export { invocationOptions, type InvocationOption } from "./internal/session/invocation-option.js";
 export {
   destinationLabel,
-  invocationReadModel,
-  invocationPolicyChoices,
   invocationBriefing,
   invocationRowSummary,
 } from "./internal/session/invocation.js";
@@ -38,7 +36,6 @@ export {
   type SetEnabledRequest,
   type SetEnabledIntent,
   type EnabledCollection,
-  enabledCollections,
 } from "./internal/session/set-enabled-request.js";
 export {
   type SetEnabledConfiguration,
@@ -88,7 +85,7 @@ export {
   SyncLocalChanged,
   type SyncSessionRequest,
 } from "./internal/sync/session.js";
-export { SyncChanges, SyncChange, SyncEnabledItem } from "./sync-changes.js";
+export { SyncChanges } from "./sync-changes.js";
 
 // Canonical read-query errors keep inferred frontend declarations portable.
 export type { LibrarySubjectNotFound, LibrarySubjectAmbiguous } from "./subject-resolution.js";

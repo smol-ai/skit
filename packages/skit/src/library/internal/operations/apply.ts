@@ -28,7 +28,7 @@ import {
 import { applyOutcome } from "./result.js";
 
 /** Private execution context, unwrapped before any public outcome or durable error is made. */
-export class InstalledChangeFailed extends Data.TaggedError("Library.InstalledChangeFailed")<{
+class InstalledChangeFailed extends Data.TaggedError("Library.InstalledChangeFailed")<{
   readonly path: string;
   readonly cause: ApplyError | InstalledSkills.Changed;
 }> {}
