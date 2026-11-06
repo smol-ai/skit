@@ -1,5 +1,7 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { LibraryState, libraryStateRevision } from "@smolai/skit-core";
+import { LibraryState } from "@smolai/skit-core";
+import { canonicalJson } from "@smolai/skit-core/shared";
+import { createHash } from "node:crypto";
 import { inspectOwnershipMarker } from "@smolai/skit-core/library/inventory";
 import { type UsageReport } from "@smolai/skit-core/library/usage";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
@@ -982,7 +984,10 @@ it.effect(
       assert.deepStrictEqual(state.enabled, [{ skill: alpha.skill_id }]);
       assert.strictEqual(failed.results[0]?.application.intent, "saved");
       assert.strictEqual(failed.results[0]?.application.status, "incomplete");
-      assert.strictEqual(failed.results[0]?.application.revision, libraryStateRevision(state));
+      assert.strictEqual(
+        failed.results[0]?.application.revision,
+        createHash("sha256").update(canonicalJson(state)).digest("hex"),
+      );
       assert.strictEqual(
         yield* f.fs.readFileString(join(f.destination, "alpha", "SKILL.md")),
         "# alpha\n",
@@ -1217,7 +1222,9 @@ it.effect(
       assert.strictEqual(result.data.application.intent, "saved");
       assert.strictEqual(
         result.data.application.revision,
-        libraryStateRevision(yield* f.home.durable),
+        createHash("sha256")
+          .update(canonicalJson(yield* f.home.durable))
+          .digest("hex"),
       );
       const rendered = renderContract(result, { color: false, detail: "full" });
       assert.match(rendered, /Library choice saved/);
@@ -1285,7 +1292,10 @@ it.effect(
       const current = yield* f.home.durable;
       assert.deepStrictEqual(current.ownershipIssues, []);
       assert.deepStrictEqual(current.installed_skills, []);
-      assert.strictEqual(failed.results[0]?.application.revision, libraryStateRevision(current));
+      assert.strictEqual(
+        failed.results[0]?.application.revision,
+        createHash("sha256").update(canonicalJson(current)).digest("hex"),
+      );
       assert.strictEqual(failed.results[0]?.application.status, "incomplete");
       const alpha = current.skills.find((skill) => skill.name === "alpha");
       assert.ok(alpha);
