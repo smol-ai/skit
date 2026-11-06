@@ -74,19 +74,22 @@ const workspaceFixture = Effect.gen(function* () {
   yield* initializeLibraryMachine(home.home);
   const path = join(source, COLLECTION_CONTROL_DIRECTORY, AUTHOR_WORKSPACE_METADATA_FILE);
   const init = (register = false, path = source) => home.owned(authorInitCommand(path, register));
-  const metadata = fs.readFileString(path).pipe(
-    Effect.flatMap(
-      Schema.decodeUnknownEffect(
-        Schema.fromJsonString(
-          Schema.Struct({
-            workspace_id: Schema.String,
-            registration: Schema.optionalKey(Schema.String),
-          }),
+  const metadataAt = (directory: string) =>
+    fs
+      .readFileString(join(directory, COLLECTION_CONTROL_DIRECTORY, AUTHOR_WORKSPACE_METADATA_FILE))
+      .pipe(
+        Effect.flatMap(
+          Schema.decodeUnknownEffect(
+            Schema.fromJsonString(
+              Schema.Struct({
+                workspace_id: Schema.String,
+                registration: Schema.optionalKey(Schema.String),
+              }),
+            ),
+          ),
         ),
-      ),
-    ),
-  );
-  return { fs, root, source, home, path, init, metadata };
+      );
+  return { fs, root, source, home, path, init, metadata: metadataAt(source), metadataAt };
 });
 
 it.effect("built-in Author edits refuse a held workspace lease while preview stays passive", () =>
@@ -281,5 +284,81 @@ it.effect(
       // The lease's own files may exist; no identity, and no scaffold, was written.
       assert.isFalse(yield* f.fs.exists(f.path));
       assert.strictEqual(yield* f.fs.readFileString(join(f.source, "skit.json")), descriptor);
+    }).pipe(Effect.provide(AuthorWorkspace.layer), Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect.each(["collection", "skill"] as const)(
+  "removing by %s opts out the moved workspace rather than its historical path",
+  (subject) =>
+    Effect.gen(function* () {
+      const f = yield* workspaceFixture;
+      const first = yield* f.init();
+      assert.ok(first.entry);
+      const identity = (yield* f.metadata).workspace_id;
+      const moved = join(f.root, "moved");
+      yield* f.fs.rename(f.source, moved);
+      const refreshed = yield* f.init(false, moved);
+      assert.strictEqual(
+        refreshed.entry?.collection.collection_id,
+        first.entry.collection.collection_id,
+      );
+      assert.strictEqual((yield* f.metadataAt(moved)).workspace_id, identity);
+      const skill = first.entry.skills[0];
+      assert.ok(skill);
+      yield* f.home.owned(
+        executeRemove({
+          query: subject === "collection" ? first.entry.collection.collection_id : skill.skill_id,
+          dryRun: false,
+        }),
+      );
+      assert.strictEqual((yield* f.metadataAt(moved)).registration, "removed");
+      assert.strictEqual((yield* f.init(false, moved)).entry, undefined);
+      assert.strictEqual((yield* f.home.durable).collections.length, 0);
+      assert.isFalse(yield* f.fs.exists(f.source));
+    }).pipe(Effect.provide(AuthorWorkspace.layer), Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("a copied identity is rejected after its original workspace moved", () =>
+  Effect.gen(function* () {
+    const f = yield* workspaceFixture;
+    yield* f.init();
+    const moved = join(f.root, "moved");
+    yield* f.fs.rename(f.source, moved);
+    yield* f.init(false, moved);
+    const copy = join(f.root, "copy");
+    yield* f.fs.copy(moved, copy);
+    const before = yield* captureDisk([moved, copy, f.home.home], { identity: true });
+    const failure = yield* Effect.flip(f.init(false, copy));
+    assert.strictEqual(failure._tag, "AuthorWorkspaceAlreadyRegistered");
+    yield* assertDiskUnchanged(before);
+  }).pipe(Effect.provide(AuthorWorkspace.layer), Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect(
+  "a reused historical path gets a distinct workspace instead of adopting the moved identity",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* workspaceFixture;
+      const first = yield* f.init();
+      assert.ok(first.entry);
+      const identity = (yield* f.metadata).workspace_id;
+      const moved = join(f.root, "moved");
+      yield* f.fs.rename(f.source, moved);
+      yield* f.init(false, moved);
+      yield* copySkitFixtureEffect("authored", f.source);
+      const replacement = yield* f.init();
+      assert.ok(replacement.entry);
+      assert.notStrictEqual(
+        replacement.entry.collection.collection_id,
+        first.entry.collection.collection_id,
+      );
+      assert.notStrictEqual((yield* f.metadata).workspace_id, identity);
+      assert.strictEqual((yield* f.home.durable).collections.length, 2);
+      // The current moved folder still belongs to its own Collection and identity.
+      const again = yield* f.init(false, moved);
+      assert.strictEqual(
+        again.entry?.collection.collection_id,
+        first.entry.collection.collection_id,
+      );
     }).pipe(Effect.provide(AuthorWorkspace.layer), Effect.provide(skitLayer), Effect.scoped),
 );

@@ -3,6 +3,7 @@ import * as Library from "../../library.js";
 import { emptyLibraryState, type LibraryState } from "../../library-state.js";
 import { resolveLibrarySubject } from "../../subject-resolution.js";
 import { enabledSkillIds } from "../../library-contracts.js";
+import { workspaceLocation } from "./workspace-claims.js";
 import {
   SkillRemovalRequiresCollection,
   CollectionRemovalMissing,
@@ -66,22 +67,10 @@ export const openRemoveSession = Effect.fn("Library.openRemoveSession")(
     const collection = state.collections.find((item) => item.collection_id === collectionId);
     // Removing the sole Skill removes its Collection too. Registration belongs to that
     // Collection's workspace, regardless of which accepted subject named the removal.
-    const workspaceId =
-      collection?.upstream?.source_identity.kind === "authored-workspace"
-        ? collection.upstream.source_identity.workspace_id
-        : undefined;
-    const path =
-      workspaceId === undefined
-        ? undefined
-        : state.imports.find(
-            (sourceImport) =>
-              sourceImport.collection_id === collectionId &&
-              sourceImport.source_identity.kind === "authored-workspace",
-          )?.input.value;
+    const workspace = collection === undefined ? undefined : workspaceLocation(state, collection);
     return {
       summary: structuredClone(summary),
-      workspace:
-        workspaceId === undefined || path === undefined ? undefined : { workspaceId, path },
+      workspace,
       apply: Effect.fn("Library.removeSelection")(function* () {
         const outcome = (yield* library.apply({
           _tag: "Apply",
