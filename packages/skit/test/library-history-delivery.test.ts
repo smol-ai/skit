@@ -14,6 +14,8 @@ import {
 } from "../src/library/store/library-store.js";
 import { snapshotOf } from "../src/library/snapshot.js";
 import { skitLayer } from "../src/platform/layer.js";
+import { acquireFileLock } from "../src/platform/file-lock.js";
+import { deliverLibraryHistory } from "../src/library/store/state-file.js";
 
 const readEnvelope = Schema.decodeUnknownEffect(Schema.fromJsonString(StateEnvelope));
 const fixture = Effect.fn("test.historyDelivery.fixture")(function* () {
@@ -47,6 +49,77 @@ const fixture = Effect.fn("test.historyDelivery.fixture")(function* () {
     logPath: join(home, "audit.jsonl"),
   };
 });
+
+for (const delivery of ["absent", "empty"] as const)
+  it.effect(
+    `opens a Library with ${delivery} history delivery while another holder owns its lock`,
+    () =>
+      Effect.gen(function* () {
+        const f = yield* fixture();
+        yield* Effect.flatMap(Library.Service, (owner) => owner.import.collection(f.request)).pipe(
+          Effect.provide(f.layer),
+        );
+        if (delivery === "empty") {
+          const state = yield* readEnvelope(yield* f.fs.readFileString(f.statePath));
+          yield* f.fs.writeFileString(
+            f.statePath,
+            JSON.stringify({ ...state, historyDelivery: { schemaVersion: 1, pending: [] } }),
+          );
+        }
+        const state = yield* f.fs.readFileString(f.statePath);
+        const audit = yield* f.fs.readFileString(f.logPath);
+        // A native hold supplies no reentrant HomeLock authority to the Library.
+        yield* acquireFileLock(join(f.home, "lock.sqlite"));
+        yield* deliverLibraryHistory(f.home);
+        yield* Effect.gen(function* () {
+          const owner = yield* Library.Service;
+          assert.strictEqual((yield* owner.read)._tag, "Present");
+          assert.strictEqual((yield* owner.history).events.length, 1);
+        }).pipe(Effect.provide(f.layer));
+        assert.strictEqual(
+          (yield* Effect.flip(writeLibrary(f.home, Effect.void)))._tag,
+          "HomeBusy",
+        );
+        assert.strictEqual(yield* f.fs.readFileString(f.statePath), state);
+        assert.strictEqual(yield* f.fs.readFileString(f.logPath), audit);
+      }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  );
+
+it.effect(
+  "queued history still requires the writer and delivers after its holder releases it",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const event = yield* Effect.gen(function* () {
+        const owner = yield* Library.Service;
+        yield* owner.import.collection(f.request);
+        return (yield* owner.history).events[0];
+      }).pipe(Effect.provide(f.layer));
+      const state = yield* readEnvelope(yield* f.fs.readFileString(f.statePath));
+      const queued = JSON.stringify({
+        ...state,
+        historyDelivery: { schemaVersion: 1, pending: [{ event, operationIds: [] }] },
+      });
+      yield* f.fs.writeFileString(f.statePath, queued);
+      yield* f.fs.writeFileString(f.logPath, "");
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* acquireFileLock(join(f.home, "lock.sqlite"));
+          assert.strictEqual((yield* Effect.flip(deliverLibraryHistory(f.home)))._tag, "HomeBusy");
+          assert.strictEqual(yield* f.fs.readFileString(f.statePath), queued);
+          assert.strictEqual(yield* f.fs.readFileString(f.logPath), "");
+        }),
+      );
+      yield* deliverLibraryHistory(f.home);
+      assert.isUndefined(
+        (yield* readEnvelope(yield* f.fs.readFileString(f.statePath))).historyDelivery,
+      );
+      yield* Effect.gen(function* () {
+        const owner = yield* Library.Service;
+        assert.deepStrictEqual((yield* owner.history).events, [event]);
+      }).pipe(Effect.provide(f.layer));
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
 
 for (const boundary of ["state", "before-log", "after-log", "after-ack"] as const)
   it.effect(`delivers one history event after interruption at ${boundary}`, () =>

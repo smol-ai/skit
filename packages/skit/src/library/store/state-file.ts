@@ -291,7 +291,11 @@ export const deliverLibraryHistory = Effect.fn("Library.deliverHistory")(functio
   actionId?: OperationId,
 ) {
   const path = join(resolve(home), "state.json");
-  if ((yield* readStateValue(path)) === undefined) return;
+  const observed = yield* readStateValue(path);
+  if (observed === undefined) return;
+  const { historyDelivery } = yield* envelope(path, observed);
+  if (!historyDelivery?.pending.length) return;
+  // Only queued history needs the writer. Re-read under the lock before delivering anything.
   yield* withLibraryStateReplacement(
     home,
     Effect.gen(function* () {
