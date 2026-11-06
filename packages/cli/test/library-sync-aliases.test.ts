@@ -1,13 +1,10 @@
+import { setupIntent } from "@smolai/skit-core/library/setup";
 import { originalArchive, originalTreePath } from "./helpers/original-tree.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Schema } from "effect";
 import { join } from "node:path";
-import {
-  currentSkillVersion,
-  libraryManifestFromLocalState,
-  LibraryState,
-} from "@smolai/skit-core";
+import { libraryManifestFromLocalState, LibraryState } from "@smolai/skit-core";
 import { LibraryManifest } from "@smolai/skit-core/library";
 import { type SkillId } from "@smolai/skit-core/universal/consumer";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
@@ -368,7 +365,10 @@ it.effect("an identical retained local edit aligns local_version_id to the publi
     const after = yield* b.state;
     const skill = after.skills[0]!;
     assert.strictEqual(skill.local_version_id, aEdit);
-    assert.strictEqual(currentSkillVersion(after, skill)?.skill_version_id, aEdit);
+    assert.strictEqual(
+      setupIntent(after).versions.find((version) => version.skillId === skill.skill_id)?.selected,
+      aEdit,
+    );
     assert.deepStrictEqual(
       ids(skill.versions, (item) => item.skill_version_id),
       ids((yield* a.state).skills[0]!.versions, (item) => item.skill_version_id),
@@ -448,7 +448,8 @@ it.effect(
         [publishedSkill.skill_id],
       );
       assert.strictEqual(
-        currentSkillVersion(after, after.skills[0]!)?.skill_version_id,
+        setupIntent(after).versions.find((version) => version.skillId === after.skills[0]?.skill_id)
+          ?.selected,
         publishedSkill.versions[0]!.skill_version_id,
       );
       // B's strictly older import stays as history, with its bytes.

@@ -3,7 +3,8 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, Exit } from "effect";
 import { join } from "node:path";
-import { currentSkillVersion, scanInventory } from "@smolai/skit-core";
+import { scanInventory } from "@smolai/skit-core";
+import { setupIntent } from "@smolai/skit-core/library/setup";
 import { inspectOwnershipMarker } from "@smolai/skit-core/library/inventory";
 import { makeImportId, type SkillId } from "@smolai/skit-core/universal/consumer";
 import { RegistryUnreachable } from "../src/registry/failures.js";
@@ -218,7 +219,9 @@ for (const repository of [false, true]) {
           );
           assert.equal(
             after.installed_skills[0]?.skill_version_id,
-            currentSkillVersion(after, after.skills[0])?.skill_version_id,
+            setupIntent(after).versions.find(
+              (version) => version.skillId === after.skills[0]?.skill_id,
+            )?.selected,
           );
           assert.equal(
             yield* fs.readFileString(join(root, "review", "SKILL.md")),
@@ -454,8 +457,13 @@ for (const localBytes of ["B\n", "base\n"]) {
         assert.equal(merged.skills[0]?.versions.length, 2);
         assert.equal(merged.skills[0]?.local_version_id, undefined);
         assert.equal(merged.imports.length, 3);
+        const selected = setupIntent(merged).versions.find(
+          (version) => version.skillId === merged.skills[0]?.skill_id,
+        );
         assert.equal(
-          currentSkillVersion(merged, merged.skills[0])?.source_hash,
+          merged.skills[0]?.versions.find(
+            (version) => version.skill_version_id === selected?.selected,
+          )?.source_hash,
           remoteUpdate.skills[0]?.versions.at(-1)?.source_hash,
         );
         assert.equal((yield* a.sync()).status, "merged");
@@ -466,8 +474,13 @@ for (const localBytes of ["B\n", "base\n"]) {
         });
         const updated = yield* b.state;
         assert.equal(updated.skills[0]?.local_version_id, undefined);
+        const updatedSelection = setupIntent(updated).versions.find(
+          (version) => version.skillId === updated.skills[0]?.skill_id,
+        );
         assert.equal(
-          currentSkillVersion(updated, updated.skills[0])?.source_hash,
+          updated.skills[0]?.versions.find(
+            (version) => version.skill_version_id === updatedSelection?.selected,
+          )?.source_hash,
           next.skills[0]?.versions.at(-1)?.source_hash,
         );
       }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),

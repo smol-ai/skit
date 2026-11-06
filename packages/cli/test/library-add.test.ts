@@ -1,10 +1,6 @@
 import { originalTreePath } from "./helpers/original-tree.js";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
-import {
-  currentSkillVersion,
-  emptyLibraryState,
-  libraryManifestFromLocalState,
-} from "@smolai/skit-core";
+import { emptyLibraryState, libraryManifestFromLocalState } from "@smolai/skit-core";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { Library } from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
@@ -18,6 +14,7 @@ import { importSource, previewLibrarySource } from "../src/library/source.js";
 import { planUpdates, updateSubjects } from "../src/library/update/operation.js";
 import { checkSubjects } from "../src/library/check/operation.js";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
+import { setupIntent } from "@smolai/skit-core/library/setup";
 import { openLibraryView, openSyncSession } from "@smolai/skit-core/library/session";
 import { executeRemove } from "../src/library/remove/operation.js";
 
@@ -415,7 +412,8 @@ it.effect("re-adding a changed local source adds a Skill Version and uses it", (
     const after = yield* stateAt(home);
     assert.strictEqual(after.skills[0]?.versions.length, 2);
     assert.strictEqual(
-      currentSkillVersion(after, after.skills[0]!)?.skill_version_id,
+      setupIntent(after).versions.find((version) => version.skillId === after.skills[0]?.skill_id)
+        ?.selected,
       after.skills[0]?.versions[1]?.skill_version_id,
     );
     assert.strictEqual(after.collection_versions.length, 2);
