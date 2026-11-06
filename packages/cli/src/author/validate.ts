@@ -1,14 +1,8 @@
 import { validateSkitDirectory } from "@smolai/skit-core/author";
-import { Effect, Option } from "effect";
+import { Effect } from "effect";
 import { resolve } from "node:path";
-import { Argument, Command, Flag } from "effect/cli";
-import { handlePlatformCommand } from "../commands/handler.js";
-import { CommandMetadata } from "../commands/metadata.js";
-import { outputContracts, type ContractDataForId } from "../commands/output-contracts.js";
 
-import { jsonFlag } from "../commands/parameters.js";
-import { Renderer } from "../terminal/renderer.js";
-import { result } from "../commands/result.js";
+import { type ContractDataForId } from "../commands/output-contracts.js";
 
 export const validateCommand = Effect.fn("CLI.validate")(function* (
   input: string,
@@ -28,45 +22,3 @@ export const validateCommand = Effect.fn("CLI.validate")(function* (
   })();
   return { value, status };
 });
-
-const path = Argument.String("path").pipe(Argument.optional);
-const assessmentContext = Flag.Literals("assessment-context", ["author", "publish"] as const).pipe(
-  Flag.withDescription(
-    "Evaluate authoring warnings or strict publication policy (default: author).",
-  ),
-  Flag.withDefault("author" as const),
-);
-
-export const validateCliCommand = Command.make(
-  "validate",
-  { path, assessmentContext, json: jsonFlag },
-  ({ path, assessmentContext }) =>
-    handlePlatformCommand(
-      Effect.gen(function* () {
-        const renderer = yield* Renderer;
-        const { status, value } = yield* validateCommand(
-          Option.getOrElse(path, () => "."),
-          assessmentContext,
-        );
-        yield* renderer.result(
-          result(
-            "validate",
-            { valid: status !== "invalid", status, ...value },
-            status === "invalid" ? 65 : status === "policy-blocked" ? 77 : undefined,
-          ),
-        );
-      }),
-    ),
-).pipe(
-  Command.withDescription("Validate a SKIT directory and its static audit."),
-  Command.withExamples([
-    { command: "skit author validate" },
-    { command: "skit author validate ./my-tools --json" },
-    { command: "skit author validate ./my-tools --assessment-context publish" },
-  ]),
-  Command.annotate(CommandMetadata, {
-    outputSchemas: [outputContracts.validate],
-    exitCodes: [0, 12, 64, 65, 77],
-    interactive: false,
-  }),
-);

@@ -32,10 +32,7 @@ export class AuthorListResponseError
   readonly code = "OPERATION_FAILED" as const;
   readonly remediation = "Check the Registry's reason, then retry.";
 }
-export class AuthorSkitNotFound
-  extends Data.TaggedError("AuthorSkitNotFound")<{}>
-  implements SkitFailure
-{
+class AuthorSkitNotFound extends Data.TaggedError("AuthorSkitNotFound")<{}> implements SkitFailure {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "NOT_FOUND" as const;
   readonly remediation =
@@ -44,7 +41,7 @@ export class AuthorSkitNotFound
     return "The private SKIT was not found or is not owned by you";
   }
 }
-export class AuthorDeleteResponseError
+class AuthorDeleteResponseError
   extends Data.TaggedError("AuthorDeleteResponseError")<{ message: string }>
   implements SkitFailure
 {
@@ -161,3 +158,6 @@ export const deletePrivateAuthorSkit = Effect.fn("Registry.deletePrivateAuthorSk
       }),
     );
 });
+
+// Error names are required by inferred consumer declarations; constructors stay private.
+export type { AuthorSkitNotFound, AuthorDeleteResponseError };

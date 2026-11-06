@@ -1,10 +1,8 @@
-import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { SkitContractError, type AuthorSkitListResponse } from "@smolai/skit-core/api";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
-import { Data, Effect, Option, Result, Scope } from "effect";
-import { Command } from "effect/cli";
+import { Data, Effect, Result, Scope } from "effect";
 
-import { Registry, type ResolvedAuth } from "../registry/index.js";
+import { type ResolvedAuth } from "../registry/index.js";
 import { RegistryHttp } from "../registry/registry-http.js";
 import { authorInventoryApi, AuthorListResponseError } from "../registry/authoring.js";
 import { Renderer } from "../terminal/renderer.js";
@@ -15,12 +13,8 @@ import {
   RegistryOriginInvalid,
   RegistryUnreachable,
 } from "../registry/failures.js";
-import { handleRegistryCommand } from "../commands/handler.js";
 
-import { CommandMetadata } from "../commands/metadata.js";
 import { outputContracts } from "../commands/output-contracts.js";
-import { homeFlag, jsonFlag, optionalString } from "../commands/parameters.js";
-import { result } from "../commands/result.js";
 
 export type AuthorSkitInventory = typeof outputContracts.authorList.schema.Type;
 
@@ -117,45 +111,3 @@ export const authorListCommand = Effect.fn("CLI.authorList")(function* <E>(
     listAuthorSkits({ origin: selected.origin, token: selected.token }),
   );
 });
-
-const registry = optionalString("registry", "Select a Registry by alias or origin.");
-
-export const authorListCliCommand = Command.make(
-  "list",
-  { registry, home: homeFlag, json: jsonFlag },
-  ({ registry, home }) =>
-    Effect.gen(function* () {
-      const paths = yield* SkitConfiguration;
-
-      const selectedHome = paths.skitHome;
-      return yield* handleRegistryCommand(
-        Effect.gen(function* () {
-          const renderer = yield* Renderer;
-          const selectedRegistry = Option.getOrUndefined(registry);
-          const authState = yield* Registry.credentials({
-            home: selectedHome,
-            registry: selectedRegistry,
-            command: "skit author list",
-          }).pipe(Effect.result);
-          const value = yield* authorListCommand({
-            authState,
-            registry: selectedRegistry,
-            home: selectedHome,
-          });
-          yield* renderer.result(result("authorList", value));
-        }),
-      );
-    }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
-).pipe(
-  Command.withDescription("List SKITs the active Principal can author on a Registry."),
-  Command.withExamples([
-    { command: "skit author list" },
-    { command: "skit author list --registry https://skit.example.com" },
-    { command: "skit author list --json" },
-  ]),
-  Command.annotate(CommandMetadata, {
-    outputSchemas: [outputContracts.authorList],
-    exitCodes: [0, 12, 13, 64],
-    interactive: false,
-  }),
-);

@@ -1,17 +1,11 @@
-import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { ImportContentInvalid } from "@smolai/skit-core/library";
 import { initSkit, validateSkitDirectory } from "@smolai/skit-core/author";
 import * as Library from "@smolai/skit-core/library";
 import { openLibraryView } from "@smolai/skit-core/library/session";
 
 import { Clock, Effect, FileSystem, Option, Path } from "effect";
-import { Argument, Command, Flag } from "effect/cli";
-import { handleLibraryCommand } from "../commands/handler.js";
-import { CommandMetadata } from "../commands/metadata.js";
-import { outputContracts } from "../commands/output-contracts.js";
-import { localFlags } from "../commands/parameters.js";
-import { result } from "../commands/result.js";
-import { Renderer } from "../terminal/renderer.js";
+
 import {
   AuthorWorkspaceAlreadyRegistered,
   AuthorWorkspace,
@@ -127,41 +121,3 @@ export const authorInitCommand = Effect.fn("CLI.authorInit")(function* (
   return { initialized, entry };
   // The lease ends with the command.
 }, Effect.scoped);
-
-const path = Argument.String("path").pipe(Argument.optional);
-const register = Flag.Boolean("register").pipe(
-  Flag.withDescription("Re-register a previously removed Author Workspace Library Entry."),
-  Flag.withDefault(false),
-);
-
-export const authorInitCliCommand = Command.make(
-  "init",
-  { path, register, ...localFlags },
-  (input) =>
-    handleLibraryCommand(
-      Effect.gen(function* () {
-        const renderer = yield* Renderer;
-        const { initialized: value, entry } = yield* authorInitCommand(
-          Option.getOrElse(input.path, () => "."),
-          input.register,
-        );
-        const output = {
-          ...value,
-          library_registration: entry ? ("registered" as const) : ("removed" as const),
-        };
-        yield* renderer.result(result("init", output));
-      }),
-    ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
-).pipe(
-  Command.withDescription("Initialize SKIT authoring in a new or existing Skill Collection."),
-  Command.withExamples([
-    { command: "skit author init" },
-    { command: "skit author init ./my-tools" },
-    { command: "skit author init --register" },
-  ]),
-  Command.annotate(CommandMetadata, {
-    outputSchemas: [outputContracts.init],
-    exitCodes: [0, 11, 12, 64, 65],
-    interactive: false,
-  }),
-);

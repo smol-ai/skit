@@ -30,7 +30,7 @@ function provenancePriority(skill: GroupableSkill): number {
   return 0;
 }
 
-export function distinctSkills<T extends GroupableSkill>(skills: readonly T[]): T[] {
+function distinctSkills<T extends GroupableSkill>(skills: readonly T[]): T[] {
   const distinct = new Map<string, T>();
   for (const skill of skills) {
     const key = skill.canonicalLocation ?? `entry:${distinct.size}`;

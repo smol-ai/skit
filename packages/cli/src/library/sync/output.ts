@@ -1,6 +1,5 @@
 import { Schema } from "effect";
 import { SyncConflictDetail } from "@smolai/skit-core/library/session";
-export { SyncConflictDetail };
 
 import { SyncChanges as SyncPlan } from "@smolai/skit-core/library/session";
 export { SyncPlan };

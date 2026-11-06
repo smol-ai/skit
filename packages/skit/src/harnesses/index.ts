@@ -20,16 +20,7 @@ export {
   type SkillsDirectoryOverrides,
 } from "./contracts.js";
 export { HarnessMetadataInvalid } from "./metadata-failures.js";
-export {
-  harnessProfile,
-  harnessProfileIds,
-  skillsDirectory,
-  resolveSkillsDirectory,
-  installSkillsDirectory,
-} from "./catalog.js";
 export { harnessDrivers } from "./drivers.js";
-export { evaluateSkillFrontmatter } from "./frontmatter.js";
-export { defaultSkillsRoot } from "./default-roots.js";
 export { installDestinationHarnesses } from "./install-destinations.js";
 export { readCodexSkills } from "./skill-listing/codex-discovery.js";
 export { largeListingEntries, ListingBudget } from "./skill-listing/contracts.js";

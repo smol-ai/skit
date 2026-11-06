@@ -1,14 +1,8 @@
-import { skitConfigurationLayer } from "@smolai/skit-core/platform";
-import { Effect, Option } from "effect";
-import { Argument, Command, Flag } from "effect/cli";
+import { Effect } from "effect";
+
 import { MissingRequirement } from "../commands/input-failures.js";
 import { publish } from "./publish/workflow.js";
 import { Renderer } from "../terminal/renderer.js";
-import { handleRegistryCommand } from "../commands/handler.js";
-import { CommandMetadata } from "../commands/metadata.js";
-import { outputContracts } from "../commands/output-contracts.js";
-import { jsonFlag, optionalString } from "../commands/parameters.js";
-import { result } from "../commands/result.js";
 
 export const publishCommand = Effect.fn("CLI.publish")(function* (options: {
   readonly root?: string;
@@ -25,41 +19,3 @@ export const publishCommand = Effect.fn("CLI.publish")(function* (options: {
     publish(options.root ?? ".", options.version, options.revision, { home: options.home }),
   );
 });
-
-const path = Argument.String("path").pipe(Argument.optional);
-const version = Flag.String("version").pipe(
-  Flag.withMetavar("semver"),
-  Flag.withDescription("Release version (required)."),
-);
-const revision = optionalString("revision", "Require an exact current skit revision.");
-
-export const publishCliCommand = Command.make(
-  "publish",
-  { path, version, revision, json: jsonFlag },
-  ({ path, version, revision }) =>
-    handleRegistryCommand(
-      Effect.gen(function* () {
-        const renderer = yield* Renderer;
-        const value = yield* publishCommand({
-          root: Option.getOrUndefined(path),
-          version,
-          revision: Option.getOrUndefined(revision),
-        });
-        yield* renderer.result(result("publish", value));
-      }),
-    ).pipe(Effect.provide(skitConfigurationLayer())),
-).pipe(
-  Command.withDescription("Package and publish an immutable SKIT release."),
-  Command.withExamples([
-    { command: "skit author publish . --version 1.0.0" },
-    {
-      command:
-        "skit author publish . --version 1.0.0 --revision sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-    },
-  ]),
-  Command.annotate(CommandMetadata, {
-    outputSchemas: [outputContracts.publish],
-    exitCodes: [0, 12, 13, 64, 65],
-    interactive: false,
-  }),
-);

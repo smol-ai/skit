@@ -1,13 +1,7 @@
 import { generateInvocationMetadata } from "@smolai/skit-core/author";
-import { Effect, Option } from "effect";
+import { Effect } from "effect";
 import { resolve } from "node:path";
-import { Argument, Command, Flag } from "effect/cli";
-import { handlePlatformCommand } from "../commands/handler.js";
-import { CommandMetadata } from "../commands/metadata.js";
-import { outputContracts } from "../commands/output-contracts.js";
-import { jsonFlag } from "../commands/parameters.js";
-import { Renderer } from "../terminal/renderer.js";
-import { result } from "../commands/result.js";
+
 import { AuthorWorkspace } from "@smolai/skit-core/author";
 
 export const authorInvocationCommand = Effect.fn("CLI.authorInvocation")(function* (
@@ -23,46 +17,3 @@ export const authorInvocationCommand = Effect.fn("CLI.authorInvocation")(functio
   const generated = yield* generateInvocationMetadata(root, { dryRun });
   return { root, dryRun, generated };
 }, Effect.scoped);
-
-const path = Argument.String("path").pipe(Argument.optional);
-const dryRunFlag = Flag.Boolean("dry-run").pipe(
-  Flag.withDescription("Report the metadata that would change without writing it."),
-  Flag.withDefault(false),
-);
-
-export const authorInvocationCliCommand = Command.make(
-  "invocation",
-  { path, dryRun: dryRunFlag, json: jsonFlag },
-  ({ path, dryRun }) =>
-    handlePlatformCommand(
-      Effect.gen(function* () {
-        const renderer = yield* Renderer;
-        const { root, generated } = yield* authorInvocationCommand(
-          Option.getOrElse(path, () => "."),
-          dryRun,
-        );
-        yield* renderer.result(
-          result("authorInvocation", {
-            path: root,
-            dryRun,
-            generated,
-          }),
-        );
-      }),
-    ),
-).pipe(
-  Command.withDescription(
-    "Write each contained Skill's declared invocation policy into its Harness metadata.",
-  ),
-  Command.withExamples([
-    { command: "skit author invocation" },
-    { command: "skit author invocation ./my-tools --dry-run" },
-    { command: "skit author invocation ./my-tools --json" },
-  ]),
-  Command.annotate(CommandMetadata, {
-    effects: { capabilities: ["filesystem.write"] },
-    outputSchemas: [outputContracts.authorInvocation],
-    exitCodes: [0, 12, 64, 65],
-    interactive: false,
-  }),
-);
