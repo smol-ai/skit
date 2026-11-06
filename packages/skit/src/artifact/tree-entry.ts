@@ -13,9 +13,15 @@ export const TreeFile = Schema.Struct({
 });
 export interface TreeFile extends Schema.Schema.Type<typeof TreeFile> {}
 
-export const TreeEntry = Schema.Union([
-  Schema.Struct({ path: Schema.String, kind: Schema.Literal("directory") }),
-  TreeFile,
-  Schema.Struct({ path: Schema.String, kind: Schema.Literal("symlink"), target: Schema.String }),
-]);
+export const TreeDirectory = Schema.Struct({
+  path: Schema.String,
+  kind: Schema.Literal("directory"),
+});
+export const TreeSymlink = Schema.Struct({
+  path: Schema.String,
+  kind: Schema.Literal("symlink"),
+  target: Schema.String,
+});
+
+export const TreeEntry = Schema.Union([TreeDirectory, TreeFile, TreeSymlink]);
 export type TreeEntry = typeof TreeEntry.Type;

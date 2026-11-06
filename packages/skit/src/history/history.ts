@@ -90,7 +90,7 @@ class StoreMissing extends Schema.TaggedError<StoreMissing>()("History.StoreMiss
 }) {}
 
 /** Stored bytes that no longer match the identity they are stored under. */
-class StoreCorrupt extends Schema.TaggedError<StoreCorrupt>()("History.StoreCorrupt", {
+export class StoreCorrupt extends Schema.TaggedError<StoreCorrupt>()("History.StoreCorrupt", {
   kind: Schema.Literals(["tree", "revision"]),
   hash: Hash,
   reason: Schema.String,
@@ -131,9 +131,16 @@ export interface Store {
  */
 export interface Backend {
   /** The document stored under `hash`, or none. */
-  readonly read: (kind: Kind, hash: Hash) => Effect.Effect<Option.Option<string>, StoreFailed>;
+  readonly read: (
+    kind: Kind,
+    hash: Hash,
+  ) => Effect.Effect<Option.Option<string>, StoreFailed | StoreCorrupt>;
   /** Store `text` under `hash` durably, leaving a document already stored there as it is. */
-  readonly write: (kind: Kind, hash: Hash, text: string) => Effect.Effect<void, StoreFailed>;
+  readonly write: (
+    kind: Kind,
+    hash: Hash,
+    text: string,
+  ) => Effect.Effect<void, StoreFailed | StoreCorrupt>;
   readonly has: (kind: Kind, hash: Hash) => Effect.Effect<boolean, StoreFailed>;
   /** Every hash stored under `kind`, in hash order. */
   readonly list: (kind: Kind) => Effect.Effect<ReadonlyArray<Hash>, StoreFailed>;
@@ -234,4 +241,4 @@ export const ancestors = (
 };
 
 // Required to name inferred history failures in generated declarations.
-export type { StoreMissing, StoreCorrupt };
+export type { StoreMissing };

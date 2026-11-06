@@ -33,6 +33,25 @@ prove a deployed Cloudflare service, Linux filesystem behavior, server process-l
 durability, last-valid per-skill installation, a watcher, or a persistent background
 process.
 
+## Current local Author history storage
+
+New trees under `<home>/history/trees/<tree-hash>.json` are versioned
+`skit.author-tree.v1` manifests. File entries name immutable SHA-256 blobs under
+`<home>/history/blobs/<file-hash>`; modes, directories and symlink targets remain
+tree metadata. Identical bytes share one blob across paths and observations.
+Changing one file stores its new bytes and a small manifest, rather than embedding
+every unchanged file again. Blobs and their directory are flushed before a manifest
+is published. Reads verify every referenced blob and the canonical tree identity.
+
+Earlier array-format trees containing file bytes remain readable and are not
+rewritten by reads or repeated saves. History tree/revision identities, public owner
+APIs and Registry transport stay the same. Focused storage tests exercise the real
+AuthorHistory engine-store port, including legacy fixtures, corruption/missing
+blobs, concurrent publication and interruption before blob/manifest publication.
+
+This is raw Author history storage. It does not implement per-skill installable
+compositions, garbage collection, retention budgets or the foreground watcher.
+
 ## Earlier harness increments
 
 This is the first test-harness increment for automatic multi-device author sync.
