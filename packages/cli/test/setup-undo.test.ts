@@ -1,3 +1,4 @@
+import { LinkStat } from "@smolai/skit-core/platform";
 import { recoveryInspection } from "./helpers/recovery.js";
 import { saveRecoveryFiles } from "./helpers/recovery-files.js";
 import { withLibraryOwner } from "./helpers/library-owner.js";
@@ -9,7 +10,6 @@ import { expect } from "vitest";
 import { Library } from "@smolai/skit-core/library";
 import {
   hashParts,
-  LinkStat,
   setupIntent,
   observePathEvidence,
   recoveryFingerprint,

@@ -1,7 +1,8 @@
+import { LinkStat } from "@smolai/skit-core/platform";
 import { dirname, join } from "node:path";
 import { Effect, Exit, Fiber, FileSystem, Layer, Ref, Scope } from "effect";
 import { libraryApplicationLayer } from "../../src/application.js";
-import { LinkStat } from "@smolai/skit-core";
+
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { AuthorWorkspace, AuthorHistory } from "@smolai/skit-core/author";
 import { Option } from "effect";

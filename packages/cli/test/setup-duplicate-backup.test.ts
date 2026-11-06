@@ -1,10 +1,11 @@
+import { LinkStat } from "@smolai/skit-core/platform";
 import { recoveryInspection } from "./helpers/recovery.js";
 import { withLibraryOwner } from "./helpers/library-owner.js";
 import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import { LinkStat } from "@smolai/skit-core";
+
 import type { LibraryFixtureState as LibraryState } from "./helpers/library-home.js";
 import { skitLayer } from "@smolai/skit-core/platform";
 import type { PlatformError } from "effect/PlatformError";

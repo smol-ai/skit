@@ -1,8 +1,8 @@
+import { LinkStat } from "@smolai/skit-core/platform";
 import { assert } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { LinkStat } from "@smolai/skit-core";
 
 /**
  * One path exactly as `lstat` sees it. A link records its own target and is never followed. Small

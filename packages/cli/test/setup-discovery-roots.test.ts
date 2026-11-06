@@ -1,10 +1,11 @@
+import { LinkStat } from "@smolai/skit-core/platform";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { Cause, Effect, Exit, FileSystem, Result } from "effect";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import { skitLayer } from "@smolai/skit-core/platform";
-import { LinkStat } from "@smolai/skit-core";
+
 import * as MachineSettings from "@smolai/skit-core/machine-settings";
 import { setupCommand } from "../src/library/setup.js";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";

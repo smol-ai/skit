@@ -14,8 +14,6 @@ export { errorMessage } from "./shared/failure.js";
 
 export { resolveDeclaredInvocation } from "./invocation/conformance.js";
 
-export { LinkStat } from "./platform/link-stat.js";
-
 export { skitLayer } from "./platform/layer.js";
 
 export { hashParts } from "./artifact/descriptor.js";

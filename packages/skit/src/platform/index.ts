@@ -12,3 +12,4 @@ export { pathIsWithin } from "./path-identity.js";
 export type { TreeRequirements } from "./tree-requirements.js";
 export type { AuthorIgnoreRepository } from "../artifact/plain-author-ignore.js";
 export type { FileLockBusy, FileLockFailed } from "./file-lock.js";
+export { LinkStat } from "./link-stat.js";

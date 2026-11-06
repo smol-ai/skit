@@ -1,8 +1,9 @@
+import { LinkStat } from "@smolai/skit-core/platform";
 import { expect, it } from "@effect/vitest";
 import { Cause, Effect, FileSystem } from "effect";
 import { systemError } from "effect/PlatformError";
 import { join } from "node:path";
-import { LinkStat } from "@smolai/skit-core";
+
 import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
