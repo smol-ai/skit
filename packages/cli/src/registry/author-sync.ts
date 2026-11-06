@@ -16,7 +16,7 @@ import {
   markRegistryResponseDecoding,
   registryApiFailureMessage,
 } from "./api-client.js";
-import { RegistryHttp } from "./registry-http.js";
+import { RegistryHttp, RegistryTransportError } from "./registry-http.js";
 import {
   AuthenticationRequired,
   CredentialLacksScope,
@@ -75,16 +75,31 @@ export const authorSyncApi = Effect.fn("Registry.authorSyncApi")(function* (inpu
       message: registryApiFailureMessage(context, error, { defaultStatus: 400 }),
     });
   };
+  // Bound the whole generated request, including decoding its body. A headers-only timeout
+  // leaves a stalled body holding the workspace lease. Do not retry an ambiguous mutation.
+  const withinDeadline = Effect.timeoutOrElse({
+    duration: "30 seconds",
+    orElse: () =>
+      Effect.fail(
+        new RegistryTransportError({
+          cause: new Error(
+            "Author Registry request timed out after 30 seconds; its outcome may be unknown",
+          ),
+        }),
+      ),
+  });
   const params = { owner, slug };
   // This SKIT on the Registry, for this command only. The transport never retries, so no retry
   // delay waits while the lease is held.
   const registry: Sync.Remote = {
     current: client.skits.current({ params }).pipe(
+      withinDeadline,
       Effect.map((skit) => skit.current),
       Effect.mapError(failure("skit current", 200)),
     ),
     revision: (id) =>
       client.skits.revision({ params: { ...params, id } }).pipe(
+        withinDeadline,
         Effect.map(({ revision, tree }) => ({ revision, tree })),
         Effect.mapError(failure("skit revision", 200)),
       ),
@@ -99,6 +114,7 @@ export const authorSyncApi = Effect.fn("Registry.authorSyncApi")(function* (inpu
             }),
           })
           .pipe(
+            withinDeadline,
             Effect.map(
               (page) =>
                 [
@@ -112,9 +128,10 @@ export const authorSyncApi = Effect.fn("Registry.authorSyncApi")(function* (inpu
     post: (id, revision, tree) =>
       client.skits
         .post({ params, payload: { id, revision, tree } })
-        .pipe(Effect.asVoid, Effect.mapError(failure("skit revision", 200))),
+        .pipe(withinDeadline, Effect.asVoid, Effect.mapError(failure("skit revision", 200))),
     move: (expected, id) =>
       client.skits.move({ params, payload: { expected, id } }).pipe(
+        withinDeadline,
         Effect.asVoid,
         Effect.mapError((error) =>
           Schema.is(CurrentMovedResponse)(error)
@@ -126,7 +143,7 @@ export const authorSyncApi = Effect.fn("Registry.authorSyncApi")(function* (inpu
   return {
     remote: registry,
     requireAvailable: Effect.gen(function* () {
-      const existing = yield* client.skits.current({ params }).pipe(Effect.result);
+      const existing = yield* client.skits.current({ params }).pipe(withinDeadline, Effect.result);
       if (Result.isSuccess(existing))
         return yield* new DestinationExistsWithoutHistory({ identity: locator });
       if (!Schema.is(SkitNotFoundResponse)(existing.failure))
@@ -138,6 +155,7 @@ export const authorSyncApi = Effect.fn("Registry.authorSyncApi")(function* (inpu
           payload: { owner, slug, visibility, request_id: requestId },
         })
         .pipe(
+          withinDeadline,
           Effect.mapError((error) =>
             Schema.is(SkitExistsResponse)(error)
               ? new DestinationExistsWithoutHistory({ identity: locator })
