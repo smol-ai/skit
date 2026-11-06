@@ -1,9 +1,9 @@
 import { originalTreePath } from "./helpers/original-tree.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
-import { Effect, Exit } from "effect";
+import { Context, Effect, Exit, Layer } from "effect";
 import { join } from "node:path";
-import { scanInventory } from "@smolai/skit-core";
+import { Library } from "@smolai/skit-core/library";
 import { setupIntent } from "@smolai/skit-core/library/setup";
 import { inspectOwnershipMarker } from "@smolai/skit-core/library/inventory";
 import { makeImportId, type SkillId } from "@smolai/skit-core/universal/consumer";
@@ -387,6 +387,11 @@ it.effect(
       yield* a.edit((state) => ({ ...state, enabled: enable([firstSkill.skill_id]) }));
       yield* b.edit((state) => ({ ...state, enabled: enable([secondSkill.skill_id]) }));
       yield* b.project();
+      // Retain this real owner before interruption; opening another owner would replay recovery.
+      const inventory = Context.get(
+        yield* Layer.build(Library.layer({ home: b.home, routing: { _tag: "None" } })),
+        Library.Service,
+      );
       yield* a.sync();
       const before = yield* b.state;
       inject({ _tag: "RejectWrite" });
@@ -399,9 +404,14 @@ it.effect(
       assert.equal(interrupted.skills[0]?.skill_id, secondSkill.skill_id);
       assert.equal(interrupted.installed_skills[0]?.status, "pending");
       assert.isFalse(yield* fs.exists(join(b.root, "same")));
-      const observed = yield* scanInventory(interrupted, []);
-      assert.equal(observed.installed_skills[0]?.status, "pending");
-      yield* b.edit(() => observed);
+      const observed = yield* inventory.plan(
+        { _tag: "RefreshInventory", roots: [] },
+        { base: yield* inventory.read },
+      );
+      assert.equal(observed.change.installedSkills[0]?.status, "pending");
+      const refreshed = yield* inventory.apply({ _tag: "Apply", plan: observed });
+      assert.equal(refreshed.result.inventory.installed_skills[0]?.status, "pending");
+      assert.equal((yield* b.state).installed_skills[0]?.status, "pending");
       assert.equal((yield* b.sync()).status, "merged");
       assert.equal((yield* b.state).skills[0]?.skill_id, firstSkill.skill_id);
       assert.equal((yield* b.state).installed_skills[0]?.status, "installed");
@@ -499,9 +509,18 @@ it.effect("identity alignment preserves a native deletion recorded before first 
     yield* a.edit((state) => ({ ...state, enabled: enable([published.skill_id]) }));
     yield* b.edit((state) => ({ ...state, enabled: enable([local.skill_id]) }));
     yield* b.project();
+    const inventory = Context.get(
+      yield* Layer.build(Library.layer({ home: b.home, routing: { _tag: "None" } })),
+      Library.Service,
+    );
     yield* fs.remove(join(b.root, "same"), { recursive: true });
-    const deleted = yield* scanInventory(yield* b.state, []);
-    yield* b.edit(() => deleted);
+    assert.equal((yield* b.state).installed_skills[0]?.status, "installed");
+    const observation = yield* inventory.plan(
+      { _tag: "RefreshInventory", roots: [] },
+      { base: yield* inventory.read },
+    );
+    const deleted = (yield* inventory.apply({ _tag: "Apply", plan: observation })).result.inventory;
+    assert.equal(deleted.installed_skills[0]?.status, "suppressed");
     yield* a.sync();
     assert.equal((yield* b.sync()).status, "merged");
     const after = yield* b.state;
