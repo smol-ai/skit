@@ -6,7 +6,7 @@ import { it } from "@effect/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Layer } from "effect";
 import { libraryApplicationLayer } from "../src/application.js";
 import { syncAuthorWorkspace } from "../src/author/sync/workflow.js";
-import { parseAuthorDestination } from "../src/author/destination.js";
+import { parseAuthorDestination } from "@smolai/skit-core/author";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 import { registryCredentialLayer } from "./helpers/registry-credential.js";

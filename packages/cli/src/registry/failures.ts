@@ -182,11 +182,9 @@ export class RegistrySelectionRequiresRegistrySource
 
 // -- Author destinations ------------------------------------------------------------------------
 
-export { AuthorRemoteAlreadyExists } from "@smolai/skit-core/author";
 
 // -- SKIT synchronization ----------------------------------------------------------------------
 
-export { VisibilityNotAccepted } from "@smolai/skit-core/author";
 
 export class RemoteSkitUnavailable
   extends Data.TaggedError("RemoteSkitUnavailable")<{
@@ -382,7 +380,7 @@ export class ScopesInvalid
 
 // -- Publication ------------------------------------------------------------------------------------
 
-export { NoRemoteHome, PublicationBlocked } from "@smolai/skit-core/author";
+export { PublicationBlocked } from "@smolai/skit-core/author";
 
 export class AuthorSyncRequired
   extends Data.TaggedError("AuthorSyncRequired")<{ commandPath: string }>
@@ -428,6 +426,5 @@ export class DeleteRequiresPrivate
 
 // -- SKIT destinations ------------------------------------------------------------------------------
 
-export { DestinationFormInvalid } from "@smolai/skit-core/author";
 
 export { DestinationExistsWithoutHistory } from "@smolai/skit-core/author";

@@ -1,4 +1,5 @@
-import { noticeRelease, passiveCheckEnabled } from "./releases.js";
+import { passiveCheckEnabled } from "./releases.js";
+import { noticeRelease } from "./platform/releases.js";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { FetchHttpClient } from "effect/http";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";

@@ -78,5 +78,4 @@ export function decideRelease(
     ...(status === "update-available" ? { upgrade: `npm install -g @smolai/skit@${target}` } : {}),
   };
 }
-export { checkRelease, noticeRelease } from "./platform/releases.js";
 export { passiveCheckEnabled } from "./releases/policy.js";

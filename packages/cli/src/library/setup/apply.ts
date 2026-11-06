@@ -5,10 +5,8 @@ import { readInstalledSkills } from "@smolai/skit-core/library/session";
 import { Renderer } from "../../terminal/renderer.js";
 import { OptionCombinationInvalid } from "../../commands/input-failures.js";
 import {
-  runSetup,
-  SetupPlanStale,
   type SetupOptions,
-  openSetupReview,
+  openApprovedSetupReview,
   type ManageOptions,
   type SetupDuplicateAction as SetupDuplicateActionType,
   type SetupApplied,
@@ -43,16 +41,13 @@ export const openSetupCommandReview = Effect.fn("CLI.setup.openReview")(function
     repositoryRoots: input.workDirFlag ? [resolve(input.workDirFlag)] : [],
     persistRoots: false,
   };
-  const scan = yield* renderer.withStatus("Observing local skills", runSetup(setupOptions));
-  if (scan.onboarding.planId !== planId.value)
-    return yield* new SetupPlanStale({
-      approvedPlanId: planId.value,
-      currentPlanId: scan.onboarding.planId,
-    });
-  const review = yield* openSetupReview(
-    { ...setupOptions, persistRoots: input.workDirFlag !== undefined },
-    scan,
-    input.manageOptions,
+  const { scan, review } = yield* renderer.withStatus(
+    "Observing local skills",
+    openApprovedSetupReview(
+      { ...setupOptions, persistRoots: input.workDirFlag !== undefined },
+      planId.value,
+      input.manageOptions,
+    ),
   );
   return { scan, review, planId: planId.value };
 });

@@ -49,7 +49,7 @@ export const CodexDoctorCheck = Schema.Struct({
 });
 export type CodexDoctorCheck = typeof CodexDoctorCheck.Type;
 
-export function codexSkillAliases(
+function codexSkillAliases(
   canonicalDocument: string,
   reportedDocument: string,
   index: readonly DuplicateCopy[],

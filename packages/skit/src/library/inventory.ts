@@ -7,7 +7,7 @@ import { emptyLibraryState, libraryInventory } from "./library-state.js";
 import { selectInventoryRoots, type InventoryRootOptions } from "./routing/roots.js";
 
 export { LibraryInventory } from "./library-state.js";
-export { libraryDoctorReport, LibraryDoctorReport } from "./inventory/doctor-report.js";
+export { libraryDoctorReport } from "./inventory/doctor-report.js";
 
 /** Read the saved inventory without scanning, preparing a mutation or exposing absent-state layout. */
 export const readInventory = Effect.gen(function* () {
@@ -66,6 +66,5 @@ export const refreshMachineInventory = Effect.fn("Library.refreshMachineInventor
 
 export {
   DoctorReport,
-  HarnessDoctorCheck,
   inspectNativeDiscovery,
 } from "./internal/doctor/harnesses.js";

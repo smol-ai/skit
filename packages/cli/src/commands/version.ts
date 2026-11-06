@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import { cliBuild } from "./build-info.js";
-import { checkRelease } from "../releases.js";
+import { checkRelease } from "../platform/releases.js";
 import { Command } from "effect/cli";
 import { handlePlatformCommand } from "./handler.js";
 import { CommandMetadata } from "./metadata.js";

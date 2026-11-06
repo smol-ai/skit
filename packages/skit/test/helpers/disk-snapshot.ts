@@ -8,7 +8,7 @@ import { join } from "node:path";
  * One path exactly as `lstat` sees it. A link records its own target and is never followed. Small
  * files keep their bytes so a diff shows them; larger ones keep a digest.
  */
-export type DiskEntry =
+type DiskEntry =
   | {
       readonly type: "file";
       readonly mode: number;
@@ -40,7 +40,7 @@ export interface DiskDiff {
   }[];
 }
 
-export const noDiskChanges: DiskDiff = { created: [], deleted: [], changed: [] };
+const noDiskChanges: DiskDiff = { created: [], deleted: [], changed: [] };
 
 const INLINE_BYTES = 4096;
 
@@ -101,7 +101,7 @@ export const captureDisk = Effect.fn("Test.captureDisk")(function* (
 const byPath = (snapshot: DiskSnapshot) =>
   new Map(snapshot.entries.map((item) => [item.path.join("\0"), item] as const));
 
-export const diffDisk = (before: DiskSnapshot, after: DiskSnapshot): DiskDiff => {
+const diffDisk = (before: DiskSnapshot, after: DiskSnapshot): DiskDiff => {
   const old = byPath(before);
   const current = byPath(after);
   const paths = [...new Map([...old, ...current]).values()]
@@ -126,7 +126,7 @@ export const diffDisk = (before: DiskSnapshot, after: DiskSnapshot): DiskDiff =>
 };
 
 /** What changed under the roots `before` declared since it was captured. */
-export const diskChanges = (before: DiskSnapshot) =>
+const diskChanges = (before: DiskSnapshot) =>
   Effect.map(captureDisk(before.roots, { identity: before.identity === true }), (after) =>
     diffDisk(before, after),
   );

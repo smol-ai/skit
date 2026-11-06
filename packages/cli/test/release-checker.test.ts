@@ -8,7 +8,8 @@ import {
 } from "@smolai/skit-core/platform";
 import { NodeServices } from "@effect/platform-node";
 import { HttpClient, HttpClientResponse } from "effect/http";
-import { defaultChannel, decideRelease, checkRelease, noticeRelease } from "../src/releases.js";
+import { defaultChannel, decideRelease } from "../src/releases.js";
+import { checkRelease, noticeRelease } from "../src/platform/releases.js";
 const releaseContext = (http: HttpClient.HttpClient) =>
   Layer.merge(Layer.succeed(HttpClient.HttpClient, http), skitConfigurationLayer());
 

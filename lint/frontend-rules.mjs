@@ -5,12 +5,14 @@ import { contains, effectImports } from "./effect-hygiene-rules.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const cli = "packages/cli/src/";
-const ownerEntries = new Set([
-  "@smolai/skit-core/author",
-  "@smolai/skit-core/library/session",
-  "@smolai/skit-core/library/source",
-  "@smolai/skit-core/harnesses",
-]);
+// Every published core owner is an entry point here. Contracts and platform wiring are not owners:
+// reading configuration or decoding a wire schema beside one owner call is not orchestration.
+const vocabulary = new Set(["./shared", "./api", "./universal/api", "./platform"]);
+const ownerEntries = new Set(
+  Object.keys(coreExports)
+    .filter((subpath) => !vocabulary.has(subpath))
+    .map((subpath) => `@smolai/skit-core/${subpath.slice(2)}`),
+);
 const member = (node) =>
   node?.type === "MemberExpression"
     ? node.computed

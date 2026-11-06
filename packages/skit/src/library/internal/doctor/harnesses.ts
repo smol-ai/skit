@@ -1,4 +1,5 @@
-import { type LibraryInventory, LibraryDoctorReport } from "../../inventory.js";
+import type { LibraryInventory } from "../../library-state.js";
+import { LibraryDoctorReport } from "../../inventory/doctor-report.js";
 import {
   DuplicateCopy,
   scanSkillsDirectory,

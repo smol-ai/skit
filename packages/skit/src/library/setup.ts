@@ -8,7 +8,8 @@ import * as MachineSettings from "./machine-settings.js";
 import { OptionCombinationInvalid } from "../shared/input-failures.js";
 import { recordDuplicateSymlinks, type ManageOptions } from "./setup/manage-existing.js";
 import { applySetupPlan, type SetupApplyOptions, type SetupApproval } from "./setup/apply.js";
-import type { SetupOptions } from "./setup/scan.js";
+import { revalidateSetupPlan, type SetupOptions } from "./setup/scan.js";
+import type { Hash } from "../shared/hash.js";
 import type {
   SetupResult,
   SetupKnownSourceSelection,
@@ -571,6 +572,17 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
     prepareRecommended,
   };
 });
+/** Scan once more, hold it to the approved plan ID, and open its review. */
+export const openApprovedSetupReview = Effect.fn("Setup.openApprovedReview")(function* (
+  options: SetupOptions,
+  approvedPlanId: typeof Hash.Type,
+  manage: ManageOptions,
+) {
+  const current = yield* revalidateSetupPlan(options, approvedPlanId);
+  const review = yield* openSetupReview(options, current.scan, manage);
+  return { scan: current.scan, review };
+});
+
 export type SetupReview = Effect.Success<ReturnType<typeof openSetupReview>>;
 export type SetupReviewSummary = Effect.Success<ReturnType<SetupReview["prepare"]>>["summary"];
 

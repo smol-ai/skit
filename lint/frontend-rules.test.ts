@@ -97,9 +97,10 @@ describe("skit/frontend-one-owner-call", () => {
         "frontend-one-owner-call",
         `
 import { Effect } from "effect";
-import { initSkit, skitLocator } from "@smolai/skit-core/author";
+import { initSkit } from "@smolai/skit-core/author";
+import { changeResults } from "@smolai/skit-core/library/setup";
 const a = Effect.gen(function* () {
-  yield* renderer.note(skitLocator(remote));
+  yield* renderer.note(changeResults(summary.changes, false));
   yield* initSkit(".");
 });
 `,

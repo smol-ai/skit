@@ -25,7 +25,7 @@ import {
   RegistryUnreachable,
 } from "./failures.js";
 
-export class AuthorListResponseError
+class AuthorListResponseError
   extends Data.TaggedError("AuthorListResponseError")<{ message: string }>
   implements SkitFailure
 {
@@ -77,7 +77,7 @@ const authoringClient = Effect.fn("Registry.authoringClient")(function* (
 });
 
 /** One scoped inventory client; pagination policy belongs to the Author inventory operation. */
-export const authorInventoryApi = Effect.fn("Registry.authorInventory")(function* (input: {
+const authorInventoryApi = Effect.fn("Registry.authorInventory")(function* (input: {
   origin?: string;
   token?: string;
 }) {
@@ -199,7 +199,7 @@ export const listAuthorInventory = Effect.fn("Registry.listAuthorInventory")(fun
   return { origin, skits };
 }, Effect.scoped);
 
-export type { AuthorListPaginationError };
+export type { AuthorListPaginationError, AuthorListResponseError };
 
 /** Adapt the command's captured account without leaking its credential into Author. */
 export const authorInventoryRegistry = (account: ResolvedAuth) => ({

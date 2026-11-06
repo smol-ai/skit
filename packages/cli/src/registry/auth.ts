@@ -207,7 +207,7 @@ const writeConfig = Effect.fn("Auth.writeConfig")(function* (config: AuthConfig,
       yield* removeStoredToken(credential.tokenStorage, path, origin, credential.tokenStorageKey);
 }, Effect.scoped);
 
-export const resolveAuth = Effect.fnUntraced(function* (
+const resolveAuth = Effect.fnUntraced(function* (
   home?: string,
   registry?: string,
   durableOrigin?: string,
@@ -275,7 +275,7 @@ export const resolveLoginTarget = Effect.fn("Auth.resolveLoginTarget")(function*
   return yield* (yield* readAccounts(home)).loginTarget(selectedRegistry);
 });
 
-export function resolveAuthForOrigin(
+function resolveAuthForOrigin(
   originInput: string,
   home?: string,
 ): Effect.Effect<

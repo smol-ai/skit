@@ -156,8 +156,6 @@ export const owners = [
     private: [
       "credentials",
       "registryCredentials",
-      "resolveAuth",
-      "resolveAuthForOrigin",
       "readStoredToken",
       "writeStoredToken",
       "removeStoredToken",
