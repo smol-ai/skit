@@ -144,6 +144,32 @@ describe("skit/import-direction", () => {
     ).toEqual([]);
   });
 
+  test.each([
+    "packages/cli/src/main.ts",
+    "packages/tui/src/index.ts",
+    "packages/skit-server-effect/src/application.ts",
+    "packages/cli/test/consumer.test.ts",
+    "packages/skit/test/consumer.test.ts",
+  ])("the removed root is forbidden for every consumer: %s", async (filename) => {
+    for (const source of [
+      'import { LibraryState } from "@smolai/skit-core";',
+      'import type { LibraryState } from "@smolai/skit-core";',
+      'export { LibraryState } from "@smolai/skit-core";',
+      'const core = import("@smolai/skit-core");',
+    ])
+      expect(
+        await reported("packages/skit/test/PROBE.ts", source, "import-direction", filename),
+      ).toEqual([1]);
+    expect(
+      await reported(
+        "packages/skit/test/PROBE.ts",
+        'import type { Hash } from "@smolai/skit-core/shared";',
+        "import-direction",
+        filename,
+      ),
+    ).toEqual([]);
+  });
+
   test("Storybook uses its declared CLI story API; the TUI stays on core", async () => {
     const source = `import { journeyStories } from "@smolai/skit/storybook"; export const stories = journeyStories;`;
     expect(await reported("packages/storybook/src/PROBE.ts", source, "import-direction")).toEqual(

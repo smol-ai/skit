@@ -348,7 +348,7 @@ export const owners = {
  * responsibility, not purity: harness probes can run processes but own no persisted SKIT state.
  * These declarations do not prove implementation behavior; existing owner/import boundaries
  * and universal-entry checks still apply. Both kinds require exact source/conditional targets.
- * The root export is an aggregate compatibility surface, not a subpath.
+ * Core has no root entry; callers choose one of these owner or shared subpaths.
  */
 export const coreExports = {
   "./platform/home-lock": {

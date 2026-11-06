@@ -47,6 +47,37 @@ describe("core exports and declared API roles", () => {
   const owners = { Library: {} };
   const entry = { types: "./dist/library/setup.d.ts", import: "./dist/library/setup.js" };
 
+  test.each(["main", "types"])("core cannot regain a %s root fallback", (field) => {
+    const root = fixture([source]);
+    expect(
+      checkCoreExports(
+        root,
+        { [field]: entry.import, exports: { "./library/setup": entry } },
+        declarations,
+        owners,
+      ),
+    ).toEqual([`core package.json: ${field} fallback is forbidden; use declared subpath exports`]);
+  });
+
+  test("a root export is rejected even if someone declares an owner for it", () => {
+    const root = fixture([source]);
+    expect(
+      checkCoreExports(
+        root,
+        { exports: { ".": entry, "./library/setup": entry } },
+        { ...declarations, ".": declarations["./library/setup"] },
+        owners,
+      ),
+    ).toEqual([".: core root export is forbidden; use declared owner or shared subpaths"]);
+  });
+
+  test("an unexported root source file is still rejected", () => {
+    const root = fixture([source, "packages/skit/src/index.ts"]);
+    expect(
+      checkCoreExports(root, { exports: { "./library/setup": entry } }, declarations, owners),
+    ).toEqual(["packages/skit/src/index.ts: core root entry is forbidden"]);
+  });
+
   test.each(["owner", "shared"])("matching %s API targets pass without dist", (kind) => {
     const root = fixture([source]);
     expect(

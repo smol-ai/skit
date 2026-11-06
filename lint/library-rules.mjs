@@ -460,11 +460,10 @@ export const libraryRules = {
               specifier.type === "ImportNamespaceSpecifier" ||
               specifier.type === "ExportNamespaceSpecifier",
           );
-        // The existing Library namespace is assembled at its two public entries, not by
-        // re-exporting the defining module from itself. All other whole-module exports fail.
+        // Only the Library entry assembles its namespace. All other whole-module exports fail.
         const publicOwnerNamespace =
           exporting &&
-          ["packages/skit/src/index.ts", `${library}index.ts`].includes(file) &&
+          file === `${library}index.ts` &&
           target === `${library}library` &&
           (nameOf(node.exported) === "Library" ||
             (node.specifiers?.length === 1 &&
@@ -507,10 +506,7 @@ export const libraryRules = {
             context.report({ node: specifier, messageId: "private", data: { name } });
             continue;
           }
-          if (
-            privateNames.has(name) ||
-            (name === "make" && publicSource && target !== "packages/skit/src/index")
-          )
+          if (privateNames.has(name) || (name === "make" && publicSource))
             context.report({ node: specifier, messageId: "private", data: { name } });
         }
       };

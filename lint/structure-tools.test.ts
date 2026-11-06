@@ -33,12 +33,12 @@ describe("structure tooling", () => {
       "packages/skit/package.json": JSON.stringify({
         name: "@smolai/skit-core",
         private: true,
-        exports: { ".": "./dist/index.js" },
+        exports: { "./library": "./dist/library/index.js" },
       }),
       "packages/skit/tsconfig.json": JSON.stringify({
         compilerOptions: { rootDir: "src", outDir: "dist" },
       }),
-      "packages/skit/src/index.ts": "export const used = 1; export const unusedEntry = 2;",
+      "packages/skit/src/library/index.ts": "export const used = 1; export const unusedEntry = 2;",
       "packages/cli/package.json": JSON.stringify({
         name: "@smolai/skit",
         dependencies: { "@smolai/skit-core": "workspace:*" },
@@ -47,7 +47,8 @@ describe("structure tooling", () => {
       "packages/cli/tsconfig.json": JSON.stringify({
         compilerOptions: { rootDir: ".", outDir: "dist" },
       }),
-      "packages/cli/src/main.ts": 'import { used } from "@smolai/skit-core"; console.log(used);',
+      "packages/cli/src/main.ts":
+        'import { used } from "@smolai/skit-core/library"; console.log(used);',
       "packages/cli/src/storybook/index.ts": "export const published = 1;",
       "packages/skit-server-effect/package.json": JSON.stringify({
         name: "@smolai/skit-server-effect",
@@ -78,10 +79,17 @@ describe("structure tooling", () => {
   test("Knip rejects a real value-import cycle", () => {
     const directory = fixture({
       "package.json": JSON.stringify({ private: true, workspaces: ["packages/*"] }),
-      "packages/skit/package.json": JSON.stringify({ name: "@smolai/skit-core", private: true }),
-      "packages/skit/src/index.ts":
+      "packages/skit/package.json": JSON.stringify({
+        name: "@smolai/skit-core",
+        private: true,
+        exports: { "./library": "./dist/library/index.js" },
+      }),
+      "packages/skit/tsconfig.json": JSON.stringify({
+        compilerOptions: { rootDir: "src", outDir: "dist" },
+      }),
+      "packages/skit/src/library/index.ts":
         'import { next } from "./next.js"; export const first = () => next();',
-      "packages/skit/src/next.ts":
+      "packages/skit/src/library/next.ts":
         'import { first } from "./index.js"; export const next = () => first();',
     });
     copyFileSync(join(root, "knip.jsonc"), join(directory, "knip.jsonc"));

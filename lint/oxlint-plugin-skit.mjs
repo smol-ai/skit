@@ -647,8 +647,7 @@ const effectRules = {
       type: "problem",
       docs: { description: "Imports follow the target layout's direction" },
       messages: {
-        coreRoot:
-          "Core implementations import the defining owner module, not the aggregate package root.",
+        coreRoot: "The core root entry is removed. Import a declared owner or shared subpath.",
         installedPolicy:
           "Installed-skill file adapters consume copy/identity facts, not Library state or owner policy. Move retained-version decisions into Library (architecture/app.ts).",
         frontend:
@@ -680,9 +679,8 @@ const effectRules = {
             ? `packages/skit/src/${source.slice("@smolai/skit-core/".length)}`
             : undefined;
         if (
-          file.startsWith("packages/skit/src/") &&
-          (source === "@smolai/skit-core" ||
-            target?.replace(/\.[jt]s$/, "") === "packages/skit/src/index")
+          source === "@smolai/skit-core" ||
+          target?.replace(/\.[jt]s$/, "") === "packages/skit/src/index"
         ) {
           context.report({ node: sourceNode, messageId: "coreRoot" });
           return;

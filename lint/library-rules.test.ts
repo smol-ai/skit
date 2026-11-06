@@ -165,25 +165,23 @@ describe("skit/library-private-api", () => {
   });
 
   test.each([
-    `export * from "./library/import-collection.js";`,
-    `export { writeRawAtomic as write } from "./platform/atomic-write.js";`,
-    `export * from "./platform/atomic-write.js";`,
-    `export * as writes from "./platform/atomic-write.js";`,
-    `export * from "./platform/copy-tree.js";`,
-    `export { writeJsonAtomic } from "./platform/atomic-write.js";`,
-    `export { writeJsonExclusive } from "./platform/atomic-write.js";`,
-    `export { copyLocalTree } from "./platform/copy-tree.js";`,
-    `export { copySkill as build } from "./installed-skills/files.js";`,
-    `export * as InstalledSkillFiles from "./installed-skills/files.js";`,
-    `export * as InstalledSkillBackups from "./installed-skills/backups.js";`,
-    `export * as imports from "./library/import-collection.js";`,
-    `export { importCollection as write } from "./library/import-collection.js";`,
-    `export { withHomeLock as lock } from "./library/store/writer-lock.js";`,
-    `export { InstalledSkillV9 } from "./library/store/state-schema-v9.js";`,
-  ])("the compatibility barrel cannot export private implementation: %s", async (source) => {
-    expect(
-      await reported("library-private-api", "packages/skit/src/index.ts", source),
-    ).toHaveLength(1);
+    `export * from "./import-collection.js";`,
+    `export { writeRawAtomic as write } from "../platform/atomic-write.js";`,
+    `export * from "../platform/atomic-write.js";`,
+    `export * as writes from "../platform/atomic-write.js";`,
+    `export * from "../platform/copy-tree.js";`,
+    `export { writeJsonAtomic } from "../platform/atomic-write.js";`,
+    `export { writeJsonExclusive } from "../platform/atomic-write.js";`,
+    `export { copyLocalTree } from "../platform/copy-tree.js";`,
+    `export { copySkill as build } from "../installed-skills/files.js";`,
+    `export * as InstalledSkillFiles from "../installed-skills/files.js";`,
+    `export * as InstalledSkillBackups from "../installed-skills/backups.js";`,
+    `export * as imports from "./import-collection.js";`,
+    `export { importCollection as write } from "./import-collection.js";`,
+    `export { withHomeLock as lock } from "./store/writer-lock.js";`,
+    `export { InstalledSkillV9 } from "./store/state-schema-v9.js";`,
+  ])("the public Library entry cannot export private implementation: %s", async (source) => {
+    expect(await reported("library-private-api", `${library}index.ts`, source)).toHaveLength(1);
   });
 
   test.each([
@@ -227,14 +225,15 @@ describe("skit/library-private-api", () => {
     ).toEqual([]);
   });
 
-  test.each([
-    ["packages/skit/src/index.ts", `export * as Library from "./library/library.js";`],
-    [`${library}index.ts`, `export * as Library from "./library.js";`],
-  ])("only public entries assemble the Library namespace: %s", async (filename, source) => {
-    expect(await reported("library-private-api", filename, source)).toEqual([]);
-  });
+  test.each([[`${library}index.ts`, `export * as Library from "./library.js";`]])(
+    "only public entries assemble the Library namespace: %s",
+    async (filename, source) => {
+      expect(await reported("library-private-api", filename, source)).toEqual([]);
+    },
+  );
 
   test.each([
+    ["packages/skit/src/index.ts", `export * as Library from "./library/library.js";`],
     [`${library}library.ts`, `export * as Library from "./library.js";`],
     ["packages/skit/src/index.ts", `export * as implementation from "./library/library.js";`],
     ["packages/skit/src/index.ts", `export * from "./library/library.js";`],

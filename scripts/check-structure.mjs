@@ -36,8 +36,18 @@ function targets(value, condition = "") {
 export function checkCoreExports(root, manifest, declarations, declaredOwners) {
   const failures = [];
   const actual = manifest.exports ?? {};
+  for (const field of ["main", "types"])
+    if (Object.hasOwn(manifest, field))
+      failures.push(
+        `core package.json: ${field} fallback is forbidden; use declared subpath exports`,
+      );
+  if (existsSync(join(root, "packages/skit/src/index.ts")))
+    failures.push("packages/skit/src/index.ts: core root entry is forbidden");
   for (const [subpath, entry] of Object.entries(actual)) {
-    if (subpath === ".") continue;
+    if (subpath === ".") {
+      failures.push(".: core root export is forbidden; use declared owner or shared subpaths");
+      continue;
+    }
     const declaration = declarations[subpath];
     if (!declaration) {
       failures.push(`${subpath}: no API declaration in architecture/app.ts coreExports`);

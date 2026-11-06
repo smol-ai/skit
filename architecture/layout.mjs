@@ -26,7 +26,7 @@ export const layout = {
     ],
   },
   "packages/skit/src/": {
-    files: ["index.ts"],
+    files: [],
     folders: [
       "library",
       "installed-skills",
