@@ -252,18 +252,20 @@ custody policy in `projection/mutation.ts`.
 
 ### Author initialization
 
-`author init` owns scaffold creation, workspace identity, local retention and registration
-under the application runtime. A durable `.skit/init-scaffold` checkpoint lets interrupted
+`author init` owns scaffold creation, workspace identity and local retention under the
+application runtime. A durable `.skit/init-scaffold` checkpoint lets interrupted
 fresh scaffolds resume without overwriting existing files. Workspace identity is published
 atomically and exclusively before retention; retries reuse it. Both retained representations
 come from a verified Original and share the existing hash and copy policies.
 
 One Projection mutation commits the Entry, Installation, removed-Skill retirement,
 surviving Binding refresh and current suppression. Bindings retain missing names and overrides as
-dormant intent; descriptor defaults never enable acquired Skills. Workspace registration is
-finalized after this commit. A failed finalization leaves the Library authoritative and
-retry repairs the marker, including an interrupted `--register` transition. Scaffold and
-identity files and verified immutable objects may survive failure; temporary copies do not.
+dormant intent; descriptor defaults never enable acquired Skills. Nothing records registration
+outside the Library: `.skit/workspace.json` holds the workspace id only, and a workspace is
+registered while the Library retains a Collection imported from it. Removing that Collection
+touches no workspace file; the next `author init` imports it again under the same identity.
+Scaffold and identity files and verified immutable objects may survive failure; temporary copies
+do not.
 See [the commit protocol](adr/0018-own-cli-workflows-with-effect.md#author-initialization-commit-protocol-issue-13).
 
 ### Add and pull

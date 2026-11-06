@@ -31,11 +31,15 @@ rules, touch `.git`, commit or push. Explicit restore is the separate operation
 allowed to replace authored content after preserving its current state.
 
 Moving the folder preserves its workspace identity; copied live metadata is
-rejected under ADR-0012. A fresh clone receives a distinct identity. Respect the
-existing deliberately removed registration marker; an automatic refresh must not
-resurrect an opted-out workspace. Registration is separate from content import:
-a folder with no valid skills may be connected and backed up while it waits for
-its first installable member.
+rejected under ADR-0012. A fresh clone receives a distinct identity. Registration is
+separate from content import: a folder with no valid skills may be connected and
+backed up while it waits for its first installable member.
+
+*Amended 2026-11-07:* `workspace.json` no longer stores a registration or removal
+marker. A workspace is registered while the Library retains its Collection; removal
+is a Library operation that leaves the workspace's identity alone, and the next
+`author init` imports it again. Automatic refresh still never imports: only
+`author init` does.
 
 No new Binding is created by observing a folder. Existing enable/disable intent
 remains authoritative. An enabled Collection follows its Source, so new valid
@@ -251,7 +255,8 @@ Before calling live installation complete, prove at the real workflow boundary:
 - Shared input changes do not leak into a held member; independent closures with
   different shared versions reproduce their selected artifact hashes.
 - A new valid member follows an enabled Collection; an invalid new member is not
-  installed; disable and deliberately removed registration remain respected.
+  installed; disable remains respected, and a removed Collection is not imported
+  again except by `author init` (amended 2026-11-07).
 - Plain-folder registration does not create authored config or touch Git, moving
   retains identity, and copying live metadata is detected.
 - Root unreadability, malformed membership, transient missing files and restart
