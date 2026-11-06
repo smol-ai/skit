@@ -3,7 +3,6 @@
 export { scanInventory } from "./library/inventory/refresh.js";
 export {
   sourceImports,
-  currentCollectionSkills,
   currentSkillVersion,
   enabledSkillIds,
 } from "./library/library-contracts.js";

@@ -6,7 +6,7 @@ import { Effect, FileSystem } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
-import { currentCollectionSkills, emptyLibraryState } from "@smolai/skit-core";
+import { openLibraryView } from "@smolai/skit-core/library/session";
 import { importSource } from "../src/library/source.js";
 import { planUpdates, updateSubjects } from "../src/library/update/operation.js";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
@@ -57,8 +57,10 @@ it.effect(
         );
       const load = run(
         Effect.flatMap(Library.Service, (library) => library.read).pipe(
-          Effect.map((snapshot) =>
-            snapshot._tag === "Present" ? snapshot.state : emptyLibraryState(),
+          Effect.flatMap((snapshot) =>
+            snapshot._tag === "Present"
+              ? Effect.succeed(snapshot.state)
+              : Effect.die("Expected imported Library"),
           ),
         ),
       );
@@ -104,9 +106,14 @@ it.effect(
       const after = yield* load;
       assert.deepStrictEqual(after.collections, before.collections);
       assert.deepStrictEqual(after.enabled, before.enabled);
+      const view = yield* run(openLibraryView(home));
+      const collection = view.placements.find(
+        (placement) => placement.collectionId === collectionId && placement.scope.kind === "global",
+      );
+      assert.ok(collection);
       assert.deepStrictEqual(
-        currentCollectionSkills(after, collectionId)
-          .map((entry) => entry.path)
+        collection.skillIds
+          .map((skillId) => after.skills.find((entry) => entry.skill_id === skillId)?.path)
           .toSorted(),
         ["plugins/tools/legacy", "plugins/tools/skills/added", "skills/review"],
       );

@@ -3,7 +3,7 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { currentSkillVersion } from "@smolai/skit-core";
+import { openLibraryView } from "@smolai/skit-core/library/session";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { Library } from "@smolai/skit-core/library";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
@@ -73,10 +73,14 @@ const boundRawReview = Effect.gen(function* () {
     const row = state.installed_skills.find((item) => item.destination === "agents");
     assert.ok(row);
     const skill = state.skills[0];
+    const view = yield* library.owned(openLibraryView(home));
     return {
       row,
       selected:
-        skill === undefined ? undefined : currentSkillVersion(state, skill)?.skill_version_id,
+        skill === undefined
+          ? undefined
+          : view.membersFor(skill.collection_id).find((member) => member.id === skill.skill_id)
+              ?.versionId,
     };
   });
   return { fs, home, roots, library, observe, project, installedPath: installed, installedSkill };
@@ -123,10 +127,10 @@ it.effect("heals an untouched installed skill already recorded as conflicted", (
     yield* observe("second verbatim Skill\n");
     const state = yield* library.durable;
     assert.ok(state);
-    const selected =
-      state.skills[0] === undefined
-        ? undefined
-        : currentSkillVersion(state, state.skills[0])?.skill_version_id;
+    const view = yield* library.owned(openLibraryView(library.home));
+    const selected = view.collections
+      .flatMap((collection) => collection.members)
+      .find((member) => member.id === state.skills[0]?.skill_id)?.versionId;
     assert.ok(selected);
     yield* library.writeDurable({
       ...state,
