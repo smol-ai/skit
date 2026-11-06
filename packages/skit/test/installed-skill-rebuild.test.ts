@@ -3,7 +3,10 @@ import { Effect, FileSystem, Option } from "effect";
 import { join } from "node:path";
 import * as Library from "../src/library/library.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
-import { prepareInstalledSkillRebuild, reproducible } from "../src/installed-skills/files.js";
+import {
+  prepareInstalledSkillRebuild,
+  reproducible,
+} from "../src/library/installation/retained-skill.js";
 import { recoveryFingerprint } from "../src/library/folder-evidence.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { copySkitFixtureEffect } from "./helpers/skit-fixture.js";

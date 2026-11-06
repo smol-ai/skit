@@ -97,6 +97,29 @@ describe("skit/directory-layout", () => {
 });
 
 describe("skit/import-direction", () => {
+  test("installed-skill byte adapters cannot import Library policy through direct paths or public aliases", async () => {
+    for (const source of [
+      'import type { LibraryState } from "../library/library-state.js";',
+      'import { globalEnabled as enabled } from "../library/enabled.js";',
+      'import * as versions from "../library/installation/retained-skill.js";',
+      'export * from "../library/installation/retained-skill.js";',
+      'const versions = import("../library/installation/retained-skill.js");',
+      'import { Library } from "@smolai/skit-core/library";',
+      'import * as settings from "@smolai/skit-core/machine-settings";',
+      'const source = import("@smolai/skit-core/library/source");',
+    ])
+      expect(
+        await reported("packages/skit/src/installed-skills/PROBE.ts", source, "import-direction"),
+      ).toEqual([1]);
+    for (const source of [
+      'import type { InstalledSkill } from "../library/device-state.js";',
+      'import { makeOperationId } from "../library/entity-ids.js";',
+    ])
+      expect(
+        await reported("packages/skit/src/installed-skills/PROBE.ts", source, "import-direction"),
+      ).toEqual([]);
+  });
+
   test("core implementations cannot re-enter the aggregate root, including type imports", async () => {
     for (const source of [
       'import type { LibraryManifest } from "@smolai/skit-core";',

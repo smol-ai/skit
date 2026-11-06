@@ -649,6 +649,8 @@ const effectRules = {
       messages: {
         coreRoot:
           "Core implementations import the defining owner module, not the aggregate package root.",
+        installedPolicy:
+          "Installed-skill file adapters consume copy/identity facts, not Library state or owner policy. Move retained-version decisions into Library (architecture/app.ts).",
         frontend:
           "{{target}} is CLI source. The TUI imports core public APIs; Storybook may also use the CLI public story export, never CLI source (architecture/layout.mjs).",
         internal:
@@ -683,6 +685,22 @@ const effectRules = {
             target?.replace(/\.[jt]s$/, "") === "packages/skit/src/index")
         ) {
           context.report({ node: sourceNode, messageId: "coreRoot" });
+          return;
+        }
+        const declared = source.startsWith("@smolai/skit-core/")
+          ? coreExports[`./${source.slice("@smolai/skit-core/".length)}`]
+          : undefined;
+        const policyTarget = (declared?.source ?? target)?.replace(/\.[jt]s$/, "");
+        if (
+          file.startsWith("packages/skit/src/installed-skills/") &&
+          (policyTarget === "packages/skit/src/library" ||
+            policyTarget?.startsWith("packages/skit/src/library/")) &&
+          ![
+            "packages/skit/src/library/device-state",
+            "packages/skit/src/library/entity-ids",
+          ].includes(policyTarget)
+        ) {
+          context.report({ node: sourceNode, messageId: "installedPolicy" });
           return;
         }
         if (target === undefined) return;

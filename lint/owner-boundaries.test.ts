@@ -59,6 +59,8 @@ describe("skit/owner-boundaries", () => {
       'import * as Status from "../../../skit/src/library/installed-skill-status.js";',
       'import * as Files from "../../../skit/src/installed-skills/files.js";',
       'const files = import("../../../skit/src/installed-skills/files.js");',
+      'import { prepareInstalledSkillRebuild as build } from "../../../skit/src/library/installation/retained-skill.js";',
+      'const recovery = import("../../../skit/src/library/installation/retained-skill.js");',
       'export * from "../../../skit/src/library/installed-skills.js";',
     ])
       expect(

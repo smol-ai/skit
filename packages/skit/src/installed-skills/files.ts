@@ -8,12 +8,7 @@ import { type InstallDestination } from "./destination.js";
 import { Hash } from "../shared/hash.js";
 import { type InvocationPolicy } from "../artifact/invocation-policy.js";
 import { LinkStat } from "../platform/link-stat.js";
-import {
-  applyInvocationPolicy,
-  declaredInvocationIntent,
-  overrideInvocationIntent,
-  type InvocationIntent,
-} from "./policy.js";
+import { applyInvocationPolicy, type InvocationIntent } from "./policy.js";
 import { deterministicTreeHash, digestTreeHash } from "../artifact/skit.js";
 import { Digest } from "effect/crypto";
 import type { HarnessInvocationWriteFailure } from "../harnesses/write-invocation.js";
@@ -30,15 +25,8 @@ import {
   UnsafeInstalledSkillName,
 } from "./failures.js";
 import { type InstalledSkill } from "../library/device-state.js";
-import { globalEnabled } from "../library/enabled.js";
-import { type LibraryState } from "../library/library-state.js";
 
-import { installedSkillSource } from "../library/installation/installed-skill-source.js";
-import {
-  losslessTree,
-  pendingInstalledSkillBackups,
-  installedSkillStagingDirectory,
-} from "./backups.js";
+import { pendingInstalledSkillBackups, installedSkillStagingDirectory } from "./backups.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 /** Where one copy's bytes come from, and how its Harness reads invocation metadata. */
@@ -78,7 +66,7 @@ const copyInstalledSkillTree = Effect.fn("Install.copyTree")((from: string, to: 
   ),
 );
 
-const copySkill = Effect.fn("Install.copySkill")(function* (
+export const copySkill = Effect.fn("Install.copySkill")(function* (
   request: SkillSource & { destination: string; libraryPath: string },
 ): Effect.fn.Return<
   void,
@@ -103,42 +91,6 @@ const copySkill = Effect.fn("Install.copySkill")(function* (
     request.declaredInvocation,
     request.invocationIntent,
   );
-});
-
-/** Rebuild one former copy into caller-owned staging, using the same byte owner as installing. */
-export const prepareInstalledSkillRebuild = Effect.fn("Install.prepareRebuild")(function* (
-  state: LibraryState,
-  originalsPath: string,
-  installedSkill: InstalledSkill,
-  invocationIntent: InvocationIntent,
-) {
-  const target = installedSkill.destination;
-  const skill = state.skills.find((item) => item.skill_id === installedSkill.skill_id);
-  const version = skill?.versions.find(
-    (item) => item.skill_version_id === installedSkill.skill_version_id,
-  );
-  if (!skill || !version)
-    return yield* new InstalledSkillFailure({
-      message: "Former installed skill has no stored Skill Version",
-    });
-  const source = yield* installedSkillSource(state, originalsPath, skill, version);
-  if (source.kind !== "source") return yield* new InstalledSkillFailure({ message: source.detail });
-  return {
-    collectionVersionPath: source.libraryPath,
-    build: Effect.fn("Install.rebuildBytes")(function* (destination: string) {
-      // Retained bytes may have changed since review; validate them again before reading.
-      const current = yield* installedSkillSource(state, originalsPath, skill, version);
-      if (current.kind !== "source")
-        return yield* new InstalledSkillFailure({ message: current.detail });
-      yield* copySkill({
-        ...current,
-        libraryPath: current.libraryPath,
-        destination,
-        target,
-        invocationIntent,
-      });
-    }),
-  };
 });
 
 const markerExpectedHash = (marker: OwnershipMarker): Hash => marker.expected_hash;
@@ -332,63 +284,6 @@ export const installedSkillDisplaced = Effect.fn("Install.displaced")(function* 
   return false;
 });
 
-/**
- * Whether a backup is exactly what SKIT would write again, proven only from `prior`, the Library
- * state the mutation loaded: the backup's marker must name the recorded installed skill and Version, that
- * Version's stored original must be intact, and restaging it under a recorded invocation policy
- * must reproduce every name, type, mode and byte. Anything short of that proof keeps the backup.
- */
-export const reproducible = Effect.fn("Install.reproducible")(function* (
-  backup: string,
-  prior: LibraryState,
-  originalsPath: string,
-  installedSkillId: string,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const recorded = prior.installed_skills.find(
-    (item) => item.installed_skill_id === installedSkillId,
-  );
-  const marker = yield* readOwnershipMarker(backup);
-  if (
-    recorded === undefined ||
-    marker?.installed_skill_id !== recorded.installed_skill_id ||
-    marker.skill_id !== recorded.skill_id ||
-    marker.skill_version_id !== recorded.skill_version_id
-  )
-    return false;
-  const skill = prior.skills.find((item) => item.skill_id === recorded.skill_id);
-  const version = skill?.versions.find(
-    (item) => item.skill_version_id === recorded.skill_version_id,
-  );
-  const target = recorded.destination;
-  if (skill === undefined || version === undefined) return false;
-  const source = yield* installedSkillSource(prior, originalsPath, skill, version);
-  const expected = yield* losslessTree(backup);
-  if (source.kind === "invalid" || expected === undefined) return false;
-  const policies = new Set(
-    [globalEnabled(prior), ...prior.repositories].flatMap((list) => {
-      const policy = list.invocation_policies?.[skill.skill_id];
-      return policy === undefined ? [] : [policy];
-    }),
-  );
-  for (const invocationIntent of [
-    declaredInvocationIntent,
-    ...[...policies].map(overrideInvocationIntent),
-  ]) {
-    const restaged = yield* Effect.scoped(
-      Effect.gen(function* () {
-        const destination = join(
-          yield* fs.makeTempDirectoryScoped({ prefix: "skit-reproduce-" }),
-          "skill",
-        );
-        yield* copySkill({ ...source, target, invocationIntent, destination });
-        return yield* losslessTree(destination);
-      }),
-    );
-    if (restaged === expected) return true;
-  }
-  return false;
-});
 /**
  * Unmanaged copies the operator approved managing in place: the selected copy, and any
  * copies with identical bytes already at another target's destination. Each is managed only while

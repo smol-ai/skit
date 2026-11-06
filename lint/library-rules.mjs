@@ -500,6 +500,7 @@ export const libraryRules = {
               "writeJsonAtomic",
               "writeJsonExclusive",
               "copyLocalTree",
+              "copySkill",
               "ensureSkillsDirectoryWritable",
             ].includes(name)
           ) {

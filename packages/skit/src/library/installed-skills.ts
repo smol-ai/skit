@@ -36,7 +36,6 @@ import type { LibraryState } from "./library-state.js";
 import type { InstalledSkillId, SkillId, SkillVersionId } from "./entity-ids.js";
 import {
   type InstalledSkillMutationError,
-  type reproducible,
   type StagedInstalledSkill,
 } from "../installed-skills/files.js";
 import {
@@ -44,6 +43,7 @@ import {
   OwnershipMarkerInspection,
 } from "../installed-skills/marker-inspection.js";
 import { InstalledSkillInvalid } from "./installation/install-enabled.js";
+import { reproducible } from "./installation/retained-skill.js";
 import { installedSkillSource } from "./installation/installed-skill-source.js";
 import { declaredInvocationIntent, overrideInvocationIntent } from "../installed-skills/policy.js";
 import type { Invocation } from "./enabled-plan.js";
@@ -52,8 +52,8 @@ import { type SkitFailure, FailureTypeId } from "../shared/failure.js";
 import type { TreeError } from "../shared/tree-error.js";
 
 /**
- * Facts about this device's skill folders, and operations that carry out what Library decided.
- * It never sees a Library row and never decides policy.
+ * Library's adapter from saved selections to installed-folder facts and operations.
+ * Stored-version selection and recovery policy stay in Library; file construction is separate.
  */
 
 /** Entries are compared by device identity, never by path alone. */
@@ -518,7 +518,7 @@ export const make = Effect.fn("make")(function* (configuration?: Routing | Inven
           Effect.provide(context),
         ),
       check: (backup, state, originalsPath, installedSkillId) =>
-        InstalledSkillFiles.reproducible(backup.path, state, originalsPath, installedSkillId).pipe(
+        reproducible(backup.path, state, originalsPath, installedSkillId).pipe(
           Effect.provide(context),
         ),
       keep: (backup) =>

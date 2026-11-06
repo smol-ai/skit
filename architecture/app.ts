@@ -81,13 +81,17 @@ export const owners = {
 
   InstalledSkills: {
     status: "EXISTS",
-    module: "packages/skit/src/library/installed-skills*.ts + install/**",
+    module: "packages/skit/src/library/installed-skills.ts + packages/skit/src/installed-skills/**",
     owns: [
       "<skills root>/<name>/** and .skit-ownership.json",
       "<root>/.skit-backups/**",
       "<root>/.skit-stage-*, .skit-write-check-*",
     ],
     ops: ["facts (any caller)", "operations (Library only)"],
+    invariants: [
+      "filesystem adapters consume copy/identity facts, never LibraryState or Library owner/policy APIs",
+      "retained-version selection and recovery reproducibility belong to Library's installation module",
+    ],
     requires: ["FileSystem", "Path", "LinkStat", "SourceProcess", "Digest"],
     removes: [
       "InstalledSkillFiles / InstalledSkillBackups namespace exports",

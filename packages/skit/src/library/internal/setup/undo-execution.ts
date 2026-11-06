@@ -3,7 +3,7 @@ import { Effect, FileSystem, Schema } from "effect";
 import { canonicalJson } from "../../../shared/json.js";
 import { copyLocalTree } from "../../../platform/copy-tree.js";
 import { LinkStat } from "../../../platform/link-stat.js";
-import { prepareInstalledSkillRebuild } from "../../../installed-skills/files.js";
+import { prepareInstalledSkillRebuild } from "../../installation/retained-skill.js";
 import { originalTreeHash } from "../../collection-version.js";
 import { globalEnabled } from "../../enabled.js";
 import { holdsEvidence, parentIsAsRecorded, recoveryEntryPath } from "../../folder-evidence.js";

@@ -173,6 +173,7 @@ describe("skit/library-private-api", () => {
     `export { writeJsonAtomic } from "./platform/atomic-write.js";`,
     `export { writeJsonExclusive } from "./platform/atomic-write.js";`,
     `export { copyLocalTree } from "./platform/copy-tree.js";`,
+    `export { copySkill as build } from "./installed-skills/files.js";`,
     `export * as InstalledSkillFiles from "./installed-skills/files.js";`,
     `export * as InstalledSkillBackups from "./installed-skills/backups.js";`,
     `export * as imports from "./library/import-collection.js";`,

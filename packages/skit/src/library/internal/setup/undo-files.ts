@@ -4,7 +4,7 @@ import { Effect, FileSystem } from "effect";
 import { canonicalJson } from "../../../shared/json.js";
 import { deterministicTreeHash } from "../../../artifact/skit.js";
 import { globalEnabled } from "../../enabled.js";
-import { prepareInstalledSkillRebuild } from "../../../installed-skills/files.js";
+import { prepareInstalledSkillRebuild } from "../../installation/retained-skill.js";
 import { inspectOwnershipMarker } from "../../../installed-skills/marker-inspection.js";
 import { inspectInstalledSkillBackups } from "../../../installed-skills/backups.js";
 import { libraryOriginalsPath } from "../../store/library-store.js";
