@@ -15,6 +15,7 @@ export type SyncPhase =
     }
   | { readonly kind: "verify-copies" | "upload"; readonly total: number };
 
+/** Sync phase facts for a frontend to render; the owner decides when each phase runs. */
 export interface SyncProgress {
   readonly around: <A, E, R>(
     phase: SyncPhase,

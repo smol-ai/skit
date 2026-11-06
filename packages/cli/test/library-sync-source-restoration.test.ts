@@ -11,7 +11,8 @@ import { type SkitSource } from "@smolai/skit-core/library/source";
 import * as Library from "@smolai/skit-core/library";
 import { SourceProcess } from "@smolai/skit-core/platform";
 import { importSource } from "../src/library/source.js";
-import { syncLibrary } from "../src/library/sync/workflow.js";
+import { syncLibrary } from "@smolai/skit-core/library/session";
+import { librarySyncApi } from "../src/library/sync/api.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { archiveBytes, writingTo } from "./helpers/library-home.js";
 import { librarySyncServer } from "./helpers/library-sync-server.js";
@@ -71,7 +72,7 @@ const fixture = Effect.gen(function* () {
       ),
     );
   const sync = () =>
-    writingTo(freshHome, syncLibrary({ origin, apply: true })).pipe(
+    writingTo(freshHome, Effect.flatMap(librarySyncApi({ origin }), (transport) => syncLibrary({ origin, apply: true }, transport))).pipe(
       Effect.provide(registryHttpLayer(http)),
       Effect.provide(http),
     );

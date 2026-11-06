@@ -2,7 +2,6 @@ import { Schema } from "effect";
 import { SyncConflictDetail } from "@smolai/skit-core/library/session";
 
 import { SyncChanges as SyncPlan } from "@smolai/skit-core/library/session";
-export { SyncPlan };
 
 export const SyncResult = Schema.Struct({
   status: Schema.Literals([

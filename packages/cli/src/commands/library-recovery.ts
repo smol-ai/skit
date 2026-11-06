@@ -1,12 +1,22 @@
 import { Cause, Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
-import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
+import {
+  SkitConfiguration,
+  skitConfigurationLayer,
+} from "@smolai/skit-core/platform";
 import { handleLibraryCommand, commandFailure } from "./handler.js";
 import { CommandMetadata } from "./metadata.js";
-import { recoveryOutputContracts, recoveryActions } from "../library/recovery.js";
+import {
+  recoveryOutputContracts,
+  recoveryActions,
+} from "../library/recovery.js";
 
 import { homeFlag, jsonFlag, optionalString } from "./parameters.js";
-import * as Library from "@smolai/skit-core/library";
+import {
+  inspectLibraryRecovery,
+  listLibraryRecovery,
+  openRecoveryRestore,
+} from "@smolai/skit-core/library/session";
 import { Renderer } from "../terminal/renderer.js";
 import { encodeResult as result } from "./encode-result.js";
 
@@ -24,8 +34,7 @@ const list = Command.make("list", flags, (input) =>
     Effect.gen(function* () {
       const configuration = yield* SkitConfiguration;
       const home = configuration.skitHome;
-      const library = yield* Library.Service;
-      const operations = yield* library.recovery.list;
+      const operations = yield* listLibraryRecovery();
       const renderer = yield* Renderer;
       yield* renderer.result(
         result("recoveryList", recoveryOutputContracts.recoveryList, {
@@ -38,7 +47,9 @@ const list = Command.make("list", flags, (input) =>
         }),
       );
     }),
-  ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
+  ).pipe(
+    Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home))),
+  ),
 ).pipe(
   Command.withDescription(
     "List machine-local saved-file recovery operations; files are kept until you remove them.",
@@ -56,8 +67,7 @@ const inspect = Command.make("inspect", { operation, ...flags }, (input) =>
     Effect.gen(function* () {
       const configuration = yield* SkitConfiguration;
       const home = configuration.skitHome;
-      const library = yield* Library.Service;
-      const inspection = yield* library.recovery.inspect(input.operation);
+      const inspection = yield* inspectLibraryRecovery(input.operation);
       const renderer = yield* Renderer;
       yield* renderer.result(
         result("recovery", recoveryOutputContracts.recovery, {
@@ -67,7 +77,9 @@ const inspect = Command.make("inspect", { operation, ...flags }, (input) =>
         }),
       );
     }),
-  ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
+  ).pipe(
+    Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home))),
+  ),
 ).pipe(
   Command.withDescription(
     "Inspect the move records and the original and saved files without changing them.",
@@ -80,81 +92,89 @@ const inspect = Command.make("inspect", { operation, ...flags }, (input) =>
   }),
 );
 
-const restore = Command.make("restore", { operation, apply, ...flags }, (input) =>
-  handleLibraryCommand(
-    Effect.gen(function* () {
-      const configuration = yield* SkitConfiguration;
-      const home = configuration.skitHome;
-      const renderer = yield* Renderer;
-      const library = yield* Library.Service;
-      const plan = yield* library.plan(
-        { _tag: "Restore", operationId: input.operation },
-        { base: yield* library.read },
-      );
-      const approved = Option.getOrUndefined(input.apply);
-      if (approved === undefined)
-        return yield* renderer.result(
-          result("recovery", recoveryOutputContracts.recovery, {
-            ...plan.change,
-            phase: "preview",
-            actions: recoveryActions(
-              home,
-              input.operation,
-              plan.change.entries.some((entry) => entry.status === "saved")
-                ? plan.change.planId
-                : undefined,
+const restore = Command.make(
+  "restore",
+  { operation, apply, ...flags },
+  (input) =>
+    handleLibraryCommand(
+      Effect.gen(function* () {
+        const configuration = yield* SkitConfiguration;
+        const home = configuration.skitHome;
+        const renderer = yield* Renderer;
+        const restore = yield* openRecoveryRestore(input.operation);
+        const plan = { change: restore.change };
+        const approved = Option.getOrUndefined(input.apply);
+        if (approved === undefined)
+          return yield* renderer.result(
+            result("recovery", recoveryOutputContracts.recovery, {
+              ...plan.change,
+              phase: "preview",
+              actions: recoveryActions(
+                home,
+                input.operation,
+                plan.change.entries.some((entry) => entry.status === "saved")
+                  ? plan.change.planId
+                  : undefined,
+              ),
+            }),
+          );
+        if (approved !== plan.change.planId)
+          return yield* renderer.result(
+            result(
+              "recovery",
+              recoveryOutputContracts.recovery,
+              {
+                ...plan.change,
+                phase: "stale",
+                failure:
+                  "The recovery plan changed. Review a new preview before applying.",
+                actions: recoveryActions(home, input.operation),
+              },
+              12,
             ),
-          }),
+          );
+        const applied = yield* restore.apply;
+        const inspection = applied.inspection;
+        const failed =
+          applied._tag === "Failed"
+            ? commandFailure(Cause.fail(applied.failure))
+            : undefined;
+        const allRestored = inspection.entries.every(
+          (entry) => entry.status === "at-original",
         );
-      if (approved !== plan.change.planId)
-        return yield* renderer.result(
+        const someRestored = inspection.entries.some(
+          (entry) => entry.status === "at-original",
+        );
+        yield* renderer.result(
           result(
             "recovery",
             recoveryOutputContracts.recovery,
             {
-              ...plan.change,
-              phase: "stale",
-              failure: "The recovery plan changed. Review a new preview before applying.",
+              ...inspection,
+              phase: failed
+                ? "failed"
+                : allRestored
+                  ? "restored"
+                  : someRestored
+                    ? "partial"
+                    : "conflicted",
+              ...(failed ? { failure: failed.message } : {}),
               actions: recoveryActions(home, input.operation),
             },
-            12,
+            failed?.exitCode ?? (allRestored ? 0 : 12),
           ),
         );
-      const applied = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
-      const inspection =
-        applied._tag === "Success"
-          ? applied.success.result.after
-          : yield* library.recovery.inspect(input.operation);
-      const failed =
-        applied._tag === "Failure" ? commandFailure(Cause.fail(applied.failure)) : undefined;
-      const allRestored = inspection.entries.every((entry) => entry.status === "at-original");
-      const someRestored = inspection.entries.some((entry) => entry.status === "at-original");
-      yield* renderer.result(
-        result(
-          "recovery",
-          recoveryOutputContracts.recovery,
-          {
-            ...inspection,
-            phase: failed
-              ? "failed"
-              : allRestored
-                ? "restored"
-                : someRestored
-                  ? "partial"
-                  : "conflicted",
-            ...(failed ? { failure: failed.message } : {}),
-            actions: recoveryActions(home, input.operation),
-          },
-          failed?.exitCode ?? (allRestored ? 0 : 12),
-        ),
-      );
-    }),
-  ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
+      }),
+    ).pipe(
+      Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home))),
+    ),
 ).pipe(
   Command.withDescription(
     "Preview or restore verified saved files into free original paths. Does not change what is enabled or any settings.",
   ),
-  Command.withExamples([{ command: "skit library recovery restore OPERATION --json" }]),
+  Command.withExamples([
+    { command: "skit library recovery restore OPERATION --json" },
+  ]),
   Command.annotate(CommandMetadata, {
     effects: { capabilities: ["filesystem.read", "filesystem.write"] },
     outputSchemas: [recoveryOutputContracts.recovery],

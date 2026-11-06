@@ -23,7 +23,6 @@ export interface SourceUpdateAdapters<E, R, F extends { readonly remediation: st
   readonly importSource: (
     input: SkitSource,
     previousSkillPaths: readonly string[],
-    owner: Library.Interface,
   ) => Effect.Effect<
     {
       readonly snapshot_digest: Hash;
@@ -85,11 +84,12 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <
       const subject = { id: before.subjectId, label: before.label };
       const imported = yield* progress.around(
         { kind: "source", subject },
-        adapters.importSource(
-          input,
-          priorTree.members.map((member) => member.source_path),
-          library,
-        ),
+        adapters
+          .importSource(
+            input,
+            priorTree.members.map((member) => member.source_path),
+          )
+          .pipe(Effect.provideService(Library.Service, library)),
         (value) => ({
           kind: "source-inspected",
           changed: value.snapshot_digest !== priorTree.hash,

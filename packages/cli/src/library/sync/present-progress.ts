@@ -1,5 +1,5 @@
 import type { RestoreProgress, RestorePhase } from "@smolai/skit-core/library";
-import type { SyncProgress, SyncPhase } from "./progress.js";
+import type { SyncProgress, SyncPhase } from "@smolai/skit-core/library/session";
 import type { RendererShape } from "../../terminal/renderer.js";
 
 const copies = (count: number, qualifier = "Skill") =>

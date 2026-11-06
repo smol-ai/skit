@@ -7,17 +7,29 @@ import { describe, expect, test } from "vitest";
 
 const root = join(import.meta.dirname, "..");
 const plugin = join(import.meta.dirname, "oxlint-plugin-skit.mjs");
-const oxlint = fileURLToPath(new URL("bin/oxlint", import.meta.resolve("oxlint/package.json")));
+const oxlint = fileURLToPath(
+  new URL("bin/oxlint", import.meta.resolve("oxlint/package.json")),
+);
 
 /** Exercise the real oxlint parser and plugin with a repository path and isolated config. */
-async function lint(rule: string, source: string, path = "packages/cli/src/author/probe.ts") {
+async function lint(
+  rule: string,
+  source: string,
+  path = "packages/cli/src/author/probe.ts",
+) {
   const directory = await mkdtemp(join(tmpdir(), "skit-frontend-rules-"));
-  const file = join(root, path.replace("probe", `lint-probe-${process.pid}-${Date.now()}`));
+  const file = join(
+    root,
+    path.replace("probe", `lint-probe-${process.pid}-${Date.now()}`),
+  );
   const config = join(directory, ".oxlintrc.json");
   try {
     await writeFile(
       config,
-      JSON.stringify({ jsPlugins: [plugin], rules: { [`skit/${rule}`]: "error" } }),
+      JSON.stringify({
+        jsPlugins: [plugin],
+        rules: { [`skit/${rule}`]: "error" },
+      }),
     );
     await writeFile(file, source);
     const result = spawnSync(
@@ -32,7 +44,10 @@ async function lint(rule: string, source: string, path = "packages/cli/src/autho
     expect(result.error).toBeUndefined();
     expect(result.stderr).toBe("");
     const report = JSON.parse(result.stdout) as {
-      diagnostics: Array<{ code: string; labels: Array<{ span: { line: number } }> }>;
+      diagnostics: Array<{
+        code: string;
+        labels: Array<{ span: { line: number } }>;
+      }>;
     };
     expect(report.diagnostics.filter((item) => !item.code)).toEqual([]);
     return report.diagnostics
@@ -43,6 +58,26 @@ async function lint(rule: string, source: string, path = "packages/cli/src/autho
     await rm(directory, { recursive: true, force: true });
   }
 }
+
+describe("skit/frontend-no-library-service", () => {
+  test("rejects the Library service through namespace and named imports", async () => {
+    expect(
+      await lint(
+        "frontend-no-library-service",
+        `
+import * as Library from "@smolai/skit-core/library";
+import { Service, type LibraryManifest } from "@smolai/skit-core/library";
+import { Effect } from "effect";
+const a = Effect.gen(function* () {
+  const library = yield* Library.Service;
+  yield* Effect.provide(library.read, Library.layer({ home: ".", routing: { _tag: "None" } }));
+});
+const b = Library.RestoreInvalid;
+`,
+      ),
+    ).toEqual([3, 6]);
+  }, 30_000);
+});
 
 describe("skit/frontend-no-resources", () => {
   test("checks aliases, direct imports, resource types and dynamic Node imports", async () => {

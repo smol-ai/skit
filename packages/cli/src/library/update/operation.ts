@@ -1,4 +1,3 @@
-import * as Library from "@smolai/skit-core/library";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { updateSources, previewLibrarySourceUpdates } from "@smolai/skit-core/library/session";
 import { Effect } from "effect";
@@ -40,7 +39,6 @@ export const updateSubjects = Effect.fn("CLI.updateSubjects")(function* (
   return yield* updateSources(paths.skitHome, options.roots, query, {
     progress,
     classifyFailure: commandFailure,
-    importSource: (input, previous, owner) =>
-      importSource(input, previous).pipe(Effect.provideService(Library.Service, owner)),
+    importSource,
   });
 });

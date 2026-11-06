@@ -321,4 +321,3 @@ export type { LibraryStateWriteError } from "./store/library-store.js";
 
 export type { SetupResult } from "./internal/setup/run.js";
 
-export type { ContentStageError } from "./internal/content/content.js";

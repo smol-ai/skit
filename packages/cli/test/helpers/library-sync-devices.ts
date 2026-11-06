@@ -13,7 +13,8 @@ import { deterministicTreeHash } from "@smolai/skit-core/author";
 import * as Library from "@smolai/skit-core/library";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
-import { syncLibrary } from "../../src/library/sync/workflow.js";
+import { syncLibrary } from "@smolai/skit-core/library/session";
+import { librarySyncApi } from "../../src/library/sync/api.js";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 
 /** state.json as the store reads it: validated, with undeclared fields kept as written. */
@@ -298,13 +299,20 @@ export const devices = Effect.gen(function* () {
           rootFor?: (target: InstallDestination) => string | undefined;
         } = {},
       ) =>
-        syncLibrary({
-          origin: "https://registry.test",
-          token: "test",
-          apply: true,
-          ...options,
-          installedSkill: { rootFor: options.rootFor ?? rootFor },
-        }).pipe(
+        Effect.flatMap(
+          librarySyncApi({ origin: "https://registry.test", token: "test" }),
+          (transport) =>
+            syncLibrary(
+              {
+                origin: "https://registry.test",
+                token: "test",
+                apply: true,
+                ...options,
+                installedSkill: { rootFor: options.rootFor ?? rootFor },
+              },
+              transport,
+            ),
+        ).pipe(
           Effect.provide(Layer.effect(Library.Service, owner(options.rootFor, options.inventory))),
           Effect.provide(http),
           Effect.scoped,

@@ -12,8 +12,6 @@ export {
   type FolderEvidence,
   type LinkEvidence,
   type InstalledSkillResult,
-  type ContentStageError,
-  type StagedContent,
   type RemoveOutcome,
   type SetupResult,
 } from "./library.js";
@@ -30,7 +28,7 @@ export { LibraryManifest, SnapshotArchive } from "./library-contracts.js";
 export { LibraryState } from "./library-state.js";
 export { LibraryAuditEvent } from "./audit/audit-log.js";
 export { RecoveryInspection } from "./recovery-facts.js";
-export { RestoreInvalid } from "./library.js";
+export type { RestoreInvalid } from "./library.js";
 export type { RestoreProgress, RestorePhase } from "./restore-progress.js";
 // Canonical result and failure names keep consumer declarations on the owner API.
 export type {
