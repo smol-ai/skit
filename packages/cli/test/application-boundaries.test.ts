@@ -10,7 +10,7 @@ import { assert, it } from "@effect/vitest";
 import { ConfigProvider, Deferred, Effect, Fiber, FileSystem, Layer } from "effect";
 import { join, resolve } from "node:path";
 import * as Library from "@smolai/skit-core/library";
-import { libraryApplicationLayer } from "../src/library/layer.js";
+import { libraryApplicationLayer } from "../src/application.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import type { CommandFailure, CommandResult } from "../src/commands/types.js";

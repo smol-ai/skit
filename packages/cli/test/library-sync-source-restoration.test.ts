@@ -72,7 +72,7 @@ const fixture = Effect.gen(function* () {
       ),
     );
   const sync = () =>
-    writingTo(freshHome, Effect.flatMap(librarySyncApi({ origin }), (transport) => syncLibrary({ origin, apply: true }, transport))).pipe(
+    writingTo(freshHome, Effect.flatMap(librarySyncApi({ origin }), (transport) => syncLibrary(freshHome, { origin, apply: true }, transport))).pipe(
       Effect.provide(registryHttpLayer(http)),
       Effect.provide(http),
     );

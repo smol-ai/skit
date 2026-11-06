@@ -267,7 +267,7 @@ export const frontendRules = {
       type: "problem",
       docs: {
         description:
-          "Frontends call Library operations, never drive its service",
+          "Frontends call Library operations; one root constructs the Library",
       },
       messages: {
         forbidden:
@@ -282,8 +282,12 @@ export const frontendRules = {
       )
         return {};
       const bindings = imports();
-      // Construction (Library.layer) joins this set once core owns the Library lifetime.
-      const owned = new Set(["Service", "Interface"]);
+      // The executable composes its one Library in commands/handler.ts; nothing else constructs one.
+      const owned = new Set(
+        file === `${cli}commands/handler.ts`
+          ? ["Service", "Interface"]
+          : ["Service", "layer", "Interface"],
+      );
       const report = (node, name) =>
         context.report({ node, messageId: "forbidden", data: { name } });
       return {

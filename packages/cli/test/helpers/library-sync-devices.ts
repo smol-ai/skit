@@ -6,7 +6,10 @@ import { Effect, FileSystem, Layer, Schema } from "effect";
 import { join } from "node:path";
 import { systemError } from "effect/PlatformError";
 import { LibraryState } from "@smolai/skit-core/library";
-import { emptyLibraryFixture, type LibraryFixtureState } from "./library-home.js";
+import {
+  emptyLibraryFixture,
+  type LibraryFixtureState,
+} from "./library-home.js";
 import { type InstallDestination } from "@smolai/skit-core/library";
 import { makeMachineId } from "@smolai/skit-core/universal/consumer";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
@@ -26,7 +29,9 @@ import { faultQueue, librarySyncServer } from "./library-sync-server.js";
 /** Devices sharing one compare-and-swap Library server, with injectable one-shot faults. */
 export const devices = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
-  const workspace = yield* fs.makeTempDirectoryScoped({ prefix: "skit-sync-crash-" });
+  const workspace = yield* fs.makeTempDirectoryScoped({
+    prefix: "skit-sync-crash-",
+  });
   const faults = faultQueue();
   yield* Effect.addFinalizer(() =>
     Effect.sync(() => assert.deepStrictEqual(faults.unconsumed(), [])),
@@ -40,11 +45,15 @@ export const devices = Effect.gen(function* () {
       HttpClient.HttpClient,
       HttpClient.make((incoming) =>
         Effect.gen(function* () {
-          if (incoming.method === "GET" && new URL(incoming.url).pathname.includes("/snapshots/"))
+          if (
+            incoming.method === "GET" &&
+            new URL(incoming.url).pathname.includes("/snapshots/")
+          )
             snapshotReads++;
           const response = yield* Effect.try(() => server.transport(incoming));
           const change =
-            incoming.method === "GET" && new URL(incoming.url).pathname === "/api/library/portable"
+            incoming.method === "GET" &&
+            new URL(incoming.url).pathname === "/api/library/portable"
               ? faults.take("ChangeStateWhenHeadRead")
               : undefined;
           // The head GET is a semantic boundary between local inspection and publication.
@@ -52,7 +61,9 @@ export const devices = Effect.gen(function* () {
             yield* fs.makeDirectory(change.home, { recursive: true });
             yield* fs.writeFileString(
               join(change.home, "state.json"),
-              Schema.encodeSync(Schema.fromJsonString(LibraryState))(change.state),
+              Schema.encodeSync(Schema.fromJsonString(LibraryState))(
+                change.state,
+              ),
             );
           }
           return HttpClientResponse.fromWeb(incoming, response);
@@ -60,7 +71,10 @@ export const devices = Effect.gen(function* () {
           Effect.mapError(
             (cause) =>
               new HttpClientError.HttpClientError({
-                reason: new HttpClientError.TransportError({ request: incoming, cause }),
+                reason: new HttpClientError.TransportError({
+                  request: incoming,
+                  cause,
+                }),
               }),
           ),
         ),
@@ -77,7 +91,10 @@ export const devices = Effect.gen(function* () {
      */
     const files = FileSystem.FileSystem.of({
       ...fs,
-      rename: Effect.fn("Test.Device.rename")(function* (from: string, to: string) {
+      rename: Effect.fn("Test.Device.rename")(function* (
+        from: string,
+        to: string,
+      ) {
         if (to !== statePath) return yield* fs.rename(from, to);
         saves++;
         const next = yield* Effect.flatMap(
@@ -88,7 +105,8 @@ export const devices = Effect.gen(function* () {
           faults.take(
             "FailSave",
             (fault) =>
-              !fault.anchoredOnly || next.sync_ancestry?.revision_id === server.remote?.revision_id,
+              !fault.anchoredOnly ||
+              next.sync_ancestry?.revision_id === server.remote?.revision_id,
           )
         )
           return yield* Effect.fail(
@@ -105,9 +123,11 @@ export const devices = Effect.gen(function* () {
         const obstruction = faults.take(
           "ObstructAfterSave",
           (fault) =>
-            fault.home === home && next.sync_ancestry?.revision_id === server.remote?.revision_id,
+            fault.home === home &&
+            next.sync_ancestry?.revision_id === server.remote?.revision_id,
         );
-        if (obstruction) yield* fs.writeFileString(obstruction.path, "occupied by a file\n");
+        if (obstruction)
+          yield* fs.writeFileString(obstruction.path, "occupied by a file\n");
       }),
     });
     /** Durable local state as written, read without constructing an owner that could recover. */
@@ -119,38 +139,51 @@ export const devices = Effect.gen(function* () {
       );
     });
     const root = join(workspace, `${name}-skills`);
-    const rootFor = (target: InstallDestination) => (target === "agents" ? root : undefined);
+    const rootFor = (target: InstallDestination) =>
+      target === "agents" ? root : undefined;
+    /** Loader maintenance happens here, outside the save-counting filesystem. */
+    const maintained = Effect.flatMap(
+      Library.Service,
+      (library) => library.read,
+    ).pipe(
+      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provideService(FileSystem.FileSystem, fs),
+    );
+    /** How a sync routes this device's installs; the same inventory a sync is given. */
+    const syncInventory = (
+      route: (target: InstallDestination) => string | undefined = rootFor,
+      inventory?: Parameters<typeof syncLibrary>[1]["inventory"],
+    ) => {
+      const agents = route("agents");
+      const claude = route("claude");
+      if (!agents && !claude) return undefined;
+      return (
+        inventory ?? {
+          home: workspace,
+          configHome: join(workspace, "config"),
+          overrides: {
+            ...(agents ? { codex: [agents] } : {}),
+            ...(claude ? { "claude-code": [claude] } : {}),
+          },
+        }
+      );
+    };
     /** This home's Library owner, routed as this device's sync installs. */
     const owner = (
       route: (target: InstallDestination) => string | undefined = rootFor,
-      inventory?: Parameters<typeof syncLibrary>[0]["inventory"],
+      inventory?: Parameters<typeof syncLibrary>[1]["inventory"],
     ) =>
       Effect.gen(function* () {
-        // Opening first performs loader maintenance outside the save-counting filesystem.
-        yield* Effect.flatMap(Library.Service, (library) => library.read).pipe(
-          Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
-          Effect.provideService(FileSystem.FileSystem, fs),
-        );
-        const agents = route("agents");
-        const claude = route("claude");
+        yield* maintained;
+        const selected = syncInventory(route, inventory);
         return Context.get(
           yield* Construction.build(
             Library.layer({
               home,
               routing:
-                !agents && !claude
+                selected === undefined
                   ? { _tag: "None" }
-                  : inventory
-                    ? { _tag: "Configured", ...inventory }
-                    : {
-                        _tag: "Configured",
-                        home: workspace,
-                        configHome: join(workspace, "config"),
-                        overrides: {
-                          ...(agents ? { codex: [agents] } : {}),
-                          ...(claude ? { "claude-code": [claude] } : {}),
-                        },
-                      },
+                  : { _tag: "Configured", ...selected },
             }),
           ),
           Library.Service,
@@ -172,14 +205,18 @@ export const devices = Effect.gen(function* () {
         return saves;
       },
       corruptOriginal: Effect.gen(function* () {
-        const hash = (yield* state).collection_versions[0]!.hash.slice("sha256:".length);
+        const hash = (yield* state).collection_versions[0]!.hash.slice(
+          "sha256:".length,
+        );
         yield* fs.writeFileString(
           join(home, "originals", hash.slice(0, 2), hash, "SKILL.md"),
           "corrupted original\n",
         );
       }),
       state,
-      importInstalledSkillEdit: (installedSkill: LibraryFixtureState["installed_skills"][number]) =>
+      importInstalledSkillEdit: (
+        installedSkill: LibraryFixtureState["installed_skills"][number],
+      ) =>
         owned(
           Effect.gen(function* () {
             const library = yield* owner();
@@ -197,7 +234,10 @@ export const devices = Effect.gen(function* () {
         Effect.gen(function* () {
           const next = change(yield* state);
           yield* fs.makeDirectory(home, { recursive: true });
-          yield* fs.writeFileString(statePath, yield* Schema.encodeEffect(StateFile)(next));
+          yield* fs.writeFileString(
+            statePath,
+            yield* Schema.encodeEffect(StateFile)(next),
+          );
         }),
       importSource: (
         repository: string,
@@ -229,7 +269,11 @@ export const devices = Effect.gen(function* () {
             });
           }),
         ),
-      importMany: (repository: string, names: readonly string[], importedAt: string) =>
+      importMany: (
+        repository: string,
+        names: readonly string[],
+        importedAt: string,
+      ) =>
         owned(
           Effect.gen(function* () {
             const sourcePath = join(workspace, repository);
@@ -237,7 +281,10 @@ export const devices = Effect.gen(function* () {
               Effect.gen(function* () {
                 const path = join(sourcePath, skillName);
                 yield* fs.makeDirectory(path, { recursive: true });
-                yield* fs.writeFileString(join(path, "SKILL.md"), `${skillName}\n`);
+                yield* fs.writeFileString(
+                  join(path, "SKILL.md"),
+                  `${skillName}\n`,
+                );
                 return {
                   name: skillName,
                   sourcePath: path,
@@ -275,7 +322,9 @@ export const devices = Effect.gen(function* () {
           }),
         ),
       project: (
-        scope: { kind: "global" } | { kind: "repository"; root: string } = { kind: "global" },
+        scope: { kind: "global" } | { kind: "repository"; root: string } = {
+          kind: "global",
+        },
         skillsDirectory = root,
       ) =>
         owned(
@@ -288,36 +337,48 @@ export const devices = Effect.gen(function* () {
         ),
       sync: (
         options: {
-          progress?: Parameters<typeof syncLibrary>[0]["progress"];
-          restoreProgress?: Parameters<typeof syncLibrary>[0]["restoreProgress"];
-          onPlan?: Parameters<typeof syncLibrary>[0]["onPlan"];
+          progress?: Parameters<typeof syncLibrary>[1]["progress"];
+          restoreProgress?: Parameters<
+            typeof syncLibrary
+          >[1]["restoreProgress"];
+          onPlan?: Parameters<typeof syncLibrary>[1]["onPlan"];
           apply?: boolean;
           takeRemote?: readonly string[];
           keepEnabled?: readonly string[];
-          deviceSelection?: Parameters<typeof syncLibrary>[0]["deviceSelection"];
-          inventory?: Parameters<typeof syncLibrary>[0]["inventory"];
+          deviceSelection?: Parameters<
+            typeof syncLibrary
+          >[1]["deviceSelection"];
+          inventory?: Parameters<typeof syncLibrary>[1]["inventory"];
           rootFor?: (target: InstallDestination) => string | undefined;
         } = {},
       ) =>
         Effect.flatMap(
-          librarySyncApi({ origin: "https://registry.test", token: "test" }),
-          (transport) =>
+          Effect.zip(
+            maintained,
+            librarySyncApi({ origin: "https://registry.test", token: "test" }),
+          ),
+          ([, transport]) =>
             syncLibrary(
+              home,
               {
                 origin: "https://registry.test",
                 token: "test",
                 apply: true,
                 ...options,
+                ...(syncInventory(options.rootFor, options.inventory) ===
+                undefined
+                  ? {}
+                  : {
+                      inventory: syncInventory(
+                        options.rootFor,
+                        options.inventory,
+                      ),
+                    }),
                 installedSkill: { rootFor: options.rootFor ?? rootFor },
               },
               transport,
             ),
-        ).pipe(
-          Effect.provide(Layer.effect(Library.Service, owner(options.rootFor, options.inventory))),
-          Effect.provide(http),
-          Effect.scoped,
-          owned,
-        ),
+        ).pipe(Effect.provide(http), Effect.scoped, owned),
     };
   };
   return {
@@ -335,7 +396,10 @@ export const devices = Effect.gen(function* () {
     /** The Registry loses the Library, as a deleted account or reset database would. */
     resetRemote: Effect.sync(() => server.reset()),
     remoteCollections: Effect.sync(
-      () => server.remote?.manifest.collections.map((item) => item.collection_id).sort() ?? [],
+      () =>
+        server.remote?.manifest.collections
+          .map((item) => item.collection_id)
+          .sort() ?? [],
     ),
   };
 });

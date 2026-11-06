@@ -1,8 +1,4 @@
-import {
-  syncLibraryApplicationLayer,
-  syncOutputContracts,
-  librarySyncCommand,
-} from "../library/sync.js";
+import { syncOutputContracts, librarySyncCommand } from "../library/sync.js";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { Registry } from "../registry/index.js";
 import { Option, Effect } from "effect";
@@ -107,7 +103,7 @@ export const librarySyncCliCommand = Command.make(
                   },
                 }
               : {}),
-        }).pipe(Effect.provide(syncLibraryApplicationLayer(configuration.inventory)));
+        });
         yield* renderer.result(
           result(
             "librarySync",

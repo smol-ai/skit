@@ -1,19 +1,37 @@
 import { Cause, Effect, Layer } from "effect";
 import { registryHttpLayer } from "../registry/registry-http.js";
 import { skitLayer, SkitConfiguration } from "@smolai/skit-core/platform";
-import { libraryApplicationLayer } from "../library/layer.js";
 
 import { commandFailure } from "./failure-classification.js";
 import { Renderer } from "../terminal/renderer.js";
 import { authorWorkspaceLayer, authorLayer } from "@smolai/skit-core/author";
+import * as Library from "@smolai/skit-core/library";
 
-export function renderCommandFailures<A, E, R>(program: Effect.Effect<A, E, R>) {
+/**
+ * The executable's one Library construction: unrouted, for commands whose operations do not
+ * install. Operations that install route their own Library from the configuration they are given.
+ */
+export const libraryApplicationLayer = Layer.unwrap(
+  Effect.map(SkitConfiguration, (paths) =>
+    Layer.mergeAll(
+      Library.layer({ home: paths.skitHome, routing: { _tag: "None" } }),
+      // Removing an authored Collection marks its workspace (A15); `author init` registers one.
+      authorWorkspaceLayer,
+    ).pipe(Layer.provideMerge(skitLayer)),
+  ),
+);
+
+export function renderCommandFailures<A, E, R>(
+  program: Effect.Effect<A, E, R>,
+) {
   return Effect.uninterruptibleMask((restore) =>
     restore(program).pipe(
       Effect.catchCause((cause) =>
         Cause.hasInterruptsOnly(cause)
           ? Effect.failCause(cause)
-          : Effect.flatMap(Renderer, (renderer) => renderer.failure(commandFailure(cause))),
+          : Effect.flatMap(Renderer, (renderer) =>
+              renderer.failure(commandFailure(cause)),
+            ),
       ),
     ),
   );
@@ -37,7 +55,9 @@ export const sourceApplicationLayer = Layer.merge(
 );
 
 /** Keep requirements inferred until the selected composition boundary supplies them. */
-export function handlePlatformCommand<E, R>(program: Effect.Effect<void, E, R>) {
+export function handlePlatformCommand<E, R>(
+  program: Effect.Effect<void, E, R>,
+) {
   return renderCommandFailures(Effect.scoped(program)).pipe(
     Effect.provide(authorWorkspaceLayer.pipe(Layer.provideMerge(skitLayer))),
   );
@@ -53,15 +73,18 @@ export function handleLibraryCommand<E, R>(program: Effect.Effect<void, E, R>) {
   );
 }
 
-export function handleRegistryCommand<E, R>(program: Effect.Effect<void, E, R>) {
+export function handleRegistryCommand<E, R>(
+  program: Effect.Effect<void, E, R>,
+) {
   return renderCommandFailures(Effect.scoped(program)).pipe(
     Effect.provide(registryApplicationLayer),
   );
 }
 
 export function handleSourceCommand<E, R>(program: Effect.Effect<void, E, R>) {
-  return renderCommandFailures(Effect.scoped(program).pipe(Effect.provide(sourceApplicationLayer)));
+  return renderCommandFailures(
+    Effect.scoped(program).pipe(Effect.provide(sourceApplicationLayer)),
+  );
 }
 
 export { commandFailure } from "./failure-classification.js";
-export { libraryApplicationLayer } from "../library/layer.js";

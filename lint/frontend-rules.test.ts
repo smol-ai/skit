@@ -60,7 +60,7 @@ async function lint(
 }
 
 describe("skit/frontend-no-library-service", () => {
-  test("rejects the Library service through namespace and named imports", async () => {
+  test("rejects the Library service and layer through namespace and named imports", async () => {
     expect(
       await lint(
         "frontend-no-library-service",
@@ -75,7 +75,7 @@ const a = Effect.gen(function* () {
 const b = Library.RestoreInvalid;
 `,
       ),
-    ).toEqual([3, 6]);
+    ).toEqual([3, 6, 7]);
   }, 30_000);
 });
 

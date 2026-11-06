@@ -2,6 +2,7 @@ import { type ResolvedAuth } from "../registry/index.js";
 import { Effect, Result } from "effect";
 
 import { syncLibrary } from "@smolai/skit-core/library/session";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { librarySyncApi } from "./sync/api.js";
 import type { LibraryInstallationConfiguration } from "./installation-configuration.js";
 import { officialRegistryOrigin } from "../registry/accounts.js";
@@ -33,6 +34,7 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <
   const progress = terminalSyncProgress(renderer);
   // With no Registry configured, sync asks the hosted Registry, which then asks for a login.
   const origin = auth.origin ?? officialRegistryOrigin;
+  const home = (yield* SkitConfiguration).skitHome;
   return yield* Effect.scoped(
     Effect.flatMap(
       librarySyncApi({
@@ -41,6 +43,7 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <
       }),
       (transport) =>
         syncLibrary(
+          home,
           {
             origin,
             ...(auth.token === undefined ? {} : { token: auth.token }),
@@ -86,4 +89,3 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <
 export { syncOutputContracts } from "./sync/output.js";
 
 export { renderLibrarySync } from "./sync/present.js";
-export { syncLibraryApplicationLayer } from "./sync/layer.js";
