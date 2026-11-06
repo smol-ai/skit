@@ -1,14 +1,13 @@
 import { LinkStat } from "@smolai/skit-core/platform";
 import { recoveryInspection } from "./helpers/recovery.js";
-import { saveRecoveryFiles } from "./helpers/recovery-files.js";
+import { recoveryFolderFixture, saveRecoveryFiles } from "./helpers/recovery-files.js";
 import { withLibraryOwner } from "./helpers/library-owner.js";
 import { dirname, join } from "node:path";
-import { Effect, FileSystem, Option } from "effect";
+import { Effect, FileSystem } from "effect";
 import { systemError } from "effect/PlatformError";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { Library } from "@smolai/skit-core/library";
-import { observePathEvidence, recoveryFingerprint } from "@smolai/skit-core";
 import * as MachineSettings from "@smolai/skit-core/machine-settings";
 import { skitLayer } from "@smolai/skit-core/platform";
 
@@ -115,11 +114,12 @@ it.effect.each([3, 2] as const)(
       const markdown = "---\nname: review\ndescription: review\n---\n\nOriginal bytes\n";
       yield* fs.makeDirectory(source, { recursive: true });
       yield* fs.writeFileString(join(source, "SKILL.md"), markdown);
+      expect(yield* fs.readDirectory(source)).toEqual(["SKILL.md"]);
       const home = yield* libraryHome({ home: join(root, "library"), inventoryHome: root });
       const operationId = "0f0e0d0c-0b0a-4908-8706-050403020100";
       const directory = join(home.home, "removed", operationId);
       const identity = (value: bigint) => (version === 3 ? String(value) : Number(value));
-      const observed = Option.getOrThrow(yield* observePathEvidence(source));
+      const observed = yield* recoveryFolderFixture(source);
       if (observed._tag !== "Directory")
         return yield* Effect.die("Expected legacy source directory");
       // Build the released journal format from public filesystem evidence, not its private reader.
@@ -136,7 +136,8 @@ it.effect.each([3, 2] as const)(
           dev: observed.dev,
           ino: observed.ino,
           hash: observed.contentHash,
-          unstampedHash: yield* recoveryFingerprint(source, "exclude"),
+          // This released fixture has only SKILL.md, so no ownership marker is excluded.
+          unstampedHash: observed.contentHash,
           marker: null,
           markerType: null,
           markerMode: null,
