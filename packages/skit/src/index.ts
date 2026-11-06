@@ -10,7 +10,6 @@ export {
   libraryStateRevision,
   libraryManifestFromLocalState,
 } from "./library/library-state.js";
-export { enabledAt } from "./library/enabled.js";
 export { InstalledSkill } from "./library/device-state.js";
 
 export { observePathEvidence, recoveryFingerprint } from "./library/folder-evidence.js";

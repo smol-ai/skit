@@ -1,5 +1,5 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { LibraryState, libraryStateRevision, enabledAt, enabledSkillIds } from "@smolai/skit-core";
+import { LibraryState, libraryStateRevision } from "@smolai/skit-core";
 import { inspectOwnershipMarker } from "@smolai/skit-core/library/inventory";
 import { type UsageReport } from "@smolai/skit-core/library/usage";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
@@ -977,9 +977,9 @@ it.effect(
       assert.instanceOf(failed, SetEnabledIncomplete);
       assert.strictEqual(failed.code, "OPERATION_FAILED");
       const state = yield* f.home.durable;
-      const enabled = enabledAt(state, { kind: "global" });
-      assert.ok(enabled);
-      assert.strictEqual(enabledSkillIds(state, enabled.enabled).length, 1);
+      const alpha = state.skills.find((skill) => skill.name === "alpha");
+      assert.ok(alpha);
+      assert.deepStrictEqual(state.enabled, [{ skill: alpha.skill_id }]);
       assert.strictEqual(failed.results[0]?.application.intent, "saved");
       assert.strictEqual(failed.results[0]?.application.status, "incomplete");
       assert.strictEqual(failed.results[0]?.application.revision, libraryStateRevision(state));
@@ -1140,9 +1140,9 @@ it.effect("a batch saves every intent together and reports the scope that cannot
     assert.strictEqual(yield* f.fs.exists(target), false);
     const state = yield* f.home.durable;
     assert.strictEqual(state.repositories.length, 1);
-    const enabled = enabledAt(state, { kind: "global" });
-    assert.ok(enabled);
-    assert.strictEqual(enabledSkillIds(state, enabled.enabled).length, 1);
+    const alpha = state.skills.find((skill) => skill.name === "alpha");
+    assert.ok(alpha);
+    assert.deepStrictEqual(state.enabled, [{ skill: alpha.skill_id }]);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -1173,9 +1173,9 @@ it.effect.each(["defect", "interruption"] as const)(
         assert.isFalse(Cause.hasFails(exit.cause));
       }
       const state = yield* f.home.durable;
-      const enabled = enabledAt(state, { kind: "global" });
-      assert.ok(enabled);
-      assert.strictEqual(enabledSkillIds(state, enabled.enabled).length, 1);
+      const alpha = state.skills.find((skill) => skill.name === "alpha");
+      assert.ok(alpha);
+      assert.deepStrictEqual(state.enabled, [{ skill: alpha.skill_id }]);
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -1287,9 +1287,9 @@ it.effect(
       assert.deepStrictEqual(current.installed_skills, []);
       assert.strictEqual(failed.results[0]?.application.revision, libraryStateRevision(current));
       assert.strictEqual(failed.results[0]?.application.status, "incomplete");
-      const enabled = enabledAt(current, { kind: "global" });
-      assert.ok(enabled);
-      assert.strictEqual(enabledSkillIds(current, enabled.enabled).length, 1);
+      const alpha = current.skills.find((skill) => skill.name === "alpha");
+      assert.ok(alpha);
+      assert.deepStrictEqual(current.enabled, [{ skill: alpha.skill_id }]);
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -1752,8 +1752,8 @@ for (const reverse of [false, true])
                       Schema.fromJsonString(LibraryState),
                     )(yield* f.fs.readFileString(to)).pipe(Effect.orDie);
                     accepted ||=
-                      enabledAt(state, local.scope)?.invocation_policies?.[alpha.skill_id] ===
-                      "explicit";
+                      state.repositories.find((entry) => entry.root === repository)
+                        ?.invocation_policies?.[alpha.skill_id] === "explicit";
                   }
                 }),
               makeTempDirectoryScoped: (options) => {
