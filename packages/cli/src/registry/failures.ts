@@ -383,11 +383,17 @@ export class ScopesInvalid
 export { PublicationBlocked } from "@smolai/skit-core/author";
 
 export class AuthorSyncRequired
-  extends Data.TaggedError("AuthorSyncRequired")<{ commandPath: string }>
+  extends Data.TaggedError("AuthorSyncRequired")<{ root: string }>
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
+  /** The workspace root as the user typed it, quoted only when the shell would need it. */
+  private get commandPath(): string {
+    return /^[A-Za-z0-9_./-]+$/.test(this.root)
+      ? this.root
+      : `'${this.root.replaceAll("'", `'\\''`)}'`;
+  }
   get remediation(): string {
     return `Run \`skit author sync ${this.commandPath} --apply\`, then publish again.`;
   }

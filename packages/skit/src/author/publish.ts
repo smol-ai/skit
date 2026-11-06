@@ -42,5 +42,5 @@ export const publishAuthorWorkspace = Effect.fn("Author.publish")(function* <E, 
   const archive = join(temporary, "release.zip");
   yield* createSkitArchive(absolute, archive);
   const bytes = yield* fs.readFile(archive);
-  return yield* publish({ version, revision, archive: bytes });
+  return yield* publish({ root, version, revision, archive: bytes });
 }, Effect.scoped);

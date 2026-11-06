@@ -1,6 +1,7 @@
 import { Data, Effect, Predicate, Schema } from "effect";
 import { HttpClient, HttpClientError, HttpClientRequest } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
+import type { RegistryTransportError } from "./registry-http.js";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 import {
   SkitContractError,
@@ -14,7 +15,6 @@ import {
   PublishBlockedResponse,
   ReleaseConflictResponse,
 } from "@smolai/skit-core/universal/api";
-import { RegistryHttp } from "./registry-http.js";
 import {
   authenticatedApiMiddleware,
   classifyRegistryApiFailure,
@@ -53,19 +53,21 @@ function stringField(body: unknown, field: string): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 /** Discovery, wire encoding and one upload, including body decoding, in the caller's Scope. */
-export const publishRelease = Effect.fn("Registry.publishRelease")(function* (input: {
-  remote: AuthorRemoteHome;
-  token: string;
-  version: string;
-  revision?: string;
-  archive: Uint8Array;
-  commandPath: string;
-}) {
-  const { remote, token, version, revision, commandPath } = input;
+export const publishRelease = Effect.fn("Registry.publishRelease")(function* (
+  http: HttpClient.HttpClient.With<RegistryTransportError>,
+  input: {
+    remote: AuthorRemoteHome;
+    token: string;
+    root: string;
+    version: string;
+    revision?: string;
+    archive: Uint8Array;
+  },
+) {
+  const { remote, token, root, version, revision } = input;
   const base = remote.origin.replace(/\/$/, "");
   const owner = remote.namespace;
   const slug = remote.skit;
-  const http = yield* (yield* RegistryHttp).client;
   const bytes = input.archive;
   const body = yield* parseContract("publish request", releasePublishRequestSchema, {
     version,
@@ -96,10 +98,9 @@ export const publishRelease = Effect.fn("Registry.publishRelease")(function* (in
     Effect.catch(() => Effect.succeed(undefined)),
   );
   if (discovered) publishUrl = discovered;
-  const transport = yield* (yield* RegistryHttp).client;
   const client = yield* HttpApiClient.makeWith(PublicationAuthenticatedApi, {
     transformResponse: markRegistryResponseDecoding,
-    httpClient: HttpClient.mapRequest(transport, HttpClientRequest.setUrl(publishUrl)),
+    httpClient: HttpClient.mapRequest(http, HttpClientRequest.setUrl(publishUrl)),
   }).pipe(Effect.provide(authenticatedApiMiddleware(token)));
   return yield* client.publication.publish({ params: { owner, slug }, payload: body }).pipe(
     Effect.catchTag(
@@ -156,7 +157,7 @@ export const publishRelease = Effect.fn("Registry.publishRelease")(function* (in
         });
       }
       if (Schema.is(IntegrityFailureResponse)(error) && error.error === "ARCHIVE_MANIFEST_MISMATCH")
-        return new AuthorSyncRequired({ commandPath });
+        return new AuthorSyncRequired({ root });
       if (classified.kind === "transport") return classified.error;
       if (classified.kind === "response_decode" || classified.kind === "request_encoding")
         return new SkitContractError({

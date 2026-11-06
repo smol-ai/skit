@@ -801,6 +801,7 @@ export interface AuthorRegistry<E, R, ProtocolError> {
     remote: RemoteHome,
   ) => Effect.Effect<
     (input: {
+      readonly root: string;
       readonly version: string;
       readonly revision?: string;
       readonly archive: Uint8Array;

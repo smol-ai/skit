@@ -14,7 +14,7 @@ export const publish = Effect.fn("CLI.publishWorkspace")(function* (
   return yield* publishAuthorWorkspace(
     root,
     { version, revision },
-    authorRegistry(options.home, root),
+    authorRegistry(options.home),
   );
 });
 

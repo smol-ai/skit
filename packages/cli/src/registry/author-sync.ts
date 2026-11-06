@@ -11,7 +11,7 @@ import type { AuthorRemoteHome, AuthorVisibility } from "@smolai/skit-core/autho
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 import { Moved, type Remote } from "@smolai/skit-core/sync";
 import { SkitContractError } from "@smolai/skit-core/api";
-import { Data, Effect, Option, Result, Schema, Stream, Scope } from "effect";
+import { Data, Effect, Option, Result, Schema, Stream } from "effect";
 import { HttpApiClient } from "effect/http-api";
 import {
   authenticatedApiMiddleware,
@@ -169,7 +169,7 @@ export const authorSyncApi = Effect.fn("Registry.authorSyncApi")(function* (inpu
 });
 
 /** Transport composition for Author; credentials are selected only for the named Registry. */
-export const authorRegistry = (home?: string, root = ".") => ({
+export const authorRegistry = (home?: string) => ({
   list: Effect.fn("Registry.listAuthor")(function* () {
     return yield* listAuthorInventory(yield* Registry.credentials({ home }));
   }),
@@ -188,20 +188,14 @@ export const authorRegistry = (home?: string, root = ".") => ({
         scopes: "library:sync,authoring:write,publication:write",
       });
     const token = credentials.token;
-    const commandPath = /^[A-Za-z0-9_./-]+$/.test(root)
-      ? root
-      : `'${root.replaceAll("'", `'\\''`)}'`;
-    const registry = yield* RegistryHttp;
-    const scope = yield* Scope.Scope;
+    // The client is built here, in the adapter's own context, so the upload needs nothing else.
+    const http = yield* (yield* RegistryHttp).client;
     return (input: {
+      readonly root: string;
       readonly version: string;
       readonly revision?: string;
       readonly archive: Uint8Array;
-    }) =>
-      publishRelease({ ...input, remote, token, commandPath }).pipe(
-        Effect.provideService(RegistryHttp, registry),
-        Effect.provideService(Scope.Scope, scope),
-      );
+    }) => publishRelease(http, { ...input, remote, token }).pipe(Effect.scoped);
   }),
   origin: Registry.credentials({ home }).pipe(Effect.map(({ origin }) => origin)),
   connect: Effect.fn("Registry.connectAuthor")(function* (input: {
