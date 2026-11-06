@@ -361,18 +361,20 @@ it.effect(
           ?.selected,
       );
       expect(selected.local_version_id).toBeUndefined();
-      const restoredSource = setupIntent(restored).sources.find(
+      const restoredSource = setupIntent(restored).sources?.find(
         (source) => source.collectionId === f.collectionId,
       );
-      const originalSource = setupIntent(f.before).sources.find(
+      const originalSource = setupIntent(f.before).sources?.find(
         (source) => source.collectionId === f.collectionId,
       );
       const observation = restored.imports.find(
         (sourceImport) => sourceImport.import_id === restoredSource?.importId,
-      )!;
+      );
       const original = f.before.imports.find(
         (sourceImport) => sourceImport.import_id === originalSource?.importId,
-      )!;
+      );
+      if (!observation || !original)
+        return yield* Effect.die("Missing selected source observation");
       expect(observation.collection_version_id).toBe(original.collection_version_id);
       expect(observation.lock_file_entries).toEqual([]);
       const copy = restored.collection_versions.find(
@@ -467,12 +469,13 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const originalSource = setupIntent(f.before).sources.find(
+      const originalSource = setupIntent(f.before).sources?.find(
         (source) => source.collectionId === f.collectionId,
       );
       const original = f.before.imports.find(
         (sourceImport) => sourceImport.import_id === originalSource?.importId,
-      )!;
+      );
+      if (!original) return yield* Effect.die("Missing selected source observation");
       const copy = f.before.collection_versions.find(
         (item) => item.collection_version_id === original.collection_version_id,
       )!;
