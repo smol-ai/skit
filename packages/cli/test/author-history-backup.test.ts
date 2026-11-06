@@ -7,6 +7,98 @@ import { authorLayer, captureWorkspace } from "./helpers/author-history.js";
 import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
+for (const connection of ["first", "connected"] as const)
+  it.effect.each(["file", "dangling"] as const)(
+    `backs up a ${connection} workspace's %s symlink without applying or following it`,
+    (targetKind) =>
+      Effect.gen(function* () {
+        const world = yield* makeAuthorSyncWorld();
+        if (connection === "connected") yield* world.connect();
+        const fs = yield* FileSystem.FileSystem;
+        const external = yield* fs.makeTempDirectoryScoped({ prefix: "skit-outside-author-" });
+        const target = join(external, targetKind);
+        if (targetKind === "file")
+          yield* fs.writeFileString(target, "outside bytes never uploaded");
+        const pointer = join(world.a.workspace, "pointer");
+        yield* fs.symlink(target, pointer);
+        const current = yield* world.server.current();
+        const revisions = yield* world.server.revisions();
+        const entries = yield* fs.readDirectory(world.a.workspace);
+        const preview = yield* world.a
+          .startSync(connection === "first", false)
+          .pipe(Effect.flatMap(Fiber.join), Effect.flip);
+        expect(preview).toMatchObject({
+          _tag: "TreeError",
+          reason: { _tag: "InvalidSymlink", path: "pointer" },
+        });
+        expect(yield* world.server.revisions()).toEqual(revisions);
+        expect(yield* fs.readDirectory(world.a.workspace)).toEqual(entries);
+        expect(yield* Effect.flip(world.a.sync(connection === "first"))).toMatchObject({
+          _tag: "TreeError",
+          reason: { _tag: "InvalidSymlink", path: "pointer" },
+        });
+        const observation = yield* captureWorkspace(world.a.workspace).pipe(
+          Effect.provide(authorLayer(world.a.home)),
+        );
+        const backedUp = (yield* world.server.revisions()).find(({ id }) => id === observation.id);
+        expect(backedUp?.tree.find(({ path }) => path === "pointer")).toEqual({
+          path: "pointer",
+          kind: "symlink",
+          target,
+        });
+        expect(
+          backedUp?.tree.some(
+            (entry) =>
+              entry.kind === "file" &&
+              new TextDecoder().decode(entry.bytes).includes("outside bytes never uploaded"),
+          ),
+        ).toBe(false);
+        expect(yield* world.server.current()).toBe(current);
+        expect(yield* fs.readLink(pointer)).toBe(target);
+        if (targetKind === "file")
+          expect(yield* fs.readFileString(target)).toBe("outside bytes never uploaded");
+        const events = yield* world.server.events();
+        expect(yield* Effect.flip(world.a.sync())).toMatchObject({ _tag: "TreeError" });
+        expect(yield* world.server.events()).toEqual(events);
+        expect(
+          (yield* world.server.revisions()).filter(({ id }) => id === observation.id),
+        ).toHaveLength(1);
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+  );
+
+it.effect.each(["first", "connected"] as const)(
+  "recovers a lost raw-backup response for a %s workspace that cannot be normalized",
+  (connection) =>
+    Effect.gen(function* () {
+      const world = yield* makeAuthorSyncWorld();
+      if (connection === "connected") yield* world.connect();
+      const fs = yield* FileSystem.FileSystem;
+      const pointer = join(world.a.workspace, "pointer");
+      yield* fs.symlink("missing-target", pointer);
+      const current = yield* world.server.current();
+      yield* world.server.dropNextResponse("a", "after-post");
+      expect(yield* Effect.flip(world.a.sync(connection === "first"))).toMatchObject({
+        _tag: "RegistryUnreachable",
+      });
+      const observation = yield* captureWorkspace(world.a.workspace).pipe(
+        Effect.provide(authorLayer(world.a.home)),
+      );
+      expect(
+        (yield* world.server.revisions()).filter(({ id }) => id === observation.id),
+      ).toHaveLength(1);
+      yield* world.a.restart();
+      expect(yield* Effect.flip(world.a.sync())).toMatchObject({
+        _tag: "TreeError",
+        reason: { _tag: "InvalidSymlink", path: "pointer" },
+      });
+      expect(
+        (yield* world.server.revisions()).filter(({ id }) => id === observation.id),
+      ).toHaveLength(1);
+      expect(yield* world.server.current()).toBe(current);
+      expect(yield* fs.readLink(pointer)).toBe("missing-target");
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
 it.effect(
   "reconnect backs up each offline A-B-A observation without making the old edits current",
   () =>

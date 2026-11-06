@@ -115,7 +115,7 @@ automatic resolution provenance are now implemented. Invalid Draft transport now
 records content diagnostics without blocking backup while publication stays
 strict.
 
-For workspaces that pass the current sync inventory checks, applying sync now uploads
+After a successful stable raw capture, applying sync now uploads
 the chronological raw observation chain before advancing current content. AuthorHistory
 stores the last acknowledged observation per workspace and remote, separately from the
 Sync checkpoint. Each content-addressed revision is posted before its acknowledgement
@@ -124,8 +124,11 @@ Archival posts never move the remote's current pointer. Unchanged passes skip ac
 history. Raw observations and normalized current-content revisions can have different
 trees and ancestry; the most recently stored revision is not necessarily current.
 
-This does not resolve the inventory-scope differences above: sync's current scan can
-still refuse content that local raw history retains. Restore and activity presentation, live
+Current-content normalization can still refuse that inventory, but its refusal no
+longer prevents raw backup: sync uploads the saved observation, then returns the
+original refusal without applying files or moving current. Preview keeps the refusal
+passive. This does not add support for applying symlinks or remove the protocol's
+path and transport limits. Restore and activity presentation, live
 installation, foreground watch, durable workspace-scoped bindings, guarded
 replacement, retention and real-server/Linux recovery proof remain in progress.
 This decision is not a claim that unattended sync is ready to ship.

@@ -1,4 +1,4 @@
-import { Effect, Option, Ref, Schema } from "effect";
+import { Effect, Option, Ref, Result, Schema } from "effect";
 import { authorSyncApi } from "../../registry/author-sync.js";
 import { join } from "node:path";
 import {
@@ -134,14 +134,16 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
   // number of times.
   const observe = Effect.gen(function* () {
     const observation = yield* history.capture(root);
-    return { observation, local: yield* scanAuthorSyncTree(root) };
+    return { observation, local: yield* scanAuthorSyncTree(root).pipe(Effect.result) };
   }).pipe(
     Effect.repeat({
-      until: ({ observation, local }) => local.verbatimHash === observation.treeHash,
+      until: ({ observation, local }) =>
+        Result.isFailure(local) || local.success.verbatimHash === observation.treeHash,
       times: 2,
     }),
     Effect.filterOrFail(
-      ({ observation, local }) => local.verbatimHash === observation.treeHash,
+      ({ observation, local }) =>
+        Result.isFailure(local) || local.success.verbatimHash === observation.treeHash,
       () => new LocalFilesChangedDuringSync(),
     ),
   );
@@ -179,11 +181,26 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
     applying !== undefined || Option.isNone(workspace.identity)
       ? undefined
       : { workspaceId: workspace.identity.value.workspaceId, ...(yield* observe) };
-  const local = applying?.local ?? previewed?.local ?? (yield* scanAuthorSyncTree(root));
-  const localHash =
-    applying === undefined && previewed === undefined
-      ? yield* History.treeHash(local.tree)
-      : yield* history.retain(local.tree);
+  const scan =
+    applying?.local ?? previewed?.local ?? Result.succeed(yield* scanAuthorSyncTree(root));
+  const scanned: Result.Result<
+    {
+      readonly local: Effect.Success<ReturnType<typeof scanAuthorSyncTree>>;
+      readonly localHash: History.TreeHash;
+    },
+    Effect.Error<ReturnType<typeof scanAuthorSyncTree>>
+  > = Result.isFailure(scan)
+    ? Result.fail(scan.failure)
+    : Result.succeed({
+        local: scan.success,
+        localHash:
+          applying === undefined && previewed === undefined
+            ? yield* History.treeHash(scan.success.tree)
+            : yield* history.retain(scan.success.tree),
+      });
+  // Preview cannot apply this inventory. Keep its refusal passive, before talking to the Registry.
+  if (applying === undefined && Result.isFailure(scanned))
+    return yield* Effect.fail(scanned.failure);
   // The engine's store reports what it cannot read back; that is unusable history.
   const storeFailure = (error: History.StoreError) =>
     Effect.fail(
@@ -212,7 +229,8 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
     if (destination._tag === "NewRemote") {
       yield* api.requireAvailable;
     }
-    if (applying === undefined)
+    if (applying === undefined) {
+      const { local } = yield* Effect.fromResult(scanned);
       return {
         status: "first_sync_ready",
         changed: false,
@@ -221,6 +239,7 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
         file_count: local.tree.length,
         effects: ["create_skit", "save_revision", "record_remote_home"],
       } satisfies AuthorSyncResult;
+    }
     // A crash anywhere from here replays from the Connecting checkpoint. The owner returns the
     // connection it saved; anything but Connecting is not what this step planned.
     const pending =
@@ -265,6 +284,19 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
     });
   }
 
+  if (Result.isFailure(scanned)) {
+    // Normalization governs current-content writes, not raw backup. A stable observation can
+    // still be retained remotely even when its symlinks or normalized names cannot be applied.
+    if (applying !== undefined)
+      yield* backupAuthorHistory(
+        applying.lease,
+        { workspaceId: applying.workspaceId, locator },
+        applying.observation,
+        registry,
+      ).pipe(Effect.catchIf(Schema.is(History.StoreError), storeFailure));
+    return yield* Effect.fail(scanned.failure);
+  }
+  const { local, localHash } = scanned.success;
   const state =
     destination._tag === "ConnectedRemote" ? savedState : Sync.Idle.make({ base: null });
   const planned = yield* Sync.loadPlanInput({
