@@ -242,6 +242,22 @@ export const makeAuthorSyncServer = Effect.fn("Test.makeAuthorSyncServer")(funct
     transport,
     /** Every revision the server recorded, in the order it first accepted them. */
     revisions: () => Ref.get(skit).pipe(Effect.map((state) => state.revisions)),
+    /** Only current's ancestry, in acceptance order; archival observations remain in revisions(). */
+    currentHistory: () =>
+      Ref.get(skit).pipe(
+        Effect.map((state) => {
+          const revisions = new Map(state.revisions.map((revision) => [revision.id, revision]));
+          const seen = new Set<History.RevisionId>();
+          const pending = state.current === null ? [] : [state.current];
+          for (let index = 0; index < pending.length; index++) {
+            const id = pending[index]!;
+            if (seen.has(id)) continue;
+            seen.add(id);
+            pending.push(...(revisions.get(id)?.revision.parents ?? []));
+          }
+          return state.revisions.filter(({ id }) => seen.has(id));
+        }),
+      ),
     current: () => Ref.get(skit).pipe(Effect.map((state) => state.current)),
     events: () => Ref.get(events),
     setOnline: (device: AuthorDevice, online: boolean) =>

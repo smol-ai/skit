@@ -44,11 +44,11 @@ it.effect("backs up invalid descriptor bytes locally and online without refusing
   Effect.gen(function* () {
     const world = yield* makeAuthorSyncWorld();
     yield* world.connect();
-    const remoteBefore = (yield* world.server.revisions()).length;
+    const remoteBefore = (yield* world.server.currentHistory()).length;
     yield* world.a.edit("skit.json", "{unfinished descriptor", "remote");
     expect((yield* world.a.sync()).status).toBe("pushed");
     expect(yield* world.missing(yield* world.copies())).toEqual([]);
-    expect((yield* world.server.revisions()).length).toBe(remoteBefore + 1);
+    expect((yield* world.server.currentHistory()).length).toBe(remoteBefore + 1);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 

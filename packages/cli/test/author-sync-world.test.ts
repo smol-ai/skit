@@ -65,7 +65,7 @@ it.effect.each(["before-create", "after-create", "after-post", "after-move"] as 
       expect(yield* fs.exists(join(world.a.workspace, "skit.remote.json"))).toBe(true);
       expect(yield* fs.exists(join(world.a.workspace, ".skit/connection.json"))).toBe(false);
       expect(yield* world.server.current()).not.toBeNull();
-      expect(yield* world.server.revisions()).toHaveLength(1);
+      expect(yield* world.server.currentHistory()).toHaveLength(1);
       expect((yield* world.a.sync()).status).toBe("up_to_date");
     }).pipe(Effect.provide(testPlatformLayer)),
 );
@@ -86,7 +86,7 @@ it.effect(
       });
       expect(yield* fs.exists(join(world.a.workspace, ".skit/connection.json"))).toBe(false);
       expect(yield* fs.exists(join(world.a.workspace, "skit.remote.json"))).toBe(false);
-      expect(yield* world.server.revisions()).toHaveLength(1);
+      expect(yield* world.server.currentHistory()).toHaveLength(1);
     }).pipe(Effect.provide(testPlatformLayer)),
 );
 
@@ -121,7 +121,7 @@ it.effect("a restart while creation is awaiting its response resumes the saved r
     yield* gate.reached();
     yield* world.a.restart();
     yield* world.a.sync();
-    expect(yield* world.server.revisions()).toHaveLength(1);
+    expect(yield* world.server.currentHistory()).toHaveLength(1);
     expect((yield* world.a.sync()).status).toBe("up_to_date");
   }).pipe(Effect.provide(testPlatformLayer)),
 );
@@ -180,7 +180,7 @@ it.effect("first connection recovers when saving the portable remote home fails"
     yield* fs.remove(remote, { recursive: true });
     yield* world.a.restart();
     expect((yield* world.a.sync()).status).toBe("created");
-    expect(yield* world.server.revisions()).toHaveLength(1);
+    expect(yield* world.server.currentHistory()).toHaveLength(1);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
@@ -513,14 +513,17 @@ it.effect.each(["repository", "plain"] as const)(
       yield* world.a.edit("notes/a.txt", "remote authored change\n");
       yield* world.a.sync();
       yield* world.b.edit("notes/b.txt", "local authored change\n");
+      yield* world.b.backUp();
       const eventStart = (yield* world.server.events()).length;
       expect((yield* world.b.sync()).status).toBe("merged");
-      // B posted its own input and the merge.
+      // B's current graph contains its input and merge, independently of raw backup posts.
+      const current = yield* world.server.currentHistory();
+      expect(current.at(-1)?.revision.parents).toHaveLength(2);
       expect(
         (yield* world.server.events())
           .slice(eventStart)
-          .filter((event) => event === "b:after-post"),
-      ).toHaveLength(2);
+          .filter((event) => event === "b:before-move"),
+      ).toHaveLength(1);
       for (const device of [world.a, world.b]) {
         for (const stored of yield* storedTreesAt(device.home)) {
           expect(
@@ -595,7 +598,10 @@ it.effect("every stored revision names its credential, device and first-observed
     yield* world.a.sync();
     yield* world.b.sync();
     expect(a.revision.author.device).not.toBe(b.revision.author.device);
-    const [aInput, bInput, merge] = (yield* world.server.revisions()).slice(-3);
+    const archived = yield* world.server.revisions();
+    expect(archived.find(({ id }) => id === a.id)).toMatchObject({ revision: a.revision });
+    expect(archived.find(({ id }) => id === b.id)).toMatchObject({ revision: b.revision });
+    const [aInput, bInput, merge] = (yield* world.server.currentHistory()).slice(-3);
     expect(aInput).toMatchObject({ device: "a", revision: { author: a.revision.author } });
     expect(bInput).toMatchObject({ device: "b", revision: { author: b.revision.author } });
     // B's merge names A's revision, which was current, and B's own input as its parents.
@@ -741,10 +747,10 @@ it.effect("independent insertions in the same skill merge through real device sy
       "local-history",
     );
     yield* world.a.sync();
-    const beforeMerge = (yield* world.server.revisions()).length;
+    const beforeMerge = (yield* world.server.currentHistory()).length;
     // A clean merge decides nothing.
     expect(yield* world.b.sync()).toMatchObject({ status: "merged", choices: [] });
-    const afterMerge = yield* world.server.revisions();
+    const afterMerge = yield* world.server.currentHistory();
     expect(afterMerge).toHaveLength(beforeMerge + 2);
     // B's own input is posted before the merge built from it.
     expect(textAt(afterMerge.at(-2)!.tree, path)).toBe(
@@ -821,7 +827,7 @@ it.effect("a device that loses the move to another device merges in the same syn
     const theirs = yield* world.server.current();
     yield* gate.release();
     expect(yield* Fiber.join(pending)).toMatchObject({ status: "merged" });
-    const merge = (yield* world.server.revisions()).at(-1)!;
+    const merge = (yield* world.server.currentHistory()).at(-1)!;
     expect(merge.revision.parents[0]).toBe(theirs);
     expect(yield* world.server.current()).toBe(merge.id);
     expect(yield* world.a.read("notes/b.txt")).toBe("B's version\n");
@@ -883,7 +889,7 @@ it.effect("invalid authored content syncs alongside independent changes on anoth
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect("an interrupted pull sends nothing and the next sync pulls again", () =>
+it.effect("an interrupted pull never moves current and the next sync pulls again", () =>
   Effect.gen(function* () {
     const world = yield* makeAuthorSyncWorld();
     const fs = yield* FileSystem.FileSystem;
@@ -894,7 +900,7 @@ it.effect("an interrupted pull sends nothing and the next sync pulls again", () 
     yield* fs.remove(join(world.b.workspace, "notes/deleted.txt"));
     yield* world.b.edit("notes/new.txt", "remote addition");
     yield* world.b.sync();
-    const revisions = (yield* world.server.revisions()).length;
+    const revisions = (yield* world.server.currentHistory()).length;
     const beforePull = (yield* world.server.events()).length;
     const reachedApply = yield* Deferred.make<void>();
     const interrupted = yield* world.a.startSync().pipe(
@@ -912,9 +918,9 @@ it.effect("an interrupted pull sends nothing and the next sync pulls again", () 
     yield* Deferred.await(reachedApply);
     yield* world.a.restart();
     expect(Exit.hasInterrupts(yield* Fiber.await(interrupted))).toBe(true);
-    // Only reads: nothing was posted or moved.
+    // Backup may archive observations of interrupted application; current is never moved.
     const reads = (events: ReadonlyArray<string>) =>
-      events.every((event) => event === "a:before-current");
+      events.every((event) => event !== "a:before-move" && event !== "a:after-move");
     expect(reads((yield* world.server.events()).slice(beforePull))).toBe(true);
     const beforeRetry = (yield* world.server.events()).length;
     expect((yield* world.a.sync()).status).toBe("pulled");
@@ -924,7 +930,7 @@ it.effect("an interrupted pull sends nothing and the next sync pulls again", () 
     yield* expectConverged(world);
     expect((yield* world.a.sync()).status).toBe("up_to_date");
     expect((yield* world.b.sync()).status).toBe("up_to_date");
-    expect((yield* world.server.revisions()).length).toBe(revisions);
+    expect((yield* world.server.currentHistory()).length).toBe(revisions);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
@@ -964,6 +970,7 @@ it.effect("a lost post response is posted again, which records nothing new", () 
     const world = yield* makeAuthorSyncWorld();
     yield* world.connect();
     yield* world.a.edit("notes/a.txt", "posted before disconnect\n", "remote");
+    yield* world.a.backUp();
     yield* world.server.dropNextResponse("a", "after-post");
     expect(Result.isFailure(yield* Effect.result(world.a.sync()))).toBe(true);
     const posted = yield* world.server.revisions();
@@ -1067,20 +1074,20 @@ it.effect("edit beats local deletion, and the deleting tree stays on the server"
     yield* fs.remove(join(world.b.workspace, "notes/shared.txt"));
     yield* world.a.edit("notes/shared.txt", "remote edit", "remote");
     yield* world.a.sync();
-    const before = (yield* world.server.revisions()).length;
+    const before = (yield* world.server.currentHistory()).length;
     expect(yield* world.b.sync()).toMatchObject({
       status: "merged",
       choices: [{ path: "notes/shared.txt", kind: "delete_modify", kept: "remote" }],
     });
     expect(yield* world.b.read("notes/shared.txt")).toBe("remote edit");
-    const revisions = yield* world.server.revisions();
+    const revisions = yield* world.server.currentHistory();
     expect(revisions).toHaveLength(before + 2);
     const [deleting, merge] = revisions.slice(-2);
     expect(deleting && textAt(deleting.tree, "notes/shared.txt")).toBeUndefined();
     expect(merge && textAt(merge.tree, "notes/shared.txt")).toBe("remote edit");
     // The merge kept A's files exactly, so A has nothing to pull.
     expect((yield* world.a.sync()).status).toBe("up_to_date");
-    expect((yield* world.server.revisions()).length).toBe(before + 2);
+    expect((yield* world.server.currentHistory()).length).toBe(before + 2);
     yield* expectConverged(world);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
@@ -1093,6 +1100,7 @@ it.effect("a local save while posting the merge input prevents stale application
     yield* world.a.sync();
     yield* world.b.edit("notes/b.txt", "local B", "remote");
     const current = yield* world.server.current();
+    yield* world.b.backUp();
     const gate = yield* world.server.gate("b", "after-post");
     const pending = yield* world.b.startSync();
     yield* gate.reached();
@@ -1146,6 +1154,7 @@ it.effect("an editor save during a push is kept locally and sent by the next syn
     const fs = yield* FileSystem.FileSystem;
     yield* world.connect();
     yield* world.a.edit("notes/a.txt", "first save\n", "remote");
+    yield* world.a.backUp();
     const gate = yield* world.server.gate("a", "after-post");
     const pending = yield* world.a.startSync();
     yield* gate.reached();
@@ -1179,6 +1188,7 @@ it.effect("a merge stopped by a newer edit keeps remote changes for the next mer
     yield* fs.remove(join(world.b.workspace, "notes/deleted.txt"));
     yield* world.b.sync();
     yield* world.a.edit("notes/a.txt", "first local save");
+    yield* world.a.backUp();
     const gate = yield* world.server.gate("a", "after-post");
     const pending = yield* world.a.startSync();
     yield* gate.reached();
@@ -1196,6 +1206,7 @@ it.effect("a merge stopped by a newer edit keeps remote changes for the next mer
     // A's newer edit was posted as an edit of the base A last synced, before any merge.
     const input = (yield* world.server.revisions()).find(
       ({ tree }) =>
+        tree.every((entry) => entry.kind === "file") &&
         textAt(tree, "notes/a.txt") === "newer local save" &&
         textAt(tree, "notes/remote.txt") === undefined,
     );
@@ -1311,6 +1322,7 @@ it.effect("repeatedly interrupted pulls keep real edits and finish remote deleti
     // The real edit is also recorded on its original base without any downloaded additions.
     const input = (yield* world.server.revisions()).find(
       ({ tree }) =>
+        tree.every((entry) => entry.kind === "file") &&
         textAt(tree, "notes/edited.txt") === "remote: original\nlocal: real local edit\n" &&
         textAt(tree, "notes/1.txt") === undefined &&
         textAt(tree, "notes/2.txt") === undefined,
@@ -1424,6 +1436,7 @@ it.effect.prop(
     Effect.gen(function* () {
       const world = yield* makeAuthorSyncWorld();
       yield* world.connect();
+      const beforeOffline = yield* world.server.revisions();
       yield* world.server.setOnline("a", false);
       yield* world.server.setOnline("b", false);
       const expected = new Map<string, string>();
@@ -1436,7 +1449,7 @@ it.effect.prop(
         expected.set(path, Buffer.from(content).toString("utf8"));
       }
       // Nothing has been sent. Superseded versions must already be readable locally.
-      expect((yield* world.server.revisions()).length).toBe(1);
+      expect(yield* world.server.revisions()).toEqual(beforeOffline);
       yield* expectRecoverable(world);
       yield* world.server.setOnline("a", true);
       yield* world.server.setOnline("b", true);
@@ -1505,7 +1518,7 @@ it.effect.prop(
         yield* expectRecoverable(world);
       }
     }).pipe(Effect.provide(testPlatformLayer)),
-  { arbitrary: { runs: 8, seed: "author-sync-overlapping-v1" } },
+  { timeout: 60_000, arbitrary: { runs: 8, seed: "author-sync-overlapping-v1" } },
 );
 
 it.effect("an empty workspace blocks deletion until that removal is allowed", () =>

@@ -33,6 +33,7 @@ import * as Sync from "@smolai/skit-core/sync";
 import { MissingRequirement } from "../../commands/input-failures.js";
 
 import { parseAuthorDestination, skitLocator } from "../destination.js";
+import { backupAuthorHistory } from "./backup.js";
 
 /** A first sync names its destination and visibility; it is persisted only once connecting. */
 type Destination =
@@ -299,6 +300,11 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
         return { status: "ready", changed: false, action: "merge" } satisfies AuthorSyncResult;
     }
   const key = { workspaceId: applying.workspaceId, locator };
+  if (planned._tag === "Blocked" && !options.allowLargeDeletion)
+    return { status: "blocked", changed: false, ...planned.removal } satisfies AuthorSyncResult;
+  yield* backupAuthorHistory(applying.lease, key, applying.observation, registry).pipe(
+    Effect.catchIf(Schema.is(History.StoreError), storeFailure),
+  );
   // The checkpoint last saved, which every step names as its `from`.
   const last = yield* Ref.make<Sync.SyncState>(state);
   const { outcome } = yield* Sync.run({
@@ -340,7 +346,10 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* (
   if (outcome.status === "blocked")
     return { status: "blocked", changed: false, ...outcome.removal } satisfies AuthorSyncResult;
   // Record what sync wrote as this workspace's latest observation.
-  yield* history.capture(root);
+  const completed = yield* history.capture(root);
+  yield* backupAuthorHistory(applying.lease, key, completed, registry).pipe(
+    Effect.catchIf(Schema.is(History.StoreError), storeFailure),
+  );
   if (destination._tag !== "ConnectedRemote")
     return {
       status: "created",

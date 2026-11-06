@@ -1,6 +1,7 @@
 /** Device-local author owners and their public vocabulary. Storage and tree writes stay private. */
 export {
   type WorkspaceRoot,
+  type SyncKey,
   WorkspaceId,
   Identity,
   AuthorSyncStateInvalid,

@@ -3,6 +3,10 @@ import { Effect, Exit, Fiber, FileSystem, Layer, Ref, Scope } from "effect";
 import { libraryApplicationLayer } from "../../src/application.js";
 import { LinkStat } from "@smolai/skit-core";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
+import { AuthorWorkspace, AuthorHistory } from "@smolai/skit-core/author";
+import { Option } from "effect";
+import { backupAuthorHistory } from "../../src/author/sync/backup.js";
+import { authorSyncApi } from "../../src/registry/author-sync.js";
 import type { PlatformError } from "effect/PlatformError";
 import { syncAuthorWorkspace } from "../../src/author/sync/workflow.js";
 import { authorLayer, storedTreesAt } from "./author-history.js";
@@ -17,7 +21,7 @@ const remote = {
   origin: "https://registry.example",
   namespace: "swyx",
   skit: "tools",
-};
+} as const;
 
 /**
  * Owns isolated real directories and restartable runtime scopes. A restart closes fibers but
@@ -113,6 +117,34 @@ export const makeAuthorSyncWorld = Effect.fn("Test.makeAuthorSyncWorld")(functio
       workspace,
       home,
       startSync,
+      /** Complete archival uploads before a test pauses the separate current-content protocol. */
+      backUp: () =>
+        Effect.gen(function* () {
+          const workspaces = yield* AuthorWorkspace;
+          const root = yield* workspaces.resolveRoot(workspace);
+          const lease = yield* workspaces.acquire(root);
+          const identity = yield* workspaces.readIdentity(root);
+          if (Option.isNone(identity))
+            return yield* Effect.die("Expected connected fixture identity");
+          const observation = yield* (yield* AuthorHistory).capture(root);
+          const api = yield* authorSyncApi({
+            remote,
+            locator: "skit://registry.example/swyx/tools",
+          });
+          yield* backupAuthorHistory(
+            lease,
+            {
+              workspaceId: identity.value.workspaceId,
+              locator: "skit://registry.example/swyx/tools",
+            },
+            observation,
+            api.remote,
+          );
+        }).pipe(
+          Effect.provide(registryHttpLayer(testHttpClientLayer(server.transport(name)))),
+          Effect.provide(authorLayer(home)),
+          Effect.scoped,
+        ),
       sync: (first = false, allowLargeDeletion = false) =>
         startSync(first, true, allowLargeDeletion).pipe(Effect.flatMap(Fiber.join)),
       preview: () => startSync(false, false).pipe(Effect.flatMap(Fiber.join)),

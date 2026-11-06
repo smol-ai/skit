@@ -113,7 +113,19 @@ syntax protection, retained-revision endpoints, acceptance/current pointers and
 migration/readback tests exist. Bound-workspace true-merge archival upload and
 automatic resolution provenance are now implemented. Invalid Draft transport now
 records content diagnostics without blocking backup while publication stays
-strict. Older-observation archival upload, restore and activity presentation, live
+strict.
+
+For workspaces that pass the current sync inventory checks, applying sync now uploads
+the chronological raw observation chain before advancing current content. AuthorHistory
+stores the last acknowledged observation per workspace and remote, separately from the
+Sync checkpoint. Each content-addressed revision is posted before its acknowledgement
+is flushed; an unknown response or interrupted acknowledgement repeats the same revision.
+Archival posts never move the remote's current pointer. Unchanged passes skip acknowledged
+history. Raw observations and normalized current-content revisions can have different
+trees and ancestry; the most recently stored revision is not necessarily current.
+
+This does not resolve the inventory-scope differences above: sync's current scan can
+still refuse content that local raw history retains. Restore and activity presentation, live
 installation, foreground watch, durable workspace-scoped bindings, guarded
 replacement, retention and real-server/Linux recovery proof remain in progress.
 This decision is not a claim that unattended sync is ready to ship.

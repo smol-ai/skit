@@ -127,13 +127,14 @@ it.effect("first sync previews then records one remote home without publishing i
       remote_home_recorded: true,
       published: false,
     });
-    // One create, one revision and one move: nothing else, and nothing published.
+    // Create, preserve the raw observation, send the normalized current revision, then move. No Release.
     expect(writes).toEqual([
       "POST /api/skits",
       "POST /api/skits/swyx/tools/revisions",
+      "POST /api/skits/swyx/tools/revisions",
       "PUT /api/skits/swyx/tools/current",
     ]);
-    const [created] = yield* server.revisions();
+    const [created] = yield* server.currentHistory();
     expect(yield* server.current()).toBe(created?.id);
     const paths = created?.tree.map((entry) => entry.path) ?? [];
     expect(paths).not.toContain("skit.remote.json");

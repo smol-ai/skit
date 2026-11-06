@@ -140,7 +140,7 @@ for (const connection of ["first", "connected"] as const)
       // and finish without another destination prompt or duplicate revision.
       yield* world.a.sync();
       expect(yield* world.a.files()).toEqual(before);
-      expect(yield* world.server.revisions()).toHaveLength(connection === "first" ? 1 : 2);
+      expect(yield* world.server.currentHistory()).toHaveLength(connection === "first" ? 1 : 2);
       expect((yield* world.a.sync()).status).toBe("up_to_date");
       expect(yield* world.missing(yield* world.copies())).toEqual([]);
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
