@@ -1,4 +1,4 @@
-import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
+import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { makeMachineId } from "@smolai/skit-core/universal/consumer";
 import {
   createSkitArchive,
@@ -15,7 +15,7 @@ import { FetchHttpClient, type HttpClient } from "effect/http";
 
 import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { testHttpClientLayer, type TestHttpHandler } from "./http-test-client.js";
-import { RegistryHttp, registryHttpLayer } from "../../src/registry/registry-http.js";
+import { registryHttpLayer } from "../../src/registry/registry-http.js";
 
 import { Library } from "@smolai/skit-core/library";
 
@@ -115,12 +115,7 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
           registryHttpLayer(transport),
         ),
       ),
-    ) as Effect.Effect<
-      A,
-      E,
-      | Exclude<R, SkitConfiguration | Library.Service | HttpClient.HttpClient | RegistryHttp>
-      | FileSystem.FileSystem
-    >;
+    );
   const snapshot = owned(Effect.flatMap(Library.Service, (library) => library.read));
   const durable = Effect.flatMap(snapshot, (current): Effect.Effect<LibraryFixtureState> =>
     current._tag === "Present"
