@@ -68,14 +68,6 @@
       "types": "./dist/history/history.d.ts",
       "import": "./dist/history/history.js"
     },
-    "./merge": {
-      "types": "./dist/sync/merge.d.ts",
-      "import": "./dist/sync/merge.js"
-    },
-    "./sync": {
-      "types": "./dist/sync/sync.d.ts",
-      "import": "./dist/sync/sync.js"
-    },
     "./library/source": {
       "types": "./dist/library/source.d.ts",
       "import": "./dist/library/source.js"

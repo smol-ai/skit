@@ -42,11 +42,18 @@ export {
 } from "../artifact/skit.js";
 export { createSkitArchive } from "../artifact/archive.js";
 export { type DescriptorFailure } from "../artifact/failures.js";
-export type { DescriptorMalformed, ReadmeFrontmatterMissing } from "../artifact/failures.js";
+export type {
+  DescriptorMalformed,
+  ReadmeFrontmatterMissing,
+} from "../artifact/failures.js";
 export { SkitValidationDiagnostic } from "../artifact/validation-diagnostic.js";
 export { InvocationMetadataGeneration } from "./invocation/generation.js";
 
-export { authorLayer, authorWorkspaceLayer, readAuthorWorkspace } from "./operations.js";
+export {
+  authorLayer,
+  authorWorkspaceLayer,
+  readAuthorWorkspace,
+} from "./operations.js";
 export { syncAuthorWorkspace } from "./sync.js";
 export { initializeAuthorWorkspace } from "./initialize.js";
 export { removeAuthorCollection } from "./remove.js";
@@ -54,6 +61,8 @@ export { generateAuthorInvocation } from "./invocation.js";
 export { parseAuthorDestination } from "./destination.js";
 export { AuthorSyncResult } from "./sync-result.js";
 export type { AuthorRegistry } from "./transport.js";
+// The Registry side of one SKIT and the one protocol failure an adapter raises itself.
+export { Moved, type Remote as SyncRemote } from "../sync/sync.js";
 export { DestinationExistsWithoutHistory } from "./failures.js";
 
 export { captureAuthorWorkspace } from "./operations.js";

@@ -376,16 +376,6 @@ export const coreExports = {
     purpose: "Content-addressed trees, revisions and store protocol shared by Author and Library.",
     source: "packages/skit/src/history/history.ts",
   },
-  "./merge": {
-    kind: "shared",
-    purpose: "Three-way value merging with explicit conflict choices; owns no persisted state.",
-    source: "packages/skit/src/sync/merge.ts",
-  },
-  "./sync": {
-    kind: "shared",
-    purpose: "Generic revision synchronization over caller-provided stores and remote protocols.",
-    source: "packages/skit/src/sync/sync.ts",
-  },
   "./library/inventory": {
     kind: "owner",
     owners: ["Library"],

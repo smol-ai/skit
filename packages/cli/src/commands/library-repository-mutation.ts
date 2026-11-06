@@ -7,7 +7,7 @@ import { CommandMetadata } from "./metadata.js";
 import { repositoryOutputContracts } from "../library/repository.js";
 import { homeFlag, jsonFlag } from "./parameters.js";
 import { Renderer } from "../terminal/renderer.js";
-import * as MachineSettings from "@smolai/skit-core/machine-settings";
+import { decideRepository } from "@smolai/skit-core/library/session";
 import { encodeResult as result } from "./encode-result.js";
 
 const path = Argument.String("path");
@@ -24,7 +24,7 @@ export const makeRepositoryCommand = (name: "watch" | "ignore" | "forget") =>
         Effect.gen(function* () {
           const renderer = yield* Renderer;
           const repository = resolve(input.path);
-          const config = yield* MachineSettings.setRepositoryDecision(
+          const { repositories } = yield* decideRepository(
             selectedHome,
             repository,
             name === "watch" ? "watched" : name === "ignore" ? "ignored" : undefined,
@@ -33,7 +33,7 @@ export const makeRepositoryCommand = (name: "watch" | "ignore" | "forget") =>
             result("repositoryPolicy", repositoryOutputContracts.repositoryPolicy, {
               action: name,
               path: repository,
-              repositories: config.repositories,
+              repositories,
             }),
           );
         }),

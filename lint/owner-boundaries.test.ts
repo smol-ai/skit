@@ -595,13 +595,10 @@ describe("author lifecycle boundary", () => {
       'import { AuthorWorkspace } from "../../../skit/src/author/workspace.js";',
       'export * from "../../../skit/src/author/history.js";',
       'const history = import("../../../skit/src/author/history.js");',
-      'import { run as execute } from "@smolai/skit-core/sync";',
-      'import * as Engine from "@smolai/skit-core/sync"; Engine.run({});',
-      'import * as Engine from "@smolai/skit-core/sync"; const { loadPlanInput: load } = Engine;',
-      'export { plan as planSync } from "@smolai/skit-core/sync";',
-      'export * from "@smolai/skit-core/sync";',
-      'export * as Engine from "@smolai/skit-core/sync";',
-      'const engine = import("@smolai/skit-core/sync");',
+      'import { run as execute } from "../../../skit/src/sync/sync.js";',
+      'import * as Engine from "../../../skit/src/sync/sync.js"; Engine.run({});',
+      'export * from "../../../skit/src/sync/sync.js";',
+      'const engine = import("../../../skit/src/sync/sync.js");',
     ])
       expect(
         await reported(source, "owner-boundaries", "packages/cli/src/author/workflow.ts"),
@@ -612,7 +609,7 @@ describe("author lifecycle boundary", () => {
       'import { syncAuthorWorkspace, authorLayer, readAuthorWorkspace } from "@smolai/skit-core/author";',
       'import * as Author from "@smolai/skit-core/author"; Author.initializeAuthorWorkspace(".", false, "home");',
       'import type { AuthorRegistry, AuthorWorkspace } from "@smolai/skit-core/author";',
-      'import { Moved, type Remote } from "@smolai/skit-core/sync";',
+      'import { Moved, type SyncRemote } from "@smolai/skit-core/author";',
     ])
       expect(
         await reported(source, "owner-boundaries", "packages/cli/src/author/workflow.ts"),

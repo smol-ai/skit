@@ -79,6 +79,10 @@ export { SyncConflictDetail } from "./internal/sync/conflict.js";
 export { syncLibrary } from "./internal/sync/library-sync.js";
 export { type SyncPhase, type SyncProgress } from "./internal/sync/progress.js";
 export {
+  readRepositoryDecisions,
+  decideRepository,
+} from "./internal/session/repositories.js";
+export {
   listLibraryRecovery,
   inspectLibraryRecovery,
   openRecoveryRestore,

@@ -6,7 +6,7 @@ import { CommandMetadata } from "./metadata.js";
 import { repositoryOutputContracts } from "../library/repository.js";
 import { homeFlag, jsonFlag } from "./parameters.js";
 import { Renderer } from "../terminal/renderer.js";
-import * as MachineSettings from "@smolai/skit-core/machine-settings";
+import { readRepositoryDecisions } from "@smolai/skit-core/library/session";
 import { encodeResult as result } from "./encode-result.js";
 
 const flags = { home: homeFlag, json: jsonFlag };
@@ -19,12 +19,12 @@ export const repositoryListCliCommand = Command.make("list", flags, (input) =>
     return yield* handlePlatformCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
-        const config = yield* MachineSettings.read(selectedHome);
+        const { repositories } = yield* readRepositoryDecisions(selectedHome);
         yield* renderer.result(
           result("repositoryPolicy", repositoryOutputContracts.repositoryPolicy, {
             action: "list",
             path: "",
-            repositories: [...config.repositories],
+            repositories,
           }),
         );
       }),
