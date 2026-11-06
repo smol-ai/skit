@@ -23,7 +23,7 @@ import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.j
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import { renderContract } from "../src/commands/output-presenters.js";
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { openSyncSession } from "@smolai/skit-core/library/session";
 import {
   deterministicTreeHash,

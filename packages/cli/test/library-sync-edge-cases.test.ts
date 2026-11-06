@@ -3,7 +3,7 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Context, Effect, Exit, Layer } from "effect";
 import { join } from "node:path";
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { setupIntent } from "@smolai/skit-core/library/setup";
 import { inspectOwnershipMarker } from "@smolai/skit-core/library/inventory";
 import { makeImportId, type SkillId } from "@smolai/skit-core/universal/consumer";

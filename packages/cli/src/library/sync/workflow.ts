@@ -1,4 +1,4 @@
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { openSyncSession } from "@smolai/skit-core/library/session";
 import { Effect, Option } from "effect";
 import type { InstallDestination, RestoreProgress } from "@smolai/skit-core/library";

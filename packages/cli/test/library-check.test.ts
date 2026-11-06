@@ -2,7 +2,7 @@ import { originalTreePath } from "./helpers/original-tree.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Ref } from "effect";
 import { join } from "node:path";

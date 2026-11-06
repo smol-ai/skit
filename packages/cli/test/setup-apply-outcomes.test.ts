@@ -5,7 +5,7 @@ import { Effect, Exit, FileSystem, Option, Schema } from "effect";
 import { PlatformError, systemError } from "effect/PlatformError";
 import { assert, it } from "@effect/vitest";
 import { LibraryState } from "@smolai/skit-core/library";
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { withSandboxDenying } from "./helpers/sandbox.js";
 import { SetupResult, SetupPlanStale, SetupStopped } from "@smolai/skit-core/library/setup";

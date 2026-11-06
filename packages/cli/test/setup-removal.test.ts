@@ -19,7 +19,7 @@ import {
   setupRemovablePaths,
 } from "@smolai/skit-core/library/setup";
 
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 const fixture = Effect.gen(function* () {

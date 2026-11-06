@@ -5,7 +5,7 @@ import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { openLibraryView } from "@smolai/skit-core/library/session";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { isolatedRoots } from "./helpers/isolated-library.js";
 import {

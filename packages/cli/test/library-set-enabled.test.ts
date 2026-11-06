@@ -2,7 +2,7 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import type { Library } from "@smolai/skit-core/library";
+import type * as Library from "@smolai/skit-core/library";
 type ImportRequestSkill = Parameters<
   Library.Interface["import"]["collection"]
 >[0]["skills"][number];

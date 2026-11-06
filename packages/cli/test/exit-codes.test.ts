@@ -15,7 +15,7 @@ import { commandApplicationLayer } from "../src/application.js";
 import { commandDescriptions } from "../src/commands/manifest.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { classifyFailure, failureExitCodes } from "../src/commands/failure-classification.js";
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { NoStoredCredentials, RegistryUnreachable } from "../src/registry/failures.js";
 
 const produced = new Set<number>(Object.values(failureExitCodes));

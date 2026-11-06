@@ -1,5 +1,5 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";

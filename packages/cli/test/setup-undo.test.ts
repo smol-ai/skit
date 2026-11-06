@@ -7,7 +7,7 @@ import { Effect, FileSystem } from "effect";
 import { systemError } from "effect/PlatformError";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import * as MachineSettings from "@smolai/skit-core/machine-settings";
 import { skitLayer } from "@smolai/skit-core/platform";
 

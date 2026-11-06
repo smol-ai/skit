@@ -4,7 +4,7 @@ import { Effect, FileSystem } from "effect";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { importSource, previewLibrarySource } from "../../src/library/source.js";
 import { writingTo } from "./library-home.js";
 

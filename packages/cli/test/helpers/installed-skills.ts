@@ -1,6 +1,6 @@
 import { Context, Effect, Layer } from "effect";
 import { type InstallDestination, type InstallScope } from "@smolai/skit-core/library";
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { SkitConfiguration, pathIsWithin } from "@smolai/skit-core/platform";
 import { type Hash } from "@smolai/skit-core/shared";
 

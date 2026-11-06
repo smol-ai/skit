@@ -17,7 +17,7 @@ import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { testHttpClientLayer, type TestHttpHandler } from "./http-test-client.js";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
 
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 
 export type LibraryFixtureState = Extract<Library.Snapshot, { readonly _tag: "Present" }>["state"];
 /** Independent current-format empty-file fixture; absence is still asserted through Snapshot. */

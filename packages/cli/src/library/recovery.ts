@@ -7,7 +7,7 @@ import { CommandMetadata } from "../commands/metadata.js";
 import { recoveryOutputContracts } from "./recovery/output.js";
 import { recoveryActions } from "./recovery/output.js";
 import { homeFlag, jsonFlag, optionalString } from "../commands/parameters.js";
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { Renderer } from "../terminal/renderer.js";
 import { encodeResult as result } from "../commands/encode-result.js";
 

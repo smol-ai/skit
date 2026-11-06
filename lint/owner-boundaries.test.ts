@@ -443,7 +443,7 @@ describe("skit/owner-boundaries", () => {
   });
 
   test("calling the owner is allowed", async () => {
-    expect(await reported(`import { Library } from "@smolai/skit-core/library";`)).toEqual([]);
+    expect(await reported(`import * as Library from "@smolai/skit-core/library";`)).toEqual([]);
   });
 
   test.each(["local-tree", "write-tree"])(

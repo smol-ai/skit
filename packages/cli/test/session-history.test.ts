@@ -1,5 +1,5 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";

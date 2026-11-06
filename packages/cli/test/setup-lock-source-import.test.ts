@@ -1,5 +1,5 @@
 import { originalTreePath } from "./helpers/original-tree.js";
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { Effect, FileSystem, Schema } from "effect";

@@ -1,7 +1,7 @@
 import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { ImportContentInvalid } from "@smolai/skit-core/library";
 import { initSkit, validateSkitDirectory } from "@smolai/skit-core/author";
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { openLibraryView } from "@smolai/skit-core/library/session";
 
 import { Clock, Effect, FileSystem, Option, Path } from "effect";

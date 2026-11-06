@@ -21,7 +21,7 @@ import { openLibrarySession, readLibrarySkillContent } from "@smolai/skit-core/l
 import { createLibraryController } from "./library/controller";
 import { errorMessage } from "@smolai/skit-core/shared";
 import { HarnessName, readListingBudgets, type ListingBudget } from "@smolai/skit-core/harnesses";
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { readInventory } from "@smolai/skit-core/library/inventory";
 import { SkitConfiguration, skitConfigurationLayer, skitLayer } from "@smolai/skit-core/platform";
 import { auditLocalCapabilitiesV1Alpha4 } from "@smolai/skit-core/audit";

@@ -1,5 +1,5 @@
 import { LinkStat } from "@smolai/skit-core/platform";
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { skitConfigurationLayer, skitLayer } from "@smolai/skit-core/platform";
 import { join } from "node:path";
 import { Effect, FileSystem, Layer } from "effect";

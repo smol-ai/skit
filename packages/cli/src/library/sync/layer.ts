@@ -1,6 +1,6 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Effect, Layer } from "effect";
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 
 /** The executable's Sync root supplies routing once; the owner keeps its storage private. */
 export const syncLibraryApplicationLayer = (

@@ -1,7 +1,7 @@
 import { emptyLibraryFixture } from "./helpers/library-home.js";
 import { readLibraryManifest } from "./helpers/library-manifest.js";
 import { originalArchive, originalTreePath } from "./helpers/original-tree.js";
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, Schema, Option, Exit, type Layer, type Scope } from "effect";

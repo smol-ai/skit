@@ -10,7 +10,7 @@ import { executeRemove } from "../src/library/remove/operation.js";
 import { authorInitCommand } from "../src/author/init.js";
 import { authorInvocationCommand } from "../src/author/invocation.js";
 import { AuthorWorkspace } from "@smolai/skit-core/author";
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { systemError } from "effect/PlatformError";
 import {
   copySkitFixtureEffect,

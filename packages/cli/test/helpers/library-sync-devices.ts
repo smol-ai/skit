@@ -10,7 +10,7 @@ import { emptyLibraryFixture, type LibraryFixtureState } from "./library-home.js
 import { type InstallDestination } from "@smolai/skit-core/library";
 import { makeMachineId } from "@smolai/skit-core/universal/consumer";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
 import { syncLibrary } from "../../src/library/sync/workflow.js";

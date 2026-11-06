@@ -28,7 +28,7 @@ const setupProcess = (home: string, folder: string, commits: number) =>
       "--input-type=module",
       "-e",
       `import { Context, Effect, FileSystem, Layer, Option } from "effect";
-       import { Library } from "@smolai/skit-core/library";
+       import * as Library from "@smolai/skit-core/library";
        import { skitLayer } from "@smolai/skit-core/platform";
        const [url, home, folder, commits] = process.argv.slice(1);
        const { observePathEvidence } = await import(url);

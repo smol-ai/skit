@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { openLibraryView } from "@smolai/skit-core/library/session";
 import { assertDiskUnchanged, captureDisk } from "./disk-snapshot.js";
 

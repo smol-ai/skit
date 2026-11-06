@@ -1,7 +1,7 @@
 import { SkitConfiguration, skitConfigurationLayer, skitLayer } from "@smolai/skit-core/platform";
 import { makeMachineId } from "@smolai/skit-core/universal/consumer";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 
 import { presentDoctorCleanup } from "../library/doctor.js";
 import { syncJourney } from "./sync-journey.js";

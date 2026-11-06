@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { LibraryState } from "@smolai/skit-core/library";
 import { type SkitSource } from "@smolai/skit-core/library/source";
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { SourceProcess } from "@smolai/skit-core/platform";
 import { importSource } from "../src/library/source.js";
 import { syncLibrary } from "../src/library/sync/workflow.js";

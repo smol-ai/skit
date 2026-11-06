@@ -1,4 +1,4 @@
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import {
   type LibraryManifest,
   type SnapshotArchive,

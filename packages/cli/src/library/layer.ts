@@ -1,7 +1,7 @@
 import { SkitConfiguration, skitLayer } from "@smolai/skit-core/platform";
 import { Effect, Layer } from "effect";
 
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { AuthorWorkspace } from "@smolai/skit-core/author";
 
 /** Storage constructors consume the application boundary's required path snapshot. */

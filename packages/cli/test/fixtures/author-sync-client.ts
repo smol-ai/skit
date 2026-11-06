@@ -1,6 +1,6 @@
 import { NodeRuntime } from "@effect/platform-node";
 import { Console, Effect, Layer, Result, Schema } from "effect";
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { AuthorHistory, AuthorWorkspace } from "@smolai/skit-core/author";
 import { skitConfigurationLayer, skitLayer } from "@smolai/skit-core/platform";
 import { syncAuthorWorkspace } from "../../src/author/sync/workflow.js";

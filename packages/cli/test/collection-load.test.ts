@@ -1,6 +1,6 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 type ImportRequestSkill = Parameters<
   Library.Interface["import"]["collection"]
 >[0]["skills"][number];

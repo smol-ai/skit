@@ -1,4 +1,4 @@
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { updateSources } from "@smolai/skit-core/library/session";
 import { Effect } from "effect";

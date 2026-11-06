@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { LinkStat } from "@smolai/skit-core/platform";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { dirname, join } from "node:path";
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 /** Native evidence for test-owned paths; never invokes Library's evidence reader or verifier. */
 export const recoveryFolderFixture = Effect.fn("Test.recoveryFolderFixture")(function* (
   path: string,

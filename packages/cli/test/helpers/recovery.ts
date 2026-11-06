@@ -1,4 +1,4 @@
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 import { Effect } from "effect";
 
 /** Exercise the same public recovery facts used by the command. */

@@ -6,7 +6,7 @@ import { expect } from "vitest";
 import { Effect, FileSystem, Schema } from "effect";
 import { join } from "node:path";
 
-import { Library } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 type SkillsShLockFileEntry = Parameters<
   Library.Interface["import"]["collection"]
 >[0]["lockFileEntries"][number];

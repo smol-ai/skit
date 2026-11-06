@@ -225,14 +225,19 @@ describe("skit/library-private-api", () => {
     ).toEqual([]);
   });
 
-  test.each([[`${library}index.ts`, `export * as Library from "./library.js";`]])(
-    "only public entries assemble the Library namespace: %s",
-    async (filename, source) => {
-      expect(await reported("library-private-api", filename, source)).toEqual([]);
-    },
-  );
+  test("the public entry names its owner exports explicitly", async () => {
+    expect(
+      await reported(
+        "library-private-api",
+        `${library}index.ts`,
+        `export { Service, layer } from "./library.js";`,
+      ),
+    ).toEqual([]);
+  });
 
   test.each([
+    [`${library}index.ts`, `export * as Library from "./library.js";`],
+    [`${library}index.ts`, `export * from "./library.js";`],
     ["packages/skit/src/index.ts", `export * as Library from "./library/library.js";`],
     [`${library}library.ts`, `export * as Library from "./library.js";`],
     ["packages/skit/src/index.ts", `export * as implementation from "./library/library.js";`],
@@ -249,8 +254,8 @@ describe("skit/library-private-api", () => {
         "library-private-api",
         "packages/cli/src/library/example.ts",
         `
-      import { Library, RecoveryInspection } from "@smolai/skit-core/library";
-      export const use = [Library.layer, RecoveryInspection];
+      import * as Library from "@smolai/skit-core/library";
+      export const use = [Library.layer, Library.RecoveryInspection];
     `,
       ),
     ).toEqual([]);

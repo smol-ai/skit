@@ -104,7 +104,7 @@ describe("skit/import-direction", () => {
       'import * as versions from "../library/installation/retained-skill.js";',
       'export * from "../library/installation/retained-skill.js";',
       'const versions = import("../library/installation/retained-skill.js");',
-      'import { Library } from "@smolai/skit-core/library";',
+      'import * as Library from "@smolai/skit-core/library";',
       'import * as settings from "@smolai/skit-core/machine-settings";',
       'const source = import("@smolai/skit-core/library/source");',
     ])
