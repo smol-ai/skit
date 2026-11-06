@@ -64,8 +64,9 @@ export const openRemoveSession = Effect.fn("Library.openRemoveSession")(
     if (collectionId === undefined)
       return yield* new CollectionRemovalMissing({ collection_id: summary.subject_id });
     const collection = state.collections.find((item) => item.collection_id === collectionId);
+    // Removing the sole Skill removes its Collection too. Registration belongs to that
+    // Collection's workspace, regardless of which accepted subject named the removal.
     const workspaceId =
-      summary.subject_kind === "collection" &&
       collection?.upstream?.source_identity.kind === "authored-workspace"
         ? collection.upstream.source_identity.workspace_id
         : undefined;

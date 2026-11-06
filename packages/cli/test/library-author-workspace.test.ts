@@ -167,25 +167,62 @@ it.effect("rejects a copied workspace identity before scaffolding or publishing"
   }).pipe(Effect.provide(AuthorWorkspace.layer), Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("removal requires explicit re-registration and preserves workspace identity", () =>
+it.effect.each(["collection", "skill"] as const)(
+  "%s removal requires explicit re-registration and preserves workspace identity",
+  (subject) =>
+    Effect.gen(function* () {
+      const f = yield* workspaceFixture;
+      const first = yield* f.init();
+      assert.ok(first.entry);
+      const skill = first.entry.skills[0];
+      assert.ok(skill);
+      const identity = (yield* f.metadata).workspace_id;
+      yield* f.home.owned(
+        executeRemove({
+          query: subject === "collection" ? first.entry.collection.collection_id : skill.skill_id,
+          dryRun: false,
+        }),
+      );
+      assert.strictEqual((yield* f.metadata).registration, "removed");
+      assert.strictEqual((yield* f.init()).entry, undefined);
+      assert.strictEqual((yield* f.home.durable).collections.length, 0);
+      const registered = yield* f.init(true);
+      assert.ok(registered.entry);
+      assert.deepStrictEqual(yield* f.metadata, {
+        workspace_id: identity,
+        registration: "registered",
+      });
+      assert.strictEqual((yield* f.home.durable).collections.length, 1);
+    }).pipe(Effect.provide(AuthorWorkspace.layer), Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("sole-Skill removal respects the workspace lease while preview stays passive", () =>
   Effect.gen(function* () {
     const f = yield* workspaceFixture;
     const first = yield* f.init();
-    assert.ok(first.entry);
-    const identity = (yield* f.metadata).workspace_id;
-    yield* f.home.owned(
-      executeRemove({ query: first.entry.collection.collection_id, dryRun: false }),
+    const skill = first.entry?.skills[0];
+    assert.ok(skill);
+    const workspaces = yield* AuthorWorkspace;
+    const root = yield* workspaces.resolveRoot(f.source);
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        yield* workspaces.acquire(root);
+        const before = yield* captureDisk([f.source, f.home.home], { identity: true });
+        const preview = yield* f.home.owned(executeRemove({ query: skill.skill_id, dryRun: true }));
+        assert.strictEqual(preview.kind, "plan");
+        const refused = yield* f.home.owned(
+          Effect.result(executeRemove({ query: skill.skill_id, dryRun: false })),
+        );
+        if (refused._tag !== "Failure")
+          return yield* Effect.die("Removal bypassed the held workspace lease");
+        assert.strictEqual(refused.failure._tag, "AuthorWorkspaceBusy");
+        yield* assertDiskUnchanged(before);
+      }),
     );
+    const removed = yield* f.home.owned(executeRemove({ query: skill.skill_id, dryRun: false }));
+    assert.strictEqual(removed.kind, "removed");
     assert.strictEqual((yield* f.metadata).registration, "removed");
-    assert.strictEqual((yield* f.init()).entry, undefined);
     assert.strictEqual((yield* f.home.durable).collections.length, 0);
-    const registered = yield* f.init(true);
-    assert.ok(registered.entry);
-    assert.deepStrictEqual(yield* f.metadata, {
-      workspace_id: identity,
-      registration: "registered",
-    });
-    assert.strictEqual((yield* f.home.durable).collections.length, 1);
   }).pipe(Effect.provide(AuthorWorkspace.layer), Effect.provide(skitLayer), Effect.scoped),
 );
 
