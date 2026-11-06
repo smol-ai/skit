@@ -2,7 +2,6 @@ import { originalTreePath } from "./helpers/original-tree.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Schema, Scope } from "effect";
 import { join } from "node:path";
-import { COLLECTION_CONTROL_DIRECTORY, AUTHOR_WORKSPACE_METADATA_FILE } from "@smolai/skit-core";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
 import { holdHomeLock } from "./helpers/home-lock.js";
@@ -71,23 +70,21 @@ const workspaceFixture = Effect.gen(function* () {
   yield* copySkitFixtureEffect("authored", source);
   const home = yield* libraryHome({ home: join(root, "home") });
   yield* initializeLibraryMachine(home.home);
-  const path = join(source, COLLECTION_CONTROL_DIRECTORY, AUTHOR_WORKSPACE_METADATA_FILE);
+  const path = join(source, ".skit", "workspace.json");
   const init = (register = false, path = source) => home.owned(authorInitCommand(path, register));
   const metadataAt = (directory: string) =>
-    fs
-      .readFileString(join(directory, COLLECTION_CONTROL_DIRECTORY, AUTHOR_WORKSPACE_METADATA_FILE))
-      .pipe(
-        Effect.flatMap(
-          Schema.decodeUnknownEffect(
-            Schema.fromJsonString(
-              Schema.Struct({
-                workspace_id: Schema.String,
-                registration: Schema.optionalKey(Schema.String),
-              }),
-            ),
+    fs.readFileString(join(directory, ".skit", "workspace.json")).pipe(
+      Effect.flatMap(
+        Schema.decodeUnknownEffect(
+          Schema.fromJsonString(
+            Schema.Struct({
+              workspace_id: Schema.String,
+              registration: Schema.optionalKey(Schema.String),
+            }),
           ),
         ),
-      );
+      ),
+    );
   return { fs, root, source, home, path, init, metadata: metadataAt(source), metadataAt };
 });
 

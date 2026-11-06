@@ -8,12 +8,7 @@ import { systemError } from "effect/PlatformError";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { Library } from "@smolai/skit-core/library";
-import {
-  hashParts,
-  setupIntent,
-  observePathEvidence,
-  recoveryFingerprint,
-} from "@smolai/skit-core";
+import { setupIntent, observePathEvidence, recoveryFingerprint } from "@smolai/skit-core";
 import * as MachineSettings from "@smolai/skit-core/machine-settings";
 import { skitLayer } from "@smolai/skit-core/platform";
 
@@ -166,7 +161,7 @@ it.effect.each([3, 2] as const)(
         JSON.stringify({
           schemaVersion: version,
           kind: "setup",
-          planId: hashParts(["journal"]),
+          planId: "sha256:f2e7a599c1ffd13691f3006fb8d7644aa90ea993195c724a24947d97cab68801",
           settings,
           machineId: null,
           targets: [],
