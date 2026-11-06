@@ -15,7 +15,7 @@
     "format:check": "oxfmt --check .",
     "lint": "pnpm --parallel --no-bail --include-workspace-root run /^lint:/",
     "lint:code": "oxlint .",
-    "lint:unused": "knip",
+    "lint:unused": "node scripts/check-unused.mjs",
     "lint:structure": "node scripts/check-structure.mjs",
     "skit": "node packages/cli/bin/skit.js",
     "vm": "pnpm --filter @smolai/skit-devtools vm",
@@ -35,6 +35,7 @@
     "oxlint": "^1.79.0",
     "skills": "1.5.26",
     "typescript": "7.0.2",
+    "typescript-parser": "npm:typescript@5.9.3",
     "vitest": "5.0.3"
   },
   "engines": {
