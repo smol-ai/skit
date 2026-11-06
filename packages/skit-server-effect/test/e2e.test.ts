@@ -722,7 +722,7 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
     first(["add", raw]);
     first(["add", gitRemote]);
     const imported = await state(firstHome);
-    expect(imported.schemaVersion).toBe(11);
+    expect(imported.schemaVersion).toBe(12);
     expect(imported.collections).toHaveLength(2);
     expect(imported.enabled).toEqual([]);
     const collectionId = imported.collections[0].collection_id;
@@ -764,7 +764,7 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
     expect(second(["sync"])).toMatchObject({ data: { status: "pull_ready" } });
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "pulled" } });
     const restored = await state(secondHome);
-    expect(restored.schemaVersion).toBe(11);
+    expect(restored.schemaVersion).toBe(12);
     expect(restored.collections.some((item) => item.collection_id === collectionId)).toBe(true);
     expect(restored.imports[0].lock_file_entries).toEqual([]);
     expect(restored.enabled).toEqual([]);
@@ -851,15 +851,16 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
         stdio: "ignore",
       },
     );
-    const exited = new Promise((resolveExit) => killed.once("exit", resolveExit));
+    const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+      (resolveExit) => killed.once("exit", (code, signal) => resolveExit({ code, signal })),
+    );
     // A CLI that exits before its write reaches the Registry fails here instead of hanging.
     expect(
       await Promise.race([committed.then(() => "committed"), exited.then(() => "exited")]),
     ).toBe("committed");
-    killed.kill("SIGKILL");
-    await exited;
-    // The killed writer left its lock and its previous state with the previous ancestry.
-    expect(existsSync(join(firstHome, ".lock"))).toBe(true);
+    expect(killed.kill("SIGKILL")).toBe(true);
+    expect(await exited).toEqual({ code: null, signal: "SIGKILL" });
+    // The Registry committed, but the device has not accepted that receipt yet.
     expect(await readFile(join(firstHome, "state.json"), "utf8")).toBe(stateBeforeKill);
     const head = await fetch(new URL("/api/library/portable", registryUrl), {
       headers: { authorization: `Bearer ${token}` },
@@ -873,15 +874,9 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
     )(await head.json()).library.manifest.collections;
     expect(committedCollections).toHaveLength(2);
 
-    // The dead writer's lock fails closed: the retry is refused and changes nothing.
-    expect(first(["sync", "--apply"], 12)).toMatchObject({ error: { code: "CONFLICT" } });
-    expect(existsSync(join(firstHome, ".lock"))).toBe(true);
-    expect(await readFile(join(firstHome, "state.json"), "utf8")).toBe(stateBeforeKill);
-    // Once its owner is known to be stopped, removing the lock lets the retry find the remote
-    // already holds its state.
-    await rm(join(firstHome, ".lock"));
+    // The OS releases the SQLite lease after SIGKILL. Retry discovers the committed
+    // remote state without deleting lock files or repeating the accepted mutation.
     expect(first(["sync", "--apply"])).toMatchObject({ data: { status: "clean" } });
-    expect(existsSync(join(firstHome, ".lock"))).toBe(false);
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "merged" } });
     expect((await state(secondHome)).collections).toHaveLength(2);
     expect(first(["sync", "--apply"])).toMatchObject({ data: { status: "clean" } });
