@@ -17,7 +17,6 @@ export {
 } from "./library/library-state.js";
 export { enabledAt } from "./library/enabled.js";
 export { InstalledSkill } from "./library/device-state.js";
-export { setupIntent } from "./library/setup.js";
 
 export { readSnapshotArchive } from "./library/snapshot-archive.js";
 

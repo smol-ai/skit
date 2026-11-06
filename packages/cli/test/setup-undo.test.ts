@@ -8,7 +8,7 @@ import { systemError } from "effect/PlatformError";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { Library } from "@smolai/skit-core/library";
-import { setupIntent, observePathEvidence, recoveryFingerprint } from "@smolai/skit-core";
+import { observePathEvidence, recoveryFingerprint } from "@smolai/skit-core";
 import * as MachineSettings from "@smolai/skit-core/machine-settings";
 import { skitLayer } from "@smolai/skit-core/platform";
 
@@ -20,7 +20,7 @@ import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import { renderContract } from "../src/commands/output-presenters.js";
 import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply.js";
-import { runSetup } from "@smolai/skit-core/library/setup";
+import { runSetup, setupIntent } from "@smolai/skit-core/library/setup";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import { libraryHome, scratch } from "./helpers/library-home.js";
 
