@@ -32,7 +32,11 @@ import {
   type ManagePlanError,
   type ManageApplyError,
 } from "./internal/manage/manage.js";
-export { ManageIntent, ManagePlan, type ManageStopped } from "./internal/manage/manage.js";
+export {
+  ManageIntent,
+  ManagePlan,
+  type ManageStopped,
+} from "./internal/manage/manage.js";
 import {
   type AcceptFindingIntent,
   type AcceptFindingPlan,
@@ -49,8 +53,15 @@ import {
   type RefreshInventoryApplyError,
 } from "./internal/inventory/refresh.js";
 export { RefreshInventoryPlan } from "./internal/inventory/refresh.js";
-import { type UndoPlanError, type UndoApplyError } from "./internal/setup/undo.js";
-import type { UndoIntent, UndoPlan, UndoResult } from "./internal/setup/undo-plan.js";
+import {
+  type UndoPlanError,
+  type UndoApplyError,
+} from "./internal/setup/undo.js";
+import type {
+  UndoIntent,
+  UndoPlan,
+  UndoResult,
+} from "./internal/setup/undo-plan.js";
 import { Context, Effect, Layer } from "effect";
 import {
   type StagedContent,
@@ -62,15 +73,26 @@ import type { CollectionVersionPlan } from "./collection-version-plan.js";
 import type { Digest } from "effect/crypto";
 import * as InstalledSkills from "./installed-skills.js";
 import type { InventoryRootOptions } from "./routing/roots.js";
-import type { LibraryLayerError, LibraryStateReadError } from "./store/library-store.js";
+import type { HttpClient } from "effect/http";
+import type {
+  LibraryLayerError,
+  LibraryStateReadError,
+} from "./store/library-store.js";
 import type {
   OperationStatus as StoredOperationStatus,
   RecordedSetupStep,
   SetupStep,
 } from "./store/state-schema.js";
-import { type LibraryAuditEvent, type LibraryAuditInvalid } from "./audit/audit-log.js";
+import {
+  type LibraryAuditEvent,
+  type LibraryAuditInvalid,
+} from "./audit/audit-log.js";
 import { type Snapshot } from "./snapshot.js";
-import { type SetupError, type SetupResult, type StartupRecovery } from "./internal/setup/run.js";
+import {
+  type SetupError,
+  type SetupResult,
+  type StartupRecovery,
+} from "./internal/setup/run.js";
 
 import {
   type AuthoredImport,
@@ -116,8 +138,14 @@ export {
 export type { SetupApproval } from "./enabled-plan.js";
 
 export { Revision, type Snapshot } from "./snapshot.js";
-export type { LibraryLayerError, LibraryStateReadError } from "./store/library-store.js";
-export { RestoreInvalid, SourceRestoreInvalid } from "./internal/content/restore.js";
+export type {
+  LibraryLayerError,
+  LibraryStateReadError,
+} from "./store/library-store.js";
+export {
+  RestoreInvalid,
+  SourceRestoreInvalid,
+} from "./internal/content/restore.js";
 export type { StagedContent } from "./internal/content/content.js";
 export type {
   FolderEvidence,
@@ -130,9 +158,9 @@ export type {
 } from "./store/state-schema.js";
 /** History reports steps and evidence, without private installed-change checkpoints. */
 type ReportedOperation<O> = {
-  readonly [K in keyof O as K extends "preparation" ? never : K]: K extends "steps"
-    ? readonly Omit<RecordedSetupStep, "applies">[]
-    : O[K];
+  readonly [
+    K in keyof O as K extends "preparation" ? never : K
+  ]: K extends "steps" ? readonly Omit<RecordedSetupStep, "applies">[] : O[K];
 };
 type OperationStatus = ReportedOperation<StoredOperationStatus>;
 
@@ -237,11 +265,20 @@ export interface Interface {
    */
   readonly plan: <I extends PlanningIntent>(
     intent: I,
-    options: { readonly base: Snapshot; readonly approvals?: readonly Approval[] },
-  ) => Effect.Effect<Extract<ReviewedPlan, { readonly _tag: I["_tag"] }>, PlanError>;
+    options: {
+      readonly base: Snapshot;
+      readonly approvals?: readonly Approval[];
+    },
+  ) => Effect.Effect<
+    Extract<ReviewedPlan, { readonly _tag: I["_tag"] }>,
+    PlanError
+  >;
   readonly apply: <Request extends ApplyRequest>(
     request: Request,
-  ) => Effect.Effect<Extract<Outcome, { readonly _tag: Request["plan"]["_tag"] }>, ApplyError>;
+  ) => Effect.Effect<
+    Extract<Outcome, { readonly _tag: Request["plan"]["_tag"] }>,
+    ApplyError
+  >;
   /**
    * Store a Source's files as a Collection Version and save it. Nothing to preview or recheck: it
    * touches no skill folders, and what it imports exists only while the fetched Source does.
@@ -254,7 +291,9 @@ export interface Interface {
       request: AuthoredImport,
     ) => Effect.Effect<ImportedCollection, ImportAuthoredCollectionError>;
     /** An edited copy, as a new Version of its Skill. */
-    readonly edit: (request: EditImport) => Effect.Effect<ImportedEdit, ImportEditError>;
+    readonly edit: (
+      request: EditImport,
+    ) => Effect.Effect<ImportedEdit, ImportEditError>;
   };
   /**
    * Save the steps in state.json as one Pending operation, then run them in order, removals last,
@@ -275,22 +314,34 @@ export interface Interface {
       snapshot: Snapshot,
     ) => Effect.Effect<
       | { readonly _tag: "Intact" }
-      | { readonly _tag: "Changed"; readonly hash: import("../shared/hash.js").Hash },
+      | {
+          readonly _tag: "Changed";
+          readonly hash: import("../shared/hash.js").Hash;
+        },
       LibraryStateReadError | StalePlan
     >;
     readonly pack: (
       snapshot: Snapshot,
-    ) => Effect.Effect<readonly SnapshotArchive[], LibraryStateReadError | StalePlan>;
+    ) => Effect.Effect<
+      readonly SnapshotArchive[],
+      LibraryStateReadError | StalePlan
+    >;
     readonly stage: <E = never, R = never>(
       target: LibraryManifest,
       source: ContentSource<E, R>,
     ) => Effect.Effect<StagedContent, ContentStageError | E, R>;
   };
   /** Audit events and recorded operations, including Pending and Stopped setup. Never writes. */
-  readonly history: Effect.Effect<History, LibraryStateReadError | LibraryAuditInvalid>;
+  readonly history: Effect.Effect<
+    History,
+    LibraryStateReadError | LibraryAuditInvalid
+  >;
   /** Passive recovery facts; malformed audit history must not hide saved files. */
   readonly recovery: {
-    readonly list: Effect.Effect<readonly string[], PlatformError | RecoveryInvalid>;
+    readonly list: Effect.Effect<
+      readonly string[],
+      PlatformError | RecoveryInvalid
+    >;
     readonly inspect: (
       operationId: string,
     ) => Effect.Effect<RecoveryInspection, PlatformError | RecoveryInvalid>;
@@ -298,7 +349,9 @@ export interface Interface {
   /** What startup recovery did when the layer was built. */
   readonly startup: StartupRecovery;
 }
-export class Service extends Context.Service<Service, Interface>()("skit/library/Library") {}
+export class Service extends Context.Service<Service, Interface>()(
+  "skit/library/Library",
+) {}
 
 /** Routing is part of constructing this Library, never assembled by an operation's caller. */
 export type Routing =
@@ -314,10 +367,12 @@ export interface Config {
 /** One public constructor owns migration, startup recovery, storage and installed-skill routing. */
 export const layer = (
   config: Config,
-): Layer.Layer<Service, LibraryLayerError, TreeRequirements | Digest.Digest> =>
-  Layer.effect(Service, makeOwner(config));
+): Layer.Layer<
+  Service,
+  LibraryLayerError,
+  TreeRequirements | Digest.Digest | HttpClient.HttpClient
+> => Layer.effect(Service, makeOwner(config));
 
 export type { LibraryStateWriteError } from "./store/library-store.js";
 
 export type { SetupResult } from "./internal/setup/run.js";
-

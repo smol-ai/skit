@@ -1,5 +1,6 @@
 import { Clock, Effect } from "effect";
 import type { Digest } from "effect/crypto";
+import type { HttpClient } from "effect/http";
 import * as Library from "../library/library.js";
 
 import {
@@ -38,18 +39,26 @@ type LedgerInspection =
 
 const inspectLibraryLedger = Effect.fn("Audit.ledger")(function* (
   library: ResolvedSkitConfiguration,
-): Effect.gen.Return<LedgerInspection, never, TreeRequirements | Digest.Digest> {
+): Effect.gen.Return<
+  LedgerInspection,
+  never,
+  TreeRequirements | Digest.Digest | HttpClient.HttpClient
+> {
   // Library owns migration/startup; failure to open it is unreadable forensic evidence.
   return yield* Effect.flatMap(Library.Service, (owner) => owner.read).pipe(
     Effect.map((inspected): LedgerInspection =>
       inspected._tag === "Present"
         ? {
             kind: "readable",
-            imported: new Set(inspected.state.skills.map((skill) => skill.skill_id)),
+            imported: new Set(
+              inspected.state.skills.map((skill) => skill.skill_id),
+            ),
           }
         : { kind: "absent" },
     ),
-    Effect.provide(Library.layer({ home: library.skitHome, routing: { _tag: "None" } })),
+    Effect.provide(
+      Library.layer({ home: library.skitHome, routing: { _tag: "None" } }),
+    ),
     Effect.orElseSucceed((): LedgerInspection => ({
       kind: "unreadable",
       path: join(resolve(library.skitHome), "state.json"),
@@ -101,7 +110,10 @@ const auditOwnershipClaims = Effect.fn("Audit.ownershipClaims")(function* (
     if (
       inspection.kind === "valid" &&
       ledger.kind !== "unreadable" &&
-      !(ledger.kind === "readable" && ledger.imported.has(inspection.marker.skill_id))
+      !(
+        ledger.kind === "readable" &&
+        ledger.imported.has(inspection.marker.skill_id)
+      )
     ) {
       const claim = {
         skillId: inspection.marker.skill_id,
@@ -119,13 +131,16 @@ const auditOwnershipClaims = Effect.fn("Audit.ownershipClaims")(function* (
           : {}),
         skillId: claim.skillId,
         expectedHash: claim.expectedHash,
-        ...(claim.transactionId === undefined ? {} : { transactionId: claim.transactionId }),
+        ...(claim.transactionId === undefined
+          ? {}
+          : { transactionId: claim.transactionId }),
       };
       findings.push({
         severity: "error",
         code: "orphaned-projection-claim",
         subject: observation.path,
-        problem: "Installed skill claims SKIT ownership, but its Library entry is missing",
+        problem:
+          "Installed skill claims SKIT ownership, but its Library entry is missing",
         locations: [observation.path, markerPath],
         details: {
           markerPath,
@@ -146,101 +161,112 @@ const auditOwnershipClaims = Effect.fn("Audit.ownershipClaims")(function* (
  * fiber rather than re-entering a runtime per path. `suppliedProbes` carries subprocess results the caller already ran, so nothing spawns from
  * inside the observation.
  */
-export const auditLocalCapabilities = Effect.fn("Audit.capabilities")(function* (
-  options: AuditOptions = {},
-  suppliedProbes?: readonly ProbeResult[],
-) {
-  const paths = yield* configurationForHome();
-  const home = resolve(options.home ?? paths.userHome);
-  const cwd = resolve(options.cwd ?? process.cwd());
-  const observations: AuditEntry[] = [];
-  const findings: AuditFinding[] = [];
-  const stateHome = options.stateHome ?? paths.xdgStateHome;
-  let lockPath: string | undefined;
-  for (const candidate of [
-    stateHome ? join(stateHome, "skills", ".skill-lock.json") : null,
-    join(home, ".agents", ".skill-lock.json"),
-  ])
-    if (candidate && (yield* pathExists(candidate))) {
-      lockPath = candidate;
-      break;
-    }
-  const lock = (lockPath ? objectAt((yield* json(lockPath)) ?? {}, "skills") : {}) ?? {};
+export const auditLocalCapabilities = Effect.fn("Audit.capabilities")(
+  function* (
+    options: AuditOptions = {},
+    suppliedProbes?: readonly ProbeResult[],
+  ) {
+    const paths = yield* configurationForHome();
+    const home = resolve(options.home ?? paths.userHome);
+    const cwd = resolve(options.cwd ?? process.cwd());
+    const observations: AuditEntry[] = [];
+    const findings: AuditFinding[] = [];
+    const stateHome = options.stateHome ?? paths.xdgStateHome;
+    let lockPath: string | undefined;
+    for (const candidate of [
+      stateHome ? join(stateHome, "skills", ".skill-lock.json") : null,
+      join(home, ".agents", ".skill-lock.json"),
+    ])
+      if (candidate && (yield* pathExists(candidate))) {
+        lockPath = candidate;
+        break;
+      }
+    const lock =
+      (lockPath ? objectAt((yield* json(lockPath)) ?? {}, "skills") : {}) ?? {};
 
-  const claude = yield* auditClaude(home, cwd, lock);
-  observations.push(...claude.observations);
-  findings.push(...claude.findings);
+    const claude = yield* auditClaude(home, cwd, lock);
+    observations.push(...claude.observations);
+    findings.push(...claude.findings);
 
-  const skills = yield* auditSkills(home, cwd, lock, claude.skills);
-  observations.push(...skills.observations);
-  findings.push(...skills.findings);
-  // An audited home other than the configured one has its own Library, unless SKIT_HOME names one.
-  const library =
-    options.home === undefined ? paths : yield* resolveSkitConfiguration(undefined, home);
-  findings.push(...(yield* auditOwnershipClaims(library, skills.observations)));
+    const skills = yield* auditSkills(home, cwd, lock, claude.skills);
+    observations.push(...skills.observations);
+    findings.push(...skills.findings);
+    // An audited home other than the configured one has its own Library, unless SKIT_HOME names one.
+    const library =
+      options.home === undefined
+        ? paths
+        : yield* resolveSkitConfiguration(undefined, home);
+    findings.push(
+      ...(yield* auditOwnershipClaims(library, skills.observations)),
+    );
 
-  const codex = yield* auditCodex(home, cwd);
-  observations.push(...codex.observations);
-  findings.push(...codex.findings);
+    const codex = yield* auditCodex(home, cwd);
+    observations.push(...codex.observations);
+    findings.push(...codex.findings);
 
-  const configuredMcp = new Set(
-    observations
-      .filter((item) => item.kind === "mcp-server" && item.scope !== "legacy")
-      .map((item) => item.name),
-  );
-  const unsupportedMcp = new Set(
-    observations
-      .filter((item) => item.kind === "mcp-server" && item.scope === "legacy")
-      .map((item) => item.name),
-  );
-  for (const [server, paths] of claude.advertisedMcp)
-    if (!configuredMcp.has(server) && !unsupportedMcp.has(server))
-      findings.push({
-        severity: "warning",
-        code: "advertised-mcp-not-configured",
-        subject: server,
-        problem: `Rules reference MCP server “${server}”, but no supported registration was found`,
-        locations: [...paths],
-        details: { server, advertisingPaths: [...paths] },
-      });
+    const configuredMcp = new Set(
+      observations
+        .filter((item) => item.kind === "mcp-server" && item.scope !== "legacy")
+        .map((item) => item.name),
+    );
+    const unsupportedMcp = new Set(
+      observations
+        .filter((item) => item.kind === "mcp-server" && item.scope === "legacy")
+        .map((item) => item.name),
+    );
+    for (const [server, paths] of claude.advertisedMcp)
+      if (!configuredMcp.has(server) && !unsupportedMcp.has(server))
+        findings.push({
+          severity: "warning",
+          code: "advertised-mcp-not-configured",
+          subject: server,
+          problem: `Rules reference MCP server “${server}”, but no supported registration was found`,
+          locations: [...paths],
+          details: { server, advertisingPaths: [...paths] },
+        });
 
-  const probes = suppliedProbes ? [...suppliedProbes] : [];
+    const probes = suppliedProbes ? [...suppliedProbes] : [];
 
-  observations.sort((left, right) =>
-    `${left.kind}\0${left.harnesses.join(",")}\0${left.name}\0${left.path}`.localeCompare(
-      `${right.kind}\0${right.harnesses.join(",")}\0${right.name}\0${right.path}`,
-    ),
-  );
-  return {
-    generatedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
-    home,
-    cwd,
-    coverage: {
-      supported: skills.profiles.map((profile) => ({
-        id: profile.id,
-        profileId: profile.profile.id,
-        version: profile.profile.version,
-        frontmatterContracts: profile.frontmatter.map((contract) => contract.id),
-        skillMetadataContracts: (profile.skillMetadata ?? []).map((contract) => contract.id),
-        documentation: profile.documentation,
-      })),
-      deferred: deferredAuditHarnesses,
-    },
-    observations,
-    findings,
-    probes,
-    summary: {
-      capabilities: new Set(
-        observations.map((item) =>
-          item.kind === "skill" && item.canonicalPath
-            ? `${item.kind}\0${item.canonicalPath}`
-            : `${item.kind}\0${item.harnesses.join(",")}\0${item.name}\0${item.path}`,
-        ),
-      ).size,
-      findings: findings.length,
-    },
-  };
-});
+    observations.sort((left, right) =>
+      `${left.kind}\0${left.harnesses.join(",")}\0${left.name}\0${left.path}`.localeCompare(
+        `${right.kind}\0${right.harnesses.join(",")}\0${right.name}\0${right.path}`,
+      ),
+    );
+    return {
+      generatedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
+      home,
+      cwd,
+      coverage: {
+        supported: skills.profiles.map((profile) => ({
+          id: profile.id,
+          profileId: profile.profile.id,
+          version: profile.profile.version,
+          frontmatterContracts: profile.frontmatter.map(
+            (contract) => contract.id,
+          ),
+          skillMetadataContracts: (profile.skillMetadata ?? []).map(
+            (contract) => contract.id,
+          ),
+          documentation: profile.documentation,
+        })),
+        deferred: deferredAuditHarnesses,
+      },
+      observations,
+      findings,
+      probes,
+      summary: {
+        capabilities: new Set(
+          observations.map((item) =>
+            item.kind === "skill" && item.canonicalPath
+              ? `${item.kind}\0${item.canonicalPath}`
+              : `${item.kind}\0${item.harnesses.join(",")}\0${item.name}\0${item.path}`,
+          ),
+        ).size,
+        findings: findings.length,
+      },
+    };
+  },
+);
 
 /**
  * The audit the CLI runs.
@@ -250,9 +276,9 @@ export const auditLocalCapabilities = Effect.fn("Audit.capabilities")(function* 
  * Both entry points use the same scoped filesystem reads. Probes run on this fiber before
  * the passive snapshot is normalized into the versioned public report.
  */
-export const auditLocalCapabilitiesV1Alpha4 = Effect.fn("Audit.local")(function* (
-  options: AuditOptions = {},
-) {
-  const probes = yield* runAuditProbes(options);
-  return normalizeAuditReport(yield* auditLocalCapabilities(options, probes));
-});
+export const auditLocalCapabilitiesV1Alpha4 = Effect.fn("Audit.local")(
+  function* (options: AuditOptions = {}) {
+    const probes = yield* runAuditProbes(options);
+    return normalizeAuditReport(yield* auditLocalCapabilities(options, probes));
+  },
+);

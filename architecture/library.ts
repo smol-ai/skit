@@ -29,6 +29,7 @@ import type {
  */
 
 import type { Digest } from "effect/crypto";
+import type { HttpClient } from "effect/http";
 import type { LibraryState } from "../packages/skit/src/library/library-state.js";
 import type {
   InstalledSkill,
@@ -121,7 +122,11 @@ import type { RestoreProgress } from "../packages/skit/src/library/restore-progr
 /** What one read saw. "Absent" has its own revision, so a first sync can plan from it. */
 export type Snapshot =
   | { readonly _tag: "Absent"; readonly revision: Revision }
-  | { readonly _tag: "Present"; readonly revision: Revision; readonly state: LibraryState };
+  | {
+      readonly _tag: "Present";
+      readonly revision: Revision;
+      readonly state: LibraryState;
+    };
 /** Covers presence, state and any unfinished operation recorded in state.json. */
 export type Revision = Brand.Branded<string, "Revision">;
 /** One recorded operation. Today the recovery directory's basename (setup-operation.ts:316). */
@@ -181,10 +186,7 @@ export type StepEvidence = PathEvidence | RetainedEvidence;
 
 /** Duplicate policy, exactly SetupDuplicateAction (setup-decisions.ts:12-17). */
 export type DuplicatePolicy =
-  | "keep-both"
-  | "preserve-duplicates"
-  | "retire-aliases"
-  | "retain-only";
+  "keep-both" | "preserve-duplicates" | "retire-aliases" | "retain-only";
 
 /** Common to both modes. Core values, not CLI selections (SetupCopySelection, setup-decisions.ts:156-163). */
 interface ManageSelectionBase {
@@ -209,10 +211,13 @@ export interface ManageExistingSelection extends ManageSelectionBase {
 export type ManageNewSource =
   | { readonly _tag: "Import"; readonly request: ImportRequest } // manage-existing.ts:400 importSource(plan.sourcePath)
   | { readonly _tag: "Collection"; readonly collectionId: CollectionId }; // already imported: manage-existing.ts:403 subjectId
-export type ManageStepSource = ManageNewSource | { readonly _tag: "Step"; readonly step: number }; // index of an Import step earlier in the same setup
+export type ManageStepSource =
+  ManageNewSource | { readonly _tag: "Step"; readonly step: number }; // index of an Import step earlier in the same setup
 
 /** Retain and take ownership. ManageRequest "retain", manage-existing.ts:267-281; setup-manage.ts:88-119. */
-export interface ManageNewSelection<Source = ManageNewSource> extends ManageSelectionBase {
+export interface ManageNewSelection<
+  Source = ManageNewSource,
+> extends ManageSelectionBase {
   readonly mode: "new";
   readonly importFrom: Source;
   readonly currentHash: Option.Option<Hash>; // may be undefined, manage-existing.ts:270; setup-manage.ts:97
@@ -253,7 +258,10 @@ export type Intent =
       readonly rationale: string;
       readonly expiresAt: Option.Option<string>;
     }
-  | { readonly _tag: "RefreshInventory"; readonly roots: readonly InventoryScanRoot[] } // NEW: inventory/refresh.ts:233
+  | {
+      readonly _tag: "RefreshInventory";
+      readonly roots: readonly InventoryScanRoot[];
+    } // NEW: inventory/refresh.ts:233
   | {
       // NEW: local half of sync. Planned BEFORE the remote write (library-sync.ts:285-317) and
       // applied exactly as planned after it succeeds. Remote merge/CAS/transport stay in sync.
@@ -366,7 +374,10 @@ export interface SyncProgram {
     readonly path: string;
     readonly entry: "Absent" | "Directory" | "SymbolicLink" | "File" | "Other";
     readonly evidence: string;
-    readonly ancestors: readonly { readonly path: string; readonly evidence: string }[];
+    readonly ancestors: readonly {
+      readonly path: string;
+      readonly evidence: string;
+    }[];
   }[];
   readonly issues: readonly string[];
 }
@@ -383,7 +394,10 @@ export interface ApplyFolder {
   readonly path: string;
   readonly entry: "Absent" | "Directory" | "SymbolicLink" | "File" | "Other";
   readonly evidence: string;
-  readonly ancestors: readonly { readonly path: string; readonly evidence: string }[];
+  readonly ancestors: readonly {
+    readonly path: string;
+    readonly evidence: string;
+  }[];
 }
 export type RecordedInstalledChange =
   | {
@@ -398,8 +412,16 @@ export type RecordedInstalledChange =
       readonly result: "Unchanged" | "Suppressed" | "Conflicted";
       readonly backUp: boolean;
     }
-  | { readonly _tag: "Uninstall"; readonly id: InstalledSkillId; readonly keep: boolean }
-  | { readonly _tag: "Forget"; readonly id: InstalledSkillId; readonly keep: boolean }
+  | {
+      readonly _tag: "Uninstall";
+      readonly id: InstalledSkillId;
+      readonly keep: boolean;
+    }
+  | {
+      readonly _tag: "Forget";
+      readonly id: InstalledSkillId;
+      readonly keep: boolean;
+    }
   | { readonly _tag: "Fail"; readonly path: string; readonly reason: string };
 
 /** Fixed inverse data; staged identities are bound before replacing live destinations. */
@@ -411,7 +433,10 @@ export interface UndoProgram {
   readonly files: readonly import("../packages/skit/src/library/internal/setup/undo-evidence.js").UndoFile[];
   readonly paths: readonly import("../packages/skit/src/library/internal/setup/undo-evidence.js").UndoPath[];
   readonly sources: readonly import("../packages/skit/src/library/internal/setup/undo-evidence.js").UndoPath[];
-  readonly sourceImports: readonly { readonly path: string; readonly hash: Hash }[];
+  readonly sourceImports: readonly {
+    readonly path: string;
+    readonly hash: Hash;
+  }[];
   readonly actions: readonly import("../packages/skit/src/library/internal/setup/undo-evidence.js").UndoAction[];
   readonly preserve: readonly (FolderEvidence | LinkEvidence)[];
   readonly preserved: boolean;
@@ -426,7 +451,10 @@ export type SetupStep =
         readonly witnesses: readonly string[];
         readonly parents: readonly string[];
         readonly structure: string;
-        readonly content: readonly { readonly original?: string; readonly saved?: string }[];
+        readonly content: readonly {
+          readonly original?: string;
+          readonly saved?: string;
+        }[];
       };
     }
   // Execution consumes fixed changes; no reviewed Plan or replay-time planning.
@@ -448,8 +476,16 @@ export type SetupStep =
         | { readonly _tag: "Done"; readonly folders: readonly ApplyFolder[] };
     }
   // APPROVED by Tim, 2026-11-05: record the local Sync work in this existing operation mechanism.
-  | { readonly _tag: "Sync"; readonly phase: "retire"; readonly program: SyncProgram }
-  | { readonly _tag: "Sync"; readonly phase: "publish" | "install"; readonly sourceStep: number }
+  | {
+      readonly _tag: "Sync";
+      readonly phase: "retire";
+      readonly program: SyncProgram;
+    }
+  | {
+      readonly _tag: "Sync";
+      readonly phase: "publish" | "install";
+      readonly sourceStep: number;
+    }
   | { readonly _tag: "Import"; readonly request: ImportRequest }
   | {
       readonly _tag: "Manage";
@@ -471,7 +507,10 @@ export type SetupStep =
       readonly importedAt: string;
       readonly routing: StepRouting;
     }
-  | { readonly _tag: "Remove"; readonly folders: readonly (FolderEvidence | LinkEvidence)[] }; // arbitrary reviewed duplicates (recovery-moves.ts:92-101)
+  | {
+      readonly _tag: "Remove";
+      readonly folders: readonly (FolderEvidence | LinkEvidence)[];
+    }; // arbitrary reviewed duplicates (recovery-moves.ts:92-101)
 
 /**
  * One step as saved in state.json before any step runs; `after` evidence that depends on an earlier
@@ -573,8 +612,14 @@ export interface Library {
    */
   readonly plan: <I extends Intent>(
     intent: I,
-    options: { readonly base: Snapshot; readonly approvals?: readonly Approval[] },
-  ) => Effect.Effect<Extract<TargetPlan, { readonly _tag: I["_tag"] }>, TargetPlanError>;
+    options: {
+      readonly base: Snapshot;
+      readonly approvals?: readonly Approval[];
+    },
+  ) => Effect.Effect<
+    Extract<TargetPlan, { readonly _tag: I["_tag"] }>,
+    TargetPlanError
+  >;
   /**
    * Rechecks both state (baseRevision) and filesystem evidence (planId) under the writer, refusing
    * either with StalePlan. Then one atomic state.json write, including this change's record; then
@@ -603,7 +648,9 @@ export interface Library {
     readonly authored: (
       request: AuthoredImport,
     ) => Effect.Effect<ImportedCollection, ImportAuthoredCollectionError>;
-    readonly edit: (request: EditImport) => Effect.Effect<ImportedEdit, ImportEditError>;
+    readonly edit: (
+      request: EditImport,
+    ) => Effect.Effect<ImportedEdit, ImportEditError>;
   };
   /**
    * NEW: replaces beginSetupOperation and setup-apply's LibraryStore substitution. Failures before
@@ -627,12 +674,16 @@ export interface Library {
     readonly inspect: (
       snapshot: Snapshot,
     ) => Effect.Effect<
-      { readonly _tag: "Intact" } | { readonly _tag: "Changed"; readonly hash: Hash },
+      | { readonly _tag: "Intact" }
+      | { readonly _tag: "Changed"; readonly hash: Hash },
       LibraryStateReadError | StalePlan
     >;
     readonly pack: (
       snapshot: Snapshot,
-    ) => Effect.Effect<readonly SnapshotArchive[], LibraryStateReadError | StalePlan>;
+    ) => Effect.Effect<
+      readonly SnapshotArchive[],
+      LibraryStateReadError | StalePlan
+    >;
     /**
      * Before the remote write: retain everything `target` needs from local archives, originals/
      * and `download`. Additive only; existing originals are immutable. Missing content is
@@ -642,12 +693,23 @@ export interface Library {
     readonly stage: <E = never, R = never>(
       target: LibraryManifest,
       source: {
-        readonly download?: (digest: Hash) => Effect.Effect<SnapshotArchive, E, R>;
-        readonly registry: { readonly origin: string; readonly token: Option.Option<string> };
+        readonly download?: (
+          digest: Hash,
+        ) => Effect.Effect<SnapshotArchive, E, R>;
+        readonly registry: {
+          readonly origin: string;
+          readonly token: Option.Option<string>;
+        };
         readonly progress?: RestoreProgress;
       } & (
-        | { readonly localArchives: readonly SnapshotArchive[]; readonly plan?: never }
-        | { readonly plan: CollectionVersionPlan; readonly localArchives?: never }
+        | {
+            readonly localArchives: readonly SnapshotArchive[];
+            readonly plan?: never;
+          }
+        | {
+            readonly plan: CollectionVersionPlan;
+            readonly localArchives?: never;
+          }
       ),
     ) => Effect.Effect<StagedContent, ContentStageError | E, R>;
   };
@@ -655,13 +717,22 @@ export interface Library {
    * Includes pending and stopped operations. Malformed audit data reports its path and line;
    * reading history must never silently discard evidence or repair the log.
    */
-  readonly history: Effect.Effect<History, LibraryStateReadError | LibraryAuditInvalid>;
+  readonly history: Effect.Effect<
+    History,
+    LibraryStateReadError | LibraryAuditInvalid
+  >;
   /** Passive recovery facts; malformed audit history must not hide saved files. */
   readonly recovery: {
-    readonly list: Effect.Effect<readonly string[], PlatformErrors.PlatformError | RecoveryInvalid>;
+    readonly list: Effect.Effect<
+      readonly string[],
+      PlatformErrors.PlatformError | RecoveryInvalid
+    >;
     readonly inspect: (
       operationId: string,
-    ) => Effect.Effect<RecoveryInspection, PlatformErrors.PlatformError | RecoveryInvalid>;
+    ) => Effect.Effect<
+      RecoveryInspection,
+      PlatformErrors.PlatformError | RecoveryInvalid
+    >;
   };
   /** What startup recovery did when the layer was built. */
   readonly startup: StartupRecovery;
@@ -707,13 +778,18 @@ export type LibraryLayerError =
   | LibraryStateReadError
   | LibraryStateWriteError;
 
-/** What Library.layer may require. Its methods require nothing. */
+/**
+ * What Library.layer may require: the platform, including its HTTP client for content it
+ * downloads. Captured at construction like the filesystem; an owner never picks a transport.
+ * Its methods require nothing.
+ */
 export type LibraryRequires =
   | FileSystem.FileSystem
   | Path.Path
   | LinkStat
   | SourceProcess
-  | Digest.Digest; // TreeHasher becomes a plain function over Digest (service rule)
+  | Digest.Digest // TreeHasher becomes a plain function over Digest (service rule)
+  | HttpClient.HttpClient;
 
 // ── InstalledSkills ────────────────────────────────────────────────────────────────────────────
 // APPROVE: today's surface, packages/skit/src/library/installed-skills.ts. Facts about skill
@@ -722,13 +798,20 @@ export declare namespace InstalledSkills {
   /** Changes nothing on disk. Anyone may hold these. */
   interface Facts {
     readonly active: Effect.Effect<readonly InstallDestination[], Error>;
-    readonly destinations: (scope: InstallScope) => Effect.Effect<readonly Destination[], Error>;
+    readonly destinations: (
+      scope: InstallScope,
+    ) => Effect.Effect<readonly Destination[], Error>;
     readonly identify: (
       path: string,
-    ) => Effect.Effect<{ readonly key: string; readonly canonicalPath: string }, Error>;
+    ) => Effect.Effect<
+      { readonly key: string; readonly canonicalPath: string },
+      Error
+    >;
     readonly inspect: (path: string) => Effect.Effect<Folder, Error>;
     readonly hash: (path: string) => Effect.Effect<Hash, Error>;
-    readonly check: (folders: readonly Folder[]) => Effect.Effect<void, Changed | Error>;
+    readonly check: (
+      folders: readonly Folder[],
+    ) => Effect.Effect<void, Changed | Error>;
     readonly build: (
       installedSkill: {
         readonly skillId: SkillId;
@@ -800,7 +883,12 @@ export declare namespace InstalledSkills {
     readonly _contract: "skit/library/InstalledSkills";
   }
   /** APPROVE: what InstalledSkills.make may require. Routing is a constructor argument. */
-  type Requires = FileSystem.FileSystem | Path.Path | LinkStat | SourceProcess | Digest.Digest;
+  type Requires =
+    | FileSystem.FileSystem
+    | Path.Path
+    | LinkStat
+    | SourceProcess
+    | Digest.Digest;
 }
 
 // Write authority, removals and debt for this slice live in app.ts (owners.Library, owners.InstalledSkills).

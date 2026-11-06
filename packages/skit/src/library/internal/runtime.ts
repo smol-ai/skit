@@ -1,16 +1,32 @@
-import { listRecoveryOperations, inspectRecoveryOperation } from "./recovery/moves.js";
+import {
+  listRecoveryOperations,
+  inspectRecoveryOperation,
+} from "./recovery/moves.js";
 import { resolve } from "node:path";
 import { planRestore, applyRestore } from "./recovery/restore.js";
 import { planSync, applySync, type SyncApplyRequest } from "./sync/sync.js";
-import { planManaging, applyManaging, checkedManageIntent } from "./manage/manage.js";
+import {
+  planManaging,
+  applyManaging,
+  checkedManageIntent,
+} from "./manage/manage.js";
 import { stepRouting } from "../routing/step.js";
 import { planAcceptance, applyAcceptance } from "./security/accept.js";
 import { planInventory, applyInventory } from "./inventory/refresh.js";
 import { planUndo, applyUndo } from "./setup/undo.js";
-import { Context, Effect, FileSystem, Layer, Option, Path, Schema, Struct } from "effect";
+import {
+  Context,
+  Effect,
+  FileSystem,
+  Layer,
+  Option,
+  Path,
+  Schema,
+  Struct,
+} from "effect";
 import { LinkStat } from "../../platform/link-stat.js";
 import { SourceProcess } from "../../platform/source-process.js";
-import { FetchHttpClient, HttpClient } from "effect/http";
+import { HttpClient } from "effect/http";
 import {
   inspectContent,
   planContent,
@@ -36,7 +52,11 @@ import { readLibraryAudit } from "../audit/audit-log.js";
 import { snapshotOf, type Snapshot } from "../snapshot.js";
 import { recover, setup, applyRecorded } from "./setup/run.js";
 import { planningState } from "../reviewed-plan.js";
-import { importCollection, importAuthoredCollection, importEdit } from "../import-collection.js";
+import {
+  importCollection,
+  importAuthoredCollection,
+  importEdit,
+} from "../import-collection.js";
 import type { TreeRequirements } from "../../platform/tree-requirements.js";
 import { StalePlan, type Approval } from "../library-plan.js";
 import { planIntent } from "../plan-changes.js";
@@ -71,17 +91,19 @@ const make = Effect.fn("Library.make")(function* (
   const writer = Context.pick(FileSystem.FileSystem)(
     yield* Effect.context<FileSystem.FileSystem>(),
   );
+  // The platform's HTTP client is captured like its filesystem: an owner never picks a transport.
   const importing = Context.pick(
     FileSystem.FileSystem,
     Path.Path,
     LinkStat,
     SourceProcess,
     Digest.Digest,
-  )(yield* Effect.context<TreeRequirements | Digest.Digest>());
-  const suppliedHttp = yield* Effect.serviceOption(HttpClient.HttpClient);
-  const contentHttp = Option.isSome(suppliedHttp)
-    ? Layer.succeed(HttpClient.HttpClient, suppliedHttp.value)
-    : FetchHttpClient.layer;
+    HttpClient.HttpClient,
+  )(
+    yield* Effect.context<
+      TreeRequirements | Digest.Digest | HttpClient.HttpClient
+    >(),
+  );
   /** Every import holds the Library writer, and its staging ends with the import. */
   const owned = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     writeLibrary(home, Effect.scoped(effect)).pipe(
@@ -89,10 +111,10 @@ const make = Effect.fn("Library.make")(function* (
       Effect.provide(importing),
     );
 
-  const stageFor = Effect.fn("Library.content.stageOwned")(function* <E = never, R = never>(
-    target: LibraryManifest,
-    source: ContentSource<E, R>,
-  ) {
+  const stageFor = Effect.fn("Library.content.stageOwned")(function* <
+    E = never,
+    R = never,
+  >(target: LibraryManifest, source: ContentSource<E, R>) {
     // The owner's platform must never replace a download callback's own dependencies.
     const caller = yield* Effect.context<R>();
     const download = source.download;
@@ -104,27 +126,40 @@ const make = Effect.fn("Library.make")(function* (
             download: (hash: import("../../shared/hash.js").Hash) =>
               download(hash).pipe(Effect.provide(caller)),
           }),
-    }).pipe(Effect.provide(writer), Effect.provide(importing), Effect.provide(contentHttp));
+    }).pipe(Effect.provide(writer), Effect.provide(importing));
   });
 
   function planFor<I extends PlanningIntent>(
     intent: I,
-    options: { readonly base: Snapshot; readonly approvals?: readonly Approval[] },
-  ): Effect.Effect<Extract<ReviewedPlan, { readonly _tag: I["_tag"] }>, PlanningError>;
+    options: {
+      readonly base: Snapshot;
+      readonly approvals?: readonly Approval[];
+    },
+  ): Effect.Effect<
+    Extract<ReviewedPlan, { readonly _tag: I["_tag"] }>,
+    PlanningError
+  >;
   function planFor(
     intent: PlanningIntent,
-    options: { readonly base: Snapshot; readonly approvals?: readonly Approval[] },
+    options: {
+      readonly base: Snapshot;
+      readonly approvals?: readonly Approval[];
+    },
   ): Effect.Effect<ReviewedPlan, PlanningError> {
     // The plan owns its Snapshot from the call, not from when its Effect runs.
     const base = structuredClone(options.base);
     if (intent._tag === "Restore")
-      return planRestore(home, structuredClone(intent), { base }).pipe(Effect.provide(importing));
+      return planRestore(home, structuredClone(intent), { base }).pipe(
+        Effect.provide(importing),
+      );
     const planning = Effect.provideService(InstalledSkills.Service, files);
     if (intent._tag === "Sync")
       return planSync(home, intent, {
         base,
         none: configuration._tag === "None",
-        ...(configuration._tag === "Configured" ? { roots: configuration } : {}),
+        ...(configuration._tag === "Configured"
+          ? { roots: configuration }
+          : {}),
       }).pipe(planning, Effect.provide(importing));
     if (intent._tag === "Manage")
       return Effect.gen(function* () {
@@ -133,16 +168,24 @@ const make = Effect.fn("Library.make")(function* (
         const installs = checked.selections.some(
           (selection) =>
             Option.getOrUndefined(selection.duplicates) !== "retain-only" &&
-            (selection.mode === "existing" || Option.isSome(selection.ownership)),
+            (selection.mode === "existing" ||
+              Option.isSome(selection.ownership)),
         );
-        let routing: StepRouting = { active: [], destinations: [], readable: [] };
+        let routing: StepRouting = {
+          active: [],
+          destinations: [],
+          readable: [],
+        };
         if (installs) {
           if (configuration._tag === "Configured")
             routing = yield* stepRouting(configuration, state);
           else {
             const scopes = [
               { kind: "global" as const },
-              ...state.repositories.map(({ root }) => ({ kind: "repository" as const, root })),
+              ...state.repositories.map(({ root }) => ({
+                kind: "repository" as const,
+                root,
+              })),
             ];
             routing = {
               active: yield* files.active,
@@ -158,9 +201,15 @@ const make = Effect.fn("Library.make")(function* (
         return yield* planManaging(home, checked, { base, routing });
       }).pipe(planning, Effect.provide(importing));
     if (intent._tag === "AcceptFinding")
-      return planAcceptance(home, intent, { base }).pipe(planning, Effect.provide(importing));
+      return planAcceptance(home, intent, { base }).pipe(
+        planning,
+        Effect.provide(importing),
+      );
     if (intent._tag === "RefreshInventory")
-      return planInventory(home, intent, { base }).pipe(planning, Effect.provide(importing));
+      return planInventory(home, intent, { base }).pipe(
+        planning,
+        Effect.provide(importing),
+      );
     if (intent._tag === "Undo")
       return planUndo(home, intent, { base }).pipe(
         Effect.provide(writer),
@@ -168,18 +217,28 @@ const make = Effect.fn("Library.make")(function* (
       );
     return Effect.gen(function* () {
       yield* planningState(home, base);
-      return yield* planIntent(intent, { home, base, approvals: options.approvals });
+      return yield* planIntent(intent, {
+        home,
+        base,
+        approvals: options.approvals,
+      });
     }).pipe(planning, Effect.provide(writer));
   }
   function applyFor<Request extends ApplyRequest>(
     request: Request,
-  ): Effect.Effect<Extract<Outcome, { readonly _tag: Request["plan"]["_tag"] }>, ApplyingError>;
-  function applyFor(request: ApplyRequest): Effect.Effect<Outcome, ApplyingError> {
+  ): Effect.Effect<
+    Extract<Outcome, { readonly _tag: Request["plan"]["_tag"] }>,
+    ApplyingError
+  >;
+  function applyFor(
+    request: ApplyRequest,
+  ): Effect.Effect<Outcome, ApplyingError> {
     return applyRequest(request).pipe(
       Effect.catchTag("LibraryChanged", () =>
         Effect.fail(
           new StalePlan({
-            message: "The Library changed before the reviewed change could be saved",
+            message:
+              "The Library changed before the reviewed change could be saved",
           }),
         ),
       ),
@@ -197,7 +256,9 @@ const make = Effect.fn("Library.make")(function* (
     const syncing = (request: SyncApplyRequest) =>
       applySync(home, request, {
         none: configuration._tag === "None",
-        ...(configuration._tag === "Configured" ? { roots: configuration } : {}),
+        ...(configuration._tag === "Configured"
+          ? { roots: configuration }
+          : {}),
       }).pipe(applying);
     if (request._tag === "ApplySynced") return syncing(request);
     const plan = request.plan;
@@ -205,11 +266,15 @@ const make = Effect.fn("Library.make")(function* (
     if (plan._tag === "Restore") return applyRestore(home, plan).pipe(applying);
     if (plan._tag !== plan.intent._tag)
       return Effect.fail(
-        new StalePlan({ message: "The plan tag does not match its reviewed intent" }),
+        new StalePlan({
+          message: "The plan tag does not match its reviewed intent",
+        }),
       );
     if (plan._tag === "Manage") return applyManaging(home, plan).pipe(applying);
-    if (plan._tag === "AcceptFinding") return applyAcceptance(home, plan).pipe(applying);
-    if (plan._tag === "RefreshInventory") return applyInventory(home, plan).pipe(applying);
+    if (plan._tag === "AcceptFinding")
+      return applyAcceptance(home, plan).pipe(applying);
+    if (plan._tag === "RefreshInventory")
+      return applyInventory(home, plan).pipe(applying);
     if (plan._tag === "Undo")
       return applyUndo(home, plan).pipe(
         Effect.map((result) => ({ _tag: "Undo" as const, result })),
@@ -222,12 +287,14 @@ const make = Effect.fn("Library.make")(function* (
   }
 
   return {
-    read: Effect.map(inspectLocalLibraryState(home), snapshotOf).pipe(Effect.provide(writer)),
+    read: Effect.map(inspectLocalLibraryState(home), snapshotOf).pipe(
+      Effect.provide(writer),
+    ),
     history: Effect.gen(function* () {
       const state = yield* loadLibrary(home);
-      const operations = yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
-        state.operations,
-      ).pipe(
+      const operations = yield* Schema.decodeUnknownEffect(
+        Schema.Array(OperationStatus),
+      )(state.operations).pipe(
         Effect.mapError(
           () =>
             new InvalidLibraryState({
@@ -240,7 +307,9 @@ const make = Effect.fn("Library.make")(function* (
       return {
         events,
         operations: operations.map(({ steps, ...operation }) => ({
-          ...(operation._tag === "Pending" ? Struct.omit(operation, ["preparation"]) : operation),
+          ...(operation._tag === "Pending"
+            ? Struct.omit(operation, ["preparation"])
+            : operation),
           steps: steps.map(({ applies: _applies, ...step }) => step),
         })),
       } satisfies History;
@@ -248,7 +317,9 @@ const make = Effect.fn("Library.make")(function* (
     recovery: {
       list: listRecoveryOperations(home).pipe(Effect.provide(importing)),
       inspect: (operationId) =>
-        inspectRecoveryOperation(home, operationId).pipe(Effect.provide(importing)),
+        inspectRecoveryOperation(home, operationId).pipe(
+          Effect.provide(importing),
+        ),
     },
     plan: planFor,
     apply: applyFor,
@@ -265,9 +336,15 @@ const make = Effect.fn("Library.make")(function* (
           Effect.provide(importing),
         ),
       inspect: (snapshot) =>
-        inspectContent(home, snapshot).pipe(Effect.provide(writer), Effect.provide(importing)),
+        inspectContent(home, snapshot).pipe(
+          Effect.provide(writer),
+          Effect.provide(importing),
+        ),
       pack: (snapshot) =>
-        packContent(home, snapshot).pipe(Effect.provide(writer), Effect.provide(importing)),
+        packContent(home, snapshot).pipe(
+          Effect.provide(writer),
+          Effect.provide(importing),
+        ),
       stage: stageFor,
     },
     setup: (steps, options) =>
@@ -284,12 +361,15 @@ export const makeOwner = (config: Config) =>
     Effect.provideServiceEffect(
       InstalledSkills.Service,
       Effect.gen(function* () {
-        if (config.routing._tag === "None") return yield* InstalledSkills.make();
+        if (config.routing._tag === "None")
+          return yield* InstalledSkills.make();
         if (config.routing._tag === "Configured")
           return yield* InstalledSkills.make(config.routing);
         yield* migrateLocalLibraryState(config.home);
         return yield* InstalledSkills.make(
-          yield* InstalledSkills.recordedRouting(yield* loadLibrary(config.home)),
+          yield* InstalledSkills.recordedRouting(
+            yield* loadLibrary(config.home),
+          ),
         );
       }),
     ),
