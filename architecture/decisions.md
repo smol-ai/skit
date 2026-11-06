@@ -327,16 +327,16 @@ API: `architecture/author.ts`. Each entry is a choice today's code does not sett
 
 **Evidence:** t3code's whole-directory lock: "Hold an exclusive lock on the state directory until the scope closes" ([T/apps/server/src/serverOwnership.ts#L177-L197](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/serverOwnership.ts#L177-L197)). For the check against `from`, see maple's `$.version.eq(expectedVersion)` (A3).
 
-### A7. AuthorHistory provides storage; the sync command runs the engine (decided)
+### A7. Author operations own the lifecycle; history supplies private storage (decided)
 
-**Problem:** `app.ts` gave AuthorHistory a `sync(remote)` operation. A `withStore` escape hatch would instead give any caller raw store authority (core `history.ts:95-105`). `Sync.Remote` is a `Context.Service` (core `sync.ts:95-124`), yet it owns no state, holds no resource, and is built anew for every command (`sync.ts:517-590`).
+**Problem:** approving `AuthorHistory.engineStore` and frontend `Sync.run` callbacks let the CLI coordinate leases, checkpoint persistence, capture-before-write and recovery. Import enforcement correctly accepted that contract but could not enforce the ownership required by the coding standards.
 
 **Decided:**
-- AuthorHistory exposes owner methods (`capture`, `retain`, `syncState.{read, save, prepareWrite}`) and one narrow `engineStore`, a `History.Store` adapter it builds over `<home>/history`. **Approved storage port:** the engine may write through that adapter because its writes (`putTree`, `commit`) are immutable, content-addressed and idempotent (`device-store.ts:32-66`). The adapter never touches the journal or `sync-bindings.json`.
-- `Sync.Remote` becomes a plain `remote` input to `Sync.loadPlanInput` and `Sync.run`, built by the workflow from the Registry client. This follows the service rule, which allows a service only when it owns state or holds a resource. Listed in `app.ts` removals.
-- The workflow drives `Sync.run`. Its `write` callback calls `capture` and then `lease.writeTree`. AuthorHistory needs neither the Registry nor AuthorWorkspace's write side.
-
-**Evidence (partial):** t3code's stores expose narrow writes, for example `/** Call inside the commit transaction. */ readonly apply` ([ProjectStore.ts#L73-L77](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/orchestration-v2/ProjectStore.ts#L73-L77)). A separate driver composes them into one commit ([EventSink.ts#L739-L766](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/orchestration-v2/EventSink.ts#L739-L766)). In t3code that driver is a service, while here the rules make it a plain function.
+- Frontends call `syncAuthorWorkspace`, `initializeAuthorWorkspace`, `removeAuthorCollection` and `generateAuthorInvocation`. These plain Author operations hide workspace leases, registration/connection transitions, backup acknowledgement, checkpoint sequencing and prepared writes.
+- `AuthorWorkspace` and `AuthorHistory` remain separate internal state owners. Their tags are exported only as types for Effect requirements. Runtime composition uses `authorLayer` / `authorWorkspaceLayer`; callers receive no storage or lease capabilities.
+- The pure Sync engine runs inside Author. Its content-addressed store, checkpoint and write callbacks stay private. AuthorHistory still owns its journal permit and home state; AuthorWorkspace owns local tree writes. No coordinator service is needed.
+- Frontends supply an `AuthorRegistry` protocol adapter (origin, destination session, availability/create and revision transport), and render the operation result. Transport callbacks cannot receive a lease, checkpoint or local writer.
+- Read-only workspace queries and capture/backup intents remain available through owner operations. Low-level storage unit tests live with the owners; frontend integration tests use the operations and independent read-only disk evidence. No product history readers are added solely for tests.
 
 ### A8. One writer at a time per workspace: the lease (decided)
 
@@ -431,12 +431,12 @@ Implemented hierarchy handling (2026-11-06): implicit directories merge by child
 
 **Problem:** `library remove` runs `Library.apply`, then marks the workspace removed (`workflows/library/remove.ts:81`). A crash between the two leaves a workspace that still says `Registered` for a collection that is gone.
 
-**Decided:** there is no coordinator service.
+**Decided:** the plain Author `removeAuthorCollection` operation coordinates the two owners; the frontend supplies the query and renders the result. There is no coordinator service.
 1. Under the workspace lease, `register { → Removing }` records the intent durably.
 2. `Library.apply(Remove)` runs.
 3. `register { Removing → Removed }` completes the removal.
 
-A retry that finds `Removing` runs `Library.apply` again only if the collection is still there, then marks the workspace `Removed`. `Removing` already counts as opted out for promotion. The workspace is marked only if it still carries the collection's id (`author-workspace.ts:169-184`). If the root is gone, `Library.apply` runs alone.
+A removal retry while the Collection exists sees `Removing`, applies Library removal and marks `Removed`. After the Library half has already completed, `initializeAuthorWorkspace` verifies that no Library registration remains and settles `Removing → Removed`; ordinary init keeps it opted out and `--register` explicitly opts it back in. `Removing` already counts as opted out for promotion. The workspace is marked only if it still carries the collection's id (`author-workspace.ts:169-184`). If the root is gone, `Library.apply` runs alone.
 
 ### A16. Delete leaves the local binding stale (decided)
 

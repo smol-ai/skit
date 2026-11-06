@@ -10,7 +10,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Cause, Effect, Exit, FileSystem } from "effect";
 import { join } from "node:path";
 
-import { AuthorWorkspace } from "@smolai/skit-core/author";
+import { readAuthorWorkspace } from "@smolai/skit-core/author";
 
 const ORIGIN = "https://registry.example";
 const credential = { token: "t", tokenId: "i", tokenPrefix: "p", scopes: ["library:sync"] };
@@ -26,12 +26,8 @@ const withRemote = Effect.fn("withRemote")(function* (document: string) {
   const fs = yield* FileSystem.FileSystem;
   const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-remote-" });
   yield* fs.writeFileString(join(root, "skit.remote.json"), document);
-  const workspaces = yield* AuthorWorkspace;
   return yield* Effect.exit(
-    workspaces.resolveRoot(root).pipe(
-      Effect.flatMap(workspaces.read),
-      Effect.map(({ connection }) => connection),
-    ),
+    readAuthorWorkspace(root).pipe(Effect.map(({ connection }) => connection)),
   );
 });
 

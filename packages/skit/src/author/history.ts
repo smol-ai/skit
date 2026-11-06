@@ -835,3 +835,15 @@ export class AuthorHistory extends Context.Service<AuthorHistory, AuthorHistoryS
   static readonly layer = (config: AuthorHistoryConfig) =>
     Layer.effect(AuthorHistory, make(config));
 }
+
+/** Storage representation errors are reported as unusable Author history at the owner boundary. */
+export const authorHistoryStoreError = (error: History.StoreError) =>
+  new AuthorHistoryInvalid({
+    path: error._tag === "History.StoreFailed" ? "history" : `history ${error.kind} ${error.hash}`,
+    reason:
+      error._tag === "History.StoreFailed"
+        ? String(error.cause)
+        : error._tag === "History.StoreMissing"
+          ? `${error.kind} is missing`
+          : error.reason,
+  });

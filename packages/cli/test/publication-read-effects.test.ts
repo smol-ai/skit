@@ -12,7 +12,8 @@ import {
   type AuthorWorkspaceMetadataInvalid,
   type AuthorSyncStateInvalid,
   type AuthorWorkspaceRootInvalid,
-  AuthorWorkspace,
+  authorWorkspaceLayer,
+  readAuthorWorkspace,
 } from "@smolai/skit-core/author";
 
 type ReadError =
@@ -30,11 +31,10 @@ import { readConfig } from "../src/registry/auth.js";
 const remote = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   return yield* Effect.gen(function* () {
-    const workspaces = yield* AuthorWorkspace;
-    return yield* workspaces.read(yield* workspaces.resolveRoot("/"));
+    return yield* readAuthorWorkspace("/");
   }).pipe(
     // Fresh: the platform layer's own AuthorWorkspace reads the real FileSystem.
-    Effect.provide(Layer.fresh(AuthorWorkspace.layer)),
+    Effect.provide(Layer.fresh(authorWorkspaceLayer)),
     Effect.provideService(FileSystem.FileSystem, {
       ...fs,
       readFileString: (path, encoding) =>
@@ -56,7 +56,7 @@ type Requirements =
   | FileSystem.FileSystem
   | SkitConfiguration
   | ChildProcessSpawner.ChildProcessSpawner
-  | Layer.Services<typeof AuthorWorkspace.layer>;
+  | Layer.Services<typeof authorWorkspaceLayer>;
 
 it.effect.each(["remote", "config"] as const)(
   "%s read preserves defects and interruption",

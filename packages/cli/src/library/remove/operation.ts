@@ -1,51 +1,10 @@
-import { AuthorWorkspace } from "@smolai/skit-core/author";
+import { Effect } from "effect";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { openRemoveSession } from "@smolai/skit-core/library/session";
-import { Effect, Option } from "effect";
-
+import { removeAuthorCollection } from "@smolai/skit-core/author";
 export interface RemoveOptions {
   readonly query: string;
   readonly dryRun: boolean;
 }
-
 export const executeRemove = Effect.fn("CLI.executeRemove")(function* (options: RemoveOptions) {
-  const paths = yield* SkitConfiguration;
-  const selection = yield* openRemoveSession(paths.skitHome, options.query);
-  if (options.dryRun) return { kind: "plan" as const, value: selection.summary };
-  const remove = selection.apply();
-  // A15: the frontend composes Library removal with the AuthorWorkspace lease and registration.
-  const workspaces = yield* AuthorWorkspace;
-  const root =
-    selection.workspace?.path === undefined
-      ? Option.none()
-      : yield* workspaces.resolveRoot(selection.workspace.path).pipe(
-          Effect.map(Option.some),
-          Effect.catchTag("AuthorWorkspaceRootInvalid", () => Effect.succeedNone),
-        );
-  const outcome = Option.isNone(root)
-    ? yield* remove
-    : yield* Effect.scoped(
-        Effect.gen(function* () {
-          const lease = yield* workspaces.acquire(root.value);
-          const identity = yield* workspaces.readIdentity(root.value);
-          if (
-            Option.isNone(identity) ||
-            identity.value.workspaceId !== selection.workspace?.workspaceId
-          )
-            return yield* remove;
-          const { registration } = identity.value;
-          const removing =
-            registration === "IdentityOnly" || registration === "Registered"
-              ? yield* lease.register({ from: { ...identity.value, registration }, to: "Removing" })
-              : identity.value;
-          const removed = yield* remove;
-          if (removing.registration === "Removing")
-            yield* lease.register({
-              from: { ...removing, registration: "Removing" },
-              to: "Removed",
-            });
-          return removed;
-        }),
-      );
-  return { kind: "removed" as const, value: outcome };
+  return yield* removeAuthorCollection((yield* SkitConfiguration).skitHome, options);
 });

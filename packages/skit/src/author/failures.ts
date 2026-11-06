@@ -1,4 +1,4 @@
-import { Data } from "effect";
+import { Data, Schema } from "effect";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 export class AuthorWorkspaceMetadataInvalid
@@ -162,5 +162,104 @@ export class NotAnAuthorWorkspace
     "Run the command in an Author Workspace, the source directory you author a SKIT in.";
   get message(): string {
     return `${this.path} is not an Author Workspace; invocation metadata is generated only for author-owned source, never for acquired or retained content`;
+  }
+}
+
+export class AuthorRemoteAlreadyExists
+  extends Data.TaggedError("AuthorRemoteAlreadyExists")<{
+    locator: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "CONFLICT" as const;
+  readonly remediation = "Sync without --to to use the existing remote home.";
+  get message(): string {
+    return `Remote home already exists at ${this.locator}`;
+  }
+}
+
+export class VisibilityNotAccepted
+  extends Data.TaggedError("VisibilityNotAccepted")<{
+    reason: "already-synced" | "required";
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "INVALID_ARGUMENT" as const;
+  get remediation(): string {
+    return this.reason === "already-synced"
+      ? "Sync again without --visibility."
+      : "Pass --visibility private, unlisted or public.";
+  }
+  get message(): string {
+    return this.reason === "already-synced"
+      ? "--visibility is accepted only on first author sync"
+      : "First author sync requires --visibility";
+  }
+}
+
+export class DestinationFormInvalid
+  extends Data.TaggedError("DestinationFormInvalid")<{
+    form: "canonical" | "relative-without-registry";
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "INVALID_ARGUMENT" as const;
+  get remediation(): string {
+    return this.form === "canonical"
+      ? "Pass the destination as skit://host/namespace/skit."
+      : "Run `skit auth login`, or pass a full destination.";
+  }
+  get message(): string {
+    return this.form === "canonical"
+      ? "Canonical SKIT destination must be skit://host/namespace/skit"
+      : "A relative author destination requires an active Registry; run `skit auth login`";
+  }
+}
+
+export class DestinationExistsWithoutHistory
+  extends Data.TaggedError("DestinationExistsWithoutHistory")<{ identity: string }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "CONFLICT" as const;
+  readonly remediation = "Choose a new destination, or sync from a SKIT that shares its history.";
+  get message(): string {
+    return `Destination ${this.identity} already exists without common history`;
+  }
+}
+
+export class DirectoryAlreadyInLibrary
+  extends Data.TaggedError("DirectoryAlreadyInLibrary")<{
+    collectionId: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "CONFLICT" as const;
+  get remediation(): string {
+    return `Run \`skit remove ${this.collectionId}\`, then register the Author Workspace.`;
+  }
+  get message(): string {
+    return `This directory is already retained as ${this.collectionId}; remove it before registering an Author Workspace`;
+  }
+}
+
+export class AuthorWorkspaceRemovalUnfinished
+  extends Schema.TaggedError<AuthorWorkspaceRemovalUnfinished>()(
+    "AuthorWorkspaceRemovalUnfinished",
+    { collectionId: Schema.String },
+  )
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "CONFLICT" as const;
+  get remediation(): string {
+    return `Run \`skit remove ${this.collectionId}\` to finish removing it, then initialize the workspace again with --register.`;
+  }
+  get message(): string {
+    return `Removing this Author Workspace's Collection ${this.collectionId} did not finish`;
   }
 }

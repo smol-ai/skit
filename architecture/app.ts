@@ -160,7 +160,8 @@ export const owners = {
       "resolveRoot(input): WorkspaceRoot (canonical; A1)",
       "read: { identity, connection: Unconnected | Connecting | Connected { leftover } } (never writes)",
       "readIdentity(root) (workspace.json only; for AuthorHistory, A10)",
-      "acquire(root): scoped WorkspaceLease { register, transition, writeTree } (A8)",
+      "private acquire(root): scoped WorkspaceLease { register, transition, writeTree } (A8)",
+      "public readAuthorWorkspace / initializeAuthorWorkspace / generateAuthorInvocation / removeAuthorCollection; Author owns orchestration (A7, A15)",
     ],
     requires: [
       "FileSystem",
@@ -192,10 +193,11 @@ export const owners = {
     ops: [
       "capture(root): { id, revision, treeHash }",
       "retain(tree)",
-      "engineStore: History.Store adapter (immutable, content-addressed, idempotent writes; A7)",
-      "syncState.{read, save, prepareWrite} keyed by { workspaceId, locator } (A5, A6)",
+      "private engineStore: History.Store adapter for the owner-local Sync engine (A7)",
+      "private syncState.{read, save, prepareWrite} keyed by { workspaceId, locator } (A5, A6)",
+      "public syncAuthorWorkspace / captureAuthorWorkspace / backupAuthorWorkspace",
     ],
-    // Runs no sync: the plain sync workflow drives Sync.run with engineStore and syncState (A7).
+    // Plain owner-local Author operations run sync; frontends supply only Registry transport (A7).
     requires: [
       "FileSystem",
       "Path",
@@ -511,7 +513,7 @@ export const platform = [
 /** Removed outright or demoted to plain functions: no owner, no state, no resource. */
 export const removedServices = [
   "Sync.Remote → plain engine input to Sync.loadPlanInput / Sync.run, built per command from the Registry client (A7)",
-  "History.Store → plain engine input to Sync and History.record; one implementation, the CLI device store (AuthorHistory.engineStore)",
+  "History.Store → plain engine input to Sync and History.record; one implementation, the private AuthorHistory.engineStore",
   "SkillUsage → scanUsage()",
   "SetupDiscovery → plain function (the scan-once requirement is proven another way)",
   "PasswordHasher → plain functions shared by Better Auth and bootstrap (done; same format: self-hosting.md:267)",

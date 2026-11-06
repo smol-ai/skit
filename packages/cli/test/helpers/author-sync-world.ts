@@ -4,9 +4,7 @@ import { Effect, Exit, Fiber, FileSystem, Layer, Ref, Scope } from "effect";
 import { libraryApplicationLayer } from "../../src/application.js";
 
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
-import { AuthorWorkspace, AuthorHistory } from "@smolai/skit-core/author";
-import { Option } from "effect";
-import { backupAuthorHistory } from "../../src/author/sync/backup.js";
+import { backupAuthorWorkspace } from "@smolai/skit-core/author";
 import { authorSyncApi } from "../../src/registry/author-sync.js";
 import type { PlatformError } from "effect/PlatformError";
 import { syncAuthorWorkspace } from "../../src/author/sync/workflow.js";
@@ -121,26 +119,11 @@ export const makeAuthorSyncWorld = Effect.fn("Test.makeAuthorSyncWorld")(functio
       /** Complete archival uploads before a test pauses the separate current-content protocol. */
       backUp: () =>
         Effect.gen(function* () {
-          const workspaces = yield* AuthorWorkspace;
-          const root = yield* workspaces.resolveRoot(workspace);
-          const lease = yield* workspaces.acquire(root);
-          const identity = yield* workspaces.readIdentity(root);
-          if (Option.isNone(identity))
-            return yield* Effect.die("Expected connected fixture identity");
-          const observation = yield* (yield* AuthorHistory).capture(root);
           const api = yield* authorSyncApi({
             remote,
             locator: "skit://registry.example/swyx/tools",
           });
-          yield* backupAuthorHistory(
-            lease,
-            {
-              workspaceId: identity.value.workspaceId,
-              locator: "skit://registry.example/swyx/tools",
-            },
-            observation,
-            api.remote,
-          );
+          yield* backupAuthorWorkspace(workspace, api.remote);
         }).pipe(
           Effect.provide(registryHttpLayer(testHttpClientLayer(server.transport(name)))),
           Effect.provide(authorLayer(home)),

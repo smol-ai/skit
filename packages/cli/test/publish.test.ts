@@ -5,7 +5,7 @@ import { it } from "@effect/vitest";
 import { Cause, Effect, Exit, FileSystem, Schema } from "effect";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { publish } from "../src/author/publish/workflow.js";
-import { AuthorWorkspace } from "@smolai/skit-core/author";
+import { authorWorkspaceLayer } from "@smolai/skit-core/author";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 import { registryCredentialLayer } from "./helpers/registry-credential.js";
@@ -25,7 +25,7 @@ const runPublish = (
 ) =>
   publish(root, version, revision).pipe(
     Effect.provide(registryHttpLayer(testHttpClientLayer(options.transport))),
-    Effect.provide(AuthorWorkspace.layer),
+    Effect.provide(authorWorkspaceLayer),
     // The environment's token is for this Registry only.
     Effect.provide(registryCredentialLayer(options.credentialOrigin ?? "https://registry.test")),
   );

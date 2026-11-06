@@ -2,8 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { Clock, Effect, Stream, FileSystem, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
-import * as History from "@smolai/skit-core/history";
-import { AuthorHistory } from "@smolai/skit-core/author";
+import { readAuthorAncestors } from "./helpers/author-history.js";
 import { authorLayer, captureWorkspace, storedTreesAt } from "./helpers/author-history.js";
 import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
 import { testPlatformLayer } from "./helpers/platform.js";
@@ -40,9 +39,7 @@ const eventsFrom = (
 const latest = (workspace: string, home: string) =>
   Effect.gen(function* () {
     const saved = yield* captureWorkspace(workspace);
-    const reached = yield* Stream.runCollect(
-      History.ancestors((yield* AuthorHistory).engineStore, saved.id),
-    );
+    const reached = yield* readAuthorAncestors(home, saved.id);
     return { ...saved, recorded: Array.from(reached).length };
   }).pipe(Effect.provide(authorLayer(home)));
 

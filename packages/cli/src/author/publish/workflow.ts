@@ -16,7 +16,8 @@ import { type TreeRequirements, type SkitConfiguration } from "@smolai/skit-core
 import { RegistryHttp, RegistryTransportError } from "../../registry/registry-http.js";
 import { publishRelease, PublicationResponseError } from "../../registry/publication.js";
 import {
-  AuthorWorkspace,
+  type AuthorWorkspace,
+  readAuthorWorkspace,
   type AuthorSyncStateInvalid,
   type AuthorWorkspaceRootInvalid,
   type AuthorWorkspaceMetadataInvalid,
@@ -81,9 +82,8 @@ export const publish = Effect.fn("publish")(function* (
   const absolute = resolve(root);
   const commandPath = /^[A-Za-z0-9_./-]+$/.test(root) ? root : `'${root.replaceAll("'", `'\\''`)}'`;
   yield* readSkitDescriptor(absolute);
-  const workspaces = yield* AuthorWorkspace;
   // One read: the portable remote is the authority; a leftover checkpoint beside it does not matter.
-  const { connection } = yield* workspaces.read(yield* workspaces.resolveRoot(absolute));
+  const { connection } = yield* readAuthorWorkspace(absolute);
   if (connection._tag !== "Connected") return yield* new NoRemoteHome();
   const remote = connection.remote;
   // Only this remote's credential: an environment token for another Registry is never sent.

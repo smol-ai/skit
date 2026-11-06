@@ -490,12 +490,23 @@ const effectRules = {
         (owner) => ![owner.owner].flat().some((path) => file.startsWith(path)),
       );
       if (owners.length === 0) return {};
-      // An owner's names arrive through core (default) or through the modules listed in `sources`.
+      // Resolve published entry points as well as relative imports; aliases keep the same owner.
+      const sourceTarget = (source) => {
+        if (source.startsWith(".")) return relative(repositoryRoot, resolve(fileDirectory, source));
+        if (source.startsWith("@smolai/skit-core/"))
+          return coreExports[`./${source.slice("@smolai/skit-core/".length)}`]?.source;
+        return undefined;
+      };
       const carries = (owner, source) => {
         if (owner.sources === undefined) return carriesCoreNames(fileDirectory, source);
-        if (!source.startsWith(".")) return false;
-        const target = relative(repositoryRoot, resolve(fileDirectory, source));
-        return owner.sources.some((path) => target.startsWith(path));
+        const target = sourceTarget(source);
+        return target !== undefined && owner.sources.some((path) => target.startsWith(path));
+      };
+      const namespaces = new Map();
+      const reportPrivate = (node, name, candidates) => {
+        const owner = candidates.find((candidate) => candidate.private.includes(name));
+        if (owner)
+          context.report({ node, messageId: "forbidden", data: { name, owner: owner.name } });
       };
       const check = (node) => {
         const source = node.source?.value;
@@ -511,7 +522,20 @@ const effectRules = {
           (owner) =>
             target !== undefined &&
             !(source.startsWith(".") && file.startsWith(owner.testOwner ?? "\0")) &&
-            owner.privateModules?.some((prefix) => target.startsWith(prefix)),
+            owner.privateModules?.some((prefix) => target.startsWith(prefix)) &&
+            !(
+              owner.publicNames &&
+              !source.startsWith(".") &&
+              (node.importKind === "type" ||
+                node.exportKind === "type" ||
+                (node.specifiers?.length > 0 &&
+                  node.specifiers.every(
+                    (specifier) =>
+                      specifier.importKind === "type" ||
+                      specifier.exportKind === "type" ||
+                      owner.publicNames.includes(specifier.imported?.name ?? specifier.local?.name),
+                  )))
+            ),
         );
         if (moduleOwner) {
           context.report({
@@ -534,17 +558,42 @@ const effectRules = {
             ),
         );
         if (reachable.length === 0) return;
-        for (const specifier of node.specifiers ?? []) {
-          const imported = specifier.imported ?? specifier.local;
-          const name = imported?.type === "Identifier" ? imported.name : imported?.value;
-          if (typeof name !== "string") continue;
-          const owner = reachable.find((candidate) => candidate.private.includes(name));
+        if (node.importKind === "type" || node.exportKind === "type") return;
+        if (node.type === "ImportExpression" || node.type === "ExportAllDeclaration") {
+          // Dynamic/whole engine access can hide the execution name from this file's imports.
+          const owner = reachable.find((owner) => owner.publicNames);
           if (owner)
             context.report({
-              node: specifier,
+              node,
               messageId: "forbidden",
-              data: { name, owner: owner.name },
+              data: { name: source, owner: owner.name },
             });
+        }
+        for (const specifier of node.specifiers ?? []) {
+          if (specifier.importKind === "type" || specifier.exportKind === "type") continue;
+          if (specifier.type === "ImportNamespaceSpecifier") {
+            const owner = reachable.find((owner) => owner.publicNames);
+            if (owner)
+              context.report({
+                node: specifier,
+                messageId: "forbidden",
+                data: { name: source, owner: owner.name },
+              });
+            else namespaces.set(specifier.local.name, reachable);
+            continue;
+          }
+          if (specifier.type === "ExportNamespaceSpecifier") {
+            const owner = reachable.find((owner) => owner.publicNames);
+            if (owner)
+              context.report({
+                node: specifier,
+                messageId: "forbidden",
+                data: { name: source, owner: owner.name },
+              });
+            continue;
+          }
+          const imported = specifier.imported ?? specifier.local;
+          reportPrivate(specifier, imported?.name ?? imported?.value, reachable);
         }
       };
       return {
@@ -552,6 +601,21 @@ const effectRules = {
         ExportNamedDeclaration: check,
         ExportAllDeclaration: check,
         ImportExpression: check,
+        MemberExpression(node) {
+          reportPrivate(
+            node,
+            node.property?.name ?? node.property?.value,
+            namespaces.get(node.object?.name) ?? [],
+          );
+        },
+        VariableDeclarator(node) {
+          const from = namespaces.get(node.init?.name);
+          if (!from) return;
+          if (node.id.type === "Identifier") namespaces.set(node.id.name, from);
+          if (node.id.type === "ObjectPattern")
+            for (const property of node.id.properties)
+              reportPrivate(property, property.key?.name ?? property.key?.value, from);
+        },
       };
     },
   },

@@ -1,14 +1,16 @@
+import { AuthorWorkspace } from "../src/author/workspace.js";
+import { AuthorHistory } from "../src/author/history.js";
 import { expect, it } from "@effect/vitest";
 import { Effect, FileSystem, Option, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
-import * as History from "@smolai/skit-core/history";
-import { AuthorHistory, AuthorWorkspace, type Identity } from "@smolai/skit-core/author";
+import * as History from "../src/history/history.js";
+import type { Identity } from "../src/author/index.js";
 
 /** No identity, typed as the state a first registration plans from. */
 const absent = Option.none<Identity>();
 import { authorLayer, captureWorkspace, storedTreesAt } from "./helpers/author-history.js";
-import { libraryHome } from "./helpers/library-home.js";
+import { libraryHome } from "./helpers/author-home.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { captureDisk, assertDiskUnchanged } from "./helpers/disk-snapshot.js";
 
@@ -33,7 +35,7 @@ const fixture = Effect.gen(function* () {
       }),
     );
   const capture = (path = source) =>
-    home.owned(captureWorkspace(path).pipe(Effect.provide(authorLayer(home.home))));
+    captureWorkspace(path).pipe(Effect.provide(authorLayer(home.home)));
   const metadata = (path = source) =>
     fs.readFileString(join(path, ".skit/workspace.json")).pipe(Effect.map(JSON.parse));
   return { fs, workspaces, root, source, home, identify, capture, metadata };

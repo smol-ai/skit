@@ -12,3 +12,5 @@ export {
   type FailureCode,
   type SkitFailure,
 } from "./failure.js";
+
+export { MissingRequirement } from "./input-failures.js";

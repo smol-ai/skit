@@ -1,9 +1,9 @@
 import { expect, it } from "@effect/vitest";
-import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Stream } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, FileSystem } from "effect";
 import { TestClock } from "effect/testing";
 import { dirname, join } from "node:path";
 import * as History from "@smolai/skit-core/history";
-import { AuthorHistory } from "@smolai/skit-core/author";
+import { readAuthorAncestors, readAuthorRevision } from "./helpers/author-history.js";
 import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
 import {
   authorLayer,
@@ -21,8 +21,7 @@ const capture = (workspace: string, home: string) =>
 /** The ids reachable from `id` in `home`'s history, newest first. */
 const lineage = (id: History.RevisionId, home: string) =>
   Effect.gen(function* () {
-    const history = yield* AuthorHistory;
-    const reached = yield* Stream.runCollect(History.ancestors(history.engineStore, id));
+    const reached = yield* readAuthorAncestors(home, id);
     return Array.from(reached, (entry) => entry.id);
   }).pipe(Effect.provide(authorLayer(home)));
 
@@ -58,8 +57,8 @@ it.effect("A → B → A records three ordered revisions referencing two stored 
       ]);
       expect(new Set(observations.map((saved) => saved.id)).size).toBe(3);
       expect(third.treeHash).toBe(first.treeHash);
-      expect(yield* storedTrees).toHaveLength(2);
-      expect(fileText(yield* capturedTree(second), "notes/a.txt")).toBe("B");
+      expect(yield* storedTrees(a.home)).toHaveLength(2);
+      expect(fileText(yield* capturedTree(second, a.home), "notes/a.txt")).toBe("B");
       expect(new Set(observations.map((saved) => saved.revision.author.device)).size).toBe(1);
       // The latest is still the third: an unchanged capture records nothing.
       expect((yield* captureWorkspace(a.workspace)).id).toBe(third.id);
@@ -80,7 +79,7 @@ it.effect("unchanged concurrent observations add no duplicate events", () =>
       );
       expect(repeated.map((saved) => saved.id)).toEqual(Array.from({ length: 4 }, () => first.id));
       expect(first.revision.parents).toEqual([]);
-      expect(yield* storedTrees).toHaveLength(1);
+      expect(yield* storedTrees(a.home)).toHaveLength(1);
     }).pipe(Effect.provide(authorLayer(a.home)));
   }).pipe(Effect.provide(testPlatformLayer)),
 );
@@ -106,12 +105,15 @@ it.effect(
       const since = ids.slice(0, ids.indexOf(before.id)).reverse();
       expect(since).toHaveLength(3);
       yield* Effect.gen(function* () {
-        const history = yield* AuthorHistory;
-        const revisions = yield* Effect.forEach(since, history.engineStore.revision);
+        const revisions = yield* Effect.forEach(since, (id) =>
+          readAuthorRevision(world.a.home, id),
+        );
         expect(revisions[0]?.tree).toBe(revisions[2]?.tree);
         const contents: Array<string | undefined> = [];
         for (const revision of revisions)
-          contents.push(fileText(yield* capturedTree({ treeHash: revision.tree }), "notes/a.txt"));
+          contents.push(
+            fileText(yield* capturedTree({ treeHash: revision.tree }, world.a.home), "notes/a.txt"),
+          );
         expect(contents).toEqual(["A", "B", "A"]);
       }).pipe(Effect.provide(authorLayer(world.a.home)));
     }).pipe(Effect.provide(testPlatformLayer)),
@@ -332,13 +334,13 @@ it.effect("existing stored trees stay available without inventing a pre-journal 
     const saved = yield* capture(a.workspace, a.home);
     yield* fs.remove(join(a.home, "history", "journal.sqlite"));
     yield* Effect.gen(function* () {
-      expect(fileText(yield* capturedTree(saved), "notes/a.txt")).toBe("existing tree");
+      expect(fileText(yield* capturedTree(saved, a.home), "notes/a.txt")).toBe("existing tree");
       yield* TestClock.setTime(1000);
       const recorded = yield* captureWorkspace(a.workspace);
       expect(recorded.treeHash).toBe(saved.treeHash);
       expect(recorded.revision.parents).toEqual([]);
       expect(recorded.revision.author.at).toBe(1000);
-      expect(yield* storedTrees).toHaveLength(1);
+      expect(yield* storedTrees(a.home)).toHaveLength(1);
     }).pipe(Effect.provide(authorLayer(a.home)));
   }).pipe(Effect.provide(testPlatformLayer)),
 );

@@ -8,7 +8,6 @@ import type { Effect, Layer } from "effect";
 import type {
   scanAuthorSyncTree,
   AuthorWorkspace as Implementation,
-  WorkspaceLease as ImplementationLease,
   AuthorHistory as HistoryImplementation,
 } from "../../packages/skit/src/author/index.js";
 import type * as CoreHistory from "../../packages/skit/src/history/history.js";
@@ -27,8 +26,9 @@ import type {
 } from "../author.js";
 import type { Assert, ChangedMethods, Equal, ExtraMethods, MissingMethods } from "./library.js";
 
-import type { AuthorWorkspaceShape } from "../../packages/skit/src/author/workspace.js";
-import type { AuthorHistoryShape } from "../../packages/skit/src/author/history.js";
+type AuthorWorkspaceShape = Implementation["Service"];
+type ImplementationLease = Effect.Success<ReturnType<AuthorWorkspaceShape["acquire"]>>;
+type AuthorHistoryShape = HistoryImplementation["Service"];
 
 type Layered = typeof Implementation.layer;
 type HistoryLayered = ReturnType<typeof HistoryImplementation.layer>;
@@ -80,4 +80,70 @@ export type Checks = [
   Assert<Equal<Layer.Success<HistoryLayered>, HistoryImplementation>>,
   Assert<Equal<Layer.Error<HistoryLayered>, AuthorHistoryLayerError>>,
   Assert<Equal<HistoryImplementation["Service"], AuthorHistoryShape>>,
+];
+
+import type * as PublicAuthor from "../../packages/skit/src/author/index.js";
+import type {
+  AuthorSyncOptions,
+  AuthorRemoveOptions,
+  AuthorRegistry,
+  AuthorSyncOutcome,
+  Workspace,
+} from "../author.js";
+export type PublicOperationChecks = [
+  Assert<Equal<Effect.Success<ReturnType<typeof PublicAuthor.readAuthorWorkspace>>, Workspace>>,
+  Assert<
+    Equal<
+      PublicAuthor.AuthorRegistry<"connect", "environment", "protocol">,
+      AuthorRegistry<"connect", "environment", "protocol">
+    >
+  >,
+  Assert<PublicAuthor.AuthorSyncResult extends AuthorSyncOutcome ? true : false>,
+  Assert<AuthorSyncOutcome extends PublicAuthor.AuthorSyncResult ? true : false>,
+  Assert<
+    Effect.Success<ReturnType<typeof PublicAuthor.syncAuthorWorkspace>> extends AuthorSyncOutcome
+      ? true
+      : false
+  >,
+  Assert<Equal<Parameters<typeof PublicAuthor.syncAuthorWorkspace>[0], string>>,
+  Assert<Equal<Parameters<typeof PublicAuthor.syncAuthorWorkspace>[1], AuthorSyncOptions>>,
+  Assert<
+    Equal<
+      Parameters<typeof PublicAuthor.syncAuthorWorkspace>[2],
+      AuthorRegistry<unknown, unknown, unknown>
+    >
+  >,
+  Assert<Equal<Parameters<typeof PublicAuthor.initSkit>, [input: string]>>,
+  Assert<
+    Equal<
+      Parameters<typeof PublicAuthor.initializeAuthorWorkspace>,
+      [input: string, register: boolean, home: string]
+    >
+  >,
+  Assert<
+    Equal<
+      Parameters<typeof PublicAuthor.generateAuthorInvocation>,
+      [input: string, dryRun: boolean]
+    >
+  >,
+  Assert<
+    Equal<
+      Parameters<typeof PublicAuthor.removeAuthorCollection>,
+      [home: string, options: AuthorRemoveOptions]
+    >
+  >,
+  Assert<
+    Equal<
+      Extract<
+        keyof typeof PublicAuthor,
+        | "AuthorWorkspace"
+        | "AuthorHistory"
+        | "WorkspaceLease"
+        | "backupAuthorHistory"
+        | "engineStore"
+        | "generateInvocationMetadata"
+      >,
+      never
+    >
+  >,
 ];

@@ -14,7 +14,23 @@ import { TestClock } from "effect/testing";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import type * as History from "@smolai/skit-core/history";
-import * as Sync from "@smolai/skit-core/sync";
+// Independent disk format: this test observes checkpoint progress, not engine capabilities.
+const IdleCheckpoint = Schema.TaggedStruct("Idle", { base: Schema.NullOr(Schema.String) });
+const SendingCheckpoint = Schema.TaggedStruct("Sending", {
+  base: Schema.NullOr(Schema.String),
+  revision: Schema.String,
+});
+const SyncCheckpoint = Schema.Union([
+  IdleCheckpoint,
+  SendingCheckpoint,
+  Schema.TaggedStruct("Writing", {
+    base: Schema.NullOr(Schema.String),
+    from: Schema.String,
+    to: Schema.String,
+    next: Schema.Union([IdleCheckpoint, SendingCheckpoint]),
+    merged: Schema.Boolean,
+  }),
+]);
 import { testPlatformLayer } from "./helpers/platform.js";
 import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
 import { makeAuthorSyncServer } from "./helpers/author-sync-server.js";
@@ -43,7 +59,7 @@ const savedStates = Effect.fn("Test.savedSyncStates")(function* (device: {
     Schema.fromJsonString(
       Schema.Struct({
         schema: Schema.Literal("skit.sync-bindings.v1"),
-        workspaces: Schema.Record(Schema.String, Schema.Record(Schema.String, Sync.SyncState)),
+        workspaces: Schema.Record(Schema.String, Schema.Record(Schema.String, SyncCheckpoint)),
       }),
     ),
   )(yield* fs.readFileString(join(device.home, "sync-bindings.json")));

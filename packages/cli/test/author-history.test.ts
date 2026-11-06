@@ -1,10 +1,9 @@
 import { expect, it } from "@effect/vitest";
-import { Effect, FileSystem, Result, Stream } from "effect";
+import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { holdHomeLock } from "./helpers/home-lock.js";
-import * as History from "@smolai/skit-core/history";
-import { AuthorHistory } from "@smolai/skit-core/author";
+import { readAuthorAncestors } from "./helpers/author-history.js";
 import {
   authorLayer,
   captureWorkspace,
@@ -30,10 +29,10 @@ it.effect("ignored edits neither enter raw history nor record a new revision", (
       // The same revision: the unchanged capture recorded nothing.
       expect(after.id).toBe(before.id);
       expect(after.revision.parents).toEqual([]);
-      expect((yield* capturedTree(after)).some((entry) => entry.path === "private.local")).toBe(
-        false,
-      );
-      const versions = yield* storedTrees;
+      expect(
+        (yield* capturedTree(after, world.a.home)).some((entry) => entry.path === "private.local"),
+      ).toBe(false);
+      const versions = yield* storedTrees(world.a.home);
       expect(versions).toHaveLength(1);
       expect(versions[0]?.tree.some((entry) => entry.path === "private.local")).toBe(false);
     }).pipe(Effect.provide(authorLayer(world.a.home)));
@@ -77,7 +76,7 @@ it.effect(
           [captureWorkspace(world.a.workspace), captureWorkspace(world.a.workspace)],
           { concurrency: "unbounded" },
         );
-        return { versions, stored: yield* storedTrees };
+        return { versions, stored: yield* storedTrees(world.a.home) };
       }).pipe(Effect.provide(authorLayer(world.a.home)));
       expect(versions[0].treeHash).toBe(versions[1].treeHash);
       expect(versions[0].id).toBe(versions[1].id);
@@ -132,7 +131,7 @@ it.effect(
       yield* fs.symlink("run.sh", join(world.a.workspace, "notes/link"));
       yield* fs.writeFile(join(world.a.workspace, "notes/binary"), new Uint8Array([0, 128, 255]));
       const tree = yield* captureWorkspace(world.a.workspace).pipe(
-        Effect.flatMap(capturedTree),
+        Effect.flatMap((observation) => capturedTree(observation, world.a.home)),
         Effect.provide(authorLayer(world.a.home)),
       );
       expect(tree.find((entry) => entry.path === "notes/run.sh")).toMatchObject({
@@ -160,7 +159,9 @@ it.effect(
         const version = yield* captureWorkspace(world.a.workspace);
         const path = join(world.a.home, "history", "trees", `${version.treeHash.slice(7)}.json`);
         yield* fs.writeFileString(path, "corrupted");
-        expect(yield* Effect.flip(storedTrees)).toMatchObject({ _tag: "History.StoreCorrupt" });
+        expect(yield* Effect.flip(storedTrees(world.a.home))).toMatchObject({
+          _tag: "History.StoreCorrupt",
+        });
         expect(yield* Effect.flip(captureWorkspace(world.a.workspace))).toMatchObject({
           _tag: "AuthorHistoryInvalid",
         });
@@ -253,12 +254,10 @@ it.effect(
         const version = yield* captureWorkspace(world.a.workspace);
         // Recorded on the same history, after the revision made under the valid identity.
         expect(version.revision.parents).toEqual([first.id]);
-        const tree = yield* capturedTree(version);
+        const tree = yield* capturedTree(version, world.a.home);
         expect(tree.some((entry) => entry.path === "notes/a.txt")).toBe(true);
         expect(tree.some((entry) => entry.path.startsWith(".skit/"))).toBe(false);
-        const history = yield* Stream.runCollect(
-          History.ancestors((yield* AuthorHistory).engineStore, version.id),
-        );
+        const history = yield* readAuthorAncestors(world.a.home, version.id);
         expect(history.map((entry) => entry.id)).toEqual([version.id, first.id]);
       }).pipe(Effect.provide(authorLayer(world.a.home)));
       expect(yield* fs.readFileString(metadata)).toBe("unfinished metadata");

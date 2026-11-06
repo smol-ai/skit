@@ -1,15 +1,11 @@
+import { AuthorWorkspace, type WorkspaceLease } from "../src/author/workspace.js";
+import { AuthorHistory } from "../src/author/history.js";
 import { expect, it } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Option, Scope } from "effect";
 import { join } from "node:path";
-import * as History from "@smolai/skit-core/history";
-import * as Sync from "@smolai/skit-core/sync";
-import {
-  AuthorWorkspace,
-  type Identity,
-  type WorkspaceLease,
-  AuthorHistory,
-  scanAuthorSyncTree,
-} from "@smolai/skit-core/author";
+import * as History from "../src/history/history.js";
+import * as Sync from "../src/sync/sync.js";
+import { type Identity, scanAuthorSyncTree } from "../src/author/index.js";
 
 import { authorLayer } from "./helpers/author-history.js";
 import { testPlatformLayer } from "./helpers/platform.js";

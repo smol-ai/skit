@@ -533,3 +533,45 @@ class Library extends Context.Service<Library, {}>()("skit/library/Library") {}`
     ).toEqual([id]);
   });
 });
+
+describe("author lifecycle boundary", () => {
+  test("frontends cannot acquire author internals through names, aliases, namespaces or reexports", async () => {
+    for (const source of [
+      'import { AuthorHistory as history } from "@smolai/skit-core/author";',
+      'import * as Author from "@smolai/skit-core/author"; const history = Author.AuthorHistory;',
+      'import * as Author from "@smolai/skit-core/author"; const alias = Author; const { AuthorWorkspace: owner } = alias;',
+      'export { AuthorWorkspace as Workspace } from "@smolai/skit-core/author";',
+      'import { AuthorWorkspace } from "../../../skit/src/author/workspace.js";',
+      'export * from "../../../skit/src/author/history.js";',
+      'const history = import("../../../skit/src/author/history.js");',
+      'import { run as execute } from "@smolai/skit-core/sync";',
+      'import * as Engine from "@smolai/skit-core/sync"; Engine.run({});',
+      'import * as Engine from "@smolai/skit-core/sync"; const { loadPlanInput: load } = Engine;',
+      'export { plan as planSync } from "@smolai/skit-core/sync";',
+      'export * from "@smolai/skit-core/sync";',
+      'export * as Engine from "@smolai/skit-core/sync";',
+      'const engine = import("@smolai/skit-core/sync");',
+    ])
+      expect(
+        await reported(source, "owner-boundaries", "packages/cli/src/author/workflow.ts"),
+      ).toHaveLength(1);
+  });
+  test("owner operations, read-only queries and protocol adapters remain allowed", async () => {
+    for (const source of [
+      'import { syncAuthorWorkspace, authorLayer, readAuthorWorkspace } from "@smolai/skit-core/author";',
+      'import * as Author from "@smolai/skit-core/author"; Author.initializeAuthorWorkspace(".", false, "home");',
+      'import type { AuthorRegistry, AuthorWorkspace } from "@smolai/skit-core/author";',
+      'import { Moved, type Remote } from "@smolai/skit-core/sync";',
+    ])
+      expect(
+        await reported(source, "owner-boundaries", "packages/cli/src/author/workflow.ts"),
+      ).toEqual([]);
+    expect(
+      await reported(
+        'import { AuthorWorkspace } from "../src/author/workspace.js";',
+        "owner-boundaries",
+        "packages/skit/test/author-workspace.test.ts",
+      ),
+    ).toEqual([]);
+  });
+});

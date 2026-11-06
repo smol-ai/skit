@@ -1,3 +1,5 @@
+/** Public intent operations own lifecycle sequencing. The workspace/history interfaces below
+ * specify their PRIVATE storage contracts, not capabilities available to frontends (A7). */
 /**
  * Architecture contract: the two device-side author owners, AuthorWorkspace and AuthorHistory.
  * Target API, types only. Approved. Both owners are enforced by conformance/author.ts. Same shape
@@ -527,7 +529,7 @@ export type SyncStateError = AuthorSyncStateInvalid | PlatformError.PlatformErro
 
 /**
  * Holds state (history store, journal, sync checkpoints) and a resource (the journal writer
- * permit), so it is a Context.Service. It does not run sync: the plain sync workflow drives
+ * permit), so it is a Context.Service. It does not run sync: the plain owner-local Author sync operation drives
  * Sync.plan / Sync.run with this owner's engineStore and checkpoint transition (A7).
  */
 export interface AuthorHistory {
@@ -702,7 +704,7 @@ export type WritingRecovery = "merge";
 // ── Commands: plain functions, no coordinator service ──────────────────────────────────────────
 /**
  * `skit author sync [path] [--to] [--visibility] [--apply] [--allow-large-deletion]`
- *   handler → syncAuthorWorkspace(input, flags), a plain Effect.fn in workflows/author/sync.ts:
+ *   handler → Author.syncAuthorWorkspace(input, flags, Registry transport), in core author/sync.ts:
  *   1. root = AuthorWorkspace.resolveRoot(input).
  *   2. Preview (no --apply): no lease, no .skit, no lock. ws = read(root).
  *      Identity None → plans from Idle { base: null } over scanAuthorSyncTree(root) alone, reports
@@ -720,7 +722,7 @@ export type WritingRecovery = "merge";
  *      checks as sync.ts:466-495 (pure). Connected with Leftover Matching → lease.transition
  *      { Connected(Matching) → Connected }; Mismatched or Invalid → stop and report, change nothing (A4).
  *   6. creds = Registry.credentials(destination.remote.origin); remote: SyncRemote over the authoring
- *      client (sync.ts:517-590). Until a Registry owner exists, the workflow resolves the
+ *      client (sync.ts:517-590). The Registry transport adapter resolves the
  *      credential for destination.remote.origin itself, so a token is only ever sent to that server.
  *   7. obs = AuthorHistory.capture(root): every tree saved before talking to the Registry (sync.ts:509-510).
  *      local = scanAuthorSyncTree(root); local.verbatimHash must equal obs.treeHash, else capture and
@@ -746,19 +748,126 @@ export type WritingRecovery = "merge";
  * `skit author delete` → parseAuthorDestination; Registry.credentials; HTTP. Touches no owner. The
  *   local binding and history stay as they were; the next sync fails RemoteSkitUnavailable, and
  *   reconnecting is an explicit user action, never an automatic reset (A16, product behaviour).
- * `skit author init` → root; lease = acquire(root); initSkit scaffold(lease) (plain; A11).
+ * `skit author init` → Author.initializeAuthorWorkspace → root; lease = acquire(root); initSkit scaffold(lease) (plain; A11).
  *   Identity None → register { None → Registered, adopt } (adopt from Library.read, A3);
  *   IdentityOnly → { → Registered }; Removed → only with the explicit opt-in flag { → Registered,
  *   optIn }; Removing → report that a removal is unfinished; Registered → no write.
  *   Then Library.import.authored, which checks under its own writer that no other collection
  *   claims this root or id (A3). If Library refuses, the identity stays Registered: report
  *   "registered, not imported" with Library's reason; a retry reuses the same identity.
- * `skit author invocation` → lease = acquire(root); its skill-metadata write takes the lease (A11).
- * `skit library remove` of an authored collection (A15) → lease = acquire(root) when the root still
+ * `skit author invocation` → Author.generateAuthorInvocation → lease = acquire(root); its skill-metadata write takes the lease (A11).
+ * `skit library remove` → Author.removeAuthorCollection; an authored collection (A15) → lease = acquire(root) when the root still
  *   exists; identity must carry the collection's workspace id (author-workspace.ts:169-184), else
  *   Library.apply alone. lease.register { → Removing } (durable intent); Library.apply(Remove);
- *   lease.register { Removing → Removed }. A crash after the intent: the retry sees Removing, runs
- *   Library.apply again only if the collection is still there, then marks Removed. Lease before
+ *   lease.register { Removing → Removed }. A removal retry while the Collection exists completes both owners. After Library removal
+ *   has finished, initializeAuthorWorkspace settles Removing against absent Library claims,
+ *   preserving opt-out unless explicitly registering again. Lease before
  *   the Library writer.
  */
 export type Commands = never;
+
+/** Frontend inputs. Callers do not supply lifecycle callbacks, checkpoint state or write authority. */
+export interface AuthorSyncOptions {
+  readonly apply: boolean;
+  readonly allowLargeDeletion?: boolean;
+  readonly home: string;
+  readonly to?: string;
+  readonly visibility?: "private" | "unlisted" | "public";
+}
+export interface AuthorRemoveOptions {
+  readonly query: string;
+  readonly dryRun: boolean;
+}
+
+/** Transport input supplies protocol effects only. It has no local writer, lease or checkpoint. */
+export interface AuthorRegistry<E, R, ProtocolError> {
+  readonly origin: Effect.Effect<string | undefined, E, R>;
+  readonly connect: (input: {
+    readonly remote: RemoteHome;
+    readonly locator: string;
+    readonly requireAuthentication: boolean;
+  }) => Effect.Effect<
+    {
+      readonly remote: SyncRemote;
+      readonly requireAvailable: Effect.Effect<
+        void,
+        | ProtocolError
+        | import("../packages/skit/src/author/failures.js").DestinationExistsWithoutHistory
+      >;
+      readonly create: (
+        visibility: AuthorVisibility,
+        requestId: string,
+      ) => Effect.Effect<
+        unknown,
+        | ProtocolError
+        | import("../packages/skit/src/author/failures.js").DestinationExistsWithoutHistory
+      >;
+    },
+    E,
+    R
+  >;
+}
+
+export type AuthorSyncOutcome =
+  | {
+      readonly status: "first_sync_ready";
+      readonly changed: boolean;
+      readonly identity: {
+        readonly authority: string;
+        readonly namespace: string;
+        readonly skit: string;
+        readonly locator: string;
+      };
+      readonly visibility: AuthorVisibility;
+      readonly file_count: number;
+      readonly effects: readonly ("create_skit" | "save_revision" | "record_remote_home")[];
+    }
+  | {
+      readonly status: "created";
+      readonly changed: boolean;
+      readonly identity: {
+        readonly authority: string;
+        readonly namespace: string;
+        readonly skit: string;
+        readonly locator: string;
+      };
+      readonly visibility: AuthorVisibility;
+      readonly revision_id: string;
+      readonly paths: readonly string[];
+      readonly remote_home_recorded: boolean;
+      readonly published: boolean;
+    }
+  | {
+      readonly status: "ready";
+      readonly changed: boolean;
+      readonly action: "pull" | "push" | "merge";
+    }
+  | {
+      readonly status: "up_to_date" | "pushed";
+      readonly changed: boolean;
+      readonly revision_id: string;
+    }
+  | {
+      readonly status: "pulled";
+      readonly changed: boolean;
+      readonly revision_id: string;
+      readonly paths: readonly string[];
+    }
+  | {
+      readonly status: "merged";
+      readonly changed: boolean;
+      readonly revision_id: string;
+      readonly paths: readonly string[];
+      readonly choices: readonly {
+        readonly path: string;
+        readonly kind: "both_modified" | "delete_modify" | "binary" | "descriptor";
+        readonly kept: "local" | "remote";
+      }[];
+    }
+  | {
+      readonly status: "blocked";
+      readonly changed: boolean;
+      readonly deleting: number;
+      readonly of: number;
+      readonly paths: readonly string[];
+    };

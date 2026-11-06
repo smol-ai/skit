@@ -159,17 +159,49 @@ export const owners = [
     ],
   },
   {
-    // NEW owner (architecture/author.ts). Callers use AuthorWorkspace and its lease; this export
-    // serves the owner itself.
+    // Author intent operations own the lifecycle; leases and checkpoint writes stay internal.
     name: "AuthorWorkspace",
     owner: "packages/skit/src/author/",
     privateModules: [
+      "packages/skit/src/author/workspace.",
+      "packages/skit/src/author/history.",
+      "packages/skit/src/author/backup.",
+      "packages/skit/src/author/sync-policy.",
+      "packages/skit/src/author/invocation/generation.",
+      "packages/skit/src/author/scaffold.",
       "packages/skit/src/author/local-tree.",
       "packages/skit/src/author/write-tree.",
     ],
     testOwner: "packages/skit/test/",
     sources: ["packages/skit/src/author/"],
-    private: ["writeWorkspaceTree"],
+    private: [
+      "writeWorkspaceTree",
+      "AuthorWorkspace",
+      "AuthorHistory",
+      "WorkspaceLease",
+      "backupAuthorHistory",
+      "authorHistoryStoreError",
+      "generateInvocationMetadata",
+    ],
+  },
+  {
+    name: "Author sync engine",
+    owner: ["packages/skit/src/author/", "packages/skit/src/sync/"],
+    sources: ["packages/skit/src/sync/sync"],
+    privateModules: ["packages/skit/src/sync/sync."],
+    testOwner: "packages/skit/test/",
+    // Transport adapters need Moved and Remote, never engine execution or checkpoint state.
+    publicNames: ["Moved"],
+    private: [
+      "run",
+      "plan",
+      "loadPlanInput",
+      "allowsStep",
+      "Idle",
+      "Sending",
+      "Writing",
+      "SyncState",
+    ],
   },
   {
     // RESHAPE owner (architecture/author.ts): history, its journal and the history store.

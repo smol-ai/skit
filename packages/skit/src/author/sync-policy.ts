@@ -1,7 +1,7 @@
 import { DateTime, Option } from "effect";
-import { mergeAuthorTree } from "@smolai/skit-core/author";
-import type * as History from "@smolai/skit-core/history";
-import * as Merge from "@smolai/skit-core/merge";
+import { mergeAuthorTree } from "./merge/files.js";
+import type * as History from "../history/history.js";
+import * as Merge from "../sync/merge.js";
 
 /**
  * Author sync's overlap rule: an edit beats a deletion, then the later edit wins, and this

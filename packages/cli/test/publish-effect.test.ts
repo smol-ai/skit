@@ -9,7 +9,7 @@ import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 import { registryCredentialLayer } from "./helpers/registry-credential.js";
 import { publish } from "../src/author/publish/workflow.js";
-import { AuthorWorkspace } from "@smolai/skit-core/author";
+import { authorWorkspaceLayer } from "@smolai/skit-core/author";
 import { copySkitFixtureEffect, scratch } from "./helpers/library-home.js";
 
 /** A scoped authored Skit with a Registry binding, built on the platform FileSystem. */
@@ -114,7 +114,7 @@ it.effect.each([
       const fs = yield* FileSystem.FileSystem;
       return yield* publish(root, "1.0.0", undefined).pipe(
         Effect.provide(registryHttpLayer(testHttpClientLayer(fetcher))),
-        Effect.provide(AuthorWorkspace.layer),
+        Effect.provide(authorWorkspaceLayer),
         Effect.provide(registryCredentialLayer("https://registry.test")),
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
@@ -216,7 +216,7 @@ it.effect.each([
             }),
           ),
         ),
-        Effect.provide(AuthorWorkspace.layer),
+        Effect.provide(authorWorkspaceLayer),
         Effect.provide(registryCredentialLayer("https://registry.test")),
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,

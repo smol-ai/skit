@@ -1,3 +1,4 @@
+import { Registry } from "./index.js";
 import {
   AuthoringAuthenticatedApi,
   CurrentMovedResponse,
@@ -6,7 +7,7 @@ import {
 } from "@smolai/skit-core/universal/api";
 import type { AuthorRemoteHome, AuthorVisibility } from "@smolai/skit-core/author";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
-import * as Sync from "@smolai/skit-core/sync";
+import { Moved, type Remote } from "@smolai/skit-core/sync";
 import { SkitContractError } from "@smolai/skit-core/api";
 import { Data, Effect, Option, Result, Schema, Stream } from "effect";
 import { HttpApiClient } from "effect/http-api";
@@ -91,7 +92,7 @@ export const authorSyncApi = Effect.fn("Registry.authorSyncApi")(function* (inpu
   const params = { owner, slug };
   // This SKIT on the Registry, for this command only. The transport never retries, so no retry
   // delay waits while the lease is held.
-  const registry: Sync.Remote = {
+  const registry: Remote = {
     current: client.skits.current({ params }).pipe(
       withinDeadline,
       Effect.map((skit) => skit.current),
@@ -135,7 +136,7 @@ export const authorSyncApi = Effect.fn("Registry.authorSyncApi")(function* (inpu
         Effect.asVoid,
         Effect.mapError((error) =>
           Schema.is(CurrentMovedResponse)(error)
-            ? new Sync.Moved({ current: error.current })
+            ? new Moved({ current: error.current })
             : failure("skit move", 200)(error),
         ),
       ),
@@ -163,4 +164,22 @@ export const authorSyncApi = Effect.fn("Registry.authorSyncApi")(function* (inpu
           ),
         ),
   };
+});
+
+/** Transport composition for Author; credentials are selected only for the named Registry. */
+export const authorRegistry = (home: string) => ({
+  origin: Registry.credentials({ home }).pipe(Effect.map(({ origin }) => origin)),
+  connect: Effect.fn("Registry.connectAuthor")(function* (input: {
+    readonly remote: AuthorRemoteHome;
+    readonly locator: string;
+    readonly requireAuthentication: boolean;
+  }) {
+    const credentials = yield* Registry.credentials({ origin: input.remote.origin, home });
+    if (input.requireAuthentication && !credentials.token)
+      return yield* new AuthenticationRequired({
+        origin: input.remote.origin,
+        scopes: "library:sync,authoring:write",
+      });
+    return yield* authorSyncApi({ ...input, token: credentials.token });
+  }),
 });

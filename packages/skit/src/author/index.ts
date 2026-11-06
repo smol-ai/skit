@@ -13,8 +13,7 @@ export {
   type AuthorWriteNotPrepared,
   type AuthorLeaseNotHeld,
   type WorkspaceReadError,
-  type WorkspaceLease,
-  AuthorWorkspace,
+  type AuthorWorkspace,
 } from "./workspace.js";
 export {
   AuthorHistoryInvalid,
@@ -24,7 +23,7 @@ export {
   type AuthorSyncStateIllegal,
   type Observation,
   type CaptureError,
-  AuthorHistory,
+  type AuthorHistory,
 } from "./history.js";
 export {
   AuthorWorkspaceMetadataInvalid,
@@ -40,7 +39,8 @@ export {
 } from "./failures.js";
 export { AuthorRemoteHome, AuthorVisibility, decodeUrl, normalizeRemote } from "./remote.js";
 export { scanAuthorSyncTree } from "./local-tree.js";
-export { type InitSkitResult, initSkit } from "./scaffold.js";
+export type { InitSkitResult } from "./scaffold.js";
+export { initSkit } from "./initialize.js";
 export {
   readSkitDescriptor,
   deterministicTreeHash,
@@ -51,8 +51,27 @@ export { type DescriptorFailure, SkitValidationFailed } from "../artifact/failur
 export type { DescriptorMalformed, ReadmeFrontmatterMissing } from "../artifact/failures.js";
 export { SkitValidationDiagnostic } from "../artifact/validation-diagnostic.js";
 export {
-  generateInvocationMetadata,
   InvocationMetadataGeneration,
   type InvocationMetadataGenerationFailure,
 } from "./invocation/generation.js";
 export { mergeAuthorTree, conflictKind } from "./merge/files.js";
+
+export { authorLayer, authorWorkspaceLayer, readAuthorWorkspace } from "./operations.js";
+export { syncAuthorWorkspace } from "./sync.js";
+export { initializeAuthorWorkspace } from "./initialize.js";
+export { removeAuthorCollection } from "./remove.js";
+export { generateAuthorInvocation } from "./invocation.js";
+export { parseAuthorDestination, skitLocator } from "./destination.js";
+export { AuthorSyncResult } from "./sync-result.js";
+export type { AuthorRegistry } from "./transport.js";
+export {
+  AuthorRemoteAlreadyExists,
+  VisibilityNotAccepted,
+  DestinationFormInvalid,
+  DestinationExistsWithoutHistory,
+  DirectoryAlreadyInLibrary,
+  AuthorWorkspaceRemovalUnfinished,
+} from "./failures.js";
+
+export { captureAuthorWorkspace } from "./operations.js";
+export { backupAuthorWorkspace } from "./backup.js";

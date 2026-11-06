@@ -5,7 +5,7 @@ import { libraryApplicationLayer } from "../library/layer.js";
 
 import { commandFailure } from "./failure-classification.js";
 import { Renderer } from "../terminal/renderer.js";
-import { AuthorWorkspace, AuthorHistory } from "@smolai/skit-core/author";
+import { authorWorkspaceLayer, authorLayer } from "@smolai/skit-core/author";
 
 export function renderCommandFailures<A, E, R>(program: Effect.Effect<A, E, R>) {
   return Effect.uninterruptibleMask((restore) =>
@@ -25,7 +25,7 @@ const registryApplicationLayer = Layer.unwrap(
       registryHttpLayer(),
       // One author layer per runtime: AuthorHistory over AuthorWorkspace, built once, so one
       // journal permit guards this home (A9).
-      AuthorHistory.layer({ home: paths.skitHome }).pipe(Layer.provideMerge(AuthorWorkspace.layer)),
+      authorLayer({ home: paths.skitHome }),
     ).pipe(Layer.provideMerge(skitLayer)),
   ),
 );
@@ -39,7 +39,7 @@ export const sourceApplicationLayer = Layer.merge(
 /** Keep requirements inferred until the selected composition boundary supplies them. */
 export function handlePlatformCommand<E, R>(program: Effect.Effect<void, E, R>) {
   return renderCommandFailures(Effect.scoped(program)).pipe(
-    Effect.provide(AuthorWorkspace.layer.pipe(Layer.provideMerge(skitLayer))),
+    Effect.provide(authorWorkspaceLayer.pipe(Layer.provideMerge(skitLayer))),
   );
 }
 

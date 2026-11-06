@@ -182,41 +182,11 @@ export class RegistrySelectionRequiresRegistrySource
 
 // -- Author destinations ------------------------------------------------------------------------
 
-export class AuthorRemoteAlreadyExists
-  extends Data.TaggedError("AuthorRemoteAlreadyExists")<{
-    locator: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly remediation = "Sync without --to to use the existing remote home.";
-  get message(): string {
-    return `Remote home already exists at ${this.locator}`;
-  }
-}
+export { AuthorRemoteAlreadyExists } from "@smolai/skit-core/author";
 
 // -- SKIT synchronization ----------------------------------------------------------------------
 
-export class VisibilityNotAccepted
-  extends Data.TaggedError("VisibilityNotAccepted")<{
-    reason: "already-synced" | "required";
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "INVALID_ARGUMENT" as const;
-  get remediation(): string {
-    return this.reason === "already-synced"
-      ? "Sync again without --visibility."
-      : "Pass --visibility private, unlisted or public.";
-  }
-  get message(): string {
-    return this.reason === "already-synced"
-      ? "--visibility is accepted only on first author sync"
-      : "First author sync requires --visibility";
-  }
-}
+export { VisibilityNotAccepted } from "@smolai/skit-core/author";
 
 export class RemoteSkitUnavailable
   extends Data.TaggedError("RemoteSkitUnavailable")<{
@@ -482,34 +452,6 @@ export class DeleteRequiresPrivate
 
 // -- SKIT destinations ------------------------------------------------------------------------------
 
-export class DestinationFormInvalid
-  extends Data.TaggedError("DestinationFormInvalid")<{
-    form: "canonical" | "relative-without-registry";
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "INVALID_ARGUMENT" as const;
-  get remediation(): string {
-    return this.form === "canonical"
-      ? "Pass the destination as skit://host/namespace/skit."
-      : "Run `skit auth login`, or pass a full destination.";
-  }
-  get message(): string {
-    return this.form === "canonical"
-      ? "Canonical SKIT destination must be skit://host/namespace/skit"
-      : "A relative author destination requires an active Registry; run `skit auth login`";
-  }
-}
+export { DestinationFormInvalid } from "@smolai/skit-core/author";
 
-export class DestinationExistsWithoutHistory
-  extends Data.TaggedError("DestinationExistsWithoutHistory")<{ identity: string }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly remediation = "Choose a new destination, or sync from a SKIT that shares its history.";
-  get message(): string {
-    return `Destination ${this.identity} already exists without common history`;
-  }
-}
+export { DestinationExistsWithoutHistory } from "@smolai/skit-core/author";
