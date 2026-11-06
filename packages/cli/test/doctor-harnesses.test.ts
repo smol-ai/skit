@@ -2,12 +2,11 @@ import { skitLayer } from "@smolai/skit-core/platform";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { Effect, Fiber, FileSystem, Layer, Result, Schedule, Schema } from "effect";
-import { emptyLibraryState, libraryDoctorReport } from "@smolai/skit-core";
+import { libraryDoctorReport, type LibraryInventory } from "@smolai/skit-core/library/inventory";
 import { SourceProcess } from "@smolai/skit-core/platform";
 import { ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { currentLibraryState } from "@smolai/skit-core";
 import {
   makeInstalledSkillId,
   makeSkillId,
@@ -44,7 +43,7 @@ it.effect.each([false, true])(
       }
       const loop = join(f.root, "claude", "loop");
       if (unreadable) yield* fs.symlink(loop, loop);
-      const inventory = emptyLibraryState();
+      const inventory: LibraryInventory = { skills: [], unmanaged: [], installed_skills: [] };
       const before = yield* captureDisk([f.root]);
       const report = yield* inspectNativeDiscovery(inventory, {
         cwd,
@@ -347,15 +346,9 @@ const collisionFixture = () => {
   const skillId = makeSkillId();
   const versionId = makeSkillVersionId();
   const hash = `sha256:${"a".repeat(64)}`;
-  const state = currentLibraryState({
-    collections: [],
+  const state: LibraryInventory = {
     skills: [],
-    collection_versions: [],
-    imports: [],
-    enabled: [],
-    repositories: [],
     unmanaged: [],
-    operations: [],
     installed_skills: (["agents", "claude"] as const).map((target) => ({
       installed_skill_id: makeInstalledSkillId(),
       skill_id: skillId,
@@ -368,7 +361,7 @@ const collisionFixture = () => {
       status: "installed" as const,
       installed_at: "2026-10-01T00:00:00.000Z",
     })),
-  });
+  };
   const warning =
     "WARN duplicate skill name name=review existing=/home/.claude/skills/review/SKILL.md duplicate=/home/.agents/skills/review/SKILL.md";
   const check = {
@@ -447,7 +440,11 @@ test("doctor exposes deduplicated collision facts, selected copy and unclassifie
   const unknown = "unknown native warning name=review";
   const malformed = "WARN duplicate skill name name=review existing=/missing-duplicate";
   check.warnings = [collision, `${collision}\n${unknown}`, malformed];
-  const result = classifyOpenCodeWarnings(check, emptyLibraryState());
+  const result = classifyOpenCodeWarnings(check, {
+    skills: [],
+    unmanaged: [],
+    installed_skills: [],
+  });
   expect(result.warnings).toEqual([collision, collision, unknown, malformed]);
   expect(result.findings).toEqual([
     {

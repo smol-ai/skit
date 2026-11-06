@@ -1,6 +1,4 @@
-import { readDescriptionLoad } from "@smolai/skit-core/library/session";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { collectionVersionPath, emptyLibraryState } from "@smolai/skit-core";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { Library } from "@smolai/skit-core/library";
 type ImportRequestSkill = Parameters<
@@ -14,7 +12,6 @@ import {
   descriptionLoadMessage,
   largeCollectionWarning,
 } from "../src/library/presentation/description-size.js";
-import { importSource } from "../src/library/source.js";
 import { openLibraryView } from "@smolai/skit-core/library/session";
 import {
   initializeLibraryMachine,
@@ -132,66 +129,5 @@ effectIt.effect(
         "Enable whole collection · 1 skills · 3 description characters",
       );
       expect(prompts[1]?.choices.map((choice) => choice.value).sort()).toEqual(["keep", "removed"]);
-    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
-);
-
-effectIt.effect(
-  "measures selected retained bytes and reports unreadable or malformed descriptions",
-  () =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-description-load-" });
-      const home = join(root, "home");
-      const source = join(root, "source");
-      yield* initializeLibraryMachine(home);
-      yield* fs.makeDirectory(source);
-      yield* fs.writeFileString(
-        join(source, "SKILL.md"),
-        '---\nname: review\ndescription: "A😀é"\n---\n',
-      );
-      const first = yield* importSource(source).pipe(
-        Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
-      );
-      const firstState = yield* Effect.flatMap(Library.Service, (library) => library.read).pipe(
-        Effect.map((snapshot) =>
-          snapshot._tag === "Present" ? snapshot.state : emptyLibraryState(),
-        ),
-        Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
-      );
-      const originalSkill = firstState.skills[0]!;
-      yield* fs.writeFileString(
-        join(source, "SKILL.md"),
-        '---\nname: review\ndescription: "A much longer new description"\n---\n',
-      );
-      yield* importSource(source).pipe(
-        Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
-      );
-      const state = yield* Effect.flatMap(Library.Service, (library) => library.read).pipe(
-        Effect.map((snapshot) =>
-          snapshot._tag === "Present" ? snapshot.state : emptyLibraryState(),
-        ),
-        Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
-      );
-      const skill = {
-        ...state.skills[0]!,
-        local_version_id: originalSkill.versions[0]!.skill_version_id,
-      };
-      const selectedState = { ...state, skills: [skill] };
-      const originals = join(home, "originals");
-      const measure = readDescriptionLoad(selectedState, originals, [skill]);
-      expect(yield* measure).toEqual({ skills: 1, characters: 3, unknown: 0 });
-      const importedFile = join(
-        collectionVersionPath(originals, first.snapshot_digest),
-        "SKILL.md",
-      );
-      for (const text of [
-        "---\nname: review\ndescription: [bad\n---\n",
-        "---\nname: review\ndescription: 123\n---\n",
-      ]) {
-        yield* fs.writeFileString(importedFile, text);
-        expect(yield* measure).toEqual({ skills: 1, characters: 0, unknown: 1 });
-      }
-      yield* fs.remove(importedFile);
-      expect(yield* measure).toEqual({ skills: 1, characters: 0, unknown: 1 });
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

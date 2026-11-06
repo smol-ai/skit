@@ -14,8 +14,6 @@ export { errorMessage } from "./shared/failure.js";
 
 export { resolveDeclaredInvocation } from "./invocation/conformance.js";
 
-export { libraryDoctorReport } from "./library/inventory/doctor-report.js";
-
 export { LinkStat } from "./platform/link-stat.js";
 
 export { skitLayer } from "./platform/layer.js";
@@ -38,7 +36,6 @@ export {
 export {
   CURRENT_LIBRARY_STATE_VERSION,
   LibraryState,
-  currentLibraryState,
   emptyLibraryState,
   libraryStateRevision,
   libraryManifestFromLocalState,

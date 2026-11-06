@@ -1,5 +1,4 @@
 /** Shared Library choices/read models. Frontends own prompts, widgets and output. */
-export { readDescriptionLoad } from "./internal/session/description-load.js";
 export { invocationOptions, type InvocationOption } from "./internal/session/invocation-option.js";
 export {
   destinationLabel,

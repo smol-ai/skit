@@ -1,17 +1,25 @@
-import { skitLayer } from "@smolai/skit-core/platform";
+import { skitLayer } from "../src/platform/layer.js";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { systemError } from "effect/PlatformError";
 import { join } from "node:path";
 import { expect } from "vitest";
-import { emptyLibraryState, libraryDoctorReport, scanInventory } from "@smolai/skit-core";
+import { emptyLibraryState } from "../src/library/library-state.js";
+import { libraryDoctorReport } from "../src/library/inventory/doctor-report.js";
+import { scanInventory } from "../src/library/inventory/refresh.js";
 import {
   makeCollectionId,
   makeInstalledSkillId,
   makeSkillId,
   makeSkillVersionId,
-} from "@smolai/skit-core/universal/consumer";
-import { nativeLibraryFixture } from "./helpers/native-library.js";
+} from "../src/library/entity-ids.js";
+const nativeLibraryFixture = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-inventory-scan-" });
+  const home = join(root, "home");
+  yield* fs.makeDirectory(home);
+  return { root, home };
+});
 
 it.effect(
   "reports skill copies, shared symlinks and scan gaps without counting arbitrary directories",
