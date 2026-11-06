@@ -26,21 +26,23 @@ const register = Effect.fn("Test.registerBackupWorkspace")(function* (lease: Wor
 });
 const locator = "skit://registry.example/swyx/tools";
 
-it.effect("backup reads preserve absent storage and independent older v4 documents", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    const key = { workspaceId: WorkspaceId.make(`workspace_${"a".repeat(32)}`), locator };
-    yield* Effect.gen(function* () {
-      const history = yield* AuthorHistory;
-      expect(yield* history.backupState.read(key)).toBeNull();
-      expect(yield* f.fs.exists(f.home)).toBe(false);
-      const old = '{"schema":"skit.sync-bindings.v4","workspaces":{}}\n';
-      yield* f.fs.makeDirectory(f.home);
-      yield* f.fs.writeFileString(f.bindings, old);
-      expect(yield* history.backupState.read(key)).toBeNull();
-      expect(yield* f.fs.readFileString(f.bindings)).toBe(old);
-    }).pipe(Effect.provide(ownerLayer(f.home)));
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+it.effect(
+  "backup reads preserve absent storage and independent documents without acknowledgements",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture;
+      const key = { workspaceId: WorkspaceId.make(`workspace_${"a".repeat(32)}`), locator };
+      yield* Effect.gen(function* () {
+        const history = yield* AuthorHistory;
+        expect(yield* history.backupState.read(key)).toBeNull();
+        expect(yield* f.fs.exists(f.home)).toBe(false);
+        const old = '{"schema":"skit.sync-bindings.v1","workspaces":{}}\n';
+        yield* f.fs.makeDirectory(f.home);
+        yield* f.fs.writeFileString(f.bindings, old);
+        expect(yield* history.backupState.read(key)).toBeNull();
+        expect(yield* f.fs.readFileString(f.bindings)).toBe(old);
+      }).pipe(Effect.provide(ownerLayer(f.home)));
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("backup checkpoints advance contiguous A-B-A observations and preserve sync state", () =>

@@ -309,7 +309,7 @@ API: `architecture/author.ts`. Each entry is a choice today's code does not sett
 **Problem:** the checkpoint is keyed only by the SKIT's locator (`sync.ts:93-96`). Two clones of one repository on one device therefore share a single `Idle | Sending | Writing` state. Sync can then plan one clone from the other's base, and a removal check measured against the wrong base can block, or allow, the wrong deletions.
 
 **Decided:**
-- The key is `{ workspaceId, locator }`, stored as `skit.sync-bindings.v4` (`workspaces → locator → state`).
+- The key is `{ workspaceId, locator }`, stored as `skit.sync-bindings.v1` (`workspaces → locator → state`).
 - A v3 file, which is locator-only, fails `AuthorSyncStateInvalid` at the loader. So do v2 and pre-release files. There is no migration (see "Settled" above).
 - `author sync --apply` creates an identity when there is none, as `IdentityOnly` (ADR-0026:24-27, :36-38), adopting a Library id as in A3. It never changes an existing registration, so a `Removed` workspace is backed up but never promoted.
 

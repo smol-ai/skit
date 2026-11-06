@@ -158,23 +158,19 @@ export type PreparedWrite = typeof PreparedWrite.Type;
 
 /** <home>/sync-bindings.json: one checkpoint per workspace and SKIT locator (A5). */
 const SyncBindings = Schema.Struct({
-  schema: Schema.Literal("skit.sync-bindings.v4"),
+  schema: Schema.Literal("skit.sync-bindings.v1"),
   workspaces: Schema.Record(WorkspaceId, Schema.Record(Schema.String, Sync.SyncState)),
-  // Additive: older v4 documents have no acknowledged observation yet.
+  // A workspace has no backup checkpoint until an observation is acknowledged.
   backups: Schema.optional(
     Schema.Record(WorkspaceId, Schema.Record(Schema.String, History.RevisionId)),
   ),
 });
 type SyncBindings = typeof SyncBindings.Type;
-/** Formats from unreleased builds, keyed by locator only: recognized only to refuse them. */
-const UnreleasedBindings = Schema.Struct({
-  schema: Schema.Literals(["skit.sync-bindings.v3", "skit.sync-bindings.v2"]),
-});
-const BindingsDocument = Schema.fromJsonString(Schema.Union([SyncBindings, UnreleasedBindings]));
+const BindingsDocument = Schema.fromJsonString(SyncBindings);
 
 /** One entry in a workspace's history on this device: the revision its files were saved as. */
 const HistoryEvent = Schema.Struct({
-  schema: Schema.Literal("skit.author-history-event.v2"),
+  schema: Schema.Literal("skit.author-history-event.v1"),
   workspace_key: Hash,
   sequence: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER })),
   revision: History.RevisionId,
@@ -363,7 +359,7 @@ const writeHistoryEvent = Effect.fn("AuthorHistory.writeHistoryEvent")(function*
               const saved = yield* save(last?.revision);
               if (last?.revision === saved.id) return saved;
               const event: HistoryEvent = {
-                schema: "skit.author-history-event.v2",
+                schema: "skit.author-history-event.v1",
                 workspace_key: key,
                 sequence: (last?.sequence ?? 0) + 1,
                 revision: saved.id,
@@ -629,18 +625,12 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
       Effect.catchReason("PlatformError", "NotFound", () => Effect.succeedNone),
     );
     if (Option.isNone(text))
-      return { schema: "skit.sync-bindings.v4", workspaces: {} } satisfies SyncBindings;
+      return { schema: "skit.sync-bindings.v1", workspaces: {} } satisfies SyncBindings;
     const document = yield* Schema.decodeUnknownEffect(BindingsDocument)(text.value).pipe(
       Effect.mapError(
         (error) => new AuthorSyncStateInvalid({ path: bindingsPath, reason: String(error) }),
       ),
     );
-    // No migration: author sync never shipped with these formats (A5).
-    if (document.schema !== "skit.sync-bindings.v4")
-      return yield* new AuthorSyncStateInvalid({
-        path: bindingsPath,
-        reason: `it is ${document.schema}, written by an unreleased build; this build reads only skit.sync-bindings.v4`,
-      });
     return document;
   });
   const entry = (bindings: SyncBindings, key: SyncKey) =>
@@ -705,7 +695,7 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
         const next: SyncBindings = {
           ...bindings,
           ...(bindings.backups === undefined ? {} : { backups }),
-          schema: "skit.sync-bindings.v4",
+          schema: "skit.sync-bindings.v1",
           workspaces: {
             ...bindings.workspaces,
             [key.workspaceId]: { ...bindings.workspaces[key.workspaceId], [key.locator]: to },

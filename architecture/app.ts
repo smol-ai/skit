@@ -209,8 +209,8 @@ export const owners = {
       "AuthorWorkspace (identity only; A10)",
     ],
     removes: [
-      "LegacySyncStates v2 'drafts' and PreReleaseBindings in the workflow (sync.ts:99-110)",
-      "skit.sync-bindings.v3 locator-only keys: rejected as invalid, no migration (author commands never shipped; A5)",
+      "unreleased locator-only bindings formats (removed before release)",
+      "unsupported bindings formats are refused without rewriting their files",
       "historyDirectory / withDeviceStore exports (replaced by capture, retain, engineStore; A7)",
       "module-global journal semaphore (history-journal.ts:29) → per layer, one layer per home (A9)",
     ],

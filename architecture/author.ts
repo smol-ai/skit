@@ -45,7 +45,7 @@
  *     general "run anything against the store" entry point. layerDeviceStore stays private
  *     (device-store.ts:18-84)
  *   - loadSyncStates, saveSyncState (sync.ts:317-374) → AuthorHistory.syncState.{read, transition}
- *   - skit.sync-bindings.v3, keyed by locator only (sync.ts:93-96), LegacySyncStates v2 "drafts"
+ *   - Branch-only bindings formats were discarded before release; current bindings start at v1.
  *     and PreReleaseBindings (sync.ts:98-111, :331-335): removed. Any of them now fails
  *     AuthorSyncStateInvalid at the loader; no migration, no back-compat (decided; A5)
  *   - module-global journal semaphore `writers` (history-journal.ts:29) → held by the layer (A9)
@@ -482,7 +482,7 @@ export interface Observation {
 /**
  * Which sync checkpoint (decided, A5): workspace identity plus SKIT locator, so two clones on one
  * device never share one. Was locator only (sync.ts:93-96, :348).
- * File format NEW: { schema: "skit.sync-bindings.v4", workspaces: { [WorkspaceId]: { [Locator]:
+ * File format NEW: { schema: "skit.sync-bindings.v1", workspaces: { [WorkspaceId]: { [Locator]:
  * SyncState } } }. v3 and older fail AuthorSyncStateInvalid naming the file and saying it was
  * written by an unreleased build; no migration (author commands never shipped).
  */

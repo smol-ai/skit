@@ -42,7 +42,7 @@ const savedStates = Effect.fn("Test.savedSyncStates")(function* (device: {
   const bindings = yield* Schema.decodeUnknownEffect(
     Schema.fromJsonString(
       Schema.Struct({
-        schema: Schema.Literal("skit.sync-bindings.v4"),
+        schema: Schema.Literal("skit.sync-bindings.v1"),
         workspaces: Schema.Record(Schema.String, Schema.Record(Schema.String, Sync.SyncState)),
       }),
     ),
@@ -132,7 +132,7 @@ it.effect.each([
     name: "unknown state",
     render: (workspaceId: string) =>
       JSON.stringify({
-        schema: "skit.sync-bindings.v4",
+        schema: "skit.sync-bindings.v1",
         workspaces: { [workspaceId]: { [locator]: { _tag: "Unknown" } } },
       }),
   },
@@ -204,7 +204,7 @@ it.effect.each([
     render: (base: string) => ({ [locator]: { skitId: "skit_1", revisionId: base } }),
   },
 ])(
-  "unreleased sync bindings ($name) are refused without changing files or remote history",
+  "unsupported sync bindings ($name) are refused without changing files or remote history",
   ({ render }) =>
     Effect.gen(function* () {
       const world = yield* makeAuthorSyncWorld();
