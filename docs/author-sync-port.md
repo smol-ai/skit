@@ -80,11 +80,10 @@ reason. A passing workflow suite is not a public CLI or deployed end-to-end proo
    Define clock-skew reporting alongside this policy.
 2. Decide how the manual author client becomes supported, then prove the real
    client against the Worker. Keep watcher lifecycle work after that journey.
-3. Resolve deployment compatibility before applying migration
-   `0010_draft_revisions.sql`: it deliberately drops old Draft snapshots and
-   clears current pointers. Its assumption that Drafts are unused has not been
-   checked against any deployed database in this port. Preserve or convert old
-   data if that assumption does not hold.
+3. Upgrade through the consolidated `0010_owner_schema.sql` after the `0009`
+   schema. Follow the maintenance-window procedure in `self-hosting.md`; the old
+   Worker cannot serve against the replaced tables. Existing legacy Draft history
+   is refused without data loss and needs an explicit conversion before upgrading.
 
 ## Recovery sources
 

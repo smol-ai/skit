@@ -32,7 +32,7 @@ create-once behavior. A matching ID and visibility replay succeeds without
 changing the SKIT or its current revision; an unrelated existing destination
 still conflicts. A definitive receipt mismatch removes the pending intent so
 the author can choose another destination; uncertain failures keep it.
-Authorization is checked on every replay. Migration 0012 adds
+Authorization is checked on every replay. The consolidated migration 0010 adds
 a nullable receipt column without replacing existing identities or history.
 
 The portable `skit.remote.v1` contract stays unchanged. It is saved and flushed
@@ -49,5 +49,5 @@ conflicting flags, malformed checkpoints and credential isolation. The real
 Worker tests cover authenticated creation replay through HTTP, D1 and R2,
 including keeping an already advanced current pointer unchanged.
 
-Roll out migration 0012 and the Registry change before relying on client
+Roll out migration 0010 and the matching Registry change, following the maintenance-window procedure in self-hosting.md, before relying on client
 connection recovery. These changes have not been deployed.

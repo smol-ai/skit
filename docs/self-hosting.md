@@ -79,16 +79,24 @@ pnpm skit server bootstrap \
 
 Cloudflare documents `workers.dev` as an evaluation and personal-project endpoint. SKIT supports it as the first canonical origin, while recommending a Custom Domain for production.
 
-For an existing server upgrading past migration `0012`, first deploy compatibility revision `858184158`, which no longer reads or deletes resource grants. Then deploy the revision containing `0013_remove_resource_grants.sql`, which removes the obsolete rows and indexes. This order is required because deployment applies migrations before switching Workers; the compatibility Worker must already be serving requests when the table is dropped. Namespace ownership, current team membership, operator capability and credential state/generation are retained.
+The unreleased owner-schema changes are consolidated into
+`0010_owner_schema.sql`, applied directly after the `0009` schema on `dev`.
+It creates the final SKIT revision tables and removes obsolete grants, SDK
+rate-limit counters and release-adoption metadata. Namespace ownership, current
+team membership, operator capability, credentials, releases and Library data are
+retained.
 
-Migration `0014` removes Better Auth's obsolete database rate-limit counters. SKIT
-already disables that SDK limiter and enforces limits through its Cloudflare
-bindings. Identity, session and token data are retained. The `0013` compatibility
-deployment prerequisite above still applies when upgrading an older installation.
+For an existing installation, back up D1 and stop serving requests before applying
+`0010`; deploy the matching Worker and verify it before reopening traffic. The
+old Worker uses tables that this migration replaces or removes, and deployment
+applies migrations before switching Workers. The previous unreleased
+compatibility-revision deployment sequence does not apply to this flattened chain.
 
-Migration `0015` removes the unused release snapshot-adoption digest and its index.
-Release identities, versions, source revisions, archive metadata and visibility
-are retained; the Worker no longer reads or writes adoption metadata.
+The migration refuses a database containing legacy Draft revisions, files or a
+current Draft pointer. It leaves that history intact instead of silently dropping
+it. Such an installation needs a reviewed data conversion before the upgrade can
+proceed. Branch-only migrations and file formats are not supported upgrade sources;
+they were confirmed unused before consolidation.
 
 ## Promote to a custom domain
 

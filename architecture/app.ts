@@ -261,7 +261,7 @@ export const owners = {
       "Bootstrap as a separate writer (done: Identity.createOperator owns the unchanged atomic claim batch and post-commit verification email)",
       "NativeClock service (done: Better Auth captures the built-in Clock)",
       "SDK callback runtime/context audit (done: two runPromise bridges are deliberate Promise-host boundaries over closed effects using captured SQL/random; no request Context or runtime is cached)",
-      "rateLimit table (done: Better Auth rate limiting disabled; forward migration 0014 removes unused SDK counters, Cloudflare limiters remain)",
+      "rateLimit table (done: Better Auth rate limiting disabled; consolidated migration 0010 removes unused SDK counters, Cloudflare limiters remain)",
       "Authentication.authenticatePat in the public API (done: private to Identity credential implementation)",
     ],
   },
@@ -304,7 +304,7 @@ export const owners = {
       "unguarded publication commit after archive upload (done: D1 compares the selected current revision and visibility; refusal compensates the uploaded archive)",
       "publication/archive.ts reading Skits' tables directly (done: private skits/internal/release-archive.ts)",
       "ReleaseStore.readArchive leaking R2ObjectBody (done: BlobStore returns bytes or a stream)",
-      "releases.adopted_content_digest (done: no reader or writer; forward migration 0015 removes the obsolete column and partial unique index)",
+      "releases.adopted_content_digest (done: no reader or writer; consolidated migration 0010 removes the obsolete column and partial unique index)",
     ],
   },
 
@@ -333,7 +333,7 @@ export const owners = {
     ],
     removes: [
       "per-handler origin checks (done: 9 copies and credentialOriginAllowed removed)",
-      "resource_grants table, its indexes and every grant query (done: owner checks replaced grant reads; deletion no longer touches grants; forward migration 0013 drops the obsolete table/indexes)",
+      "resource_grants table, its indexes and every grant query (done: owner checks replaced grant reads; deletion no longer touches grants; consolidated migration 0010 drops the obsolete table/indexes)",
       "Authorization service and its single-caller can*/has*/scope methods (done: role checks live in owners; namespace reads use Identity with Teams membership reads)",
       "duplicated route-scope decisions (done: HTTP declares the required scope; Authentication.requirePrincipalScope checks it at the existing post-decoding boundary; owners check roles)",
       "Readiness.isServerOperator (done: auth owns operator lookup); Teams' private ownedTeam SQL",

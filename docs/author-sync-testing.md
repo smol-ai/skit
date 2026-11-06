@@ -494,7 +494,7 @@ revisions remain authored by default and retain their IDs.
 
 
 The retention boundary is implemented server-side before the client enables any
-new winner rule. Migration `0010_draft_history.sql` initializes acceptance tips
+new winner rule. The consolidated `0010_owner_schema.sql` introduces revision storage
 from existing content heads, keeps revision IDs and parent links, records causal
 bases separately, and labels old provenance `legacy` rather than inventing edit
 identity. New authored/merge provenance is explicit. Old callers remain supported.

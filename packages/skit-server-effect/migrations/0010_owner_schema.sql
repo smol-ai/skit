@@ -1,19 +1,29 @@
--- A Draft is a graph of content-addressed revisions and one `current` pointer (ADR-0027).
--- Nobody has used Drafts yet, so the old snapshot rows are dropped rather than converted.
+-- One upgrade from the dev schema (0009) to the current owner model.
+-- Refuse legacy snapshots instead of discarding their files or revision pointers.
+CREATE TABLE IF NOT EXISTS skit_upgrade_requires_empty_legacy_drafts (
+  snapshots INTEGER NOT NULL CHECK (snapshots = 0)
+);
+INSERT INTO skit_upgrade_requires_empty_legacy_drafts
+  SELECT (SELECT COUNT(*) FROM draft_revisions)
+       + (SELECT COUNT(*) FROM draft_files)
+       + (SELECT COUNT(*) FROM drafts WHERE current_revision_id IS NOT NULL);
+DROP TABLE skit_upgrade_requires_empty_legacy_drafts;
+
 DROP TABLE draft_files;
 DROP TABLE draft_revisions;
-UPDATE drafts SET current_revision_id = NULL;
-ALTER TABLE drafts DROP COLUMN title;
-ALTER TABLE drafts DROP COLUMN description;
+ALTER TABLE drafts RENAME TO skits;
+ALTER TABLE skits DROP COLUMN title;
+ALTER TABLE skits DROP COLUMN description;
+ALTER TABLE skits ADD COLUMN creation_request_id TEXT;
 
 -- A tree is identified by its hash, so every Draft that records the same tree shares one row.
-CREATE TABLE draft_trees (
+CREATE TABLE revision_trees (
   tree_hash TEXT PRIMARY KEY
 ) WITHOUT ROWID;
 
 -- File bytes live in R2 under draft-blobs/<first 2 hex>/<hex of blob_hash>.
-CREATE TABLE draft_tree_entries (
-  tree_hash TEXT NOT NULL REFERENCES draft_trees(tree_hash),
+CREATE TABLE revision_tree_entries (
+  tree_hash TEXT NOT NULL REFERENCES revision_trees(tree_hash),
   path TEXT NOT NULL,
   kind TEXT NOT NULL CHECK (kind IN ('file', 'directory', 'symlink')),
   mode INTEGER,
@@ -33,11 +43,11 @@ CREATE TABLE draft_tree_entries (
 
 -- author_device and author_at are asserted by the device and part of revision_id;
 -- credential_id is the authenticated credential that posted the revision.
-CREATE TABLE draft_revisions (
+CREATE TABLE revisions (
   owner_slug TEXT NOT NULL,
   skit_slug TEXT NOT NULL,
   revision_id TEXT NOT NULL,
-  tree_hash TEXT NOT NULL REFERENCES draft_trees(tree_hash),
+  tree_hash TEXT NOT NULL REFERENCES revision_trees(tree_hash),
   author_device TEXT NOT NULL,
   author_at INTEGER NOT NULL,
   descriptor_json TEXT NOT NULL CHECK (json_valid(descriptor_json)),
@@ -45,13 +55,13 @@ CREATE TABLE draft_revisions (
   credential_id TEXT,
   created_at TEXT NOT NULL,
   PRIMARY KEY (owner_slug, skit_slug, revision_id),
-  FOREIGN KEY (owner_slug, skit_slug) REFERENCES drafts(owner_slug, skit_slug)
+  FOREIGN KEY (owner_slug, skit_slug) REFERENCES skits(owner_slug, skit_slug)
 ) WITHOUT ROWID;
 
-CREATE INDEX idx_draft_revisions_tree ON draft_revisions(tree_hash);
+CREATE INDEX idx_revisions_tree ON revisions(tree_hash);
 
 -- A parent is always an earlier revision of the same Draft.
-CREATE TABLE draft_revision_parents (
+CREATE TABLE revision_parents (
   owner_slug TEXT NOT NULL,
   skit_slug TEXT NOT NULL,
   revision_id TEXT NOT NULL,
@@ -59,10 +69,18 @@ CREATE TABLE draft_revision_parents (
   parent_id TEXT NOT NULL,
   PRIMARY KEY (owner_slug, skit_slug, revision_id, position),
   FOREIGN KEY (owner_slug, skit_slug, revision_id)
-    REFERENCES draft_revisions(owner_slug, skit_slug, revision_id),
+    REFERENCES revisions(owner_slug, skit_slug, revision_id),
   FOREIGN KEY (owner_slug, skit_slug, parent_id)
-    REFERENCES draft_revisions(owner_slug, skit_slug, revision_id)
+    REFERENCES revisions(owner_slug, skit_slug, revision_id)
 ) WITHOUT ROWID;
 
-CREATE INDEX idx_draft_revision_parents_parent
-  ON draft_revision_parents(owner_slug, skit_slug, parent_id);
+CREATE INDEX idx_revision_parents_parent
+  ON revision_parents(owner_slug, skit_slug, parent_id);
+
+-- Current access is namespace ownership or current team membership.
+DROP TABLE resource_grants;
+-- Cloudflare bindings own rate limiting; SDK counters are obsolete.
+DROP TABLE rateLimit;
+-- Releases retain their revision and archive identity, not adoption metadata.
+DROP INDEX idx_releases_adopted_content;
+ALTER TABLE releases DROP COLUMN adopted_content_digest;
