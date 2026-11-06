@@ -1,3 +1,4 @@
+import { emptyLibraryFixture } from "./helpers/library-home.js";
 import { readLibraryManifest } from "./helpers/library-manifest.js";
 import { originalArchive, originalTreePath } from "./helpers/original-tree.js";
 import { Library } from "@smolai/skit-core/library";
@@ -6,7 +7,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, Schema, Option, Exit, type Layer, type Scope } from "effect";
 import type { SkillId } from "@smolai/skit-core/universal/consumer";
 import { join } from "node:path";
-import { LibraryState, emptyLibraryState } from "@smolai/skit-core";
+import { LibraryState } from "@smolai/skit-core";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { LibraryChangedOnServer, RegistryUnreachable } from "../src/registry/failures.js";
 import { LibraryApiRejected, LibraryManifestTooNew } from "../src/library/sync/api.js";
@@ -933,7 +934,7 @@ const prepareLocalSync = (home: string) =>
   Effect.gen(function* () {
     const library = yield* Library.Service;
     const base = yield* library.read;
-    const state = base._tag === "Present" ? base.state : emptyLibraryState();
+    const state = base._tag === "Present" ? base.state : emptyLibraryFixture();
     const manifest = yield* readLibraryManifest(home);
     const localArchives = base._tag === "Present" ? yield* library.content.pack(base) : [];
     const staged = yield* library.content.stage(manifest, {
@@ -962,7 +963,7 @@ it.effect("a Sync plan distinguishes an absent Library from a newly empty one", 
     const plan = yield* prepareLocalSync(a.home).pipe(Effect.provide(layer));
     yield* fs.makeDirectory(a.home, { recursive: true });
     const statePath = join(a.home, "state.json");
-    const bytes = JSON.stringify(emptyLibraryState());
+    const bytes = JSON.stringify(emptyLibraryFixture());
     yield* fs.writeFileString(statePath, bytes);
     const failure = yield* Effect.flip(
       Effect.flatMap(Library.Service, (library) => library.apply({ _tag: "Apply", plan })).pipe(

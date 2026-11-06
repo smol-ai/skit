@@ -1,6 +1,7 @@
+import { emptyLibraryFixture } from "./helpers/library-home.js";
 import { originalTreePath } from "./helpers/original-tree.js";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
-import { emptyLibraryState } from "@smolai/skit-core";
+
 import { Library } from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
@@ -71,7 +72,7 @@ const fixture = Effect.gen(function* () {
   const load = run(
     Effect.flatMap(Library.Service, (library) => library.read).pipe(
       Effect.map((snapshot) =>
-        snapshot._tag === "Present" ? snapshot.state : emptyLibraryState(),
+        snapshot._tag === "Present" ? snapshot.state : emptyLibraryFixture(),
       ),
     ),
   );

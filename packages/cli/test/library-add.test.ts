@@ -1,7 +1,8 @@
+import { emptyLibraryFixture } from "./helpers/library-home.js";
 import { readLibraryManifest } from "./helpers/library-manifest.js";
 import { originalTreePath } from "./helpers/original-tree.js";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
-import { emptyLibraryState } from "@smolai/skit-core";
+
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { Library } from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
@@ -32,7 +33,9 @@ import { homeLockIsFree } from "./helpers/home-lock.js";
 /** The Library at `home`, read through its owner. */
 const stateAt = (home: string) =>
   Effect.flatMap(Library.Service, (library) => library.read).pipe(
-    Effect.map((snapshot) => (snapshot._tag === "Present" ? snapshot.state : emptyLibraryState())),
+    Effect.map((snapshot) =>
+      snapshot._tag === "Present" ? snapshot.state : emptyLibraryFixture(),
+    ),
     Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
   );
 

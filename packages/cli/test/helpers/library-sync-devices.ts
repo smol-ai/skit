@@ -5,7 +5,8 @@ import { assert } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Schema } from "effect";
 import { join } from "node:path";
 import { systemError } from "effect/PlatformError";
-import { type InstalledSkill, emptyLibraryState, LibraryState } from "@smolai/skit-core";
+import { LibraryState } from "@smolai/skit-core";
+import { emptyLibraryFixture, type LibraryFixtureState } from "./library-home.js";
 import { type InstallDestination } from "@smolai/skit-core/library";
 import { makeMachineId } from "@smolai/skit-core/universal/consumer";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
@@ -110,7 +111,7 @@ export const devices = Effect.gen(function* () {
     });
     /** Durable local state as written, read without constructing an owner that could recover. */
     const state = Effect.gen(function* () {
-      if (!(yield* fs.exists(statePath))) return emptyLibraryState();
+      if (!(yield* fs.exists(statePath))) return emptyLibraryFixture();
       return yield* Effect.flatMap(
         fs.readFileString(statePath),
         Schema.decodeUnknownEffect(StateFile),
@@ -177,7 +178,7 @@ export const devices = Effect.gen(function* () {
         );
       }),
       state,
-      importInstalledSkillEdit: (installedSkill: InstalledSkill) =>
+      importInstalledSkillEdit: (installedSkill: LibraryFixtureState["installed_skills"][number]) =>
         owned(
           Effect.gen(function* () {
             const library = yield* owner();

@@ -20,6 +20,20 @@ import { registryHttpLayer } from "../../src/registry/registry-http.js";
 import { Library } from "@smolai/skit-core/library";
 
 export type LibraryFixtureState = Extract<Library.Snapshot, { readonly _tag: "Present" }>["state"];
+/** Independent current-format empty-file fixture; absence is still asserted through Snapshot. */
+export const emptyLibraryFixture = (): LibraryFixtureState => ({
+  collections: [],
+  skills: [],
+  collection_versions: [],
+  imports: [],
+  enabled: [],
+  repositories: [],
+  installed_skills: [],
+  unmanaged: [],
+  operations: [],
+  schemaVersion: 13,
+});
+
 type ImportRequest = Parameters<Library.Interface["import"]["collection"]>[0];
 
 export type HarnessRoots = SkillsDirectoryOverrides;
