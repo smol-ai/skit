@@ -4,6 +4,7 @@ import { coreExports } from "../architecture/app.ts";
 import { layout, undecided } from "../architecture/layout.mjs";
 import { libraryRules } from "./library-rules.mjs";
 import { structureRules } from "./structure-rules.mjs";
+import { effectHygieneRules } from "./effect-hygiene-rules.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 
@@ -117,7 +118,6 @@ const runtimeEntryNames = new Set([
   "runFork",
 ]);
 const runtimeHelperNames = new Set(["runSkit", "runSkitSync"]);
-const promiseWrapperNames = new Set(["promise", "tryPromise"]);
 const effectCallbackNames = new Set(["fn", "gen", "fnUntraced"]);
 const effectTestNames = new Set(["effect", "scoped", "live", "scopedLive"]);
 const errorOperandNames = new Set(["error", "err", "cause", "failure", "e"]);
@@ -284,25 +284,6 @@ const effectRules = {
       return {
         CallExpression(node) {
           if (isEffectMember(node.callee, runtimeEntryNames))
-            context.report({ node, messageId: "forbidden" });
-        },
-      };
-    },
-  },
-
-  "no-promise-wrappers": {
-    meta: {
-      type: "problem",
-      docs: { description: "Migrate Promise operations rather than wrapping them" },
-      messages: {
-        forbidden:
-          "Do not wrap a Promise back into an Effect. Migrate the operation to a native Effect (FileSystem, HttpClient, or the owning service).",
-      },
-    },
-    create(context) {
-      return {
-        CallExpression(node) {
-          if (isEffectMember(node.callee, promiseWrapperNames))
             context.report({ node, messageId: "forbidden" });
         },
       };
@@ -729,6 +710,7 @@ export default {
   meta: { name: "skit" },
   rules: {
     ...effectRules,
+    ...effectHygieneRules,
     ...libraryRules,
     ...structureRules,
     "no-direct-cli-output": {

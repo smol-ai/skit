@@ -461,9 +461,7 @@ const runOperation = Effect.fn("Library.setup.run")(function* (operationId: Oper
       );
     }).pipe(
       // Unsaved, the record stays Pending and the next run finds it.
-      Effect.catchCause((cause) =>
-        Effect.logWarning("Setup stopped, but could not record it", cause),
-      ),
+      Effect.catch((error) => Effect.logWarning("Setup stopped, but could not record it", error)),
       Effect.map((): SetupResult => ({ _tag: "Stopped", operationId, completed, reason })),
     );
   const failed = (step: number) => (error: unknown) =>

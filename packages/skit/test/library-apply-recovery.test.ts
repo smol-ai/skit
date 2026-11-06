@@ -1,5 +1,6 @@
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Option, Schema } from "effect";
+import { Cause, Effect, FileSystem, Layer, Option, Schema } from "effect";
+import { systemError } from "effect/PlatformError";
 import { join } from "node:path";
 import * as Library from "../src/library/library.js";
 import { LibraryState, libraryStateRevision } from "../src/library/library-state.js";
@@ -363,3 +364,69 @@ it.effect("recovery settles predecessor backups after the completed state was co
     assert.strictEqual(yield* f.fs.readFileString(join(f.installed, "SKILL.md")), bytes("Updated"));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+for (const failure of ["expected", "defect", "interrupt"] as const)
+  it.effect(`backup settlement keeps expected failures pending and propagates ${failure}`, () =>
+    Effect.gen(function* () {
+      const f = yield* fixture("update");
+      yield* interrupt(f, "settlement");
+      const backups = join(f.root, ".skit-backups");
+      const defect = new Error("backup scan defect");
+      let attempted = false;
+      const fs: FileSystem.FileSystem = {
+        ...f.fs,
+        readDirectory: (path) => {
+          if (path !== backups) return f.fs.readDirectory(path);
+          attempted = true;
+          return failure === "defect"
+            ? Effect.die(defect)
+            : failure === "interrupt"
+              ? Effect.interrupt
+              : Effect.fail(
+                  systemError({
+                    _tag: "PermissionDenied",
+                    module: "FileSystem",
+                    method: "readDirectory",
+                    pathOrDescriptor: path,
+                  }),
+                );
+        },
+      };
+      const exit = yield* Effect.exit(
+        Effect.gen(function* () {
+          const library = yield* Library.Service;
+          return yield* library.read;
+        }).pipe(
+          Effect.provide(f.layer.pipe(Layer.provide(Layer.succeed(FileSystem.FileSystem, fs)))),
+        ),
+      );
+      assert.isTrue(attempted);
+      if (failure === "expected") assert.strictEqual(exit._tag, "Success");
+      else {
+        if (exit._tag !== "Failure") return assert.fail("settlement failure was swallowed");
+        if (failure === "defect")
+          assert.isTrue(
+            exit.cause.reasons.some(
+              (reason) => Cause.isDieReason(reason) && reason.defect === defect,
+            ),
+          );
+        else assert.isTrue(Cause.hasInterruptsOnly(exit.cause));
+      }
+      // The successor was already published. Failure neither rolls it back nor drops its backup.
+      assert.strictEqual(
+        yield* f.fs.readFileString(join(f.installed, "SKILL.md")),
+        bytes("Updated"),
+      );
+      assert.isTrue(
+        (yield* f.fs.readDirectory(backups)).some((name) => name.startsWith("pending-")),
+      );
+      if (failure !== "expected") {
+        yield* Effect.gen(function* () {
+          yield* Library.Service;
+        }).pipe(Effect.provide(f.layer));
+        assert.isFalse(
+          (yield* f.fs.readDirectory(backups)).some((name) => name.startsWith("pending-")),
+        );
+      }
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+  );

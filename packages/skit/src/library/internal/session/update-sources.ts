@@ -178,7 +178,7 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <
                 "pathOrDescriptor" in error.reason ? error.reason.pathOrDescriptor : undefined;
               if (typeof path === "string") {
                 const canonical = yield* canonicalStoragePath(path).pipe(
-                  Effect.catchCause(() => Effect.failCause(cause)),
+                  Effect.catch(() => Effect.failCause(cause)),
                 );
                 if (canonical === storeHome || canonical.startsWith(`${storeHome}/`)) return false;
               }

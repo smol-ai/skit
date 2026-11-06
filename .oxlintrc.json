@@ -16,6 +16,18 @@
   },
   "overrides": [
     {
+      "files": [
+        "packages/skit/src/**/*.ts",
+        "packages/cli/src/**/*.ts",
+        "packages/tui/src/**/*.ts",
+        "packages/skit-server-effect/src/**/*.ts"
+      ],
+      "rules": {
+        "skit/no-unconditional-cause-recovery": "error",
+        "typescript/no-non-null-asserted-optional-chain": "error"
+      }
+    },
+    {
       "files": ["packages/skit-server-effect/worker-configuration.d.ts"],
       "rules": {
         "skit/no-record-any": "off",

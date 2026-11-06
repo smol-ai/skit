@@ -280,10 +280,10 @@ export const apply = Effect.fn("Library.applyRecordedChanges")(function* (
               yield* writer.save(pending, current);
               current = pending;
             }).pipe(
-              Effect.catchCause((cause) =>
+              Effect.catch((error) =>
                 Effect.logWarning(
                   "Installed files changed, but pending state could not be saved",
-                  cause,
+                  error,
                 ),
               ),
             ),
@@ -352,8 +352,8 @@ const settleBackups = Effect.fn("Library.settleApplyBackups")(function* (
         yield* reproducible ? files.backups.discard(backup) : files.backups.keep(backup);
       }
     }).pipe(
-      Effect.catchCause((cause) =>
-        Effect.logWarning("Library changed, but installed-skill backups stayed pending", cause),
+      Effect.catch((error) =>
+        Effect.logWarning("Library changed, but installed-skill backups stayed pending", error),
       ),
     );
 });
