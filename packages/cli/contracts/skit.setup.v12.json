@@ -1,5 +1,5 @@
 {
-  "$id": "skit.setup.v13",
+  "$id": "skit.setup.v12",
   "type": "object",
   "properties": {
     "operationId": {

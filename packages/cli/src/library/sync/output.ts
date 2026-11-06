@@ -36,5 +36,5 @@ export const SyncResult = Schema.Struct({
 export type SyncResult = typeof SyncResult.Type;
 
 export const syncOutputContracts = {
-  librarySync: { id: "skit.library.sync.v13", schema: SyncResult },
+  librarySync: { id: "skit.library.sync.v12", schema: SyncResult },
 } as const;

@@ -1,5 +1,5 @@
 {
-  "$id": "skit.library.sync.v13",
+  "$id": "skit.library.sync.v12",
   "type": "object",
   "properties": {
     "status": {
