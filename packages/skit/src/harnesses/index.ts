@@ -12,13 +12,7 @@ export {
 } from "./probe.js";
 export { captureBounded } from "./probe-process.js";
 
-export {
-  HarnessName,
-  type HarnessDocumentationSource,
-  type SkillsDirectory,
-  type HarnessProfile,
-  type SkillsDirectoryOverrides,
-} from "./contracts.js";
+export { HarnessName, type SkillsDirectoryOverrides } from "./contracts.js";
 export { HarnessMetadataInvalid } from "./metadata-failures.js";
 export { harnessDrivers } from "./drivers.js";
 export { installDestinationHarnesses } from "./install-destinations.js";

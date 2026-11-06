@@ -36,7 +36,7 @@ export type SkillItem = AuditItem & {
   provenance: NonNullable<AuditItem["provenance"]>;
 };
 
-export type SkillGroupRow = Omit<AuditItem, "kind"> & {
+type SkillGroupRow = Omit<AuditItem, "kind"> & {
   kind: "skill-group";
   group: SkillGroup<SkillItem>;
 };

@@ -41,7 +41,7 @@ export interface BrowseContext {
   readonly insideCollection: boolean;
   readonly copySelection: boolean;
 }
-export type InteractionCommand =
+type InteractionCommand =
   | {
       kind:
         | "quit"
