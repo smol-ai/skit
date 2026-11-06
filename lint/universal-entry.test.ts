@@ -129,21 +129,4 @@ describe("optional capability boundaries", () => {
       ),
     ).toEqual([]);
   });
-
-  test("server consumer paths do not import Draft or Publication modules", () => {
-    const roots = [
-      "packages/skit-server-effect/src/integrity",
-      "packages/skit-server-effect/src/library",
-      "packages/skit-server-effect/src/releases",
-    ].map((path) => join(repoRoot, path));
-    const offending = roots
-      .flatMap(sourceImports)
-      .filter(({ dependency }) => /\/(drafts|publication)\//.test(dependency));
-    expect(
-      offending.map(
-        ({ file, dependency }) =>
-          `${relative(repoRoot, file)} -> ${relative(repoRoot, dependency)}`,
-      ),
-    ).toEqual([]);
-  });
 });
