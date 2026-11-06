@@ -24,7 +24,6 @@ export { resolveDeclaredInvocation } from "./invocation/conformance.js";
 export { libraryDoctorReport } from "./library/inventory/doctor-report.js";
 
 export { LinkStat } from "./platform/link-stat.js";
-export { acquireFileLock } from "./platform/file-lock.js";
 
 export { skitLayer } from "./platform/layer.js";
 

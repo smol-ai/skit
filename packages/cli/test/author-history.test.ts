@@ -2,7 +2,7 @@ import { expect, it } from "@effect/vitest";
 import { Effect, FileSystem, Result, Stream } from "effect";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import { acquireFileLock } from "@smolai/skit-core";
+import { holdHomeLock } from "./helpers/home-lock.js";
 import * as History from "@smolai/skit-core/history";
 import { AuthorHistory } from "@smolai/skit-core/author";
 import {
@@ -277,7 +277,7 @@ it.effect("capture reports shared HomeBusy when machine identity cannot be writt
       join(workspace, "SKILL.md"),
       "---\nname: review\ndescription: review\n---\nReview\n",
     );
-    yield* acquireFileLock(join(home, "lock.sqlite"));
+    yield* holdHomeLock(home);
     const error = yield* captureWorkspace(workspace).pipe(
       Effect.provide(authorLayer(home)),
       Effect.flip,
