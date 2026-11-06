@@ -1,3 +1,4 @@
+import { originalTreePath } from "./helpers/original-tree.js";
 import { Library } from "@smolai/skit-core/library";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
@@ -5,7 +6,7 @@ import { Effect, FileSystem, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
-import { collectionVersionPath } from "@smolai/skit-core";
+
 import * as MachineSettings from "@smolai/skit-core/machine-settings";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { setupCommand } from "../src/library/setup.js";
@@ -274,7 +275,7 @@ it.effect("retains a project lock claim beside raw Skill bytes without inferring
     const skill = persisted.state.skills.find((item) => item.name === "review");
     expect(sourceImport.collection_id).toBe(skill?.collection_id);
     const tree = persisted.state.collection_versions[0]!;
-    const original = collectionVersionPath(home.originals, tree.hash);
+    const original = originalTreePath(home.originals, tree.hash);
     expect(yield* fs.readFileString(join(original, "review", "SKILL.md"))).toBe(installedText);
     expect(yield* fs.exists(join(original, "README.md"))).toBe(false);
     const secondSetup = yield* home.owned(runSetup(setup));

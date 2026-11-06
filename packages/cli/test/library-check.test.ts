@@ -1,6 +1,7 @@
+import { originalTreePath } from "./helpers/original-tree.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
-import { collectionVersionPath } from "@smolai/skit-core";
+
 import { Library } from "@smolai/skit-core/library";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Ref } from "effect";
@@ -41,7 +42,7 @@ it.effect("checks retained files without treating an observed local copy as an u
     assert.strictEqual(current[0]?.source_status, "not-applicable");
     assert.strictEqual(current[0]?.available_snapshot_digest, undefined);
     yield* fs.writeFileString(join(source, "SKILL.md"), "changed source bytes\n");
-    const path = collectionVersionPath(
+    const path = originalTreePath(
       join(home, "originals"),
       loaded.state.collection_versions[0]!.hash,
     );

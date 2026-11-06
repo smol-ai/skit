@@ -1,5 +1,6 @@
+import { originalTreePath } from "./helpers/original-tree.js";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
-import { emptyLibraryState, collectionVersionPath } from "@smolai/skit-core";
+import { emptyLibraryState } from "@smolai/skit-core";
 import { Library } from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
@@ -408,7 +409,7 @@ it.effect("stops on corruption of an existing retained object", () =>
       (copy) => copy.collection_version_id === f.before.imports[0]!.collection_version_id,
     )!;
     yield* f.fs.writeFileString(
-      join(collectionVersionPath(join(f.home, "originals"), copy.hash), "a", "SKILL.md"),
+      join(originalTreePath(join(f.home, "originals"), copy.hash), "a", "SKILL.md"),
       "corrupted",
     );
     f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "before"));

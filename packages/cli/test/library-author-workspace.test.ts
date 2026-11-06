@@ -1,11 +1,8 @@
+import { originalTreePath } from "./helpers/original-tree.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, Exit, FileSystem, Schema, Scope } from "effect";
 import { join } from "node:path";
-import {
-  COLLECTION_CONTROL_DIRECTORY,
-  AUTHOR_WORKSPACE_METADATA_FILE,
-  collectionVersionPath,
-} from "@smolai/skit-core";
+import { COLLECTION_CONTROL_DIRECTORY, AUTHOR_WORKSPACE_METADATA_FILE } from "@smolai/skit-core";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
 import { holdHomeLock } from "./helpers/home-lock.js";
@@ -44,7 +41,7 @@ it.effect(
       const firstTree = firstState.collection_versions[0];
       assert.ok(firstTree);
       assert.strictEqual(
-        yield* fs.exists(join(collectionVersionPath(home.originals, firstTree.hash), "skit.json")),
+        yield* fs.exists(join(originalTreePath(home.originals, firstTree.hash), "skit.json")),
         true,
       );
 

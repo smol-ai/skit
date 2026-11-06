@@ -1,9 +1,10 @@
+import { originalTreePath } from "./helpers/original-tree.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { collectionVersionPath } from "@smolai/skit-core";
+
 import { Library } from "@smolai/skit-core/library";
 import { importSource, previewLibrarySource } from "../src/library/source.js";
 import { gitBlobHash } from "./helpers/collection-import.js";
@@ -44,7 +45,7 @@ it.effect(
         state.skills.map((skill) => skill.path),
         manifest.skills.map((skill) => skill.path),
       );
-      const imported = collectionVersionPath(join(home, "originals"), result.snapshot_digest);
+      const imported = originalTreePath(join(home, "originals"), result.snapshot_digest);
       for (const file of manifest.files) {
         if (!manifest.skills.some((skill) => file.path.startsWith(`${skill.path}/`))) continue;
         assert.strictEqual(

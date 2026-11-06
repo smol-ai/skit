@@ -22,7 +22,6 @@ export { hashParts } from "./artifact/descriptor.js";
 export { deterministicTreeHash } from "./artifact/skit.js";
 
 export { scanInventory } from "./library/inventory/refresh.js";
-export { collectionVersionPath } from "./library/collection-version.js";
 export {
   importCanBeRefetched,
   librarySnapshotDigests,

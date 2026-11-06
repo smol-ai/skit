@@ -1,9 +1,9 @@
+import { originalTreePath } from "./helpers/original-tree.js";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import {
   currentSkillVersion,
   emptyLibraryState,
   libraryManifestFromLocalState,
-  collectionVersionPath,
 } from "@smolai/skit-core";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { Library } from "@smolai/skit-core/library";
@@ -70,7 +70,7 @@ it.effect(
         assert.strictEqual(yield* fs.readFileString(skillPath), bytes);
         assert.strictEqual(
           yield* fs.readFileString(
-            join(collectionVersionPath(join(home, "originals"), added.snapshot_digest), "SKILL.md"),
+            join(originalTreePath(join(home, "originals"), added.snapshot_digest), "SKILL.md"),
           ),
           bytes,
         );
@@ -120,7 +120,7 @@ it.effect("previews without mutation, then retains exact root Skill bytes", () =
     );
     assert.strictEqual(
       yield* fs.readFileString(
-        join(collectionVersionPath(join(home, "originals"), added.snapshot_digest), "SKILL.md"),
+        join(originalTreePath(join(home, "originals"), added.snapshot_digest), "SKILL.md"),
       ),
       bytes,
     );
@@ -221,7 +221,7 @@ it.effect("reports the retained package when its source disappears after publica
     assert.strictEqual(
       yield* fs.readFileString(
         join(
-          collectionVersionPath(join(home, "originals"), added.snapshot_digest),
+          originalTreePath(join(home, "originals"), added.snapshot_digest),
           memberPath,
           "SKILL.md",
         ),
@@ -259,7 +259,7 @@ it.effect("retains the exact bytes of a direct SKILL.md URL", () =>
     );
     assert.strictEqual(
       yield* fs.readFileString(
-        join(collectionVersionPath(join(home, "originals"), added.snapshot_digest), "SKILL.md"),
+        join(originalTreePath(join(home, "originals"), added.snapshot_digest), "SKILL.md"),
       ),
       bytes,
     );
@@ -461,7 +461,7 @@ it.effect("repeated identical local re-adds record nothing new", () =>
     assert.strictEqual(
       yield* fs.exists(
         join(
-          collectionVersionPath(join(home, "originals"), added.snapshot_digest),
+          originalTreePath(join(home, "originals"), added.snapshot_digest),
           ".skit-ownership.json",
         ),
       ),

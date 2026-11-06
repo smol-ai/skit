@@ -1,3 +1,4 @@
+import { originalTreePath } from "./helpers/original-tree.js";
 import { installEnabledSkills } from "./helpers/installed-skills.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
@@ -8,7 +9,6 @@ import {
   readSnapshotArchive,
   libraryManifestFromLocalState,
   LibraryState,
-  collectionVersionPath,
 } from "@smolai/skit-core";
 import { type SkitSource } from "@smolai/skit-core/library/source";
 import { Library } from "@smolai/skit-core/library";
@@ -111,7 +111,7 @@ const fixture = Effect.gen(function* () {
       assert.strictEqual(result.exitCode, 0);
       release = yield* fs.readFile(archive);
     }),
-    root: (hash: string) => collectionVersionPath(join(freshHome, "originals"), hash),
+    root: (hash: string) => originalTreePath(join(freshHome, "originals"), hash),
   };
 });
 

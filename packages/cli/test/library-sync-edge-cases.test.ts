@@ -1,8 +1,9 @@
+import { originalTreePath } from "./helpers/original-tree.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, Exit } from "effect";
 import { join } from "node:path";
-import { currentSkillVersion, scanInventory, collectionVersionPath } from "@smolai/skit-core";
+import { currentSkillVersion, scanInventory } from "@smolai/skit-core";
 import { inspectOwnershipMarker } from "@smolai/skit-core/library/inventory";
 import { makeImportId, type SkillId } from "@smolai/skit-core/universal/consumer";
 import { RegistryUnreachable } from "../src/registry/failures.js";
@@ -448,9 +449,7 @@ for (const localBytes of ["B\n", "base\n"]) {
         );
         const merged = yield* b.state;
         for (const copy of localCopies) {
-          assert.isTrue(
-            yield* fs.exists(collectionVersionPath(join(b.home, "originals"), copy.hash)),
-          );
+          assert.isTrue(yield* fs.exists(originalTreePath(join(b.home, "originals"), copy.hash)));
         }
         assert.equal(merged.skills[0]?.versions.length, 2);
         assert.equal(merged.skills[0]?.local_version_id, undefined);

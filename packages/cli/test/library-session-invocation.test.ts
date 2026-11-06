@@ -1,10 +1,11 @@
+import { originalTreePath } from "./helpers/original-tree.js";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
 import { Library } from "@smolai/skit-core/library";
-import { collectionVersionPath } from "@smolai/skit-core";
+
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { parseDocument } from "yaml";
 import { skitLayer } from "@smolai/skit-core/platform";
@@ -237,7 +238,7 @@ Tools
         ).every((agent) => agent.effectivePolicy === "explicit"),
       ).toBe(true);
       const state = yield* home.durable;
-      const imported = collectionVersionPath(home.originals, state.collection_versions[0]!.hash);
+      const imported = originalTreePath(home.originals, state.collection_versions[0]!.hash);
       yield* fs.writeFileString(join(imported, "agents", "openai.yaml"), "policy: [\n");
       const broken = yield* home.owned(
         Effect.flatMap(SkitConfiguration, (paths) =>
@@ -307,10 +308,7 @@ for (const problem of ["missing-skill", "malformed-metadata"] as const)
       const badState = yield* home.durable;
       if (problem === "missing-skill")
         yield* fs.remove(
-          join(
-            collectionVersionPath(home.originals, badState.collection_versions[0]!.hash),
-            "SKILL.md",
-          ),
+          join(originalTreePath(home.originals, badState.collection_versions[0]!.hash), "SKILL.md"),
         );
       const healthy = join(source, "..", "healthy");
       yield* fs.makeDirectory(healthy);
@@ -423,7 +421,7 @@ Tools
       );
       const state = yield* home.durable;
       const payload = join(
-        collectionVersionPath(home.originals, state.collection_versions[0]!.hash),
+        originalTreePath(home.originals, state.collection_versions[0]!.hash),
         "retained-payload.txt",
       );
       let payloadReads = 0;

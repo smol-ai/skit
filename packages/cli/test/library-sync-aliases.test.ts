@@ -1,3 +1,4 @@
+import { originalTreePath } from "./helpers/original-tree.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Schema } from "effect";
@@ -7,7 +8,6 @@ import {
   currentSkillVersion,
   libraryManifestFromLocalState,
   LibraryState,
-  collectionVersionPath,
 } from "@smolai/skit-core";
 import { LibraryManifest } from "@smolai/skit-core/library";
 import { type SkillId } from "@smolai/skit-core/universal/consumer";
@@ -43,8 +43,7 @@ const assertIntact = Effect.fn("Test.assertIntact")(function* (
   if (ancestry !== undefined) assert.isTrue(Schema.is(LibraryManifest)(ancestry.base_manifest));
   for (const hash of new Set([...imported, ...state.collection_versions.map((copy) => copy.hash)]))
     assert.strictEqual(
-      (yield* readSnapshotArchive(collectionVersionPath(join(device.home, "originals"), hash)))
-        .digest,
+      (yield* readSnapshotArchive(originalTreePath(join(device.home, "originals"), hash))).digest,
       hash,
     );
   const head = server.remote;

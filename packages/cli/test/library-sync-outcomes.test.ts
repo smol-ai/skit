@@ -1,3 +1,4 @@
+import { originalTreePath } from "./helpers/original-tree.js";
 import { Library } from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
@@ -7,7 +8,6 @@ import { join } from "node:path";
 import {
   LibraryState,
   readSnapshotArchive,
-  collectionVersionPath,
   libraryManifestFromLocalState,
   emptyLibraryState,
 } from "@smolai/skit-core";
@@ -184,10 +184,7 @@ const cases: readonly {
         // The competitor uploads its bytes and commits before A's null-base CAS.
         const competingState = yield* b.state;
         const archive = yield* readSnapshotArchive(
-          collectionVersionPath(
-            join(b.home, "originals"),
-            competingState.collection_versions[0]!.hash,
-          ),
+          originalTreePath(join(b.home, "originals"), competingState.collection_versions[0]!.hash),
         );
         assert.strictEqual(server.respond("POST", "/api/library/snapshots", archive).status, 200);
         inject({
@@ -1003,9 +1000,9 @@ it.effect("sync reuses an orphan retained snapshot without downloading it", () =
     yield* a.importSource("first");
     yield* a.sync();
     const hash = server.remote!.manifest.snapshot_digests[0]!;
-    const destination = collectionVersionPath(join(b.home, "originals"), hash);
+    const destination = originalTreePath(join(b.home, "originals"), hash);
     yield* fs.makeDirectory(join(destination, ".."), { recursive: true });
-    yield* fs.copy(collectionVersionPath(join(a.home, "originals"), hash), destination);
+    yield* fs.copy(originalTreePath(join(a.home, "originals"), hash), destination);
     inject({ _tag: "FailDownload", hash });
     const before = yield* captureDisk(b.disk);
     const preview = yield* b.sync({ apply: false });

@@ -1,3 +1,4 @@
+import { originalTreePath } from "./helpers/original-tree.js";
 import { withLibraryOwner } from "./helpers/library-owner.js";
 import { installEnabledSkills } from "./helpers/installed-skills.js";
 import { createHash } from "node:crypto";
@@ -12,7 +13,6 @@ import {
   enabledSkillIds,
   currentSkillVersion,
   libraryManifestFromLocalState,
-  collectionVersionPath,
   sourceImports,
 } from "@smolai/skit-core";
 import type { LibraryFixtureState as LibraryState } from "./helpers/library-home.js";
@@ -365,7 +365,7 @@ it.effect(
         (item) => item.collection_version_id === original.collection_version_id,
       )!;
       expect(observation.input.value).toBe(
-        collectionVersionPath(join(f.home.home, "originals"), copy.hash),
+        originalTreePath(join(f.home.home, "originals"), copy.hash),
       );
       const restoredManifest = yield* libraryManifestFromLocalState(restored);
       expect(restoredManifest.imports).toEqual(restored.imports);
@@ -457,7 +457,7 @@ it.effect(
         (item) => item.collection_version_id === original.collection_version_id,
       )!;
       const path = join(
-        collectionVersionPath(join(f.home.home, "originals"), copy.hash),
+        originalTreePath(join(f.home.home, "originals"), copy.hash),
         "existing",
         "SKILL.md",
       );
