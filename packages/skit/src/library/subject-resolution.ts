@@ -30,7 +30,7 @@ export class LibrarySubjectNotFound
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "NOT_FOUND" as const;
-  readonly remediation = "Run `skit list` to find a retained Skill or Collection.";
+  readonly remediation = "Check the retained Skills and Collections for the name.";
   get message(): string {
     return `No retained Skill or Collection matches ${this.query}`;
   }

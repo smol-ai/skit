@@ -213,7 +213,7 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <
             error: sourceImported
               ? {
                   ...error,
-                  remediation: `${error.remediation} Run \`skit update ${before.subjectId}\` to retry this Collection and update its installed skills.`,
+                  remediation: `${error.remediation} Update this Collection again to retry it and update its installed skills.`,
                 }
               : error,
           };

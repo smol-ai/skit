@@ -26,7 +26,7 @@ export class EditImportMissing
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "NOT_FOUND" as const;
-  readonly remediation = "Run `skit doctor` to inspect changed installed skills.";
+  readonly remediation = "Inspect the changed installed skills.";
 }
 
 class EditImportAmbiguous

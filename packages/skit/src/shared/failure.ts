@@ -23,7 +23,10 @@ export const FailureTypeId = "~@smolai/skit-core/Failure";
 export interface SkitFailure extends Error {
   readonly [FailureTypeId]: typeof FailureTypeId;
   readonly code: FailureCode;
-  /** What an operator can do next, as one or two sentences. */
+  /**
+   * What an operator can do next, as one or two sentences in the domain's own words. A failure
+   * never names a frontend command; each frontend adds the command that does it.
+   */
   readonly remediation: string;
 }
 

@@ -47,7 +47,7 @@ export class InstalledSkillFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Run `skit doctor` to inspect the installed skill, then retry.";
+  readonly remediation = "Inspect the installed skill, then retry.";
 }
 
 function exists(path: string): Effect.Effect<boolean, PlatformError, FileSystem.FileSystem> {

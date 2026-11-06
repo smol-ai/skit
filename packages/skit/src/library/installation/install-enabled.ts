@@ -9,7 +9,7 @@ export class InstalledSkillInvalid
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Run `skit doctor` to inspect the Library, then retry.";
+  readonly remediation = "Inspect the Library, then retry.";
   get message(): string {
     return this.detail;
   }

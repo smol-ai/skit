@@ -23,7 +23,7 @@ export class SyncLocalChanged
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Run `skit sync` again.";
+  readonly remediation = "Sync again.";
   get message(): string {
     return "The local Library changed while sync was running";
   }

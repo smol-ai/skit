@@ -29,7 +29,7 @@ export class SnapshotArchiveInvalid
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Run `skit sync` again; if it persists, the stored snapshot is damaged.";
+  readonly remediation = "Sync again; if it persists, the stored snapshot is damaged.";
   get message(): string {
     return `Invalid Library snapshot archive: ${this.reason}`;
   }

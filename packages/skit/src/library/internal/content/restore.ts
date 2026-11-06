@@ -32,7 +32,7 @@ export class RestoreInvalid
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Run `skit doctor` to inspect the Library, then run `skit sync` again.";
+  readonly remediation = "Inspect the Library, then sync again.";
   get message(): string {
     return `Cannot restore the Library: ${this.detail}`;
   }

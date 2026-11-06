@@ -7,7 +7,7 @@ export class ContentAddressCollision
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  readonly remediation = "Run `skit doctor` to inspect the Library before retrying.";
+  readonly remediation = "Inspect the Library before retrying.";
   get message(): string {
     return "Canonical library content-address collision";
   }
@@ -23,7 +23,7 @@ export class UnknownInstalledSkill
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "NOT_FOUND" as const;
-  readonly remediation = "Run `skit list` to find an installed Skill.";
+  readonly remediation = "Check the installed Skills for the name.";
   get message(): string {
     return `Unknown installed skill: ${this.query}`;
   }
@@ -91,7 +91,7 @@ export class InvalidLibraryState
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "VALIDATION_FAILED" as const;
   readonly remediation =
-    "Back up the state file before recovery. To reset an alpha Library, move it aside and run `skit setup`; keep installed Skill files.";
+    "Back up the state file before recovery. To reset an alpha Library, move it aside and set it up again; keep installed Skill files.";
   get message(): string {
     return `Invalid Library state at ${this.path}: ${this.detail}`;
   }

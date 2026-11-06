@@ -22,7 +22,7 @@ class SetupImportInvalid
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Run `skit setup` again and review the current plan.";
+  readonly remediation = "Set up again and review the current plan.";
   get message(): string {
     return `Cannot import ${this.name} during setup: ${this.reason}`;
   }

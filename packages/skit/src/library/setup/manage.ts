@@ -38,7 +38,7 @@ class SetupManageSelectionInvalid
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Run `skit setup` again and review the current plan.";
+  readonly remediation = "Set up again and review the current plan.";
   get message() {
     return `Cannot manage ${this.name} during setup: ${this.reason}`;
   }

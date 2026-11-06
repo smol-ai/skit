@@ -112,7 +112,7 @@ export class OwnershipMarkerDisagrees
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  readonly remediation = "Run `skit doctor` to inspect the installed skill before retrying.";
+  readonly remediation = "Inspect the installed skill before retrying.";
   get message(): string {
     return `Installed-skill state and ownership marker disagree for ${this.skillId} at ${this.target}`;
   }
@@ -156,7 +156,7 @@ export class InstalledSkillFileMissing
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "VALIDATION_FAILED" as const;
-  readonly remediation = "Run `skit doctor` to inspect the installed skill, then retry.";
+  readonly remediation = "Inspect the installed skill, then retry.";
   get message(): string {
     return `Installed skill is missing ${this.path}`;
   }

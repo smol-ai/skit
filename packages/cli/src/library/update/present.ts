@@ -45,6 +45,7 @@ export function renderUpdate(data: UpdateResult): string {
         : []),
       ...item.error.message.split("\n").map((line) => `  ${line}`),
       `  ${item.error.remediation}`,
+      ...(item.source_imported ? [`  Run \`skit update ${item.subject_id}\` to retry it.`] : []),
     );
   lines.push(
     "",

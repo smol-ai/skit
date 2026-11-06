@@ -267,7 +267,7 @@ export class AuthorWorkspaceRemovalUnfinished
 export class NoRemoteHome extends Data.TaggedError("NoRemoteHome")<{}> implements SkitFailure {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "INVALID_ARGUMENT" as const;
-  readonly remediation = "Run `skit author sync --to <namespace/skit>` first.";
+  readonly remediation = "Connect this workspace to a Registry SKIT first.";
   get message(): string {
     return "This SKIT has no remote home; run `skit author sync --to ...` first";
   }

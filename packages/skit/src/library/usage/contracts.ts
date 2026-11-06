@@ -63,7 +63,7 @@ export class InvalidUsageOptions
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "INVALID_ARGUMENT" as const;
-  readonly remediation = "Run `skit usage --help` to review its options.";
+  readonly remediation = "Review the usage options.";
 }
 export interface UsageRoot {
   readonly harness: UsageHarness;

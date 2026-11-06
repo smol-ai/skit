@@ -16,6 +16,7 @@ import { commandDescriptions } from "../src/commands/manifest.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { classifyFailure, failureExitCodes } from "../src/commands/failure-classification.js";
 import * as Library from "@smolai/skit-core/library";
+import { FailureTypeId } from "@smolai/skit-core/shared";
 import { NoStoredCredentials, RegistryUnreachable } from "../src/registry/failures.js";
 
 const produced = new Set<number>(Object.values(failureExitCodes));
@@ -84,6 +85,19 @@ describe("declared exit codes", () => {
         message: failure.message,
         remediation: failure.remediation,
       });
+  });
+
+  test("a failure the owner describes in domain terms gets this executable's command", () => {
+    const failure = {
+      [FailureTypeId]: FailureTypeId,
+      _tag: "InvalidLibraryState",
+      name: "InvalidLibraryState",
+      code: "VALIDATION_FAILED" as const,
+      message: "Invalid Library state at /home/state.json: schema v2",
+      remediation: "Back up the state file before recovery.",
+    };
+    expect(classifyFailure(failure).remediation).toContain("skit setup");
+    expect(classifyFailure(failure).remediation).not.toBe(failure.remediation);
   });
 
   test("anything not named as a failure ends the command with exit 1", () => {

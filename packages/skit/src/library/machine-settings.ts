@@ -270,7 +270,7 @@ class SetupNotRecorded
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "NOT_FOUND" as const;
-  readonly remediation = "Review the discovery folders with `skit setup`.";
+  readonly remediation = "Review the discovery folders in a new setup.";
   get message(): string {
     return `No discovery folders are recorded for setup ${this.operationId} in ${this.path}`;
   }
