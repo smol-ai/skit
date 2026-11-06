@@ -1,4 +1,4 @@
-import { History } from "@smolai/skit-core/universal/authoring";
+import * as History from "@smolai/skit-core/history";
 import { MachineId } from "@smolai/skit-core/universal/consumer";
 import { Effect, Schema } from "effect";
 

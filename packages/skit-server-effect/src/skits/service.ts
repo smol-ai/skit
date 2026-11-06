@@ -5,9 +5,9 @@ import { makeReleaseReads, type Releases } from "./internal/releases.js";
 import { makePublication, type Publication } from "./internal/publication.js";
 import { makeDeletion, type Deletion } from "./internal/deletion.js";
 import { D1Client } from "@effect/sql-d1";
+import * as History from "@smolai/skit-core/history";
 import {
   type SkitCurrentResponse,
-  History,
   MAX_ARTIFACT_CONTENT_BYTES,
   MAX_ARTIFACT_FILES,
   type RevisionPage,

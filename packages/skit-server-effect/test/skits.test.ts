@@ -11,7 +11,7 @@ import {
   PublicationAuthenticatedApi,
   CreatedPat,
 } from "@smolai/skit-core/universal/api";
-import { History } from "@smolai/skit-core/universal/authoring";
+import * as History from "@smolai/skit-core/history";
 import { sha256Hash } from "@smolai/skit-core/universal/consumer";
 import { legacyGrantsTable } from "./fixtures/legacy-grants.js";
 import { revisionRequest, skillTree } from "./fixtures/revision-request.js";

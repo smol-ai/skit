@@ -8,11 +8,8 @@ import { promisify } from "node:util";
 import { Schema } from "effect";
 import { createTestHarness } from "wrangler";
 import { expect, test } from "vitest";
-import {
-  History,
-  RevisionReadResponse,
-  SkitCurrentResponse,
-} from "@smolai/skit-core/universal/authoring";
+import * as History from "@smolai/skit-core/history";
+import { RevisionReadResponse, SkitCurrentResponse } from "@smolai/skit-core/universal/authoring";
 import { CreatedPat } from "@smolai/skit-core/universal/api";
 import type { RuntimeEnv } from "../src/platform/cloudflare.js";
 

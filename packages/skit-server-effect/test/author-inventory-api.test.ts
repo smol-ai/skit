@@ -8,7 +8,7 @@ import { AuthoringAuthenticatedApi } from "@smolai/skit-core/universal/api";
 import { requestDecodingLayer } from "../src/api/request-decoding.js";
 import { Skits } from "../src/skits/service.js";
 import type { Principal } from "../src/identity/service.js";
-import { History } from "@smolai/skit-core/universal/authoring";
+import * as History from "@smolai/skit-core/history";
 import { Schema } from "effect";
 
 const revisionId = Schema.decodeUnknownSync(History.RevisionId)(`sha256:${"a".repeat(64)}`);

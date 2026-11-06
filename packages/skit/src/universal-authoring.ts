@@ -20,4 +20,3 @@ export {
   MAX_RELEASE_ARCHIVE_BASE64_LENGTH,
   releasePublishRequestSchema,
 } from "./api/authoring-contracts.js";
-export * as History from "./history/history.js";

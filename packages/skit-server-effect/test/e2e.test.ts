@@ -12,9 +12,9 @@ import { LibraryState } from "@smolai/skit-core/library";
 import { createTestHarness } from "wrangler";
 import { expect, test } from "vitest";
 import type { RuntimeEnv } from "../src/platform/cloudflare.js";
+import * as History from "@smolai/skit-core/history";
 import {
   SkitCurrentResponse,
-  History,
   RevisionPostRequest,
   RevisionReadResponse,
 } from "@smolai/skit-core/universal/authoring";
