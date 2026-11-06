@@ -38,6 +38,13 @@ export const installedSkillSource = Effect.fn("Library.installedSkillSource")(fu
     backing.member.source_path === "." ? root : join(root, backing.member.source_path);
   if ((yield* originalTreeHash(importedPath)) !== version.source_hash)
     return { kind: "invalid" as const, detail: `retained Skill ${skill.name} changed` };
+  // The primary directory hash excludes shared inputs. The validated Skill identity covers
+  // the complete projected artifact, including current shared mappings and their file bytes.
+  const validatedSkill = validated?.identity.skills.find(
+    (candidate) => candidate.name === skill.name,
+  );
+  if (authored && validatedSkill?.contentHash !== version.validation_identity_hash)
+    return { kind: "invalid" as const, detail: `retained Skill ${skill.name} inputs changed` };
   return {
     kind: "source" as const,
     libraryPath: root,
