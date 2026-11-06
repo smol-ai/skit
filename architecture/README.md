@@ -46,14 +46,16 @@ or an independent runner chooses the SHA and executes the pinned command.
 Library's storage implementation (`library-store`, `state-file`, `writer-lock`)
 and `library/internal/` can be imported only inside Library. Inside Library, only
 `library/store/` imports `state-file`: every change saves through the
-`LibraryWriter` that `writeLibrary` provides while it holds the home lock. The compatibility
-root barrel and package-local implementation tests have explicit access. Shared
-schema modules retain their existing vocabulary role.
+`LibraryWriter` that `writeLibrary` provides while it holds the home lock.
+Package-local implementation tests can inspect private evidence without opening an
+owner that would recover it. There is no core root entry: applications use the
+declared owner or shared subpaths. The Library entry exposes the current snapshot
+codec for serialized-state validation; storage, historical migration and recovery
+remain private.
 
 The rule covers named imports, aliases, namespace imports, side-effect imports,
 re-exports and literal dynamic imports. A new export name does not grant access.
-Named private exports through public compatibility barrels are separately checked
-against the existing debt list.
+Named private exports through public package entries are separately checked.
 
 ## Accept one operation, not a folder move
 

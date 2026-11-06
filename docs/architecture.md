@@ -187,17 +187,29 @@ The default local library is `~/.skit`, overridable with `SKIT_HOME` or `--home`
 
 `openSyncSession` is the shared Library boundary for portable sync review. It owns ancestry, merge, identity alignment, device selection and change summaries, then prepares the local Sync plan and remote receipt from the reviewed target. The caller owns remote transport and compare-and-swap. Library alone records and applies local mutations. A changed staged target or stale snapshot cannot inherit the original review.
 
-Projection changes use one serialized, scoped mutation:
+Library applies reviewed installed-skill changes through a serialized, scoped
+writer. Planning and interactive review stay outside that writer:
 
 ```text
-load authoritative state
+read a snapshot and review the plan
         ↓
-resolve bindings and concrete targets
+take the home lock and revalidate the reviewed state and file evidence
         ↓
-materialize all changed projections
+save the Pending operation, routing and recovery evidence
         ↓
-persist the new state once
+prepare recorded roots and execute recorded steps with durable checkpoints
+        ↓
+save Done or Stopped, retaining evidence for recovery
+        ↓
+deliver the recorded history event and acknowledge it
 ```
+
+State saves include pending history-delivery evidence. Startup retries unfinished
+delivery with stable event identities, so interruption after appending an event
+does not duplicate it. Startup also resumes recorded Pending operations; changed
+user files cause a stopped outcome instead of silently acquiring new consent.
+This protocol can save several checkpoints. It is not a single final state write
+after all filesystem changes.
 
 Foreign or drifted content is not silently overwritten. Materialization uses ownership markers and observed hashes to decide whether an operation is safe, a no-op, or a conflict.
 
