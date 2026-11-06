@@ -99,6 +99,23 @@ export class AuthorSyncStateConflict
   readonly remediation = "Sync again; it plans from the checkpoint saved now.";
 }
 
+/** Another backup pass advanced this workspace's acknowledged observation. */
+export class AuthorBackupStateConflict
+  extends Schema.TaggedError<AuthorBackupStateConflict>()("AuthorBackupStateConflict", {
+    key: SyncKey,
+    found: Schema.NullOr(History.RevisionId),
+  })
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "CONFLICT" as const;
+  readonly retryable = true;
+  get message() {
+    return `The backup checkpoint for ${this.key.locator} changed while this backup was running`;
+  }
+  readonly remediation = "Sync again; it resumes from the acknowledged observation.";
+}
+
 /** `from → to` is not a step the sync engine takes (Sync.allowsStep). */
 export class AuthorSyncStateIllegal
   extends Schema.TaggedError<AuthorSyncStateIllegal>()("AuthorSyncStateIllegal", {
@@ -143,6 +160,10 @@ export type PreparedWrite = typeof PreparedWrite.Type;
 const SyncBindings = Schema.Struct({
   schema: Schema.Literal("skit.sync-bindings.v4"),
   workspaces: Schema.Record(WorkspaceId, Schema.Record(Schema.String, Sync.SyncState)),
+  // Additive: older v4 documents have no acknowledged observation yet.
+  backups: Schema.optional(
+    Schema.Record(WorkspaceId, Schema.Record(Schema.String, History.RevisionId)),
+  ),
 });
 type SyncBindings = typeof SyncBindings.Type;
 /** Formats from unreleased builds, keyed by locator only: recognized only to refuse them. */
@@ -394,6 +415,24 @@ export interface AuthorHistoryShape {
    * idempotent; it never touches the journal or sync-bindings.
    */
   readonly engineStore: History.Store;
+  /** Acknowledged raw observations, independent of the remote's current content. */
+  readonly backupState: {
+    /** Absent means nothing has been acknowledged. Never creates files. */
+    readonly read: (key: SyncKey) => Effect.Effect<History.RevisionId | null, SyncStateError>;
+    /** Advance one revision only after the remote accepts it; preserve every other checkpoint. */
+    readonly save: (
+      lease: WorkspaceLease,
+      key: SyncKey,
+      change: { readonly from: History.RevisionId | null; readonly to: History.RevisionId },
+    ) => Effect.Effect<
+      void,
+      | AuthorBackupStateConflict
+      | AuthorHistoryInvalid
+      | AuthorLeaseNotHeld
+      | HomeBusy
+      | SyncStateError
+    >;
+  };
   /** The sync checkpoint, Idle | Sending | Writing. */
   readonly syncState: {
     /** Absent reads as Idle { base: null }. Never writes. */
@@ -611,6 +650,33 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
     return entry(yield* loadBindings, key);
   });
 
+  const writeBindings = Effect.fn("AuthorHistory.writeBindings")(function* (next: SyncBindings) {
+    yield* fs.makeDirectory(home, { recursive: true, mode: 0o700 });
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const staging = yield* fs.makeTempDirectoryScoped({
+          directory: home,
+          prefix: ".sync-state-",
+        });
+        const temporary = path.join(staging, "state.json");
+        const file = yield* fs.open(temporary, { flag: "wx", mode: 0o600 });
+        // The bindings are built from decoded states, so failing to encode them is a defect.
+        const text = yield* Schema.encodeEffect(Schema.fromJsonString(SyncBindings))(next).pipe(
+          Effect.orDie,
+        );
+        yield* file.writeAll(new TextEncoder().encode(text));
+        yield* file.sync;
+        yield* Effect.uninterruptible(
+          Effect.gen(function* () {
+            yield* fs.rename(temporary, bindingsPath);
+            const folder = yield* fs.open(home, { flag: "r" });
+            yield* folder.sync;
+          }),
+        );
+      }),
+    );
+  });
+
   /**
    * One checkpoint step under the home lock: refuse unless the saved entry still equals `from`,
    * rewrite only that entry (flushed, then renamed over the old file), then advance the lease.
@@ -620,6 +686,7 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
     key: SyncKey,
     from: Sync.SyncState,
     to: Sync.SyncState,
+    resetBackup = false,
   ) {
     return yield* HomeLock.withLock(
       home,
@@ -629,38 +696,69 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
         const bindings = yield* loadBindings;
         const found = entry(bindings, key);
         if (!sameState(found, from)) return yield* new AuthorSyncStateConflict({ key, found });
+        const backups = { ...bindings.backups };
+        if (resetBackup && backups[key.workspaceId]) {
+          const remaining = { ...backups[key.workspaceId] };
+          delete remaining[key.locator];
+          backups[key.workspaceId] = remaining;
+        }
         const next: SyncBindings = {
+          ...bindings,
+          ...(bindings.backups === undefined ? {} : { backups }),
           schema: "skit.sync-bindings.v4",
           workspaces: {
             ...bindings.workspaces,
             [key.workspaceId]: { ...bindings.workspaces[key.workspaceId], [key.locator]: to },
           },
         };
-        yield* fs.makeDirectory(home, { recursive: true, mode: 0o700 });
-        yield* Effect.scoped(
-          Effect.gen(function* () {
-            const staging = yield* fs.makeTempDirectoryScoped({
-              directory: home,
-              prefix: ".sync-state-",
-            });
-            const temporary = path.join(staging, "state.json");
-            const file = yield* fs.open(temporary, { flag: "wx", mode: 0o600 });
-            // The bindings are built from decoded states, so failing to encode them is a defect.
-            const text = yield* Schema.encodeEffect(Schema.fromJsonString(SyncBindings))(next).pipe(
-              Effect.orDie,
-            );
-            yield* file.writeAll(new TextEncoder().encode(text));
-            yield* file.sync;
-            yield* Effect.uninterruptible(
-              Effect.gen(function* () {
-                yield* fs.rename(temporary, bindingsPath);
-                const folder = yield* fs.open(home, { flag: "r" });
-                yield* folder.sync;
-              }),
-            );
-          }),
-        );
+        yield* writeBindings(next);
         return yield* lease.advance;
+      }),
+    );
+  });
+
+  const backupEntry = (bindings: SyncBindings, key: SyncKey) =>
+    bindings.backups?.[key.workspaceId]?.[key.locator] ?? null;
+  const readBackup = Effect.fn("AuthorHistory.backupState.read")(function* (key: SyncKey) {
+    return backupEntry(yield* loadBindings, key);
+  });
+  const saveBackup = Effect.fn("AuthorHistory.backupState.save")(function* (
+    lease: WorkspaceLease,
+    key: SyncKey,
+    change: { readonly from: History.RevisionId | null; readonly to: History.RevisionId },
+  ) {
+    yield* HomeLock.withLock(
+      home,
+      Effect.gen(function* () {
+        yield* lease.revision;
+        const bindings = yield* loadBindings;
+        const found = backupEntry(bindings, key);
+        if (found !== change.from) return yield* new AuthorBackupStateConflict({ key, found });
+        if (change.to === found) return;
+        const revision = yield* engineStore
+          .revision(change.to)
+          .pipe(Effect.catchIf(Schema.is(History.StoreError), storeFailure));
+        yield* engineStore
+          .tree(revision.tree)
+          .pipe(Effect.catchIf(Schema.is(History.StoreError), storeFailure));
+        const parents = change.from === null ? [] : [change.from];
+        if (
+          revision.parents.length !== parents.length ||
+          revision.parents.some((id, index) => id !== parents[index])
+        )
+          return yield* new AuthorHistoryInvalid({
+            path: bindingsPath,
+            reason:
+              "a backup checkpoint must advance one observed revision without skipping its parent",
+          });
+        yield* writeBindings({
+          ...bindings,
+          backups: {
+            ...bindings.backups,
+            [key.workspaceId]: { ...bindings.backups?.[key.workspaceId], [key.locator]: change.to },
+          },
+        });
+        yield* lease.advance;
       }),
     );
   });
@@ -676,7 +774,7 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
       | { readonly from: Sync.SyncState; readonly reset: CreateReceipt },
   ) {
     if ("reset" in change) {
-      yield* step(lease, key, change.from, Sync.Idle.make({ base: null }));
+      yield* step(lease, key, change.from, Sync.Idle.make({ base: null }), true);
       return;
     }
     if (!Sync.allowsStep(change.from, change.to))
@@ -726,6 +824,10 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
     retain: (tree) =>
       engineStore.putTree(tree).pipe(Effect.catchIf(Schema.is(History.StoreError), storeFailure)),
     engineStore,
+    backupState: {
+      read: (key) => readBackup(key).pipe(Effect.provide(context)),
+      save: (lease, key, change) => saveBackup(lease, key, change).pipe(Effect.provide(context)),
+    },
     syncState: {
       read: (key) => read(key).pipe(Effect.provide(context)),
       save: (lease, key, change) => save(lease, key, change).pipe(Effect.provide(context)),

@@ -19,6 +19,7 @@ export {
   AuthorHistoryInvalid,
   type AuthorHistoryBusy,
   type AuthorSyncStateConflict,
+  type AuthorBackupStateConflict,
   type AuthorSyncStateIllegal,
   type Observation,
   type CaptureError,

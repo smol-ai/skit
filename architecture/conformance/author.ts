@@ -55,6 +55,15 @@ export type Checks = [
   Assert<Equal<ExtraMethods<AuthorHistory, AuthorHistoryShape>, never>>,
   Assert<Equal<ChangedMethods<AuthorHistory, AuthorHistoryShape>, never>>,
   Assert<Equal<AuthorHistoryShape["engineStore"], CoreHistory.Store>>,
+  Assert<
+    Equal<MissingMethods<AuthorHistory["backupState"], AuthorHistoryShape["backupState"]>, never>
+  >,
+  Assert<
+    Equal<ExtraMethods<AuthorHistory["backupState"], AuthorHistoryShape["backupState"]>, never>
+  >,
+  Assert<
+    Equal<ChangedMethods<AuthorHistory["backupState"], AuthorHistoryShape["backupState"]>, never>
+  >,
   // syncState is checked method by method, so the debt names the steps rather than syncState.
   Assert<Equal<MissingMethods<HistorySyncState, ImplementationSyncState>, never>>,
   Assert<Equal<ExtraMethods<HistorySyncState, ImplementationSyncState>, never>>,

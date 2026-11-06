@@ -81,6 +81,7 @@ import type {
   AuthorHistoryBusy,
   AuthorHistoryInvalid,
   AuthorSyncStateConflict,
+  AuthorBackupStateConflict,
   AuthorSyncStateIllegal,
   AuthorLocalPathNotObserved,
   AuthorNonNfcPathUnsupported,
@@ -103,6 +104,7 @@ import type {
 export type {
   AuthorLeaseNotHeld,
   AuthorSyncStateConflict,
+  AuthorBackupStateConflict,
   AuthorSyncStateIllegal,
   AuthorWorkspaceBusy,
   AuthorWorkspaceConflict,
@@ -550,6 +552,29 @@ export interface AuthorHistory {
    * AuthorHistoryInvalid as device-store.ts:95-105 does today.
    */
   readonly engineStore: History.Store;
+  /** Acknowledged chronological observations, separate from current remote content (ADR-0025). */
+  readonly backupState: {
+    /** Absent reads as null without creating storage; old v4 documents have no acknowledgement. */
+    readonly read: (key: SyncKey) => Effect.Effect<History.RevisionId | null, SyncStateError>;
+    /**
+     * Save after remote acceptance, under the workspace lease and home lock. Refuse stale `from`,
+     * missing/corrupt local revision or tree, and skipped observation parents. Flush before return,
+     * then advance the lease. Other workspaces, remotes and syncState entries stay unchanged.
+     * First-connection reset clears only this destination's backup checkpoint.
+     */
+    readonly save: (
+      lease: WorkspaceLease,
+      key: SyncKey,
+      change: { readonly from: History.RevisionId | null; readonly to: History.RevisionId },
+    ) => Effect.Effect<
+      void,
+      | AuthorBackupStateConflict
+      | AuthorHistoryInvalid
+      | AuthorLeaseNotHeld
+      | HomeBusy
+      | SyncStateError
+    >;
+  };
   /** The sync checkpoint, Idle | Sending | Writing (packages/skit/src/sync/sync.ts:26-39). One read, one transition. */
   readonly syncState: {
     /** FROM CODE: absent reads as Idle { base: null } (sync.ts:636-638). Never writes. */
