@@ -1,7 +1,7 @@
 import { Schema } from "effect";
-import { SyncConflictDetail } from "@smolai/skit-core/library/session";
+import { SyncConflictDetail } from "@smolai/skit-core/library/sync";
 
-import { SyncChanges as SyncPlan } from "@smolai/skit-core/library/session";
+import { SyncChanges as SyncPlan } from "@smolai/skit-core/library/sync";
 
 export const SyncResult = Schema.Struct({
   status: Schema.Literals([

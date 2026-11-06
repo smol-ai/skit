@@ -3,7 +3,7 @@ import { join } from "node:path";
 import * as Library from "@smolai/skit-core/library";
 import { makeMachineId } from "@smolai/skit-core/universal/consumer";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
-import { readLibraryManifest } from "@smolai/skit-core/library/session";
+import { readLibraryManifest } from "@smolai/skit-core/library/queries";
 
 /** Real retained bytes and owner-generated identities, shared by the preview journeys. */
 export const importReview = Effect.fn("Storybook.importReview")(function* (root: string) {

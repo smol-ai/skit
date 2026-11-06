@@ -1,4 +1,4 @@
-import { SkillMetadata } from "@smolai/skit-core/library/session";
+import { SkillMetadata } from "@smolai/skit-core/library/queries";
 import { Schema } from "effect";
 import { CollectionId, SkillId, SkillVersionId } from "@smolai/skit-core/universal/consumer";
 import { Hash } from "@smolai/skit-core/shared";

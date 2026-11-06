@@ -2,9 +2,9 @@ import { Effect } from "effect";
 import type { InstallScope } from "@smolai/skit-core/library";
 import type { InvocationOption } from "@smolai/skit-core/library/session";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import * as Selection from "@smolai/skit-core/library/session";
-import type { SetEnabledRequest } from "@smolai/skit-core/library/session";
-export { SetEnabledIncomplete, type SetEnabledRequest } from "@smolai/skit-core/library/session";
+import * as Selection from "@smolai/skit-core/library/enable";
+import type { SetEnabledRequest } from "@smolai/skit-core/library/enable";
+export { SetEnabledIncomplete, type SetEnabledRequest } from "@smolai/skit-core/library/enable";
 
 /** Test fixtures supply paths as a service; production callers pass their resolved home directly. */
 export const openSetEnabledSession = (configuration: Selection.SetEnabledConfiguration) =>

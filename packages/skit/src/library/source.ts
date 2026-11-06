@@ -118,3 +118,5 @@ export type {
   SourcePolicyViolation,
   ParseSourceFailure,
 } from "../sources/resolve.js";
+
+export { sourceFromUpstream } from "./internal/session/upstream-source.js";

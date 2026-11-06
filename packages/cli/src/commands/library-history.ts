@@ -1,7 +1,7 @@
-import { readLibraryHistory } from "@smolai/skit-core/library/session";
+import { readLibraryHistory } from "@smolai/skit-core/library/queries";
 import { Option, Effect } from "effect";
 import { Command } from "effect/cli";
-import { handleLibraryCommand } from "./handler.js";
+import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
 import { historyOutputContracts } from "../library/history.js";
 import { homeFlag, jsonFlag } from "./parameters.js";

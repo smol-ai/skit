@@ -24,7 +24,7 @@ import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import { renderContract } from "../src/commands/output-presenters.js";
 import * as Library from "@smolai/skit-core/library";
-import { openSyncSession } from "@smolai/skit-core/library/session";
+import { openSyncSession } from "@smolai/skit-core/library/sync";
 import {
   deterministicTreeHash,
   libraryHome,

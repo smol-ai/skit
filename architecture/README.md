@@ -5,6 +5,53 @@
 private imports and service identities; `layout.mjs` controls placement and import
 direction. Existing debt is a list of violations, not approval of their design.
 
+## Read the core/CLI boundary
+
+`packages/skit` is the `@smolai/skit-core` package. It owns Library policy,
+plans, mutations, locks and recovery. `packages/cli` is the `@smolai/skit`
+application: command grammar, terminal interaction and process execution.
+
+Start at a command in `packages/cli/src/commands/`, follow its feature entry in
+`packages/cli/src/library/`, and then the named core API:
+
+| Core entry | Responsibility |
+| --- | --- |
+| `library/queries` | Passive reports and Skill metadata |
+| `library/session` | Interactive Library state, choices and transitions |
+| `library/enable` | Enable/disable selection, reviewed plans and outcomes |
+| `library/update`, `library/edit` | Source updates and reviewed local edit imports |
+| `library/remove` | Removal selection and reviewed plans |
+| `library/sync` | Library sync sessions and outcomes |
+| `library/recovery` | Recovery inspection and reviewed restores |
+| `library/security` | Review and acceptance of security findings |
+
+`packages/cli/src/application.ts` constructs the production owner layers and
+supplies command configuration, terminal services and failure rendering.
+`commands/runtime.ts` runs the CLI grammar; `main.ts` supplies the Node process
+environment. Commands do not construct the Library or open its storage.
+
+For example, enable/disable follows:
+
+```text
+commands/library-enable-command.ts       parse flags and scope
+  → library/enable.ts                    collect choices and render outcomes
+    → @smolai/skit-core/library/enable    open selection → plan intent → apply reviewed plan
+      → private Library implementation   own freshness, writes and recovery
+```
+
+The prompts stay outside writer scopes; core owns the plan and its application.
+Several calls across this interaction are legitimate. `frontend-one-owner-call`
+only flags multiple directly imported owner calls in one Effect body; it does
+not follow helpers or callbacks and is not proof of ownership.
+
+`import-direction` rejects core dependencies on workspace applications,
+undeclared core package subpaths, and cross-package relative imports into core
+source or build output. It checks static imports/re-exports, literal dynamic
+imports and type-expression imports. Core and CLI have no tsconfig path aliases;
+arbitrary aliases and nonliteral dynamic targets are not resolved by this check. Export maps and these
+direct-edge checks do not prove transitive runtime safety; universal-entry tests
+separately inspect the runtime-neutral graph.
+
 ## Check a working tree against an approved checkpoint
 
 Choose an exact commit whose architecture and checker have been reviewed. Keep

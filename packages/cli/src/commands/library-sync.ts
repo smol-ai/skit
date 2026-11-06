@@ -2,7 +2,7 @@ import { syncOutputContracts, librarySyncCommand } from "../library/sync.js";
 import { Registry } from "../registry/index.js";
 import { Option, Effect } from "effect";
 import { Command, Flag } from "effect/cli";
-import { handleRegistryCommand } from "./handler.js";
+import { handleRegistryCommand } from "../application.js";
 import { libraryCommandConfiguration } from "./library-configuration.js";
 import {
   CommandMetadata,

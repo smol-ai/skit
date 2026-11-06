@@ -17,7 +17,7 @@ import type { AuthorVisibility, AuthorRemoteHome } from "./remote.js";
 import type { AuthorSyncResult } from "./sync-result.js";
 import { authorDecider, authorTree } from "./sync-policy.js";
 import { adoptFrom } from "./library-claims.js";
-import { readLibraryWorkspaceClaims } from "../library/session.js";
+import { readLibraryWorkspaceClaims } from "../library/queries.js";
 import { conflictKind } from "./merge/files.js";
 import * as History from "../history/history.js";
 import * as Sync from "../sync/sync.js";

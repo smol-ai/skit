@@ -1,5 +1,5 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { readSkillsShCollectionIds, readSkillPreviews } from "@smolai/skit-core/library/session";
+import { readSkillsShCollectionIds, readSkillPreviews } from "@smolai/skit-core/library/queries";
 import { Effect } from "effect";
 
 import { resolve } from "node:path";

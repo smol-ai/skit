@@ -1,7 +1,7 @@
 import { Cause, Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { handleLibraryCommand, commandFailure } from "./handler.js";
+import { handleLibraryCommand, commandFailure } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
 import { recoveryOutputContracts, recoveryActions } from "../library/recovery.js";
 
@@ -10,7 +10,7 @@ import {
   inspectLibraryRecovery,
   listLibraryRecovery,
   openRecoveryRestore,
-} from "@smolai/skit-core/library/session";
+} from "@smolai/skit-core/library/recovery";
 import { Renderer } from "../terminal/renderer.js";
 import { encodeResult as result } from "./encode-result.js";
 

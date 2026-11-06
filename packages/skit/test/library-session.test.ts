@@ -3,7 +3,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
 import { join } from "node:path";
 import * as Library from "../src/library/library.js";
-import { applySetEnabledPlan, openSetEnabledSession } from "../src/library/session.js";
+import { applySetEnabledPlan, openSetEnabledSession } from "../src/library/enable.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
 

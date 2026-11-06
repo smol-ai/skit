@@ -10,15 +10,33 @@ const plugin = join(import.meta.dirname, "oxlint-plugin-skit.mjs");
 const oxlint = fileURLToPath(new URL("bin/oxlint", import.meta.resolve("oxlint/package.json")));
 
 /** Exercise the real oxlint parser and plugin with a repository path and isolated config. */
-async function lint(rule: string, source: string, path = "packages/cli/src/author/probe.ts") {
+async function lint(
+  rule: string,
+  source: string,
+  path = "packages/cli/src/author/probe.ts",
+  filename?: string,
+) {
   const directory = await mkdtemp(join(tmpdir(), "skit-frontend-rules-"));
   const file = join(root, path.replace("probe", `lint-probe-${process.pid}-${Date.now()}`));
   const config = join(directory, ".oxlintrc.json");
   try {
+    const configuredPlugin = filename ? join(directory, "plugin.mjs") : plugin;
+    if (filename)
+      await writeFile(
+        configuredPlugin,
+        `import plugin from ${JSON.stringify(plugin)};
+export default { meta: plugin.meta, rules: { ${JSON.stringify(rule)}: {
+  ...plugin.rules[${JSON.stringify(rule)}], create(context) {
+    return plugin.rules[${JSON.stringify(rule)}].create(new Proxy({}, {
+      get(_, key) { return key === "filename" ? ${JSON.stringify(join(root, filename))} : Reflect.get(context, key); }
+    }));
+  }
+} } };`,
+      );
     await writeFile(
       config,
       JSON.stringify({
-        jsPlugins: [plugin],
+        jsPlugins: [configuredPlugin],
         rules: { [`skit/${rule}`]: "error" },
       }),
     );
@@ -51,6 +69,26 @@ async function lint(rule: string, source: string, path = "packages/cli/src/autho
 }
 
 describe("skit/frontend-no-library-service", () => {
+  test("only the application root constructs the production Library", async () => {
+    const source = `import * as Library from "@smolai/skit-core/library";
+export const layer = Library.layer({ home: ".", routing: { _tag: "None" } });`;
+    expect(
+      await lint(
+        "frontend-no-library-service",
+        source,
+        undefined,
+        "packages/cli/src/application.ts",
+      ),
+    ).toEqual([]);
+    expect(
+      await lint(
+        "frontend-no-library-service",
+        source,
+        undefined,
+        "packages/cli/src/commands/handler.ts",
+      ),
+    ).toEqual([2]);
+  });
   test("rejects the Library service and layer through namespace and named imports", async () => {
     expect(
       await lint(
@@ -140,21 +178,21 @@ const a = Effect.gen(function* () {
         `
 import { Effect as Fx } from "effect";
 import { initSkit as init, readAuthorWorkspace } from "@smolai/skit-core/author";
-import * as Library from "@smolai/skit-core/library/session";
+import * as Library from "@smolai/skit-core/library/queries";
 const a = Fx.fn("a")(function* () {
   yield* init(".").pipe(Fx.tap(render));
   yield* renderer.withStatus("Read", readAuthorWorkspace("."));
 });
 const b = Fx.gen(function* () {
-  yield* Library.openLibrarySession(options);
-  yield* Library.updateSources(options);
+  yield* Library.readLibraryHistory();
+  yield* Library.readLibraryHistory();
 });
 `,
       ),
     ).toEqual([5, 9]);
   });
 
-  test("checks nested bodies independently and ignores callbacks and other APIs", async () => {
+  test("is a direct-call guard; helpers, nested bodies and callbacks are not a transitive proof", async () => {
     expect(
       await lint(
         "frontend-one-owner-call",
@@ -166,6 +204,8 @@ const a = Effect.gen(function* () {
   yield* init(".").pipe(Effect.tap(() => init("other")));
   yield* Effect.gen(function* () { yield* init("nested"); });
 });
+const initialize = () => init(".");
+const b = Effect.gen(function* () { yield* initialize(); yield* initialize(); });
 `,
       ),
     ).toEqual([]);

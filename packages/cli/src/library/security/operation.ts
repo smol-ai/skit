@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import {
   acceptLibrarySecurityFinding,
   reviewLibrarySecurity as readSecurity,
-} from "@smolai/skit-core/library/session";
+} from "@smolai/skit-core/library/security";
 
 export const reviewLibrarySecurity = Effect.fn("Library.reviewSecurity")(function* (query: string) {
   return yield* readSecurity((yield* SkitConfiguration).skitHome, query);

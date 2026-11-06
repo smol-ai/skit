@@ -1,4 +1,4 @@
-import type { WorkspaceClaim } from "../library/session.js";
+import type { WorkspaceClaim } from "../library/queries.js";
 import { Option, Schema } from "effect";
 import { WorkspaceId } from "./workspace.js";
 

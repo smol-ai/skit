@@ -1,6 +1,6 @@
 import { Effect } from "effect";
 import * as Library from "@smolai/skit-core/library";
-import { readLibraryManifest as readManifest } from "@smolai/skit-core/library/session";
+import { readLibraryManifest as readManifest } from "@smolai/skit-core/library/queries";
 import { assertDiskUnchanged, captureDisk } from "./disk-snapshot.js";
 
 /** Query the public view; recovery or history delivery must never repair this test's evidence. */

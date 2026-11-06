@@ -1,7 +1,7 @@
 import { type ResolvedAuth } from "../registry/index.js";
 import { Effect, Result } from "effect";
 
-import { syncLibrary } from "@smolai/skit-core/library/session";
+import { syncLibrary } from "@smolai/skit-core/library/sync";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { librarySyncApi } from "./sync/api.js";
 import type { LibraryInstallationConfiguration } from "./installation-configuration.js";

@@ -11,7 +11,7 @@ import { LibraryState } from "@smolai/skit-core/library";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { LibraryChangedOnServer, RegistryUnreachable } from "../src/registry/failures.js";
 import { LibraryApiRejected, LibraryManifestTooNew } from "../src/library/sync/api.js";
-import { SyncLocalChanged } from "@smolai/skit-core/library/session";
+import { SyncLocalChanged } from "@smolai/skit-core/library/sync";
 import {
   assertDiskUnchanged,
   captureDisk,

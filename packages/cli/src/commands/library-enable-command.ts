@@ -5,7 +5,7 @@ import { type InstallScope as Scope } from "@smolai/skit-core/library";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { resolve } from "node:path";
-import { handleLibraryCommand } from "./handler.js";
+import { handleLibraryCommand } from "../application.js";
 
 import { libraryCommandConfiguration } from "./library-configuration.js";
 import { CommandMetadata } from "./metadata.js";

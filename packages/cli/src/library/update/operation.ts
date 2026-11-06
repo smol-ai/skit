@@ -1,5 +1,5 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { updateSources, previewLibrarySourceUpdates } from "@smolai/skit-core/library/session";
+import { updateSources, previewLibrarySourceUpdates } from "@smolai/skit-core/library/update";
 import { Effect } from "effect";
 import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import type { UpdateResult } from "./output.js";

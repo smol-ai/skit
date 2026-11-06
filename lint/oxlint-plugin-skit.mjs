@@ -1,4 +1,5 @@
 import { dirname, relative, resolve } from "node:path";
+import { readFileSync } from "node:fs";
 import { approvedServices, owners as boundaryOwners } from "../architecture/boundaries.mjs";
 import { coreExports } from "../architecture/app.ts";
 import { layout, undecided } from "../architecture/layout.mjs";
@@ -8,6 +9,12 @@ import { effectHygieneRules } from "./effect-hygiene-rules.mjs";
 import { frontendRules } from "./frontend-rules.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
+const applicationDirectories = ["cli", "tui", "storybook", "skit-server-effect", "devtools"];
+const applicationPackages = applicationDirectories.map(
+  (directory) =>
+    JSON.parse(readFileSync(resolve(repositoryRoot, "packages", directory, "package.json"), "utf8"))
+      .name,
+);
 
 /** Sources that can carry an owner's private names: core, and the CLI facades that re-export it. */
 function carriesCoreNames(fileDirectory, source) {
@@ -707,6 +714,10 @@ const effectRules = {
       type: "problem",
       docs: { description: "Imports follow the target layout's direction" },
       messages: {
+        coreApplication:
+          "Core cannot depend on application code ({{target}}). Keep prompts, rendering and runtime composition in the application; call core from there.",
+        publicEntry:
+          "{{target}} bypasses the core package API. Import a declared @smolai/skit-core subpath from architecture/app.ts.",
         coreRoot: "The core root entry is removed. Import a declared owner or shared subpath.",
         installedPolicy:
           "Installed-skill file adapters consume copy/identity facts, not Library state or owner policy. Move retained-version decisions into Library (architecture/app.ts).",
@@ -724,6 +735,33 @@ const effectRules = {
       const check = (node, sourceNode) => {
         const source = sourceNode?.value;
         if (typeof source !== "string") return;
+        const relativeTarget = source.startsWith(".")
+          ? relative(repositoryRoot, resolve(fileDirectory, source))
+          : undefined;
+        if (
+          file.startsWith("packages/skit/src/") &&
+          (applicationPackages.some((name) => source === name || source.startsWith(`${name}/`)) ||
+            applicationDirectories.some((directory) =>
+              relativeTarget?.startsWith(`packages/${directory}/`),
+            ))
+        ) {
+          context.report({
+            node: sourceNode,
+            messageId: "coreApplication",
+            data: { target: source },
+          });
+          return;
+        }
+        if (
+          (source.startsWith("@smolai/skit-core/") &&
+            !Object.hasOwn(coreExports, `./${source.slice("@smolai/skit-core/".length)}`)) ||
+          (!file.startsWith("packages/skit/") &&
+            (relativeTarget?.startsWith("packages/skit/src/") ||
+              relativeTarget?.startsWith("packages/skit/dist/")))
+        ) {
+          context.report({ node: sourceNode, messageId: "publicEntry", data: { target: source } });
+          return;
+        }
         const cliPackage = source === "@smolai/skit" || source.startsWith("@smolai/skit/");
         if (
           frontend &&
@@ -780,6 +818,7 @@ const effectRules = {
         ExportNamedDeclaration: declaration,
         ExportAllDeclaration: declaration,
         ImportExpression: (node) => check(node, node.source),
+        TSImportType: (node) => check(node, node.source),
       };
     },
   },

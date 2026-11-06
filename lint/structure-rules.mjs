@@ -74,6 +74,7 @@ export const structureRules = {
         ExportNamedDeclaration: check,
         ExportAllDeclaration: check,
         ImportExpression: check,
+        TSImportType: check,
       };
     },
   },

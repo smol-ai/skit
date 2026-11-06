@@ -79,6 +79,38 @@
     "./platform/home-lock": {
       "types": "./dist/platform/home-lock.d.ts",
       "import": "./dist/platform/home-lock.js"
+    },
+    "./library/enable": {
+      "types": "./dist/library/enable.d.ts",
+      "import": "./dist/library/enable.js"
+    },
+    "./library/queries": {
+      "types": "./dist/library/queries.d.ts",
+      "import": "./dist/library/queries.js"
+    },
+    "./library/remove": {
+      "types": "./dist/library/remove.d.ts",
+      "import": "./dist/library/remove.js"
+    },
+    "./library/edit": {
+      "types": "./dist/library/edit.d.ts",
+      "import": "./dist/library/edit.js"
+    },
+    "./library/update": {
+      "types": "./dist/library/update.d.ts",
+      "import": "./dist/library/update.js"
+    },
+    "./library/sync": {
+      "types": "./dist/library/sync.d.ts",
+      "import": "./dist/library/sync.js"
+    },
+    "./library/recovery": {
+      "types": "./dist/library/recovery.d.ts",
+      "import": "./dist/library/recovery.js"
+    },
+    "./library/security": {
+      "types": "./dist/library/security.d.ts",
+      "import": "./dist/library/security.js"
     }
   },
   "scripts": {

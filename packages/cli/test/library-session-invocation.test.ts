@@ -18,8 +18,8 @@ import {
   proposeLibraryInvocation,
   invocationBriefing,
   invocationRowSummary,
-  openSetEnabledSession,
 } from "@smolai/skit-core/library/session";
+import { openSetEnabledSession } from "@smolai/skit-core/library/enable";
 
 import {
   initializeLibraryMachine,

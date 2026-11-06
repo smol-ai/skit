@@ -6,7 +6,7 @@ import { Effect, FileSystem } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
-import { openSetEnabledSession } from "@smolai/skit-core/library/session";
+import { openSetEnabledSession } from "@smolai/skit-core/library/enable";
 import { importSource } from "../src/library/source.js";
 import { planUpdates, updateSubjects } from "../src/library/update/operation.js";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";

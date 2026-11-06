@@ -3,7 +3,7 @@ import { Option, Effect } from "effect";
 import { Command, Flag } from "effect/cli";
 import { presentDoctorCleanup, doctorOutputContracts, doctorCommand } from "../library/doctor.js";
 import { Renderer } from "../terminal/renderer.js";
-import { handleLibraryCommand } from "./handler.js";
+import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
 
 import { enableOutputContracts } from "../library/enable.js";

@@ -1,7 +1,7 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { handleRegistryCommand } from "../../commands/handler.js";
+import { handleRegistryCommand } from "../../application.js";
 import { CommandMetadata, credentialStoreSubprocesses } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { homeFlag, jsonFlag, jsonRequested } from "../../commands/parameters.js";

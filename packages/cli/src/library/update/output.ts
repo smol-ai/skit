@@ -1,4 +1,4 @@
-import { EditImportPlan, EditImportResult } from "@smolai/skit-core/library/session";
+import { EditImportPlan, EditImportResult } from "@smolai/skit-core/library/edit";
 import { Hash } from "@smolai/skit-core/shared";
 import { SourceDiscoveryDiagnostic } from "@smolai/skit-core/library/source";
 import { Schema } from "effect";

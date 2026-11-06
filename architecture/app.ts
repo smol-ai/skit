@@ -409,6 +409,46 @@ export const coreExports = {
     owners: ["Library"],
     source: "packages/skit/src/library/setup.ts",
   },
+  "./library/enable": {
+    kind: "owner",
+    owners: ["Library"],
+    source: "packages/skit/src/library/enable.ts",
+  },
+  "./library/queries": {
+    kind: "owner",
+    owners: ["Library"],
+    source: "packages/skit/src/library/queries.ts",
+  },
+  "./library/remove": {
+    kind: "owner",
+    owners: ["Library"],
+    source: "packages/skit/src/library/remove.ts",
+  },
+  "./library/edit": {
+    kind: "owner",
+    owners: ["Library"],
+    source: "packages/skit/src/library/edit.ts",
+  },
+  "./library/update": {
+    kind: "owner",
+    owners: ["Library"],
+    source: "packages/skit/src/library/update.ts",
+  },
+  "./library/sync": {
+    kind: "owner",
+    owners: ["Library"],
+    source: "packages/skit/src/library/sync.ts",
+  },
+  "./library/recovery": {
+    kind: "owner",
+    owners: ["Library"],
+    source: "packages/skit/src/library/recovery.ts",
+  },
+  "./library/security": {
+    kind: "owner",
+    owners: ["Library"],
+    source: "packages/skit/src/library/security.ts",
+  },
   "./library/session": {
     kind: "owner",
     owners: ["Library"],

@@ -18,10 +18,11 @@ async function reported(
   source: string,
   rule: string,
   filename?: string,
+  production = false,
 ): Promise<number[]> {
   const file = join(root, path.replace("PROBE", `layout-probe-${process.pid}-${Date.now()}`));
   const directory = await mkdtemp(join(tmpdir(), "skit-directory-layout-"));
-  const config = join(directory, ".oxlintrc.json");
+  const config = production ? join(root, ".oxlintrc.json") : join(directory, ".oxlintrc.json");
   const configuredPlugin = filename ? join(directory, "plugin.mjs") : pluginPath;
   if (filename)
     await writeFile(
@@ -36,10 +37,11 @@ async function reported(
     } } };
   `,
     );
-  await writeFile(
-    config,
-    JSON.stringify({ jsPlugins: [configuredPlugin], rules: { [`skit/${rule}`]: "error" } }),
-  );
+  if (!production)
+    await writeFile(
+      config,
+      JSON.stringify({ jsPlugins: [configuredPlugin], rules: { [`skit/${rule}`]: "error" } }),
+    );
   await writeFile(file, source);
   try {
     const result = spawnSync(
@@ -53,6 +55,11 @@ async function reported(
     const report = JSON.parse(result.stdout) as {
       diagnostics: Array<{ code: string; labels: Array<{ span: { line: number } }> }>;
     };
+    expect(result.error).toBeUndefined();
+    expect(result.stderr).toBe("");
+    // A plugin/parser failure must never look like an allowed import.
+    expect(report.diagnostics.filter((item) => !item.code)).toEqual([]);
+    expect(result.status).toBe(report.diagnostics.some((item) => item.code.includes(rule)) ? 1 : 0);
     return report.diagnostics
       .filter((item) => item.code.includes(rule))
       .map((item) => item.labels[0]?.span.line ?? 0);
@@ -97,6 +104,78 @@ describe("skit/directory-layout", () => {
 });
 
 describe("skit/import-direction", () => {
+  test("production config rejects reverse dependencies and accepts public owner APIs", async () => {
+    expect(
+      await reported(
+        "packages/skit/src/library/PROBE.ts",
+        'export { presentSetEnabled } from "../../../cli/src/library/enable.js";',
+        "import-direction",
+        undefined,
+        true,
+      ),
+    ).toEqual([1]);
+    expect(
+      await reported(
+        "packages/cli/src/library/PROBE.ts",
+        'export type { SetEnabledPlan } from "@smolai/skit-core/library/enable";',
+        "import-direction",
+        undefined,
+        true,
+      ),
+    ).toEqual([]);
+  });
+  test.each([
+    'import { presentSetEnabled } from "../../../cli/src/library/enable.js";',
+    'import type { SetEnabledCommandInput } from "../../../cli/src/library/enable.js";',
+    'export * from "../../../cli/src/library/enable.js";',
+    'const cli = import("../../../cli/src/library/enable.js");',
+    'type Input = import("../../../cli/src/library/enable.js").SetEnabledCommandInput;',
+    'import "@smolai/skit";',
+    'export * from "@smolai/skit/storybook";',
+    'const tui = import("../../../tui/src/index.ts");',
+    'import "../../../storybook/src/main.ts";',
+    'import "../../../skit-server-effect/src/application.ts";',
+    'import "../../../devtools/src/main.ts";',
+  ])("core cannot depend on application code: %s", async (source) => {
+    expect(
+      await reported("packages/skit/src/library/PROBE.ts", source, "import-direction"),
+    ).toEqual([1]);
+  });
+
+  test.each([
+    'import { value } from "@smolai/skit-core/library/internal/session/queries";',
+    'export * from "@smolai/skit-core/library/session.js";',
+    'const value = import("@smolai/skit-core/not-a-public-entry");',
+    'type Value = import("@smolai/skit-core/library/internal/session/queries").Value;',
+    'import { LibraryState } from "../../../skit/src/library/index.js";',
+    'export * from "../../../skit/dist/library/index.js";',
+    'const library = import("../../../skit/src/library/index.js");',
+    'type Library = import("../../../skit/src/library/index.js").Interface;',
+  ])("consumers must use declared core package entries: %s", async (source) => {
+    expect(await reported("packages/cli/src/library/PROBE.ts", source, "import-direction")).toEqual(
+      [1],
+    );
+  });
+
+  test.each([
+    [
+      "packages/cli/src/library/PROBE.ts",
+      'import type { Interface } from "@smolai/skit-core/library";',
+    ],
+    [
+      "packages/cli/src/library/PROBE.ts",
+      'type Library = import("@smolai/skit-core/library").Interface;',
+    ],
+    ["packages/skit/src/library/PROBE.ts", 'import { LibraryState } from "./library-state.js";'],
+    [
+      "packages/skit/test/PROBE.ts",
+      'import { LibraryState } from "../src/library/library-state.js";',
+    ],
+    ["packages/skit/src/library/PROBE.ts", 'import type { Context } from "effect";'],
+  ])("legitimate owner and public imports pass: %s", async (path, source) => {
+    expect(await reported(path, source, "import-direction")).toEqual([]);
+  });
+
   test("installed-skill byte adapters cannot import Library policy through direct paths or public aliases", async () => {
     for (const source of [
       'import type { LibraryState } from "../library/library-state.js";',
@@ -308,6 +387,7 @@ describe("skit/feature-entry", () => {
     'export { review } from "./setup/review.js";',
     'export * from "./setup/review.js";',
     'const review = import("./setup/review.js");',
+    'type Review = import("./setup/review.js").Review;',
     'import { review } from "@smolai/skit-core/library/setup/review";',
   ])("outside callers cannot bypass a feature entry: %s", async (source) => {
     expect(

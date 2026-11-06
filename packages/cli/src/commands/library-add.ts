@@ -1,9 +1,9 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Effect, Option } from "effect";
 import { descriptionLoadMessage } from "../library/presentation/description-size.js";
-import { readLibraryDescriptionLoad } from "@smolai/skit-core/library/session";
+import { readLibraryDescriptionLoad } from "@smolai/skit-core/library/queries";
 import { Argument, Command, Flag } from "effect/cli";
-import { handleSourceCommand } from "./handler.js";
+import { handleSourceCommand } from "../application.js";
 import { MissingRequirement } from "./input-failures.js";
 import {
   CommandMetadata,

@@ -1,7 +1,7 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Effect } from "effect";
 import { inspectLibrarySource } from "../source.js";
-import { checkLibrarySubjects } from "@smolai/skit-core/library/session";
+import { checkLibrarySubjects } from "@smolai/skit-core/library/queries";
 
 export const checkSubjects = Effect.fn("CLI.checkSubjects")(function* (
   query?: string,

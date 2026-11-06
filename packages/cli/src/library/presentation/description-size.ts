@@ -1,5 +1,5 @@
 import type { Effect } from "effect";
-import type { readLibraryDescriptionLoad } from "@smolai/skit-core/library/session";
+import type { readLibraryDescriptionLoad } from "@smolai/skit-core/library/queries";
 
 export const largeCollectionWarning = (count: number): string | undefined =>
   count > 100

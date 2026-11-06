@@ -1,7 +1,7 @@
 import { Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
 import { Renderer } from "../terminal/renderer.js";
-import { handleSourceCommand } from "./handler.js";
+import { handleSourceCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
 import { checkOutputContracts, checkSubjects } from "../library/check.js";
 import { localFlags } from "./parameters.js";

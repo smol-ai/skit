@@ -8,7 +8,7 @@ import {
 } from "../library/update.js";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { handleSourceCommand } from "./handler.js";
+import { handleSourceCommand } from "../application.js";
 import { libraryCommandConfiguration } from "./library-configuration.js";
 import {
   CommandMetadata,

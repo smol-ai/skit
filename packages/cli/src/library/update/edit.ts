@@ -1,7 +1,7 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { openEditImport } from "@smolai/skit-core/library/session";
+import { openEditImport } from "@smolai/skit-core/library/edit";
 import { Effect } from "effect";
-export { EditImportMissing } from "@smolai/skit-core/library/session";
+export { EditImportMissing } from "@smolai/skit-core/library/edit";
 
 export const prepareEditImport = Effect.fn("CLI.prepareEditImport")(function* (
   query: string,

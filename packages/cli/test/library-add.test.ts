@@ -24,7 +24,8 @@ import { planUpdates, updateSubjects } from "../src/library/update/operation.js"
 import { checkSubjects } from "../src/library/check/operation.js";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { setupIntent } from "@smolai/skit-core/library/setup";
-import { openSetEnabledSession, openSyncSession } from "@smolai/skit-core/library/session";
+import { openSetEnabledSession } from "@smolai/skit-core/library/enable";
+import { openSyncSession } from "@smolai/skit-core/library/sync";
 import { executeRemove } from "../src/library/remove/operation.js";
 
 import { rendererTestLayer } from "./helpers/renderer.js";

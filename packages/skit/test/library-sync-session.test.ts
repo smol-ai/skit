@@ -4,7 +4,7 @@ import { join } from "node:path";
 import * as Library from "../src/library/library.js";
 import { libraryManifestFromLocalState } from "../src/library/library-state.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
-import { openSyncSession } from "../src/library/session.js";
+import { openSyncSession } from "../src/library/sync.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 it.effect("sync session captures review inputs and refuses redirected staged content", () =>

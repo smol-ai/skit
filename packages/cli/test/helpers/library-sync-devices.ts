@@ -13,7 +13,7 @@ import { deterministicTreeHash } from "@smolai/skit-core/author";
 import * as Library from "@smolai/skit-core/library";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
-import { syncLibrary } from "@smolai/skit-core/library/session";
+import { syncLibrary } from "@smolai/skit-core/library/sync";
 import { librarySyncApi } from "../../src/library/sync/api.js";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 

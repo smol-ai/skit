@@ -12,7 +12,7 @@ import {
   descriptionLoadMessage,
   largeCollectionWarning,
 } from "../src/library/presentation/description-size.js";
-import { openSetEnabledSession } from "@smolai/skit-core/library/session";
+import { openSetEnabledSession } from "@smolai/skit-core/library/enable";
 import {
   initializeLibraryMachine,
   libraryHome,

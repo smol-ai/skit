@@ -9,15 +9,14 @@ import { libraryCommandConfiguration } from "../commands/library-configuration.j
 
 import { enableOutputContracts } from "./enable/output.js";
 
+import { type InvocationOption, scopeChoices } from "@smolai/skit-core/library/session";
 import {
-  type InvocationOption,
-  scopeChoices,
   applySetEnabledPlan,
   SetEnabledIncomplete,
   openSetEnabledSession,
   type SetEnabledIntent,
   type EnabledCollection,
-} from "@smolai/skit-core/library/session";
+} from "@smolai/skit-core/library/enable";
 
 import { Prompter } from "../terminal/prompter.js";
 import { Renderer } from "../terminal/renderer.js";

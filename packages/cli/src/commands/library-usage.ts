@@ -1,10 +1,10 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { readInstalledSkills } from "@smolai/skit-core/library/session";
+import { readInstalledSkills } from "@smolai/skit-core/library/queries";
 import { UsageHarness } from "@smolai/skit-core/library/usage";
 import { Effect, Option } from "effect";
 import { Command, Flag } from "effect/cli";
 import { scanLocalUsage, usageOutputContracts } from "../library/usage.js";
-import { handleLibraryCommand } from "./handler.js";
+import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
 
 import { homeFlag, jsonFlag, optionalString } from "./parameters.js";

@@ -1,4 +1,4 @@
-import type { SkillMetadata } from "@smolai/skit-core/library/session";
+import type { SkillMetadata } from "@smolai/skit-core/library/queries";
 import { homedir } from "node:os";
 import { sep } from "node:path";
 

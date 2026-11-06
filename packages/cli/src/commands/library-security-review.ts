@@ -1,6 +1,6 @@
 import { Option, Effect } from "effect";
 import { Argument, Command } from "effect/cli";
-import { handleLibraryCommand } from "./handler.js";
+import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
 import {
   securityOutputContracts,

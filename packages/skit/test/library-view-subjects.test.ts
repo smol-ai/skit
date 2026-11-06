@@ -5,7 +5,7 @@ import * as Library from "../src/library/library.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { libraryView } from "../src/library/internal/session/library-view.js";
-import { openSetEnabledSession } from "../src/library/session.js";
+import { openSetEnabledSession } from "../src/library/enable.js";
 import { matchingLibrarySubjects } from "../src/library/subject-resolution.js";
 import { makeCollectionId, makeSkillId } from "../src/library/entity-ids.js";
 

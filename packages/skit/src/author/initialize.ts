@@ -7,7 +7,7 @@ import { ImportContentInvalid } from "../library/index.js";
 import { initSkit as scaffoldSkit } from "./scaffold.js";
 import { validateSkitDirectory } from "../artifact/skit.js";
 import * as Library from "../library/index.js";
-import { readLibraryWorkspaceClaims } from "../library/session.js";
+import { readLibraryWorkspaceClaims } from "../library/queries.js";
 
 import {
   AuthorWorkspace,

@@ -16,7 +16,7 @@ import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Cause, Effect, Option } from "effect";
 import { Command, Flag } from "effect/cli";
 import { resolve } from "node:path";
-import { commandFailure, handleSourceCommand } from "./handler.js";
+import { commandFailure, handleSourceCommand } from "../application.js";
 import { libraryCommandConfiguration } from "./library-configuration.js";
 import { CommandMetadata } from "./metadata.js";
 

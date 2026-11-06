@@ -1,5 +1,5 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { readLibraryList } from "@smolai/skit-core/library/session";
+import { readLibraryList } from "@smolai/skit-core/library/queries";
 import { Effect } from "effect";
 import { listOutputContracts } from "./list/output.js";
 import { Renderer } from "../terminal/renderer.js";

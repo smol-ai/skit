@@ -1,7 +1,7 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Option, Effect } from "effect";
 import { Command } from "effect/cli";
-import { handlePlatformCommand } from "./handler.js";
+import { handlePlatformCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
 import { repositoryOutputContracts } from "../library/repository.js";
 import { homeFlag, jsonFlag } from "./parameters.js";

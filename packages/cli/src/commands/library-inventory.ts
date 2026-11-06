@@ -2,7 +2,7 @@ import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Option, Effect } from "effect";
 import { Command } from "effect/cli";
 import { Renderer } from "../terminal/renderer.js";
-import { handleLibraryCommand } from "./handler.js";
+import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
 import { inventoryRootOptions, localFlags } from "./parameters.js";
 import { encodeResult as result } from "./encode-result.js";

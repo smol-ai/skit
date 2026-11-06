@@ -2,7 +2,7 @@ import { Effect, Option } from "effect";
 import { Command } from "effect/cli";
 import { bootstrapServer } from "../bootstrap.js";
 import { Renderer } from "../../terminal/renderer.js";
-import { handleRegistryCommand } from "../../commands/handler.js";
+import { handleRegistryCommand } from "../../application.js";
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { jsonFlag, optionalString } from "../../commands/parameters.js";

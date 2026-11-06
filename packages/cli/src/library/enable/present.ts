@@ -1,4 +1,4 @@
-import type { SetEnabledChange, SetEnabledResult } from "@smolai/skit-core/library/session";
+import type { SetEnabledChange, SetEnabledResult } from "@smolai/skit-core/library/enable";
 
 export function renderSetEnabled(
   data: SetEnabledChange | SetEnabledResult,

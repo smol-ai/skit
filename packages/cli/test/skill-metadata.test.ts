@@ -10,12 +10,9 @@ import * as Library from "@smolai/skit-core/library";
 type SkillsShLockFileEntry = Parameters<
   Library.Interface["import"]["collection"]
 >[0]["lockFileEntries"][number];
-import {
-  readLibrarySkillMetadata,
-  readSkillPreviews,
-  openSetEnabledSession,
-  openLibrarySession,
-} from "@smolai/skit-core/library/session";
+import { readLibrarySkillMetadata, readSkillPreviews } from "@smolai/skit-core/library/queries";
+import { openSetEnabledSession } from "@smolai/skit-core/library/enable";
+import { openLibrarySession } from "@smolai/skit-core/library/session";
 import { inventoryCommand } from "../src/library/inventory/operation.js";
 import { renderMachineSkills } from "../src/library/inventory/present.js";
 import { renderLibraryList } from "../src/library/list/present.js";

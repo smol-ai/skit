@@ -121,10 +121,10 @@ describe("skit/owner-boundaries", () => {
       'import * as Locked from "@smolai/skit-core/platform/home-lock";',
       'export * from "@smolai/skit-core/platform/home-lock";',
       'const locked = import("@smolai/skit-core/platform/home-lock");',
-      'import * as Locked from "../../../skit/src/platform/home-lock.js";',
+      'import * as Locked from "../../skit/src/platform/home-lock.js";',
     ])
       expect(
-        await reported(statement, "owner-boundaries", "packages/cli/src/commands/handler.ts"),
+        await reported(statement, "owner-boundaries", "packages/cli/src/application.ts"),
       ).toHaveLength(1);
 
     for (const filename of [
@@ -318,7 +318,7 @@ describe("skit/owner-boundaries", () => {
     },
   );
 
-  test("sync derivation stays behind the Library session", async () => {
+  test("sync derivation stays behind the Library sync API", async () => {
     for (const name of [
       "mergeLibraryManifests",
       "prepareLibraryMerge",
@@ -332,7 +332,7 @@ describe("skit/owner-boundaries", () => {
     ]) {
       expect(
         await reported(
-          `import { ${name} } from "@smolai/skit-core/library/session";`,
+          `import { ${name} } from "@smolai/skit-core/library/sync";`,
           "owner-boundaries",
           "packages/cli/src/library/sync/workflow.ts",
         ),
@@ -340,7 +340,7 @@ describe("skit/owner-boundaries", () => {
     }
     expect(
       await reported(
-        'import { openSyncSession } from "@smolai/skit-core/library/session";',
+        'import { openSyncSession } from "@smolai/skit-core/library/sync";',
         "owner-boundaries",
         "packages/cli/src/library/sync/workflow.ts",
       ),

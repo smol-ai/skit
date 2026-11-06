@@ -1,5 +1,5 @@
 import { AuthorWorkspace } from "./workspace.js";
-import { openRemoveSession } from "../library/session.js";
+import { openRemoveSession } from "../library/remove.js";
 import { Effect, Option } from "effect";
 
 export interface RemoveOptions {

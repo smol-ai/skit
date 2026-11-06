@@ -1,6 +1,6 @@
 import { Cause, Effect, Option } from "effect";
 import { Argument, Command } from "effect/cli";
-import { commandFailure, handleLibraryCommand } from "./handler.js";
+import { commandFailure, handleLibraryCommand } from "../application.js";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { CommandMetadata } from "./metadata.js";
 import { setupOutputContracts, setupUndoActions, prepareSetupUndo } from "../library/setup.js";

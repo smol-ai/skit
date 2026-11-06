@@ -4,12 +4,12 @@ import type {
   LibraryProgressStage,
   LibraryProgressCompletion,
   LibraryProgressReporter,
-} from "@smolai/skit-core/library/session";
+} from "@smolai/skit-core/library/update";
 export type {
   LibraryProgressStage,
   LibraryProgressCompletion,
   LibraryProgressReporter,
-} from "@smolai/skit-core/library/session";
+} from "@smolai/skit-core/library/update";
 
 export type LibraryProgressEvent =
   | { readonly kind: "started"; readonly stage: LibraryProgressStage }

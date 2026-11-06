@@ -2,7 +2,7 @@ import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { openLibrarySession } from "@smolai/skit-core/library/session";
 import { Option, Effect } from "effect";
 import { Command } from "effect/cli";
-import { handleLibraryCommand } from "./handler.js";
+import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
 import { listOutputContracts, browseLibrary, presentListCommand } from "../library/list.js";
 import { localFlags } from "./parameters.js";

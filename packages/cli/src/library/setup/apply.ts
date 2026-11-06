@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { Effect, Option, Schema } from "effect";
 import { Hash } from "@smolai/skit-core/shared";
-import { readInstalledSkills } from "@smolai/skit-core/library/session";
+import { readInstalledSkills } from "@smolai/skit-core/library/queries";
 import { Renderer } from "../../terminal/renderer.js";
 import { OptionCombinationInvalid } from "../../commands/input-failures.js";
 import {

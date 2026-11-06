@@ -11,7 +11,7 @@ import { type SkitSource } from "@smolai/skit-core/library/source";
 import * as Library from "@smolai/skit-core/library";
 import { SourceProcess } from "@smolai/skit-core/platform";
 import { importSource } from "../src/library/source.js";
-import { syncLibrary } from "@smolai/skit-core/library/session";
+import { syncLibrary } from "@smolai/skit-core/library/sync";
 import { librarySyncApi } from "../src/library/sync/api.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { archiveBytes, writingTo } from "./helpers/library-home.js";

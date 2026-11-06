@@ -2,7 +2,7 @@ import type { ListingBudget } from "@smolai/skit-core/harnesses";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Array, Effect } from "effect";
 import { resolve } from "node:path";
-import { openSetEnabledSession, type SetEnabledIntent } from "@smolai/skit-core/library/session";
+import { openSetEnabledSession, type SetEnabledIntent } from "@smolai/skit-core/library/enable";
 import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { scanLocalUsage } from "../usage.js";
 

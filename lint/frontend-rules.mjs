@@ -223,7 +223,7 @@ export const frontendRules = {
       },
       messages: {
         forbidden:
-          "Library.{{name}} is the owner's own. Call a Library operation from @smolai/skit-core/library/session instead.",
+          "Library.{{name}} is the owner's own. Call the matching Library operation entry instead.",
       },
     },
     create(context) {
@@ -231,9 +231,9 @@ export const frontendRules = {
       if (!file.startsWith(cli) || /^(storybook|platform)\//.test(file.slice(cli.length)))
         return {};
       const bindings = imports();
-      // The executable composes its one Library in commands/handler.ts; nothing else constructs one.
+      // The executable composes its one Library in application.ts; nothing else constructs one.
       const owned = new Set(
-        file === `${cli}commands/handler.ts`
+        file === `${cli}application.ts`
           ? ["Service", "Interface"]
           : ["Service", "layer", "Interface"],
       );
@@ -335,11 +335,11 @@ export const frontendRules = {
     meta: {
       type: "problem",
       docs: {
-        description: "A frontend Effect body delegates to one owner operation",
+        description: "Flag multiple directly imported owner operations in one frontend Effect body",
       },
       messages: {
         forbidden:
-          "This Effect body yields multiple owner calls. Move their coordination into the owner.",
+          "This Effect body yields multiple directly imported owner calls. Keep state-transition coordination in the owner; this check does not follow helpers or callbacks.",
       },
     },
     create(context) {
