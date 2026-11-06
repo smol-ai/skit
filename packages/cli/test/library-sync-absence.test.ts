@@ -3,7 +3,6 @@ import { assert, it } from "@effect/vitest";
 import { join } from "node:path";
 import { renderLibrarySync } from "../src/library/sync/present.js";
 import { Effect } from "effect";
-import { currentLibraryManifest } from "@smolai/skit-core";
 import { type LibraryManifest } from "@smolai/skit-core/library";
 import { captureDisk, diskChanges, noDiskChanges } from "./helpers/disk-snapshot.js";
 import { devices } from "./helpers/library-sync-devices.js";
@@ -16,14 +15,15 @@ import { devices } from "./helpers/library-sync-devices.js";
 type Homes = Effect.Success<typeof devices>;
 type Device = Homes["a"];
 
-const empty: LibraryManifest = currentLibraryManifest({
+const empty: LibraryManifest = {
+  schema: "skit.library.v8",
   collections: [],
   skills: [],
   collection_versions: [],
   imports: [],
   snapshot_digests: [],
   enabled: [],
-});
+};
 
 /**
  * Assert that a sync published no local state, sent the Registry no write request, and left the

@@ -1,7 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { join } from "node:path";
-import { globalEnabled } from "@smolai/skit-core";
 import { devices } from "./helpers/library-sync-devices.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
@@ -117,13 +116,13 @@ it.effect(
       const result = yield* b.sync();
       assert.strictEqual(result.status, "merged");
       const state = yield* b.state;
-      const global = globalEnabled(state);
-      assert.deepStrictEqual(global.enabled, [
-        { skill: publishedSkill.skill_id },
-        { collection: published.collection.collection_id },
-      ]);
-      assert.deepStrictEqual(global.invocation_policies, {
-        [publishedSkill.skill_id]: "explicit",
+      assert.deepStrictEqual(state.device_skill_selection, {
+        mode: "choose",
+        enabled: [
+          { skill: publishedSkill.skill_id },
+          { collection: published.collection.collection_id },
+        ],
+        invocation_policies: { [publishedSkill.skill_id]: "explicit" },
       });
       assert.deepStrictEqual((yield* remote)?.manifest.enabled, account);
       assert.isTrue(yield* fs.exists(join(b.root, "first", "SKILL.md")));
@@ -238,8 +237,12 @@ it.effect("a whole-collection choice follows membership while an individual does
     const individual = yield* b.state;
     const whole = yield* c.state;
     const collection = first.collection.collection_id;
-    assert.isTrue("skill" in globalEnabled(individual).enabled[0]!);
-    assert.deepStrictEqual(globalEnabled(whole).enabled, [{ collection: collection }]);
+    assert.strictEqual(individual.device_skill_selection?.mode, "choose");
+    assert.strictEqual(whole.device_skill_selection?.mode, "choose");
+    if (individual.device_skill_selection?.mode === "choose")
+      assert.isTrue("skill" in individual.device_skill_selection.enabled[0]!);
+    if (whole.device_skill_selection?.mode === "choose")
+      assert.deepStrictEqual(whole.device_skill_selection.enabled, [{ collection: collection }]);
     yield* a.importMany("tools", ["first", "new-member"], "2026-02-01T00:00:00.000Z");
     assert.strictEqual((yield* a.sync()).status, "merged");
     assert.strictEqual((yield* b.sync()).status, "merged");

@@ -30,7 +30,6 @@ export {
   currentCollectionSkills,
   currentSkillVersion,
   enabledSkillIds,
-  currentLibraryManifest,
 } from "./library/library-contracts.js";
 
 export {
@@ -40,7 +39,7 @@ export {
   libraryStateRevision,
   libraryManifestFromLocalState,
 } from "./library/library-state.js";
-export { globalEnabled, enabledAt } from "./library/enabled.js";
+export { enabledAt } from "./library/enabled.js";
 export { InstalledSkill } from "./library/device-state.js";
 export { setupIntent } from "./library/setup.js";
 
