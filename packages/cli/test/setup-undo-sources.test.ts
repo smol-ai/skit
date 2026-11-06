@@ -336,7 +336,7 @@ it.effect(
           (membership) => membership.collectionId === f.collectionId,
         )?.skillIds,
       ).toHaveLength(2);
-      const afterManifest = yield* readLibraryManifest(f.home.home);
+      const afterManifest = yield* readLibraryManifest(f.home.home, [f.root]);
       const head = {
         library_id: "source-undo-library",
         revision_id: "after-setup",
@@ -407,7 +407,7 @@ it.effect(
       expect(observation.input.value).toBe(
         originalTreePath(join(f.home.home, "originals"), copy.hash),
       );
-      const restoredManifest = yield* readLibraryManifest(f.home.home);
+      const restoredManifest = yield* readLibraryManifest(f.home.home, [f.root]);
       expect(restoredManifest.imports).toEqual(restored.imports);
       const synced = yield* f.home.owned(
         Effect.gen(function* () {

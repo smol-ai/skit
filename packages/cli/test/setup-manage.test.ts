@@ -106,7 +106,7 @@ it.effect("adds selected skills and takes ownership only of eligible global copi
     expect(yield* fs.readFileString(join(repositorySkill, "SKILL.md"))).toBe(
       skillDocument("repo-only", "Repository skill"),
     );
-    expect((yield* readLibraryManifest(home.home)).snapshot_digests).toEqual(
+    expect((yield* readLibraryManifest(home.home, [root])).snapshot_digests).toEqual(
       state.collection_versions.map((copy) => copy.hash).sort(),
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),

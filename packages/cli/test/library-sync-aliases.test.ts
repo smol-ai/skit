@@ -35,7 +35,7 @@ const assertIntact = Effect.fn("Test.assertIntact")(function* (
 ) {
   const state = yield* device.state;
   assert.isTrue(Schema.is(LibraryState)(state));
-  yield* readLibraryManifest(device.home);
+  yield* readLibraryManifest(device.home, device.disk);
   const ancestry = state.sync_ancestry;
   if (ancestry !== undefined) assert.isTrue(Schema.is(LibraryManifest)(ancestry.base_manifest));
   for (const hash of new Set([...imported, ...state.collection_versions.map((copy) => copy.hash)]))

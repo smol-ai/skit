@@ -79,7 +79,7 @@ const fixture = Effect.gen(function* () {
     Effect.gen(function* () {
       yield* writingTo(home, importSource(source)).pipe(Effect.provide(http));
       const state = yield* load(home);
-      const manifest = yield* readLibraryManifest(home);
+      const manifest = yield* readLibraryManifest(home, [workspace]);
       assert.deepStrictEqual(manifest.snapshot_digests, []);
       assert.strictEqual(
         server.respond("PUT", "/api/library/portable", { expected_revision_id: null, manifest })

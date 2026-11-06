@@ -187,7 +187,7 @@ const cases: readonly {
         assert.strictEqual(server.respond("POST", "/api/library/snapshots", archive).status, 200);
         inject({
           _tag: "CompetingWrite",
-          manifest: yield* readLibraryManifest(b.home),
+          manifest: yield* readLibraryManifest(b.home, b.disk),
         });
         const unchanged = yield* captureDisk(a.disk);
         assert.instanceOf(yield* Effect.flip(a.sync()), LibraryChangedOnServer);
@@ -930,12 +930,12 @@ it.effect("a failed snapshot download retains nothing and leaves the remote unch
 );
 
 /** Prepare through the owner; the resulting plan contains no writer callbacks. */
-const prepareLocalSync = (home: string) =>
+const prepareLocalSync = (home: string, roots: readonly string[]) =>
   Effect.gen(function* () {
     const library = yield* Library.Service;
     const base = yield* library.read;
     const state = base._tag === "Present" ? base.state : emptyLibraryFixture();
-    const manifest = yield* readLibraryManifest(home);
+    const manifest = yield* readLibraryManifest(home, roots);
     const localArchives = base._tag === "Present" ? yield* library.content.pack(base) : [];
     const staged = yield* library.content.stage(manifest, {
       localArchives,
@@ -960,7 +960,7 @@ it.effect("a Sync plan distinguishes an absent Library from a newly empty one", 
   Effect.gen(function* () {
     const { a, fs } = yield* devices;
     const layer = Library.layer({ home: a.home, routing: { _tag: "None" } });
-    const plan = yield* prepareLocalSync(a.home).pipe(Effect.provide(layer));
+    const plan = yield* prepareLocalSync(a.home, a.disk).pipe(Effect.provide(layer));
     yield* fs.makeDirectory(a.home, { recursive: true });
     const statePath = join(a.home, "state.json");
     const bytes = JSON.stringify(emptyLibraryFixture());
@@ -979,7 +979,7 @@ it.effect("a Sync plan cannot save into another Library home", () =>
   Effect.gen(function* () {
     const { a, b } = yield* devices;
     yield* a.importSource("first");
-    const plan = yield* prepareLocalSync(a.home).pipe(
+    const plan = yield* prepareLocalSync(a.home, a.disk).pipe(
       Effect.provide(Library.layer({ home: a.home, routing: { _tag: "None" } })),
     );
     const before = yield* captureDisk([...a.disk, ...b.disk], { identity: true });

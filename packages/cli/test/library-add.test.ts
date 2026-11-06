@@ -557,6 +557,6 @@ it.effect("records the Registry Release a Collection is added from, so sync can 
       ["1.2.3"],
     );
     // A Release the Registry can serve again needs no snapshot of its own.
-    assert.deepStrictEqual((yield* readLibraryManifest(home)).snapshot_digests, []);
+    assert.deepStrictEqual((yield* readLibraryManifest(home, [root])).snapshot_digests, []);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
