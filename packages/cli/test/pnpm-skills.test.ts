@@ -64,8 +64,7 @@ it.effect("refuses parent-directory acquisition before retaining any pnpm member
           if (result._tag === "Failure") expect(result.failure._tag).toBe("PnpmSkillManaged");
         }
       }
-      expect((yield* home.durable).skills).toHaveLength(0);
-      expect((yield* home.durable).collection_versions).toHaveLength(0);
+      expect((yield* home.snapshot)._tag).toBe("Absent");
     }
     expect(yield* f.fs.readLink(f.alias)).toBe(f.skill);
   }).pipe(Effect.provide(skitLayer)),

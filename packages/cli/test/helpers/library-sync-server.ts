@@ -1,7 +1,7 @@
 import { assert } from "@effect/vitest";
 import { Schema, SchemaAST } from "effect";
 import type { HttpClientRequest } from "effect/http";
-import type { LibraryState } from "@smolai/skit-core";
+import type { LibraryFixtureState as LibraryState } from "./library-home.js";
 import {
   InvalidRequestResponse,
   LibraryManifest,

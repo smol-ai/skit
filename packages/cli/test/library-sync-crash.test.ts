@@ -2,7 +2,7 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { join } from "node:path";
-import { type LibraryState } from "@smolai/skit-core";
+import type { LibraryFixtureState as LibraryState } from "./helpers/library-home.js";
 import { RegistryUnreachable } from "../src/registry/failures.js";
 import { devices } from "./helpers/library-sync-devices.js";
 

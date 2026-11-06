@@ -335,7 +335,7 @@ it.effect("bytes changed between the apply-time scan and a later stage fail stal
           : Effect.void,
     });
     assert.instanceOf(failure(exit), StalePlan);
-    assert.deepStrictEqual((yield* f.home.durable).skills, []);
+    assert.strictEqual((yield* f.home.snapshot)._tag, "Absent");
     const changes = yield* diskChanges(before);
     assert.isFalse(holds(changes, changed));
     assert.deepStrictEqual(changedPaths(f.root, changes), {

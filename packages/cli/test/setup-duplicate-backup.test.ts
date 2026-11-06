@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import { LinkStat, type LibraryState } from "@smolai/skit-core";
+import { LinkStat } from "@smolai/skit-core";
+import type { LibraryFixtureState as LibraryState } from "./helpers/library-home.js";
 import { skitLayer } from "@smolai/skit-core/platform";
 import type { PlatformError } from "effect/PlatformError";
 import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply.js";
@@ -173,7 +174,7 @@ it.effect("a duplicate changed after selection invalidates the approval without 
       "Newer independent contents",
     );
     expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(false);
-    expect((yield* f.home.durable).skills).toEqual([]);
+    expect((yield* f.home.snapshot)._tag).toBe("Absent");
   }).pipe(Effect.provide(skitLayer)),
 );
 

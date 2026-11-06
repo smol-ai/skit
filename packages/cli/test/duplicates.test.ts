@@ -224,9 +224,7 @@ it.effect("setup requires a duplicate decision before retaining any selected sou
               result.failure._tag === "SetupManageSelectionInvalid" &&
               result.failure.reason,
           ).toBe("duplicate-action-required");
-          const state = yield* f.home.durable;
-          expect(state.collections).toEqual([]);
-          expect(state.enabled).toEqual([]);
+          expect((yield* f.home.snapshot)._tag).toBe("Absent");
           expect(yield* f.fs.readLink(f.alias)).toBe(f.source);
         }),
       ),
@@ -571,7 +569,7 @@ for (const operation of ["add", "bind"] as const) {
             Effect.gen(function* () {
               if (operation === "bind") yield* importSource(f.source);
               const setup = { ...f.options, repositoryRoots: [], persistRoots: false };
-              const before = yield* f.home.durable;
+              const before = yield* f.home.snapshot;
               const scan = yield* runSetup(setup);
               const conflict = copyConflict(scan, { name: "review", sourcePath: f.source });
               if (conflict.kind !== "retirable")
@@ -617,7 +615,7 @@ for (const operation of ["add", "bind"] as const) {
                       Effect.result,
                     );
               expect(result._tag === "Failure" && result.failure._tag).toBe("Library.StalePlan");
-              expect(yield* f.home.durable).toEqual(before);
+              expect(yield* f.home.snapshot).toEqual(before);
               expect(yield* f.fs.exists(f.alias)).toBe(change !== "removed");
               expect(yield* f.fs.exists(f.destination)).toBe(false);
               expect(yield* f.fs.exists(join(f.home.home, "removed"))).toBe(false);

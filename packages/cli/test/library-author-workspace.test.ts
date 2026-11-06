@@ -221,7 +221,7 @@ it.effect("a refused Library import leaves the workspace registered for a retry"
     assert.strictEqual(failure._tag, "HomeBusy");
     const pending = yield* f.metadata;
     assert.strictEqual(pending.registration, "registered");
-    assert.strictEqual((yield* f.home.durable).collections.length, 0);
+    assert.strictEqual((yield* f.home.snapshot)._tag, "Absent");
     yield* Scope.close(other, Exit.void);
     const retried = yield* f.init();
     assert.ok(retried.entry);

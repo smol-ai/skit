@@ -311,7 +311,7 @@ it.effect("refuses to apply a prepared plan to another Library", () =>
     const other = yield* libraryHome({ home: join(f.root, "other-library") });
     const error = yield* other.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
     assert.strictEqual(error._tag, "Library.StalePlan");
-    assert.deepStrictEqual((yield* other.durable).enabled, []);
+    assert.strictEqual((yield* other.snapshot)._tag, "Absent");
     assert.strictEqual(yield* f.fs.exists(f.destination), false);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

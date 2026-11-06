@@ -1,5 +1,4 @@
 import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
-import { type LibraryState, emptyLibraryState, type ImportRequest } from "@smolai/skit-core";
 import { makeMachineId } from "@smolai/skit-core/universal/consumer";
 import {
   createSkitArchive,
@@ -19,6 +18,9 @@ import { testHttpClientLayer, type TestHttpHandler } from "./http-test-client.js
 import { RegistryHttp, registryHttpLayer } from "../../src/registry/registry-http.js";
 
 import { Library } from "@smolai/skit-core/library";
+
+export type LibraryFixtureState = Extract<Library.Snapshot, { readonly _tag: "Present" }>["state"];
+type ImportRequest = Parameters<Library.Interface["import"]["collection"]>[0];
 
 export type HarnessRoots = SkillsDirectoryOverrides;
 
@@ -119,14 +121,13 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
       | Exclude<R, SkitConfiguration | Library.Service | HttpClient.HttpClient | RegistryHttp>
       | FileSystem.FileSystem
     >;
-  const durable = owned(
-    Effect.flatMap(Library.Service, (library) => library.read).pipe(
-      Effect.map((snapshot) =>
-        snapshot._tag === "Present" ? snapshot.state : emptyLibraryState(),
-      ),
-    ),
+  const snapshot = owned(Effect.flatMap(Library.Service, (library) => library.read));
+  const durable = Effect.flatMap(snapshot, (current): Effect.Effect<LibraryFixtureState> =>
+    current._tag === "Present"
+      ? Effect.succeed(current.state)
+      : Effect.die("Expected persisted Library state; use snapshot to assert absence"),
   );
-  const writeDurable = (state: LibraryState) =>
+  const writeDurable = (state: LibraryFixtureState) =>
     fs.writeFileString(statePath, `${JSON.stringify(state, null, 2)}\n`);
   return {
     home,
@@ -139,6 +140,7 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
     installOptions,
     variantsPath: join(home, "variants"),
     owned,
+    snapshot,
     durable,
     writeDurable,
     installedSkill: (harness: HarnessName, ...segments: string[]) =>

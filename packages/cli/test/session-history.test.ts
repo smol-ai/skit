@@ -3,7 +3,7 @@ import { Library } from "@smolai/skit-core/library";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { type LibraryState } from "@smolai/skit-core";
+import type { LibraryFixtureState as LibraryState } from "./helpers/library-home.js";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { skitLayer } from "@smolai/skit-core/platform";
 import {

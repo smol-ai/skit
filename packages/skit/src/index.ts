@@ -59,7 +59,7 @@ export { setupIntent } from "./library/setup.js";
 
 export { SourceRestoreInvalid } from "./library/library.js";
 
-export type { ImportRequestSkill, ImportRequest } from "./library/import-collection.js";
+export type { ImportRequestSkill } from "./library/import-collection.js";
 
 export { readSnapshotArchive } from "./library/snapshot-archive.js";
 export { makeMachineId } from "./library/entity-ids.js";

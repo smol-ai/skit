@@ -174,7 +174,7 @@ it.effect("declining removal or using dry run leaves copies and Library unchange
       yield* f.setup(dryRun ? [] : [["remove\0copied"], false], dryRun);
       expect(yield* f.fs.exists(f.copy)).toBe(true);
       expect(yield* f.fs.exists(join(f.home.home, "removed"))).toBe(false);
-      expect((yield* f.home.durable).collections).toHaveLength(0);
+      expect((yield* f.home.snapshot)._tag).toBe("Absent");
     }
     yield* f.setup([[]]);
     expect(yield* f.fs.exists(f.copy)).toBe(true);

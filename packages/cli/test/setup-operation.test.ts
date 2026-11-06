@@ -4,7 +4,7 @@ import { Effect, FileSystem, Option } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { systemError, type PlatformError } from "effect/PlatformError";
-import { type LibraryState } from "@smolai/skit-core";
+import type { LibraryFixtureState as LibraryState } from "./helpers/library-home.js";
 import * as MachineSettings from "@smolai/skit-core/machine-settings";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { setupApplyCommand } from "../src/library/setup/apply.js";

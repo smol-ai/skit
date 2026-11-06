@@ -51,8 +51,7 @@ it.effect("an identity-only registration writes no config, registration or Libra
       schema: "skit.author-workspace.v1",
       workspace_id: identity.workspaceId,
     });
-    const state = yield* f.home.durable;
-    expect(state.collections).toEqual([]);
+    expect((yield* f.home.snapshot)._tag).toBe("Absent");
     const recorded = yield* f.capture();
     const trees = yield* storedTreesAt(f.home.home);
     expect(trees).toHaveLength(1);

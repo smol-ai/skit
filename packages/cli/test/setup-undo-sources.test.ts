@@ -10,12 +10,12 @@ import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import {
   enabledSkillIds,
-  type LibraryState,
   currentSkillVersion,
   libraryManifestFromLocalState,
   collectionVersionPath,
   sourceImports,
 } from "@smolai/skit-core";
+import type { LibraryFixtureState as LibraryState } from "./helpers/library-home.js";
 import * as MachineSettings from "@smolai/skit-core/machine-settings";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { skillsDirectoryFor } from "@smolai/skit-core/library/routing";
