@@ -137,7 +137,7 @@ it.effect("v8 state migrates to account-following without changing portable inte
     const migrated = yield* openedState(home);
     assert.isTrue(migrated.present);
     if (!migrated.present) return;
-    assert.strictEqual(migrated.state.schemaVersion, 13);
+    assert.strictEqual(migrated.state.schemaVersion, 12);
     assert.isUndefined(migrated.state.device_skill_selection);
     assert.deepStrictEqual(globalEnabled(migrated.state), { enabled: migrated.state.enabled });
     assert.isTrue(
@@ -158,7 +158,7 @@ it.effect(
       const migrated = yield* openedState(home);
       assert.strictEqual(migrated.present, true);
       if (!migrated.present) return;
-      assert.strictEqual(migrated.state.schemaVersion, 13);
+      assert.strictEqual(migrated.state.schemaVersion, 12);
       assert.strictEqual(migrated.state.collections.length, 1);
       assert.strictEqual(migrated.state.imports[0]?.kind, "source");
       assert.strictEqual(
@@ -458,7 +458,7 @@ it.effect("migrates v5 state: whole Sources, entries, retained edits, all histor
     assert.strictEqual(migrated.present, true);
     if (!migrated.present) return;
     const state = migrated.state;
-    assert.strictEqual(state.schemaVersion, 13);
+    assert.strictEqual(state.schemaVersion, 12);
     assert.ok(
       (yield* fs.readDirectory(home)).some((name) => name.startsWith("state.json.v5.backup-")),
     );
@@ -558,7 +558,7 @@ for (const agreed of [true, false])
         const migrated = yield* openedState(home);
         assert.strictEqual(migrated.present, true);
         if (!migrated.present) return;
-        assert.strictEqual(migrated.state.schemaVersion, 13);
+        assert.strictEqual(migrated.state.schemaVersion, 12);
         assert.deepStrictEqual(migrated.state.enabled, enabled);
         // Harnesses that disagreed leave the Skill on its declared policy.
         assert.deepStrictEqual(
@@ -717,7 +717,7 @@ it.effect("migrates v9 Bindings to enabled lists and renames stored records", ()
     assert.strictEqual(migrated.present, true);
     if (!migrated.present) return;
     const state = migrated.state;
-    assert.strictEqual(state.schemaVersion, 13);
+    assert.strictEqual(state.schemaVersion, 12);
     assert.deepStrictEqual(state.enabled, []);
     assert.deepStrictEqual(state.invocation_policies, { [skill.skill_id]: "explicit" });
     assert.deepStrictEqual(state.device_skill_selection, {
@@ -818,7 +818,7 @@ it.effect(
       const migrated = yield* openedState(home);
       assert.strictEqual(migrated.present, true);
       if (!migrated.present) return;
-      assert.strictEqual(migrated.state.schemaVersion, 13);
+      assert.strictEqual(migrated.state.schemaVersion, 12);
       assert.deepStrictEqual(migrated.state.installed_skills, [
         {
           ...copy,
@@ -917,7 +917,7 @@ it.effect("migrates a legacy state.json exactly once, when the Library layer is 
     const library = Context.get(yield* Layer.build(libraryLayer(home)), Library.Service);
     assert.strictEqual((yield* stateBackups(home)).length, 1);
     const migrated = yield* stateFileEvidence(home);
-    assert.strictEqual(JSON.parse(migrated.bytes).schemaVersion, 13);
+    assert.strictEqual(JSON.parse(migrated.bytes).schemaVersion, 12);
 
     const first = yield* library.read;
     const second = yield* library.read;

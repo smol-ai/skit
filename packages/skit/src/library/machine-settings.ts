@@ -12,7 +12,7 @@ import {
   currentMachineDocument,
   emptyMachineDocument,
   MachineDocumentJson,
-  MachineDocumentV7,
+  MachineDocumentV6,
   CurrentMachineDocument,
   type DiscoveryEvidence,
   type MachineRepositoryDecision,
@@ -104,7 +104,7 @@ const mutate = Effect.fn("MachineSettings.mutate")(function* <E = never, R = nev
         discoveryRoots: [...discoveryRoots],
         ...(identity === undefined ? {} : { machineId: identity }),
       });
-      const document = yield* MachineDocumentV7.makeEffect(
+      const document = yield* MachineDocumentV6.makeEffect(
         currentMachineDocument({
           machineId,
           undoneSetups:

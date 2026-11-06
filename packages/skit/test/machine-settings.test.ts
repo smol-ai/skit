@@ -65,7 +65,7 @@ for (const version of [1, 2, 3] as const) {
       assert.deepStrictEqual(identified.repositories, []);
       yield* MachineSettings.setRepositoryDecision(home, "/repo", "watched");
       const updated = yield* MachineSettings.read(home);
-      assert.strictEqual(JSON.parse(yield* fs.readFileString(path)).schemaVersion, 7);
+      assert.strictEqual(JSON.parse(yield* fs.readFileString(path)).schemaVersion, 6);
       assert.strictEqual(updated.machineId, identity);
       assert.strictEqual(updated.displayName, version === 1 ? hostname() : "Existing name");
       assert.deepStrictEqual(updated.discoveryRoots, ["/saved"]);

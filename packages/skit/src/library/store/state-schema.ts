@@ -104,7 +104,7 @@ export const SyncAncestry = Schema.Struct({
   base_manifest: LibraryManifest,
 });
 export interface SyncAncestry extends Schema.Schema.Type<typeof SyncAncestry> {}
-export const CURRENT_LIBRARY_STATE_VERSION = 13 as const;
+export const CURRENT_LIBRARY_STATE_VERSION = 12 as const;
 
 /** State fields a publication replaces; operation history is deliberately separate. */
 export const LibraryStateFields = {
@@ -422,7 +422,6 @@ export const SetupStep = Schema.Union([
   Schema.TaggedStruct("Undo", { program: UndoProgram }),
   Schema.TaggedStruct("Restore", { program: RecoveryRestore }),
   InstalledApply,
-  Schema.TaggedStruct("LegacyApply", { detail: Schema.String, document: Schema.Json }),
   Schema.TaggedStruct("Sync", { phase: Schema.Literal("retire"), program: SyncProgram }),
   Schema.TaggedStruct("Sync", {
     phase: Schema.Literals(["publish", "install"]),
@@ -457,7 +456,7 @@ export const RecordedSetupStep = Schema.Struct({
   step: SetupStep,
   /** Older Update records lost the approved selection and must not resume. */
   updateSelection: Schema.optionalKey(Schema.Literal("reviewed")),
-  /** Named installed-change batches. Absent in existing v12 operation records. */
+  /** Named installed-change batches, when this step changes installed files. */
   applies: Schema.optionalKey(
     Schema.Array(Schema.Struct({ key: Schema.String, apply: InstalledApply })),
   ),

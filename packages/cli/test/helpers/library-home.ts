@@ -31,7 +31,7 @@ export const emptyLibraryFixture = (): LibraryFixtureState => ({
   installed_skills: [],
   unmanaged: [],
   operations: [],
-  schemaVersion: 13,
+  schemaVersion: 12,
 });
 
 type ImportRequest = Parameters<Library.Interface["import"]["collection"]>[0];

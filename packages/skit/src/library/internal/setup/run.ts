@@ -122,7 +122,6 @@ const recordedStep = Effect.fn("Library.setup.recordedStep")(function* (step: Se
   switch (step._tag) {
     case "Undo":
     case "Restore":
-    case "LegacyApply":
     case "Apply":
       return { step, before: [], after: [], status: "Pending" } satisfies RecordedSetupStep;
     case "Sync":
@@ -322,20 +321,6 @@ const runStep = Effect.fn("Library.setup.step")(function* (
         _tag: "Ran",
         result: { _tag: "Restore", after: yield* restoreRecorded(home, step.program) },
         after: [],
-      } satisfies StepOutcome;
-    case "LegacyApply":
-      return {
-        _tag: "Stop",
-        reason: {
-          _tag: "StepFailed",
-          step: index,
-          error: {
-            _tag: "Library.ApplyMigrationStopped",
-            code: "CONFLICT",
-            message: step.detail,
-            remediation: "Review and apply the change again.",
-          },
-        },
       } satisfies StepOutcome;
     case "Apply": {
       const outcome = yield* runApply(operationId, index, step);
@@ -785,23 +770,18 @@ export const recover = Effect.fn("Library.recover")(function* (home: string) {
   const found = yield* operations.pipe(
     Effect.catchTag("InvalidLibraryState", () => Effect.succeed([])),
   );
-  const migrationStopped = found.flatMap((operation) =>
-    operation._tag === "Stopped" && operation.steps.some((item) => item.step._tag === "LegacyApply")
-      ? [operation]
-      : [],
-  );
   const reportStopped = (stopped: readonly StoppedOperation[]) =>
     stopped.map(({ steps, ...operation }) => ({
       ...operation,
       steps: steps.map(({ applies: _applies, ...step }) => step),
     }));
   if (!found.some((operation) => operation._tag === "Pending"))
-    return { finished: [], stopped: reportStopped(migrationStopped) } satisfies StartupRecovery;
+    return { finished: [], stopped: [] } satisfies StartupRecovery;
   return yield* withHomeLock(
     home,
     Effect.gen(function* () {
       const finished: OperationId[] = [];
-      const stopped: StoppedOperation[] = [...migrationStopped];
+      const stopped: StoppedOperation[] = [];
       for (const operation of yield* operations) {
         if (operation._tag !== "Pending") continue;
         const result = yield* writeLibrary(home, runOperation(operation.operationId), {

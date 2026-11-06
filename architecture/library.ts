@@ -6,7 +6,6 @@ import type {
   Option,
   Path,
   Scope,
-  Schema,
 } from "effect";
 import type {
   RecoveryInvalid,
@@ -448,8 +447,6 @@ export type SetupStep =
         | { readonly _tag: "Pending" }
         | { readonly _tag: "Done"; readonly folders: readonly ApplyFolder[] };
     }
-  // A v12 record without sufficient evidence remains visible and can never execute.
-  | { readonly _tag: "LegacyApply"; readonly detail: string; readonly document: Schema.Json }
   // APPROVED by Tim, 2026-11-05: record the local Sync work in this existing operation mechanism.
   | { readonly _tag: "Sync"; readonly phase: "retire"; readonly program: SyncProgram }
   | { readonly _tag: "Sync"; readonly phase: "publish" | "install"; readonly sourceStep: number }

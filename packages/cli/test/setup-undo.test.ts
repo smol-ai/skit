@@ -561,7 +561,7 @@ it.effect.each([".git", "skit.json", "skit.remote.json"])(
 );
 
 it.effect(
-  "a pre-split completed inverse keeps later settings even without a machine completion record",
+  "a legacy completed inverse keeps later v5 settings without a machine completion record",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -599,10 +599,14 @@ it.effect(
         operations: state.operations.filter((item) => item.operationId !== operation.operationId),
       });
       const path = join(f.home.home, "machine.json");
-      const { undoneSetups: _completed, ...machine } = JSON.parse(yield* f.fs.readFileString(path));
+      const {
+        undoneSetups: _completed,
+        setups: _setups,
+        ...machine
+      } = JSON.parse(yield* f.fs.readFileString(path));
       const later = JSON.stringify({
         ...machine,
-        schemaVersion: 6,
+        schemaVersion: 5,
         discoveryRoots: settingsBefore.discoveryRoots,
       });
       yield* f.fs.writeFileString(path, later);

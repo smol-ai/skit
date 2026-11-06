@@ -20,7 +20,7 @@ const decode = (document: unknown) =>
 it.effect("normalizes every persisted machine document version to one current shape", () =>
   Effect.gen(function* () {
     assert.deepStrictEqual(yield* decode({ schemaVersion: 1, repositoryRoots: ["/v1"] }), {
-      schemaVersion: 7,
+      schemaVersion: 6,
       discoveryRoots: ["/v1"],
       repositories: [],
       repositoryDecisionsInitialized: false,
@@ -36,7 +36,7 @@ it.effect("normalizes every persisted machine document version to one current sh
         repositoryRoots: ["/v2"],
       }),
       {
-        schemaVersion: 7,
+        schemaVersion: 6,
         machineId: migratedMachineId(legacyMachineId, legacyMachineId),
         legacyMachineId,
         displayName: "legacy",
@@ -57,7 +57,7 @@ it.effect("normalizes every persisted machine document version to one current sh
         repositoryRoots: ["/v3"],
       }),
       {
-        schemaVersion: 7,
+        schemaVersion: 6,
         machineId,
         displayName: "prior",
         discoveryRoots: ["/v3"],
@@ -77,7 +77,7 @@ it.effect("normalizes every persisted machine document version to one current sh
     } as const;
     assert.deepStrictEqual(yield* decode(current), {
       ...current,
-      schemaVersion: 7,
+      schemaVersion: 6,
       repositoryDecisionsInitialized: true,
       setups: [],
       undoneSetups: [],
@@ -98,7 +98,7 @@ for (const initialized of [false, true]) {
       } as const;
       assert.deepStrictEqual(yield* decode(document), {
         ...document,
-        schemaVersion: 7,
+        schemaVersion: 6,
         setups: [],
         undoneSetups: [],
       });
@@ -106,7 +106,7 @@ for (const initialized of [false, true]) {
   );
 }
 
-it.effect("v6 setup evidence reads without rewriting and has no completed machine inverse", () =>
+it.effect("current setup evidence reads without rewriting and records its inverse", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-machine-v6-" });
@@ -114,8 +114,9 @@ it.effect("v6 setup evidence reads without rewriting and has no completed machin
     const machineId = makeMachineId();
     const document = {
       schemaVersion: 6,
+      undoneSetups: [],
       machineId,
-      displayName: "Prior machine",
+      displayName: "Current machine",
       discoveryRoots: ["/after"],
       repositories: [],
       repositoryDecisionsInitialized: true,
@@ -137,7 +138,7 @@ it.effect("v6 setup evidence reads without rewriting and has no completed machin
     const plan = yield* MachineSettings.planRestoreDiscovery(home, operationId);
     yield* MachineSettings.applyRestoreDiscovery(home, plan);
     const saved = JSON.parse(yield* fs.readFileString(path));
-    assert.strictEqual(saved.schemaVersion, 7);
+    assert.strictEqual(saved.schemaVersion, 6);
     assert.deepStrictEqual(saved.discoveryRoots, ["/before"]);
     assert.deepStrictEqual(saved.undoneSetups, [operationId]);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
