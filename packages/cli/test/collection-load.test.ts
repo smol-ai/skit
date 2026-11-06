@@ -1,12 +1,11 @@
 import { readDescriptionLoad } from "@smolai/skit-core/library/session";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import {
-  collectionVersionPath,
-  emptyLibraryState,
-  type ImportRequestSkill,
-} from "@smolai/skit-core";
+import { collectionVersionPath, emptyLibraryState } from "@smolai/skit-core";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { Library } from "@smolai/skit-core/library";
+type ImportRequestSkill = Parameters<
+  Library.Interface["import"]["collection"]
+>[0]["skills"][number];
 import { it as effectIt } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
 import { join } from "node:path";

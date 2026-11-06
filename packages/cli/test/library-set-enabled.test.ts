@@ -2,7 +2,10 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { type ImportRequestSkill } from "@smolai/skit-core";
+import type { Library } from "@smolai/skit-core/library";
+type ImportRequestSkill = Parameters<
+  Library.Interface["import"]["collection"]
+>[0]["skills"][number];
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { isolatedRoots } from "./helpers/isolated-library.js";

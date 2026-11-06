@@ -35,7 +35,6 @@ export { resolveSkitSource } from "./sources/resolve.js";
 export { scanInventory } from "./library/inventory/refresh.js";
 export { collectionVersionPath } from "./library/collection-version.js";
 export {
-  SkillsShLockFileEntry,
   importCanBeRefetched,
   librarySnapshotDigests,
   sourceImports,
@@ -57,20 +56,12 @@ export { globalEnabled, enabledAt } from "./library/enabled.js";
 export { InstalledSkill } from "./library/device-state.js";
 export { setupIntent } from "./library/setup.js";
 
-export { SourceRestoreInvalid } from "./library/library.js";
-
-export type { ImportRequestSkill } from "./library/import-collection.js";
-
 export { readSnapshotArchive } from "./library/snapshot-archive.js";
 export { makeMachineId } from "./library/entity-ids.js";
-
-export { errnoOf } from "./shared/errno.js";
 
 export * as Library from "./library/library.js";
 
 export { observePathEvidence, recoveryFingerprint } from "./library/folder-evidence.js";
-
-export { StalePlan } from "./library/library.js";
 
 // Recovery vocabulary is public; reading and mutating recovery evidence belongs to Library.
 

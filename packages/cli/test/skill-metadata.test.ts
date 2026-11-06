@@ -1,5 +1,4 @@
 import { SkitConfiguration, skitLayer } from "@smolai/skit-core/platform";
-import { type SkillsShLockFileEntry } from "@smolai/skit-core";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { ListResult } from "../src/library/list/output.js";
 import { it } from "@effect/vitest";
@@ -8,6 +7,9 @@ import { Effect, FileSystem, Schema } from "effect";
 import { join } from "node:path";
 
 import { Library } from "@smolai/skit-core/library";
+type SkillsShLockFileEntry = Parameters<
+  Library.Interface["import"]["collection"]
+>[0]["lockFileEntries"][number];
 import {
   readLibrarySkillMetadata,
   skillModificationTime,

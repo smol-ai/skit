@@ -1,8 +1,11 @@
-import { resolveDeclaredInvocation } from "@smolai/skit-core";
+import { resolveDeclaredInvocation } from "../src/invocation/conformance.js";
 import { describe, expect, test } from "vitest";
 import { Result } from "effect";
-import { invocationPolicyChoices, invocationReadModel } from "@smolai/skit-core/library/session";
-import type { InvocationOption } from "@smolai/skit-core/library/session";
+import {
+  invocationPolicyChoices,
+  invocationReadModel,
+} from "../src/library/internal/session/invocation.js";
+import type { InvocationOption } from "../src/library/internal/session/invocation-option.js";
 
 const CLAUDE = "skills/review/SKILL.md";
 

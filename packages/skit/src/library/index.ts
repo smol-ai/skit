@@ -12,6 +12,8 @@ export type { RestoreProgress, RestorePhase } from "./restore-progress.js";
 // Canonical result and failure names keep consumer declarations on the owner API.
 export type {
   LibraryLayerError,
+  StalePlan,
+  SourceRestoreInvalid,
   LibraryStateReadError,
   ApplyError,
   ManageStopped,

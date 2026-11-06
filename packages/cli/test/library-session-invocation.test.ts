@@ -4,9 +4,9 @@ import { expect } from "vitest";
 import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
 import { Library } from "@smolai/skit-core/library";
-import { collectionVersionPath, resolveDeclaredInvocation } from "@smolai/skit-core";
+import { collectionVersionPath } from "@smolai/skit-core";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
-import { HarnessName } from "@smolai/skit-core/harnesses";
+import { parseDocument } from "yaml";
 import { skitLayer } from "@smolai/skit-core/platform";
 import {
   confirmLibraryChange,
@@ -108,18 +108,31 @@ it.effect(
       const installedSkill = (yield* home.durable).installed_skills.find(
         (copy) => copy.destination === "agents",
       )!;
-      const files = new Map([
-        ["SKILL.md", yield* fs.readFileString(join(installedSkill.path, "SKILL.md"))],
-        [
-          "agents/openai.yaml",
-          yield* fs.readFileString(join(installedSkill.path, "agents/openai.yaml")),
-        ],
-      ]);
-      const actual = Result.getOrThrow(
-        resolveDeclaredInvocation({ name: "review", path: "." }, (path) => files.get(path)),
+      // Inspect native output independently of SKIT's policy resolver: a shared reader/writer
+      // mistake must not make the installation appear consistent with the displayed policy.
+      const installedText = yield* fs.readFileString(join(installedSkill.path, "SKILL.md"));
+      const frontmatter = installedText.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+      expect(frontmatter).not.toBeNull();
+      const native = parseDocument(frontmatter?.[1] ?? "");
+      expect(native.errors).toEqual([]);
+      expect(native.get("disable-model-invocation")).toBe(true);
+      expect(native.getIn(["metadata", "opencode/autoinvoke"])).toBe("false");
+      expect(native.toJS()).toMatchObject({ triggers: ["user"] });
+      const codex = parseDocument(
+        yield* fs.readFileString(join(installedSkill.path, "agents/openai.yaml")),
       );
-      for (const harness of HarnessName.literals)
-        expect(policy.agents[harness].effectivePolicy).toBe(actual[harness].policy);
+      expect(codex.errors).toEqual([]);
+      expect(codex.getIn(["policy", "allow_implicit_invocation"])).toBe(true);
+      expect(
+        Object.fromEntries(
+          Object.entries(policy.agents).map(([name, agent]) => [name, agent.effectivePolicy]),
+        ),
+      ).toEqual({
+        "claude-code": "explicit",
+        codex: "implicit",
+        opencode: "explicit",
+        devin: "explicit",
+      });
 
       const explicit = Result.getOrThrow(libraryPolicyAfter(row, "explicit"));
       expect(

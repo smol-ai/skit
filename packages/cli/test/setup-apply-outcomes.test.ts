@@ -4,7 +4,8 @@ import { basename, join, relative } from "node:path";
 import { Effect, Exit, FileSystem, Option, Schema } from "effect";
 import { PlatformError, systemError } from "effect/PlatformError";
 import { assert, it } from "@effect/vitest";
-import { LibraryState, StalePlan } from "@smolai/skit-core";
+import { LibraryState } from "@smolai/skit-core";
+import { Library } from "@smolai/skit-core/library";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { withSandboxDenying } from "./helpers/sandbox.js";
 import { SetupResult, SetupPlanStale, SetupStopped } from "@smolai/skit-core/library/setup";
@@ -334,7 +335,7 @@ it.effect("bytes changed between the apply-time scan and a later stage fail stal
           ? f.fs.writeFileString(join(f.path("alpha"), "SKILL.md"), changed)
           : Effect.void,
     });
-    assert.instanceOf(failure(exit), StalePlan);
+    assert.instanceOf(failure(exit), Library.StalePlan);
     assert.strictEqual((yield* f.home.snapshot)._tag, "Absent");
     const changes = yield* diskChanges(before);
     assert.isFalse(holds(changes, changed));

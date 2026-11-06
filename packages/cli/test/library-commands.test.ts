@@ -1,5 +1,5 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { StalePlan } from "@smolai/skit-core";
+import { Library } from "@smolai/skit-core/library";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
@@ -581,7 +581,7 @@ it.effect("rejects a stale multi-destination disable before changing any Binding
     yield* Deferred.succeed(resume, undefined);
     const outcome = yield* Fiber.join(command);
     assert.isTrue(Result.isFailure(outcome));
-    if (Result.isFailure(outcome)) assert.instanceOf(outcome.failure, StalePlan);
+    if (Result.isFailure(outcome)) assert.instanceOf(outcome.failure, Library.StalePlan);
     assert.deepStrictEqual(yield* home.durable, concurrent);
     assert.deepStrictEqual(results, []);
     assert.isTrue(yield* homeLockIsFree(home.home));
