@@ -1,15 +1,11 @@
-import { originalTreePath } from "./helpers/original-tree.js";
+import { originalArchive, originalTreePath } from "./helpers/original-tree.js";
 import { installEnabledSkills } from "./helpers/installed-skills.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Schema } from "effect";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import {
-  readSnapshotArchive,
-  libraryManifestFromLocalState,
-  LibraryState,
-} from "@smolai/skit-core";
+import { libraryManifestFromLocalState, LibraryState } from "@smolai/skit-core";
 import { type SkitSource } from "@smolai/skit-core/library/source";
 import { Library } from "@smolai/skit-core/library";
 import { SourceProcess } from "@smolai/skit-core/platform";
@@ -127,7 +123,7 @@ it.effect(
         state.collection_versions,
       );
       const hash = state.collection_versions[0]!.hash;
-      assert.strictEqual((yield* readSnapshotArchive(f.root(hash))).digest, hash);
+      assert.strictEqual((yield* originalArchive(f.root(hash), hash)).digest, hash);
       for (const [path, bytes] of Object.entries(f.files))
         assert.strictEqual(yield* f.fs.readFileString(join(f.root(hash), path)), bytes);
       const targetRoot = join(f.workspace, "agent-skills");
@@ -169,7 +165,7 @@ it.effect("plain Registry restore keeps the retained subset and excludes sibling
     const state = yield* f.seed(registrySource);
     yield* f.sync();
     const hash = state.collection_versions[0]!.hash;
-    assert.strictEqual((yield* readSnapshotArchive(f.root(hash))).digest, hash);
+    assert.strictEqual((yield* originalArchive(f.root(hash), hash)).digest, hash);
     assert.isFalse(yield* f.fs.exists(join(f.root(hash), "README.md")));
     assert.isFalse(yield* f.fs.exists(join(f.root(hash), "skills/.gitkeep")));
     assert.strictEqual(
@@ -282,7 +278,7 @@ it.effect.each(["git", "github"] as const)(
       );
       yield* f.sync().pipe(Effect.provide(localGit));
       const hash = state.collection_versions[0]!.hash;
-      assert.strictEqual((yield* readSnapshotArchive(f.root(hash))).digest, hash);
+      assert.strictEqual((yield* originalArchive(f.root(hash), hash)).digest, hash);
       assert.strictEqual(
         yield* f.fs.readFileString(join(f.root(hash), "skit.json")),
         f.files["skit.json"],

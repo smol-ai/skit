@@ -17,6 +17,4 @@ export {
 export { enabledAt } from "./library/enabled.js";
 export { InstalledSkill } from "./library/device-state.js";
 
-export { readSnapshotArchive } from "./library/snapshot-archive.js";
-
 export { observePathEvidence, recoveryFingerprint } from "./library/folder-evidence.js";

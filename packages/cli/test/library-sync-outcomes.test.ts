@@ -1,16 +1,11 @@
-import { originalTreePath } from "./helpers/original-tree.js";
+import { originalArchive, originalTreePath } from "./helpers/original-tree.js";
 import { Library } from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, Schema, Option, Exit, type Layer, type Scope } from "effect";
 import type { SkillId } from "@smolai/skit-core/universal/consumer";
 import { join } from "node:path";
-import {
-  LibraryState,
-  readSnapshotArchive,
-  libraryManifestFromLocalState,
-  emptyLibraryState,
-} from "@smolai/skit-core";
+import { LibraryState, libraryManifestFromLocalState, emptyLibraryState } from "@smolai/skit-core";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { LibraryChangedOnServer, RegistryUnreachable } from "../src/registry/failures.js";
 import { LibraryApiRejected, LibraryManifestTooNew } from "../src/library/sync/api.js";
@@ -183,8 +178,9 @@ const cases: readonly {
         yield* b.importSource("from-b");
         // The competitor uploads its bytes and commits before A's null-base CAS.
         const competingState = yield* b.state;
-        const archive = yield* readSnapshotArchive(
+        const archive = yield* originalArchive(
           originalTreePath(join(b.home, "originals"), competingState.collection_versions[0]!.hash),
+          competingState.collection_versions[0]!.hash,
         );
         assert.strictEqual(server.respond("POST", "/api/library/snapshots", archive).status, 200);
         inject({
