@@ -160,13 +160,13 @@ for (const boundary of [
             probePath: "",
             skillsStateHome: join(root, "state"),
           };
-          const scan = yield* runSetup(setup);
+          const review = yield* openSetupReview(setup, { installOptions: configuration });
+          const scan = review.scan;
           const alpha = scan.changes?.find(
             (fact) =>
               fact.skillId === before.skills.find((skill) => skill.path === "alpha")?.skill_id,
           );
           if (!alpha) return yield* Effect.die("Missing Alpha update");
-          const review = yield* openSetupReview(setup, scan, { installOptions: configuration });
           const plan = yield* review.prepare({
             sources: [],
             copies: [],

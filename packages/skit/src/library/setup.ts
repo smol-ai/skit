@@ -8,7 +8,7 @@ import * as MachineSettings from "./machine-settings.js";
 import { OptionCombinationInvalid } from "../shared/input-failures.js";
 import { recordDuplicateSymlinks, type ManageOptions } from "./setup/manage-existing.js";
 import { applySetupPlan, type SetupApplyOptions, type SetupApproval } from "./setup/apply.js";
-import { revalidateSetupPlan, type SetupOptions } from "./setup/scan.js";
+import { revalidateSetupPlan, runSetup, type SetupOptions } from "./setup/scan.js";
 import type { Hash } from "../shared/hash.js";
 import type {
   SetupResult,
@@ -61,7 +61,7 @@ class SetupDuplicateDecisionRequired
 }
 
 /** Hold the observed choices and their meaning through preparation and confirmation. */
-export const openSetupReview = Effect.fn("Setup.openReview")(function* (
+const reviewScan = Effect.fn("Setup.reviewScan")(function* (
   options: SetupOptions,
   lockFileEntry: SetupResult,
   manage: ManageOptions,
@@ -572,6 +572,41 @@ export const openSetupReview = Effect.fn("Setup.openReview")(function* (
     prepareRecommended,
   };
 });
+type OpenError =
+  | Effect.Error<ReturnType<typeof runSetup>>
+  | Effect.Error<ReturnType<typeof reviewScan>>;
+type OpenRequirements =
+  | Effect.Services<ReturnType<typeof runSetup>>
+  | Effect.Services<ReturnType<typeof reviewScan>>;
+
+/** A review carries the scan it was opened on; a changed answer opens a new review, never edits one. */
+export interface SetupReview extends Effect.Success<ReturnType<typeof reviewScan>> {
+  readonly scan: SetupResult;
+  readonly refresh: (
+    changes: Partial<SetupOptions>,
+  ) => Effect.Effect<SetupReview, OpenError, OpenRequirements>;
+}
+
+const withScan = (
+  options: SetupOptions,
+  manage: ManageOptions,
+  scan: SetupResult,
+  review: Effect.Success<ReturnType<typeof reviewScan>>,
+): SetupReview => ({
+  ...review,
+  scan,
+  refresh: (changes) => openSetupReview({ ...options, ...changes }, manage),
+});
+
+/** Scan, then hold the observed choices and their meaning through preparation and confirmation. */
+export const openSetupReview = Effect.fn("Setup.openReview")(function* (
+  options: SetupOptions,
+  manage: ManageOptions,
+): Effect.fn.Return<SetupReview, OpenError, OpenRequirements> {
+  const scan = yield* runSetup(options);
+  return withScan(options, manage, scan, yield* reviewScan(options, scan, manage));
+});
+
 /** Scan once more, hold it to the approved plan ID, and open its review. */
 export const openApprovedSetupReview = Effect.fn("Setup.openApprovedReview")(function* (
   options: SetupOptions,
@@ -579,11 +614,8 @@ export const openApprovedSetupReview = Effect.fn("Setup.openApprovedReview")(fun
   manage: ManageOptions,
 ) {
   const current = yield* revalidateSetupPlan(options, approvedPlanId);
-  const review = yield* openSetupReview(options, current.scan, manage);
-  return { scan: current.scan, review };
+  return withScan(options, manage, current.scan, yield* reviewScan(options, current.scan, manage));
 });
-
-export type SetupReview = Effect.Success<ReturnType<typeof openSetupReview>>;
 export type SetupReviewSummary = Effect.Success<ReturnType<SetupReview["prepare"]>>["summary"];
 
 /** Reusable setup scan, reviewed choices and apply workflow. Owners retain their state. */
@@ -628,7 +660,6 @@ export { resolveSkillsShSelectedSource } from "./setup/skills-sh/lock-source.js"
 export { prepareSetupUndo } from "./setup/undo.js";
 export { computeSkillsShCompatibleHash as computeSkillsLockCompatibleHash } from "./setup/skills-sh/compatible-hash.js";
 // Inferred consumer declarations need public names for these nested choices and typed failures.
-export type { SetupCopyConflict } from "./setup/decisions.js";
 // Legacy undo evidence still uses this read-only projection; recordedLibrary remains private.
 export { setupIntent } from "./internal/setup/intent.js";
 

@@ -41,7 +41,7 @@ export const openSetupCommandReview = Effect.fn("CLI.setup.openReview")(function
     repositoryRoots: input.workDirFlag ? [resolve(input.workDirFlag)] : [],
     persistRoots: false,
   };
-  const { scan, review } = yield* renderer.withStatus(
+  const review = yield* renderer.withStatus(
     "Observing local skills",
     openApprovedSetupReview(
       { ...setupOptions, persistRoots: input.workDirFlag !== undefined },
@@ -49,7 +49,7 @@ export const openSetupCommandReview = Effect.fn("CLI.setup.openReview")(function
       input.manageOptions,
     ),
   );
-  return { scan, review, planId: planId.value };
+  return { scan: review.scan, review, planId: planId.value };
 });
 
 export const prepareSetupCommand = Effect.fn("CLI.setup.prepare")(function* (

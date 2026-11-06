@@ -280,7 +280,8 @@ it.effect("non-interactive setup with a work dir records a guarded settings-only
       deleted: [],
       changed: ["library/machine.json"],
     });
-    assert.strictEqual(scans, 3);
+    // The review's own scan, then the revalidation under apply; the apply reports its scan back.
+    assert.strictEqual(scans, 2);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 

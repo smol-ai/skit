@@ -57,10 +57,10 @@ const fixture = Effect.gen(function* () {
     probePath: "",
     skillsStateHome: join(root, "state"),
   };
-  const scan = yield* home.owned(runSetup(options));
   const review = yield* home.owned(
-    openSetupReview(options, scan, { installOptions: home.installOptions }),
+    openSetupReview(options, { installOptions: home.installOptions }),
   );
+  const scan = review.scan;
   const apply = <A, E, R>(_message: string, effect: Effect.Effect<A, E, R>) => effect;
   return { fs, root, home, agentRoot, linked, alias, options, observed: scan, review, apply };
 });

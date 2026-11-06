@@ -31,9 +31,8 @@ it.effect("core setup reviews, applies and undoes a local copy without frontend 
       skillsStateHome: join(root, "state"),
     };
     yield* Effect.gen(function* () {
-      const scan = yield* runSetup(options);
       assert.isFalse(yield* fs.exists(join(home, "machine.json")));
-      const review = yield* openSetupReview(options, scan, { installOptions: inventory });
+      const review = yield* openSetupReview(options, { installOptions: inventory });
       const plan = yield* review.prepareRecommended(undefined);
       assert.isTrue(plan.hasChanges);
       assert.isFalse(yield* fs.exists(join(home, "machine.json")));

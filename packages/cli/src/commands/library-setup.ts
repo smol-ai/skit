@@ -275,7 +275,7 @@ export const setupCliCommand = Command.make(
                   actions: setupResultActions(context, applied),
                 });
               }
-              const value = yield* setupCommand({
+              yield* setupCommand({
                 ...(workDir === undefined ? {} : { workDirFlag: workDir }),
                 interactive,
                 dryRun: input.dryRun || input.json,
@@ -288,11 +288,11 @@ export const setupCliCommand = Command.make(
                 repositoryRoots: workDir ? [resolve(workDir)] : [],
                 persistRoots: false,
               };
-              const review = yield* openSetupReview(setup, value, manageOptions);
+              const review = yield* openSetupReview(setup, manageOptions);
               return result(
                 "setup",
                 setupOutputContracts.setup,
-                setupDiscoveryOutput(value, review, context),
+                setupDiscoveryOutput(review.scan, review, context),
               );
             }),
           );

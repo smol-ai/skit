@@ -14,7 +14,6 @@ import {
   type SetupStepPlan,
 } from "./setup/steps.js";
 import {
-  runSetup,
   type SetupOptions,
   openSetupReview,
   type SetupReview,
@@ -41,7 +40,7 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
 }) {
   const roots = input.workDirFlag ? [resolve(input.workDirFlag)] : [];
   const persistRoots = Boolean(input.workDirFlag) && !input.dryRun;
-  let setupOptions: SetupOptions = {
+  const setupOptions: SetupOptions = {
     ...input.options,
     repositoryRoots: roots,
     persistRoots: false,
@@ -50,15 +49,15 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
   const guided = input.interactive && !input.dryRun && input.manageOptions !== undefined;
   const steps = setupStepPlan({ scanRepositories: roots.length > 0 });
   if (guided) yield* renderer.note(steps.overview, setupOverviewTitle);
-  const scanSetup = (options: SetupOptions) =>
-    renderer.withStatus("Observing local skills", runSetup(options));
-  let scan = yield* scanSetup(setupOptions);
-  if (!input.interactive && persistRoots) {
-    const review = yield* openSetupReview(
-      { ...setupOptions, persistRoots: true },
-      scan,
+  // One owner call opens the review on its own scan; prompts refresh it, never re-scan themselves.
+  let review = yield* renderer.withStatus(
+    "Observing local skills",
+    openSetupReview(
+      { ...setupOptions, persistRoots },
       input.manageOptions ?? { installOptions: setupOptions.inventory },
-    );
+    ),
+  );
+  if (!input.interactive && persistRoots) {
     // The explicit work-dir flag approves only this settings change, not skill enablement.
     const plan = yield* review.prepare({
       sources: [],
@@ -67,15 +66,14 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
       reconcileExisting: false,
     });
     const applied = yield* plan.apply(renderer.withStatus);
-    const refreshed = yield* scanSetup(setupOptions);
     return {
-      ...refreshed,
-      machineConfig: { ...refreshed.machineConfig, persisted: true },
+      ...applied.scan,
+      machineConfig: { ...applied.scan.machineConfig, persisted: true },
       operationId: applied.operationId,
     };
   }
-  if (!guided || !input.manageOptions) return scan;
-  const discoveredRepositories = scan.repositories;
+  if (!guided || !input.manageOptions) return review.scan;
+  const discoveredRepositories = review.scan.repositories;
   const displayPath = (path: string) => compactHomePath(path, input.options.inventory.home);
   const displayRoots = roots.map(displayPath).join(", ");
   if (roots.length)
@@ -105,18 +103,12 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
       path: repository.path,
       status: watchedPaths.has(repository.path) ? ("watched" as const) : ("ignored" as const),
     }));
-    setupOptions = {
-      ...setupOptions,
-      repositoryDecisions,
-      scanDecidedRepositories: true,
-    };
-    scan = yield* scanSetup({ ...setupOptions, persistRoots: false });
+    review = yield* renderer.withStatus(
+      "Observing local skills",
+      review.refresh({ repositoryDecisions, scanDecidedRepositories: true }),
+    );
   }
-  const review = yield* openSetupReview(
-    { ...setupOptions, persistRoots },
-    scan,
-    input.manageOptions,
-  );
+  const scan = review.scan;
   const sources = yield* chooseKnownSources(steps, review);
   const copies = yield* chooseDiscoveredSkills(steps, review, input.options.inventory.home);
   const decisions = yield* chooseSetupCopyDecisions(

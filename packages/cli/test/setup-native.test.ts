@@ -99,8 +99,7 @@ const scanForSetup = (options: SetupOptions) =>
 
 const saveSettingsForSetup = (options: SetupOptions) =>
   Effect.gen(function* () {
-    const scan = yield* runSetup(options);
-    const review = yield* openSetupReview(options, scan, { installOptions: options.inventory });
+    const review = yield* openSetupReview(options, { installOptions: options.inventory });
     const plan = yield* review.prepare({
       sources: [],
       copies: [],
