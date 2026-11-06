@@ -1,12 +1,13 @@
-import type { LibraryInventory } from "@smolai/skit-core/library/inventory";
-import { configurationForHome } from "@smolai/skit-core/platform";
+import type { LibraryInventory } from "../../inventory.js";
+import { configurationForHome } from "../../../platform/index.js";
 import {
   SkillAlias,
   type DuplicateCopy,
   scanSkillsDirectory,
   readableSkillsDirectories,
-} from "@smolai/skit-core/library/routing";
-import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
+  type InventoryRootOptions,
+} from "../../routing/index.js";
+
 import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { Effect, FileSystem, Schema } from "effect";
@@ -14,9 +15,9 @@ import {
   readCodexSkills,
   readCodexListingBudget,
   type ListingBudget,
-} from "@smolai/skit-core/harnesses";
-export { readCodexSkills } from "@smolai/skit-core/harnesses";
-import { probeHarness } from "@smolai/skit-core/harnesses";
+  probeHarness,
+} from "../../../harnesses/index.js";
+export { readCodexSkills } from "../../../harnesses/index.js";
 
 export const CodexDoctorInstance = Schema.Struct({
   name: Schema.String,

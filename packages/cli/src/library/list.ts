@@ -1,22 +1,13 @@
-import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
-
-import { openLibraryView, openLibrarySession } from "@smolai/skit-core/library/session";
-import { Option, Effect } from "effect";
-import { Command } from "effect/cli";
-import { handleLibraryCommand } from "../commands/handler.js";
-import { CommandMetadata } from "../commands/metadata.js";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
+import { readLibraryList } from "@smolai/skit-core/library/session";
+import { Effect } from "effect";
 import { listOutputContracts } from "./list/output.js";
-import { localFlags } from "../commands/parameters.js";
 import { Renderer } from "../terminal/renderer.js";
 import { encodeResult as result } from "../commands/encode-result.js";
-import { libraryCommandConfiguration } from "../commands/library-configuration.js";
-import { terminalPrompterLayer } from "../terminal/prompter.js";
-import { promptsAllowed } from "../terminal/interactivity.js";
-import { browseLibrary } from "./list/browse.js";
 
 export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
-  const view = yield* Effect.flatMap(SkitConfiguration, (paths) => openLibraryView(paths.skitHome));
-  const subjects = yield* view.readSubjects();
+  const view = yield* readLibraryList((yield* SkitConfiguration).skitHome);
+  const subjects = view.subjects;
   const value = {
     subjects: subjects.map((subject) => ({
       subject_id: subject.id,
@@ -43,34 +34,7 @@ export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
   yield* renderer.result(result("list", listOutputContracts.list, value));
 });
 
-export const listCliCommand = Command.make("list", localFlags, (input) =>
-  Effect.gen(function* () {
-    const interactive = promptsAllowed({ json: input.json, needsStdout: true });
-    return yield* handleLibraryCommand(
-      Effect.gen(function* () {
-        if (!interactive) return yield* presentListCommand();
-        const configuration = yield* libraryCommandConfiguration(input);
-        const session = yield* Effect.flatMap(SkitConfiguration, (paths) =>
-          openLibrarySession(paths.skitHome, configuration.pull.installOptions),
-        );
-        yield* browseLibrary(session, configuration.pull.installOptions).pipe(
-          Effect.provide(terminalPrompterLayer),
-        );
-      }),
-    );
-  }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
-).pipe(
-  Command.withDescription(
-    "Browse the Skills and Collections in your Library and choose what is enabled.",
-  ),
-  Command.withExamples([{ command: "skit list" }, { command: "skit list --json" }]),
-  Command.annotate(CommandMetadata, {
-    effects: { capabilities: ["filesystem.read", "filesystem.write"] },
-    outputSchemas: [listOutputContracts.list],
-    exitCodes: [0, 12, 64, 65],
-    interactive: true,
-  }),
-);
-
 export { listOutputContracts } from "./list/output.js";
+
 export { renderLibraryList } from "./list/present.js";
+export { browseLibrary } from "./list/browse.js";

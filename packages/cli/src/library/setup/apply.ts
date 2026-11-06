@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { Effect, Option, Schema } from "effect";
 import { Hash } from "@smolai/skit-core/shared";
-import { openLibraryView } from "@smolai/skit-core/library/session";
+import { readInstalledSkills } from "@smolai/skit-core/library/session";
 import { Renderer } from "../../terminal/renderer.js";
 import { OptionCombinationInvalid } from "../../commands/input-failures.js";
 import {
@@ -88,7 +88,7 @@ export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (
     ...reconnects.map((copy) => copy.name),
     ...removals.entries.map((copy) => copy.name),
   ]);
-  const view = yield* openLibraryView(input.options.libraryHome);
+  const installedSkills = yield* readInstalledSkills(input.options.libraryHome);
   return {
     planId,
     changes: applied?.changes ?? changeResults(plan.summary.changes, false),
@@ -101,7 +101,7 @@ export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (
     imported: sources.map(({ source, names }) => ({ source, names })),
     added: additions,
     reconnected: reconnects,
-    installedSkills: view.installedSkills
+    installedSkills: installedSkills
       .filter((copy) => taken.has(copy.name))
       .map(({ name, destination, path, status }) => ({ name, destination, path, status })),
     leftAlone: scan.onboarding.candidates

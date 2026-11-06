@@ -5,7 +5,6 @@ export {
   invocationBriefing,
   invocationRowSummary,
 } from "./internal/session/invocation.js";
-export { openLibraryView } from "./internal/session/library-view.js";
 export {
   type ScopeChoice,
   scopeKey,
@@ -47,7 +46,7 @@ export {
 } from "./internal/session/set-enabled.js";
 export {
   SkillMetadata,
-  skillModificationTime,
+  readSkillPreviews,
   readLibrarySkillMetadata,
 } from "./internal/session/skill-metadata.js";
 
@@ -87,3 +86,15 @@ export { SyncChanges } from "./sync-changes.js";
 export type { LibrarySubjectNotFound, LibrarySubjectAmbiguous } from "./subject-resolution.js";
 
 export type { WorkspaceClaim } from "./internal/session/workspace-claims.js";
+
+export {
+  readLibraryList,
+  readLibraryWorkspaceClaims,
+  readInstalledSkills,
+  readLibraryManifest,
+  readSkillsShCollectionIds,
+  readLibraryDescriptionLoad,
+  reviewLibrarySecurity,
+  checkLibrarySubjects,
+  previewLibrarySourceUpdates,
+} from "./internal/session/queries.js";

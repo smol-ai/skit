@@ -12,17 +12,22 @@ import type {
 } from "../../packages/skit/src/author/index.js";
 import type * as CoreHistory from "../../packages/skit/src/history/history.js";
 
-import type {
-  AuthorHistory,
-  AuthorHistoryConfig,
-  AuthorHistoryLayerError,
-  AuthorHistoryRequires,
-  AuthorWorkspace,
-  AuthorWorkspaceLayerError,
-  AuthorWorkspaceRequires,
-  Services,
-  WorkspaceLease,
-  SyncScan,
+import {
+  type AuthorHistory,
+  type AuthorHistoryConfig,
+  type AuthorHistoryLayerError,
+  type AuthorHistoryRequires,
+  type AuthorWorkspace,
+  type AuthorWorkspaceLayerError,
+  type AuthorWorkspaceRequires,
+  type Services,
+  type WorkspaceLease,
+  type SyncScan,
+  type AuthorSyncOptions,
+  type AuthorRemoveOptions,
+  type AuthorRegistry,
+  type AuthorSyncOutcome,
+  type Workspace,
 } from "../author.js";
 import type { Assert, ChangedMethods, Equal, ExtraMethods, MissingMethods } from "./library.js";
 
@@ -83,14 +88,11 @@ export type Checks = [
 ];
 
 import type * as PublicAuthor from "../../packages/skit/src/author/index.js";
-import type {
-  AuthorSyncOptions,
-  AuthorRemoveOptions,
-  AuthorRegistry,
-  AuthorSyncOutcome,
-  Workspace,
-} from "../author.js";
+
 export type PublicOperationChecks = [
+  Assert<
+    Equal<keyof PublicAuthor.AuthorRegistry, "origin" | "connect" | "list" | "publish" | "delete">
+  >,
   Assert<Equal<Effect.Success<ReturnType<typeof PublicAuthor.readAuthorWorkspace>>, Workspace>>,
   Assert<
     Equal<
@@ -110,7 +112,7 @@ export type PublicOperationChecks = [
   Assert<
     Equal<
       Parameters<typeof PublicAuthor.syncAuthorWorkspace>[2],
-      AuthorRegistry<unknown, unknown, unknown>
+      Pick<AuthorRegistry<unknown, unknown, unknown>, "origin" | "connect">
     >
   >,
   Assert<Equal<Parameters<typeof PublicAuthor.initSkit>, [input: string]>>,

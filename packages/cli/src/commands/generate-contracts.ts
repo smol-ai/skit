@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { join, resolve } from "node:path";
 import { commandContractArtifacts } from "./artifacts.js";
-import { writeCommandContractArtifacts } from "./contract-writer.js";
+import { writeCommandContractArtifacts } from "../platform/command-contracts.js";
 import { commandApplicationLayer } from "../application.js";
 
 const target = resolve(import.meta.dirname, "../../../contracts");

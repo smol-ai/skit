@@ -1,20 +1,26 @@
-import { type LibraryInventory, LibraryDoctorReport } from "@smolai/skit-core/library/inventory";
+import { type LibraryInventory, LibraryDoctorReport } from "../../inventory.js";
 import {
   DuplicateCopy,
   scanSkillsDirectory,
   readableSkillsDirectories,
   type DuplicateScanError,
-} from "@smolai/skit-core/library/routing";
-import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
+  type InventoryRootOptions,
+} from "../../routing/index.js";
+
 import { Data, Effect, FileSystem, Option, Record, Schema, Stream } from "effect";
 import { dirname, join, resolve } from "node:path";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { HarnessName, readClaudeListingSnapshot, ListingBudget } from "@smolai/skit-core/harnesses";
-import { SourceProcess, type SourceProcessResult } from "@smolai/skit-core/platform";
-import { probeHarness } from "@smolai/skit-core/harnesses";
+import {
+  HarnessName,
+  readClaudeListingSnapshot,
+  ListingBudget,
+  probeHarness,
+} from "../../../harnesses/index.js";
+import { SourceProcess, type SourceProcessResult } from "../../../platform/index.js";
+
 import { CodexDoctorCheck, doctorCodexCheck } from "./codex.js";
 import { readOpenCodeV2Skills } from "./opencode.js";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
+import { FailureTypeId, type SkitFailure } from "../../../shared/index.js";
 
 class HarnessDiscoveryFailure
   extends Data.TaggedError("HarnessDiscoveryFailure")<{

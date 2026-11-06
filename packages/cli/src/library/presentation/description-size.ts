@@ -1,7 +1,5 @@
 import type { Effect } from "effect";
-import type { openLibraryView } from "@smolai/skit-core/library/session";
-
-type LibraryView = Effect.Success<ReturnType<typeof openLibraryView>>;
+import type { readLibraryDescriptionLoad } from "@smolai/skit-core/library/session";
 
 export const largeCollectionWarning = (count: number): string | undefined =>
   count > 100
@@ -9,7 +7,7 @@ export const largeCollectionWarning = (count: number): string | undefined =>
     : undefined;
 
 export function descriptionLoadMessage(
-  load: Effect.Success<ReturnType<LibraryView["descriptionLoad"]>>,
+  load: Effect.Success<ReturnType<typeof readLibraryDescriptionLoad>>,
 ): string {
   return `${load.skills} skills · ${load.characters.toLocaleString("en-US")} description characters${load.unknown ? ` · ${load.unknown} unmeasured` : ""}`;
 }

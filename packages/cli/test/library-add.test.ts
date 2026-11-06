@@ -1,4 +1,11 @@
-import { emptyLibraryFixture } from "./helpers/library-home.js";
+import {
+  emptyLibraryFixture,
+  archiveBytes,
+  boundSkit,
+  initializeLibraryMachine,
+  importCollectionIn,
+  writingTo,
+} from "./helpers/library-home.js";
 import { readLibraryManifest } from "./helpers/library-manifest.js";
 import { originalTreePath } from "./helpers/original-tree.js";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
@@ -17,16 +24,9 @@ import { planUpdates, updateSubjects } from "../src/library/update/operation.js"
 import { checkSubjects } from "../src/library/check/operation.js";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { setupIntent } from "@smolai/skit-core/library/setup";
-import { openLibraryView, openSyncSession } from "@smolai/skit-core/library/session";
+import { openSetEnabledSession, openSyncSession } from "@smolai/skit-core/library/session";
 import { executeRemove } from "../src/library/remove/operation.js";
 
-import {
-  archiveBytes,
-  boundSkit,
-  initializeLibraryMachine,
-  importCollectionIn,
-  writingTo,
-} from "./helpers/library-home.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 import { homeLockIsFree } from "./helpers/home-lock.js";
 
@@ -323,7 +323,11 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     assert.strictEqual(before.collections.length, 1);
     const skill = before.skills[0]!;
     assert.strictEqual(skill.collection_id, before.collections[0]?.collection_id);
-    const view = yield* run(openLibraryView(home));
+    const view = yield* run(
+      openSetEnabledSession(home, { home: home, configHome: home, overrides: {} }).pipe(
+        Effect.map((selection) => selection.view),
+      ),
+    );
     const subjects = yield* run(view.readSubjects());
     assert.deepStrictEqual(
       subjects.map((subject) => [subject.kind, subject.id, subject.label]),

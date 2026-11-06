@@ -781,6 +781,36 @@ export interface AuthorRemoveOptions {
 
 /** Transport input supplies protocol effects only. It has no local writer, lease or checkpoint. */
 export interface AuthorRegistry<E, R, ProtocolError> {
+  readonly list: () => Effect.Effect<
+    {
+      readonly origin: string;
+      readonly skits: readonly import("../packages/skit/src/api/authoring-contracts.js").AuthorSkitSummary[];
+    },
+    E,
+    R
+  >;
+  readonly delete: (
+    remote: RemoteHome,
+    options: { readonly dryRun?: boolean },
+  ) => Effect.Effect<
+    import("../packages/skit/src/api/authoring-contracts.js").AuthorSkitDeleteResponse,
+    E,
+    R
+  >;
+  readonly publish: (
+    remote: RemoteHome,
+  ) => Effect.Effect<
+    (input: {
+      readonly version: string;
+      readonly revision?: string;
+      readonly archive: Uint8Array;
+    }) => Effect.Effect<
+      import("../packages/skit/src/api/index.js").ReleasePublishResponse,
+      ProtocolError
+    >,
+    E,
+    R
+  >;
   readonly origin: Effect.Effect<string | undefined, E, R>;
   readonly connect: (input: {
     readonly remote: RemoteHome;

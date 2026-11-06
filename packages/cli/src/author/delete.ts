@@ -1,8 +1,8 @@
 import { Effect, Result } from "effect";
 
-import { parseAuthorDestination } from "./destination.js";
-import { Registry, type ResolvedAuth } from "../registry/index.js";
-import { deletePrivateAuthorSkit } from "../registry/authoring.js";
+import { deleteAuthorSkit } from "@smolai/skit-core/author";
+import { type ResolvedAuth } from "../registry/index.js";
+import { authorRegistry } from "../registry/author-sync.js";
 import { Renderer } from "../terminal/renderer.js";
 
 export interface AuthorDeleteOptions<E> {
@@ -16,15 +16,18 @@ export const authorDeleteCommand = Effect.fn("CLI.authorDelete")(function* <E>(
   destination: string,
   options: AuthorDeleteOptions<E>,
 ) {
-  const concrete = /^(?:skit:\/\/|https?:\/\/)/.test(destination);
-  const startup = concrete ? undefined : yield* Effect.fromResult(options.authState);
-  const remote = yield* parseAuthorDestination(destination, startup?.origin);
-  const credentials = yield* Registry.credentials({ origin: remote.origin, home: options.home });
   const renderer = yield* Renderer;
   return yield* renderer.withStatus(
     options.dryRun ? "Planning private SKIT deletion" : "Deleting private SKIT",
     Effect.scoped(
-      deletePrivateAuthorSkit(remote, { token: credentials.token, dryRun: options.dryRun }),
+      deleteAuthorSkit(
+        destination,
+        { dryRun: options.dryRun },
+        {
+          ...authorRegistry(options.home),
+          origin: Effect.fromResult(options.authState).pipe(Effect.map((auth) => auth.origin)),
+        },
+      ),
     ),
   );
 });

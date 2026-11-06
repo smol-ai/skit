@@ -1,11 +1,11 @@
 import * as Library from "@smolai/skit-core/library";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { updateSources } from "@smolai/skit-core/library/session";
+import { updateSources, previewLibrarySourceUpdates } from "@smolai/skit-core/library/session";
 import { Effect } from "effect";
 import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import type { UpdateResult } from "./output.js";
 import { importSource, inspectLibrarySource } from "../source.js";
-import { openLibraryView } from "@smolai/skit-core/library/session";
+
 import { LibraryProgress } from "./progress.js";
 import { commandFailure } from "../../commands/failure-classification.js";
 export interface UpdateOptions {
@@ -13,8 +13,11 @@ export interface UpdateOptions {
 }
 
 export const planUpdates = Effect.fn("CLI.planUpdates")(function* (query?: string) {
-  const view = yield* Effect.flatMap(SkitConfiguration, (paths) => openLibraryView(paths.skitHome));
-  return yield* view.previewSourceUpdates(query, inspectLibrarySource);
+  return yield* previewLibrarySourceUpdates(
+    (yield* SkitConfiguration).skitHome,
+    query,
+    inspectLibrarySource,
+  );
 });
 
 /** Preserve a uniform failure code; mixed success or failure types use the batch code. */

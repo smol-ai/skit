@@ -1,10 +1,8 @@
+import { makeSyncJourneyFixture } from "../platform/storybook-fixtures.js";
 import * as Library from "@smolai/skit-core/library";
-import { Effect, FileSystem, Layer, Result, Schema } from "effect";
+import { Effect, Layer, Result, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { join } from "node:path";
-import { openLibraryView } from "@smolai/skit-core/library/session";
-import { makeMachineId } from "@smolai/skit-core/universal/consumer";
-import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { skitLayer } from "@smolai/skit-core/platform";
 import {
   LibraryResponse,
@@ -21,46 +19,7 @@ import { registryHttpLayer } from "../registry/registry-http.js";
 export const syncJourney = (failDownload: boolean) =>
   Effect.scoped(
     Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const workspace = yield* fs.makeTempDirectoryScoped({ prefix: "skit-story-sync-" });
-      const seedHome = join(workspace, "seed");
-      const machineId = makeMachineId();
-      const seeded = yield* Effect.gen(function* () {
-        const library = yield* Library.Service;
-        for (const name of ["review", "testing", "docs"]) {
-          const sourcePath = join(workspace, name);
-          yield* fs.makeDirectory(sourcePath);
-          yield* fs.writeFileString(
-            join(sourcePath, "SKILL.md"),
-            `# ${name}\nFixture Skill for sync preview.\n`,
-          );
-          yield* library.import.collection({
-            machineId,
-            source: { type: "github", owner: "fixture", repository: name },
-            input: sourcePath,
-            importedAt: "2026-01-01T00:00:00.000Z",
-            skills: [
-              {
-                name,
-                sourcePath,
-                relativePath: ".",
-                currentHash: yield* deterministicTreeHash(sourcePath),
-              },
-            ],
-            lockFileEntries: [],
-          });
-        }
-        const snapshot = yield* library.read;
-        if (snapshot._tag === "Absent") return yield* Effect.die("Expected seeded Library");
-        const view = yield* openLibraryView(seedHome);
-        const portable = yield* view.readManifest();
-        const manifest = {
-          ...portable,
-          enabled: portable.skills.map((skill) => ({ skill: skill.skill_id })),
-        };
-        const archives = yield* library.content.pack(snapshot);
-        return { manifest, archives };
-      }).pipe(Effect.provide(Library.layer({ home: seedHome, routing: { _tag: "None" } })));
+      const { workspace, seeded } = yield* makeSyncJourneyFixture;
       const remote = {
         library_id: "library_story",
         revision_id: "revision_story",

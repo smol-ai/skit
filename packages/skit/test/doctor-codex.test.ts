@@ -1,4 +1,4 @@
-import { skitLayer } from "@smolai/skit-core/platform";
+import { skitLayer } from "../src/platform/index.js";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
@@ -7,7 +7,7 @@ import {
   codexDuplicateFindings,
   readCodexSkills,
   type CodexDoctorInstance,
-} from "../src/library/doctor/codex.js";
+} from "../src/library/internal/doctor/codex.js";
 import { nativeLibraryFixture } from "./helpers/native-library.js";
 
 const instance = (path: string, extra: Partial<CodexDoctorInstance> = {}): CodexDoctorInstance => ({

@@ -1,4 +1,4 @@
-import { SkitContractError } from "@smolai/skit-core/api";
+import { SkitContractError, type AuthorSkitListResponse } from "@smolai/skit-core/api";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 import {
   AuthoringAuthenticatedApi,
@@ -16,6 +16,7 @@ import {
   registryApiFailureMessage,
 } from "./api-client.js";
 import { RegistryHttp } from "./registry-http.js";
+import type { ResolvedAuth } from "./accounts.js";
 import {
   AuthenticationRequired,
   CredentialLacksScope,
@@ -161,3 +162,46 @@ export const deletePrivateAuthorSkit = Effect.fn("Registry.deletePrivateAuthorSk
 
 // Error names are required by inferred consumer declarations; constructors stay private.
 export type { AuthorSkitNotFound, AuthorDeleteResponseError };
+
+class AuthorListPaginationError
+  extends Data.TaggedError("AuthorListPaginationError")<{
+    origin: string;
+  }>
+  implements SkitFailure
+{
+  readonly [FailureTypeId] = FailureTypeId;
+  readonly code = "OPERATION_FAILED" as const;
+  readonly remediation = "Retry; if it persists, report the Registry's inventory to its operator.";
+  get message() {
+    return `Registry ${this.origin} returned non-progressing or excessive inventory pages`;
+  }
+}
+
+export const listAuthorInventory = Effect.fn("Registry.listAuthorInventory")(function* (input: {
+  origin?: string;
+  token?: string;
+}) {
+  const api = yield* authorInventoryApi(input);
+  const origin = api.origin;
+  const skits: Array<AuthorSkitListResponse["skits"][number]> = [];
+  let cursor: string | null = null;
+  const cursors = new Set<string>();
+  let pages = 0;
+  do {
+    const page: AuthorSkitListResponse = yield* api.readPage(cursor);
+    skits.push(...page.skits);
+    cursor = page.next_cursor;
+    pages++;
+    if (cursor && (cursors.has(cursor) || pages >= 1_000 || skits.length > 100_000))
+      return yield* Effect.fail(new AuthorListPaginationError({ origin }));
+    if (cursor) cursors.add(cursor);
+  } while (cursor);
+  return { origin, skits };
+}, Effect.scoped);
+
+export type { AuthorListPaginationError };
+
+/** Adapt the command's captured account without leaking its credential into Author. */
+export const authorInventoryRegistry = (account: ResolvedAuth) => ({
+  list: () => listAuthorInventory(account),
+});

@@ -1,16 +1,22 @@
-import { AuthorWorkspaceAlreadyRegistered } from "./failures.js";
+import {
+  AuthorWorkspaceAlreadyRegistered,
+  AuthorWorkspaceRemovalUnfinished,
+  DirectoryAlreadyInLibrary,
+} from "./failures.js";
 import { ImportContentInvalid } from "../library/index.js";
 import { initSkit as scaffoldSkit } from "./scaffold.js";
 import { validateSkitDirectory } from "../artifact/skit.js";
 import * as Library from "../library/index.js";
-import { openLibraryView } from "../library/session.js";
+import { readLibraryWorkspaceClaims } from "../library/session.js";
 
-import { AuthorWorkspace } from "./workspace.js";
+import {
+  AuthorWorkspace,
+  type Identity,
+  type WorkspaceId,
+  type WorkspaceRoot,
+} from "./workspace.js";
 
 import { Clock, Effect, FileSystem, Option, Path } from "effect";
-
-import { type Identity, type WorkspaceId, type WorkspaceRoot } from "./workspace.js";
-import { AuthorWorkspaceRemovalUnfinished, DirectoryAlreadyInLibrary } from "./failures.js";
 
 import { adoptFrom } from "./library-claims.js";
 
@@ -23,8 +29,7 @@ const checkLibraryClaims = Effect.fn("Author.checkLibraryClaims")(function* (
   root: WorkspaceRoot,
   identity: Option.Option<Identity>,
 ) {
-  const view = yield* openLibraryView(home);
-  const claims = yield* view.readWorkspaceClaims(root);
+  const claims = yield* readLibraryWorkspaceClaims(home, root);
   const sameRoot = claims.atRoot;
   const imported = sameRoot.find((collection) => collection.workspaceId !== undefined);
   const expected = Option.isSome(identity) ? identity.value.workspaceId : imported?.workspaceId;

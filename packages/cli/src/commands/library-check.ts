@@ -1,0 +1,45 @@
+import { skitConfigurationLayer } from "@smolai/skit-core/platform";
+import { Effect, Option } from "effect";
+import { Argument, Command } from "effect/cli";
+import { Renderer } from "../terminal/renderer.js";
+import { handleSourceCommand } from "./handler.js";
+import { CommandMetadata } from "./metadata.js";
+import { checkOutputContracts, checkSubjects } from "../library/check.js";
+import { localFlags } from "./parameters.js";
+import { encodeResult as result } from "./encode-result.js";
+
+const subject = Argument.String("skill-or-collection").pipe(Argument.optional);
+
+export const checkCliCommand = Command.make("check", { subject, ...localFlags }, (input) =>
+  handleSourceCommand(
+    Effect.gen(function* () {
+      const renderer = yield* Renderer;
+      const value = yield* renderer.withStatus(
+        "Checking retained Collections",
+        checkSubjects(Option.getOrUndefined(input.subject), (collection) =>
+          renderer.updateStatus(`Checking ${collection.display_name}`),
+        ),
+      );
+      yield* renderer.result(result("check", checkOutputContracts.check, value));
+    }),
+  ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home)))),
+).pipe(
+  Command.withDescription("Check the Library's stored files and whether their sources changed."),
+  Command.withExamples([{ command: "skit check" }, { command: "skit check owner/tools" }]),
+  Command.annotate(CommandMetadata, {
+    effects: {
+      capabilities: ["filesystem.read", "filesystem.write", "network.read", "process.execute"],
+      subprocesses: [
+        "git clone --mirror",
+        "git fetch --all --prune",
+        "git rev-parse",
+        "git ls-tree",
+        "git cat-file blob",
+        "git log",
+      ],
+    },
+    outputSchemas: [checkOutputContracts.check],
+    exitCodes: [0, 11, 12, 64, 65],
+    interactive: false,
+  }),
+);

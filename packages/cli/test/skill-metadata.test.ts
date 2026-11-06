@@ -12,8 +12,8 @@ type SkillsShLockFileEntry = Parameters<
 >[0]["lockFileEntries"][number];
 import {
   readLibrarySkillMetadata,
-  skillModificationTime,
-  openLibraryView,
+  readSkillPreviews,
+  openSetEnabledSession,
   openLibrarySession,
 } from "@smolai/skit-core/library/session";
 import { inventoryCommand } from "../src/library/inventory/operation.js";
@@ -96,7 +96,13 @@ it.effect(
       };
       yield* home.writeDurable(selected);
       const view = yield* home.owned(
-        Effect.flatMap(SkitConfiguration, (paths) => openLibraryView(paths.skitHome)),
+        Effect.flatMap(SkitConfiguration, (paths) =>
+          openSetEnabledSession(paths.skitHome, {
+            home: paths.skitHome,
+            configHome: paths.skitHome,
+            overrides: {},
+          }).pipe(Effect.map((selection) => selection.view)),
+        ),
       );
       const interaction = yield* makeScriptedInteraction([]);
       yield* home.owned(presentListCommand().pipe(Effect.provide(interaction.layer)));
@@ -166,7 +172,13 @@ it.effect(
       expect((yield* view.readSubjects())[0]?.skills[0]?.revision).toBe("1".repeat(40));
       expect((yield* view.readSkills())[0]?.revision).toBe("1".repeat(40));
       const fresh = yield* home.owned(
-        Effect.flatMap(SkitConfiguration, (paths) => openLibraryView(paths.skitHome)),
+        Effect.flatMap(SkitConfiguration, (paths) =>
+          openSetEnabledSession(paths.skitHome, {
+            home: paths.skitHome,
+            configHome: paths.skitHome,
+            overrides: {},
+          }).pipe(Effect.map((selection) => selection.view)),
+        ),
       );
       expect((yield* fresh.readSkills())[0]?.revision).toBe("2".repeat(40));
       expect(yield* home.durable).toEqual(state);
@@ -212,8 +224,8 @@ it.effect("inventory distinguishes physical copy dates and follows symlink targe
     expect(
       inventory.machine.instances.map((instance) => instance.skill_md_modified_at).sort(),
     ).toEqual(["2026-01-03T00:00:00.000Z", "2026-09-20T00:00:00.000Z"]);
-    expect(yield* skillModificationTime(alias)).toBe("2026-01-03T00:00:00.000Z");
-    expect(yield* skillModificationTime(join(root, "missing"))).toBeNull();
+    expect((yield* readSkillPreviews([alias]))[0]?.modifiedAt).toBe("2026-01-03T00:00:00.000Z");
+    expect((yield* readSkillPreviews([join(root, "missing")]))[0]?.modifiedAt).toBeNull();
     const rendered = renderMachineSkills(inventory.machine);
     expect(rendered).toContain("SKILL.md modified 2026-01-03");
     expect(rendered).toContain("SKILL.md modified 2026-09-20");

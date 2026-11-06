@@ -2,11 +2,10 @@ import { SkitConfiguration } from "@smolai/skit-core/platform";
 import * as Library from "@smolai/skit-core/library";
 import { type Hash } from "@smolai/skit-core/shared";
 import { Effect, Option } from "effect";
-import { openLibraryView } from "@smolai/skit-core/library/session";
+import { reviewLibrarySecurity as readSecurity } from "@smolai/skit-core/library/session";
 
 export const reviewLibrarySecurity = Effect.fn("Library.reviewSecurity")(function* (query: string) {
-  const view = yield* Effect.flatMap(SkitConfiguration, (paths) => openLibraryView(paths.skitHome));
-  return yield* view.securityReview(query);
+  return yield* readSecurity((yield* SkitConfiguration).skitHome, query);
 });
 
 export const acceptLibrarySecurityFinding = Effect.fn("Library.acceptSecurity")(function* (

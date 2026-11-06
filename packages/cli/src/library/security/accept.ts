@@ -1,16 +1,8 @@
-import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import type { Hash } from "@smolai/skit-core/shared";
-import { Effect, Option, Schema } from "effect";
-import { Argument, Command, Flag } from "effect/cli";
-import { handleLibraryCommand } from "../../commands/handler.js";
+import { Effect, Schema } from "effect";
+
 import { FindingFingerprintInvalid } from "./failures.js";
 import { MissingRequirement } from "../../commands/input-failures.js";
-import { CommandMetadata } from "../../commands/metadata.js";
-import { securityOutputContracts } from "./output.js";
-import { localFlags } from "../../commands/parameters.js";
-import { acceptLibrarySecurityFinding } from "./operation.js";
-import { Renderer } from "../../terminal/renderer.js";
-import { encodeResult as result } from "../../commands/encode-result.js";
 
 const FindingFingerprint = Schema.TemplateLiteral([
   "sha256:",
@@ -63,61 +55,3 @@ export const securityAcceptCommand = Effect.fn("CLI.securityAccept")(function* <
     ...(options.expiresAt ? { expiresAt: options.expiresAt } : {}),
   });
 });
-
-const skill = Argument.String("skill");
-const finding = Flag.String("finding").pipe(
-  Flag.withDescription("Accept this exact finding fingerprint."),
-);
-const principal = Flag.String("principal").pipe(
-  Flag.withDescription("Record the Principal granting acceptance."),
-);
-const rationale = Flag.String("rationale").pipe(
-  Flag.withDescription("Record why this finding is accepted."),
-);
-const expiresAt = Flag.String("expires-at").pipe(
-  Flag.withDescription("Expire acceptance at this canonical ISO instant."),
-  Flag.optional,
-);
-
-export const securityAcceptCliCommand = Command.make(
-  "accept",
-  { skill, finding, principal, rationale, expiresAt, ...localFlags },
-  ({ skill, finding, principal, rationale, expiresAt, home }) =>
-    handleLibraryCommand(
-      Effect.gen(function* () {
-        const renderer = yield* Renderer;
-        const value = yield* securityAcceptCommand(
-          {
-            acceptSecurityFindingEffect: (query, input) =>
-              acceptLibrarySecurityFinding(query, input),
-          },
-          {
-            query: skill,
-            fingerprint: finding,
-            principal,
-            rationale,
-            expiresAt: Option.getOrUndefined(expiresAt),
-          },
-        );
-        yield* renderer.result(
-          result("securityAccept", securityOutputContracts.securityAccept, value),
-        );
-      }),
-    ).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(home)))),
-).pipe(
-  Command.withDescription(
-    "Accept one finding for installing one exact Skill version in your Library.",
-  ),
-  Command.withExamples([
-    {
-      command:
-        "skit security accept owner/tools:review --finding sha256:... --principal tim --rationale reviewed",
-    },
-  ]),
-  Command.annotate(CommandMetadata, {
-    effects: { capabilities: ["filesystem.read", "filesystem.write"] },
-    outputSchemas: [securityOutputContracts.securityAccept],
-    exitCodes: [0, 11, 12, 64, 65],
-    interactive: false,
-  }),
-);

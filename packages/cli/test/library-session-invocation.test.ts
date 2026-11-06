@@ -1,5 +1,5 @@
 import { originalTreePath } from "./helpers/original-tree.js";
-import { SkitConfiguration } from "@smolai/skit-core/platform";
+import { SkitConfiguration, skitLayer } from "@smolai/skit-core/platform";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { Effect, FileSystem, Result } from "effect";
@@ -8,7 +8,7 @@ import * as Library from "@smolai/skit-core/library";
 
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { parseDocument } from "yaml";
-import { skitLayer } from "@smolai/skit-core/platform";
+
 import {
   confirmLibraryChange,
   libraryPolicyAfter,
@@ -16,16 +16,17 @@ import {
   proposeLibraryDisable,
   proposeLibraryEnable,
   proposeLibraryInvocation,
+  invocationBriefing,
+  invocationRowSummary,
+  openSetEnabledSession,
 } from "@smolai/skit-core/library/session";
-import { invocationBriefing, invocationRowSummary } from "@smolai/skit-core/library/session";
+
 import {
   initializeLibraryMachine,
   libraryHome,
   importCollectionIn,
   writingTo,
 } from "./helpers/library-home.js";
-
-import { openLibraryView } from "@smolai/skit-core/library/session";
 
 const text = (explicit: boolean) => `---
 name: review
@@ -437,7 +438,13 @@ Tools
           ),
       };
       const view = yield* home.owned(
-        Effect.flatMap(SkitConfiguration, (paths) => openLibraryView(paths.skitHome)),
+        Effect.flatMap(SkitConfiguration, (paths) =>
+          openSetEnabledSession(paths.skitHome, {
+            home: paths.skitHome,
+            configHome: paths.skitHome,
+            overrides: {},
+          }).pipe(Effect.map((selection) => selection.view)),
+        ),
       );
       const read = home
         .owned(view.readSkills())

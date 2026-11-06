@@ -1,8 +1,22 @@
 import { Effect } from "effect";
 
 import { MissingRequirement } from "../commands/input-failures.js";
-import { publish } from "./publish/workflow.js";
+import { publishAuthorWorkspace } from "@smolai/skit-core/author";
+import { authorRegistry } from "../registry/author-sync.js";
 import { Renderer } from "../terminal/renderer.js";
+
+export const publish = Effect.fn("CLI.publishWorkspace")(function* (
+  root: string,
+  version: string,
+  revision: string | undefined,
+  options: { readonly home?: string } = {},
+) {
+  return yield* publishAuthorWorkspace(
+    root,
+    { version, revision },
+    authorRegistry(options.home, root),
+  );
+});
 
 export const publishCommand = Effect.fn("CLI.publish")(function* (options: {
   readonly root?: string;

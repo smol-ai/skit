@@ -382,31 +382,7 @@ export class ScopesInvalid
 
 // -- Publication ------------------------------------------------------------------------------------
 
-export class NoRemoteHome extends Data.TaggedError("NoRemoteHome")<{}> implements SkitFailure {
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "INVALID_ARGUMENT" as const;
-  readonly remediation = "Run `skit author sync --to <namespace/skit>` first.";
-  get message(): string {
-    return "This SKIT has no remote home; run `skit author sync --to ...` first";
-  }
-}
-
-export class PublicationBlocked
-  extends Data.TaggedError("PublicationBlocked")<{
-    reason: "content" | "assessment";
-    detail: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "VALIDATION_FAILED" as const;
-  readonly remediation = "Resolve the reported findings, sync the SKIT, then publish again.";
-  get message(): string {
-    return this.reason === "content"
-      ? `This SKIT cannot be published as it stands:\n${this.detail}`
-      : `Publication is blocked by the current SKIT assessment${this.detail}`;
-  }
-}
+export { NoRemoteHome, PublicationBlocked } from "@smolai/skit-core/author";
 
 export class AuthorSyncRequired
   extends Data.TaggedError("AuthorSyncRequired")<{ commandPath: string }>

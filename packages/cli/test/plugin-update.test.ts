@@ -6,7 +6,7 @@ import { Effect, FileSystem } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
-import { openLibraryView } from "@smolai/skit-core/library/session";
+import { openSetEnabledSession } from "@smolai/skit-core/library/session";
 import { importSource } from "../src/library/source.js";
 import { planUpdates, updateSubjects } from "../src/library/update/operation.js";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
@@ -106,7 +106,11 @@ it.effect(
       const after = yield* load;
       assert.deepStrictEqual(after.collections, before.collections);
       assert.deepStrictEqual(after.enabled, before.enabled);
-      const view = yield* run(openLibraryView(home));
+      const view = yield* run(
+        openSetEnabledSession(home, { home: home, configHome: home, overrides: {} }).pipe(
+          Effect.map((selection) => selection.view),
+        ),
+      );
       const collection = view.placements.find(
         (placement) => placement.collectionId === collectionId && placement.scope.kind === "global",
       );

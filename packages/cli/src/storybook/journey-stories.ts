@@ -1,12 +1,15 @@
+import {
+  importReview,
+  makeEnablePreviewFixture,
+  makeDoctorPreviewFixture,
+} from "../platform/storybook-fixtures.js";
 import { SkitConfiguration, skitConfigurationLayer, skitLayer } from "@smolai/skit-core/platform";
-import { makeMachineId } from "@smolai/skit-core/universal/consumer";
-import { deterministicTreeHash } from "@smolai/skit-core/author";
 import * as Library from "@smolai/skit-core/library";
 
 import { presentDoctorCleanup } from "../library/doctor.js";
 import { syncJourney } from "./sync-journey.js";
 import { join } from "node:path";
-import { ConfigProvider, Effect, FileSystem, Option } from "effect";
+import { ConfigProvider, Effect, Option } from "effect";
 
 import { libraryCommandConfiguration } from "../commands/library-configuration.js";
 import { presentSetEnabled } from "../library/enable.js";
@@ -24,39 +27,9 @@ export interface JourneyStory<A, E, R> {
   readonly finalState: (result: A) => string;
 }
 
-/** Real retained bytes and owner-generated identities, shared by the preview journeys. */
-const importReview = Effect.fn("Storybook.importReview")(function* (root: string) {
-  const fs = yield* FileSystem.FileSystem;
-  const library = yield* Library.Service;
-  const sourcePath = join(root, "review-tools");
-  yield* fs.makeDirectory(sourcePath, { recursive: true });
-  yield* fs.writeFileString(
-    join(sourcePath, "SKILL.md"),
-    "---\nname: review\ndescription: Review code changes.\n---\n# Review\nPreserve the intended behavior.\n",
-  );
-  return yield* library.import.collection({
-    machineId: makeMachineId(),
-    source: { type: "local", path: sourcePath },
-    input: sourcePath,
-    importedAt: "2026-01-01T00:00:00.000Z",
-    skills: [
-      {
-        name: "review",
-        sourcePath,
-        relativePath: ".",
-        currentHash: yield* deterministicTreeHash(sourcePath),
-      },
-    ],
-    lockFileEntries: [],
-  });
-});
-
 const previewEnable = Effect.scoped(
   Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-story-library-" });
-    const codexRoot = `${home}/codex`;
-    yield* fs.makeDirectory(codexRoot);
+    const { home, codexRoot, installedEmpty } = yield* makeEnablePreviewFixture;
     const configuration = yield* libraryCommandConfiguration({
       home: Option.some(home),
       codexRoot: Option.some(codexRoot),
@@ -82,7 +55,7 @@ const previewEnable = Effect.scoped(
         before._tag !== "Present" ||
         after._tag !== "Present" ||
         before.revision !== after.revision ||
-        (yield* fs.readDirectory(codexRoot)).length !== 0
+        !(yield* installedEmpty)
       )
         return yield* Effect.die("The enable preview changed the Library or installed files");
       return yield* Effect.flatMap(SkitConfiguration, (paths) =>
@@ -97,12 +70,15 @@ const previewEnable = Effect.scoped(
 
 const previewDoctorCleanup = Effect.scoped(
   Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-doctor-story-" });
-    const home = join(root, "library");
-    const account = join(root, "account");
-    const skillsRoot = join(account, ".agents", "skills");
-    const path = join(skillsRoot, "review");
+    const {
+      root,
+      home,
+      account,
+      skillsRoot,
+      path,
+      installed: documentExists,
+      document,
+    } = yield* makeDoctorPreviewFixture;
     const configuration = {
       home: account,
       configHome: account,
@@ -127,10 +103,10 @@ const previewDoctorCleanup = Effect.scoped(
         { base: yield* library.read },
       );
       const installed = (yield* library.apply({ _tag: "Apply", plan: plan })).result;
-      if (installed._tag !== "Applied" || !(yield* fs.exists(join(path, "SKILL.md"))))
+      if (installed._tag !== "Applied" || !(yield* documentExists))
         return yield* Effect.die("Expected the review Skill to be installed");
       const before = yield* library.read;
-      const bytes = yield* fs.readFileString(join(path, "SKILL.md"));
+      const bytes = yield* document;
       yield* presentDoctorCleanup(
         [
           {
@@ -161,7 +137,7 @@ const previewDoctorCleanup = Effect.scoped(
         before._tag !== "Present" ||
         after._tag !== "Present" ||
         before.revision !== after.revision ||
-        (yield* fs.readFileString(join(path, "SKILL.md"))) !== bytes
+        (yield* document) !== bytes
       )
         return yield* Effect.die("The cleanup preview changed the Library or installed bytes");
       return `Preview only · ${after.state.enabled.length} Skill remains enabled`;

@@ -1,9 +1,9 @@
-import { skitLayer } from "@smolai/skit-core/platform";
+import { skitLayer, SourceProcess, skitConfigurationLayer } from "../src/platform/index.js";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { Effect, Fiber, FileSystem, Layer, Result, Schedule, Schema } from "effect";
-import { libraryDoctorReport, type LibraryInventory } from "@smolai/skit-core/library/inventory";
-import { SourceProcess } from "@smolai/skit-core/platform";
+import { libraryDoctorReport, type LibraryInventory } from "../src/library/inventory.js";
+
 import { ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
 import { expect, test } from "vitest";
@@ -11,7 +11,7 @@ import {
   makeInstalledSkillId,
   makeSkillId,
   makeSkillVersionId,
-} from "@smolai/skit-core/universal/consumer";
+} from "../src/universal-consumer.js";
 import {
   classifyOpenCodeWarnings,
   type HarnessDoctorCheck,
@@ -19,10 +19,9 @@ import {
   nativeDiscovery,
   inspectNativeDiscovery,
   DoctorReport,
-} from "../src/library/doctor/harnesses.js";
+} from "../src/library/internal/doctor/harnesses.js";
 import { nativeLibraryFixture } from "./helpers/native-library.js";
 
-import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { captureDisk } from "./helpers/disk-snapshot.js";
 
 it.effect.each([false, true])(

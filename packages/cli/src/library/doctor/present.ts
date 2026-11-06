@@ -1,5 +1,5 @@
 import { renderDoctorListingBudget } from "./budget.js";
-import type { DoctorReport } from "./harnesses.js";
+import type { DoctorReport } from "@smolai/skit-core/library/inventory";
 import { dirname } from "node:path";
 import { compactHomePath } from "../../terminal/home-path.js";
 import { harnessLabel } from "@smolai/skit-core/harnesses";

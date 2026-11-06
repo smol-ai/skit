@@ -16,13 +16,7 @@ import {
 
 import { applySetupSelections } from "./helpers/setup-apply.js";
 
-import {
-  type DuplicateScanError,
-  findDuplicates,
-  scanSkillsDirectory,
-  readableSkillsDirectories,
-} from "@smolai/skit-core/library/routing";
-import { codexSkillAliases } from "../src/library/doctor/codex.js";
+import { type DuplicateScanError, findDuplicates } from "@smolai/skit-core/library/routing";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
@@ -181,12 +175,10 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const index = yield* scanSkillsDirectory(
-        readableSkillsDirectories(f.home.inventory, { kind: "global" }),
-      );
-      expect(
-        codexSkillAliases(join(f.source, "SKILL.md"), join(f.source, "SKILL.md"), index),
-      ).toEqual([expect.objectContaining({ path: f.alias, linkTarget: f.source, via: "symlink" })]);
+      const index = yield* findDuplicates(f.home.inventory, { kind: "global" }, ["review"]);
+      expect(index.find((copy) => copy.canonicalPath === f.source)?.aliases).toEqual([
+        expect.objectContaining({ path: f.alias, linkTarget: f.source, via: "symlink" }),
+      ]);
       expect(
         yield* findDuplicates(
           f.home.inventory,

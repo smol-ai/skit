@@ -3,7 +3,9 @@ import { NodeServices } from "@effect/platform-node";
 import { HttpClientError } from "effect/http";
 import { assert, it } from "@effect/vitest";
 import { expect } from "vitest";
-import { authorListCommand, listAuthorSkits, AuthorListIdentityError } from "../src/author/list.js";
+import { authorListCommand } from "../src/author/list.js";
+import { listAuthorSkits, AuthorListIdentityError } from "@smolai/skit-core/author";
+import { listAuthorInventory } from "../src/registry/authoring.js";
 import { SkitContractError } from "@smolai/skit-core/api";
 
 import { renderCommandFailures } from "../src/application.js";
@@ -19,7 +21,9 @@ import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.j
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 
 const listWithTransport = (input: { origin?: string; token?: string }, fetcher: TestHttpHandler) =>
-  listAuthorSkits(input).pipe(Effect.provide(registryHttpLayer(testHttpClientLayer(fetcher))));
+  listAuthorSkits({ list: () => listAuthorInventory(input) }).pipe(
+    Effect.provide(registryHttpLayer(testHttpClientLayer(fetcher))),
+  );
 
 const input = { origin: "https://registry.test", token: "test-token" };
 const item = {

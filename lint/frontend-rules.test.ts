@@ -91,6 +91,21 @@ const a = Effect.gen(function* () { return yield* operation(); });
 });
 
 describe("skit/frontend-one-owner-call", () => {
+  test("does not count pure labels passed to a renderer as owner operations", async () => {
+    expect(
+      await lint(
+        "frontend-one-owner-call",
+        `
+import { Effect } from "effect";
+import { initSkit, skitLocator } from "@smolai/skit-core/author";
+const a = Effect.gen(function* () {
+  yield* renderer.note(skitLocator(remote));
+  yield* initSkit(".");
+});
+`,
+      ),
+    ).toEqual([]);
+  }, 30_000);
   test("counts aliased and namespace owner calls through status/pipe wrappers", async () => {
     expect(
       await lint(
@@ -142,6 +157,19 @@ const a = Effect.gen(function* () { yield* initSkit("."); yield* initSkit("."); 
 });
 
 describe("skit/command-module-exports", () => {
+  test("recognizes command values returned by a local factory", async () => {
+    expect(
+      await lint(
+        "command-module-exports",
+        `
+import { Command } from "effect/cli";
+const build = () => Command.make("x", {}, handler);
+export const command = build();
+export const helper = () => {};
+`,
+      ),
+    ).toEqual([5]);
+  }, 30_000);
   test("rejects helpers, types and re-exports beside an aliased command", async () => {
     expect(
       await lint(

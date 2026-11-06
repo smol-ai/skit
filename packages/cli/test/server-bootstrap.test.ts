@@ -19,7 +19,7 @@ import {
   bootstrapServer,
   originFromWranglerConfig,
   removeBootstrapSecretInvocation,
-} from "../src/registry/commands/bootstrap.js";
+} from "../src/registry/bootstrap.js";
 
 // 32 bytes of 0x01, base64url-encoded without padding.
 const SECRET = `${"AQEB".repeat(10)}AQE`;

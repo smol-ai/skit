@@ -75,3 +75,8 @@ export {
 
 export { captureAuthorWorkspace } from "./operations.js";
 export { backupAuthorWorkspace } from "./backup.js";
+
+export { listAuthorSkits, AuthorListIdentityError } from "./list.js";
+export { deleteAuthorSkit } from "./delete.js";
+export { publishAuthorWorkspace } from "./publish.js";
+export { NoRemoteHome, PublicationBlocked } from "./failures.js";

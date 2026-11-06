@@ -86,3 +86,22 @@ export const readLibrarySkillMetadata = Effect.fn("Library.readSkillMetadata")(f
   }
   return metadata;
 });
+
+/** Metadata and lazy content reads for copies already selected by an owner-backed review. */
+export const readSkillPreviews = Effect.fn("Library.readSkillPreviews")(function* (
+  paths: readonly string[],
+) {
+  const fs = yield* FileSystem.FileSystem;
+  return yield* Effect.forEach(paths, (path) =>
+    Effect.gen(function* () {
+      return {
+        path,
+        documentPath: join(path, "SKILL.md"),
+        modifiedAt: yield* skillModificationTime(path),
+        content: fs
+          .readFileString(join(path, "SKILL.md"))
+          .pipe(Effect.orElseSucceed(() => undefined)),
+      };
+    }),
+  );
+});

@@ -13,9 +13,7 @@ import { dirname } from "node:path";
 import {
   CredentialsUnusable,
   NoStoredCredentials,
-  RegistryAliasNotFound,
   RegistryOriginInvalid,
-  RegistrySelectionAmbiguous,
   RegistrySelectionConflict,
   RegistrySelectionRequiresRegistrySource,
   RegistryUnreachable,
@@ -81,13 +79,6 @@ const accountEnvironment = Effect.gen(function* () {
 const readAccounts = Effect.fn("Auth.readAccounts")(function* (home?: string) {
   return new RegistryAccounts(yield* readConfig(home), yield* accountEnvironment);
 });
-
-export type RegistryConfigurationError =
-  | Config.ConfigError
-  | CredentialsUnusable
-  | RegistryOriginInvalid
-  | RegistryAliasNotFound
-  | RegistrySelectionAmbiguous;
 
 export const authPath = Effect.fn("Auth.path")(function* (home?: string) {
   return (yield* configurationForHome(home)).authPath;
@@ -221,11 +212,7 @@ export const resolveAuth = Effect.fnUntraced(function* (
   registry?: string,
   durableOrigin?: string,
   command?: string,
-): Effect.fn.Return<
-  ResolvedAuth,
-  RegistryConfigurationError,
-  FileSystem.FileSystem | SkitConfiguration | ChildProcessSpawner.ChildProcessSpawner
-> {
+) {
   const accounts = yield* readAccounts(home);
   return yield* accounts.credential(
     yield* accounts.select(registry, "ambient", { durableOrigin, command }),
@@ -660,3 +647,17 @@ export const logoutEffect = Effect.fn("Auth.logout")(
   },
   (effect, home, _selectedOrigin) => withConfigurationWriter(home, effect),
 );
+
+/** A concrete origin never borrows a different Registry's ambient credentials. */
+export const registryCredentials = Effect.fn("Registry.credentials")(function* (
+  options: {
+    readonly home?: string;
+    readonly registry?: string;
+    readonly origin?: string;
+    readonly command?: string;
+  } = {},
+) {
+  return options.origin === undefined
+    ? yield* resolveAuth(options.home, options.registry, undefined, options.command)
+    : yield* resolveAuthForOrigin(options.origin, options.home);
+});

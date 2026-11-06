@@ -60,7 +60,7 @@ function imports() {
 
 /** TypeScript resolves aliases, re-exports and inheritance; spelling is not error evidence. */
 let cliProgram;
-function failureUnions(context) {
+function cliTypes(context) {
   const filename = context.filename;
   // Oxlint visits many files in one process. Resolve their shared graph only once. Refresh
   // if a host reuses the plugin for edited source (e.g. a subsequent editor lint pass).
@@ -111,6 +111,11 @@ function failureUnions(context) {
   const program = cliProgram;
   const checker = program.getTypeChecker();
   const source = program.getSourceFile(filename);
+  return { checker, source };
+}
+
+function failureUnions(context) {
+  const { checker, source } = cliTypes(context);
   const error = checker.resolveName("Error", source, ts.SymbolFlags.Type, false);
   const errorType = error && checker.getDeclaredTypeOfSymbol(error);
   const reports = [];
@@ -167,6 +172,44 @@ function failureUnions(context) {
   };
   visit(source);
   return reports;
+}
+
+/** Pure labels/choices exported beside owner operations do not perform owner work. */
+function ownerEffectCalls(context, calls) {
+  const { checker, source } = cliTypes(context);
+  const starts = new Set(calls.map((call) => call.range[0]));
+  let count = 0;
+  const visit = (node) => {
+    if (ts.isCallExpression(node) && starts.has(node.getStart(source))) {
+      const signature = checker.getResolvedSignature(node);
+      const result = signature && checker.getReturnTypeOfSignature(signature);
+      if (
+        !result ||
+        result.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown) ||
+        result.getProperty("~effect/Effect")
+      )
+        count++;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return count;
+}
+
+function commandExport(context, exports) {
+  const { checker, source } = cliTypes(context);
+  const values = new Map(
+    exports.filter((item) => item.value).map((item) => [item.value.range[0], item]),
+  );
+  let command;
+  const visit = (node) => {
+    const item = values.get(node.getStart(source));
+    if (item && checker.getTypeAtLocation(node).getProperty("~effect/cli/Command"))
+      command ??= item;
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return command;
 }
 
 export const frontendRules = {
@@ -271,7 +314,7 @@ export const frontendRules = {
           const callee = node.callee?.type === "CallExpression" ? node.callee.callee : node.callee;
           if (!["fn", "gen"].some((name) => effect.is(callee, name))) return;
           for (const callback of node.arguments.filter(isFunction)) {
-            let calls = 0;
+            const calls = [];
             walkBody(callback.body, (child) => {
               if (child.type !== "YieldExpression" || !child.delegate) return;
               walkBody(child.argument, (call) => {
@@ -279,10 +322,11 @@ export const frontendRules = {
                   call.type === "CallExpression" &&
                   ownerEntries.has(bindings.path(call.callee)?.[0])
                 )
-                  calls++;
+                  calls.push(call);
               });
             });
-            if (calls > 1) context.report({ node: callback, messageId: "forbidden" });
+            if (calls.length > 1 && ownerEffectCalls(context, calls) > 1)
+              context.report({ node: callback, messageId: "forbidden" });
           }
         },
       };
@@ -358,7 +402,7 @@ export const frontendRules = {
             for (const specifier of statement.specifiers)
               exports.push({
                 node: specifier,
-                value: statement.source ? undefined : specifier.local,
+                value: specifier.local,
               });
           }
           const isCommand = (value, seen = new Set()) => {
@@ -377,7 +421,9 @@ export const frontendRules = {
             });
             return found;
           };
-          const command = exports.find((item) => isCommand(item.value));
+          const command =
+            exports.find((item) => isCommand(item.value)) ??
+            (exports.length > 1 ? commandExport(context, exports) : undefined);
           if (command)
             for (const item of exports)
               if (item !== command) context.report({ node: item.node, messageId: "forbidden" });

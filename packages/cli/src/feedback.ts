@@ -5,12 +5,8 @@ import { CommandMetadata, credentialStoreReadSubprocesses } from "./commands/met
 import { outputContracts } from "./commands/output-contracts.js";
 import { homeFlag, jsonFlag, optionalString } from "./commands/parameters.js";
 import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
-import {
-  feedbackInput,
-  feedbackOrigin,
-  feedbackSigningToken,
-  sendFeedback,
-} from "./feedback/send.js";
+import { feedbackInput } from "./feedback/send.js";
+import { submitFeedback } from "./registry/feedback.js";
 import { Renderer } from "./terminal/renderer.js";
 import { registryHttpLayer } from "./registry/registry-http.js";
 import { result } from "./commands/result.js";
@@ -56,19 +52,8 @@ export const feedbackSendCliCommand = Command.make(
             model: Option.getOrUndefined(options.model),
             email: Option.getOrUndefined(options.email),
           });
-          const recipient = yield* feedbackOrigin;
-          const token = options.signedIn
-            ? yield* feedbackSigningToken(recipient, skitHome)
-            : undefined;
-          const sent = yield* sendFeedback(recipient, input, token);
-          yield* renderer.result(
-            result("feedbackSend", {
-              ...sent,
-              recipient,
-              signedIn: options.signedIn,
-              ...(input.email === undefined ? {} : { email: input.email }),
-            }),
-          );
+          const sent = yield* submitFeedback(input, { signedIn: options.signedIn, home: skitHome });
+          yield* renderer.result(result("feedbackSend", sent));
         }).pipe(Effect.provide(registryHttpLayer())),
       );
     }).pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(options.home)))),

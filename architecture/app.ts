@@ -74,7 +74,7 @@ export const owners = {
       "library/security.ts (two 3-line pass-throughs)",
       "library-application/{update,update-installed-skills,set-enabled}.ts pass-throughs",
       "raw librarySubjects/matchingLibrarySubjects exports (removed; subject resolution stays private to Library)",
-      "raw libraryView(state, originalsPath) export (removed; openLibraryView opens owner-backed snapshots; counterfactual tests live in core)",
+      "raw libraryView/openLibraryView exports (removed; intent queries and selection sessions expose owner-backed snapshots; counterfactual tests live in core)",
       "calculateSetEnabled legacy text/option compatibility (removed; public selection.plan owns subject resolution; the rest of set-enabled-request.ts stays)",
       "public recovery restore/move callbacks (compatibility exports; setup undo now uses Library.plan/apply)",
     ],

@@ -1,36 +1,36 @@
-import { usageCliCommand } from "../library/usage.js";
+import { usageCliCommand } from "./library-usage.js";
 import { Command } from "effect/cli";
-import { checkCliCommand } from "../library/check.js";
+import { checkCliCommand } from "./library-check.js";
 import { serverBootstrapCliCommand } from "../registry/commands/bootstrap.js";
-import { authLogoutCliCommand } from "../registry/commands/logout.js";
-import { authLoginCliCommand } from "../registry/commands/login.js";
+import { authLogoutCliCommand } from "../registry/commands/auth-logout.js";
+import { authLoginCliCommand } from "../registry/commands/auth-login.js";
 import { authStatusCliCommand } from "../registry/commands/status.js";
-import { listCliCommand } from "../library/list.js";
-import { addCliCommand } from "../library/add.js";
-import { removeCliCommand } from "../library/remove.js";
-import { updateCliCommand } from "../library/update.js";
-import { librarySyncCliCommand } from "../library/sync.js";
-import { disableCliCommand, enableCliCommand } from "../library/enable.js";
-import { securityAcceptCliCommand, securityReviewCliCommand } from "../library/security.js";
-import { setupCliCommand, librarySetupUndoCliCommand } from "../library/setup.js";
-import { doctorCliCommand } from "../library/doctor.js";
-import { inventoryCliCommand } from "../library/inventory.js";
-import {
-  repositoryForgetCliCommand,
-  repositoryIgnoreCliCommand,
-  repositoryListCliCommand,
-  repositoryWatchCliCommand,
-} from "../library/repository.js";
-import { libraryRecoveryCliCommand } from "../library/recovery.js";
-import { libraryHistoryCliCommand } from "../library/history.js";
+import { listCliCommand } from "./library-list.js";
+import { addCliCommand } from "./library-add.js";
+import { removeCliCommand } from "./library-remove.js";
+import { updateCliCommand } from "./library-update.js";
+import { librarySyncCliCommand } from "./library-sync.js";
+import { disableCliCommand } from "./library-disable.js";
+import { enableCliCommand } from "./library-enable.js";
+
+import { securityAcceptCliCommand } from "./library-security-accept.js";
+import { securityReviewCliCommand } from "./library-security-review.js";
+import { librarySetupUndoCliCommand } from "./library-setup-undo.js";
+import { setupCliCommand } from "./library-setup.js";
+import { doctorCliCommand } from "./library-doctor.js";
+import { inventoryCliCommand } from "./library-inventory.js";
+import { repositoryForgetCliCommand } from "./library-repository-forget.js";
+import { repositoryIgnoreCliCommand } from "./library-repository-ignore.js";
+import { repositoryWatchCliCommand } from "./library-repository-watch.js";
+import { repositoryListCliCommand } from "./library-repository-list.js";
+import { libraryRecoveryCliCommand } from "./library-recovery.js";
+import { libraryHistoryCliCommand } from "./library-history.js";
 import { versionCliCommand } from "./version.js";
 import { feedbackSendCliCommand } from "../feedback.js";
-import {
-  registryAddCliCommand,
-  registryDefaultCliCommand,
-  registryListCliCommand,
-  registryRemoveCliCommand,
-} from "../registry/commands/remotes.js";
+import { registryAddCliCommand } from "../registry/commands/registry-add.js";
+import { registryDefaultCliCommand } from "../registry/commands/registry-default.js";
+import { registryListCliCommand } from "../registry/commands/registry-list.js";
+import { registryRemoveCliCommand } from "../registry/commands/registry-remove.js";
 import { JsonOutputFlag } from "./parameters.js";
 
 const authCommand = Command.make("auth").pipe(

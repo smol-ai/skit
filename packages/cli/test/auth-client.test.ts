@@ -1,22 +1,23 @@
-import { testPlatformLayer } from "./helpers/platform.js";
-import { join } from "node:path";
-import { describe, expect } from "vitest";
-import { it } from "@effect/vitest";
-import { ConfigProvider, Effect, FileSystem, Layer, Schema } from "effect";
-import { HttpClientResponse } from "effect/http";
 import {
+  registryCredentials,
   addRegistryRemote,
   registryStatus,
   loginEffect,
   logoutEffect,
   resolveLoginTarget,
 } from "../src/registry/auth.js";
+import { testPlatformLayer } from "./helpers/platform.js";
+import { join } from "node:path";
+import { describe, expect } from "vitest";
+import { it } from "@effect/vitest";
+import { ConfigProvider, Effect, FileSystem, Layer, Schema } from "effect";
+import { HttpClientResponse } from "effect/http";
+
 import { cliBuild } from "../src/commands/build-info.js";
 import { RegistryHttp, registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 import { authLoginCommand } from "../src/registry/commands/login.js";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
-import { Registry } from "../src/registry/index.js";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 
 /**
@@ -96,7 +97,7 @@ describe("saved login reuse", () => {
       });
       expect(yield* interaction.prompts).toEqual([]);
       expect(observed).toEqual(["GET"]);
-      const access = yield* Registry.credentials({ home, command: "skit sync" });
+      const access = yield* registryCredentials({ home, command: "skit sync" });
       expect(access.token).toBe("saved-test-token");
     }).pipe(Effect.provide(testPlatformLayer)),
   );
@@ -198,7 +199,7 @@ describe("saved login reuse", () => {
         "text",
         "password",
       ]);
-      expect((yield* Registry.credentials({ home })).token).toBe("skit_pat_secret_one");
+      expect((yield* registryCredentials({ home })).token).toBe("skit_pat_secret_one");
     }).pipe(Effect.provide(testPlatformLayer)),
   );
 });
@@ -369,7 +370,7 @@ describe("CLI authentication journey", () => {
           defaultRegistry: "default",
           registryAliases: { default: "https://skit.example" },
         });
-        expect(yield* Registry.credentials({ home })).toMatchObject({
+        expect(yield* registryCredentials({ home })).toMatchObject({
           origin: "https://skit.example",
           token: "skit_pat_secret_one",
           tokenId: "pat_one",
@@ -410,7 +411,7 @@ describe("CLI authentication journey", () => {
       );
 
       expect(result).not.toHaveProperty("expiresAt");
-      expect(yield* Registry.credentials({ home })).toMatchObject({
+      expect(yield* registryCredentials({ home })).toMatchObject({
         source: "stored",
         expiresAt: undefined,
       });
@@ -435,11 +436,11 @@ describe("CLI authentication journey", () => {
           server,
         );
 
-      expect(yield* Registry.credentials({ home })).toMatchObject({
+      expect(yield* registryCredentials({ home })).toMatchObject({
         origin: "https://one.example",
         token: "skit_pat_secret_one",
       });
-      expect(yield* Registry.credentials({ origin: "https://one.example", home })).toMatchObject({
+      expect(yield* registryCredentials({ origin: "https://one.example", home })).toMatchObject({
         origin: "https://one.example",
         token: "skit_pat_secret_one",
         source: "stored",
@@ -472,7 +473,7 @@ describe("CLI authentication journey", () => {
       expect(new Headers(requests[0].init?.headers).get("authorization")).toBe(
         "Bearer skit_pat_secret_one",
       );
-      expect(yield* Registry.credentials({ home })).toMatchObject({
+      expect(yield* registryCredentials({ home })).toMatchObject({
         source: "none",
         token: undefined,
       });
@@ -506,7 +507,7 @@ describe("CLI authentication journey", () => {
       );
       expect(failure.message).toContain("Sign out failed");
       expect(requests.map(({ url }) => new URL(url).pathname)).toContain("/api/tokens/pat_one");
-      expect(yield* Registry.credentials({ home })).toMatchObject({ source: "none" });
+      expect(yield* registryCredentials({ home })).toMatchObject({ source: "none" });
     }).pipe(Effect.provide(testPlatformLayer)),
   );
 
@@ -551,7 +552,7 @@ describe("CLI authentication journey", () => {
       yield* login(credentials(["library:sync"]), server);
       yield* login(credentials(["library:sync", "authoring:write"]), server);
 
-      expect(yield* Registry.credentials({ home })).toMatchObject({
+      expect(yield* registryCredentials({ home })).toMatchObject({
         tokenId: "pat_two",
         token: "skit_pat_secret_two",
         scopes: ["library:sync", "authoring:write"],
@@ -590,7 +591,7 @@ describe("CLI authentication journey", () => {
       ).pipe(Effect.ensuring(fs.chmod(home, 0o700).pipe(Effect.orDie)));
       expect(exit._tag).toBe("Failure");
 
-      expect(yield* Registry.credentials({ home })).toMatchObject({ tokenId: "pat_one" });
+      expect(yield* registryCredentials({ home })).toMatchObject({ tokenId: "pat_one" });
       const revoked = requests
         .filter(({ init }) => init?.method === "DELETE")
         .map(({ url }) => new URL(url).pathname);
@@ -621,7 +622,7 @@ describe("CLI authentication journey", () => {
       const result = yield* login({ ...input, scopes: [...input.scopes] }, server);
 
       expect(result.warning).toMatch(/pat_one.*may still be live/);
-      expect(yield* Registry.credentials({ home })).toMatchObject({ tokenId: "pat_two" });
+      expect(yield* registryCredentials({ home })).toMatchObject({ tokenId: "pat_two" });
     }).pipe(Effect.provide(testPlatformLayer)),
   );
 
@@ -652,7 +653,7 @@ describe("CLI authentication journey", () => {
       );
 
       yield* logout(server, home, "https://one.example");
-      expect(yield* Registry.credentials({ home })).toMatchObject({
+      expect(yield* registryCredentials({ home })).toMatchObject({
         origin: "https://one.example",
         token: undefined,
       });
@@ -674,7 +675,7 @@ describe("CLI authentication journey", () => {
         successfulServer(requests),
       );
       expect(
-        yield* Registry.credentials({ home }).pipe(withEnvironment(environmentCredential)),
+        yield* registryCredentials({ home }).pipe(withEnvironment(environmentCredential)),
       ).toMatchObject({
         origin: "https://environment.example",
         token: "skit_pat_environment",
@@ -705,7 +706,7 @@ describe("CLI authentication journey", () => {
         }),
       );
 
-      expect(yield* Effect.flip(Registry.credentials({ home }))).toMatchObject({
+      expect(yield* Effect.flip(registryCredentials({ home }))).toMatchObject({
         _tag: "RegistrySelectionAmbiguous",
         origins: ["https://one.example", "https://two.example"],
       });
@@ -770,7 +771,7 @@ describe("CLI authentication journey", () => {
       const fs = yield* FileSystem.FileSystem;
       yield* fs.writeFileString(join(home, "auth.json"), "{");
       expect(
-        yield* Registry.credentials({ origin: "https://environment.example", home }).pipe(
+        yield* registryCredentials({ origin: "https://environment.example", home }).pipe(
           withEnvironment(environmentCredential),
         ),
       ).toMatchObject({
@@ -796,7 +797,7 @@ describe("CLI authentication journey", () => {
         successfulServer(requests),
       );
       expect(
-        yield* Registry.credentials({ home }).pipe(
+        yield* registryCredentials({ home }).pipe(
           withEnvironment({ SKIT_SERVER_URL: "https://stored.example" }),
         ),
       ).toMatchObject({

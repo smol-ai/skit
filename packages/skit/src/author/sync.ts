@@ -17,7 +17,7 @@ import type { AuthorVisibility, AuthorRemoteHome } from "./remote.js";
 import type { AuthorSyncResult } from "./sync-result.js";
 import { authorDecider, authorTree } from "./sync-policy.js";
 import { adoptFrom } from "./library-claims.js";
-import { openLibraryView } from "../library/session.js";
+import { readLibraryWorkspaceClaims } from "../library/session.js";
 import { conflictKind } from "./merge/files.js";
 import * as History from "../history/history.js";
 import * as Sync from "../sync/sync.js";
@@ -50,7 +50,7 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
     readonly to?: string;
     readonly visibility?: AuthorVisibility;
   },
-  registryAccess: AuthorRegistry<E, R, P>,
+  registryAccess: Pick<AuthorRegistry<E, R, P>, "origin" | "connect">,
 ) {
   const workspaces = yield* AuthorWorkspace;
   const history = yield* AuthorHistory;
@@ -145,8 +145,9 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
           const workspaceId = Option.isSome(identity)
             ? identity.value.workspaceId
             : yield* Effect.gen(function* () {
-                const view = yield* openLibraryView(options.home);
-                const adopt = adoptFrom((yield* view.readWorkspaceClaims(root)).atRoot);
+                const adopt = adoptFrom(
+                  (yield* readLibraryWorkspaceClaims(options.home, root)).atRoot,
+                );
                 const created = yield* lease.register({
                   from: identity,
                   to: "IdentityOnly",

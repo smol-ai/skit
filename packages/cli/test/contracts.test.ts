@@ -12,7 +12,7 @@ import { encodeResult } from "../src/commands/encode-result.js";
 import { enableOutputContracts } from "../src/library/enable.js";
 import { renderContract } from "../src/commands/output-presenters.js";
 import { defaultTerminalEnvironment, renderResultFrame } from "../src/commands/output-frame.js";
-import { writeCommandContractArtifacts } from "../src/commands/contract-writer.js";
+import { writeCommandContractArtifacts } from "../src/platform/command-contracts.js";
 
 const contractsRoot = resolve(import.meta.dirname, "../contracts");
 

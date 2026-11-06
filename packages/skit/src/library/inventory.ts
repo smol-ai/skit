@@ -1,3 +1,5 @@
+import { runSetup } from "./setup.js";
+import { skillModificationTime } from "./internal/session/skill-metadata.js";
 /** Inventory refresh and read reports belong to Library; frontends provide roots and rendering. */
 import { Effect } from "effect";
 import * as Library from "./library.js";
@@ -30,3 +32,40 @@ export const refreshInventory = Effect.fn("Library.refreshInventory")(function* 
 });
 
 export { inspectOwnershipMarker } from "../installed-skills/marker-inspection.js";
+
+/** One owner assembles the saved inventory and this machine's discovered copy facts. */
+export const refreshMachineInventory = Effect.fn("Library.refreshMachineInventory")(function* (
+  options: InventoryRootOptions & { readonly libraryHome: string },
+) {
+  const library = yield* refreshInventory(options);
+  const scan = yield* runSetup({
+    libraryHome: options.libraryHome,
+    inventory: options,
+    persistRoots: false,
+    scanDecidedRepositories: true,
+  });
+  return {
+    ...library,
+    machine: {
+      repositoryRoots: scan.machineConfig.repositoryRoots,
+      repositoryDecisions: scan.machineConfig.repositoryDecisions,
+      scan: scan.scan,
+      instances: yield* Effect.forEach(
+        scan.instances,
+        (instance) =>
+          skillModificationTime(instance.path).pipe(
+            Effect.map((modified) => ({ ...instance, skill_md_modified_at: modified })),
+          ),
+        { concurrency: 8 },
+      ),
+      brokenLinks: scan.brokenLinks,
+      suppressed: scan.suppressed,
+    },
+  };
+});
+
+export {
+  DoctorReport,
+  HarnessDoctorCheck,
+  inspectNativeDiscovery,
+} from "./internal/doctor/harnesses.js";

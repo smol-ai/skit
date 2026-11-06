@@ -3,7 +3,7 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { openLibraryView } from "@smolai/skit-core/library/session";
+import { openSetEnabledSession } from "@smolai/skit-core/library/session";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import * as Library from "@smolai/skit-core/library";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
@@ -73,7 +73,11 @@ const boundRawReview = Effect.gen(function* () {
     const row = state.installed_skills.find((item) => item.destination === "agents");
     assert.ok(row);
     const skill = state.skills[0];
-    const view = yield* library.owned(openLibraryView(home));
+    const view = yield* library.owned(
+      openSetEnabledSession(home, { home: home, configHome: home, overrides: {} }).pipe(
+        Effect.map((selection) => selection.view),
+      ),
+    );
     return {
       row,
       selected:
@@ -127,7 +131,13 @@ it.effect("heals an untouched installed skill already recorded as conflicted", (
     yield* observe("second verbatim Skill\n");
     const state = yield* library.durable;
     assert.ok(state);
-    const view = yield* library.owned(openLibraryView(library.home));
+    const view = yield* library.owned(
+      openSetEnabledSession(library.home, {
+        home: library.home,
+        configHome: library.home,
+        overrides: {},
+      }).pipe(Effect.map((selection) => selection.view)),
+    );
     const selected = view.collections
       .flatMap((collection) => collection.members)
       .find((member) => member.id === state.skills[0]?.skill_id)?.versionId;

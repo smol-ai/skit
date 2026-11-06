@@ -1,4 +1,4 @@
-import { Registry } from "../src/registry/index.js";
+import { registryCredentials } from "../src/registry/auth.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 // The two CLI readers of JSON this process did not write.
 //
@@ -19,7 +19,7 @@ const withAuth = Effect.fn("withAuth")(function* (config: string) {
   const fs = yield* FileSystem.FileSystem;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-auth-" });
   yield* fs.writeFileString(join(home, "auth.json"), config);
-  return yield* Effect.exit(Registry.credentials({ home }));
+  return yield* Effect.exit(registryCredentials({ home }));
 });
 
 const withRemote = Effect.fn("withRemote")(function* (document: string) {

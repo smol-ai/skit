@@ -1,4 +1,6 @@
 import { Registry } from "./index.js";
+import { listAuthorInventory, deletePrivateAuthorSkit } from "./authoring.js";
+import { publishRelease } from "./publication.js";
 import {
   AuthoringAuthenticatedApi,
   CurrentMovedResponse,
@@ -9,7 +11,7 @@ import type { AuthorRemoteHome, AuthorVisibility } from "@smolai/skit-core/autho
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 import { Moved, type Remote } from "@smolai/skit-core/sync";
 import { SkitContractError } from "@smolai/skit-core/api";
-import { Data, Effect, Option, Result, Schema, Stream } from "effect";
+import { Data, Effect, Option, Result, Schema, Stream, Scope } from "effect";
 import { HttpApiClient } from "effect/http-api";
 import {
   authenticatedApiMiddleware,
@@ -167,7 +169,40 @@ export const authorSyncApi = Effect.fn("Registry.authorSyncApi")(function* (inpu
 });
 
 /** Transport composition for Author; credentials are selected only for the named Registry. */
-export const authorRegistry = (home: string) => ({
+export const authorRegistry = (home?: string, root = ".") => ({
+  list: Effect.fn("Registry.listAuthor")(function* () {
+    return yield* listAuthorInventory(yield* Registry.credentials({ home }));
+  }),
+  delete: Effect.fn("Registry.deleteAuthor")(function* (
+    remote: AuthorRemoteHome,
+    options: { readonly dryRun?: boolean },
+  ) {
+    const credentials = yield* Registry.credentials({ origin: remote.origin, home });
+    return yield* deletePrivateAuthorSkit(remote, { token: credentials.token, ...options });
+  }, Effect.scoped),
+  publish: Effect.fn("Registry.publishAuthor")(function* (remote: AuthorRemoteHome) {
+    const credentials = yield* Registry.credentials({ origin: remote.origin, home });
+    if (!credentials.token)
+      return yield* new AuthenticationRequired({
+        origin: remote.origin,
+        scopes: "library:sync,authoring:write,publication:write",
+      });
+    const token = credentials.token;
+    const commandPath = /^[A-Za-z0-9_./-]+$/.test(root)
+      ? root
+      : `'${root.replaceAll("'", `'\\''`)}'`;
+    const registry = yield* RegistryHttp;
+    const scope = yield* Scope.Scope;
+    return (input: {
+      readonly version: string;
+      readonly revision?: string;
+      readonly archive: Uint8Array;
+    }) =>
+      publishRelease({ ...input, remote, token, commandPath }).pipe(
+        Effect.provideService(RegistryHttp, registry),
+        Effect.provideService(Scope.Scope, scope),
+      );
+  }),
   origin: Registry.credentials({ home }).pipe(Effect.map(({ origin }) => origin)),
   connect: Effect.fn("Registry.connectAuthor")(function* (input: {
     readonly remote: AuthorRemoteHome;

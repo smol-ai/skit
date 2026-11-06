@@ -1,4 +1,4 @@
-import { Registry } from "../src/registry/index.js";
+import { registryCredentials, readConfig } from "../src/registry/auth.js";
 import { ChildProcessSpawner } from "effect/process";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { testPlatformLayer } from "./helpers/platform.js";
@@ -24,8 +24,6 @@ type ReadError =
   | PlatformError
   | CredentialsUnusable
   | Config.ConfigError;
-
-import { readConfig } from "../src/registry/auth.js";
 
 /** The workspace read, with only skit.remote.json present: every other workspace file is absent. */
 const remote = Effect.gen(function* () {
@@ -142,7 +140,7 @@ it.effect.each(["remote", "config"] as const)(
 
 it.effect("origin parsing fails in the named Registry channel", () =>
   Effect.gen(function* () {
-    const exit = yield* Registry.credentials({ origin: "not a URL" }).pipe(
+    const exit = yield* registryCredentials({ origin: "not a URL" }).pipe(
       Effect.provide(testPlatformLayer),
       Effect.exit,
     );

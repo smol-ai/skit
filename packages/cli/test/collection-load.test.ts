@@ -12,7 +12,7 @@ import {
   descriptionLoadMessage,
   largeCollectionWarning,
 } from "../src/library/presentation/description-size.js";
-import { openLibraryView } from "@smolai/skit-core/library/session";
+import { openSetEnabledSession } from "@smolai/skit-core/library/session";
 import {
   initializeLibraryMachine,
   libraryHome,
@@ -85,7 +85,13 @@ effectIt.effect(
         "2026-10-13T00:00:00.000Z",
       );
       const view = yield* home.owned(
-        Effect.flatMap(SkitConfiguration, (paths) => openLibraryView(paths.skitHome)),
+        Effect.flatMap(SkitConfiguration, (paths) =>
+          openSetEnabledSession(paths.skitHome, {
+            home: paths.skitHome,
+            configHome: paths.skitHome,
+            overrides: {},
+          }).pipe(Effect.map((selection) => selection.view)),
+        ),
       );
       expect(yield* view.descriptionLoad({ collection: first.collection.collection_id })).toEqual({
         skills: 1,
