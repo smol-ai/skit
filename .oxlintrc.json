@@ -6,6 +6,10 @@
   "rules": {
     "oxc/no-barrel-file": "error",
     "skit/feature-entry": "error",
+    "skit/frontend-no-resources": "error",
+    "skit/frontend-one-owner-call": "error",
+    "skit/no-failure-unions": "error",
+    "skit/command-module-exports": "error",
     "skit/no-record-any": "error",
     "skit/no-record-unknown": "error",
     "skit/library-contract-complete": "error",

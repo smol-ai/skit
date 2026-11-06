@@ -123,6 +123,8 @@ export const owners = [
       "backUpInstalledSkill",
       "commitInstalledSkill",
       "stageInstalledSkill",
+      "openLibraryView",
+      "skillModificationTime",
     ],
   },
   {
@@ -150,13 +152,26 @@ export const owners = [
     ],
     testOwner: "packages/cli/test/",
     sources: ["packages/cli/src/registry/"],
+    objects: ["Registry"],
     private: [
+      "credentials",
       "resolveAuth",
       "resolveAuthForOrigin",
       "readStoredToken",
       "writeStoredToken",
       "removeStoredToken",
     ],
+  },
+  {
+    name: "InstalledSkills scan facts",
+    owner: [
+      "packages/skit/src/installed-skills/",
+      "packages/skit/src/library/",
+      "packages/skit/src/auditing/",
+      "packages/skit/src/harnesses/",
+    ],
+    testOwner: "packages/skit/test/",
+    private: ["scanSkillsDirectory", "readableSkillsDirectories"],
   },
   {
     // Author intent operations own the lifecycle; leases and checkpoint writes stay internal.

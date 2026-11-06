@@ -55,6 +55,7 @@ export const owners = {
       "home-lock contention is HomeBusy across all home owners; old recorded LibraryBusy failures decode privately",
       "operation record is durable before the first folder move (setup-recovery-refactor.md:26)",
       "Setup intent carries prior/expected-after evidence in the same state.json write (setup-recovery-refactor.md:136-138)",
+      "openLibraryView and skillModificationTime are private Library facts; frontends consume owner reports and selection sessions",
     ],
     removes: [
       "LibraryStore service → private functions inside Library (tests that counted saves through it are rewritten)",
@@ -87,8 +88,9 @@ export const owners = {
       "<root>/.skit-backups/**",
       "<root>/.skit-stage-*, .skit-write-check-*",
     ],
-    ops: ["facts (any caller)", "operations (Library only)"],
+    ops: ["reports (any caller)", "operations (Library only)"],
     invariants: [
+      "scanSkillsDirectory and readableSkillsDirectories stay inside InstalledSkills, Library, Audit and Harness owners; frontends request reports",
       "filesystem adapters consume copy/identity facts, never LibraryState or Library owner/policy APIs",
       "retained-version selection and recovery reproducibility belong to Library's installation module",
     ],

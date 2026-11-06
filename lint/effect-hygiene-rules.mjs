@@ -1,5 +1,5 @@
 /** Recognize Effect imports, including named aliases and effect/Effect namespaces. */
-function effectImports() {
+export function effectImports() {
   const namespaces = new Set(["Effect"]);
   const members = new Map();
   return {
@@ -28,7 +28,7 @@ function effectImports() {
   };
 }
 
-function contains(node, predicate) {
+export function contains(node, predicate) {
   if (!node || typeof node !== "object") return false;
   if (predicate(node)) return true;
   return Object.entries(node).some(

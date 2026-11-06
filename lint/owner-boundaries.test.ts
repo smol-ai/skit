@@ -422,6 +422,57 @@ describe("skit/owner-boundaries", () => {
     ).toEqual([]);
   });
 
+  test("Registry credential selection is private through named, aliased and namespace objects", async () => {
+    for (const source of [
+      `import { Registry as R } from "../registry/index.js"; R.credentials();`,
+      `import { Registry } from "../registry/index.js"; const R = Registry; R["credentials"]();`,
+      `import { Registry } from "../registry/index.js"; const { credentials: select } = Registry;`,
+      `import * as R from "../registry/index.js"; R.Registry.credentials();`,
+      `import * as R from "../registry/index.js"; const { Registry: Owner } = R; Owner.credentials();`,
+    ])
+      expect(
+        await reported(source, "owner-boundaries", "packages/cli/src/library/probe.ts"),
+      ).toEqual(["credentials"]);
+    expect(
+      await reported(
+        `import { Registry } from "./index.js"; Registry.credentials();`,
+        "owner-boundaries",
+        "packages/cli/src/registry/probe.ts",
+      ),
+    ).toEqual([]);
+    expect(
+      await reported(
+        `import { Registry } from "../registry/index.js"; Registry.remotes.list();`,
+        "owner-boundaries",
+        "packages/cli/src/library/probe.ts",
+      ),
+    ).toEqual([]);
+  });
+
+  test("frontend callers cannot scan InstalledSkills or open private Library views", async () => {
+    for (const name of [
+      "scanSkillsDirectory",
+      "readableSkillsDirectories",
+      "skillModificationTime",
+      "openLibraryView",
+    ])
+      for (const source of [
+        `import { ${name} as read } from "@smolai/skit-core/library/session";`,
+        `import * as Library from "@smolai/skit-core/library/session"; Library.${name}();`,
+        `export { ${name} } from "@smolai/skit-core/library/session";`,
+      ])
+        expect(
+          await reported(source, "owner-boundaries", "packages/cli/src/library/probe.ts"),
+        ).toEqual([name]);
+    expect(
+      await reported(
+        `import { scanSkillsDirectory } from "../installed-skills/scan.js";`,
+        "owner-boundaries",
+        "packages/skit/src/library/probe.ts",
+      ),
+    ).toEqual([]);
+  });
+
   test("a handler cannot take the Library's home lock", async () => {
     expect(await reported(`import { withHomeLock } from "@smolai/skit-core";`)).toEqual([
       "withHomeLock",

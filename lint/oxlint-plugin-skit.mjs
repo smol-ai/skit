@@ -5,6 +5,7 @@ import { layout, undecided } from "../architecture/layout.mjs";
 import { libraryRules } from "./library-rules.mjs";
 import { structureRules } from "./structure-rules.mjs";
 import { effectHygieneRules } from "./effect-hygiene-rules.mjs";
+import { frontendRules } from "./frontend-rules.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 
@@ -503,6 +504,12 @@ const effectRules = {
         return target !== undefined && owner.sources.some((path) => target.startsWith(path));
       };
       const namespaces = new Map();
+      const namespaceOwners = (node) => {
+        if (node?.type === "Identifier") return namespaces.get(node.name) ?? [];
+        if (node?.type !== "MemberExpression") return [];
+        const name = node.computed ? node.property?.value : node.property?.name;
+        return namespaceOwners(node.object).filter((owner) => owner.objects?.includes(name));
+      };
       const reportPrivate = (node, name, candidates) => {
         const owner = candidates.find((candidate) => candidate.private.includes(name));
         if (owner)
@@ -594,6 +601,8 @@ const effectRules = {
           }
           const imported = specifier.imported ?? specifier.local;
           reportPrivate(specifier, imported?.name ?? imported?.value, reachable);
+          const objects = reachable.filter((owner) => owner.objects?.includes(imported?.name));
+          if (objects.length) namespaces.set(specifier.local.name, objects);
         }
       };
       return {
@@ -605,16 +614,22 @@ const effectRules = {
           reportPrivate(
             node,
             node.property?.name ?? node.property?.value,
-            namespaces.get(node.object?.name) ?? [],
+            namespaceOwners(node.object),
           );
         },
         VariableDeclarator(node) {
-          const from = namespaces.get(node.init?.name);
-          if (!from) return;
+          const from = namespaceOwners(node.init);
+          if (!from.length) return;
           if (node.id.type === "Identifier") namespaces.set(node.id.name, from);
           if (node.id.type === "ObjectPattern")
-            for (const property of node.id.properties)
+            for (const property of node.id.properties) {
               reportPrivate(property, property.key?.name ?? property.key?.value, from);
+              const objects = from.filter((owner) =>
+                owner.objects?.includes(property.key?.name ?? property.key?.value),
+              );
+              if (objects.length && property.value?.type === "Identifier")
+                namespaces.set(property.value.name, objects);
+            }
         },
       };
     },
@@ -777,6 +792,7 @@ export default {
     ...effectHygieneRules,
     ...libraryRules,
     ...structureRules,
+    ...frontendRules,
     "no-direct-cli-output": {
       meta: {
         type: "problem",
