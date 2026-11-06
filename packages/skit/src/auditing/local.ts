@@ -2,6 +2,7 @@ import { Clock, Effect } from "effect";
 import type { Digest } from "effect/crypto";
 import type { HttpClient } from "effect/http";
 import * as Library from "../library/library.js";
+import { inventoryRootOptions } from "../library/routing/roots.js";
 
 import {
   configurationForHome,
@@ -54,7 +55,7 @@ const inspectLibraryLedger = Effect.fn("Audit.ledger")(function* (
           }
         : { kind: "absent" },
     ),
-    Effect.provide(Library.layer({ home: library.skitHome, routing: { _tag: "None" } })),
+    Effect.provide(Library.layer({ home: library.skitHome, roots: inventoryRootOptions(library) })),
     Effect.orElseSucceed((): LedgerInspection => ({
       kind: "unreadable",
       path: join(resolve(library.skitHome), "state.json"),

@@ -53,7 +53,7 @@ export const authLoginCliCommand = Command.make(
             : result("authLogin", value),
         );
       }),
-      Option.getOrUndefined(home),
+      { home },
     ),
 ).pipe(
   Command.withDescription(

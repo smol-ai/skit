@@ -1,4 +1,4 @@
-import { Option, Effect } from "effect";
+import { Effect } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
@@ -36,7 +36,7 @@ export const removeCliCommand = Command.make(
           );
         yield* renderer.result(result("remove", removeOutputContracts.remove, outcome.value));
       }),
-      Option.getOrUndefined(input.home),
+      input,
     ),
 ).pipe(
   Command.withDescription(

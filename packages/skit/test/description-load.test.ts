@@ -8,6 +8,7 @@ import { collectionVersionPath } from "../src/library/collection-version.js";
 import { readDescriptionLoad } from "../src/library/internal/session/description-load.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
+import { testRoots } from "./helpers/library-store.js";
 
 it.effect("measures selected retained bytes and reports unreadable or malformed descriptions", () =>
   Effect.gen(function* () {
@@ -28,25 +29,25 @@ it.effect("measures selected retained bytes and reports unreadable or malformed 
       return yield* owner.import.collection(request);
     });
     const first = yield* importSource.pipe(
-      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provide(Library.layer({ home, roots: testRoots(home) })),
     );
     const firstState = yield* Effect.flatMap(Library.Service, (library) => library.read).pipe(
       Effect.map((snapshot) =>
         snapshot._tag === "Present" ? snapshot.state : emptyLibraryState(),
       ),
-      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provide(Library.layer({ home, roots: testRoots(home) })),
     );
     const originalSkill = firstState.skills[0]!;
     yield* fs.writeFileString(
       join(source, "SKILL.md"),
       '---\nname: review\ndescription: "A much longer new description"\n---\n',
     );
-    yield* importSource.pipe(Effect.provide(Library.layer({ home, routing: { _tag: "None" } })));
+    yield* importSource.pipe(Effect.provide(Library.layer({ home, roots: testRoots(home) })));
     const state = yield* Effect.flatMap(Library.Service, (library) => library.read).pipe(
       Effect.map((snapshot) =>
         snapshot._tag === "Present" ? snapshot.state : emptyLibraryState(),
       ),
-      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provide(Library.layer({ home, roots: testRoots(home) })),
     );
     const skill = {
       ...state.skills[0]!,

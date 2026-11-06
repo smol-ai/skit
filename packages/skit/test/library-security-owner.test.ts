@@ -8,6 +8,7 @@ import * as Library from "../src/library/library.js";
 import { openLibraryView } from "../src/library/internal/session/library-view.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
+import { testRoots } from "./helpers/library-store.js";
 
 const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -70,7 +71,7 @@ it.effect("passive portable acceptance plans stamp apply time and preserve unkno
       const after = JSON.parse(yield* f.fs.readFileString(path));
       assert.deepStrictEqual(after.future, { keep: "future data" });
       assert.deepStrictEqual(after.assessmentAcceptances, [result.acceptance]);
-    }).pipe(Effect.provide(Library.layer({ home: f.home, routing: { _tag: "None" } })));
+    }).pipe(Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })));
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
@@ -118,7 +119,7 @@ it.effect(
             assert.strictEqual(expired.failure.reason, "expiry-in-past");
         }
         assert.strictEqual(yield* f.fs.readFileString(join(f.home, "state.json")), before);
-      }).pipe(Effect.provide(Library.layer({ home: f.home, routing: { _tag: "None" } })));
+      }).pipe(Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })));
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
@@ -177,7 +178,7 @@ it.effect(
         const stale = yield* Effect.result(library.apply({ _tag: "Apply", plan: plan }));
         assert.strictEqual(stale._tag, "Failure");
         if (stale._tag === "Failure") assert.strictEqual(stale.failure._tag, "Library.StalePlan");
-      }).pipe(Effect.provide(Library.layer({ home: f.home, routing: { _tag: "None" } })));
+      }).pipe(Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })));
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
@@ -186,7 +187,7 @@ it.effect("state publication failure leaves no acceptance and preserves reviewed
     const f = yield* fixture;
     yield* Effect.gen(function* () {
       yield* (yield* Library.Service).import.collection(f.request);
-    }).pipe(Effect.provide(Library.layer({ home: f.home, routing: { _tag: "None" } })));
+    }).pipe(Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })));
     const statePath = join(f.home, "state.json");
     const before = yield* f.fs.readFileString(statePath);
     yield* Effect.gen(function* () {
@@ -201,7 +202,7 @@ it.effect("state publication failure leaves no acceptance and preserves reviewed
         f.bytes,
       );
     }).pipe(
-      Effect.provide(Library.layer({ home: f.home, routing: { _tag: "None" } })),
+      Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })),
       Effect.provideService(FileSystem.FileSystem, {
         ...f.fs,
         rename: (from, to) =>

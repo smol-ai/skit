@@ -87,7 +87,7 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
             ...(flags.workDirFlag ? { workDirFlag: flags.workDirFlag } : {}),
             manageOptions: { installOptions: home.installOptions },
           }).pipe(
-            withLibraryOwner,
+            withLibraryOwner(home.inventory),
             Effect.provideServiceEffect(
               Prompter,
               Effect.map(Prompter, (prompter) => ({

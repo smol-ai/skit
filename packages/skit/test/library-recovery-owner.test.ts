@@ -6,6 +6,7 @@ import { observePathEvidence } from "../src/library/folder-evidence.js";
 import { LibraryState } from "../src/library/library-state.js";
 import { OperationStatus } from "../src/library/store/state-schema.js";
 import { skitLayer } from "../src/platform/layer.js";
+import { testRoots } from "./helpers/library-store.js";
 
 const fixture = Effect.fn("test.recoveryOwner.fixture")(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -18,7 +19,7 @@ const fixture = Effect.fn("test.recoveryOwner.fixture")(function* () {
     yield* fs.makeDirectory(path);
     yield* fs.writeFileString(join(path, "SKILL.md"), basename(path));
   }
-  const layer = Library.layer({ home, routing: { _tag: "None" } });
+  const layer = Library.layer({ home, roots: testRoots(home) });
   const plan = yield* Effect.gen(function* () {
     const owner = yield* Library.Service;
     const folders = yield* Effect.forEach(paths, (path) =>

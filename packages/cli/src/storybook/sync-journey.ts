@@ -2,6 +2,7 @@ import { makeSyncJourneyFixture } from "../platform/storybook-fixtures.js";
 import { Effect, Layer, Result, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { join } from "node:path";
+import * as Library from "@smolai/skit-core/library";
 import { skitConfigurationLayer, skitLayer } from "@smolai/skit-core/platform";
 import {
   LibraryResponse,
@@ -70,13 +71,18 @@ export const syncJourney = (failDownload: boolean) =>
         installedSkill: {
           rootFor: (target) => (target === "agents" ? join(workspace, "agents-skills") : undefined),
         },
-        // The sync routes its own Library as this fixture device's installs.
-        inventory: {
-          home: workspace,
-          configHome: workspace,
-          overrides: { codex: [join(workspace, "agents-skills")] },
-        },
       }).pipe(
+        // The fixture device's Library, routed as its installs.
+        Effect.provide(
+          Library.layer({
+            home,
+            roots: {
+              home: workspace,
+              configHome: workspace,
+              overrides: { codex: [join(workspace, "agents-skills")] },
+            },
+          }),
+        ),
         Effect.provide(skitConfigurationLayer(home)),
         Effect.provide(transport),
         Effect.catchCause((cause) =>

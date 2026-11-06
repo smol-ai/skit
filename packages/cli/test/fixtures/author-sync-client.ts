@@ -6,6 +6,7 @@ import { skitConfigurationLayer, skitLayer } from "@smolai/skit-core/platform";
 import { syncAuthorWorkspace } from "../../src/author/sync/workflow.js";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
 import { FetchHttpClient, HttpClient } from "effect/http";
+import { testRoots } from "../helpers/roots.js";
 
 const Arguments = Schema.Struct({
   mode: Schema.Literals(["capture", "sync", "hold-post"]),
@@ -52,7 +53,7 @@ NodeRuntime.runMain(
         home,
         ...(first ? { to: destination, visibility: "private" as const } : {}),
       }).pipe(
-        Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+        Effect.provide(Library.layer({ home, roots: testRoots(home) })),
         Effect.provide(registryHttpLayer(transport)),
       );
     });

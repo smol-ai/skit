@@ -63,9 +63,10 @@ const fixture = Effect.gen(function* () {
       ),
     );
   });
+  const roots = { home: root, configHome: join(root, "config"), overrides: {} };
   const run = <A, E, R>(operation: Effect.Effect<A, E, R>) =>
     operation.pipe(
-      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provide(Library.layer({ home, roots })),
       Effect.provide(skitConfigurationLayer(home)),
       Effect.provideService(HttpClient.HttpClient, client),
     );
@@ -81,10 +82,7 @@ const fixture = Effect.gen(function* () {
   bodies.set(urls[0]!, yield* archive("broken", true, "after"));
   bodies.set(urls[1]!, yield* archive("healthy", false, "after"));
   requests.length = 0;
-  const options = {
-    roots: { home: root, configHome: join(root, "config"), overrides: {} },
-    variantsPath: join(home, "variants"),
-  };
+  const options = { roots, variantsPath: join(home, "variants") };
   return { fs, root, home, urls, bodies, requests, before, run, load, options, archive };
 });
 
@@ -94,7 +92,7 @@ it.effect("stops the batch when shared machine settings cannot be read", () =>
     f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "after"));
     yield* f.fs.writeFileString(join(f.home, "machine.json"), "invalid machine settings");
     const before = yield* f.fs.readFileString(join(f.home, "state.json"));
-    const error = yield* f.run(updateSubjects(f.options)).pipe(Effect.flip);
+    const error = yield* f.run(updateSubjects()).pipe(Effect.flip);
     assert.strictEqual(error._tag, "MachineSettingsUnusable");
     assert.deepStrictEqual(f.requests, [f.urls[0]]);
     assert.strictEqual(yield* f.fs.readFileString(join(f.home, "state.json")), before);
@@ -114,7 +112,7 @@ it.effect(
         pathOrDescriptor: join(f.root, "source-temp"),
       });
       const outcomes = yield* f.run(
-        updateSubjects(f.options).pipe(
+        updateSubjects().pipe(
           Effect.provide(
             rendererTestLayer({
               withStatus: (status, operation) =>
@@ -159,10 +157,13 @@ for (const failurePhase of ["install", "source-cleanup"] as const) {
         const f = yield* fixture;
         const roots = { ...f.options.roots, overrides: { codex: [join(f.root, "codex")] } };
         const options = { ...f.options, roots };
+        /** This test's device installs into its codex folder: its Library routes there. */
+        const run = <A, E, R>(operation: Effect.Effect<A, E, R>) =>
+          f.run(operation.pipe(Effect.provide(Library.layer({ home: f.home, roots }))));
         const collection = f.before.collections[0]!;
         yield* writingTo(
           f.home,
-          f.run(
+          run(
             setLibraryEnabled({
               query: collection.collection_id,
               all: true,
@@ -181,7 +182,9 @@ for (const failurePhase of ["install", "source-cleanup"] as const) {
         f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "after"));
         let failed = false;
         const outcomes = yield* f.run(
-          updateSubjects(options).pipe(
+          updateSubjects().pipe(
+            // The owner is built under this test's faulting filesystem.
+            Effect.provide(Library.layer({ home: f.home, roots })),
             Effect.provide(
               rendererTestLayer({
                 withStatus: (status, operation) =>
@@ -236,7 +239,7 @@ for (const failurePhase of ["install", "source-cleanup"] as const) {
         const imported = yield* f.load;
         const retry = yield* writingTo(
           f.home,
-          f.run(updateSubjects(options).pipe(Effect.provide(rendererTestLayer()))),
+          run(updateSubjects().pipe(Effect.provide(rendererTestLayer()))),
         );
         assert.isTrue("changed" in retry[0]! && !retry[0].changed && retry[0].installed === 0);
         assert.include(yield* f.fs.readFileString(installedSkillPath), "after");
@@ -244,7 +247,7 @@ for (const failurePhase of ["install", "source-cleanup"] as const) {
         assert.strictEqual(after.imports.length, imported.imports.length);
         const unchanged = yield* writingTo(
           f.home,
-          f.run(updateSubjects(options).pipe(Effect.provide(rendererTestLayer()))),
+          run(updateSubjects().pipe(Effect.provide(rendererTestLayer()))),
         );
         assert.isTrue(
           unchanged.every((item) => "changed" in item && !item.changed && item.installed === 0),
@@ -261,9 +264,7 @@ for (const kind of ["defect", "interrupt"] as const) {
         kind === "defect" ? Effect.die(new Error("programming defect")) : Effect.interrupt;
       const exit = yield* Effect.exit(
         f.run(
-          updateSubjects(f.options).pipe(
-            Effect.provide(rendererTestLayer({ withStatus: () => failure })),
-          ),
+          updateSubjects().pipe(Effect.provide(rendererTestLayer({ withStatus: () => failure }))),
         ),
       );
       assert.isTrue(Exit.isFailure(exit));
@@ -287,7 +288,7 @@ it.effect("stops on typed filesystem errors in shared Library storage", () =>
     });
     const exit = yield* Effect.exit(
       f.run(
-        updateSubjects(f.options).pipe(
+        updateSubjects().pipe(
           Effect.provide(rendererTestLayer()),
           Effect.provideService(FileSystem.FileSystem, {
             ...f.fs,
@@ -323,9 +324,7 @@ it.effect("keeps candidate manifest validation failures local to their Collectio
       execFileSync("tar", ["-cf", archivePath, "-C", join(f.root, "broken"), "."]),
     );
     f.bodies.set(f.urls[0]!, yield* f.fs.readFile(archivePath));
-    const outcomes = yield* f.run(
-      updateSubjects(f.options).pipe(Effect.provide(rendererTestLayer())),
-    );
+    const outcomes = yield* f.run(updateSubjects().pipe(Effect.provide(rendererTestLayer())));
     assert.isTrue("status" in outcomes[0]!);
     if (!("status" in outcomes[0]!)) return;
     assert.strictEqual(outcomes[0].error.code, "VALIDATION_FAILED");
@@ -341,7 +340,7 @@ it.effect("aborts the batch on typed shared state failures", () =>
     const f = yield* fixture;
     const statePath = join(f.home, "state.json");
     const exit = yield* Effect.exit(
-      f.run(updateSubjects(f.options).pipe(Effect.provide(rendererTestLayer()))).pipe(
+      f.run(updateSubjects().pipe(Effect.provide(rendererTestLayer()))).pipe(
         Effect.provideService(FileSystem.FileSystem, {
           ...f.fs,
           readFileString: (path, options) =>
@@ -376,7 +375,7 @@ it.effect("a stale installed-copy plan aborts before fetching the next Source", 
     let changed: string | undefined;
     const failure = yield* Effect.flip(
       f.run(
-        updateSubjects(f.options).pipe(
+        updateSubjects().pipe(
           Effect.provide(
             rendererTestLayer({
               withStatus: (status, operation) =>
@@ -415,7 +414,7 @@ it.effect("stops on corruption of an existing retained object", () =>
     );
     f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "before"));
     const exit = yield* Effect.exit(
-      f.run(updateSubjects(f.options).pipe(Effect.provide(rendererTestLayer()))),
+      f.run(updateSubjects().pipe(Effect.provide(rendererTestLayer()))),
     );
     assert.isTrue(Exit.isFailure(exit));
     if (Exit.isFailure(exit))
@@ -436,7 +435,7 @@ it.effect("several successful source updates are one composed history action", (
     f.bodies.set(first, yield* f.archive("broken", false, "after"));
     const auditPath = join(f.home, "audit.jsonl");
     const before = (yield* f.fs.readFileString(auditPath)).trim().split("\n").length;
-    const outcomes = yield* f.run(updateSubjects(f.options));
+    const outcomes = yield* f.run(updateSubjects());
     assert.strictEqual(outcomes.length, 2);
     assert.isTrue(outcomes.every((item) => "changed" in item && item.changed));
     const after = (yield* f.fs.readFileString(auditPath)).trim().split("\n").length;

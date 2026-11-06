@@ -17,6 +17,7 @@ import {
 import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { inspectLibrary, libraryLayer, saveLibrary } from "./helpers/library-store.js";
+import { testRoots } from "./helpers/library-store.js";
 
 const machineId = migratedMachineId("019950c0-4c00-7000-8000-000000000001", "setup-manage-test");
 const skill = "---\nname: review\n---\nReview.\n";
@@ -368,10 +369,13 @@ it.effect("a re-run stops when the copy to manage changed after the record", () 
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-/** Review the public owner's update against the installed routes it recorded. */
-const reviewUpdate = (home: string) =>
+/** Review the public owner's update, routed to the agents folder the fixture installs into. */
+const reviewUpdate = (home: string, agents: string) =>
   Effect.gen(function* () {
-    const layer = Library.layer({ home, routing: { _tag: "Recorded" } });
+    const layer = Library.layer({
+      home,
+      roots: { ...testRoots(home), overrides: { codex: [agents] } },
+    });
     const owner = Context.get(yield* Layer.build(layer), Library.Service);
     return reviewInstalledSkillChanges(
       yield* owner.plan({ _tag: "Update" }, { base: yield* owner.read }),
@@ -398,7 +402,7 @@ const updateFixture = Effect.gen(function* () {
       lockFileEntries: [],
     }),
   );
-  const changes = yield* reviewUpdate(home);
+  const changes = yield* reviewUpdate(home, join(copy, ".."));
   assert.deepStrictEqual(
     changes.map(({ path, status }) => ({ path, status })),
     [{ path: copy, status: "incoming-update" }],
@@ -468,7 +472,7 @@ it.effect("a crash after the update was saved is finished by a re-run that accep
 
     assert.deepStrictEqual(startup, { finished: [operation.operationId], stopped: [] });
     assert.deepStrictEqual(
-      (yield* reviewUpdate(home)).map(({ path, status }) => ({ path, status })),
+      (yield* reviewUpdate(home, join(copy, ".."))).map(({ path, status }) => ({ path, status })),
       [{ path: copy, status: "unchanged" }],
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -541,7 +545,7 @@ it.effect("a re-run imports a chosen local edit once", () =>
   Effect.gen(function* () {
     const { fs, home, copy, routing } = yield* updateFixture;
     yield* fs.writeFileString(join(copy, "SKILL.md"), `${skill}The user's own line.\n`);
-    const changes = yield* reviewUpdate(home);
+    const changes = yield* reviewUpdate(home, join(copy, ".."));
     const [competing] = changes;
     if (competing?.status !== "competing") return assert.fail("the copy is not competing");
     const update: SetupStep = {
@@ -647,8 +651,7 @@ it.effect(
       const { fs, home, source, copy } = yield* fixture;
       const configured = Library.layer({
         home,
-        routing: {
-          _tag: "Configured",
+        roots: {
           home: join(home, "test-device"),
           configHome: join(home, "test-device", ".config"),
           overrides: { codex: [join(copy, "..")] },
@@ -875,7 +878,7 @@ for (const boundary of ["backup", "successor"] as const)
       );
       assert.include(yield* fs.readFileString(join(copy, "SKILL.md")), "Now with more.");
       assert.deepStrictEqual(
-        (yield* reviewUpdate(home)).map((row) => row.status),
+        (yield* reviewUpdate(home, join(copy, ".."))).map((row) => row.status),
         ["unchanged"],
       );
     }).pipe(Effect.provide(skitLayer), Effect.scoped),

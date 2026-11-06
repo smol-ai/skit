@@ -5,7 +5,7 @@ import { Effect, Exit, FileSystem, Option, Scope } from "effect";
 import { join } from "node:path";
 import * as History from "../src/history/history.js";
 import * as Sync from "../src/sync/sync.js";
-import { type Identity, scanAuthorSyncTree } from "../src/author/index.js";
+import { scanAuthorSyncTree } from "../src/author/index.js";
 
 import { authorLayer } from "./helpers/author-history.js";
 import { testPlatformLayer } from "./helpers/platform.js";
@@ -16,7 +16,6 @@ const remote = {
   namespace: "swyx",
   skit: "tools",
 } as const;
-const absent = Option.none<Identity>();
 
 const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;

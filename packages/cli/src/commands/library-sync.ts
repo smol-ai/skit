@@ -1,8 +1,8 @@
 import { syncOutputContracts, librarySyncCommand } from "../library/sync.js";
 import { Registry } from "../registry/index.js";
-import { Option, Effect } from "effect";
+import { Effect } from "effect";
 import { Command, Flag } from "effect/cli";
-import { handleRegistryCommand } from "../application.js";
+import { handleSourceCommand } from "../application.js";
 import { libraryCommandConfiguration } from "./library-configuration.js";
 import {
   CommandMetadata,
@@ -68,7 +68,7 @@ export const librarySyncCliCommand = Command.make(
     ...localFlags,
   },
   (input) =>
-    handleRegistryCommand(
+    handleSourceCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
         const choosing =
@@ -91,7 +91,6 @@ export const librarySyncCliCommand = Command.make(
           takeRemote: input.takeRemote,
           keepEnabled: input.keepEnabled,
           installedSkill: configuration.pull.installation,
-          inventory: configuration.inventory,
           ...(input.followAccount
             ? { deviceSelection: "follow-account" as const }
             : choosing
@@ -116,7 +115,7 @@ export const librarySyncCliCommand = Command.make(
           ),
         );
       }),
-      Option.getOrUndefined(input.home),
+      input,
     ),
 ).pipe(
   Command.withDescription("Sync your Library with skit-server."),

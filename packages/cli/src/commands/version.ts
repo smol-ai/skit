@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 import { cliBuild } from "./build-info.js";
 import { checkRelease } from "../platform/releases.js";
 import { Command } from "effect/cli";
@@ -22,7 +22,7 @@ export const versionCliCommand = Command.make("version", { json: jsonFlag }, () 
         }),
       );
     }),
-    undefined,
+    { home: Option.none() },
   ),
 ).pipe(
   Command.withDescription("Show build details and check npm for an upgrade."),

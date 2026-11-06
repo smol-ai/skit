@@ -1,5 +1,5 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { Option, Effect } from "effect";
+import { Effect } from "effect";
 import { Argument, Command } from "effect/cli";
 import { resolve } from "node:path";
 import { handlePlatformCommand } from "../application.js";
@@ -36,7 +36,7 @@ export const makeRepositoryCommand = (name: "watch" | "ignore" | "forget") =>
           }),
         );
       }),
-      Option.getOrUndefined(input.home),
+      input,
     ),
   ).pipe(
     Command.withDescription(

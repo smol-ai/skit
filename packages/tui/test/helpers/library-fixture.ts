@@ -25,6 +25,7 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
   const home = join(root, "home");
   const skitHome = join(home, ".skit");
   const cwd = join(root, "work");
+  const deviceRoots = { home, configHome: join(home, ".config"), overrides: {} };
   yield* fs.makeDirectory(skitHome, { recursive: true });
   yield* fs.makeDirectory(cwd, { recursive: true });
   yield* fs.writeFileString(
@@ -37,7 +38,7 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
     }),
   );
   /** The Library as a second front end opens it: its own owner over the same home. */
-  const owner = Library.layer({ home: skitHome, routing: { _tag: "None" } });
+  const owner = Library.layer({ home: skitHome, roots: deviceRoots });
   const importSource = (collection: string, skills: readonly string[]) =>
     Effect.gen(function* () {
       const source = join(root, "sources", collection);
@@ -73,7 +74,7 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
     overrides: {},
     now: () => "2026-10-14T00:00:00.000Z",
   };
-  const application = Library.layer({ home: skitHome, routing: { _tag: "None" } }).pipe(
+  const application = Library.layer({ home: skitHome, roots: deviceRoots }).pipe(
     Layer.provideMerge(skitLayer),
     Layer.provideMerge(skitConfigurationLayer(skitHome)),
   );

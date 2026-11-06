@@ -45,7 +45,7 @@ for (const boundary of [
         configHome: join(root, "config"),
         overrides: { codex: [agents], ...(multiple ? { "claude-code": [claude] } : {}) },
       };
-      const layer = Library.layer({ home, routing: { _tag: "Configured", ...configuration } });
+      const layer = Library.layer({ home, roots: configuration });
       const importing = (body: string, importedAt: string) =>
         Effect.gen(function* () {
           const library = yield* Library.Service;

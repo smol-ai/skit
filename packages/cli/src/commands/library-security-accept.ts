@@ -53,7 +53,7 @@ export const securityAcceptCliCommand = Command.make(
           result("securityAccept", securityOutputContracts.securityAccept, value),
         );
       }),
-      Option.getOrUndefined(home),
+      { home },
     ),
 ).pipe(
   Command.withDescription(

@@ -1,5 +1,5 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { Option, Effect } from "effect";
+import { Effect } from "effect";
 import { Argument, Command } from "effect/cli";
 import { handlePlatformCommand } from "../../application.js";
 import { CommandMetadata, credentialStoreSubprocesses } from "../../commands/metadata.js";
@@ -29,7 +29,7 @@ export const registryRemoveCliCommand = Command.make(
           }),
         );
       }),
-      Option.getOrUndefined(home),
+      { home },
     ),
 ).pipe(
   Command.withDescription("Remove a Registry name."),

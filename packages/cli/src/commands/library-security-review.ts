@@ -1,4 +1,4 @@
-import { Option, Effect } from "effect";
+import { Effect } from "effect";
 import { Argument, Command } from "effect/cli";
 import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
@@ -24,7 +24,7 @@ export const securityReviewCliCommand = Command.make(
           result("securityReview", securityOutputContracts.securityReview, value),
         );
       }),
-      Option.getOrUndefined(home),
+      { home },
     ),
 ).pipe(
   Command.withDescription("Review security findings for one exact Skill version in your Library."),

@@ -36,7 +36,7 @@ const fixture = Effect.fn("test.historyDelivery.fixture")(function* () {
   if (Option.isNone(request)) return yield* Effect.die("Missing fixture source");
   const layer = Library.layer({
     home,
-    routing: { _tag: "Configured", home: root, configHome: root, overrides: { codex: [skills] } },
+    roots: { home: root, configHome: root, overrides: { codex: [skills] } },
   });
   return {
     fs,

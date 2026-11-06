@@ -60,7 +60,7 @@ export const usageCliCommand = Command.make(
         );
         yield* renderer.result(result("usage", usageOutputContracts.usage, report));
       }),
-      Option.getOrUndefined(input.home),
+      input,
     ),
 ).pipe(
   Command.withDescription(

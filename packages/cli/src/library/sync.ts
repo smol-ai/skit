@@ -11,7 +11,6 @@ import { createColors } from "picocolors";
 import { terminalSyncProgress } from "./sync/present-progress.js";
 import { renderLibrarySyncPlan } from "./sync/present.js";
 import { terminalData } from "../terminal/text.js";
-import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 
 export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthError>(options: {
   readonly authState: Result.Result<ResolvedAuth, AuthError>;
@@ -19,7 +18,6 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
   readonly takeRemote?: readonly string[];
   readonly keepEnabled?: readonly string[];
   readonly installedSkill: Pick<LibraryInstallationConfiguration, "rootFor">;
-  readonly inventory?: InventoryRootOptions;
   readonly deviceSelection?:
     | "follow-account"
     | {
@@ -49,7 +47,6 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
             ...(options.takeRemote === undefined ? {} : { takeRemote: options.takeRemote }),
             ...(options.keepEnabled === undefined ? {} : { keepEnabled: options.keepEnabled }),
             installedSkill: options.installedSkill,
-            ...(options.inventory === undefined ? {} : { inventory: options.inventory }),
             ...(options.deviceSelection === undefined
               ? {}
               : { deviceSelection: options.deviceSelection }),

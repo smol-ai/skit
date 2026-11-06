@@ -3,6 +3,7 @@ import { type InstallDestination, type InstallScope } from "@smolai/skit-core/li
 import * as Library from "@smolai/skit-core/library";
 import { SkitConfiguration, pathIsWithin } from "@smolai/skit-core/platform";
 import { type Hash } from "@smolai/skit-core/shared";
+import { testRoots } from "./roots.js";
 
 type ManageApproval = Extract<Library.Approval, { readonly _tag: "Manage" }>["manage"];
 type OwnershipMarker = Extract<Library.Approval, { readonly _tag: "AcceptEdit" }>["marker"];
@@ -11,7 +12,7 @@ type OwnershipMarker = Extract<Library.Approval, { readonly _tag: "AcceptEdit" }
 const currentSnapshot = Effect.gen(function* () {
   const { skitHome } = yield* SkitConfiguration;
   const owner = Context.get(
-    yield* Layer.build(Library.layer({ home: skitHome, routing: { _tag: "None" } })),
+    yield* Layer.build(Library.layer({ home: skitHome, roots: testRoots(skitHome) })),
     Library.Service,
   );
   return yield* owner.read;
@@ -48,8 +49,7 @@ const library = (
       yield* Layer.build(
         Library.layer({
           home: skitHome,
-          routing: {
-            _tag: "Configured",
+          roots: {
             home: skitHome,
             configHome: skitHome,
             overrides: {

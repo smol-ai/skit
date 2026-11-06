@@ -1,6 +1,7 @@
 import { Option, Record } from "effect";
 import { CliConfig, Flag, GlobalFlag } from "effect/cli";
-import type { HarnessName } from "@smolai/skit-core/harnesses";
+import type { HarnessName, SkillsDirectoryOverrides } from "@smolai/skit-core/harnesses";
+import { inventoryRootOptions as deviceRoots } from "@smolai/skit-core/library/routing";
 import type { ResolvedSkitConfiguration } from "@smolai/skit-core/platform";
 import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 
@@ -63,26 +64,29 @@ export const localFlags = {
   devinRoot: devinRootFlag,
 };
 
+/** The parsed root flags: skills directories named on the command line. */
+export interface RootFlags {
+  readonly codexRoot: Option.Option<string>;
+  readonly claudeRoot: Option.Option<string>;
+  readonly opencodeRoot: Option.Option<string>;
+  readonly devinRoot: readonly string[];
+}
+
+export function rootOverrides(input: Partial<RootFlags>): SkillsDirectoryOverrides {
+  const overrides: Record<HarnessName, readonly string[]> = {
+    codex: Option.toArray(input.codexRoot ?? Option.none()),
+    "claude-code": Option.toArray(input.claudeRoot ?? Option.none()),
+    opencode: Option.toArray(input.opencodeRoot ?? Option.none()),
+    devin: input.devinRoot ?? [],
+  };
+  return Record.filter(overrides, (roots) => roots.length > 0);
+}
+
 export function inventoryRootOptions(
-  input: {
-    readonly codexRoot: Option.Option<string>;
-    readonly claudeRoot: Option.Option<string>;
-    readonly opencodeRoot: Option.Option<string>;
-    readonly devinRoot: readonly string[];
-  },
+  input: Partial<RootFlags>,
   paths: ResolvedSkitConfiguration,
 ): InventoryRootOptions {
-  const overrides: Record<HarnessName, readonly string[]> = {
-    codex: Option.toArray(input.codexRoot),
-    "claude-code": Option.toArray(input.claudeRoot),
-    opencode: Option.toArray(input.opencodeRoot),
-    devin: input.devinRoot,
-  };
-  return {
-    home: paths.userHome,
-    configHome: paths.configHome,
-    overrides: Record.filter(overrides, (roots) => roots.length > 0),
-  };
+  return deviceRoots(paths, rootOverrides(input));
 }
 
 export const optionValue = <A>(value: Option.Option<A>): A | undefined =>

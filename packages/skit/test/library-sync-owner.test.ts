@@ -6,6 +6,7 @@ import { localImportRequest } from "../src/library/setup/local-import.js";
 import { LibraryState, libraryManifestFromLocalState } from "../src/library/library-state.js";
 import { currentLibraryManifest, type LibraryManifest } from "../src/library/library-contracts.js";
 import { skitLayer } from "../src/platform/layer.js";
+import { testRoots } from "./helpers/library-store.js";
 
 it.effect(
   "Sync verifies its remote receipt, records a data-only program, and publishes and installs through one owner",
@@ -37,7 +38,9 @@ it.effect(
           archives: yield* library.content.pack(snapshot),
         };
       }).pipe(
-        Effect.provide(Library.layer({ home: join(root, "seed"), routing: { _tag: "None" } })),
+        Effect.provide(
+          Library.layer({ home: join(root, "seed"), roots: testRoots(join(root, "seed")) }),
+        ),
       );
       const home = join(root, "device");
       const skills = join(root, "skills");
@@ -136,8 +139,7 @@ it.effect(
         Effect.provide(
           Library.layer({
             home,
-            routing: {
-              _tag: "Configured",
+            roots: {
               home: root,
               configHome: root,
               overrides: { codex: [skills] },
@@ -178,14 +180,15 @@ for (const boundary of ["retired", "retired-edited", "published", "installed", "
             archives: yield* library.content.pack(snapshot),
           };
         }).pipe(
-          Effect.provide(Library.layer({ home: join(root, "seed"), routing: { _tag: "None" } })),
+          Effect.provide(
+            Library.layer({ home: join(root, "seed"), roots: testRoots(join(root, "seed")) }),
+          ),
         );
         const home = join(root, "device");
         const skills = join(root, "skills");
         const layer = Library.layer({
           home,
-          routing: {
-            _tag: "Configured",
+          roots: {
             home: root,
             configHome: root,
             overrides: { codex: [skills] },

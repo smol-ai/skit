@@ -7,6 +7,7 @@ import { LibraryState, libraryStateRevision } from "../src/library/library-state
 import { OperationStatus } from "../src/library/store/state-schema.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
+import { testRoots } from "./helpers/library-store.js";
 
 type Operation = "enable" | "disable" | "update" | "remove" | "uninstall";
 type Boundary = "recorded" | "folder" | "successor" | "completion" | "directory" | "settlement";
@@ -30,7 +31,7 @@ const fixture = Effect.fn("test.applyRecovery.fixture")(function* (
   yield* fs.writeFileString(join(source, "SKILL.md"), bytes("Original"));
   const layer = Library.layer({
     home,
-    routing: { _tag: "Configured", home: root, configHome: root, overrides: { codex: [skills] } },
+    roots: { home: root, configHome: root, overrides: { codex: [skills] } },
   });
   const plan = yield* Effect.gen(function* () {
     const library = yield* Library.Service;
@@ -169,7 +170,7 @@ for (const operation of ["enable", "disable", "update", "remove", "uninstall"] a
           assert.deepStrictEqual(library.startup.finished, [interrupted.operationId]);
           assert.deepStrictEqual(library.startup.stopped, []);
           return yield* library.read;
-        }).pipe(Effect.provide(Library.layer({ home: f.home, routing: { _tag: "None" } })));
+        }).pipe(Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })));
         if (recovered._tag !== "Present") return yield* Effect.die("Missing recovered Library");
         const installed = operation === "enable" || operation === "update";
         assert.strictEqual(yield* f.fs.exists(f.installed), installed);
@@ -286,7 +287,7 @@ it.effect(
               )
               .find((row) => row.path === copy.path)?.installed_skill_id,
           );
-      }).pipe(Effect.provide(Library.layer({ home: f.home, routing: { _tag: "None" } })));
+      }).pipe(Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })));
       assert.strictEqual(
         yield* f.fs.readFileString(join(f.skills, "second", "SKILL.md")),
         "---\nname: second\ndescription: Second fixture\n---\nSecond bytes\n",
@@ -303,7 +304,7 @@ it.effect("recovery prepares a missing root from the recorded review", () =>
       const library = yield* Library.Service;
       assert.deepStrictEqual(library.startup.finished, [operation.operationId]);
       assert.deepStrictEqual(library.startup.stopped, []);
-    }).pipe(Effect.provide(Library.layer({ home: f.home, routing: { _tag: "None" } })));
+    }).pipe(Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })));
     assert.strictEqual(
       yield* f.fs.readFileString(join(f.installed, "SKILL.md")),
       bytes("Original"),
@@ -343,7 +344,7 @@ it.effect("recovery resumes after creating a previously absent skills directory"
         yield* f.fs.readFileString(join(f.installed, "SKILL.md")),
         bytes("Original"),
       );
-    }).pipe(Effect.provide(Library.layer({ home: f.home, routing: { _tag: "None" } })));
+    }).pipe(Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -357,7 +358,7 @@ it.effect("recovery settles predecessor backups after the completed state was co
       const library = yield* Library.Service;
       assert.deepStrictEqual(library.startup.finished, [operation.operationId]);
       assert.deepStrictEqual(library.startup.stopped, []);
-    }).pipe(Effect.provide(Library.layer({ home: f.home, routing: { _tag: "None" } })));
+    }).pipe(Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })));
     assert.isFalse(
       (yield* f.fs.readDirectory(backups)).some((name) => name.startsWith("pending-")),
     );

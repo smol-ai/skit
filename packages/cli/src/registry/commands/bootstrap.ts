@@ -36,7 +36,7 @@ export const serverBootstrapCliCommand = Command.make(
           }),
         );
       }),
-      undefined,
+      { home: Option.none() },
     ),
 ).pipe(
   Command.withDescription("Create the first operator for a deployed skit-server."),

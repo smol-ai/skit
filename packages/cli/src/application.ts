@@ -7,6 +7,9 @@ import { commandFailure } from "./commands/failure-classification.js";
 import { Renderer } from "./terminal/renderer.js";
 import { authorWorkspaceLayer, authorLayer } from "@smolai/skit-core/author";
 import * as Library from "@smolai/skit-core/library";
+import { inventoryRootOptions } from "@smolai/skit-core/library/routing";
+import { rootOverrides, type RootFlags } from "./commands/parameters.js";
+import { Option } from "effect";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { terminalPrompterLayer } from "./terminal/prompter.js";
 import { terminalLibraryProgressLayer } from "./library/update/present-progress.js";
@@ -15,23 +18,30 @@ import { terminalLibraryProgressLayer } from "./library/update/present-progress.
 const withTerminal = <A, E, R>(program: Effect.Effect<A, E, R>) =>
   program.pipe(Effect.provide(terminalPrompterLayer), Effect.provide(terminalLibraryProgressLayer));
 
+/** The flags every command may carry: `--home` selects its configuration, root flags its device roots. */
+export type CommandInput = { readonly home: Option.Option<string> } & Partial<RootFlags>;
+
 /** The `--home` a command was given selects its configuration; the handler provides it once. */
-const configured = <A, E, R>(program: Effect.Effect<A, E, R>, home: string | undefined) =>
-  program.pipe(Effect.provide(skitConfigurationLayer(home)));
+const configured = <A, E, R>(program: Effect.Effect<A, E, R>, input: CommandInput) =>
+  program.pipe(Effect.provide(skitConfigurationLayer(Option.getOrUndefined(input.home))));
 
 /**
- * The executable's one Library construction: unrouted, for commands whose operations do not
- * install. Operations that install route their own Library from the configuration they are given.
+ * The executable's one Library construction, routed from this device's roots and the command's
+ * root flags. Operations never construct a Library.
  */
-export const libraryApplicationLayer = Layer.unwrap(
-  Effect.map(SkitConfiguration, (paths) =>
-    Layer.mergeAll(
-      Library.layer({ home: paths.skitHome, routing: { _tag: "None" } }),
-      // Removing an authored Collection marks its workspace (A15); `author init` registers one.
-      authorWorkspaceLayer,
-    ).pipe(Layer.provideMerge(skitLayer)),
-  ),
-);
+export const libraryApplicationLayer = (input: Partial<RootFlags> = {}) =>
+  Layer.unwrap(
+    Effect.map(SkitConfiguration, (paths) =>
+      Layer.mergeAll(
+        Library.layer({
+          home: paths.skitHome,
+          roots: inventoryRootOptions(paths, rootOverrides(input)),
+        }),
+        // `author init` registers a workspace under its lease.
+        authorWorkspaceLayer,
+      ).pipe(Layer.provideMerge(skitLayer)),
+    ),
+  );
 
 export function renderCommandFailures<A, E, R>(program: Effect.Effect<A, E, R>) {
   return Effect.uninterruptibleMask((restore) =>
@@ -57,21 +67,19 @@ const registryApplicationLayer = Layer.unwrap(
 );
 
 /** Combined domain services consume the same required configuration snapshot. */
-export const sourceApplicationLayer = Layer.merge(
-  libraryApplicationLayer,
-  registryApplicationLayer,
-);
+export const sourceApplicationLayer = (input: Partial<RootFlags> = {}) =>
+  Layer.merge(libraryApplicationLayer(input), registryApplicationLayer);
 
 /** Keep requirements inferred until the selected composition boundary supplies them. */
 export function handlePlatformCommand<E, R>(
   program: Effect.Effect<void, E, R>,
-  home: string | undefined,
+  input: CommandInput,
 ) {
   return configured(
     renderCommandFailures(Effect.scoped(withTerminal(program))).pipe(
       Effect.provide(authorWorkspaceLayer.pipe(Layer.provideMerge(skitLayer))),
     ),
-    home,
+    input,
   );
 }
 
@@ -81,37 +89,34 @@ export function handlePlatformCommand<E, R>(
  */
 export function handleLibraryCommand<E, R>(
   program: Effect.Effect<void, E, R>,
-  home: string | undefined,
+  input: CommandInput,
 ) {
   return configured(
     renderCommandFailures(
-      Effect.scoped(withTerminal(program)).pipe(Effect.provide(libraryApplicationLayer)),
+      Effect.scoped(withTerminal(program)).pipe(Effect.provide(libraryApplicationLayer(input))),
     ),
-    home,
+    input,
   );
 }
 
 export function handleRegistryCommand<E, R>(
   program: Effect.Effect<void, E, R>,
-  home: string | undefined,
+  input: CommandInput,
 ) {
   return configured(
     renderCommandFailures(Effect.scoped(withTerminal(program))).pipe(
       Effect.provide(registryApplicationLayer),
     ),
-    home,
+    input,
   );
 }
 
-export function handleSourceCommand<E, R>(
-  program: Effect.Effect<void, E, R>,
-  home: string | undefined,
-) {
+export function handleSourceCommand<E, R>(program: Effect.Effect<void, E, R>, input: CommandInput) {
   return configured(
     renderCommandFailures(
-      Effect.scoped(withTerminal(program)).pipe(Effect.provide(sourceApplicationLayer)),
+      Effect.scoped(withTerminal(program)).pipe(Effect.provide(sourceApplicationLayer(input))),
     ),
-    home,
+    input,
   );
 }
 
@@ -120,7 +125,7 @@ export { commandFailure } from "./commands/failure-classification.js";
 /** Full environment for contract generators and runners exercising multiple command families. */
 export function commandApplicationLayer(json: boolean, home: string) {
   return Layer.merge(
-    sourceApplicationLayer.pipe(Layer.provideMerge(skitConfigurationLayer(home))),
+    sourceApplicationLayer().pipe(Layer.provideMerge(skitConfigurationLayer(home))),
     consoleRendererLayer(json),
   );
 }

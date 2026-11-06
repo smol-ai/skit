@@ -9,6 +9,7 @@ import { localImportRequest } from "../src/library/setup/local-import.js";
 import { inspectRecoveryOperation } from "../src/library/internal/recovery/moves.js";
 import { canonicalJson } from "../src/shared/json.js";
 import { skitLayer } from "../src/platform/layer.js";
+import { testRoots } from "./helpers/library-store.js";
 
 const fixture = Effect.fn("test.undoRecovery.fixture")(function* (reconstruct = false) {
   const fs = yield* FileSystem.FileSystem;
@@ -21,7 +22,7 @@ const fixture = Effect.fn("test.undoRecovery.fixture")(function* (reconstruct = 
     yield* fs.makeDirectory(path);
     yield* fs.writeFileString(join(path, "SKILL.md"), basename(path));
   }
-  const layer = Library.layer({ home, routing: { _tag: "None" } });
+  const layer = Library.layer({ home, roots: testRoots(home) });
   const plan = yield* Effect.gen(function* () {
     const owner = yield* Library.Service;
     if (reconstruct) {

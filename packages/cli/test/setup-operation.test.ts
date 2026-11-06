@@ -39,7 +39,7 @@ const fixture = Effect.fn("Test.setupOperationFixture")(function* () {
     options,
     manageOptions: { installOptions: home.installOptions },
     planId: scan.onboarding.planId,
-  }).pipe(withLibraryOwner, Effect.provide(interaction.layer));
+  }).pipe(withLibraryOwner(home.inventory), Effect.provide(interaction.layer));
   return { fs, root, source, home, apply };
 });
 

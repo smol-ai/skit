@@ -102,7 +102,7 @@ export const makeAuthorSyncWorld = Effect.fn("Test.makeAuthorSyncWorld")(functio
             Effect.provideService(LinkStat, yield* LinkStat),
             // A first sync without workspace.json adopts an id from this home's Library (A3).
             Effect.provide(
-              libraryApplicationLayer.pipe(Layer.provide(skitConfigurationLayer(home))),
+              libraryApplicationLayer().pipe(Layer.provide(skitConfigurationLayer(home))),
             ),
             // The environment's token is for the test Registry only.
             Effect.provide(registryCredentialLayer(remote.origin)),

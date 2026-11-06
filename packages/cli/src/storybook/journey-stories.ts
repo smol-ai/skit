@@ -62,7 +62,7 @@ const previewEnable = Effect.scoped(
         openLibrarySession(paths.skitHome, configuration.pull.installOptions),
       );
     }).pipe(
-      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provide(Library.layer({ home, roots: configuration.inventory })),
       Effect.provide(skitConfigurationLayer(home)),
     );
   }),
@@ -142,7 +142,7 @@ const previewDoctorCleanup = Effect.scoped(
         return yield* Effect.die("The cleanup preview changed the Library or installed bytes");
       return `Preview only · ${after.state.enabled.length} Skill remains enabled`;
     }).pipe(
-      Effect.provide(Library.layer({ home, routing: { _tag: "Configured", ...configuration } })),
+      Effect.provide(Library.layer({ home, roots: configuration })),
       Effect.provide(skitConfigurationLayer(home)),
       Effect.provide(
         ConfigProvider.layer(

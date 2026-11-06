@@ -1,6 +1,6 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { openLibrarySession } from "@smolai/skit-core/library/session";
-import { Option, Effect } from "effect";
+import { Effect } from "effect";
 import { Command } from "effect/cli";
 import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
@@ -23,7 +23,7 @@ export const listCliCommand = Command.make("list", localFlags, (input) =>
       );
       yield* browseLibrary(session, configuration.pull.installOptions);
     }),
-    Option.getOrUndefined(input.home),
+    input,
   ),
 ).pipe(
   Command.withDescription(

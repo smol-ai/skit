@@ -7,6 +7,7 @@ import { observePathEvidence } from "../src/library/folder-evidence.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { makeMachineId } from "../src/library/entity-ids.js";
 import { skitLayer } from "../src/platform/layer.js";
+import { testRoots } from "./helpers/library-store.js";
 
 const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(LibraryState));
 type Boundary = "recorded" | "directory" | "prepared";
@@ -65,7 +66,7 @@ const fixture = Effect.fn("test.rootPreparation.fixture")(function* () {
     bytes,
     steps,
     state: join(home, "state.json"),
-    layer: Library.layer({ home, routing: { _tag: "None" } }),
+    layer: Library.layer({ home, roots: testRoots(home) }),
   };
 });
 type Fixture = Effect.Success<ReturnType<typeof fixture>>;

@@ -19,6 +19,7 @@ import {
   type ContentSource,
 } from "./content/content.js";
 import type { LibraryManifest } from "../library-contracts.js";
+import type { LibraryState } from "../library-state.js";
 import { Digest } from "effect/crypto";
 import * as InstalledSkills from "../installed-skills.js";
 import {
@@ -40,10 +41,10 @@ import { importCollection, importAuthoredCollection, importEdit } from "../impor
 import type { TreeRequirements } from "../../platform/tree-requirements.js";
 import { StalePlan, type Approval } from "../library-plan.js";
 import { planIntent } from "../plan-changes.js";
+import type { InventoryRootOptions } from "../routing/roots.js";
 import type {
   Interface,
   Config,
-  Routing,
   History,
   Outcome,
   PlanningIntent,
@@ -57,16 +58,18 @@ import type {
  * The Library over `home`, writing installed skills through the `InstalledSkills` it is given:
  * migrates a legacy state.json, then resumes any operation left Pending.
  */
-const make = Effect.fn("Library.make")(function* (
-  home: string,
-  configuration: Routing = { _tag: "Recorded" },
-) {
+const make = Effect.fn("Library.make")(function* (home: string, roots: InventoryRootOptions) {
   yield* migrateLocalLibraryState(home);
   const activeWriter = yield* Effect.serviceOption(LibraryWriter);
   if (Option.isNone(activeWriter) || activeWriter.value.home !== resolve(home))
     yield* recoverLibraryHistory(home);
   const startup = yield* recover(home);
   const files = yield* InstalledSkills.Service;
+  /** A change that adds no routes (Remove, Uninstall) works only where copies already are. */
+  const recordedFiles = Effect.fn("Library.recordedFiles")(function* (state: LibraryState) {
+    return yield* InstalledSkills.make(yield* InstalledSkills.recordedRouting(state));
+  });
+  const addsNoRoutes = (tag: string) => tag === "Remove" || tag === "Uninstall";
   // Only the platform services: an owner built inside a write must never carry that writer out.
   const writer = Context.pick(FileSystem.FileSystem)(
     yield* Effect.context<FileSystem.FileSystem>(),
@@ -125,11 +128,7 @@ const make = Effect.fn("Library.make")(function* (
       return planRestore(home, structuredClone(intent), { base }).pipe(Effect.provide(importing));
     const planning = Effect.provideService(InstalledSkills.Service, files);
     if (intent._tag === "Sync")
-      return planSync(home, intent, {
-        base,
-        none: configuration._tag === "None",
-        ...(configuration._tag === "Configured" ? { roots: configuration } : {}),
-      }).pipe(planning, Effect.provide(importing));
+      return planSync(home, intent, { base, roots }).pipe(planning, Effect.provide(importing));
     if (intent._tag === "Manage")
       return Effect.gen(function* () {
         const state = yield* planningState(home, base);
@@ -139,33 +138,9 @@ const make = Effect.fn("Library.make")(function* (
             Option.getOrUndefined(selection.duplicates) !== "retain-only" &&
             (selection.mode === "existing" || Option.isSome(selection.ownership)),
         );
-        let routing: StepRouting = {
-          active: [],
-          destinations: [],
-          readable: [],
-        };
-        if (installs) {
-          if (configuration._tag === "Configured")
-            routing = yield* stepRouting(configuration, state);
-          else {
-            const scopes = [
-              { kind: "global" as const },
-              ...state.repositories.map(({ root }) => ({
-                kind: "repository" as const,
-                root,
-              })),
-            ];
-            routing = {
-              active: yield* files.active,
-              readable: [],
-              destinations: (yield* Effect.forEach(scopes, (scope) =>
-                Effect.map(files.destinations(scope), (targets) =>
-                  targets.map((target) => ({ scope, ...target })),
-                ),
-              )).flat(),
-            };
-          }
-        }
+        const routing: StepRouting = installs
+          ? yield* stepRouting(roots, state)
+          : { active: [], destinations: [], readable: [] };
         return yield* planManaging(home, checked, { base, routing });
       }).pipe(planning, Effect.provide(importing));
     if (intent._tag === "AcceptFinding")
@@ -178,13 +153,18 @@ const make = Effect.fn("Library.make")(function* (
         Effect.provide(importing),
       );
     return Effect.gen(function* () {
-      yield* planningState(home, base);
+      const state = yield* planningState(home, base);
       return yield* planIntent(intent, {
         home,
         base,
         approvals: options.approvals,
-      });
-    }).pipe(planning, Effect.provide(writer));
+      }).pipe(
+        Effect.provideService(
+          InstalledSkills.Service,
+          addsNoRoutes(intent._tag) ? yield* recordedFiles(state) : files,
+        ),
+      );
+    }).pipe(Effect.provide(importing), Effect.provide(writer));
   }
   function applyFor<Request extends ApplyRequest>(
     request: Request,
@@ -210,10 +190,7 @@ const make = Effect.fn("Library.make")(function* (
         Effect.provide(importing),
       );
     const syncing = (request: SyncApplyRequest) =>
-      applySync(home, request, {
-        none: configuration._tag === "None",
-        ...(configuration._tag === "Configured" ? { roots: configuration } : {}),
-      }).pipe(applying);
+      applySync(home, request, { roots }).pipe(applying);
     if (request._tag === "ApplySynced") return syncing(request);
     const plan = request.plan;
     if (plan._tag === "Sync") return syncing({ _tag: "Apply", plan });
@@ -232,7 +209,17 @@ const make = Effect.fn("Library.make")(function* (
         Effect.map((result) => ({ _tag: "Undo" as const, result })),
         applying,
       );
-    return writeLibrary(home, applyRecorded(plan, configuration)).pipe(
+    return writeLibrary(
+      home,
+      addsNoRoutes(plan._tag)
+        ? applyRecorded(plan, "recorded").pipe(
+            Effect.provideServiceEffect(
+              InstalledSkills.Service,
+              Effect.flatMap(loadLibrary(home), recordedFiles),
+            ),
+          )
+        : applyRecorded(plan, roots),
+    ).pipe(
       Effect.map((result) => ({ _tag: plan._tag, result })),
       applying,
     );
@@ -295,19 +282,8 @@ const make = Effect.fn("Library.make")(function* (
   } satisfies Interface;
 });
 
-/** Routes installed skills as `config.routing` says; recorded routing is read after migration. */
+/** Routes installed skills from this device's roots. */
 export const makeOwner = (config: Config) =>
-  make(config.home, config.routing).pipe(
-    Effect.provideServiceEffect(
-      InstalledSkills.Service,
-      Effect.gen(function* () {
-        if (config.routing._tag === "None") return yield* InstalledSkills.make();
-        if (config.routing._tag === "Configured")
-          return yield* InstalledSkills.make(config.routing);
-        yield* migrateLocalLibraryState(config.home);
-        return yield* InstalledSkills.make(
-          yield* InstalledSkills.recordedRouting(yield* loadLibrary(config.home)),
-        );
-      }),
-    ),
+  make(config.home, config.roots).pipe(
+    Effect.provideServiceEffect(InstalledSkills.Service, InstalledSkills.make(config.roots)),
   );

@@ -41,7 +41,7 @@ const list = Command.make("list", flags, (input) =>
         }),
       );
     }),
-    Option.getOrUndefined(input.home),
+    input,
   ),
 ).pipe(
   Command.withDescription(
@@ -70,7 +70,7 @@ const inspect = Command.make("inspect", { operation, ...flags }, (input) =>
         }),
       );
     }),
-    Option.getOrUndefined(input.home),
+    input,
   ),
 ).pipe(
   Command.withDescription(
@@ -147,7 +147,7 @@ const restore = Command.make("restore", { operation, apply, ...flags }, (input) 
         ),
       );
     }),
-    Option.getOrUndefined(input.home),
+    input,
   ),
 ).pipe(
   Command.withDescription(

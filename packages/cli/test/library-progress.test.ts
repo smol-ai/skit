@@ -50,9 +50,7 @@ it.effect("a headless update emits domain progress and records one attributed tr
     bytes = yield* archive;
     const results = yield* home
       .owned(
-        updateSubjects({
-          roots: home.inventory,
-        }).pipe(
+        updateSubjects().pipe(
           Effect.provide(
             libraryProgressLayer((event) =>
               Effect.sync(() => {

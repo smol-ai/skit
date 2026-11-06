@@ -6,6 +6,7 @@ import * as Library from "../src/library/library.js";
 import { applySetEnabledPlan, openSetEnabledSession } from "../src/library/enable.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
+import { testRoots } from "./helpers/library-store.js";
 
 it.effect(
   "a core selection captures its configured owner, refuses another home and applies without frontend services",
@@ -26,13 +27,15 @@ it.effect(
       if (Option.isNone(request)) return yield* Effect.die("Expected an observed source");
       yield* Effect.flatMap(Library.Service, (library) =>
         library.import.collection(request.value),
-      ).pipe(Effect.provide(Library.layer({ home, routing: { _tag: "None" } })));
+      ).pipe(Effect.provide(Library.layer({ home, roots: testRoots(home) })));
       const configuration = {
         home: root,
         configHome: join(root, "config"),
         overrides: { codex: [destination] },
       };
-      const selection = yield* openSetEnabledSession(home, configuration);
+      const selection = yield* openSetEnabledSession(home, configuration).pipe(
+        Effect.provide(Library.layer({ home, roots: configuration })),
+      );
       const plan = yield* selection.plan(
         { subject: "review", enabled: true, where: [{ kind: "global" }] },
         configuration,
@@ -49,7 +52,7 @@ it.effect(
       yield* applying;
       assert.strictEqual(yield* fs.readFileString(join(destination, "review", "SKILL.md")), bytes);
       const view = yield* openLibraryView(home).pipe(
-        Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+        Effect.provide(Library.layer({ home, roots: testRoots(home) })),
       );
       assert.deepStrictEqual(
         view.installedSkills.map(({ name, path, destination, status }) => ({
@@ -80,7 +83,7 @@ it.effect(
       Reflect.set(collection, "label", "Changed by the reader");
       assert.strictEqual((yield* view.readManifest()).collections[0]?.label, label);
       const snapshot = yield* Effect.flatMap(Library.Service, (library) => library.read).pipe(
-        Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+        Effect.provide(Library.layer({ home, roots: testRoots(home) })),
       );
       assert.strictEqual(snapshot._tag, "Present");
       if (snapshot._tag === "Present") assert.strictEqual(snapshot.state.enabled.length, 1);
@@ -116,9 +119,7 @@ it.effect(
           ),
         );
         assert.strictEqual(outcome._tag === "Applied" && outcome.copies.length, 2);
-      }).pipe(
-        Effect.provide(Library.layer({ home, routing: { _tag: "Configured", ...configuration } })),
-      );
+      }).pipe(Effect.provide(Library.layer({ home, roots: configuration })));
     }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -128,7 +129,7 @@ it.effect("an absent Library exposes empty read facts without creating persisted
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-empty-view-" });
     const home = join(root, "absent");
     const view = yield* openLibraryView(home).pipe(
-      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provide(Library.layer({ home, roots: testRoots(home) })),
     );
     assert.deepStrictEqual(view.installedSkills, []);
     assert.deepStrictEqual(view.skillsShCollectionIds, []);

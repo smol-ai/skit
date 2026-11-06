@@ -11,6 +11,7 @@ import {
 } from "../src/library/source.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { SourceProcess } from "../src/platform/source-process.js";
+import { testRoots } from "./helpers/library-store.js";
 
 it.effect(
   "the source owner rejects dedicated installers before preview or import acquisition",
@@ -32,7 +33,7 @@ it.effect(
         }
         assert.isFalse(yield* fs.exists(join(home, "state.json")));
       }).pipe(
-        Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+        Effect.provide(Library.layer({ home, roots: testRoots(home) })),
         Effect.provideService(
           SourceProcess,
           SourceProcess.of({
@@ -85,6 +86,6 @@ it.effect("add keeps its saved import when the optional description report canno
         );
       }
       assert.strictEqual(yield* fs.readFileString(join(source, "SKILL.md")), bytes);
-    }).pipe(Effect.provide(Library.layer({ home, routing: { _tag: "None" } })));
+    }).pipe(Effect.provide(Library.layer({ home, roots: testRoots(home) })));
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );

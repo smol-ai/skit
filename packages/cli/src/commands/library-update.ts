@@ -4,7 +4,6 @@ import { prepareEditImport, EditImportMissing } from "../library/update/edit.js"
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleSourceCommand } from "../application.js";
-import { libraryCommandConfiguration } from "./library-configuration.js";
 import {
   CommandMetadata,
   credentialStoreReadSubprocesses,
@@ -71,13 +70,12 @@ export const updateCliCommand = Command.make(
             result("updatePlan", updateOutputContracts.updatePlan, value),
           );
         }
-        const configuration = yield* libraryCommandConfiguration(input);
-        const value = yield* updateSubjects({ roots: configuration.inventory }, query);
+        const value = yield* updateSubjects(query);
         yield* renderer.result(
           result("update", updateOutputContracts.update, value, updateExitCode(value)),
         );
       }),
-      Option.getOrUndefined(input.home),
+      input,
     ),
 ).pipe(
   Command.withDescription("Update sources from their recorded origins."),

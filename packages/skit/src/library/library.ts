@@ -305,15 +305,13 @@ export interface Interface {
 }
 export class Service extends Context.Service<Service, Interface>()("skit/library/Library") {}
 
-/** Routing is part of constructing this Library, never assembled by an operation's caller. */
-export type Routing =
-  | { readonly _tag: "None" }
-  | { readonly _tag: "Recorded" }
-  | ({ readonly _tag: "Configured" } & InventoryRootOptions);
-
+/**
+ * This device's roots are part of constructing the Library, never assembled by an operation's
+ * caller. A change that adds no routes (Remove, Uninstall) plans against the routes recorded.
+ */
 export interface Config {
   readonly home: string;
-  readonly routing: Routing;
+  readonly roots: InventoryRootOptions;
 }
 
 /** One public constructor owns migration, startup recovery, storage and installed-skill routing. */

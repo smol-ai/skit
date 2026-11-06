@@ -2,6 +2,7 @@ import { Effect } from "effect";
 import * as Library from "@smolai/skit-core/library";
 import { readLibraryManifest as readManifest } from "@smolai/skit-core/library/queries";
 import { assertDiskUnchanged, captureDisk } from "./disk-snapshot.js";
+import { testRoots } from "./roots.js";
 
 /** Query the public view; recovery or history delivery must never repair this test's evidence. */
 export const readLibraryManifest = Effect.fn("Test.readLibraryManifest")(function* (
@@ -10,7 +11,7 @@ export const readLibraryManifest = Effect.fn("Test.readLibraryManifest")(functio
 ) {
   const before = yield* captureDisk(roots, { identity: true });
   const manifest = yield* readManifest(home).pipe(
-    Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+    Effect.provide(Library.layer({ home, roots: testRoots(home) })),
   );
   yield* assertDiskUnchanged(before);
   return manifest;

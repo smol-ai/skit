@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { checkSubjects } from "../src/library/check/operation.js";
 import { importSource } from "../src/library/source.js";
 import { initializeLibraryMachine } from "./helpers/library-home.js";
+import { testRoots } from "./helpers/roots.js";
 
 it.effect("checks retained files without treating an observed local copy as an upstream", () =>
   Effect.gen(function* () {
@@ -21,10 +22,10 @@ it.effect("checks retained files without treating an observed local copy as an u
     yield* initializeLibraryMachine(home);
     yield* fs.writeFileString(join(source, "SKILL.md"), "observed raw Skill\n");
     const imported = yield* importSource(source).pipe(
-      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provide(Library.layer({ home, roots: testRoots(home) })),
     );
     const read = Effect.flatMap(Library.Service, (library) => library.read).pipe(
-      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provide(Library.layer({ home, roots: testRoots(home) })),
     );
     const loaded = yield* read;
     assert.strictEqual(loaded._tag, "Present");
@@ -34,7 +35,7 @@ it.effect("checks retained files without treating an observed local copy as an u
     const current = yield* checkSubjects(imported.collection_id, (collection) =>
       Ref.update(checkedCollections, (names) => [...names, collection.display_name]),
     ).pipe(
-      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provide(Library.layer({ home, roots: testRoots(home) })),
       Effect.provide(skitConfigurationLayer(home)),
     );
     assert.strictEqual(current[0]?.collection_versions[0]?.original_intact, true);
@@ -48,7 +49,7 @@ it.effect("checks retained files without treating an observed local copy as an u
     );
     yield* fs.writeFileString(join(path, "SKILL.md"), "changed retained bytes\n");
     const changed = yield* checkSubjects(imported.collection_id).pipe(
-      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provide(Library.layer({ home, roots: testRoots(home) })),
       Effect.provide(skitConfigurationLayer(home)),
     );
     assert.strictEqual(changed[0]?.collection_versions[0]?.original_intact, false);
@@ -56,7 +57,7 @@ it.effect("checks retained files without treating an observed local copy as an u
     assert.strictEqual(changed[0]?.available_snapshot_digest, undefined);
     yield* fs.remove(source, { recursive: true });
     const withoutCopy = yield* checkSubjects(imported.collection_id).pipe(
-      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provide(Library.layer({ home, roots: testRoots(home) })),
       Effect.provide(skitConfigurationLayer(home)),
     );
     assert.strictEqual(withoutCopy[0]?.source_status, "not-applicable");

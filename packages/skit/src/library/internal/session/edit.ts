@@ -157,30 +157,28 @@ const enablingScope = (
   )?.scope;
 
 /** Capture the Library and observations once; callers only render or apply this operation. */
-export const openEditImport = Effect.fn("Library.openEditImport")(
-  function* (home: string, query: string, selector: string) {
-    const library = yield* Library.Service;
-    const snapshot = yield* library.read;
-    const initial = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
-    const context = yield* Effect.context<Library.Service | TreeRequirements | Digest.Digest>();
-    const preview = yield* planEditImport(home, initial, query, selector);
-    return {
-      preview: structuredClone(preview),
-      apply: (currentHome: string) =>
-        resolve(currentHome) !== resolve(home)
-          ? Effect.fail(
-              new StalePlan({
-                message: "This retention preview belongs to a different Library",
-              }),
-            )
-          : applyEditImport(home, preview, query, selector).pipe(Effect.provide(context)),
-    };
-  },
-  (effect, home) =>
-    Effect.scoped(effect).pipe(
-      Effect.provide(Library.layer({ home, routing: { _tag: "Recorded" } })),
-    ),
-);
+export const openEditImport = Effect.fn("Library.openEditImport")(function* (
+  home: string,
+  query: string,
+  selector: string,
+) {
+  const library = yield* Library.Service;
+  const snapshot = yield* library.read;
+  const initial = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
+  const context = yield* Effect.context<Library.Service | TreeRequirements | Digest.Digest>();
+  const preview = yield* planEditImport(home, initial, query, selector);
+  return {
+    preview: structuredClone(preview),
+    apply: (currentHome: string) =>
+      resolve(currentHome) !== resolve(home)
+        ? Effect.fail(
+            new StalePlan({
+              message: "This retention preview belongs to a different Library",
+            }),
+          )
+        : applyEditImport(home, preview, query, selector).pipe(Effect.provide(context)),
+  };
+}, Effect.scoped);
 
 const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
   home: string,

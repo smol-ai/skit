@@ -6,6 +6,7 @@ import { removeCollection } from "../src/library/remove.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { skitConfigurationLayer } from "../src/platform/configuration.js";
+import { testRoots } from "./helpers/library-store.js";
 
 it.effect(
   "a dry run reports the removal without writing; removal takes the sole Skill's Collection",
@@ -44,7 +45,7 @@ it.effect(
         // The source folder is the user's; removal touches only the Library.
         assert.strictEqual(yield* fs.readFileString(path), bytes);
       }).pipe(
-        Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+        Effect.provide(Library.layer({ home, roots: testRoots(home) })),
         Effect.provide(skitConfigurationLayer(home)),
       );
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),

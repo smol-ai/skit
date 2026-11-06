@@ -6,6 +6,7 @@ import { readInventory, refreshInventory } from "../src/library/inventory.js";
 import * as Library from "../src/library/library.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
+import { testRoots } from "./helpers/library-store.js";
 
 const folder = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -52,7 +53,7 @@ it.effect(
         assert.strictEqual(saved._tag, "Present");
         if (saved._tag === "Present")
           assert.deepStrictEqual(saved.state.unmanaged, applied.result.inventory.unmanaged);
-      }).pipe(Effect.provide(Library.layer({ home: f.home, routing: { _tag: "None" } })));
+      }).pipe(Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })));
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
@@ -112,7 +113,7 @@ it.effect(
           JSON.parse(yield* f.fs.readFileString(join(f.home, "state.json"))).future,
           { keep: "future data" },
         );
-      }).pipe(Effect.provide(Library.layer({ home: f.home, routing: { _tag: "None" } })));
+      }).pipe(Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })));
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
@@ -128,8 +129,7 @@ it.effect(
       yield* f.fs.remove(join(f.skills, "review"), { recursive: true });
       const config = {
         home: f.home,
-        routing: {
-          _tag: "Configured" as const,
+        roots: {
           home: f.root,
           configHome: join(f.root, "config"),
           overrides: { codex: [f.skills] },
@@ -286,6 +286,6 @@ it.effect(
             saved.state.unmanaged.map((item) => item.path).sort(),
             [join(other, "older"), join(f.skills, "review")].sort(),
           );
-      }).pipe(Effect.provide(Library.layer({ home: f.home, routing: { _tag: "None" } })));
+      }).pipe(Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })));
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

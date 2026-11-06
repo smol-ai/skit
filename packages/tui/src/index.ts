@@ -22,6 +22,7 @@ import { createLibraryController } from "./library/controller";
 import { errorMessage } from "@smolai/skit-core/shared";
 import { HarnessName, readListingBudgets, type ListingBudget } from "@smolai/skit-core/harnesses";
 import * as Library from "@smolai/skit-core/library";
+import { inventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { readInventory } from "@smolai/skit-core/library/inventory";
 import { SkitConfiguration, skitConfigurationLayer, skitLayer } from "@smolai/skit-core/platform";
 import { auditLocalCapabilitiesV1Alpha4 } from "@smolai/skit-core/audit";
@@ -65,7 +66,7 @@ const flag = (name: string): string | undefined => {
 const libraryHost = createLibraryHost(
   Layer.unwrap(
     Effect.map(SkitConfiguration, (paths) =>
-      Library.layer({ home: paths.skitHome, routing: { _tag: "None" } }),
+      Library.layer({ home: paths.skitHome, roots: inventoryRootOptions(paths) }),
     ),
   ).pipe(
     Layer.provideMerge(skitLayer),

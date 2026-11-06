@@ -20,6 +20,7 @@ import {
   type DiskSnapshot,
 } from "./helpers/disk-snapshot.js";
 import { devices } from "./helpers/library-sync-devices.js";
+import { testRoots } from "./helpers/roots.js";
 
 type Homes = Effect.Success<typeof devices>;
 
@@ -447,8 +448,8 @@ const cases: readonly {
           ...state,
           enabled: [first, second].map((item) => ({ skill: item.skills[0]!.skill_id })),
         }));
-        // Without enabled roots nothing collides, so the Library can be pushed as it is.
-        yield* a.sync({ rootFor: () => undefined });
+        // A device that installs nothing has no collision, so the Library can be pushed as it is.
+        yield* a.sync({ deviceSelection: { skills: [], collections: [] } });
         yield* c.importSource("concurrent-local");
         yield* fs.makeDirectory(b.home, { recursive: true });
         yield* fs.copy(join(c.home, "originals"), join(b.home, "originals"));
@@ -783,8 +784,11 @@ it.effect("a --take-remote key is refused before collision checks on a push and 
     assert.strictEqual((yield* a.sync()).status, "conflicted");
     assert.deepStrictEqual(yield* a.sync({ takeRemote }), { status: "resolution_invalid" });
     assert.strictEqual(server.writeRequests, 0);
-    // Without enabled roots nothing collides, so the Library can be pushed as it is.
-    assert.strictEqual((yield* a.sync({ rootFor: () => undefined })).status, "pushed");
+    // A device that installs nothing has no collision, so the Library can be pushed as it is.
+    assert.strictEqual(
+      (yield* a.sync({ deviceSelection: { skills: [], collections: [] } })).status,
+      "pushed",
+    );
     const head = server.remote!;
     assert.strictEqual((yield* b.sync()).status, "conflicted");
     assert.deepStrictEqual(yield* b.sync({ takeRemote }), {
@@ -959,7 +963,7 @@ const prepareLocalSync = (home: string, roots: readonly string[]) =>
 it.effect("a Sync plan distinguishes an absent Library from a newly empty one", () =>
   Effect.gen(function* () {
     const { a, fs } = yield* devices;
-    const layer = Library.layer({ home: a.home, routing: { _tag: "None" } });
+    const layer = Library.layer({ home: a.home, roots: testRoots(a.home) });
     const plan = yield* prepareLocalSync(a.home, a.disk).pipe(Effect.provide(layer));
     yield* fs.makeDirectory(a.home, { recursive: true });
     const statePath = join(a.home, "state.json");
@@ -980,12 +984,12 @@ it.effect("a Sync plan cannot save into another Library home", () =>
     const { a, b } = yield* devices;
     yield* a.importSource("first");
     const plan = yield* prepareLocalSync(a.home, a.disk).pipe(
-      Effect.provide(Library.layer({ home: a.home, routing: { _tag: "None" } })),
+      Effect.provide(Library.layer({ home: a.home, roots: testRoots(a.home) })),
     );
     const before = yield* captureDisk([...a.disk, ...b.disk], { identity: true });
     const failure = yield* Effect.flip(
       Effect.flatMap(Library.Service, (library) => library.apply({ _tag: "Apply", plan })).pipe(
-        Effect.provide(Library.layer({ home: b.home, routing: { _tag: "None" } })),
+        Effect.provide(Library.layer({ home: b.home, roots: testRoots(b.home) })),
       ),
     );
     assert.strictEqual(failure._tag, "Library.StalePlan");

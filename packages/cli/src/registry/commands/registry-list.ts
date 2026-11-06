@@ -1,5 +1,5 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { Option, Effect } from "effect";
+import { Effect } from "effect";
 import { Command } from "effect/cli";
 import { handlePlatformCommand } from "../../application.js";
 import { CommandMetadata, credentialStoreReadSubprocesses } from "../../commands/metadata.js";
@@ -22,7 +22,7 @@ export const registryListCliCommand = Command.make(
         const registries = yield* Registry.remotes.list(selectedHome);
         yield* renderer.result(result("registryList", { registries }));
       }),
-      Option.getOrUndefined(home),
+      { home },
     ),
 ).pipe(
   Command.withDescription("List named Registries."),

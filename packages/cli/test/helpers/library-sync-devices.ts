@@ -2,7 +2,7 @@ import * as Construction from "effect/Layer";
 import * as Context from "effect/Context";
 import { installEnabledSkills } from "./installed-skills.js";
 import { assert } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Schema } from "effect";
+import { Effect, FileSystem, Layer, Schema, Struct } from "effect";
 import { join } from "node:path";
 import { systemError } from "effect/PlatformError";
 import { LibraryState } from "@smolai/skit-core/library";
@@ -22,6 +22,8 @@ const StateFile = Schema.fromJsonString(
   Schema.Unknown.pipe(Schema.refine(Schema.is(LibraryState))),
 );
 import { faultQueue, librarySyncServer } from "./library-sync-server.js";
+import { testRoots } from "./roots.js";
+import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 
 /** Devices sharing one compare-and-swap Library server, with injectable one-shot faults. */
 export const devices = Effect.gen(function* () {
@@ -127,17 +129,16 @@ export const devices = Effect.gen(function* () {
     const rootFor = (target: InstallDestination) => (target === "agents" ? root : undefined);
     /** Loader maintenance happens here, outside the save-counting filesystem. */
     const maintained = Effect.flatMap(Library.Service, (library) => library.read).pipe(
-      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provide(Library.layer({ home, roots: testRoots(home) })),
       Effect.provideService(FileSystem.FileSystem, fs),
     );
-    /** How a sync routes this device's installs; the same inventory a sync is given. */
+    /** How this device routes installs: the roots its Library is built from. */
     const syncInventory = (
       route: (target: InstallDestination) => string | undefined = rootFor,
-      inventory?: Parameters<typeof syncLibrary>[1]["inventory"],
-    ) => {
+      inventory?: InventoryRootOptions,
+    ): InventoryRootOptions => {
       const agents = route("agents");
       const claude = route("claude");
-      if (!agents && !claude) return undefined;
       return (
         inventory ?? {
           home: workspace,
@@ -152,18 +153,13 @@ export const devices = Effect.gen(function* () {
     /** This home's Library owner, routed as this device's sync installs. */
     const owner = (
       route: (target: InstallDestination) => string | undefined = rootFor,
-      inventory?: Parameters<typeof syncLibrary>[1]["inventory"],
+      inventory?: InventoryRootOptions,
     ) =>
       Effect.gen(function* () {
         yield* maintained;
-        const selected = syncInventory(route, inventory);
         return Context.get(
           yield* Construction.build(
-            Library.layer({
-              home,
-              routing:
-                selected === undefined ? { _tag: "None" } : { _tag: "Configured", ...selected },
-            }),
+            Library.layer({ home, roots: syncInventory(route, inventory) }),
           ),
           Library.Service,
         );
@@ -291,10 +287,11 @@ export const devices = Effect.gen(function* () {
           kind: "global",
         },
         skillsDirectory = root,
+        target: InstallDestination = "agents",
       ) =>
         owned(
           installEnabledSkills({
-            target: "agents",
+            target,
             scope,
             root: skillsDirectory,
             variantsPath: join(home, "variants"),
@@ -309,7 +306,8 @@ export const devices = Effect.gen(function* () {
           takeRemote?: readonly string[];
           keepEnabled?: readonly string[];
           deviceSelection?: Parameters<typeof syncLibrary>[1]["deviceSelection"];
-          inventory?: Parameters<typeof syncLibrary>[1]["inventory"];
+          /** The roots this device's Library is built from; defaults to `rootFor`'s. */
+          inventory?: InventoryRootOptions;
           rootFor?: (target: InstallDestination) => string | undefined;
         } = {},
       ) =>
@@ -325,15 +323,14 @@ export const devices = Effect.gen(function* () {
                 origin: "https://registry.test",
                 token: "test",
                 apply: true,
-                ...options,
-                ...(syncInventory(options.rootFor, options.inventory) === undefined
-                  ? {}
-                  : {
-                      inventory: syncInventory(options.rootFor, options.inventory),
-                    }),
+                ...Struct.omit(options, ["inventory", "rootFor"]),
                 installedSkill: { rootFor: options.rootFor ?? rootFor },
               },
               transport,
+            ).pipe(
+              Effect.provide(
+                Library.layer({ home, roots: syncInventory(options.rootFor, options.inventory) }),
+              ),
             ),
         ).pipe(Effect.provide(http), Effect.scoped, owned),
     };

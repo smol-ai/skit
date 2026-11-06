@@ -55,7 +55,7 @@ export const addCliCommand = Command.make(
           "Description size",
         );
       }),
-      Option.getOrUndefined(input.home),
+      input,
     ),
 ).pipe(
   Command.withDescription("Add a source to the local library without enabling it."),

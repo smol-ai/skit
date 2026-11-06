@@ -57,7 +57,7 @@ export const feedbackSendCliCommand = Command.make(
         });
         yield* renderer.result(result("feedbackSend", sent));
       }).pipe(Effect.provide(registryHttpLayer())),
-      Option.getOrUndefined(options.home),
+      { home: options.home },
     ),
 ).pipe(
   Command.withDescription(

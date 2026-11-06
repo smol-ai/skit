@@ -11,6 +11,7 @@ import { RegistryUnreachable } from "../src/registry/failures.js";
 import { captureDisk, assertDiskUnchanged } from "./helpers/disk-snapshot.js";
 import { renderLibrarySyncPlan } from "../src/library/sync/present.js";
 import { devices } from "./helpers/library-sync-devices.js";
+import { testRoots } from "./helpers/roots.js";
 
 const enable = (ids: readonly SkillId[]) => ids.map((id) => ({ skill: id }));
 
@@ -262,10 +263,14 @@ it.effect(
       yield* a.edit((state) => ({ ...state, enabled: enable([skill.skill_id]) }));
       yield* a.sync();
       yield* b.sync();
-      yield* fs.writeFileString(join(b.root, "review", "SKILL.md"), "native edit\n");
-      assert.equal((yield* b.sync({ rootFor: () => undefined })).status, "clean");
-      assert.equal((yield* b.state).installed_skills[0]?.status, "conflicted");
-      assert.equal(yield* fs.readFileString(join(b.root, "review", "SKILL.md")), "native edit\n");
+      // A copy at the claude destination is inactive here: Claude Code is not on this device.
+      const claude = join(b.root, "..", "b-claude");
+      yield* b.project({ kind: "global" }, claude, "claude");
+      yield* fs.writeFileString(join(claude, "review", "SKILL.md"), "native edit\n");
+      assert.equal((yield* b.sync()).status, "clean");
+      const copies = (yield* b.state).installed_skills;
+      assert.equal(copies.find((copy) => copy.destination === "claude")?.status, "conflicted");
+      assert.equal(yield* fs.readFileString(join(claude, "review", "SKILL.md")), "native edit\n");
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -389,7 +394,7 @@ it.effect(
       yield* b.project();
       // Retain this real owner before interruption; opening another owner would replay recovery.
       const inventory = Context.get(
-        yield* Layer.build(Library.layer({ home: b.home, routing: { _tag: "None" } })),
+        yield* Layer.build(Library.layer({ home: b.home, roots: testRoots(b.home) })),
         Library.Service,
       );
       yield* a.sync();
@@ -510,7 +515,7 @@ it.effect("identity alignment preserves a native deletion recorded before first 
     yield* b.edit((state) => ({ ...state, enabled: enable([local.skill_id]) }));
     yield* b.project();
     const inventory = Context.get(
-      yield* Layer.build(Library.layer({ home: b.home, routing: { _tag: "None" } })),
+      yield* Layer.build(Library.layer({ home: b.home, roots: testRoots(b.home) })),
       Library.Service,
     );
     yield* fs.remove(join(b.root, "same"), { recursive: true });

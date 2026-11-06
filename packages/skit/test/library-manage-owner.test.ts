@@ -7,6 +7,7 @@ import { observePathEvidence } from "../src/library/folder-evidence.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { systemError } from "effect/PlatformError";
+import { testRoots } from "./helpers/library-store.js";
 
 const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -45,8 +46,7 @@ const fixture = Effect.gen(function* () {
   };
   const config: Library.Config = {
     home,
-    routing: {
-      _tag: "Configured",
+    roots: {
       home: root,
       configHome: join(root, "config"),
       overrides: { codex: [agents] },
@@ -171,7 +171,7 @@ it.effect("retaining alone uses no routing and keeps previous completed setups u
         { base: yield* library.read },
       );
       assert.strictEqual(undo.change.status, "ready");
-    }).pipe(Effect.provide(Library.layer({ home: f.home, routing: { _tag: "None" } })));
+    }).pipe(Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })));
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
@@ -221,7 +221,7 @@ for (const edit of [false, true])
             assert.isTrue(yield* f.fs.exists(join(f.copy, ".skit-ownership.json")));
             assert.strictEqual((yield* library.history).operations[0]._tag, "Done");
           }
-        }).pipe(Effect.provide(Library.layer({ home: f.home, routing: { _tag: "None" } })));
+        }).pipe(Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })));
       }).pipe(Effect.scoped, Effect.provide(skitLayer)),
   );
 
@@ -327,8 +327,7 @@ for (const readable of [true, false])
         };
         const config: Library.Config = {
           home: f.home,
-          routing: {
-            _tag: "Configured",
+          roots: {
             home: f.root,
             configHome: join(f.root, "config"),
             overrides: { codex: [f.agents], opencode: readable ? [f.agents, legacy] : [legacy] },
@@ -436,8 +435,7 @@ it.effect(
       yield* f.fs.writeFileString(other, otherBytes);
       const config: Library.Config = {
         home: f.home,
-        routing: {
-          _tag: "Configured",
+        roots: {
           home: f.root,
           configHome: join(f.root, "config"),
           overrides: { codex: [f.agents], "claude-code": [claude] },
@@ -484,8 +482,7 @@ it.effect("a newly introduced duplicate invalidates Manage without moving either
     yield* f.fs.makeDirectory(legacy);
     const config: Library.Config = {
       home: f.home,
-      routing: {
-        _tag: "Configured",
+      roots: {
         home: f.root,
         configHome: join(f.root, "config"),
         overrides: { codex: [f.agents], opencode: [legacy] },

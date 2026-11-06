@@ -10,6 +10,7 @@ import {
   prepareInstalledSkillRebuild,
   reproducible,
 } from "../src/library/installation/retained-skill.js";
+import { testRoots } from "./helpers/library-store.js";
 
 const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -45,7 +46,7 @@ const fixture = Effect.gen(function* () {
       input: source,
       importedAt: "2026-11-06T00:00:00.000Z",
     }),
-  ).pipe(Effect.provide(Library.layer({ home, routing: { _tag: "None" } })));
+  ).pipe(Effect.provide(Library.layer({ home, roots: testRoots(home) })));
   const retained = collectionVersionPath(originals, imported.snapshotDigest);
   // Independent on-disk format fixture: no composition encoder or private writer creates it.
   const entries = [
@@ -209,8 +210,7 @@ it.effect(
         Effect.provide(
           Library.layer({
             home: f.home,
-            routing: {
-              _tag: "Configured",
+            roots: {
               home: f.root,
               configHome: join(f.root, "config"),
               overrides: { codex: [agents] },
@@ -286,7 +286,7 @@ for (const damage of [
           const library = yield* Library.Service;
           return yield* Effect.result(library.content.inspect(yield* library.read));
         }).pipe(
-          Effect.provide(Library.layer({ home: f.home, routing: { _tag: "None" } })),
+          Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })),
           Effect.provideService(FileSystem.FileSystem, f.trackReads),
         );
         if (refused._tag !== "Failure")

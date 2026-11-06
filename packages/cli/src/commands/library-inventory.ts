@@ -1,5 +1,5 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { Option, Effect } from "effect";
+import { Effect } from "effect";
 import { Command } from "effect/cli";
 import { Renderer } from "../terminal/renderer.js";
 import { handleLibraryCommand } from "../application.js";
@@ -39,7 +39,7 @@ export const inventoryCliCommand = Command.make("inventory", localFlags, (input)
       const inventory = yield* inventoryCommand(options);
       yield* renderer.result(result("inventory", inventoryOutputContracts.inventory, inventory));
     }),
-    Option.getOrUndefined(input.home),
+    input,
   ),
 ).pipe(
   Command.withDescription(

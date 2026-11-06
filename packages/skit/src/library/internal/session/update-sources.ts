@@ -7,7 +7,6 @@ import { loadLibrary, writeLibrary } from "../../store/library-store.js";
 import { latestSourceImport, type LibrarySubject } from "../../subject-resolution.js";
 import { sourceLocator } from "../../../sources/resolve.js";
 import { isSkitFailure } from "../../../shared/failure.js";
-import type { InventoryRootOptions } from "../../routing/roots.js";
 import type { Hash } from "../../../shared/hash.js";
 import type { SkitSource } from "../../library-contracts.js";
 import type { SourceDiscoveryDiagnostic } from "../../../sources/source-diagnostics.js";
@@ -224,28 +223,21 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <
 });
 
 /** One owner and one batch action; Collection failures stay local, shared-storage failures stop it. */
-export const updateSources = Effect.fn("Library.updateSources")(
-  function* <E, R, F extends { readonly remediation: string }>(
-    home: string,
-    roots: InventoryRootOptions,
-    query: string | undefined,
-    adapters: SourceUpdateAdapters<E, R, F>,
-  ) {
-    const library = yield* Library.Service;
-    return yield* writeLibrary(
-      home,
-      Effect.gen(function* () {
-        const snapshot = yield* library.read;
-        const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
-        const selected = yield* selectSubjects(state, query);
-        return yield* Effect.forEach(selected, (subject) =>
-          updateCollection(home, state, subject, adapters),
-        );
-      }),
-    );
-  },
-  (effect, home, roots) =>
-    Effect.scoped(effect).pipe(
-      Effect.provide(Library.layer({ home, routing: { _tag: "Configured", ...roots } })),
-    ),
-);
+export const updateSources = Effect.fn("Library.updateSources")(function* <
+  E,
+  R,
+  F extends { readonly remediation: string },
+>(home: string, query: string | undefined, adapters: SourceUpdateAdapters<E, R, F>) {
+  const library = yield* Library.Service;
+  return yield* writeLibrary(
+    home,
+    Effect.gen(function* () {
+      const snapshot = yield* library.read;
+      const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
+      const selected = yield* selectSubjects(state, query);
+      return yield* Effect.forEach(selected, (subject) =>
+        updateCollection(home, state, subject, adapters),
+      );
+    }),
+  );
+}, Effect.scoped);

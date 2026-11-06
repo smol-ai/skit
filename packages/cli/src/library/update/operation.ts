@@ -1,16 +1,11 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { updateSources, previewLibrarySourceUpdates } from "@smolai/skit-core/library/update";
 import { Effect } from "effect";
-import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import type { UpdateResult } from "./output.js";
 import { importSource, inspectLibrarySource } from "../source.js";
 
 import { LibraryProgress } from "./progress.js";
 import { commandFailure } from "../../commands/failure-classification.js";
-export interface UpdateOptions {
-  readonly roots: InventoryRootOptions;
-}
-
 export const planUpdates = Effect.fn("CLI.planUpdates")(function* (query?: string) {
   return yield* previewLibrarySourceUpdates(
     (yield* SkitConfiguration).skitHome,
@@ -30,13 +25,10 @@ export function updateExitCode(outcomes: UpdateResult): number {
     : 1;
 }
 
-export const updateSubjects = Effect.fn("CLI.updateSubjects")(function* (
-  options: UpdateOptions,
-  query?: string,
-) {
+export const updateSubjects = Effect.fn("CLI.updateSubjects")(function* (query?: string) {
   const paths = yield* SkitConfiguration;
   const progress = yield* LibraryProgress;
-  return yield* updateSources(paths.skitHome, options.roots, query, {
+  return yield* updateSources(paths.skitHome, query, {
     progress,
     classifyFailure: commandFailure,
     importSource,

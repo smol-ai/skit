@@ -1,5 +1,5 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { Option, Effect } from "effect";
+import { Effect } from "effect";
 import { Command } from "effect/cli";
 import { handlePlatformCommand } from "../../application.js";
 import { Registry } from "../index.js";
@@ -26,7 +26,7 @@ export const authStatusCliCommand = Command.make(
         const value = yield* Registry.status(selectedHome, optionValue(registry));
         yield* renderer.result(result("authStatus", value));
       }),
-      Option.getOrUndefined(home),
+      { home },
     ),
 ).pipe(
   Command.withDescription("Show stored Registry credential metadata."),

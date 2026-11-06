@@ -315,7 +315,7 @@ export const setupCliCommand = Command.make(
         }
         if (execution.success) yield* renderer.result(execution.success);
       }),
-      Option.getOrUndefined(input.home),
+      input,
     ),
 ).pipe(
   Command.withDescription(

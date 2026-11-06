@@ -1,7 +1,8 @@
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { installEnabledSkills } from "./helpers/installed-skills.js";
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Layer } from "effect";
+import * as Library from "@smolai/skit-core/library";
 import { join } from "node:path";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { skitLayer } from "@smolai/skit-core/platform";
@@ -45,7 +46,17 @@ const installedSkillFixture = Effect.gen(function* () {
     ),
   );
   const library = yield* libraryHome({ home });
-  const configuration = skitConfigurationLayer(home);
+  const configuration = Layer.merge(
+    skitConfigurationLayer(home),
+    Library.layer({
+      home,
+      roots: {
+        home: workspace,
+        configHome: join(workspace, "config"),
+        overrides: { codex: [roots.codexRoot], "claude-code": [roots.claudeRoot] },
+      },
+    }),
+  );
   const initial = yield* library.durable;
   const skill = initial.skills.find(
     (candidate) => candidate.collection_id === collection.collection?.collection_id,

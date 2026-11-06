@@ -170,9 +170,8 @@ const emptyManifest = currentLibraryManifest({
 /** Global destinations come from this owner; repositories keep their already-recorded routes. */
 const routingFor = Effect.fn("Library.sync.routing")(function* (
   state: LibraryState,
-  options: { readonly none?: boolean; readonly roots?: InventoryRootOptions },
+  options: { readonly roots: InventoryRootOptions },
 ) {
-  if (options.none) return { active: [], destinations: [], readable: [] } satisfies StepRouting;
   const files = yield* InstalledSkills.Service;
   const active = yield* files.active;
   const globals = yield* files.destinations({ kind: "global" });
@@ -191,12 +190,9 @@ const routingFor = Effect.fn("Library.sync.routing")(function* (
             return root === undefined ? [] : [{ scope, destination, root }];
           }),
     ),
-    readable:
-      roots === undefined
-        ? []
-        : scopes.flatMap((scope) =>
-            readableSkillsDirectories(roots, scope).map((root) => ({ scope, ...root })),
-          ),
+    readable: scopes.flatMap((scope) =>
+      readableSkillsDirectories(roots, scope).map((root) => ({ scope, ...root })),
+    ),
   } satisfies StepRouting;
 });
 
@@ -206,8 +202,7 @@ export const planSync = Effect.fn("Library.planSync")(function* (
   input: SyncIntent,
   options: {
     readonly base: Snapshot;
-    readonly none?: boolean;
-    readonly roots?: InventoryRootOptions;
+    readonly roots: InventoryRootOptions;
     readonly operationId?: OperationId;
   },
 ) {
@@ -397,7 +392,7 @@ export const planSync = Effect.fn("Library.planSync")(function* (
 export const applySync = Effect.fn("Library.applySync")(function* (
   home: string,
   request: SyncApplyRequest,
-  options: { readonly none?: boolean; readonly roots?: InventoryRootOptions },
+  options: { readonly roots: InventoryRootOptions },
 ) {
   const approved = request.plan;
   if (approved.home !== home)

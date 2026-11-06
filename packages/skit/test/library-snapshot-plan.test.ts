@@ -40,8 +40,7 @@ it.effect("a plan narrows by operation and a forged tag cannot redirect apply", 
       Effect.provide(
         Library.layer({
           home,
-          routing: {
-            _tag: "Configured",
+          roots: {
             home,
             configHome: home,
             overrides: { codex: [join(home, "skills")] },
@@ -93,8 +92,7 @@ for (const initiallyPresent of [false, true])
           Effect.provide(
             Library.layer({
               home,
-              routing: {
-                _tag: "Configured",
+              roots: {
                 home,
                 configHome: join(home, "config"),
                 overrides: { codex: [join(home, "skills")] },
@@ -133,8 +131,7 @@ it.effect("planning refuses a changed Snapshot revision without writing the Libr
       Effect.provide(
         Library.layer({
           home,
-          routing: {
-            _tag: "Configured",
+          roots: {
             home,
             configHome: join(home, "config"),
             overrides: { codex: [join(home, "skills")] },
@@ -175,8 +172,7 @@ it.effect("all planning validates captured state, and a delayed plan owns its Sn
       Effect.provide(
         Library.layer({
           home,
-          routing: {
-            _tag: "Configured",
+          roots: {
             home,
             configHome: home,
             overrides: { codex: [join(home, "skills")] },

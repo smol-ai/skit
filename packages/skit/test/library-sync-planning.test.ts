@@ -7,6 +7,7 @@ import { localImportRequest } from "../src/library/setup/local-import.js";
 import { previewSyncInstalledSkills } from "../src/library/internal/sync/installed-skills.js";
 import { resolveSyncInstalledSkillCollisions } from "../src/library/internal/sync/collisions.js";
 import { skitLayer } from "../src/platform/layer.js";
+import { testRoots } from "./helpers/library-store.js";
 
 it.effect("Sync planning protects edited copies without saving state or moving files", () =>
   Effect.gen(function* () {
@@ -90,8 +91,7 @@ it.effect("Sync planning protects edited copies without saving state or moving f
       Effect.provide(
         Library.layer({
           home,
-          routing: {
-            _tag: "Configured",
+          roots: {
             home: root,
             configHome: root,
             overrides: { codex: [skills] },
@@ -152,6 +152,6 @@ it.effect("Sync requires an explicit collision choice and keeps both Skills reta
       assert.isTrue(invalid.invalid);
       assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), before);
       assert.deepEqual(yield* fs.readDirectory(skills), []);
-    }).pipe(Effect.provide(Library.layer({ home, routing: { _tag: "None" } })));
+    }).pipe(Effect.provide(Library.layer({ home, roots: testRoots(home) })));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

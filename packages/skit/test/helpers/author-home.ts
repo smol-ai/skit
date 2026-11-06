@@ -2,6 +2,7 @@ import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { makeMachineId } from "../../src/library/entity-ids.js";
 import * as Library from "../../src/library/index.js";
+import { testRoots } from "./library-store.js";
 export const libraryHome = Effect.fn("Test.authorHome")(function* ({ home }: { home: string }) {
   const fs = yield* FileSystem.FileSystem;
   yield* fs.makeDirectory(home, { recursive: true });
@@ -17,7 +18,7 @@ export const libraryHome = Effect.fn("Test.authorHome")(function* ({ home }: { h
   return {
     home,
     snapshot: Effect.flatMap(Library.Service, (owner) => owner.read).pipe(
-      Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+      Effect.provide(Library.layer({ home, roots: testRoots(home) })),
     ),
   };
 });

@@ -185,7 +185,7 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
         Effect.provide(interaction.layer),
         // The record is the first state.json replacement and the import the second: dying there
         // leaves it Pending.
-        withLibraryOwner,
+        withLibraryOwner(home.inventory),
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
           rename: (from, to) =>

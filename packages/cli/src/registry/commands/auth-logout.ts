@@ -24,7 +24,7 @@ export const authLogoutCliCommand = Command.make(
         const value = yield* authLogoutCommand(selectedHome, Option.getOrUndefined(origin));
         yield* renderer.result(result("authLogout", value));
       }),
-      Option.getOrUndefined(home),
+      { home },
     ),
 ).pipe(
   Command.withDescription("Revoke and remove a stored CLI credential."),

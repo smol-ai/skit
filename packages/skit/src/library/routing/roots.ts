@@ -57,6 +57,12 @@ export function skillsDirectoryFor(
   );
 }
 
+/** This device's roots: its home and config home, plus any skills directories named on the command line. */
+export const inventoryRootOptions = (
+  paths: { readonly userHome: string; readonly configHome: string },
+  overrides: SkillsDirectoryOverrides = {},
+): InventoryRootOptions => ({ home: paths.userHome, configHome: paths.configHome, overrides });
+
 /** The targets this device materializes into: `.agents` always, `.claude` only with Claude Code. */
 export const activeInstallDestinations = Effect.fn("Install.activeInstallDestinations")(function* (
   options: InventoryRootOptions,

@@ -100,6 +100,13 @@ export const makeSyncJourneyFixture = Effect.gen(function* () {
     };
     const archives = yield* library.content.pack(snapshot);
     return { manifest, archives };
-  }).pipe(Effect.provide(Library.layer({ home: seedHome, routing: { _tag: "None" } })));
+  }).pipe(
+    Effect.provide(
+      Library.layer({
+        home: seedHome,
+        roots: { home: seedHome, configHome: join(seedHome, "config"), overrides: {} },
+      }),
+    ),
+  );
   return { workspace, seeded };
 });

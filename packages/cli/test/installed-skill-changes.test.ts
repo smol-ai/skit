@@ -691,7 +691,7 @@ it.effect(
       const failed = yield* f.home.owned(
         setupApplyCommand({ ...input, reviewedPlanId: review.plan.reviewId }).pipe(
           Effect.provide(interaction.layer),
-          withLibraryOwner,
+          withLibraryOwner(f.home.inventory),
           Effect.provideService(FileSystem.FileSystem, {
             ...f.fs,
             rename: (from, to) => {

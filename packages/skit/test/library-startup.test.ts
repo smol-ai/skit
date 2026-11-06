@@ -40,7 +40,8 @@ const setupProcess = (home: string, folder: string, commits: number) =>
            rename: (from, to) => Effect.andThen(gate, fs.rename(from, to)),
            link: (from, to) => Effect.andThen(gate, fs.link(from, to)) };
        }));
-       const layer = Library.layer({ home, routing: { _tag: "None" } }).pipe(
+       const roots = { home: home + "/device-home", configHome: home + "/device-home/.config", overrides: {} };
+       const layer = Library.layer({ home, roots }).pipe(
          Layer.provide(paused));
        const keepAlive = setInterval(() => {}, 60_000);
        try { await Effect.runPromise(Effect.gen(function* () {

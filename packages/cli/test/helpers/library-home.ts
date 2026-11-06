@@ -18,6 +18,7 @@ import { testHttpClientLayer, type TestHttpHandler } from "./http-test-client.js
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
 
 import * as Library from "@smolai/skit-core/library";
+import { testRoots } from "./roots.js";
 
 export type LibraryFixtureState = Extract<Library.Snapshot, { readonly _tag: "Present" }>["state"];
 /** Independent current-format empty-file fixture; absence is still asserted through Snapshot. */
@@ -124,7 +125,7 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
       Effect.provide(
         Layer.mergeAll(
           skitConfigurationLayer(home),
-          Library.layer({ home, routing: { _tag: "Recorded" } }),
+          Library.layer({ home, roots: inventory }),
           transport,
           registryHttpLayer(transport),
         ),
@@ -216,12 +217,12 @@ export { deterministicTreeHash };
 /** Retain observed bytes into the Library at `home`, through the owner production consumes. */
 export const importCollectionIn = (home: string) => (request: ImportRequest) =>
   Effect.flatMap(Library.Service, (library) => library.import.collection(request)).pipe(
-    Effect.provide(Library.layer({ home, routing: { _tag: "Recorded" } })),
+    Effect.provide(Library.layer({ home, roots: testRoots(home) })),
   );
 
 /** Change the Library at `home` the way a front end does: through its owner. */
 export const writingTo = <A, E, R>(home: string, effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
-    Effect.provide(Library.layer({ home, routing: { _tag: "Recorded" } })),
+    Effect.provide(Library.layer({ home, roots: testRoots(home) })),
     Effect.provide(skitConfigurationLayer(home)),
   );

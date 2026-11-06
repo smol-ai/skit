@@ -8,6 +8,7 @@ import { libraryView } from "../src/library/internal/session/library-view.js";
 import { openSetEnabledSession } from "../src/library/enable.js";
 import { matchingLibrarySubjects } from "../src/library/subject-resolution.js";
 import { makeCollectionId, makeSkillId } from "../src/library/entity-ids.js";
+import { testRoots } from "./helpers/library-store.js";
 
 it.effect(
   "subject selection preserves skill/collection precedence and rejects ambiguity before fetching",
@@ -30,7 +31,7 @@ it.effect(
         const library = yield* Library.Service;
         yield* library.import.collection(request.value);
         return yield* library.read;
-      }).pipe(Effect.provide(Library.layer({ home, routing: { _tag: "None" } })));
+      }).pipe(Effect.provide(Library.layer({ home, roots: testRoots(home) })));
       if (snapshot._tag !== "Present") return yield* Effect.die("Expected imported Library");
       const state = snapshot.state;
       const member = state.skills.find((skill) => skill.name === "review");
@@ -101,13 +102,15 @@ it.effect(
       if (Option.isNone(secondRequest)) return yield* Effect.die("Expected second collection");
       yield* Effect.flatMap(Library.Service, (library) =>
         library.import.collection(secondRequest.value),
-      ).pipe(Effect.provide(Library.layer({ home, routing: { _tag: "None" } })));
+      ).pipe(Effect.provide(Library.layer({ home, roots: testRoots(home) })));
       const configuration = {
         home: root,
         configHome: join(root, "config"),
         overrides: { codex: [join(root, "enabled")] },
       };
-      const selection = yield* openSetEnabledSession(home, configuration);
+      const selection = yield* openSetEnabledSession(home, configuration).pipe(
+        Effect.provide(Library.layer({ home, roots: configuration })),
+      );
       const failure = yield* selection
         .plan({ subject: "review", enabled: true, where: [{ kind: "global" }] }, configuration)
         .pipe(Effect.flip);

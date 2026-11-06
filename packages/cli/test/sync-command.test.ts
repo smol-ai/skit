@@ -16,13 +16,14 @@ import { scratch } from "./helpers/library-home.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 import { MissingRequirement } from "../src/commands/input-failures.js";
 import { authorLayer } from "./helpers/author-history.js";
+import { testRoots } from "./helpers/roots.js";
 
 const failure = new CredentialsUnusable({ path: "/broken/auth.json", reason: "invalid" });
 
 const services = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.provide(rendererTestLayer()),
-    Effect.provide(Library.layer({ home: "/unreachable", routing: { _tag: "None" } })),
+    Effect.provide(Library.layer({ home: "/unreachable", roots: testRoots("/unreachable") })),
     // Building the owner touches no disk; these commands fail before they capture anything.
     Effect.provide(authorLayer("/unreachable")),
     Effect.provide(testPlatformLayer),
@@ -110,7 +111,7 @@ it.effect.each(["connected", "connecting"] as const)(
         Effect.exit,
         Effect.provide(rendererTestLayer()),
         Effect.provide(authorLayer(home)),
-        Effect.provide(libraryApplicationLayer.pipe(Layer.provide(skitConfigurationLayer(home)))),
+        Effect.provide(libraryApplicationLayer().pipe(Layer.provide(skitConfigurationLayer(home)))),
         Effect.provide(
           registryHttpLayer(
             testHttpClientLayer((request) =>

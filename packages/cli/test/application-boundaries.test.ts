@@ -227,7 +227,7 @@ it.effect("application layers consume the supplied paths without re-reading conf
       assert.isTrue(yield* fs.exists(paths.authPath));
       assert.isFalse(yield* fs.exists(join(root, "ignored")));
     }).pipe(
-      Effect.provide(sourceApplicationLayer),
+      Effect.provide(sourceApplicationLayer()),
       Effect.provideService(SkitConfiguration, paths),
       Effect.provide(
         ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: join(root, "ignored") })),
@@ -256,7 +256,7 @@ it.effect("separate application boundaries retain their own storage roots", () =
         return home;
       }).pipe(
         Effect.provide(
-          libraryApplicationLayer.pipe(Layer.provideMerge(skitConfigurationLayer(home))),
+          libraryApplicationLayer().pipe(Layer.provideMerge(skitConfigurationLayer(home))),
         ),
       ),
     );

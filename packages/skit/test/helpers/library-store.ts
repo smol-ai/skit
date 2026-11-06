@@ -1,4 +1,6 @@
 import { Context, Effect, Layer } from "effect";
+import { join } from "node:path";
+import type { InventoryRootOptions } from "../../src/library/routing/roots.js";
 import * as Library from "../../src/library/library.js";
 import {
   inspectLocalLibraryState,
@@ -24,8 +26,15 @@ export const saveLibrary = (home: string, state: LibraryState) =>
     }),
   );
 
-/** The Library rooted at `home`, routing nothing; building it migrates a legacy state.json. */
-export const libraryLayer = (home: string) => Library.layer({ home, routing: { _tag: "None" } });
+/** A device whose roots sit under the Library home, so detection finds no harness there. */
+export const testRoots = (home: string): InventoryRootOptions => ({
+  home: join(home, "device-home"),
+  configHome: join(home, "device-home", ".config"),
+  overrides: {},
+});
+
+/** The Library rooted at `home`; building it migrates a legacy state.json. */
+export const libraryLayer = (home: string) => Library.layer({ home, roots: testRoots(home) });
 
 /** Build the public owner in the caller's test scope, with no installed-skill destinations. */
 export const openLibrary = (home: string) =>

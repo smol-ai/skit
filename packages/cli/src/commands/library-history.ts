@@ -1,5 +1,5 @@
 import { readLibraryHistory } from "@smolai/skit-core/library/queries";
-import { Option, Effect } from "effect";
+import { Effect } from "effect";
 import { Command } from "effect/cli";
 import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
@@ -22,7 +22,7 @@ export const libraryHistoryCliCommand = Command.make(
           }),
         );
       }),
-      Option.getOrUndefined(input.home),
+      input,
     ),
 ).pipe(
   Command.withDescription("Show device-local Library change history."),

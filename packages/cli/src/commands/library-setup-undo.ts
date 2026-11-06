@@ -128,7 +128,7 @@ export const librarySetupUndoCliCommand = Command.make(
           }),
         );
       }),
-      Option.getOrUndefined(input.home),
+      input,
     ),
 ).pipe(
   Command.withDescription(

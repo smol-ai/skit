@@ -90,7 +90,7 @@ export const setEnabledCliCommand = (enabled: boolean) => {
             configuration,
           });
         }),
-        Option.getOrUndefined(input.home),
+        input,
       ),
   ).pipe(
     Command.withDescription(

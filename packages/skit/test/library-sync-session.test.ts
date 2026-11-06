@@ -6,6 +6,7 @@ import { libraryManifestFromLocalState } from "../src/library/library-state.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { openSyncSession } from "../src/library/sync.js";
 import { skitLayer } from "../src/platform/layer.js";
+import { testRoots } from "./helpers/library-store.js";
 
 it.effect("sync session captures review inputs and refuses redirected staged content", () =>
   Effect.gen(function* () {
@@ -64,6 +65,6 @@ it.effect("sync session captures review inputs and refuses redirected staged con
         assert.strictEqual(after.state.collections[0]?.label, label);
         assert.strictEqual(after.state.sync_ancestry?.base_manifest.collections[0]?.label, label);
       }
-    }).pipe(Effect.provide(Library.layer({ home, routing: { _tag: "None" } })));
+    }).pipe(Effect.provide(Library.layer({ home, roots: testRoots(home) })));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

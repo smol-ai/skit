@@ -11,6 +11,8 @@ import type { OwnershipMarker } from "../../src/installed-skills/ownership-marke
 import type { Hash } from "../../src/shared/hash.js";
 import type { InstallDestination } from "../../src/installed-skills/destination.js";
 import type { InstallScope } from "../../src/library/scope.js";
+import { testRoots } from "./library-store.js";
+import type { InventoryRootOptions } from "../../src/library/routing/roots.js";
 
 /** Real public owner construction; fixture options supply device roots, never adapters. */
 const library = (
@@ -26,7 +28,7 @@ const library = (
   } = {},
 ) =>
   Effect.gen(function* () {
-    let routing: Library.Routing = { _tag: "Recorded" };
+    let deviceRoots: InventoryRootOptions = testRoots(home);
     if (options.add !== undefined || options.active !== undefined) {
       const fs = yield* FileSystem.FileSystem;
       const physical = (path: string) =>
@@ -44,8 +46,7 @@ const library = (
         roots.set(options.add.destination, options.add.root);
       const deviceHome = join(home, "test-device");
       const active = options.active ?? [...roots.keys()];
-      routing = {
-        _tag: "Configured",
+      deviceRoots = {
         home: deviceHome,
         configHome: join(deviceHome, ".config"),
         overrides: {
@@ -56,7 +57,10 @@ const library = (
         },
       };
     }
-    return Context.get(yield* Layer.build(Library.layer({ home, routing })), Library.Service);
+    return Context.get(
+      yield* Layer.build(Library.layer({ home, roots: deviceRoots })),
+      Library.Service,
+    );
   });
 
 const applied = (

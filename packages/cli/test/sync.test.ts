@@ -42,7 +42,7 @@ const runAuthorSync = (
         Effect.provide(authorLayer(historyHome)),
         // A first sync without workspace.json adopts an id from this home's Library (A3).
         Effect.provide(
-          libraryApplicationLayer.pipe(Layer.provide(skitConfigurationLayer(historyHome))),
+          libraryApplicationLayer().pipe(Layer.provide(skitConfigurationLayer(historyHome))),
         ),
         // The environment's token is for the test Registry only.
         Effect.provide(registryCredentialLayer("https://registry.example")),

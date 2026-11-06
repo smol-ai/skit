@@ -171,7 +171,10 @@ it.effect("an inverse record must save before any copy or intent changes", () =>
           (yield* Effect.flip(
             plan
               .apply()
-              .pipe(withLibraryOwner, Effect.provideService(FileSystem.FileSystem, faultFs)),
+              .pipe(
+                withLibraryOwner(f.home.inventory),
+                Effect.provideService(FileSystem.FileSystem, faultFs),
+              ),
           ))._tag,
         ).toBe("PlatformError");
         expect(yield* f.home.durable).toEqual(state);
@@ -212,7 +215,7 @@ it.effect("a cold owner finishes a recorded inverse interrupted before Library p
         let interrupted = false;
         const exit = yield* Effect.exit(
           reviewed.apply().pipe(
-            withLibraryOwner,
+            withLibraryOwner(f.home.inventory),
             Effect.provideService(FileSystem.FileSystem, {
               ...f.fs,
               rename: (from, to) =>

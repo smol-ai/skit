@@ -111,7 +111,7 @@ it.effect("a directory that becomes repository-owned before cleanup stays in pla
     const failed = yield* Effect.flip(
       f.home.owned(
         f.apply.pipe(
-          withLibraryOwner,
+          withLibraryOwner(f.home.inventory),
           afterSaves(f.home.statePath, (next) =>
             next.installed_skills.some((installedSkill) => installedSkill.status === "installed")
               ? f.fs.writeFileString(join(f.duplicate, ".git"), "gitdir: newly-owned-checkout\n")
@@ -188,7 +188,7 @@ it.effect.each(["installing", "cleanup"] as const)(
       const outcome = yield* f.home
         .owned(
           f.apply.pipe(
-            withLibraryOwner,
+            withLibraryOwner(f.home.inventory),
             afterSaves(f.home.statePath, (next) => {
               const operation = next.operations.find((operation) => operation._tag === "Pending");
               const apply =

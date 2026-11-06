@@ -36,7 +36,7 @@ import { prepareApply } from "../operations/recorded.js";
 import { copiesOf } from "../operations/program.js";
 import { applyOutcome } from "../operations/result.js";
 import { runApply, operationScope } from "../operations/operations.js";
-import type { Routing } from "../../library.js";
+import type { InventoryRootOptions } from "../../routing/roots.js";
 import { snapshotOf, type Snapshot } from "../../snapshot.js";
 import {
   LibraryWriter,
@@ -695,7 +695,7 @@ export const setup = Effect.fn("Library.setup")(function* (
 /** Keep the ordinary apply surface while the existing runner owns its durable lifecycle. */
 export const applyRecorded = Effect.fn("Library.applyRecorded")(function* (
   plan: Plan,
-  routing: Routing,
+  routing: InventoryRootOptions | "recorded",
 ) {
   const { home } = yield* LibraryWriter;
   const prepared = yield* prepareApply(home, plan, routing);

@@ -22,7 +22,7 @@ export const checkCliCommand = Command.make("check", { subject, ...localFlags },
       );
       yield* renderer.result(result("check", checkOutputContracts.check, value));
     }),
-    Option.getOrUndefined(input.home),
+    input,
   ),
 ).pipe(
   Command.withDescription("Check the Library's stored files and whether their sources changed."),

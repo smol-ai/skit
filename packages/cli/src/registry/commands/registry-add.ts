@@ -1,5 +1,5 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { Option, Effect } from "effect";
+import { Effect } from "effect";
 import { Argument, Command } from "effect/cli";
 import { handlePlatformCommand } from "../../application.js";
 import { CommandMetadata, credentialStoreSubprocesses } from "../../commands/metadata.js";
@@ -26,7 +26,7 @@ export const registryAddCliCommand = Command.make(
         const value = yield* Registry.remotes.add(name, origin, selectedHome);
         yield* renderer.result(result("registryRemote", { ...value, action: "added" }));
       }),
-      Option.getOrUndefined(home),
+      { home },
     ),
 ).pipe(
   Command.withDescription("Name a Registry for use in source references."),

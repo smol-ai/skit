@@ -7,6 +7,7 @@ import { join } from "node:path";
 import * as Library from "@smolai/skit-core/library";
 import { importSource, previewLibrarySource } from "../../src/library/source.js";
 import { writingTo } from "./library-home.js";
+import { testRoots } from "./roots.js";
 
 export const gitBlobHash = (bytes: Uint8Array) =>
   createHash("sha1").update(`blob ${bytes.byteLength}\0`).update(bytes).digest("hex");
@@ -25,7 +26,7 @@ export const assertCollectionImport = Effect.fn("Test.assertCollectionImport")(f
   const added = yield* writingTo(home, importSource(source));
   assert.deepStrictEqual(added.skills, preview.skills);
   const snapshot = yield* Effect.flatMap(Library.Service, (library) => library.read).pipe(
-    Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+    Effect.provide(Library.layer({ home, roots: testRoots(home) })),
   );
   assert.strictEqual(snapshot._tag, "Present");
   const state = snapshot._tag === "Present" ? snapshot.state : assert.fail("no Library state");

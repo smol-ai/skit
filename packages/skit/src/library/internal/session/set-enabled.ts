@@ -181,22 +181,19 @@ function libraryChangeSelection(
 }
 
 /** Initialize the configured owner once, then capture the Library before asking questions. */
-export const openSetEnabledSession = Effect.fn("Library.openSelection")(
-  function* (home: string, configuration: SetEnabledConfiguration) {
-    const snapshot = yield* (yield* Library.Service).read;
-    return libraryChangeSelection(
-      snapshot,
-      home,
-      join(home, "originals"),
-      yield* Library.Service,
-      configuration,
-    );
-  },
-  (effect, home, configuration) =>
-    Effect.scoped(effect).pipe(
-      Effect.provide(Library.layer({ home, routing: { _tag: "Configured", ...configuration } })),
-    ),
-);
+export const openSetEnabledSession = Effect.fn("Library.openSelection")(function* (
+  home: string,
+  configuration: SetEnabledConfiguration,
+) {
+  const snapshot = yield* (yield* Library.Service).read;
+  return libraryChangeSelection(
+    snapshot,
+    home,
+    join(home, "originals"),
+    yield* Library.Service,
+    configuration,
+  );
+}, Effect.scoped);
 export type SetEnabledSession = Effect.Success<ReturnType<typeof openSetEnabledSession>>;
 
 /** One request in front-end terms: its subject is text, resolved against the Library planned. */

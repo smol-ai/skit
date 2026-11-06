@@ -8,6 +8,7 @@ import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { acquireFileLock } from "../src/platform/file-lock.js";
 import { collectionVersionPath } from "../src/library/collection-version.js";
+import { testRoots } from "./helpers/library-store.js";
 
 const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -33,7 +34,7 @@ const fixture = Effect.gen(function* () {
     const manifest = yield* libraryManifestFromLocalState(snapshot.state);
     const archives = yield* library.content.pack(snapshot);
     return { fs, root, home, library, snapshot, manifest, archives };
-  }).pipe(Effect.provide(Library.layer({ home, routing: { _tag: "None" } })));
+  }).pipe(Effect.provide(Library.layer({ home, roots: testRoots(home) })));
 });
 const registry = { origin: "https://registry.example", token: Option.none<string>() };
 
@@ -170,7 +171,7 @@ it.effect(
         assert.strictEqual(downloads, 2);
         assert.strictEqual(publications, 2);
       }).pipe(
-        Effect.provide(Library.layer({ home, routing: { _tag: "None" } })),
+        Effect.provide(Library.layer({ home, roots: testRoots(home) })),
         Effect.provideService(FileSystem.FileSystem, {
           ...f.fs,
           rename: (from, to) =>
@@ -222,7 +223,7 @@ it.effect(
         assert.strictEqual(failed._tag, "Failure");
         if (failed._tag === "Failure") assert.strictEqual(failed.failure, "transport-refused");
         assert.isFalse(yield* f.fs.exists(home));
-      }).pipe(Effect.provide(Library.layer({ home, routing: { _tag: "None" } })));
+      }).pipe(Effect.provide(Library.layer({ home, roots: testRoots(home) })));
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
@@ -272,6 +273,6 @@ it.effect("staging refuses reusable bytes changed during a download without over
         assert.strictEqual(result.failure._tag, "ContentAddressCollision");
       assert.strictEqual(yield* f.fs.readFileString(unexpected), "changed during fetch\n");
       assert.isFalse(yield* f.fs.exists(join(home, "state.json")));
-    }).pipe(Effect.provide(Library.layer({ home, routing: { _tag: "None" } })));
+    }).pipe(Effect.provide(Library.layer({ home, roots: testRoots(home) })));
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );

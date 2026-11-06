@@ -91,7 +91,7 @@ const setupLock = (
 
 const scanForSetup = (options: SetupOptions) =>
   runSetup(options).pipe(
-    withLibraryOwner,
+    withLibraryOwner(options.inventory),
     Effect.provide(
       skitConfigurationLayer(options.libraryHome).pipe(Layer.provide(testPlatformLayer)),
     ),
@@ -108,7 +108,7 @@ const saveSettingsForSetup = (options: SetupOptions) =>
     });
     return (yield* plan.apply((_message, effect) => effect)).scan;
   }).pipe(
-    withLibraryOwner,
+    withLibraryOwner(options.inventory),
     Effect.provide(
       skitConfigurationLayer(options.libraryHome).pipe(Layer.provide(testPlatformLayer)),
     ),
@@ -116,7 +116,7 @@ const saveSettingsForSetup = (options: SetupOptions) =>
 
 const revalidateSetup = (options: SetupOptions, planId: Hash) =>
   revalidateSetupPlan(options, planId).pipe(
-    withLibraryOwner,
+    withLibraryOwner(options.inventory),
     Effect.provide(
       skitConfigurationLayer(options.libraryHome).pipe(Layer.provide(testPlatformLayer)),
     ),
@@ -532,7 +532,7 @@ for (const failure of ["ls-files", "status"] as const) {
       yield* git(f.repository, "add", ".");
       yield* git(f.repository, "commit", "-qm", "repository copies");
       const evidence = yield* collectSetupEvidence(f.options).pipe(
-        withLibraryOwner,
+        withLibraryOwner(f.options.inventory),
         Effect.provide(skitConfigurationLayer(f.libraryHome)),
       );
       expect(evidence.hits.filter((hit) => hit.name === "local")).toHaveLength(1);
@@ -545,7 +545,7 @@ for (const failure of ["ls-files", "status"] as const) {
               ? Effect.succeed({ exitCode: 1, stdout: new Uint8Array(), stderr: "fixture failure" })
               : process.output(command, args, options),
         }),
-        withLibraryOwner,
+        withLibraryOwner(f.options.inventory),
         Effect.provide(skitConfigurationLayer(f.libraryHome)),
       );
       expect(scan.scan.complete).toBe(false);

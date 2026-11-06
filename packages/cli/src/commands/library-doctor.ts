@@ -1,5 +1,5 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { Option, Effect } from "effect";
+import { Effect } from "effect";
 import { Command, Flag } from "effect/cli";
 import { presentDoctorCleanup } from "../library/doctor/cleanup.js";
 import { doctorOutputContracts } from "../library/doctor/output.js";
@@ -64,7 +64,7 @@ export const doctorCliCommand = Command.make(
           }
         }
       }),
-      Option.getOrUndefined(input.home),
+      input,
     ),
 ).pipe(
   Command.withDescription(

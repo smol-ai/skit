@@ -73,8 +73,7 @@ const authoredFixture = Effect.gen(function* () {
     Effect.provide(
       Library.layer({
         home,
-        routing: {
-          _tag: "Configured",
+        roots: {
           home: root,
           configHome: join(root, "config"),
           overrides: { codex: [agents] },
@@ -248,8 +247,7 @@ it.effect(
         Effect.provide(
           Library.layer({
             home,
-            routing: {
-              _tag: "Configured",
+            roots: {
               home: root,
               configHome: join(root, "config"),
               overrides: { codex: [agents], "claude-code": [claude] },

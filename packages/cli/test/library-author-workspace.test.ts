@@ -364,7 +364,7 @@ it.effect(
         Effect.provide(
           Library.layer({
             home: f.home.home,
-            routing: { _tag: "Configured", ...f.home.inventory, overrides: { codex: [agents] } },
+            roots: { ...f.home.inventory, overrides: { codex: [agents] } },
           }),
         ),
       );

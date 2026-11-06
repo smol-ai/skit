@@ -24,6 +24,7 @@ import { skitLayer } from "../src/platform/layer.js";
 import * as Library from "../src/library/library.js";
 import { losslessTree, installedSkillStagingDirectory } from "../src/installed-skills/backups.js";
 import { inspectOwnershipMarker } from "../src/installed-skills/marker-inspection.js";
+import { testRoots } from "./helpers/library-store.js";
 
 const machineId = migratedMachineId(
   "019950c0-4c00-7000-8000-000000000001",
@@ -595,7 +596,7 @@ const installedSkillFixture = (second = false, emptyDirectories: readonly string
         { base: yield* library.read },
       );
       return (yield* library.apply({ _tag: "Apply", plan: plan })).result;
-    }).pipe(Effect.provide(Library.layer({ home, routing: { _tag: "None" } })));
+    }).pipe(Effect.provide(Library.layer({ home, roots: testRoots(home) })));
 
     return { ...bound, variantsPath, load, edit, project, retire, remove, refresh };
   });

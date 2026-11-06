@@ -49,6 +49,7 @@ import { renderContract } from "../src/commands/output-presenters.js";
 import { Prompter, PromptCancelled } from "../src/terminal/prompter.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 import { testPlatformLayer } from "./helpers/platform.js";
+import { withLibraryOwner } from "./helpers/library-owner.js";
 import {
   initializeLibraryMachine,
   libraryHome,
@@ -613,6 +614,7 @@ it.effect("cleanup reads one captured Library and protects a Skill used in a rea
           }),
         ),
       ),
+      withLibraryOwner(f.home.inventory),
       Effect.provideService(FileSystem.FileSystem, observed),
       (effect) => f.home.owned(effect),
     );
@@ -1327,6 +1329,7 @@ it.effect("the CLI adapter keeps the I/O failure exit code after saving enableme
         configuration,
       }).pipe(
         Effect.provide(interaction.layer),
+        withLibraryOwner(f.home.inventory),
         Effect.provideService(FileSystem.FileSystem, {
           ...f.fs,
           rename: (from, to) =>

@@ -14,6 +14,7 @@ import { libraryView, openLibraryView } from "../src/library/internal/session/li
 import { resolveSkitSource } from "../src/sources/resolve.js";
 import type { SkitSource } from "../src/library/library-contracts.js";
 import { inspectResolvedSource } from "../src/library/source-inspection.js";
+import { testRoots } from "./helpers/library-store.js";
 
 const inspectSource = Effect.fn("Test.inspectSource")(function* (source: SkitSource) {
   return yield* inspectResolvedSource(source, yield* resolveSkitSource(source));
@@ -254,7 +255,7 @@ it.effect("checks skills.sh status against real Git history without saving Libra
       // Checking only reports: the Library it read is left exactly as it was.
       expect(yield* fs.readFileString(join(home, "state.json"))).toBe(beforeState);
     }).pipe(
-      Effect.provide(Library.layer({ home, routing: { _tag: "Recorded" } })),
+      Effect.provide(Library.layer({ home, roots: testRoots(home) })),
       Effect.provide(skitConfigurationLayer(home)),
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),

@@ -1,5 +1,5 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { Option, Effect } from "effect";
+import { Effect } from "effect";
 import { Command } from "effect/cli";
 import { handlePlatformCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
@@ -27,7 +27,7 @@ export const repositoryListCliCommand = Command.make("list", flags, (input) =>
         }),
       );
     }),
-    Option.getOrUndefined(input.home),
+    input,
   ),
 ).pipe(
   Command.withDescription("List repository decisions stored for this machine."),

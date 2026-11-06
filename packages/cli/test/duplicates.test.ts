@@ -254,7 +254,10 @@ it.effect("a failed replacement keeps the original alias available", () =>
               ownership: [
                 { name: "review", sourcePath: f.source, duplicateAction: "retire-aliases" },
               ],
-            }).pipe(withLibraryOwner, Effect.provideService(FileSystem.FileSystem, fs)),
+            }).pipe(
+              withLibraryOwner(f.home.inventory),
+              Effect.provideService(FileSystem.FileSystem, fs),
+            ),
           );
           expect(Result.isFailure(result) && result.failure._tag).toBe("SetupStopped");
           expect((yield* f.home.durable).skills).toHaveLength(1);
