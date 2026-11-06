@@ -2,8 +2,6 @@
 
 export { scanInventory } from "./library/inventory/refresh.js";
 export {
-  importCanBeRefetched,
-  librarySnapshotDigests,
   sourceImports,
   currentCollectionSkills,
   currentSkillVersion,

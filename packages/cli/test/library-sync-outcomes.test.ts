@@ -828,7 +828,7 @@ for (const home of ["current", "legacy", "absent"] as const)
             _tag: "ServeHead",
             body: JSON.parse(
               yield* fs.readFileString(
-                join(import.meta.dirname, "fixtures/library-wire/portable-v9.json"),
+                join(import.meta.dirname, "../../skit/test/fixtures/library-wire/portable-v9.json"),
               ),
             ),
           });

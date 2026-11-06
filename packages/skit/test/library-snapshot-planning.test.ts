@@ -1,5 +1,7 @@
 import { assert, it } from "@effect/vitest";
-import { Schema } from "effect";
+import { Effect, FileSystem, Schema } from "effect";
+import { join } from "node:path";
+import { skitLayer } from "../src/platform/layer.js";
 import {
   makeImportId,
   makeCollectionId,
@@ -9,6 +11,8 @@ import {
   makeSkillVersionId,
 } from "../src/library/entity-ids.js";
 import {
+  LibraryResponse,
+  SnapshotArchive,
   importCanBeRefetched,
   librarySnapshotDigests,
   type Import,
@@ -220,3 +224,20 @@ it("rejects a Skill Version that no import of its Collection backs", () => {
     }),
   );
 });
+
+it.effect("plans the pinned Git and retained edit from the literal supported wire fixture", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const head = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(LibraryResponse))(
+      yield* fs.readFileString(join(import.meta.dirname, "fixtures/library-wire/portable-v8.json")),
+    );
+    const archive = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SnapshotArchive))(
+      yield* fs.readFileString(
+        join(import.meta.dirname, "fixtures/library-wire/snapshot-archive.json"),
+      ),
+    );
+    // The pinned Git import is restorable from its Source; the retained edit needs a snapshot.
+    assert.deepStrictEqual(head.library.manifest.imports.map(importCanBeRefetched), [true, false]);
+    assert.deepStrictEqual(librarySnapshotDigests(head.library.manifest), [archive.digest]);
+  }).pipe(Effect.provide(skitLayer)),
+);
