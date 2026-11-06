@@ -1,2 +1,2 @@
-/** Collection removal selection and reviewed plans. */
-export { openRemoveSession } from "./internal/session/remove.js";
+/** Collection removal: a passive preview, or a removal that refuses a Library changed since. */
+export { removeCollection, type RemoveOptions } from "./internal/session/remove.js";

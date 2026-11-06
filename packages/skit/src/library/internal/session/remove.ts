@@ -1,9 +1,9 @@
 import { Effect } from "effect";
 import * as Library from "../../library.js";
+import { SkitConfiguration } from "../../../platform/configuration.js";
 import { emptyLibraryState, type LibraryState } from "../../library-state.js";
 import { resolveLibrarySubject } from "../../subject-resolution.js";
 import { enabledSkillIds } from "../../library-contracts.js";
-import { workspaceLocation } from "./workspace-claims.js";
 import {
   SkillRemovalRequiresCollection,
   CollectionRemovalMissing,
@@ -51,9 +51,9 @@ export const removalSummary = Effect.fn("Library.planRemove")(function* (
   };
 });
 
-/** Capture the Library displayed; callers only render or coordinate the other owner's registration. */
-export const openRemoveSession = Effect.fn("Library.openRemoveSession")(
-  function* (home: string, query: string) {
+/** Capture the Library displayed; apply refuses if it changed since. */
+const openRemoveSession = Effect.fn("Library.openRemoveSession")(
+  function* (query: string) {
     const library = yield* Library.Service;
     const snapshot = yield* library.read;
     const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
@@ -64,13 +64,8 @@ export const openRemoveSession = Effect.fn("Library.openRemoveSession")(
         : state.skills.find((skill) => skill.skill_id === summary.subject_id)?.collection_id;
     if (collectionId === undefined)
       return yield* new CollectionRemovalMissing({ collection_id: summary.subject_id });
-    const collection = state.collections.find((item) => item.collection_id === collectionId);
-    // Removing the sole Skill removes its Collection too. Registration belongs to that
-    // Collection's workspace, regardless of which accepted subject named the removal.
-    const workspace = collection === undefined ? undefined : workspaceLocation(state, collection);
     return {
       summary: structuredClone(summary),
-      workspace,
       apply: Effect.fn("Library.removeSelection")(function* () {
         const outcome = (yield* library.apply({
           _tag: "Apply",
@@ -84,8 +79,24 @@ export const openRemoveSession = Effect.fn("Library.openRemoveSession")(
       }),
     };
   },
-  (effect, home) =>
-    Effect.scoped(effect).pipe(
-      Effect.provide(Library.layer({ home, routing: { _tag: "Recorded" } })),
+  (effect) =>
+    Effect.flatMap(SkitConfiguration, ({ skitHome }) =>
+      Effect.scoped(effect).pipe(
+        Effect.provide(Library.layer({ home: skitHome, routing: { _tag: "Recorded" } })),
+      ),
     ),
 );
+
+export interface RemoveOptions {
+  readonly query: string;
+  readonly dryRun: boolean;
+}
+
+/** Remove a Collection, or the sole Skill's Collection, and uninstall the Skills it installed. */
+export const removeCollection = Effect.fn("Library.removeCollection")(function* (
+  options: RemoveOptions,
+) {
+  const selection = yield* openRemoveSession(options.query);
+  if (options.dryRun) return { kind: "plan" as const, value: selection.summary };
+  return { kind: "removed" as const, value: yield* selection.apply() };
+});

@@ -7,10 +7,10 @@ import { skitLayer } from "@smolai/skit-core/platform";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
 import { holdHomeLock } from "./helpers/home-lock.js";
 import { importSource } from "../src/library/source.js";
-import { executeRemove } from "../src/library/remove/operation.js";
 import { authorInitCommand } from "../src/author/init.js";
 import { authorInvocationCommand } from "../src/author/invocation.js";
 import { authorWorkspaceLayer, initSkit } from "@smolai/skit-core/author";
+import { removeCollection } from "@smolai/skit-core/library/remove";
 import * as Library from "@smolai/skit-core/library";
 import { systemError } from "effect/PlatformError";
 import {
@@ -30,7 +30,7 @@ it.effect(
       yield* copySkitFixtureEffect("authored", source);
       const home = yield* libraryHome({ home: join(root, "home") });
       yield* initializeLibraryMachine(home.home);
-      const first = yield* home.owned(authorInitCommand(source, false));
+      const first = yield* home.owned(authorInitCommand(source));
       assert.ok(first.entry);
       assert.strictEqual(
         first.entry.collection?.upstream?.source_identity.kind,
@@ -47,7 +47,7 @@ it.effect(
 
       const skillPath = join(source, "skills", "review", "SKILL.md");
       yield* fs.writeFileString(skillPath, `${yield* fs.readFileString(skillPath)}\nUpdated.\n`);
-      const refreshed = yield* home.owned(authorInitCommand(source, false));
+      const refreshed = yield* home.owned(authorInitCommand(source));
       assert.ok(refreshed.entry);
       assert.strictEqual(
         refreshed.entry.collection?.collection_id,
@@ -72,7 +72,7 @@ const workspaceFixture = Effect.gen(function* () {
   const home = yield* libraryHome({ home: join(root, "home") });
   yield* initializeLibraryMachine(home.home);
   const path = join(source, ".skit", "workspace.json");
-  const init = (register = false, path = source) => home.owned(authorInitCommand(path, register));
+  const init = (path = source) => home.owned(authorInitCommand(path));
   const metadataAt = (directory: string) =>
     fs.readFileString(join(directory, ".skit", "workspace.json")).pipe(
       Effect.flatMap(
@@ -151,7 +151,7 @@ it.effect("initializing through a symlink reuses the canonical workspace claim",
     const identity = yield* f.metadata;
     const alias = join(f.root, "alias");
     yield* f.fs.symlink(f.source, alias);
-    const again = yield* f.init(false, alias);
+    const again = yield* f.init(alias);
     assert.strictEqual(
       again.entry?.collection.collection_id,
       first.entry?.collection.collection_id,
@@ -168,14 +168,14 @@ it.effect("rejects a copied workspace identity before scaffolding or publishing"
     const copy = join(f.root, "copy");
     yield* f.fs.copy(f.source, copy);
     const before = yield* captureDisk([f.source, copy, f.home.home], { identity: true });
-    const failure = yield* Effect.flip(f.init(false, copy));
+    const failure = yield* Effect.flip(f.init(copy));
     assert.strictEqual(failure._tag, "AuthorWorkspaceAlreadyRegistered");
     yield* assertDiskUnchanged(before);
   }).pipe(Effect.provide(authorWorkspaceLayer), Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect.each(["collection", "skill"] as const)(
-  "%s removal requires explicit re-registration and preserves workspace identity",
+  "%s removal keeps the workspace identity, and init imports the Collection again",
   (subject) =>
     Effect.gen(function* () {
       const f = yield* workspaceFixture;
@@ -185,57 +185,18 @@ it.effect.each(["collection", "skill"] as const)(
       assert.ok(skill);
       const identity = (yield* f.metadata).workspace_id;
       yield* f.home.owned(
-        executeRemove({
+        removeCollection({
           query: subject === "collection" ? first.entry.collection.collection_id : skill.skill_id,
           dryRun: false,
         }),
       );
-      assert.strictEqual((yield* f.metadata).registration, "removed");
-      assert.strictEqual((yield* f.init()).entry, undefined);
+      assert.deepStrictEqual(yield* f.metadata, { workspace_id: identity });
       assert.strictEqual((yield* f.home.durable).collections.length, 0);
-      const registered = yield* f.init(true);
+      const registered = yield* f.init();
       assert.ok(registered.entry);
-      assert.deepStrictEqual(yield* f.metadata, {
-        workspace_id: identity,
-        registration: "registered",
-      });
+      assert.deepStrictEqual(yield* f.metadata, { workspace_id: identity });
       assert.strictEqual((yield* f.home.durable).collections.length, 1);
     }).pipe(Effect.provide(authorWorkspaceLayer), Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("sole-Skill removal respects the workspace lease while preview stays passive", () =>
-  Effect.gen(function* () {
-    const f = yield* workspaceFixture;
-    const first = yield* f.init();
-    const skill = first.entry?.skills[0];
-    assert.ok(skill);
-    yield* Effect.scoped(
-      Effect.gen(function* () {
-        yield* Effect.acquireRelease(
-          Effect.sync(() => {
-            const db = new DatabaseSync(join(f.source, ".skit", "lock.sqlite"));
-            db.exec("PRAGMA busy_timeout = 0; BEGIN EXCLUSIVE;");
-            return db;
-          }),
-          (db) => Effect.sync(() => db.close()),
-        );
-        const before = yield* captureDisk([f.source, f.home.home], { identity: true });
-        const preview = yield* f.home.owned(executeRemove({ query: skill.skill_id, dryRun: true }));
-        assert.strictEqual(preview.kind, "plan");
-        const refused = yield* f.home.owned(
-          Effect.result(executeRemove({ query: skill.skill_id, dryRun: false })),
-        );
-        if (refused._tag !== "Failure")
-          return yield* Effect.die("Removal bypassed the held workspace lease");
-        assert.strictEqual(refused.failure._tag, "AuthorWorkspaceBusy");
-        yield* assertDiskUnchanged(before);
-      }),
-    );
-    const removed = yield* f.home.owned(executeRemove({ query: skill.skill_id, dryRun: false }));
-    assert.strictEqual(removed.kind, "removed");
-    assert.strictEqual((yield* f.metadata).registration, "removed");
-    assert.strictEqual((yield* f.home.durable).collections.length, 0);
-  }).pipe(Effect.provide(authorWorkspaceLayer), Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("removal leaves a different workspace identity untouched", () =>
@@ -250,7 +211,7 @@ it.effect("removal leaves a different workspace identity untouched", () =>
     });
     yield* f.fs.writeFileString(f.path, replacement);
     yield* f.home.owned(
-      executeRemove({
+      removeCollection({
         query: first.entry.collection.collection_id,
         dryRun: false,
       }),
@@ -269,7 +230,7 @@ it.effect("a refused Library import leaves the workspace registered for a retry"
     const failure = yield* Effect.flip(f.init());
     assert.strictEqual(failure._tag, "HomeBusy");
     const pending = yield* f.metadata;
-    assert.strictEqual(pending.registration, "registered");
+    assert.ok(pending.workspace_id);
     assert.strictEqual((yield* f.home.snapshot)._tag, "Absent");
     yield* Scope.close(other, Exit.void);
     const retried = yield* f.init();
@@ -297,7 +258,7 @@ it.effect(
 );
 
 it.effect.each(["collection", "skill"] as const)(
-  "removing by %s opts out the moved workspace rather than its historical path",
+  "removing by %s removes the moved workspace's Collection; init imports it again",
   (subject) =>
     Effect.gen(function* () {
       const f = yield* workspaceFixture;
@@ -306,7 +267,7 @@ it.effect.each(["collection", "skill"] as const)(
       const identity = (yield* f.metadata).workspace_id;
       const moved = join(f.root, "moved");
       yield* f.fs.rename(f.source, moved);
-      const refreshed = yield* f.init(false, moved);
+      const refreshed = yield* f.init(moved);
       assert.strictEqual(
         refreshed.entry?.collection.collection_id,
         first.entry.collection.collection_id,
@@ -315,15 +276,16 @@ it.effect.each(["collection", "skill"] as const)(
       const skill = first.entry.skills[0];
       assert.ok(skill);
       yield* f.home.owned(
-        executeRemove({
+        removeCollection({
           query: subject === "collection" ? first.entry.collection.collection_id : skill.skill_id,
           dryRun: false,
         }),
       );
-      assert.strictEqual((yield* f.metadataAt(moved)).registration, "removed");
-      assert.strictEqual((yield* f.init(false, moved)).entry, undefined);
+      assert.strictEqual((yield* f.metadataAt(moved)).workspace_id, identity);
       assert.strictEqual((yield* f.home.durable).collections.length, 0);
       assert.isFalse(yield* f.fs.exists(f.source));
+      assert.ok((yield* f.init(moved)).entry);
+      assert.strictEqual((yield* f.home.durable).collections.length, 1);
     }).pipe(Effect.provide(authorWorkspaceLayer), Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -333,11 +295,11 @@ it.effect("a copied identity is rejected after its original workspace moved", ()
     yield* f.init();
     const moved = join(f.root, "moved");
     yield* f.fs.rename(f.source, moved);
-    yield* f.init(false, moved);
+    yield* f.init(moved);
     const copy = join(f.root, "copy");
     yield* f.fs.copy(moved, copy);
     const before = yield* captureDisk([moved, copy, f.home.home], { identity: true });
-    const failure = yield* Effect.flip(f.init(false, copy));
+    const failure = yield* Effect.flip(f.init(copy));
     assert.strictEqual(failure._tag, "AuthorWorkspaceAlreadyRegistered");
     yield* assertDiskUnchanged(before);
   }).pipe(Effect.provide(authorWorkspaceLayer), Effect.provide(skitLayer), Effect.scoped),
@@ -353,7 +315,7 @@ it.effect(
       const identity = (yield* f.metadata).workspace_id;
       const moved = join(f.root, "moved");
       yield* f.fs.rename(f.source, moved);
-      yield* f.init(false, moved);
+      yield* f.init(moved);
       yield* copySkitFixtureEffect("authored", f.source);
       const replacement = yield* f.init();
       assert.ok(replacement.entry);
@@ -364,7 +326,7 @@ it.effect(
       assert.notStrictEqual((yield* f.metadata).workspace_id, identity);
       assert.strictEqual((yield* f.home.durable).collections.length, 2);
       // The current moved folder still belongs to its own Collection and identity.
-      const again = yield* f.init(false, moved);
+      const again = yield* f.init(moved);
       assert.strictEqual(
         again.entry?.collection.collection_id,
         first.entry.collection.collection_id,
@@ -373,7 +335,7 @@ it.effect(
 );
 
 it.effect(
-  "refused folder removal keeps registration Removing across restart until an explicit retry",
+  "a refused folder removal leaves the Library Stopped and the files intact until a retry",
   () =>
     Effect.gen(function* () {
       const f = yield* workspaceFixture;
@@ -413,7 +375,7 @@ it.effect(
         .owned(
           Effect.gen(function* () {
             const result = yield* Effect.result(
-              executeRemove({ query: first.entry.collection.collection_id, dryRun: false }),
+              removeCollection({ query: first.entry.collection.collection_id, dryRun: false }),
             );
             return { result, snapshot: yield* (yield* Library.Service).read };
           }),
@@ -440,7 +402,6 @@ it.effect(
       assert.isAbove(refusals, 0);
       if (failed.result._tag !== "Failure") return yield* Effect.die("Removal falsely succeeded");
       assert.strictEqual(failed.result.failure._tag, "PlatformError");
-      assert.strictEqual((yield* f.metadata).registration, "removing");
       assert.strictEqual(failed.snapshot._tag, "Present");
       if (failed.snapshot._tag === "Present") {
         assert.strictEqual(failed.snapshot.state.collections.length, 1);
@@ -453,19 +414,11 @@ it.effect(
         yield* f.fs.readFileString(join(f.source, "skills/review/SKILL.md")),
         authored,
       );
-      // A typed refusal is Stopped, not a crash-Pending program. A fresh owner must not
-      // retry it silently or let init resurrect the registration before removal finishes.
-      const beforeRestart = yield* captureDisk([f.source, installed], { identity: true });
-      const restarted = yield* Effect.flip(f.init());
-      assert.strictEqual(restarted._tag, "AuthorWorkspaceRemovalUnfinished");
-      assert.strictEqual((yield* f.metadata).registration, "removing");
-      yield* assertDiskUnchanged(beforeRestart);
+      // A typed refusal is Stopped, not a crash-Pending program: nothing retries it silently.
       const retried = yield* f.home.owned(
-        executeRemove({ query: first.entry.collection.collection_id, dryRun: false }),
+        removeCollection({ query: first.entry.collection.collection_id, dryRun: false }),
       );
       assert.strictEqual(retried.kind, "removed");
-      assert.strictEqual((yield* f.metadata).registration, "removed");
-      assert.strictEqual((yield* f.init()).entry, undefined);
       assert.strictEqual((yield* f.home.durable).collections.length, 0);
       assert.isFalse(yield* f.fs.exists(installed));
     }).pipe(Effect.provide(authorWorkspaceLayer), Effect.provide(skitLayer), Effect.scoped),

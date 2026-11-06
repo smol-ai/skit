@@ -134,9 +134,8 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
       () => new LocalFilesChangedDuringSync(),
     ),
   );
-  // Applying gives an identity-less workspace an identity-only registration: backup, never
-  // installation. An existing registration is used as it is. Without workspace.json, the id of an
-  // authored Collection imported from this root is reused (A3).
+  // Applying gives an identity-less workspace its identity: backup, never installation. Without
+  // workspace.json, the id of an authored Collection imported from this root is reused (A3).
   const applying =
     lease === undefined
       ? undefined
@@ -148,12 +147,7 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
                 const adopt = adoptFrom(
                   (yield* readLibraryWorkspaceClaims(options.home, root)).atRoot,
                 );
-                const created = yield* lease.register({
-                  from: identity,
-                  to: "IdentityOnly",
-                  adopt,
-                });
-                return created.workspaceId;
+                return (yield* lease.register(adopt)).workspaceId;
               });
           if (connection._tag === "Connected" && connection.leftover._tag === "Matching")
             yield* lease.transition({

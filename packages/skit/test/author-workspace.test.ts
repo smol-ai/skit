@@ -194,10 +194,7 @@ const trees = (root: string) =>
     };
   });
 
-const identified = (lease: WorkspaceLease) =>
-  Option.isSome(absent)
-    ? Effect.die("absent is None")
-    : lease.register({ from: absent, to: "IdentityOnly", adopt: Option.none() });
+const identified = (lease: WorkspaceLease) => lease.register(Option.none());
 
 it.effect("writeTree writes only with a current, unused PreparedWrite for exactly its trees", () =>
   Effect.gen(function* () {

@@ -1,4 +1,4 @@
-import { Data, Schema } from "effect";
+import { Data } from "effect";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 export class AuthorWorkspaceMetadataInvalid
@@ -244,23 +244,6 @@ export class DirectoryAlreadyInLibrary
   }
   get message(): string {
     return `This directory is already retained as ${this.collectionId}; remove it before registering an Author Workspace`;
-  }
-}
-
-export class AuthorWorkspaceRemovalUnfinished
-  extends Schema.TaggedError<AuthorWorkspaceRemovalUnfinished>()(
-    "AuthorWorkspaceRemovalUnfinished",
-    { collectionId: Schema.String },
-  )
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  get remediation(): string {
-    return `Run \`skit remove ${this.collectionId}\` to finish removing it, then initialize the workspace again with --register.`;
-  }
-  get message(): string {
-    return `Removing this Author Workspace's Collection ${this.collectionId} did not finish`;
   }
 }
 

@@ -11,6 +11,7 @@ import { originalTreePath } from "./helpers/original-tree.js";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 
 import { deterministicTreeHash } from "@smolai/skit-core/author";
+import { removeCollection } from "@smolai/skit-core/library/remove";
 import * as Library from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
@@ -26,7 +27,6 @@ import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { setupIntent } from "@smolai/skit-core/library/setup";
 import { openSetEnabledSession } from "@smolai/skit-core/library/enable";
 import { openSyncSession } from "@smolai/skit-core/library/sync";
-import { executeRemove } from "../src/library/remove/operation.js";
 
 import { rendererTestLayer } from "./helpers/renderer.js";
 import { homeLockIsFree } from "./helpers/home-lock.js";
@@ -384,7 +384,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
       home,
       run(
         // The Collection's only Skill can be removed, taking its Collection with it.
-        executeRemove({
+        removeCollection({
           query: skill.skill_id,
           dryRun: false,
         }).pipe(Effect.provide(skitConfigurationLayer(home))),

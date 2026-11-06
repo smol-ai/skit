@@ -22,7 +22,7 @@ const register = Effect.fn("Test.registerBackupWorkspace")(function* (lease: Wor
   const identity = yield* (yield* AuthorWorkspace).readIdentity(lease.root);
   if (Option.isSome(identity))
     return yield* Effect.die("Expected an unidentified fixture workspace");
-  return yield* lease.register({ from: identity, to: "IdentityOnly", adopt: Option.none() });
+  return yield* lease.register(Option.none());
 });
 const locator = "skit://registry.example/swyx/tools";
 

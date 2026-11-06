@@ -3,7 +3,7 @@ import { Argument, Command, Flag } from "effect/cli";
 import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
 import { removeOutputContracts } from "../library/remove/output.js";
-import { executeRemove } from "../library/remove/operation.js";
+import { removeCollection } from "@smolai/skit-core/library/remove";
 import { localFlags } from "./parameters.js";
 import { Renderer } from "../terminal/renderer.js";
 
@@ -25,7 +25,7 @@ export const removeCliCommand = Command.make(
         const renderer = yield* Renderer;
         const outcome = yield* renderer.withStatus(
           input.dryRun ? "Planning Collection removal" : "Removing retained Collection",
-          executeRemove({
+          removeCollection({
             query: input.subject,
             dryRun: input.dryRun,
           }),

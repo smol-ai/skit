@@ -24,7 +24,6 @@ import {
   type WorkspaceLease,
   type SyncScan,
   type AuthorSyncOptions,
-  type AuthorRemoveOptions,
   type AuthorRegistry,
   type AuthorSyncOutcome,
   type Workspace,
@@ -117,21 +116,12 @@ export type PublicOperationChecks = [
   >,
   Assert<Equal<Parameters<typeof PublicAuthor.initSkit>, [input: string]>>,
   Assert<
-    Equal<
-      Parameters<typeof PublicAuthor.initializeAuthorWorkspace>,
-      [input: string, register: boolean, home: string]
-    >
+    Equal<Parameters<typeof PublicAuthor.initializeAuthorWorkspace>, [input: string, home: string]>
   >,
   Assert<
     Equal<
       Parameters<typeof PublicAuthor.generateAuthorInvocation>,
       [input: string, dryRun: boolean]
-    >
-  >,
-  Assert<
-    Equal<
-      Parameters<typeof PublicAuthor.removeAuthorCollection>,
-      [home: string, options: AuthorRemoveOptions]
     >
   >,
   Assert<

@@ -5,10 +5,6 @@ import { Effect, FileSystem, Option, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
 import * as History from "../src/history/history.js";
-import type { Identity } from "../src/author/index.js";
-
-/** No identity, typed as the state a first registration plans from. */
-const absent = Option.none<Identity>();
 import { authorLayer, captureWorkspace, storedTreesAt } from "./helpers/author-history.js";
 import { libraryHome } from "./helpers/author-home.js";
 import { testPlatformLayer } from "./helpers/platform.js";
@@ -22,16 +18,14 @@ const fixture = Effect.gen(function* () {
   yield* fs.makeDirectory(join(source, "review"), { recursive: true });
   yield* fs.writeFileString(join(source, "review/SKILL.md"), "---\ninvalid: [\n");
   const home = yield* libraryHome({ home: join(root, "home") });
-  /** Sync's identity step: an identity-only registration under the lease, used as is after. */
+  /** Sync's identity step: an identity created under the lease, used as is after. */
   const identify = (path = source) =>
     Effect.scoped(
       Effect.gen(function* () {
         const workspace = yield* workspaces.resolveRoot(path);
         const lease = yield* workspaces.acquire(workspace);
         const identity = yield* workspaces.readIdentity(workspace);
-        return Option.isSome(identity)
-          ? identity.value
-          : yield* lease.register({ from: identity, to: "IdentityOnly", adopt: Option.none() });
+        return Option.isSome(identity) ? identity.value : yield* lease.register(Option.none());
       }),
     );
   const capture = (path = source) =>
@@ -41,11 +35,10 @@ const fixture = Effect.gen(function* () {
   return { fs, workspaces, root, source, home, identify, capture, metadata };
 });
 
-it.effect("an identity-only registration writes no config, registration or Library entry", () =>
+it.effect("an identity writes no config, registration or Library entry", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
     const identity = yield* f.identify();
-    expect(identity.registration).toBe("IdentityOnly");
     expect(yield* f.fs.exists(join(f.source, "skit.json"))).toBe(false);
     expect(yield* f.fs.readFileString(join(f.source, "review/SKILL.md"))).toBe("---\ninvalid: [\n");
     expect(yield* f.fs.readFileString(join(f.source, ".skit/.gitignore"))).toBe("*\n");
@@ -114,48 +107,6 @@ it.effect("identity-only workspaces detect copies and retain identity when moved
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect("removal is durable intent, and a removed identity needs an explicit opt-in", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture;
-    const first = yield* f.identify();
-    const root = yield* f.workspaces.resolveRoot(f.source);
-    yield* Effect.scoped(
-      Effect.gen(function* () {
-        const lease = yield* f.workspaces.acquire(root);
-        const removing = yield* lease.register({
-          from: { ...first, registration: "IdentityOnly" },
-          to: "Removing",
-        });
-        expect((yield* f.metadata()).registration).toBe("removing");
-        const removed = yield* lease.register({
-          from: { ...removing, registration: "Removing" },
-          to: "Removed",
-        });
-        expect((yield* f.metadata()).registration).toBe("removed");
-        // The identity is unchanged, and a sync of a removed workspace uses it as it is.
-        expect(removed.workspaceId).toBe(first.workspaceId);
-        // A step planned from a state no longer on disk changes nothing.
-        expect(
-          yield* Effect.flip(
-            lease.register({ from: { ...first, registration: "IdentityOnly" }, to: "Registered" }),
-          ),
-        ).toMatchObject({ _tag: "AuthorWorkspaceConflict" });
-        const registered = yield* lease.register({
-          from: { ...removed, registration: "Removed" },
-          to: "Registered",
-          optIn: true,
-        });
-        expect(registered).toEqual({ workspaceId: first.workspaceId, registration: "Registered" });
-      }),
-    );
-    expect(yield* f.metadata()).toEqual({
-      schema: "skit.author-workspace.v1",
-      workspace_id: first.workspaceId,
-      registration: "registered",
-    });
-  }).pipe(Effect.provide(testPlatformLayer)),
-);
-
 it.effect("an identity is never replaced, and an adopted id is used as given", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
@@ -164,10 +115,7 @@ it.effect("an identity is never replaced, and an adopted id is used as given", (
     yield* Effect.scoped(
       Effect.gen(function* () {
         const lease = yield* f.workspaces.acquire(root);
-        if (Option.isSome(absent)) return;
-        const conflict = yield* Effect.flip(
-          lease.register({ from: absent, to: "Registered", adopt: Option.none() }),
-        );
+        const conflict = yield* Effect.flip(lease.register(Option.none()));
         expect(conflict).toMatchObject({ _tag: "AuthorWorkspaceConflict" });
         if (conflict._tag === "AuthorWorkspaceConflict")
           expect(conflict.found.identity).toEqual(Option.some(first));
@@ -179,15 +127,10 @@ it.effect("an identity is never replaced, and an adopted id is used as given", (
       Effect.gen(function* () {
         const workspace = yield* f.workspaces.resolveRoot(other);
         const lease = yield* f.workspaces.acquire(workspace);
-        if (Option.isSome(absent)) return yield* Effect.die("absent is None");
-        return yield* lease.register({
-          from: absent,
-          to: "Registered",
-          adopt: Option.some(first.workspaceId),
-        });
+        return yield* lease.register(Option.some(first.workspaceId));
       }),
     );
-    expect(adopted).toEqual({ workspaceId: first.workspaceId, registration: "Registered" });
+    expect(adopted).toEqual({ workspaceId: first.workspaceId });
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 

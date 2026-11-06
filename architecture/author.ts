@@ -147,24 +147,15 @@ export type SyncRemote = Sync.Remote;
 // ── AuthorWorkspace: state ─────────────────────────────────────────────────────────────────────
 
 /**
- * FROM CODE: the `registration` key of .skit/workspace.json (author-workspace-metadata.ts:12).
- * Backup and installation are separate facts (ADR-0026:33-38):
- *   - any Identity can be backed up and synced (its workspaceId keys history and SyncKey);
- *   - only "Registered" is registered for installation: Library promotion may import it.
- * "IdentityOnly" = the key is absent: identity without opt-in to installation. Sync creates it; an
- *   interrupted `author init` also leaves it (author-workspace.ts:113 ran, :151 did not), which is
- *   safe: backup works, installation waits for init to run again.
- * "Removing" = NEW durable removal intent, written before Library.apply (A15). Reads as Removed for
- *   promotion. "Removed" = the opt-out marker; nothing automatic resurrects it (ADR-0026:33-35).
+ * .skit/workspace.json, skit.author-workspace.v1, holds the identity only. Whether the workspace
+ * is registered for installation is not stored: it is registered while the Library retains a
+ * Collection imported from it (A15, superseded 2026-11-07). Any Identity can be backed up and
+ * synced; its workspaceId keys history and SyncKey. Files written by 0.3.0 carry a `registration`
+ * key, read and ignored.
  */
-export type Registration = "IdentityOnly" | "Registered" | "Removing" | "Removed";
-
-/** FROM CODE: .skit/workspace.json, skit.author-workspace.v1 (author-workspace-metadata.ts:8-14). NEW: "removing" value. */
 export interface Identity {
   readonly workspaceId: WorkspaceId;
-  readonly registration: Registration;
 }
-type IdentityIn<R extends Registration> = Identity & { readonly registration: R };
 
 /** FROM CODE: the Connecting checkpoint in .skit/connection.json (sync.ts:241-245, :251). */
 export interface Connecting {
@@ -256,49 +247,6 @@ export type ConnectionTransition =
       readonly to: { readonly _tag: "Connected" };
     };
 
-/**
- * The registration lifecycle's one transition (A2). The owner re-reads under the lease and fails
- * AuthorWorkspaceConflict unless the identity on disk equals `from` by value (id and registration), so
- * an id is never replaced. Content goes through Library.import.authored, called by the workflow.
- */
-export type RegistrationTransition =
-  | {
-      // Create the identity and .skit/.gitignore (ADR-0026:24-27). `to: "IdentityOnly"` is sync's
-      // identity-only registration (backup, no installation); `to: "Registered"` is `author init`.
-      readonly from: Extract<Option.Option<Identity>, { _tag: "None" }>;
-      readonly to: "IdentityOnly" | "Registered";
-      /**
-       * FROM CODE: reuse the workspace id an existing authored Library collection already names when
-       * workspace.json is missing (author-workspace.ts:68-72, :84-86). Only from None: an existing id
-       * is never replaced. The workflow finds it with Library.read (A3); AuthorWorkspace does not
-       * require Library.
-       */
-      readonly adopt: Option.Option<WorkspaceId>;
-    }
-  | {
-      // `author init` on an identity-only workspace (FROM CODE: author-workspace.ts:151).
-      readonly from: IdentityIn<"IdentityOnly">;
-      readonly to: "Registered";
-    }
-  | {
-      // FROM CODE: an explicit opt-in re-registers a removed workspace (workspace-identity.ts:26,
-      // `register` option). Never automatic (ADR-0026:33-35).
-      readonly from: IdentityIn<"Removed">;
-      readonly to: "Registered";
-      readonly optIn: true;
-    }
-  | {
-      // NEW (A15): durable removal intent, written before Library.apply removes the collection.
-      readonly from: IdentityIn<"IdentityOnly" | "Registered">;
-      readonly to: "Removing";
-    }
-  | {
-      // FROM CODE: markAuthorWorkspaceRemoved after Library removes the collection
-      // (author-workspace.ts:169-184; called from workflows/library/remove.ts:81)
-      readonly from: IdentityIn<"Removing">;
-      readonly to: "Removed";
-    };
-
 // NEW: AuthorWorkspaceConflict { root: WorkspaceRoot; found: Workspace }: what a transition or
 //   register planned from is no longer what is on disk.
 // NEW (A1): AuthorWorkspaceRootInvalid { input }: the input is not an existing directory.
@@ -363,9 +311,14 @@ export interface WorkspaceLease {
   readonly revision: Effect.Effect<number, AuthorLeaseNotHeld>;
   /** For AuthorHistory only: record a checkpoint step under this hold; returns the new revision. */
   readonly advance: Effect.Effect<number, AuthorLeaseNotHeld>;
-  /** The registration lifecycle. Returns the identity now on disk. */
+  /**
+   * Create the identity and .skit/.gitignore (ADR-0026:24-27), adopting the workspace id an
+   * authored Library collection already names for this root when workspace.json is missing (A3;
+   * the workflow finds it with Library.read, AuthorWorkspace does not require Library). Fails
+   * AuthorWorkspaceConflict if an identity is on disk: an id is never replaced.
+   */
   readonly register: (
-    change: RegistrationTransition,
+    adopt: Option.Option<WorkspaceId>,
   ) => Effect.Effect<Identity, AuthorWorkspaceConflict | AuthorLeaseNotHeld | WorkspaceReadError>;
   /**
    * The connection lifecycle. Every write is flushed with its directory entries before returning
@@ -715,9 +668,8 @@ export type WritingRecovery = "merge";
  *      files, as today (workflows/author/sync.ts:510, before the apply check at :601).
  *   3. Apply: lease = acquire(root) for the whole command (A8). ws = read(root).
  *   4. Identity (A5): None → adopt = Library.read finds an authored collection naming this root;
- *      lease.register { from: None, to: "IdentityOnly", adopt }. Some(any registration) → used as is:
- *      sync never changes registration, so Removing/Removed stay opted out of installation and
- *      sync only backs them up. Never Library.import.
+ *      lease.register(adopt). Some → used as is. Never Library.import: sync backs up, installation is
+ *      `author init`.
  *   5. Destination = ws.connection, or NewRemote from --to and --visibility when Unconnected; flag
  *      checks as sync.ts:466-495 (pure). Connected with Leftover Matching → lease.transition
  *      { Connected(Matching) → Connected }; Mismatched or Invalid → stop and report, change nothing (A4).
@@ -749,20 +701,12 @@ export type WritingRecovery = "merge";
  *   local binding and history stay as they were; the next sync fails RemoteSkitUnavailable, and
  *   reconnecting is an explicit user action, never an automatic reset (A16, product behaviour).
  * `skit author init` → Author.initializeAuthorWorkspace → root; lease = acquire(root); initSkit scaffold(lease) (plain; A11).
- *   Identity None → register { None → Registered, adopt } (adopt from Library.read, A3);
- *   IdentityOnly → { → Registered }; Removed → only with the explicit opt-in flag { → Registered,
- *   optIn }; Removing → report that a removal is unfinished; Registered → no write.
+ *   Identity None → register(adopt) (adopt from Library.read, A3); Some → no write.
  *   Then Library.import.authored, which checks under its own writer that no other collection
- *   claims this root or id (A3). If Library refuses, the identity stays Registered: report
- *   "registered, not imported" with Library's reason; a retry reuses the same identity.
+ *   claims this root or id (A3). If Library refuses, the identity stays: a retry reuses it.
  * `skit author invocation` → Author.generateAuthorInvocation → lease = acquire(root); its skill-metadata write takes the lease (A11).
- * `skit library remove` → Author.removeAuthorCollection; an authored collection (A15) → lease = acquire(root) when the root still
- *   exists; identity must carry the collection's workspace id (author-workspace.ts:169-184), else
- *   Library.apply alone. lease.register { → Removing } (durable intent); Library.apply(Remove);
- *   lease.register { Removing → Removed }. A removal retry while the Collection exists completes both owners. After Library removal
- *   has finished, initializeAuthorWorkspace settles Removing against absent Library claims,
- *   preserving opt-out unless explicitly registering again. Lease before
- *   the Library writer.
+ * `skit remove` → Library.removeCollection. Touches no Author owner: an authored Collection's
+ *   workspace keeps its identity, and is registered again by the next `author init`.
  */
 export type Commands = never;
 
@@ -773,10 +717,6 @@ export interface AuthorSyncOptions {
   readonly home: string;
   readonly to?: string;
   readonly visibility?: "private" | "unlisted" | "public";
-}
-export interface AuthorRemoveOptions {
-  readonly query: string;
-  readonly dryRun: boolean;
 }
 
 /** Transport input supplies protocol effects only. It has no local writer, lease or checkpoint. */

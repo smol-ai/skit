@@ -1,8 +1,4 @@
-import {
-  AuthorWorkspaceAlreadyRegistered,
-  AuthorWorkspaceRemovalUnfinished,
-  DirectoryAlreadyInLibrary,
-} from "./failures.js";
+import { AuthorWorkspaceAlreadyRegistered, DirectoryAlreadyInLibrary } from "./failures.js";
 import { ImportContentInvalid } from "../library/index.js";
 import { initSkit as scaffoldSkit } from "./scaffold.js";
 import { validateSkitDirectory } from "../artifact/skit.js";
@@ -56,13 +52,12 @@ const checkLibraryClaims = Effect.fn("Author.checkLibraryClaims")(function* (
 });
 
 /**
- * `author init`: scaffold the folder and register it for installation, under the workspace lease
- * (A11). A removed workspace stays opted out unless `register` opts it back in. If the Library
- * then refuses the import, the workspace stays Registered and a retry reuses its identity (A3).
+ * `author init`: scaffold the folder and import it into the Library, under the workspace lease
+ * (A11). A workspace whose Collection was removed is imported again, keeping its identity. If the
+ * Library refuses the import, the identity stays and a retry reuses it (A3).
  */
 export const initializeAuthorWorkspace = Effect.fn("Author.initialize")(function* (
   input: string,
-  register: boolean,
   home: string,
 ) {
   const fs = yield* FileSystem.FileSystem;
@@ -80,35 +75,7 @@ export const initializeAuthorWorkspace = Effect.fn("Author.initialize")(function
   const validated = yield* validateSkitDirectory(folder, "source", {
     assessmentContext: "import",
   });
-  const registered = Option.isNone(identity)
-    ? yield* lease.register({ from: identity, to: "Registered", adopt: claims.adopt })
-    : identity.value.registration === "IdentityOnly"
-      ? yield* lease.register({
-          from: { ...identity.value, registration: "IdentityOnly" },
-          to: "Registered",
-        })
-      : identity.value;
-  // A removal whose Library half finished is completed here; one still in the Library is not.
-  const settled =
-    registered.registration === "Removing"
-      ? claims.existing === undefined
-        ? yield* lease.register({
-            from: { ...registered, registration: "Removing" },
-            to: "Removed",
-          })
-        : yield* new AuthorWorkspaceRemovalUnfinished({
-            collectionId: claims.existing.collectionId,
-          })
-      : registered;
-  if (settled.registration === "Removed" && !register) return { initialized, entry: undefined };
-  const workspace =
-    settled.registration === "Removed"
-      ? yield* lease.register({
-          from: { ...settled, registration: "Removed" },
-          to: "Registered",
-          optIn: true,
-        })
-      : settled;
+  const workspace = Option.isNone(identity) ? yield* lease.register(claims.adopt) : identity.value;
   const entry = yield* library.import.authored({
     root: folder,
     source: { type: "local", path: folder },

@@ -49,7 +49,6 @@ export { InvocationMetadataGeneration } from "./invocation/generation.js";
 export { authorLayer, authorWorkspaceLayer, readAuthorWorkspace } from "./operations.js";
 export { syncAuthorWorkspace } from "./sync.js";
 export { initializeAuthorWorkspace } from "./initialize.js";
-export { removeAuthorCollection } from "./remove.js";
 export { generateAuthorInvocation } from "./invocation.js";
 export { parseAuthorDestination } from "./destination.js";
 export { AuthorSyncResult } from "./sync-result.js";
@@ -70,7 +69,6 @@ export type {
   AuthorDestinationInvalid,
   AuthorDestinationMalformed,
   AuthorRemoteAlreadyExists,
-  AuthorWorkspaceRemovalUnfinished,
   DestinationFormInvalid,
   DirectoryAlreadyInLibrary,
   NoRemoteHome,

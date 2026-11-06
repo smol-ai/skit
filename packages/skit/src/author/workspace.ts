@@ -33,12 +33,7 @@ import { type SkitContractError } from "../api/contracts.js";
 import { SourceProcess } from "../platform/source-process.js";
 import { type TreeError } from "../shared/tree-error.js";
 import { acquireFileLock } from "../platform/file-lock.js";
-import {
-  syncPaths,
-  writeJsonAtomic,
-  writeJsonExclusive,
-  writeRawAtomic,
-} from "../platform/atomic-write.js";
+import { syncPaths, writeJsonExclusive, writeRawAtomic } from "../platform/atomic-write.js";
 import { isErrno } from "../shared/errno.js";
 import {
   AuthorWorkspaceMetadataInvalid,
@@ -67,26 +62,17 @@ export const WorkspaceId = Schema.String.check(Schema.isPattern(/^workspace_[a-f
 export type WorkspaceId = typeof WorkspaceId.Type;
 
 /**
- * Any identity can be backed up and synced; only Registered may be installed. IdentityOnly is
- * the absent `registration` key. Removing is the durable removal intent (A15); Removed is the
- * opt-out nothing automatic resurrects.
+ * The workspace's device-local identity. Whether its Collection is in the Library is the
+ * Library's state, never stored here: a workspace is registered while the Library retains a
+ * Collection imported from it.
  */
-const Registration = Schema.Literals(["IdentityOnly", "Registered", "Removing", "Removed"]);
-type Registration = typeof Registration.Type;
-
-export const Identity = Schema.Struct({ workspaceId: WorkspaceId, registration: Registration });
+export const Identity = Schema.Struct({ workspaceId: WorkspaceId });
 export type Identity = typeof Identity.Type;
-type IdentityIn<R extends Registration> = Identity & { readonly registration: R };
 
-/** The stored `registration` value of each registration; IdentityOnly stores none. */
-const storedRegistration = {
-  IdentityOnly: undefined,
-  Registered: "registered",
-  Removing: "removing",
-  Removed: "removed",
-} as const;
-
-/** .skit/workspace.json, skit.author-workspace.v1. */
+/**
+ * .skit/workspace.json, skit.author-workspace.v1. Files written by 0.3.0 carry a `registration`
+ * key; it is read and ignored, and never written again.
+ */
 const WorkspaceDocument = Schema.Struct({
   schema: Schema.Literal("skit.author-workspace.v1"),
   workspace_id: WorkspaceId,
@@ -178,31 +164,6 @@ type ConnectionTransition =
   | {
       readonly from: Connected & { readonly leftover: Extract<Leftover, { _tag: "Matching" }> };
       readonly to: { readonly _tag: "Connected" };
-    };
-
-/** The registration lifecycle's one transition (A2). Only the first case may adopt an id. */
-type RegistrationTransition =
-  | {
-      readonly from: Extract<Option.Option<Identity>, { _tag: "None" }>;
-      readonly to: "IdentityOnly" | "Registered";
-      readonly adopt: Option.Option<WorkspaceId>;
-    }
-  | {
-      readonly from: IdentityIn<"IdentityOnly">;
-      readonly to: "Registered";
-    }
-  | {
-      readonly from: IdentityIn<"Removed">;
-      readonly to: "Registered";
-      readonly optIn: true;
-    }
-  | {
-      readonly from: IdentityIn<"IdentityOnly" | "Registered">;
-      readonly to: "Removing";
-    }
-  | {
-      readonly from: IdentityIn<"Removing">;
-      readonly to: "Removed";
     };
 
 // ── Errors ─────────────────────────────────────────────────────────────────────────────────────
@@ -331,9 +292,13 @@ export interface WorkspaceLease {
   readonly revision: Effect.Effect<number, AuthorLeaseNotHeld>;
   /** For AuthorHistory only: record a checkpoint step under this hold; returns the new revision. */
   readonly advance: Effect.Effect<number, AuthorLeaseNotHeld>;
-  /** The registration lifecycle. Returns the identity now on disk. */
+  /**
+   * Give an unidentified workspace its identity, adopting the id of a Collection the Library
+   * already imported from this root when there is one (A3). Fails AuthorWorkspaceConflict if an
+   * identity is already on disk; an identity is never replaced.
+   */
   readonly register: (
-    change: RegistrationTransition,
+    adopt: Option.Option<WorkspaceId>,
   ) => Effect.Effect<Identity, AuthorWorkspaceConflict | AuthorLeaseNotHeld | WorkspaceReadError>;
   /** The connection lifecycle. Every write is flushed before returning. Returns the new state. */
   readonly transition: (
@@ -439,15 +404,7 @@ const make = Effect.gen(function* () {
     const document = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(WorkspaceDocument), {
       onExcessProperty: "error",
     })(text.value).pipe(Effect.mapError(() => new AuthorWorkspaceMetadataInvalid({ path: file })));
-    const registration: Registration =
-      document.registration === "registered"
-        ? "Registered"
-        : document.registration === "removing"
-          ? "Removing"
-          : document.registration === "removed"
-            ? "Removed"
-            : "IdentityOnly";
-    return Option.some(Identity.make({ workspaceId: document.workspace_id, registration }));
+    return Option.some(Identity.make({ workspaceId: document.workspace_id }));
   });
 
   /** skit.remote.json, canonical or invalid. Any read failure but absence is invalid metadata. */
@@ -604,41 +561,21 @@ const make = Effect.gen(function* () {
     );
 
     const register = Effect.fn("AuthorWorkspace.register")(function* (
-      change: RegistrationTransition,
+      adopt: Option.Option<WorkspaceId>,
     ) {
       yield* held;
-      const current = yield* readIdentity(root);
-      const from = change.from;
-      const planned = Option.isOption(from)
-        ? Option.isNone(current)
-        : Option.exists(
-            current,
-            (identity) =>
-              identity.workspaceId === from.workspaceId &&
-              identity.registration === from.registration,
-          );
-      if (!planned) return yield* new AuthorWorkspaceConflict({ root, found: yield* read(root) });
+      if (Option.isSome(yield* readIdentity(root)))
+        return yield* new AuthorWorkspaceConflict({ root, found: yield* read(root) });
       const file = identityPath(root);
-      const stored = storedRegistration[change.to];
-      if ("adopt" in change) {
-        const workspaceId = Option.isSome(change.adopt)
-          ? change.adopt.value
-          : WorkspaceId.make(`workspace_${(yield* random.uuidV4()).replaceAll("-", "")}`);
-        yield* writeJsonExclusive(file, {
-          schema: "skit.author-workspace.v1",
-          workspace_id: workspaceId,
-          ...(stored === undefined ? {} : { registration: stored }),
-        });
-        yield* syncPaths([file, control(root), root]);
-        return Identity.make({ workspaceId, registration: change.to });
-      }
-      yield* writeJsonAtomic(file, {
+      const workspaceId = Option.isSome(adopt)
+        ? adopt.value
+        : WorkspaceId.make(`workspace_${(yield* random.uuidV4()).replaceAll("-", "")}`);
+      yield* writeJsonExclusive(file, {
         schema: "skit.author-workspace.v1",
-        workspace_id: change.from.workspaceId,
-        registration: stored,
+        workspace_id: workspaceId,
       });
       yield* syncPaths([file, control(root), root]);
-      return Identity.make({ workspaceId: change.from.workspaceId, registration: change.to });
+      return Identity.make({ workspaceId });
     });
 
     const transition = Effect.fn("AuthorWorkspace.transition")(function* (

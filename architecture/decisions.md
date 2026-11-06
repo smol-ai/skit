@@ -277,8 +277,7 @@ API: `architecture/author.ts`. Each entry is a choice today's code does not sett
 
 **Recommend:** two methods, one per lifecycle: `register({ from, to })` and `transition({ from, to })`, both on the workspace lease (A8). Each takes the state it planned from and fails with `AuthorWorkspaceConflict`.
 - `register` compares the on-disk identity with `from` by value, both id and registration, so it never replaces an id. `adopt` exists only on the case that starts from no identity.
-- Registration states: `IdentityOnly` (the key is absent), `Registered`, `Removing` (A15) and `Removed`. Any identity can be backed up. Only `Registered` is registered for installation (ADR-0026:33-38).
-- `Removed → Registered` needs an explicit `optIn`, as `register` does today (`workflows/author/workspace-identity.ts:26`). Nothing automatic resurrects a removed workspace.
+- Superseded 2026-11-07 (A15): `workspace.json` stores no registration. `register(adopt)` creates the identity once; whether the workspace is registered for installation is whether the Library retains its Collection.
 
 **Evidence (partial):** t3code's outbox keeps one status union, and each transition is its own compare-and-set method that only applies from the expected status: `WHERE effect_id = ${effectId} AND status = 'running' … RETURNING effect_id` ([EffectOutbox.ts#L146-L152](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/orchestration-v2/EffectOutbox.ts#L146-L152), [#L586-L637](https://github.com/pingdotgg/t3code/blob/3f9448747bb8848050dc2cacf83affa6f94a66a1/apps/server/src/orchestration-v2/EffectOutbox.ts#L586-L637)). There, the expected state is fixed per method rather than passed in, and a conflict returns `false`. I found no example of two lifecycles on one entity.
 
@@ -427,7 +426,9 @@ Implemented hierarchy handling (2026-11-06): implicit directories merge by child
 
 **OPEN (sync policy, not blocking):** a timestamp per path and how clock skew is reported (`docs/author-sync-port.md`, "Next slices" 1).
 
-### A15. Removing an authored collection survives a crash between owners (decided)
+### A15. Removing an authored collection survives a crash between owners (superseded)
+
+**Superseded (Tim, 2026-11-07):** the stored `registration` word existed only to answer "was this workspace's Collection removed from the Library?", which the Library's state already answers. `workspace.json` now holds the identity only; `Removing`, `Removed`, the lease during removal, `AuthorWorkspaceRemovalUnfinished` and `removeAuthorCollection` are gone. `skit remove` is `Library.removeCollection`. A workspace whose Collection is absent is registered again by the next `author init`; no opt-out marker remains. The original record follows.
 
 **Problem:** `library remove` runs `Library.apply`, then marks the workspace removed (`workflows/library/remove.ts:81`). A crash between the two leaves a workspace that still says `Registered` for a collection that is gone.
 

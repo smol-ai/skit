@@ -159,7 +159,7 @@ it.effect("a first sync without workspace.json reuses the id its authored Collec
     yield* copySkitFixtureEffect("authored", source);
     const library = yield* libraryHome({ home: join(root, "home") });
     yield* initializeLibraryMachine(library.home);
-    const imported = yield* library.owned(authorInitCommand(source, false));
+    const imported = yield* library.owned(authorInitCommand(source));
     const metadata = join(source, ".skit", "workspace.json");
     const { workspace_id } = JSON.parse(yield* readText(metadata));
     expect(imported.entry?.collection.upstream?.source_identity).toEqual({

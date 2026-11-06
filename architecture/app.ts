@@ -163,7 +163,7 @@ export const owners = {
       "read: { identity, connection: Unconnected | Connecting | Connected { leftover } } (never writes)",
       "readIdentity(root) (workspace.json only; for AuthorHistory, A10)",
       "private acquire(root): scoped WorkspaceLease { register, transition, writeTree } (A8)",
-      "public readAuthorWorkspace / initializeAuthorWorkspace / generateAuthorInvocation / removeAuthorCollection; Author owns orchestration (A7, A15)",
+      "public readAuthorWorkspace / initializeAuthorWorkspace / generateAuthorInvocation; Author owns orchestration (A7)",
     ],
     requires: [
       "FileSystem",
