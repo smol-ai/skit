@@ -92,6 +92,8 @@ const githubAccountLinkingPolicy = {
 
 export const makeBetterAuth = (configuration: BetterAuthConfiguration, sql: DatabaseSqlClient) =>
   Effect.gen(function* () {
+    // Better Auth invokes Promise hooks outside the fiber; keep the identity owner's services.
+    const services = yield* Effect.context();
     const crypto = yield* WebCrypto.WebCrypto;
     const random = yield* SecureRandom.SecureRandom;
     const clock = yield* Clock.Clock;
@@ -294,8 +296,7 @@ export const makeBetterAuth = (configuration: BetterAuthConfiguration, sql: Data
                 return;
               // A failed batch writes nothing; the next sign-in or username claim provisions
               // the user.
-              // oxlint-disable-next-line skit/no-nested-runtime -- Better Auth database hooks are Promise callbacks; this adapter owns that integration boundary.
-              await Effect.runPromise(
+              await Effect.runPromiseWith(services)(
                 provision(decoded.value.id, decoded.value.username).pipe(
                   Effect.tapError((error) =>
                     Effect.logError("Principal provisioning failed", error),
@@ -309,8 +310,7 @@ export const makeBetterAuth = (configuration: BetterAuthConfiguration, sql: Data
           create: {
             before: async (session) => {
               // Sign-in repairs a user whose username was saved without its Principal Namespace.
-              // oxlint-disable-next-line skit/no-nested-runtime -- Better Auth database hooks are Promise callbacks; this adapter owns that integration boundary.
-              await Effect.runPromise(
+              await Effect.runPromiseWith(services)(
                 readProvisioning(session.userId).pipe(
                   Effect.flatMap(({ username, namespace_slug }) =>
                     username === null || namespace_slug !== null
