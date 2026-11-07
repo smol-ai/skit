@@ -1,7 +1,7 @@
 import { NodeRuntime } from "@effect/platform-node";
 import { Console, Effect, FileSystem, Schema, Stream } from "effect";
 import { dirname, join } from "node:path";
-import { authorLayer, captureWorkspace } from "../helpers/author-history.js";
+import { authorLayer, refreshWorkspace } from "../helpers/author-history.js";
 import { testPlatformLayer } from "../helpers/platform.js";
 
 const Arguments = Schema.Struct({
@@ -21,7 +21,7 @@ NodeRuntime.runMain(
       const directory = join(home, "history");
       let attempts = 0;
       // The owners are built over the controlled FileSystem, so capture runs through it.
-      const controlled = captureWorkspace(root).pipe(
+      const controlled = refreshWorkspace(root).pipe(
         Effect.provide(authorLayer(home)),
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,

@@ -1,6 +1,6 @@
 import { Data, Effect, Option, Schema } from "effect";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
-import { observePathEvidence } from "../folder-evidence.js";
+import { readPathEvidence } from "../folder-evidence.js";
 import { type Hash } from "../../shared/hash.js";
 import type * as Library from "../library.js";
 import { type MachineId } from "../entity-ids.js";
@@ -50,7 +50,7 @@ const reviewedFolder = Effect.fn("Setup.reviewedFolder")(function* (
   currentHash: Hash | undefined,
   identity?: { readonly dev: bigint; readonly ino: bigint },
 ) {
-  const observed = yield* observePathEvidence(path);
+  const observed = yield* readPathEvidence(path);
   if (
     currentHash === undefined ||
     Option.isNone(observed) ||
@@ -65,7 +65,7 @@ const reviewedFolder = Effect.fn("Setup.reviewedFolder")(function* (
 
 /** The approved link as it is now, which must still be the same link to the same target. */
 const approvedLink = Effect.fn("Setup.approvedLink")(function* (link: ApprovedSymlink) {
-  const observed = yield* observePathEvidence(link.path);
+  const observed = yield* readPathEvidence(link.path);
   if (
     Option.isNone(observed) ||
     observed.value._tag !== "SymbolicLink" ||

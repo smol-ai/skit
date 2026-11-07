@@ -4,11 +4,7 @@ import { HttpClient, HttpClientResponse } from "effect/http";
 import { join } from "node:path";
 import * as Library from "@smolai/skit-core/library";
 import { skitConfigurationLayer, skitLayer } from "@smolai/skit-core/platform";
-import {
-  LibraryResponse,
-  SnapshotArchive,
-  StorageFailureResponse,
-} from "@smolai/skit-core/universal/api";
+import { LibraryResponse, SnapshotArchive, StorageFailureResponse } from "@smolai/skit-core/api";
 import { librarySyncCommand } from "../library/sync.js";
 import { result } from "../commands/result.js";
 import { commandFailure } from "../commands/failure-classification.js";

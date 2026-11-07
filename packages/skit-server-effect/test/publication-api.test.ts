@@ -3,7 +3,7 @@ import { Effect, Layer } from "effect";
 import { HttpServer } from "effect/http";
 import { HttpApiTest } from "effect/http-api";
 import { CurrentPrincipal, PrincipalAuthentication } from "../src/api/authentication.js";
-import { PublicationAuthenticatedApi } from "@smolai/skit-core/universal/api";
+import { PublicationAuthenticatedApi } from "@smolai/skit-core/api";
 import { publicationHandlers } from "../src/api/publication-http.js";
 import { requestDecodingLayer } from "../src/api/request-decoding.js";
 import { ServerConfiguration } from "../src/platform/configuration.js";

@@ -3,11 +3,11 @@ import { Context, Effect, FileSystem, Layer, Option, Schema, Stream } from "effe
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { observePathEvidence } from "../src/library/folder-evidence.js";
+import { readPathEvidence } from "../src/library/folder-evidence.js";
 import * as Library from "../src/library/library.js";
 import { OperationStatus } from "../src/library/store/state-schema.js";
 import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
-import { acquireFileLock } from "../src/platform/file-lock.js";
+import { lockFile } from "../src/platform/file-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { libraryLayer } from "./helpers/library-store.js";
 
@@ -31,7 +31,7 @@ const setupProcess = (home: string, folder: string, commits: number) =>
        import * as Library from "@smolai/skit-core/library";
        import { skitLayer } from "@smolai/skit-core/platform";
        const [url, home, folder, commits] = process.argv.slice(1);
-       const { observePathEvidence } = await import(url);
+       const { readPathEvidence } = await import(url);
        const paused = Layer.effect(FileSystem.FileSystem, Effect.map(FileSystem.FileSystem, (fs) => {
          let left = Number(commits);
          const gate = Effect.suspend(() => left-- > 0 ? Effect.void
@@ -46,7 +46,7 @@ const setupProcess = (home: string, folder: string, commits: number) =>
        const keepAlive = setInterval(() => {}, 60_000);
        try { await Effect.runPromise(Effect.gen(function* () {
          const library = Context.get(yield* Layer.build(layer), Library.Service);
-         const evidence = yield* observePathEvidence(folder);
+         const evidence = yield* readPathEvidence(folder);
          if (Option.isNone(evidence)) return yield* Effect.die("no folder");
          const base = yield* library.read;
          yield* library.setup([{ _tag: "Remove", folders: [evidence.value] }], { base });
@@ -165,7 +165,7 @@ it.effect("with nothing Pending, building the layer takes no lock and writes not
     const finished = yield* Effect.scoped(
       Effect.flatMap(Layer.build(libraryLayer(home)), (built) => {
         const library = Context.get(built, Library.Service);
-        return Effect.flatMap(observePathEvidence(folder), (evidence) =>
+        return Effect.flatMap(readPathEvidence(folder), (evidence) =>
           Option.isNone(evidence)
             ? Effect.die("no folder")
             : Effect.flatMap(library.read, (base) =>
@@ -177,7 +177,7 @@ it.effect("with nothing Pending, building the layer takes no lock and writes not
     assert.strictEqual(finished._tag, "Done");
     const before = yield* fs.readFileString(join(home, "state.json"));
     // Another holder, as another process would be: a build that took the lock would fail.
-    yield* acquireFileLock(join(home, "lock.sqlite"));
+    yield* lockFile(join(home, "lock.sqlite"));
 
     assert.deepStrictEqual(yield* startup(home), { finished: [], stopped: [] });
     assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), before);

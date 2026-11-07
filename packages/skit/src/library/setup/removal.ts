@@ -1,7 +1,7 @@
 import { dirname, resolve } from "node:path";
 import { Effect, Option } from "effect";
 import { LinkStat } from "../../platform/link-stat.js";
-import { observePathEvidence } from "../folder-evidence.js";
+import { readPathEvidence } from "../folder-evidence.js";
 import { pathIsWithin } from "../../platform/path-identity.js";
 import type * as Library from "../library.js";
 import { StalePlan } from "../library-plan.js";
@@ -79,7 +79,7 @@ export const planSetupRemovals = Effect.fn("Setup.planRemovals")(function* (
     for (const instance of scan.instances.filter((item) => selection.paths.includes(item.path)))
       for (const path of removablePaths.get(instance.path) ?? []) {
         if (folders.some((folder) => folder.path === path)) continue;
-        const observed = yield* observePathEvidence(path);
+        const observed = yield* readPathEvidence(path);
         if (Option.isNone(observed))
           return yield* new StalePlan({ message: "The Library changed since this was previewed" });
         const evidence = observed.value;

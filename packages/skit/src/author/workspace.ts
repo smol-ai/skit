@@ -32,13 +32,13 @@ import { LinkStat } from "../platform/link-stat.js";
 import { type SkitContractError } from "../api/contracts.js";
 import { SourceProcess } from "../platform/source-process.js";
 import { type TreeError } from "../shared/tree-error.js";
-import { acquireFileLock } from "../platform/file-lock.js";
+import { lockFile } from "../platform/file-lock.js";
 import { syncPaths, writeJsonExclusive, writeRawAtomic } from "../platform/atomic-write.js";
 import { isErrno } from "../shared/errno.js";
 import {
   AuthorWorkspaceMetadataInvalid,
   AuthorRemoteMetadataInvalid,
-  type AuthorLocalPathNotObserved,
+  type AuthorLocalPathUnchecked,
   type AuthorNonNfcPathUnsupported,
   type AuthorNormalizationTwin,
   type LocalFilesChangedDuringSync,
@@ -271,7 +271,7 @@ type WriteTreeError =
   | AuthorWriteNotPrepared
   | LocalFilesChangedDuringSync
   | SkitContractError
-  | AuthorLocalPathNotObserved
+  | AuthorLocalPathUnchecked
   | AuthorNormalizationTwin
   | AuthorNonNfcPathUnsupported
   | TreeError
@@ -520,7 +520,7 @@ const make = Effect.gen(function* () {
         reason: "the lock is not a regular file",
       });
     const lock = yield* Scope.make();
-    yield* acquireFileLock(lockPath).pipe(
+    yield* lockFile(lockPath).pipe(
       Scope.provide(lock),
       Effect.catchTags({
         FileLockBusy: () => Effect.fail(new AuthorWorkspaceBusy({ root })),

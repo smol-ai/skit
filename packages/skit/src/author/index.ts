@@ -17,8 +17,8 @@ export {
   type AuthorSyncStateConflict,
   type AuthorBackupStateConflict,
   type AuthorSyncStateIllegal,
-  type Observation,
-  type CaptureError,
+  type SavedRevision,
+  type RefreshError,
   type AuthorHistory,
 } from "./history.js";
 export {
@@ -27,7 +27,7 @@ export {
   InsecureOrigin,
   AuthorRemoteMetadataInvalid,
   LocalFilesChangedDuringSync,
-  type AuthorLocalPathNotObserved,
+  type AuthorLocalPathUnchecked,
   type AuthorNormalizationTwin,
   type AuthorNonNfcPathUnsupported,
 } from "./failures.js";
@@ -57,7 +57,7 @@ export type { AuthorRegistry } from "./transport.js";
 export { Moved, type Remote as SyncRemote } from "../sync/sync.js";
 export { DestinationExistsWithoutHistory } from "./failures.js";
 
-export { captureAuthorWorkspace } from "./operations.js";
+export { refreshAuthorWorkspace } from "./operations.js";
 export { backupAuthorWorkspace } from "./backup.js";
 
 export { listAuthorSkits, AuthorListIdentityError } from "./list.js";

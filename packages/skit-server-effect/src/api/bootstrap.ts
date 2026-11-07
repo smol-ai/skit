@@ -1,1 +1,1 @@
-export { BootstrapApi } from "@smolai/skit-core/universal/api";
+export { BootstrapApi } from "@smolai/skit-core/api";

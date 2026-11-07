@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Option, Schema } from "effect";
 import { basename, join } from "node:path";
 import * as Library from "../src/library/library.js";
-import { observePathEvidence } from "../src/library/folder-evidence.js";
+import { readPathEvidence } from "../src/library/folder-evidence.js";
 import { LibraryState } from "../src/library/library-state.js";
 import { OperationStatus } from "../src/library/store/state-schema.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
@@ -32,7 +32,7 @@ const fixture = Effect.fn("test.undoRecovery.fixture")(function* (reconstruct = 
     }
     const folders = yield* Effect.forEach(paths, (path) =>
       Effect.gen(function* () {
-        const evidence = yield* observePathEvidence(path);
+        const evidence = yield* readPathEvidence(path);
         if (Option.isNone(evidence)) return yield* Effect.die("Missing fixture folder");
         return evidence.value;
       }),

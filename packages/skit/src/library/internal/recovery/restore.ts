@@ -5,7 +5,7 @@ import { RecoveryInspection, RecoveryInvalid } from "../../recovery-facts.js";
 import { RecoveryRestore } from "../../store/state-schema.js";
 
 import { planningState, applyReviewed } from "../../reviewed-plan.js";
-import { captureRecoveryRestore, inspectRecoveryOperation } from "./moves.js";
+import { readRecoveryRestore, inspectRecoveryOperation } from "./moves.js";
 
 import { setupOperation } from "../setup/run.js";
 import { makeOperationId } from "../../entity-ids.js";
@@ -26,7 +26,7 @@ export const planRestore = Effect.fn("Library.planRestore")(function* (
   options: { readonly base: Snapshot },
 ) {
   yield* planningState(home, options.base);
-  const program = yield* captureRecoveryRestore(home, intent.operationId);
+  const program = yield* readRecoveryRestore(home, intent.operationId);
   return yield* RestorePlan.makeEffect({
     _tag: "Restore",
     intent,

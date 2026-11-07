@@ -20,7 +20,7 @@ import * as InstalledSkillFiles from "../installed-skills/files.js";
 import * as InstalledSkillBackups from "../installed-skills/backups.js";
 import { LinkStat } from "../platform/link-stat.js";
 import { SourceProcess } from "../platform/source-process.js";
-import { digestTreeHash, deterministicTreeHash } from "../artifact/skit.js";
+import { hashTree, deterministicTreeHash } from "../artifact/skit.js";
 
 import { ensureSkillsDirectoryWritable } from "../installed-skills/writable.js";
 import { installDestinationPathIdentity } from "../platform/path-identity.js";
@@ -435,7 +435,7 @@ export const make = Effect.fn("make")(function* (configuration?: Routing | Inven
         Effect.provide(context),
       ),
     inspect: (path) => inspect(path).pipe(Effect.provide(context)),
-    hash: (path) => digestTreeHash(path).pipe(Effect.provide(context)),
+    hash: (path) => hashTree(path).pipe(Effect.provide(context)),
     check: Effect.fn("check")(function* (folders) {
       for (const expected of folders) {
         const current = yield* inspect(expected.path).pipe(Effect.provide(context));

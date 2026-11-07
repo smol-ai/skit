@@ -8,7 +8,7 @@ import { makeMachineId } from "@smolai/skit-core/universal/consumer";
 import {
   confirmLibraryChange,
   proposeLibraryCollectionChange,
-  type Scope,
+  type InstallScope,
 } from "@smolai/skit-core/library/session";
 import { createLibraryHost } from "../../src/library/host";
 
@@ -87,7 +87,7 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
     /** The installed-skill options the TUI derives from its flags for this home. */
     configuration,
     /** Enable a whole Collection in `scopes` through the session workflows the TUI confirms. */
-    bind: (label: string, scopes: readonly Scope[]) =>
+    bind: (label: string, scopes: readonly InstallScope[]) =>
       Effect.gen(function* () {
         const session = yield* Effect.flatMap(Library.Service, (library) => library.session.open());
         const collectionId = session.skills.find((row) => row.heading === label)!.collectionId;

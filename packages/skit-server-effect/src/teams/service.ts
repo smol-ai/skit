@@ -5,7 +5,7 @@ import { prepareTeamNamespaceClaim } from "../identity/team-namespace.js";
 import { normalizeNamespace } from "../identity/namespace-name.js";
 import { DatabaseError, databaseError, type DatabaseSqlClient } from "../platform/cloudflare.js";
 import { SecureRandom } from "effect/crypto";
-import { Team, TeamMember } from "@smolai/skit-core/universal/api";
+import { Team, TeamMember } from "@smolai/skit-core/api";
 
 const TEAM_SLUG = /^[a-z0-9][a-z0-9-]{2,38}$/;
 const TeamIdRow = Schema.Struct({ team_id: Schema.String });

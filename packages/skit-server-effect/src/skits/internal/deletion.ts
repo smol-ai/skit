@@ -5,7 +5,7 @@ import {
   type DatabaseSqlClient,
   type BlobStoreService,
 } from "../../platform/cloudflare.js";
-import type { AuthorSkitDeleteResponse } from "@smolai/skit-core/universal/api";
+import type { AuthorSkitDeleteResponse } from "@smolai/skit-core/api";
 import type { Principal } from "../../identity/service.js";
 
 const SkitVisibility = Schema.Struct({

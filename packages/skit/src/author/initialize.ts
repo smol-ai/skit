@@ -13,7 +13,7 @@ import {
 
 import { Clock, Effect, FileSystem, Option, Path } from "effect";
 
-import { adoptFrom } from "./library-claims.js";
+import { workspaceIdFromClaims } from "./library-claims.js";
 
 /**
  * What the Library already says about this folder: no other Collection may claim it, and a
@@ -45,7 +45,7 @@ const checkLibraryClaims = Effect.fn("Author.checkLibraryClaims")(function* (
       at: existing.input,
     });
   return {
-    adopt: Option.isSome(identity) ? Option.none<WorkspaceId>() : adoptFrom(sameRoot),
+    adopt: Option.isSome(identity) ? Option.none<WorkspaceId>() : workspaceIdFromClaims(sameRoot),
     existing,
   };
 });

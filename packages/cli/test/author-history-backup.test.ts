@@ -3,7 +3,7 @@ import { Effect, Fiber, FileSystem } from "effect";
 import { TestClock } from "effect/testing";
 import { join } from "node:path";
 import { systemError } from "effect/PlatformError";
-import { authorLayer, captureWorkspace } from "./helpers/author-history.js";
+import { authorLayer, refreshWorkspace } from "./helpers/author-history.js";
 import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
@@ -37,7 +37,7 @@ for (const connection of ["first", "connected"] as const)
           _tag: "TreeError",
           reason: { _tag: "InvalidSymlink", path: "pointer" },
         });
-        const observation = yield* captureWorkspace(world.a.workspace).pipe(
+        const observation = yield* refreshWorkspace(world.a.workspace).pipe(
           Effect.provide(authorLayer(world.a.home)),
         );
         const backedUp = (yield* world.server.revisions()).find(({ id }) => id === observation.id);
@@ -80,7 +80,7 @@ it.effect.each(["first", "connected"] as const)(
       expect(yield* Effect.flip(world.a.sync(connection === "first"))).toMatchObject({
         _tag: "RegistryUnreachable",
       });
-      const observation = yield* captureWorkspace(world.a.workspace).pipe(
+      const observation = yield* refreshWorkspace(world.a.workspace).pipe(
         Effect.provide(authorLayer(world.a.home)),
       );
       expect(
@@ -111,7 +111,7 @@ it.effect(
         yield* TestClock.adjust("1 second");
         yield* world.a.edit("offline.txt", bytes, "remote");
         observations.push(
-          yield* captureWorkspace(world.a.workspace).pipe(
+          yield* refreshWorkspace(world.a.workspace).pipe(
             Effect.provide(authorLayer(world.a.home)),
           ),
         );
@@ -159,7 +159,7 @@ it.effect.each(["lost-response", "lost-acknowledgement"] as const)(
       yield* world.connect();
       yield* TestClock.adjust("1 second");
       yield* world.a.edit("notes.txt", "not valid Skill metadata, still backed up", "remote");
-      const observation = yield* captureWorkspace(world.a.workspace).pipe(
+      const observation = yield* refreshWorkspace(world.a.workspace).pipe(
         Effect.provide(authorLayer(world.a.home)),
       );
       const current = yield* world.server.current();
@@ -173,7 +173,7 @@ it.effect.each(["lost-response", "lost-acknowledgement"] as const)(
             if (
               interruption === "lost-acknowledgement" &&
               !refused &&
-              to === join(world.a.home, "sync-bindings.json")
+              to === join(world.a.home, "author-sync.json")
             ) {
               refused = true;
               return Effect.fail(

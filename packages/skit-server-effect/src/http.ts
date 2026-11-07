@@ -10,7 +10,7 @@ import {
   FeedbackApi,
   PublicationAuthenticatedApi,
   ReleaseApi,
-} from "@smolai/skit-core/universal/api";
+} from "@smolai/skit-core/api";
 import { authorInventoryHandlers } from "./api/author-inventory-http.js";
 import { bootstrapHandlers } from "./api/bootstrap-http.js";
 import { BootstrapApi } from "./api/bootstrap.js";

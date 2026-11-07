@@ -190,13 +190,13 @@ export const owners = {
   AuthorHistory: {
     status: "RESHAPE",
     module: "packages/skit/src/author/{history,history-store}.ts",
-    owns: ["<home>/history/**", "<home>/sync-bindings.json"],
+    owns: ["<home>/history/**", "<home>/author-sync.json"],
     ops: [
       "capture(root): { id, revision, treeHash }",
       "retain(tree)",
       "private engineStore: History.Store adapter for the owner-local Sync engine (A7)",
       "private syncState.{read, save, prepareWrite} keyed by { workspaceId, locator } (A5, A6)",
-      "public syncAuthorWorkspace / captureAuthorWorkspace / backupAuthorWorkspace",
+      "public syncAuthorWorkspace / refreshAuthorWorkspace / backupAuthorWorkspace",
     ],
     // Plain owner-local Author operations run sync; frontends supply only Registry transport (A7).
     requires: [
@@ -477,11 +477,6 @@ export const coreExports = {
     purpose: "HTTP endpoint definitions, middleware contracts and domain schemas.",
     source: "packages/skit/src/api/index.ts",
   },
-  "./universal/api": {
-    kind: "shared",
-    purpose: "Compatibility entry for the canonical runtime-neutral HTTP API.",
-    source: "packages/skit/src/api/index.ts",
-  },
 } as const satisfies {
   [subpath: string]: { source: string } & (
     | { kind: "owner"; owners: readonly [keyof typeof owners, ...(keyof typeof owners)[]] }
@@ -509,10 +504,10 @@ export const workflows = {
 } as const;
 
 /**
- * Plain platform functions (not services, under the service rule): acquireFileLock (A8) and
+ * Plain platform functions (not services, under the service rule): lockFile (A8) and
  * the home lock, one exclusive lock per <home>, reentrant with leases as WriterAuthority is today
  * (writer-lock.ts:7-12,126-128; D3), a plain Effect.fn as t3code's directory lock is. Across processes
- * the home lock is acquireFileLock on <home>/lock.sqlite, which the OS releases on crash.
+ * the home lock is lockFile on <home>/lock.sqlite, which the OS releases on crash.
  */
 /** Platform services, each kept under the service rule above (not every entry is re-checked yet). */
 export const platform = [

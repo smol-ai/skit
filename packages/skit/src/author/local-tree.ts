@@ -13,7 +13,7 @@ import {
 } from "../artifact/tree.js";
 import { SkitContractError } from "../api/contracts.js";
 import {
-  AuthorLocalPathNotObserved,
+  AuthorLocalPathUnchecked,
   AuthorNonNfcPathUnsupported,
   AuthorNormalizationTwin,
   LocalFilesChangedDuringSync,
@@ -72,7 +72,7 @@ export const scanWorkspaceWrite = Effect.fn("AuthorWorkspace.scanWriteTree")(fun
     | PlatformError
     | SkitContractError
     | LocalFilesChangedDuringSync
-    | AuthorLocalPathNotObserved
+    | AuthorLocalPathUnchecked
     | AuthorNonNfcPathUnsupported
     | AuthorNormalizationTwin
   > {
@@ -125,7 +125,7 @@ export const scanWorkspaceWrite = Effect.fn("AuthorWorkspace.scanWriteTree")(fun
               path: prefix,
               nativePath: [...parts.slice(0, depth - 1), twins[0] ?? ""].join("/"),
             });
-          return yield* new AuthorLocalPathNotObserved({ path: prefix });
+          return yield* new AuthorLocalPathUnchecked({ path: prefix });
         }
       }
       const existing = yield* stat(absolute);
@@ -158,18 +158,17 @@ export const scanWorkspaceWrite = Effect.fn("AuthorWorkspace.scanWriteTree")(fun
           yield* checkPath(prefix, "file");
           return path.join(root, ...parts);
         }
-        return yield* new AuthorLocalPathNotObserved({ path: prefix || "." });
+        return yield* new AuthorLocalPathUnchecked({ path: prefix || "." });
       }
       if (leaf) {
         if (existing.type === "Directory" && kind !== "file") {
-          if (observed === undefined)
-            return yield* new AuthorLocalPathNotObserved({ path: target });
+          if (observed === undefined) return yield* new AuthorLocalPathUnchecked({ path: target });
           return absolute;
         }
         const expected = contents.get(target);
-        if (kind === "directory") return yield* new AuthorLocalPathNotObserved({ path: target });
+        if (kind === "directory") return yield* new AuthorLocalPathUnchecked({ path: target });
         if (observed === undefined || expected === undefined || existing.type !== "File")
-          return yield* new AuthorLocalPathNotObserved({ path: target });
+          return yield* new AuthorLocalPathUnchecked({ path: target });
         yield* Effect.scoped(
           Effect.gen(function* () {
             const file = yield* fs.open(absolute, { flag: "r" });
@@ -221,7 +220,7 @@ export const scanWorkspaceWrite = Effect.fn("AuthorWorkspace.scanWriteTree")(fun
   const removeDirectory = Effect.fn("AuthorWorkspace.removeDirectory")(function* (target: string) {
     const absolute = yield* checkDirectory(target);
     if (!(yield* links.removeEmptyDirectory(absolute)))
-      return yield* new AuthorLocalPathNotObserved({ path: target });
+      return yield* new AuthorLocalPathUnchecked({ path: target });
     targets.delete(target);
     return absolute;
   });

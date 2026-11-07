@@ -30,7 +30,7 @@ import {
   planUndoFiles,
   installedSkillChoice,
   type SetupChanges,
-  type SetupFile,
+  type UndoFile,
 } from "./undo-files.js";
 import { prepareSetupSourceUndo, type UndoSourceImport } from "./undo-sources.js";
 import { reverseSetupIntent } from "./undo-intent.js";
@@ -72,7 +72,7 @@ const setupFile = Effect.fn("SetupUndo.setupFile")(function* (
   evidence: FolderEvidence | LinkEvidence | AbsentEvidence,
 ) {
   const anchor = yield* anchorOf(evidence.path, evidence.parent);
-  const entry: SetupFile["entry"] =
+  const entry: UndoFile["entry"] =
     evidence._tag === "Absent"
       ? null
       : evidence._tag === "SymbolicLink"
@@ -97,7 +97,7 @@ const setupFile = Effect.fn("SetupUndo.setupFile")(function* (
             markerMode: Option.isSome(evidence.marker) ? 0o100600 : null,
             linkTarget: null,
           };
-  return { path: evidence.path, anchor, entry } satisfies SetupFile;
+  return { path: evidence.path, anchor, entry } satisfies UndoFile;
 });
 
 /** A setup recorded in state.json: its steps' evidence and what it held before and after. */
@@ -106,7 +106,7 @@ const recordedSetup = Effect.fn("SetupUndo.recordedSetup")(function* (operation:
   const evidence = operation.steps.flatMap(({ before }) =>
     before.flatMap((item) => (item._tag === "Retained" ? [] : [item])),
   );
-  const files: SetupFile[] = [];
+  const files: UndoFile[] = [];
   for (const item of evidence)
     if (!files.some((file) => file.path === item.path)) files.push(yield* setupFile(item));
   return {

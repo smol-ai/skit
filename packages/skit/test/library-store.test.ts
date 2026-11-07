@@ -26,7 +26,7 @@ import {
 } from "../src/library/store/library-store.js";
 import { Hash } from "../src/shared/hash.js";
 import { skitLayer } from "../src/platform/layer.js";
-import { acquireFileLock } from "../src/platform/file-lock.js";
+import { lockFile } from "../src/platform/file-lock.js";
 
 const machineId = migratedMachineId("019950c0-4c00-7000-8000-000000000001", "library-store-test");
 
@@ -145,7 +145,7 @@ it.effect("refuses to save while another holder has the lock", () =>
     const state = yield* loadLibrary(home);
     const before = yield* fs.readFileString(path);
     // Another holder, as another process would be.
-    yield* acquireFileLock(join(home, "lock.sqlite"));
+    yield* lockFile(join(home, "lock.sqlite"));
 
     const error = yield* save({ ...state, enabled: [] }, state).pipe(Effect.flip);
 
@@ -172,7 +172,7 @@ it.effect("makes a save that outlives its write acquire the lock again", () =>
       }),
     );
     // Another holder takes the lock once the write has released it.
-    yield* acquireFileLock(join(home, "lock.sqlite"));
+    yield* lockFile(join(home, "lock.sqlite"));
     yield* Deferred.succeed(resume, undefined);
 
     assert.strictEqual((yield* Effect.flip(Fiber.join(child)))._tag, "HomeBusy");
@@ -222,12 +222,12 @@ it.live("keeps the lock until a save already under way in a forked fiber has fin
     yield* Effect.sleep("50 millis");
     // The owner's program has returned, but its release waits for the save it lent the lock to.
     assert.isUndefined(owner.pollUnsafe());
-    assert.isFalse(yield* Effect.isSuccess(Effect.scoped(acquireFileLock(lock))));
+    assert.isFalse(yield* Effect.isSuccess(Effect.scoped(lockFile(lock))));
 
     yield* Deferred.succeed(resume, undefined);
     yield* Fiber.join(child!);
     yield* Fiber.join(owner);
-    assert.isTrue(yield* Effect.isSuccess(Effect.scoped(acquireFileLock(lock))));
+    assert.isTrue(yield* Effect.isSuccess(Effect.scoped(lockFile(lock))));
     assert.deepStrictEqual(yield* loadLibrary(home), next);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

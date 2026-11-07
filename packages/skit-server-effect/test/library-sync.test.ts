@@ -8,7 +8,7 @@ import {
   RemoteLibrary,
   SnapshotArchive,
 } from "@smolai/skit-core/universal/consumer";
-import { RevisionConflictResponse } from "@smolai/skit-core/universal/api";
+import { RevisionConflictResponse } from "@smolai/skit-core/api";
 import { commitLibraryRevision, LibraryRevisionConflict } from "../src/library/internal/sync.js";
 import { databaseLayer } from "../src/platform/cloudflare.js";
 import { BrowserCrypto } from "@effect/platform-browser";

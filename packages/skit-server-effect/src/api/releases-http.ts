@@ -3,7 +3,7 @@ import { HttpApiBuilder } from "effect/http-api";
 import { Identity } from "../identity/service.js";
 import { downloadRelease, downloadReleaseAnonymous } from "./release-download.js";
 import { Skits } from "../skits/service.js";
-import { ReleaseApi } from "@smolai/skit-core/universal/api";
+import { ReleaseApi } from "@smolai/skit-core/api";
 
 export const authenticatedReleaseHandlers = HttpApiBuilder.group(
   ReleaseApi,

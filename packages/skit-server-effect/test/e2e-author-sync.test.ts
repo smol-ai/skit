@@ -10,7 +10,7 @@ import { createTestHarness } from "wrangler";
 import { expect, test } from "vitest";
 import * as History from "@smolai/skit-core/history";
 import { RevisionReadResponse, SkitCurrentResponse } from "@smolai/skit-core/universal/authoring";
-import { CreatedPat } from "@smolai/skit-core/universal/api";
+import { CreatedPat } from "@smolai/skit-core/api";
 import type { RuntimeEnv } from "../src/platform/cloudflare.js";
 
 const Captured = Schema.Struct({

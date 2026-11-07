@@ -88,9 +88,7 @@ const parentOf = Effect.fn("Library.parentOf")(function* (path: string) {
 });
 
 /** What is at `path` now, as evidence a later step can check: none when it holds neither kind. */
-export const observePathEvidence = Effect.fn("Library.observePathEvidence")(function* (
-  path: string,
-) {
+export const readPathEvidence = Effect.fn("Library.readPathEvidence")(function* (path: string) {
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
   const info = yield* statAt(path);

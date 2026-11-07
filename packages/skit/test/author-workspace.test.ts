@@ -205,8 +205,8 @@ it.effect("writeTree writes only with a current, unused PreparedWrite for exactl
       const { workspaceId } = yield* identified(lease);
       const key = { workspaceId, locator: "skit://registry.example/swyx/tools" };
       const { from, to, fromHash, toHash } = yield* trees(f.root);
-      yield* history.retain(from);
-      yield* history.retain(to);
+      yield* history.saveTree(from);
+      yield* history.saveTree(to);
       const idle = Sync.Idle.make({ base: null });
       const writing = Sync.Writing.make({
         base: null,
@@ -293,8 +293,8 @@ it.effect("prepareWrite refuses an impossible namespace without saving a checkpo
           bytes: new TextEncoder().encode("child"),
         },
       ];
-      const fromHash = yield* history.retain(from);
-      const toHash = yield* history.retain(to);
+      const fromHash = yield* history.saveTree(from);
+      const toHash = yield* history.saveTree(to);
       const key = { workspaceId, locator: "skit://registry.example/swyx/tools" };
       const writing = Sync.Writing.make({
         base: null,
@@ -314,7 +314,7 @@ it.effect("prepareWrite refuses an impossible namespace without saving a checkpo
         _tag: "AuthorHistoryInvalid",
         reason: expect.stringContaining("cannot contain descendants"),
       });
-      expect(yield* f.fs.exists(join(home, "sync-bindings.json"))).toBe(false);
+      expect(yield* f.fs.exists(join(home, "author-sync.json"))).toBe(false);
       expect(yield* f.fs.readFileString(join(f.root, "notes.txt"))).toBe("before\n");
     }).pipe(Effect.provide(authorLayer(home)));
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),

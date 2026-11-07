@@ -9,7 +9,7 @@ import {
   RevisionConflictResponse,
   SnapshotArchive,
   SnapshotUploadResponse,
-} from "@smolai/skit-core/universal/api";
+} from "@smolai/skit-core/api";
 import { librarySyncServer } from "./helpers/library-sync-server.js";
 
 // The Worker suite proves these rules on real D1 with the same fixtures.

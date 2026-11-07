@@ -16,7 +16,7 @@ const fixture = Effect.gen(function* () {
   const workspace = join(directory, "workspace");
   yield* fs.makeDirectory(workspace);
   yield* fs.writeFileString(join(workspace, "notes.txt"), "A");
-  return { fs, home, workspace, bindings: join(home, "sync-bindings.json") };
+  return { fs, home, workspace, bindings: join(home, "author-sync.json") };
 });
 const register = Effect.fn("Test.registerBackupWorkspace")(function* (lease: WorkspaceLease) {
   const identity = yield* (yield* AuthorWorkspace).readIdentity(lease.root);
@@ -36,7 +36,7 @@ it.effect(
         const history = yield* AuthorHistory;
         expect(yield* history.backupState.read(key)).toBeNull();
         expect(yield* f.fs.exists(f.home)).toBe(false);
-        const old = '{"schema":"skit.sync-bindings.v1","workspaces":{}}\n';
+        const old = '{"schema":"skit.author-sync.v1","workspaces":{}}\n';
         yield* f.fs.makeDirectory(f.home);
         yield* f.fs.writeFileString(f.bindings, old);
         expect(yield* history.backupState.read(key)).toBeNull();
@@ -55,11 +55,11 @@ it.effect("backup checkpoints advance contiguous A-B-A observations and preserve
       const lease = yield* workspaces.acquire(root);
       const { workspaceId } = yield* register(lease);
       const key = { workspaceId, locator };
-      const a = yield* history.capture(root);
+      const a = yield* history.refresh(root);
       yield* f.fs.writeFileString(join(root, "notes.txt"), "B");
-      const b = yield* history.capture(root);
+      const b = yield* history.refresh(root);
       yield* f.fs.writeFileString(join(root, "notes.txt"), "A");
-      const again = yield* history.capture(root);
+      const again = yield* history.refresh(root);
       const sending = Sync.Sending.make({ base: null, revision: a.id });
       yield* history.syncState.save(lease, key, {
         from: Sync.Idle.make({ base: null }),
@@ -117,7 +117,7 @@ it.effect("first-connection reset clears only its backup checkpoint", () =>
         workspaceId: WorkspaceId.make(`workspace_${"b".repeat(32)}`),
         locator,
       };
-      const observation = yield* history.capture(root);
+      const observation = yield* history.refresh(root);
       for (const key of [first, otherRemote, otherWorkspace])
         yield* history.backupState.save(lease, key, { from: null, to: observation.id });
       yield* history.syncState.save(lease, first, {
@@ -149,7 +149,7 @@ for (const boundary of ["before-rename", "after-rename"] as const)
         const root = yield* workspaces.resolveRoot(f.workspace);
         const lease = yield* workspaces.acquire(root);
         const { workspaceId } = yield* register(lease);
-        const observation = yield* history.capture(root);
+        const observation = yield* history.refresh(root);
         return { key: { workspaceId, locator }, id: observation.id };
       }).pipe(Effect.provide(ownerLayer(f.home)), Effect.scoped);
       let renamed = false;

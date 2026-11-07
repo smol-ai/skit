@@ -2,7 +2,7 @@ import { Context, Deferred, Effect, Exit, FileSystem, Scope, Semaphore, Option }
 import { systemError, type PlatformError } from "effect/PlatformError";
 import { join, resolve } from "node:path";
 import { HomeBusy } from "./lock-failures.js";
-import { acquireFileLock } from "./file-lock.js";
+import { lockFile } from "./file-lock.js";
 
 /**
  * Authority over a held writer lock: the owner's, or a lease of it. Forked fibers inherit it, so
@@ -66,7 +66,7 @@ export const withLock = Effect.fn("HomeLock.with")(function* <A, E, R>(
   const acquire = Effect.gen(function* () {
     yield* fs.makeDirectory(root, { recursive: true, mode: 0o700 });
     const lock = yield* Scope.make();
-    yield* acquireFileLock(path).pipe(
+    yield* lockFile(path).pipe(
       Scope.provide(lock),
       Effect.catchTags({
         FileLockBusy: () => Effect.fail(new HomeBusy({ path })),

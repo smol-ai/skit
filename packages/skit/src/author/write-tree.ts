@@ -5,7 +5,7 @@ import { LinkStat } from "../platform/link-stat.js";
 import { SkitContractError } from "../api/contracts.js";
 import { TreeEntry } from "../artifact/tree-entry.js";
 import { syncPaths } from "../platform/atomic-write.js";
-import { AuthorLocalPathNotObserved, LocalFilesChangedDuringSync } from "./failures.js";
+import { AuthorLocalPathUnchecked, LocalFilesChangedDuringSync } from "./failures.js";
 import { scanWorkspaceWrite } from "./local-tree.js";
 
 /**
@@ -80,7 +80,7 @@ export const writeWorkspaceTree = Effect.fn("AuthorWorkspace.writeTree")(functio
         const childInfo = yield* links.lstat(path.join(native, name));
         if (childInfo.type === "Directory") pending.push(child);
         else if (childInfo.type === "File" && removals.has(child)) yield* local.checkTarget(child);
-        else return yield* new AuthorLocalPathNotObserved({ path: child });
+        else return yield* new AuthorLocalPathUnchecked({ path: child });
       }
       directories.add(folder);
     }

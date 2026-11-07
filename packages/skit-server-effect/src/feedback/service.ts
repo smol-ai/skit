@@ -1,6 +1,6 @@
 import { D1Client } from "@effect/sql-d1";
 import { Clock, Context, Effect, Layer } from "effect";
-import type { FeedbackInput, FeedbackResult } from "@smolai/skit-core/universal/api";
+import type { FeedbackInput, FeedbackResult } from "@smolai/skit-core/api";
 import {
   databaseError,
   type DatabaseError,

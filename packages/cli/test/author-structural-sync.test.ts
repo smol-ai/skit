@@ -85,7 +85,7 @@ for (const direction of ["file-to-directory", "directory-to-file"] as const)
                 }),
               rename: (from, to) =>
                 Effect.gen(function* () {
-                  if (published && to === join(world.a.home, "sync-bindings.json"))
+                  if (published && to === join(world.a.home, "author-sync.json"))
                     yield* stop("checkpoint");
                   yield* fs.rename(from, to);
                 }),

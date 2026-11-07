@@ -34,7 +34,7 @@ const SyncCheckpoint = Schema.Union([
 import { testPlatformLayer } from "./helpers/platform.js";
 import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
 import { makeAuthorSyncServer } from "./helpers/author-sync-server.js";
-import { authorLayer, captureWorkspace, storedTreesAt } from "./helpers/author-history.js";
+import { authorLayer, refreshWorkspace, storedTreesAt } from "./helpers/author-history.js";
 
 const locator = "skit://registry.example/swyx/tools";
 
@@ -58,11 +58,11 @@ const savedStates = Effect.fn("Test.savedSyncStates")(function* (device: {
   const bindings = yield* Schema.decodeUnknownEffect(
     Schema.fromJsonString(
       Schema.Struct({
-        schema: Schema.Literal("skit.sync-bindings.v1"),
+        schema: Schema.Literal("skit.author-sync.v1"),
         workspaces: Schema.Record(Schema.String, Schema.Record(Schema.String, SyncCheckpoint)),
       }),
     ),
-  )(yield* fs.readFileString(join(device.home, "sync-bindings.json")));
+  )(yield* fs.readFileString(join(device.home, "author-sync.json")));
   return bindings.workspaces[yield* workspaceIdOf(device)];
 });
 
@@ -148,7 +148,7 @@ it.effect.each([
     name: "unknown state",
     render: (workspaceId: string) =>
       JSON.stringify({
-        schema: "skit.sync-bindings.v1",
+        schema: "skit.author-sync.v1",
         workspaces: { [workspaceId]: { [locator]: { _tag: "Unknown" } } },
       }),
   },
@@ -159,7 +159,7 @@ it.effect.each([
       const world = yield* makeAuthorSyncWorld();
       const fs = yield* FileSystem.FileSystem;
       yield* world.connect();
-      const path = join(world.a.home, "sync-bindings.json");
+      const path = join(world.a.home, "author-sync.json");
       const saved = yield* fs.readFileString(path);
       const invalid = render(yield* workspaceIdOf(world.a));
       const files = yield* world.a.files();
@@ -229,7 +229,7 @@ it.effect.each([
       const initial = (yield* savedStates(world.a))?.[locator];
       if (initial?._tag !== "Idle" || initial.base === null)
         return yield* Effect.die("Expected connected Idle checkpoint");
-      const path = join(world.a.home, "sync-bindings.json");
+      const path = join(world.a.home, "author-sync.json");
       const unreleased = JSON.stringify(render(initial.base));
       yield* fs.writeFileString(path, unreleased);
       yield* world.a.edit("notes/unreleased.txt", "Edit after an unreleased checkpoint");
@@ -279,13 +279,13 @@ it.effect.each(["file", "dangling-symlink"] as const)(
       if (kind === "file") expect(yield* fs.readFileString(privatePath)).toBe(privateValue);
       else expect(yield* fs.readLink(privatePath)).toBe("missing-private-target");
       expect(result).toMatchObject({
-        failure: { _tag: "AuthorLocalPathNotObserved", path: ".env" },
+        failure: { _tag: "AuthorLocalPathUnchecked", path: ".env" },
       });
       expect(yield* world.server.current()).toBe(current);
       // A restart and retry keep the private path safe.
       yield* world.b.restart();
       expect(yield* Effect.result(world.b.sync())).toMatchObject({
-        failure: { _tag: "AuthorLocalPathNotObserved" },
+        failure: { _tag: "AuthorLocalPathUnchecked" },
       });
       if (kind === "file") expect(yield* fs.readFileString(privatePath)).toBe(privateValue);
       else expect(yield* fs.readLink(privatePath)).toBe("missing-private-target");
@@ -500,12 +500,12 @@ it.effect.each(["directory-symlink", "file", "dangling-symlink"] as const)(
       if (kind === "file") expect(yield* fs.readFileString(parent)).toBe("private local file\n");
       else expect(yield* fs.readLink(parent)).toBe(target);
       expect(result).toMatchObject({
-        failure: { _tag: "AuthorLocalPathNotObserved", path: "private" },
+        failure: { _tag: "AuthorLocalPathUnchecked", path: "private" },
       });
       expect(yield* world.server.current()).toBe(current);
       yield* world.b.restart();
       expect(yield* Effect.result(world.b.sync())).toMatchObject({
-        failure: { _tag: "AuthorLocalPathNotObserved", path: "private" },
+        failure: { _tag: "AuthorLocalPathUnchecked", path: "private" },
       });
       expect(yield* fs.exists(join(outside, "new.md"))).toBe(false);
     }).pipe(Effect.provide(testPlatformLayer)),
@@ -606,7 +606,7 @@ it.effect("every stored revision names its credential, device and first-observed
     yield* world.b.edit("notes/b.txt", "B's edit\n", "remote");
     // Observe each edit now; sync must report this first observation, not its own later one.
     const observed = (device: World["a"]) =>
-      captureWorkspace(device.workspace).pipe(Effect.provide(authorLayer(device.home)));
+      refreshWorkspace(device.workspace).pipe(Effect.provide(authorLayer(device.home)));
     const a = yield* observed(world.a);
     yield* TestClock.adjust("1 minute");
     const b = yield* observed(world.b);
@@ -649,12 +649,12 @@ it.effect.each([
       yield* world.b.sync();
       // Each edit is observed at its own time; sync order is A, B, A regardless.
       yield* world[first].edit(path, skill(`${first} edited first`), "remote");
-      yield* captureWorkspace(world[first].workspace).pipe(
+      yield* refreshWorkspace(world[first].workspace).pipe(
         Effect.provide(authorLayer(world[first].home)),
       );
       yield* TestClock.adjust("1 minute");
       yield* world[second].edit(path, skill(`${second} edited later`), "remote");
-      yield* captureWorkspace(world[second].workspace).pipe(
+      yield* refreshWorkspace(world[second].workspace).pipe(
         Effect.provide(authorLayer(world[second].home)),
       );
       yield* world.a.sync();
@@ -795,7 +795,7 @@ it.effect("a lost move response cannot override the revision's later descendant"
     yield* world.b.sync();
     yield* world.b.edit("notes/a.txt", "descendant y", "remote");
     yield* world.b.sync();
-    const bindingPath = join(world.a.home, "sync-bindings.json");
+    const bindingPath = join(world.a.home, "author-sync.json");
     const before = yield* fs.readFileString(bindingPath);
     const preview = yield* world.a.preview();
     expect(yield* fs.readFileString(bindingPath)).toBe(before);
@@ -860,7 +860,7 @@ it.effect("a state flush failure stops sync before it moves current", () =>
     yield* world.connect();
     yield* world.a.edit("notes/a.txt", "not yet sent", "local-history");
     const current = yield* world.server.current();
-    const bindingPath = join(world.a.home, "sync-bindings.json");
+    const bindingPath = join(world.a.home, "author-sync.json");
     const before = yield* fs.readFileString(bindingPath);
     const failed = yield* Effect.result(
       world.a.sync().pipe(
@@ -962,7 +962,7 @@ it.effect("recovers a move whose response disappeared without posting it again a
     expect(yield* world.server.current()).toBe(committed.at(-1)?.id);
     yield* expectRecoverable(world);
     // The binding still says Sending; a preview reports the landed move and changes nothing.
-    const bindingPath = join(world.a.home, "sync-bindings.json");
+    const bindingPath = join(world.a.home, "author-sync.json");
     const before = yield* fs.readFileString(bindingPath);
     expect((yield* savedStates(world.a))?.[locator]?._tag).toBe("Sending");
     expect((yield* world.a.preview()).status).toBe("up_to_date");
@@ -1178,7 +1178,7 @@ it.effect("an editor save during a push is kept locally and sent by the next syn
     yield* gate.release();
     expect((yield* Fiber.join(pending)).status).toBe("pushed");
     expect(yield* world.a.read("notes/a.txt")).toBe("save while upload was in flight\n");
-    const bindingPath = join(world.a.home, "sync-bindings.json");
+    const bindingPath = join(world.a.home, "author-sync.json");
     const beforePreview = yield* fs.readFileString(bindingPath);
     expect(yield* world.a.preview()).toMatchObject({ status: "ready", action: "push" });
     expect(yield* fs.readFileString(bindingPath)).toBe(beforePreview);
@@ -1264,7 +1264,7 @@ it.effect.each(["pull", "merge"] as const)(
       expect(yield* fs.exists(join(world.a.workspace, "notes/2.txt"))).toBe(false);
       yield* world.a.restart();
       expect(Exit.hasInterrupts(yield* Fiber.await(pending))).toBe(true);
-      const bindingPath = join(world.a.home, "sync-bindings.json");
+      const bindingPath = join(world.a.home, "author-sync.json");
       const beforePreview = yield* fs.readFileString(bindingPath);
       expect((yield* savedStates(world.a))?.[locator]).toMatchObject({
         _tag: "Writing",

@@ -2,7 +2,7 @@ import { AuthorWorkspace } from "./workspace.js";
 import { skitLocator } from "./destination.js";
 import { Effect, Stream, Option, Schema } from "effect";
 import { type SyncKey } from "./workspace.js";
-import { AuthorHistoryInvalid, type Observation } from "./history.js";
+import { AuthorHistoryInvalid, type SavedRevision } from "./history.js";
 import { AuthorHistory, authorHistoryStoreError } from "./history.js";
 import type { WorkspaceLease } from "./workspace.js";
 import * as History from "../history/history.js";
@@ -12,13 +12,13 @@ import type * as Sync from "../sync/sync.js";
 export const backupAuthorHistory = Effect.fn("Author.backupHistory")(function* (
   lease: WorkspaceLease,
   key: SyncKey,
-  observation: Observation,
+  observation: SavedRevision,
   remote: Pick<Sync.Remote, "post">,
 ) {
   const history = yield* AuthorHistory;
   let acknowledged = yield* history.backupState.read(key);
   if (acknowledged === observation.id) return;
-  // capture's observations form one chronological parent chain. Verify those revisions before any
+  // refresh's observations form one chronological parent chain. Verify those revisions before any
   // remote write; an unavailable ancestor cannot be silently replaced by a new backup root.
   const chain = yield* History.ancestors(history.engineStore, observation.id).pipe(
     Stream.takeUntil(({ id }) => id === acknowledged),
@@ -60,7 +60,7 @@ export const backupAuthorWorkspace = Effect.fn("Author.backupWorkspace")(functio
       workspaceId: workspace.identity.value.workspaceId,
       locator: skitLocator(workspace.connection.remote),
     },
-    yield* (yield* AuthorHistory).capture(root),
+    yield* (yield* AuthorHistory).refresh(root),
     remote,
   ).pipe(
     Effect.catchIf(Schema.is(History.StoreError), (error) =>

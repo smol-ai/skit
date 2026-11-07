@@ -1,5 +1,5 @@
 import { Hash, safePathSchema } from "@smolai/skit-core/universal/consumer";
-import { IntegrityErrorCode } from "@smolai/skit-core/universal/api";
+import { IntegrityErrorCode } from "@smolai/skit-core/api";
 import { Schema } from "effect";
 
 const NonEmptyString = Schema.String.check(Schema.isMinLength(1));

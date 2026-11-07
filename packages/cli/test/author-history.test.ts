@@ -6,7 +6,7 @@ import { holdHomeLock } from "./helpers/home-lock.js";
 import { readAuthorAncestors } from "./helpers/author-history.js";
 import {
   authorLayer,
-  captureWorkspace,
+  refreshWorkspace,
   capturedTree,
   storedTrees,
   storedTreesAt,
@@ -22,9 +22,9 @@ it.effect("ignored edits neither enter raw history nor record a new revision", (
     yield* fs.writeFileString(join(world.a.workspace, ".gitignore"), "*.local\n");
     yield* fs.writeFileString(join(world.a.workspace, "private.local"), "first ignored value\n");
     yield* Effect.gen(function* () {
-      const before = yield* captureWorkspace(world.a.workspace);
+      const before = yield* refreshWorkspace(world.a.workspace);
       yield* fs.writeFileString(join(world.a.workspace, "private.local"), "second ignored value\n");
-      const after = yield* captureWorkspace(world.a.workspace);
+      const after = yield* refreshWorkspace(world.a.workspace);
       expect(after.treeHash).toBe(before.treeHash);
       // The same revision: the unchanged capture recorded nothing.
       expect(after.id).toBe(before.id);
@@ -73,7 +73,7 @@ it.effect(
       // One runtime, as the CLI has: both recordings share the home's journal permit.
       const { versions, stored } = yield* Effect.gen(function* () {
         const versions = yield* Effect.all(
-          [captureWorkspace(world.a.workspace), captureWorkspace(world.a.workspace)],
+          [refreshWorkspace(world.a.workspace), refreshWorkspace(world.a.workspace)],
           { concurrency: "unbounded" },
         );
         return { versions, stored: yield* storedTrees(world.a.home) };
@@ -97,7 +97,7 @@ it.effect("retries a tree that changes between reads instead of recording a mixe
     yield* world.a.edit("notes/a.txt", "before\n");
     const path = yield* fs.realPath(join(world.a.workspace, "notes/a.txt"));
     let reads = 0;
-    yield* captureWorkspace(world.a.workspace).pipe(
+    yield* refreshWorkspace(world.a.workspace).pipe(
       Effect.provide(authorLayer(world.a.home)),
       Effect.provideService(FileSystem.FileSystem, {
         ...fs,
@@ -130,7 +130,7 @@ it.effect(
       yield* fs.chmod(join(world.a.workspace, "notes/run.sh"), 0o755);
       yield* fs.symlink("run.sh", join(world.a.workspace, "notes/link"));
       yield* fs.writeFile(join(world.a.workspace, "notes/binary"), new Uint8Array([0, 128, 255]));
-      const tree = yield* captureWorkspace(world.a.workspace).pipe(
+      const tree = yield* refreshWorkspace(world.a.workspace).pipe(
         Effect.flatMap((observation) => capturedTree(observation, world.a.home)),
         Effect.provide(authorLayer(world.a.home)),
       );
@@ -156,13 +156,13 @@ it.effect(
       const world = yield* makeAuthorSyncWorld();
       const fs = yield* FileSystem.FileSystem;
       yield* Effect.gen(function* () {
-        const version = yield* captureWorkspace(world.a.workspace);
+        const version = yield* refreshWorkspace(world.a.workspace);
         const path = join(world.a.home, "history", "trees", `${version.treeHash.slice(7)}.json`);
         yield* fs.writeFileString(path, "corrupted");
         expect(yield* Effect.flip(storedTrees(world.a.home))).toMatchObject({
           _tag: "History.StoreCorrupt",
         });
-        expect(yield* Effect.flip(captureWorkspace(world.a.workspace))).toMatchObject({
+        expect(yield* Effect.flip(refreshWorkspace(world.a.workspace))).toMatchObject({
           _tag: "AuthorHistoryInvalid",
         });
         expect(yield* fs.readFileString(path)).toBe("corrupted");
@@ -187,7 +187,7 @@ it.effect("rejects a history home inside its workspace before creating it", () =
     const fs = yield* FileSystem.FileSystem;
     const home = join(world.a.workspace, "nested-history");
     expect(
-      yield* Effect.flip(captureWorkspace(world.a.workspace)).pipe(
+      yield* Effect.flip(refreshWorkspace(world.a.workspace)).pipe(
         Effect.provide(authorLayer(home)),
       ),
     ).toMatchObject({ _tag: "AuthorHistoryInvalid" });
@@ -202,7 +202,7 @@ it.effect("rejects a history directory symlink into its workspace", () =>
     const before = (yield* fs.readDirectory(world.a.workspace)).sort();
     yield* fs.symlink(world.a.workspace, join(world.a.home, "history"));
     expect(
-      yield* Effect.flip(captureWorkspace(world.a.workspace)).pipe(
+      yield* Effect.flip(refreshWorkspace(world.a.workspace)).pipe(
         Effect.provide(authorLayer(world.a.home)),
       ),
     ).toMatchObject({ _tag: "AuthorHistoryInvalid" });
@@ -221,7 +221,7 @@ it.effect(
       yield* fs.makeDirectory(directory);
       yield* fs.symlink(target, join(directory, "journal.sqlite"));
       expect(
-        yield* Effect.flip(captureWorkspace(a.workspace)).pipe(Effect.provide(authorLayer(a.home))),
+        yield* Effect.flip(refreshWorkspace(a.workspace)).pipe(Effect.provide(authorLayer(a.home))),
       ).toMatchObject({ _tag: "AuthorHistoryInvalid" });
       expect(yield* fs.exists(target)).toBe(false);
     }).pipe(Effect.provide(testPlatformLayer)),
@@ -241,17 +241,17 @@ it.effect(
         JSON.stringify({ schema: "skit.author-workspace.v1", workspace_id: workspaceId }),
       );
       yield* Effect.gen(function* () {
-        const first = yield* captureWorkspace(world.a.workspace);
+        const first = yield* refreshWorkspace(world.a.workspace);
         // The identity was recorded: a live copy carrying it is refused under that identity.
         const copy = join(world.a.home, "copy");
         yield* fs.copy(world.a.workspace, copy);
-        expect(yield* Effect.flip(captureWorkspace(copy))).toMatchObject({
+        expect(yield* Effect.flip(refreshWorkspace(copy))).toMatchObject({
           _tag: "AuthorWorkspaceAlreadyRegistered",
           workspaceId,
         });
         yield* fs.writeFileString(metadata, "unfinished metadata");
         yield* world.a.edit("notes/a.txt", "after the metadata broke\n");
-        const version = yield* captureWorkspace(world.a.workspace);
+        const version = yield* refreshWorkspace(world.a.workspace);
         // Recorded on the same history, after the revision made under the valid identity.
         expect(version.revision.parents).toEqual([first.id]);
         const tree = yield* capturedTree(version, world.a.home);
@@ -277,7 +277,7 @@ it.effect("capture reports shared HomeBusy when machine identity cannot be writt
       "---\nname: review\ndescription: review\n---\nReview\n",
     );
     yield* holdHomeLock(home);
-    const error = yield* captureWorkspace(workspace).pipe(
+    const error = yield* refreshWorkspace(workspace).pipe(
       Effect.provide(authorLayer(home)),
       Effect.flip,
     );

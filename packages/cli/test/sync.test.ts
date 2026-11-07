@@ -38,12 +38,11 @@ const runAuthorSync = (
     const historyHome = options.home ?? (yield* SkitConfiguration).skitHome;
     return yield* Effect.scoped(
       syncAuthorWorkspace(root, options).pipe(
+        Effect.provide(registryCredentialLayer("https://registry.example")),
         Effect.provide(registryHttpLayer(testHttpClientLayer(transport))),
         Effect.provide(authorLayer(historyHome)),
         // A first sync without workspace.json adopts an id from this home's Library (A3).
         Effect.provide(libraryLayer().pipe(Layer.provide(skitConfigurationLayer(historyHome)))),
-        // The environment's token is for the test Registry only.
-        Effect.provide(registryCredentialLayer("https://registry.example")),
       ),
     );
   });
@@ -386,7 +385,7 @@ it.effect("an interrupted sync aborts its SKIT request without recording a bindi
     // The request belongs to the workflow's Scope: the promise implementation had no owner to
     // cancel it, and left the read to settle on its own.
     expect(aborted).toBe(true);
-    expect(yield* exists(join(home, "sync-bindings.json"))).toBe(false);
+    expect(yield* exists(join(home, "author-sync.json"))).toBe(false);
     expect(yield* exists(join(root, "skit.remote.json"))).toBe(false);
     // The observed tree was saved on this device before sync spoke to the Registry.
     expect(

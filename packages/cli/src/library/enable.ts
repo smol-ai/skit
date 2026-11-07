@@ -1,7 +1,7 @@
 import * as Library from "@smolai/skit-core/library";
 import { MissingRequirement } from "../commands/input-failures.js";
 
-import { type InstallScope as Scope } from "@smolai/skit-core/library";
+import { type InstallScope } from "@smolai/skit-core/library";
 
 import { Effect } from "effect";
 
@@ -31,7 +31,7 @@ export interface SetEnabledCommandInput {
   readonly action: "enable" | "disable";
   readonly enabled: boolean;
   readonly subject?: string;
-  readonly scope?: Scope;
+  readonly scope?: InstallScope;
   readonly cwd: string;
   readonly all: boolean;
   readonly allowDuplicate?: boolean;
@@ -224,7 +224,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
     targets = chosen === "all" ? enabled : [enabled[Number(chosen)]!];
   }
   if (targets === undefined) {
-    let scope: Scope = input.scope ?? { kind: "global" };
+    let scope: InstallScope = input.scope ?? { kind: "global" };
     if (input.interactive && input.scope === undefined) {
       const choices = scopeChoices(input.cwd);
       if (choices.length > 1) {

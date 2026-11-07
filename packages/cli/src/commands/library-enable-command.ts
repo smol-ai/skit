@@ -1,6 +1,6 @@
 import { OptionCombinationInvalid } from "./input-failures.js";
 import { promptsAllowed } from "../terminal/interactivity.js";
-import { type InstallScope as Scope } from "@smolai/skit-core/library";
+import { type InstallScope } from "@smolai/skit-core/library";
 
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
@@ -59,7 +59,7 @@ export const setEnabledCliCommand = (enabled: boolean) => {
             detail: "Choose one scope: --global or --repo <path>",
           });
         const selectedSubject = Option.getOrUndefined(input.subject);
-        const selectedScope: Scope | undefined = input.global
+        const selectedScope: InstallScope | undefined = input.global
           ? { kind: "global" }
           : input.repo === undefined
             ? undefined

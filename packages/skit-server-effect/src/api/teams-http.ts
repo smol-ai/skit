@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { Teams } from "../teams/service.js";
 import { CurrentPrincipal } from "./authentication.js";
-import { ConsumerAuthenticatedApi } from "@smolai/skit-core/universal/api";
+import { ConsumerAuthenticatedApi } from "@smolai/skit-core/api";
 import {
   invalidTeamResponse,
   membershipNotFoundResponse,

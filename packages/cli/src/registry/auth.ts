@@ -44,7 +44,7 @@ import {
   ConsumerAuthenticatedApi,
   RateLimitedResponse,
   UnauthorizedResponse,
-} from "@smolai/skit-core/universal/api";
+} from "@smolai/skit-core/api";
 import {
   authenticatedApiMiddleware,
   isSuccessfulResponseDecodeFailure,

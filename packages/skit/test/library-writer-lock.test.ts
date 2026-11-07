@@ -4,12 +4,12 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
 import { expect } from "vitest";
 import { withLock as withHomeLock } from "../src/platform/home-lock.js";
-import { acquireFileLock } from "../src/platform/file-lock.js";
+import { lockFile } from "../src/platform/file-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 /** Whether another holder could take the home lock now. */
 const lockIsFree = (home: string) =>
-  Effect.isSuccess(Effect.scoped(acquireFileLock(join(home, "lock.sqlite"))));
+  Effect.isSuccess(Effect.scoped(lockFile(join(home, "lock.sqlite"))));
 
 it.effect("fails at once while another process holds the lock, and not after it is killed", () =>
   Effect.gen(function* () {
@@ -101,7 +101,7 @@ it.effect("makes a fiber that outlives its owner's lock acquire the lock again",
       ),
     );
     // Another holder takes the lock once the owner has released it.
-    yield* acquireFileLock(join(home, "lock.sqlite"));
+    yield* lockFile(join(home, "lock.sqlite"));
     yield* Deferred.succeed(released, undefined);
     expect(yield* Effect.flip(Fiber.join(child))).toMatchObject({ _tag: "HomeBusy" });
   }).pipe(Effect.provide(skitLayer), Effect.scoped),

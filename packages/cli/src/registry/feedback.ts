@@ -2,7 +2,7 @@ import { Config, Data, Effect, Option } from "effect";
 import { HttpClient, HttpClientRequest } from "effect/http";
 import { HttpApiClient } from "effect/http-api";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
-import { FeedbackApi, FeedbackInput } from "@smolai/skit-core/universal/api";
+import { FeedbackApi, FeedbackInput } from "@smolai/skit-core/api";
 import { officialRegistryOrigin, parseOrigin } from "./accounts.js";
 import { registryApiFailure, registryApiFailureMessage } from "./api-client.js";
 import { Registry } from "./index.js";

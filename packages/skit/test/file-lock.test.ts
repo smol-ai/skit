@@ -4,7 +4,7 @@ import { Effect, FileSystem, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { acquireFileLock, FileLockBusy } from "../src/platform/file-lock.js";
+import { lockFile, FileLockBusy } from "../src/platform/file-lock.js";
 
 const lockPath = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -16,12 +16,12 @@ it.effect("a second hold fails at once while the first is held, and succeeds aft
     const path = yield* lockPath;
     yield* Effect.scoped(
       Effect.gen(function* () {
-        yield* acquireFileLock(path);
-        const second = yield* Effect.scoped(acquireFileLock(path)).pipe(Effect.flip);
+        yield* lockFile(path);
+        const second = yield* Effect.scoped(lockFile(path)).pipe(Effect.flip);
         assert.instanceOf(second, FileLockBusy);
       }),
     );
-    yield* Effect.scoped(acquireFileLock(path));
+    yield* Effect.scoped(lockFile(path));
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
 
@@ -40,12 +40,12 @@ it.effect("a process killed while holding the lock does not leave it held", () =
       ]),
     );
     yield* holder.stdout.pipe(Stream.take(1), Stream.runDrain);
-    const busy = yield* Effect.scoped(acquireFileLock(path)).pipe(Effect.flip);
+    const busy = yield* Effect.scoped(lockFile(path)).pipe(Effect.flip);
     assert.instanceOf(busy, FileLockBusy);
 
     yield* holder.kill({ killSignal: "SIGKILL" });
     yield* holder.exitCode.pipe(Effect.ignore);
-    yield* Effect.scoped(acquireFileLock(path));
+    yield* Effect.scoped(lockFile(path));
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
 
@@ -57,9 +57,9 @@ it.effect(
       const moduleUrl = new URL("../src/platform/file-lock.ts", import.meta.url).href;
       const script = `
       import { Effect } from "effect";
-      import { acquireFileLock } from ${JSON.stringify(moduleUrl)};
+      import { lockFile } from ${JSON.stringify(moduleUrl)};
       const result = await Effect.runPromise(Effect.scoped(
-        acquireFileLock(process.argv[1]).pipe(Effect.as("free"),
+        lockFile(process.argv[1]).pipe(Effect.as("free"),
           Effect.catchTag("FileLockBusy", () => Effect.succeed("busy")))));
       process.stdout.write(result);
     `;
@@ -70,12 +70,12 @@ it.effect(
       };
       yield* Effect.scoped(
         Effect.gen(function* () {
-          yield* acquireFileLock(path);
+          yield* lockFile(path);
           assert.strictEqual(probe(), "busy");
         }),
       );
       assert.strictEqual(probe(), "free");
-      yield* Effect.scoped(acquireFileLock(path));
+      yield* Effect.scoped(lockFile(path));
 
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const holder = yield* spawner.spawn(
@@ -83,9 +83,9 @@ it.effect(
           "-e",
           `
         import { Effect } from "effect";
-        import { acquireFileLock } from ${JSON.stringify(moduleUrl)};
+        import { lockFile } from ${JSON.stringify(moduleUrl)};
         await Effect.runPromise(Effect.scoped(Effect.gen(function* () {
-          yield* acquireFileLock(process.argv[1]);
+          yield* lockFile(process.argv[1]);
           process.stdout.write("held");
           yield* Effect.never;
         })));
@@ -94,12 +94,9 @@ it.effect(
         ]),
       );
       yield* holder.stdout.pipe(Stream.take(1), Stream.runDrain);
-      assert.instanceOf(
-        yield* Effect.scoped(acquireFileLock(path)).pipe(Effect.flip),
-        FileLockBusy,
-      );
+      assert.instanceOf(yield* Effect.scoped(lockFile(path)).pipe(Effect.flip), FileLockBusy);
       yield* holder.kill({ killSignal: "SIGKILL" });
       yield* holder.exitCode.pipe(Effect.ignore);
-      yield* Effect.scoped(acquireFileLock(path));
+      yield* Effect.scoped(lockFile(path));
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );

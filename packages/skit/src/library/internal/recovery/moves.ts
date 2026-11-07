@@ -477,7 +477,7 @@ export const listRecoveryOperations = Effect.fn("Recovery.list")(function* (home
 });
 
 /** Data captured by Library.plan, persisted before the restore runner can move an entry. */
-export const captureRecoveryRestore = Effect.fn("Recovery.captureRestore")(function* (
+export const readRecoveryRestore = Effect.fn("Recovery.captureRestore")(function* (
   home: string,
   operationId: string,
 ) {

@@ -1,7 +1,7 @@
 import { Array as EffectArray, Effect, Schema } from "effect";
 import type { Principal } from "../../identity/service.js";
 import { DatabaseError, databaseError, type DatabaseSqlClient } from "../../platform/cloudflare.js";
-import type { AuthorSkitSummary } from "@smolai/skit-core/universal/api";
+import type { AuthorSkitSummary } from "@smolai/skit-core/api";
 import * as History from "@smolai/skit-core/history";
 
 const ACCESS_BATCH_SIZE = 40;

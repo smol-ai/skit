@@ -69,7 +69,7 @@ function hashNormalizedEntries(entries: readonly TreeEntry[]): Hash {
 }
 
 /** `deterministicTreeHash`, computed through Effect's Digest service. The same hash. */
-export const digestTreeHash = (root: string) =>
+export const hashTree = (root: string) =>
   walkTree(root, "normalized").pipe(
     Effect.flatMap((entries) => sha256Hash(encodeHashParts(normalizedHashParts(entries)))),
   );

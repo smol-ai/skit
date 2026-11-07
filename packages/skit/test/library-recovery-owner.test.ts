@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Option, Schema } from "effect";
 import { basename, join } from "node:path";
 import * as Library from "../src/library/library.js";
-import { observePathEvidence } from "../src/library/folder-evidence.js";
+import { readPathEvidence } from "../src/library/folder-evidence.js";
 import { LibraryState } from "../src/library/library-state.js";
 import { OperationStatus } from "../src/library/store/state-schema.js";
 import { skitLayer } from "../src/platform/layer.js";
@@ -24,7 +24,7 @@ const fixture = Effect.fn("test.recoveryOwner.fixture")(function* () {
     const owner = yield* Library.Service;
     const folders = yield* Effect.forEach(paths, (path) =>
       Effect.gen(function* () {
-        const folder = yield* observePathEvidence(path);
+        const folder = yield* readPathEvidence(path);
         if (Option.isNone(folder)) return yield* Effect.die("Missing fixture folder");
         return folder.value;
       }),

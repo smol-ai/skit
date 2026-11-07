@@ -5,7 +5,7 @@ import { inspectReadiness } from "../platform/readiness.js";
 import { isServerOperator } from "../identity/service.js";
 import type { RuntimeEnv } from "../platform/cloudflare.js";
 import { CurrentPrincipal } from "./authentication.js";
-import { ConsumerAuthenticatedApi } from "@smolai/skit-core/universal/api";
+import { ConsumerAuthenticatedApi } from "@smolai/skit-core/api";
 import { forbiddenResponse, sessionRequiredResponse, storageFailureResponse } from "./errors.js";
 import { noStore } from "./response.js";
 

@@ -16,7 +16,7 @@ import { scanAuthorSyncTree } from "./local-tree.js";
 import type { AuthorVisibility, AuthorRemoteHome } from "./remote.js";
 import type { AuthorSyncResult } from "./sync-result.js";
 import { authorDecider, authorTree } from "./sync-policy.js";
-import { adoptFrom } from "./library-claims.js";
+import { workspaceIdFromClaims } from "./library-claims.js";
 import * as Library from "../library/library.js";
 import { conflictKind } from "./merge/files.js";
 import * as History from "../history/history.js";
@@ -117,10 +117,10 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
   });
 
   // The workspace's files as sync saw them, saved to history first; the scan sync plans from must
-  // be the tree that capture saved (A14), so a mismatch captures and scans again, a bounded
+  // be the tree that refresh saved (A14), so a mismatch captures and scans again, a bounded
   // number of times.
   const observe = Effect.gen(function* () {
-    const observation = yield* history.capture(root);
+    const observation = yield* history.refresh(root);
     return { observation, local: yield* scanAuthorSyncTree(root).pipe(Effect.result) };
   }).pipe(
     Effect.repeat({
@@ -144,7 +144,7 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
           const workspaceId = Option.isSome(identity)
             ? identity.value.workspaceId
             : yield* Effect.gen(function* () {
-                const adopt = adoptFrom(
+                const adopt = workspaceIdFromClaims(
                   (yield* (yield* Library.Service).workspaceClaims(root)).atRoot,
                 );
                 return (yield* lease.register(adopt)).workspaceId;
@@ -178,7 +178,7 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
         localHash:
           applying === undefined && previewed === undefined
             ? yield* History.treeHash(scan.success.tree)
-            : yield* history.retain(scan.success.tree),
+            : yield* history.saveTree(scan.success.tree),
       });
   // Preview cannot apply this inventory. Keep its refusal passive, before talking to the Registry.
   if (applying === undefined && Result.isFailure(scanned))
@@ -342,12 +342,12 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
       }),
     // Any edit made since sync read the files is saved to history first, and stops the write.
     write: (prepared, from, to) =>
-      history.capture(root).pipe(Effect.andThen(applying.lease.writeTree({ prepared, from, to }))),
+      history.refresh(root).pipe(Effect.andThen(applying.lease.writeTree({ prepared, from, to }))),
   }).pipe(Effect.catchIf(Schema.is(History.StoreError), storeFailure));
   if (outcome.status === "blocked")
     return { status: "blocked", changed: false, ...outcome.removal } satisfies AuthorSyncResult;
   // Record what sync wrote as this workspace's latest observation.
-  const completed = yield* history.capture(root);
+  const completed = yield* history.refresh(root);
   yield* backupAuthorHistory(applying.lease, key, completed, registry).pipe(
     Effect.catchIf(Schema.is(History.StoreError), storeFailure),
   );

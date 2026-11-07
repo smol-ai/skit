@@ -22,7 +22,7 @@ import {
   type LibraryActionOutcome,
   type LibrarySkillRow,
   type ScopeRow,
-  type Scope,
+  type InstallScope,
   type InvocationOption,
 } from "@smolai/skit-core/library/session";
 import { libraryRows, type LibraryCollectionRow } from "../shell/presentation";
@@ -93,7 +93,7 @@ export function createLibraryController(options: Options) {
     }
   }
 
-  function chooseScopeThen(next: (scope: Scope) => void | Promise<void>): void {
+  function chooseScopeThen(next: (scope: InstallScope) => void | Promise<void>): void {
     const choices = scopeChoices(resolve(process.cwd()));
     if (choices.length === 1) {
       void next(choices[0]!.scope);
@@ -163,7 +163,7 @@ export function createLibraryController(options: Options) {
     if (!libraryHost.state) return;
     const scopes = libraryCollectionScopes(libraryHost.state, collectionId);
     if (!scopes.length) return;
-    const disable = async (selectedScopes: readonly Scope[]) =>
+    const disable = async (selectedScopes: readonly InstallScope[]) =>
       afterProposal(
         await transitionLibrary((state) =>
           proposeLibraryCollectionChange(state, collectionId, false, selectedScopes),
@@ -340,7 +340,7 @@ export function createLibraryController(options: Options) {
         }
       }
     },
-    async previewSelected(scope: Scope) {
+    async previewSelected(scope: InstallScope) {
       const collection = selectedLibraryCollection();
       if (collection && libraryHost.state)
         afterProposal(

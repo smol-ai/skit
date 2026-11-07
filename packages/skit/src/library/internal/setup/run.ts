@@ -22,7 +22,7 @@ import {
   runUpdate,
   type ManageResult,
 } from "./steps.js";
-import { absentEvidence, observePathEvidence } from "../../folder-evidence.js";
+import { absentEvidence, readPathEvidence } from "../../folder-evidence.js";
 
 import { recordedLibrary } from "./intent.js";
 import { restoreRecorded } from "../recovery/moves.js";
@@ -110,7 +110,7 @@ export type SetupError =
 /** What is at each path, as evidence; a missing folder is recorded as "nothing here". */
 const observed = (paths: readonly string[]) =>
   Effect.forEach([...new Set(paths)], (path) =>
-    Effect.flatMap(observePathEvidence(path), (evidence) =>
+    Effect.flatMap(readPathEvidence(path), (evidence) =>
       Option.isSome(evidence) ? Effect.succeed<StepEvidence>(evidence.value) : absentEvidence(path),
     ),
   );

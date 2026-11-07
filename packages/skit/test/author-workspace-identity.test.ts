@@ -5,7 +5,7 @@ import { Effect, FileSystem, Option, Stream } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
 import * as History from "../src/history/history.js";
-import { authorLayer, captureWorkspace, storedTreesAt } from "./helpers/author-history.js";
+import { authorLayer, refreshWorkspace, storedTreesAt } from "./helpers/author-history.js";
 import { libraryHome } from "./helpers/author-home.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { captureDisk, assertDiskUnchanged } from "./helpers/disk-snapshot.js";
@@ -28,11 +28,11 @@ const fixture = Effect.gen(function* () {
         return Option.isSome(identity) ? identity.value : yield* lease.register(Option.none());
       }),
     );
-  const capture = (path = source) =>
-    captureWorkspace(path).pipe(Effect.provide(authorLayer(home.home)));
+  const refresh = (path = source) =>
+    refreshWorkspace(path).pipe(Effect.provide(authorLayer(home.home)));
   const metadata = (path = source) =>
     fs.readFileString(join(path, ".skit/workspace.json")).pipe(Effect.map(JSON.parse));
-  return { fs, workspaces, root, source, home, identify, capture, metadata };
+  return { fs, workspaces, root, source, home, identify, refresh, metadata };
 });
 
 it.effect("an identity writes no config, registration or Library entry", () =>
@@ -47,7 +47,7 @@ it.effect("an identity writes no config, registration or Library entry", () =>
       workspace_id: identity.workspaceId,
     });
     expect((yield* f.home.snapshot)._tag).toBe("Absent");
-    const recorded = yield* f.capture();
+    const recorded = yield* f.refresh();
     const trees = yield* storedTreesAt(f.home.home);
     expect(trees).toHaveLength(1);
     const saved = trees[0]?.tree.find((entry) => entry.path === "review/SKILL.md");
@@ -55,8 +55,8 @@ it.effect("an identity writes no config, registration or Library entry", () =>
       "---\ninvalid: [\n",
     );
     expect(yield* f.identify()).toEqual(identity);
-    // The unchanged capture records nothing: it returns the revision already recorded.
-    expect((yield* f.capture()).id).toBe(recorded.id);
+    // The unchanged refresh records nothing: it returns the revision already recorded.
+    expect((yield* f.refresh()).id).toBe(recorded.id);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
@@ -66,7 +66,7 @@ it.effect("an empty readable workspace receives identity without inventing conte
     yield* f.fs.remove(join(f.source, "review"), { recursive: true });
     yield* f.identify();
     expect(yield* f.fs.readDirectory(f.source)).toEqual([".skit"]);
-    yield* f.capture();
+    yield* f.refresh();
     const trees = yield* storedTreesAt(f.home.home);
     expect(trees[0]?.tree).toEqual([]);
   }).pipe(Effect.provide(testPlatformLayer)),
@@ -76,12 +76,12 @@ it.effect("identity-only workspaces detect copies and retain identity when moved
   Effect.gen(function* () {
     const f = yield* fixture;
     const first = yield* f.identify();
-    const firstCapture = yield* f.capture();
+    const firstCapture = yield* f.refresh();
     const firstRoot = yield* f.workspaces.resolveRoot(f.source);
     const copy = join(f.root, "copy");
     yield* f.fs.copy(f.source, copy);
     const before = yield* captureDisk([copy], { identity: true });
-    const collision = yield* Effect.flip(f.capture(copy));
+    const collision = yield* Effect.flip(f.refresh(copy));
     expect(collision).toMatchObject({
       _tag: "AuthorWorkspaceAlreadyRegistered",
       workspaceId: first.workspaceId,
@@ -94,8 +94,8 @@ it.effect("identity-only workspaces detect copies and retain identity when moved
     // An edit after the move saves a second revision under the same history.
     yield* f.fs.writeFileString(join(moved, "review/SKILL.md"), "edited after the move");
     expect((yield* f.identify(moved)).workspaceId).toBe(first.workspaceId);
-    // The moved workspace continues its identity's history: the edit's parent is the first capture.
-    const second = yield* f.capture(moved);
+    // The moved workspace continues its identity's history: the edit's parent is the first refresh.
+    const second = yield* f.refresh(moved);
     expect(second.revision.parents).toEqual([firstCapture.id]);
     yield* f.fs.makeDirectory(f.source);
     expect((yield* f.identify()).workspaceId).not.toBe(first.workspaceId);
@@ -148,7 +148,7 @@ it.effect("identity registration leaves Git bytes, index and status untouched", 
       identity: true,
     });
     yield* f.identify();
-    yield* f.capture();
+    yield* f.refresh();
     expect(yield* git("--no-optional-locks", "status", "--porcelain")).toBe(status);
     yield* assertDiskUnchanged(before);
   }).pipe(Effect.provide(testPlatformLayer)),
@@ -161,7 +161,7 @@ it.effect(
       const f = yield* fixture;
       yield* f.fs.writeFileString(join(f.home.home, "machine.json"), "{broken machine settings");
       yield* f.identify();
-      expect(yield* Effect.flip(f.capture())).toMatchObject({ _tag: "MachineSettingsUnusable" });
+      expect(yield* Effect.flip(f.refresh())).toMatchObject({ _tag: "MachineSettingsUnusable" });
       const trees = yield* storedTreesAt(f.home.home);
       expect(trees).toHaveLength(1);
       const saved = trees[0]?.tree.find((entry) => entry.path === "review/SKILL.md");

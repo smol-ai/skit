@@ -4,7 +4,7 @@ import { HttpServer } from "effect/http";
 import { HttpApiTest } from "effect/http-api";
 import { CurrentPrincipal, PrincipalAuthentication } from "../src/api/authentication.js";
 import { authorInventoryHandlers } from "../src/api/author-inventory-http.js";
-import { AuthoringAuthenticatedApi } from "@smolai/skit-core/universal/api";
+import { AuthoringAuthenticatedApi } from "@smolai/skit-core/api";
 import { requestDecodingLayer } from "../src/api/request-decoding.js";
 import { Skits } from "../src/skits/service.js";
 import type { Principal } from "../src/identity/service.js";

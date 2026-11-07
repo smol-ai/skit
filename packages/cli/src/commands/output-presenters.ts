@@ -28,10 +28,7 @@ import {
 } from "../library/setup.js";
 import { renderRecoveryList, renderRecovery } from "../library/recovery/present.js";
 import { renderLibraryHistory } from "../library/history/present.js";
-import {
-  renderProjectionRetention,
-  renderProjectionRetentionPlan,
-} from "../library/update/retention.js";
+import { renderEditImport, renderEditImportPlan } from "../library/update/retention.js";
 
 type ContractPresenters = {
   [K in ContractKey]: (data: ContractData<K>, context: RenderContext) => string;
@@ -295,8 +292,8 @@ const contractPresenters: ContractPresenters = {
   addPreview: renderAddPreview,
   update: renderUpdate,
   updatePlan: renderUpdatePlan,
-  projectionRetentionPlan: renderProjectionRetentionPlan,
-  projectionRetention: renderProjectionRetention,
+  projectionRetentionPlan: renderEditImportPlan,
+  projectionRetention: renderEditImport,
   remove: renderRemove,
   removePlan: renderRemovePlan,
   enable: (data) => renderSetEnabled(data, true),

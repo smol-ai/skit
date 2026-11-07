@@ -70,7 +70,7 @@ describe("@smolai/skit-core/universal", () => {
   for (const [name, rootEntry] of [
     ["universal/consumer", consumerEntry],
     ["universal/authoring", authoringEntry],
-    ["universal/api", consumerApiEntry],
+    ["api", consumerApiEntry],
   ] as const)
     test(`${name} never reaches the Node platform layer`, () => {
       const path = offendingPathFrom(rootEntry);

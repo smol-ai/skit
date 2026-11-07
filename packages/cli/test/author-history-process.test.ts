@@ -3,7 +3,7 @@ import { Clock, Effect, Stream, FileSystem, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
 import { readAuthorAncestors } from "./helpers/author-history.js";
-import { authorLayer, captureWorkspace, storedTreesAt } from "./helpers/author-history.js";
+import { authorLayer, refreshWorkspace, storedTreesAt } from "./helpers/author-history.js";
 import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
@@ -38,7 +38,7 @@ const eventsFrom = (
 /** The latest revision of `workspace` in `home` (an unchanged capture records nothing) and how many revisions lead to it. */
 const latest = (workspace: string, home: string) =>
   Effect.gen(function* () {
-    const saved = yield* captureWorkspace(workspace);
+    const saved = yield* refreshWorkspace(workspace);
     const reached = yield* readAuthorAncestors(home, saved.id);
     return { ...saved, recorded: Array.from(reached).length };
   }).pipe(Effect.provide(authorLayer(home)));

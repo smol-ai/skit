@@ -12,7 +12,7 @@ import {
 } from "../src/library/entity-ids.js";
 import { withLock as withHomeLock } from "../src/platform/home-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
-import { acquireFileLock } from "../src/platform/file-lock.js";
+import { lockFile } from "../src/platform/file-lock.js";
 
 it.effect("reading missing settings creates no files or directories", () =>
   Effect.gen(function* () {
@@ -120,9 +120,7 @@ it.effect(
       ]);
       assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), corruptState);
       assert.strictEqual(yield* fs.exists(join(home, "audit.jsonl")), false);
-      assert.isTrue(
-        yield* Effect.isSuccess(Effect.scoped(acquireFileLock(join(home, "lock.sqlite")))),
-      );
+      assert.isTrue(yield* Effect.isSuccess(Effect.scoped(lockFile(join(home, "lock.sqlite")))));
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -134,7 +132,7 @@ it.effect("refuses an occupied root lock before replacing settings", () =>
     const path = join(home, "machine.json");
     const before = yield* fs.readFileString(path);
     // Another holder, as another process would be.
-    yield* acquireFileLock(join(home, "lock.sqlite"));
+    yield* lockFile(join(home, "lock.sqlite"));
     const error = yield* MachineSettings.setRepositoryDecision(home, "/repo", "ignored").pipe(
       Effect.flip,
     );
@@ -249,9 +247,7 @@ it.effect("saves no settings when pre-save inverse evidence fails", () =>
     );
     assert.strictEqual(failure, "inverse-refused");
     assert.strictEqual(yield* fs.readFileString(path), bytes);
-    assert.isTrue(
-      yield* Effect.isSuccess(Effect.scoped(acquireFileLock(join(home, "lock.sqlite")))),
-    );
+    assert.isTrue(yield* Effect.isSuccess(Effect.scoped(lockFile(join(home, "lock.sqlite")))));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 

@@ -658,7 +658,7 @@ export { planSetupRemovals, setupRemovablePaths } from "./setup/removal.js";
 export { SetupPlanStale, revalidateSetupPlan, runSetup, type SetupOptions } from "./setup/scan.js";
 export { resolveSkillsShSelectedSource } from "./setup/skills-sh/lock-source.js";
 export { prepareSetupUndo } from "./setup/undo.js";
-export { computeSkillsShCompatibleHash as computeSkillsLockCompatibleHash } from "./setup/skills-sh/compatible-hash.js";
+export { computeSkillsShCompatibleHash } from "./setup/skills-sh/compatible-hash.js";
 // Inferred consumer declarations need public names for these nested choices and typed failures.
 // Legacy undo evidence still uses this read-only projection; recordedLibrary remains private.
 export { setupIntent } from "./internal/setup/intent.js";

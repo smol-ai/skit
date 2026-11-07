@@ -1,7 +1,7 @@
 import { NodeRuntime } from "@effect/platform-node";
 import { Console, Effect, Layer, Result, Schema } from "effect";
 import * as Library from "@smolai/skit-core/library";
-import { authorLayer, captureAuthorWorkspace } from "@smolai/skit-core/author";
+import { authorLayer, refreshAuthorWorkspace } from "@smolai/skit-core/author";
 import { skitConfigurationLayer, skitLayer } from "@smolai/skit-core/platform";
 import { syncAuthorWorkspace } from "../../src/author/sync/workflow.js";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
@@ -45,7 +45,7 @@ NodeRuntime.runMain(
         : FetchHttpClient.layer;
     const operation = Effect.gen(function* () {
       if (mode === "capture") {
-        const observation = yield* captureAuthorWorkspace(root);
+        const observation = yield* refreshAuthorWorkspace(root);
         return { id: observation.id, treeHash: observation.treeHash };
       }
       return yield* syncAuthorWorkspace(root, {

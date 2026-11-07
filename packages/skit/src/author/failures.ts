@@ -103,8 +103,8 @@ export class LocalFilesChangedDuringSync
 }
 
 /** Incoming bytes cannot replace a local path excluded from the captured inventory. */
-export class AuthorLocalPathNotObserved
-  extends Data.TaggedError("AuthorLocalPathNotObserved")<{ path: string }>
+export class AuthorLocalPathUnchecked
+  extends Data.TaggedError("AuthorLocalPathUnchecked")<{ path: string }>
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;

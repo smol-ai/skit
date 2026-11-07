@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { Skits } from "../skits/service.js";
 import { requirePrincipalScope } from "./authentication.js";
-import { AuthoringAuthenticatedApi } from "@smolai/skit-core/universal/api";
+import { AuthoringAuthenticatedApi } from "@smolai/skit-core/api";
 import {
   deleteRequiresPrivateResponse,
   skitNotFoundResponse,

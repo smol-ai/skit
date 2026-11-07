@@ -1,6 +1,6 @@
 import {
   prepareRecoveryMoves,
-  captureRecoveryRestore,
+  readRecoveryRestore,
   restoreRecorded,
 } from "../src/library/internal/recovery/moves.js";
 import { basename, join } from "node:path";
@@ -89,7 +89,7 @@ it.effect(
       yield* f.plan.apply();
       const moveRecord = yield* f.fs.readFileString(join(f.plan.recoveryDirectory, "receipt.json"));
       expect(moveRecord).not.toContain('"moved"');
-      const preview = yield* captureRecoveryRestore(f.home, f.operationId);
+      const preview = yield* readRecoveryRestore(f.home, f.operationId);
       expect(preview.summary.entries.map((entry) => entry.status)).toEqual(["saved", "saved"]);
       // Only the link text belongs to the saved inventory; its target is independently writable.
       yield* f.fs.writeFileString(f.external, "new external edit");
@@ -104,7 +104,7 @@ it.effect(
       expect(yield* f.fs.readFileString(join(f.plan.recoveryDirectory, "receipt.json"))).toBe(
         moveRecord,
       );
-      const repeated = yield* captureRecoveryRestore(f.home, f.operationId);
+      const repeated = yield* readRecoveryRestore(f.home, f.operationId);
       expect((yield* restoreRecorded(f.home, repeated)).planId).toBe(restored.planId);
       expect(yield* f.fs.exists(join(f.home, "state.json"))).toBe(false);
     }).pipe(Effect.provide(skitLayer)),
@@ -117,7 +117,7 @@ it.effect.each(["move", "restore"] as const)(
       const f = yield* recoveryFixture();
       if (phase === "restore") yield* f.plan.apply();
       const restore =
-        phase === "restore" ? yield* captureRecoveryRestore(f.home, f.operationId) : undefined;
+        phase === "restore" ? yield* readRecoveryRestore(f.home, f.operationId) : undefined;
       let moves = 0;
       const interrupted = yield* Effect.exit(
         (restore ? restoreRecorded(f.home, restore) : f.plan.apply()).pipe(
@@ -135,7 +135,7 @@ it.effect.each(["move", "restore"] as const)(
       expect(inspection.entries.map((entry) => entry.status)).toEqual(
         phase === "move" ? ["saved", "at-original"] : ["at-original", "saved"],
       );
-      const next = yield* captureRecoveryRestore(f.home, f.operationId);
+      const next = yield* readRecoveryRestore(f.home, f.operationId);
       expect(
         (yield* restoreRecorded(f.home, next)).entries.every(
           (entry) => entry.status === "at-original",
@@ -180,7 +180,7 @@ it.effect.each(["directory", "dangling-link"] as const)(
       yield* f.plan.apply();
       if (kind === "directory") yield* f.fs.makeDirectory(f.source);
       else yield* f.fs.symlink("missing-target", f.source);
-      const preview = yield* captureRecoveryRestore(f.home, f.operationId);
+      const preview = yield* readRecoveryRestore(f.home, f.operationId);
       expect(preview.summary.entries.map((entry) => entry.status)).toEqual(["conflict", "saved"]);
       const restored = yield* restoreRecorded(f.home, preview);
       expect(restored.entries.map((entry) => entry.status)).toEqual(["conflict", "at-original"]);
@@ -199,7 +199,7 @@ it.effect.each(["content", "control", "identity", "destination", "parent"] as co
     Effect.gen(function* () {
       const f = yield* recoveryFixture();
       yield* f.plan.apply();
-      const preview = yield* captureRecoveryRestore(f.home, f.operationId);
+      const preview = yield* readRecoveryRestore(f.home, f.operationId);
       const saved = preview.summary.entries[0].recoveryPath;
       if (change === "content") yield* f.fs.writeFileString(join(saved, "SKILL.md"), "new bytes");
       if (change === "control")
@@ -227,7 +227,7 @@ it.effect("a later entry edited during restoration is never silently approved", 
   Effect.gen(function* () {
     const f = yield* recoveryFixture();
     yield* f.plan.apply();
-    const preview = yield* captureRecoveryRestore(f.home, f.operationId);
+    const preview = yield* readRecoveryRestore(f.home, f.operationId);
     const savedAlias = preview.summary.entries[1].recoveryPath;
     let moved = false;
     const failure = yield* Effect.flip(
@@ -258,7 +258,7 @@ it.effect("EXDEV refuses without copy/delete fallback and leaves saved source in
   Effect.gen(function* () {
     const f = yield* recoveryFixture();
     yield* f.plan.apply();
-    const preview = yield* captureRecoveryRestore(f.home, f.operationId);
+    const preview = yield* readRecoveryRestore(f.home, f.operationId);
     const failure = yield* Effect.flip(
       restoreRecorded(f.home, preview).pipe(
         Effect.provideService(FileSystem.FileSystem, {
@@ -312,7 +312,7 @@ it.effect(
       });
       yield* f.fs.writeFileString(join(directory, "receipt.json"), moveRecord);
       yield* f.fs.rename(f.source, recoveryPath);
-      const preview = yield* captureRecoveryRestore(f.home, "legacy-operation");
+      const preview = yield* readRecoveryRestore(f.home, "legacy-operation");
       expect(preview.summary.legacy).toBe(true);
       expect(preview.summary.entries[0].status).toBe("saved");
       expect((yield* restoreRecorded(f.home, preview)).entries[0].status).toBe("at-original");
@@ -355,7 +355,7 @@ it.effect("v2 move records with numeric device and inode numbers still restore",
       ),
     });
     yield* f.fs.writeFileString(path, v2);
-    const preview = yield* captureRecoveryRestore(f.home, f.operationId);
+    const preview = yield* readRecoveryRestore(f.home, f.operationId);
     expect(preview.summary.entries.map((entry) => entry.status)).toEqual(["saved", "saved"]);
     const restored = yield* restoreRecorded(f.home, preview);
     expect(restored.entries.map((entry) => entry.status)).toEqual(["at-original", "at-original"]);
@@ -384,7 +384,7 @@ it.effect.each(["move-record", "archive-directory", "missing"] as const)(
           "missing",
         );
       else
-        expect((yield* Effect.flip(captureRecoveryRestore(f.home, f.operationId)))._tag).toBe(
+        expect((yield* Effect.flip(readRecoveryRestore(f.home, f.operationId)))._tag).toBe(
           "RecoveryInvalid",
         );
       expect(yield* f.fs.exists(f.source)).toBe(false);
@@ -438,7 +438,7 @@ it.effect(
           (entry) => entry.status,
         ),
       ).toEqual(["saved", "saved"]);
-      const restore = yield* captureRecoveryRestore(f.home, f.operationId);
+      const restore = yield* readRecoveryRestore(f.home, f.operationId);
       expect(
         (yield* restoreRecorded(f.home, restore)).entries.every(
           (entry) => entry.status === "at-original",

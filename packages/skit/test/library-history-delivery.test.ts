@@ -14,7 +14,7 @@ import {
 } from "../src/library/store/library-store.js";
 import { snapshotOf } from "../src/library/snapshot.js";
 import { skitLayer } from "../src/platform/layer.js";
-import { acquireFileLock } from "../src/platform/file-lock.js";
+import { lockFile } from "../src/platform/file-lock.js";
 import { deliverLibraryHistory } from "../src/library/store/state-file.js";
 
 const readEnvelope = Schema.decodeUnknownEffect(Schema.fromJsonString(StateEnvelope));
@@ -69,7 +69,7 @@ for (const delivery of ["absent", "empty"] as const)
         const state = yield* f.fs.readFileString(f.statePath);
         const audit = yield* f.fs.readFileString(f.logPath);
         // A native hold supplies no reentrant HomeLock authority to the Library.
-        yield* acquireFileLock(join(f.home, "lock.sqlite"));
+        yield* lockFile(join(f.home, "lock.sqlite"));
         yield* deliverLibraryHistory(f.home);
         yield* Effect.gen(function* () {
           const owner = yield* Library.Service;
@@ -104,7 +104,7 @@ it.effect(
       yield* f.fs.writeFileString(f.logPath, "");
       yield* Effect.scoped(
         Effect.gen(function* () {
-          yield* acquireFileLock(join(f.home, "lock.sqlite"));
+          yield* lockFile(join(f.home, "lock.sqlite"));
           assert.strictEqual((yield* Effect.flip(deliverLibraryHistory(f.home)))._tag, "HomeBusy");
           assert.strictEqual(yield* f.fs.readFileString(f.statePath), queued);
           assert.strictEqual(yield* f.fs.readFileString(f.logPath), "");

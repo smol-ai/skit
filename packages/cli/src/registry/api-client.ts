@@ -7,7 +7,7 @@ import {
   apiErrorStatuses,
   PrincipalAuthentication,
   RequestDecoding,
-} from "@smolai/skit-core/universal/api";
+} from "@smolai/skit-core/api";
 import { Data, Effect, Layer, Predicate, Schema } from "effect";
 import { HttpClientError, HttpClientRequest } from "effect/http";
 import { HttpApiMiddleware } from "effect/http-api";

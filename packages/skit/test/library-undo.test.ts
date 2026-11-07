@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { join } from "node:path";
 import * as Library from "../src/library/library.js";
-import { observePathEvidence } from "../src/library/folder-evidence.js";
+import { readPathEvidence } from "../src/library/folder-evidence.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { libraryLayer } from "./helpers/library-store.js";
 
@@ -13,7 +13,7 @@ const fixture = Effect.gen(function* () {
   const folder = join(root, "skills", "review");
   yield* fs.makeDirectory(folder, { recursive: true });
   yield* fs.writeFileString(join(folder, "SKILL.md"), "Original review bytes.\n");
-  const evidence = yield* observePathEvidence(folder);
+  const evidence = yield* readPathEvidence(folder);
   if (Option.isNone(evidence)) return yield* Effect.die("No original folder evidence");
   const operation = yield* Effect.gen(function* () {
     const library = yield* Library.Service;

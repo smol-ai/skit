@@ -14,7 +14,7 @@ import {
   PublicationAuthenticatedApi,
   PublishBlockedResponse,
   ReleaseConflictResponse,
-} from "@smolai/skit-core/universal/api";
+} from "@smolai/skit-core/api";
 import {
   authenticatedApiMiddleware,
   classifyRegistryApiFailure,

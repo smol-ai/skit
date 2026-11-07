@@ -6,7 +6,7 @@ import * as Library from "../src/library/library.js";
 import { libraryManifestFromLocalState } from "../src/library/library-state.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
-import { acquireFileLock } from "../src/platform/file-lock.js";
+import { lockFile } from "../src/platform/file-lock.js";
 import { collectionVersionPath } from "../src/library/collection-version.js";
 import { testRoots } from "./helpers/library-store.js";
 
@@ -113,7 +113,7 @@ it.effect(
             // The transport is caller-owned and must retain its own required service.
             assert.strictEqual(yield* SourceProcess, callbackProcess);
             assert.isTrue(
-              yield* Effect.isSuccess(Effect.scoped(acquireFileLock(join(home, "lock.sqlite")))),
+              yield* Effect.isSuccess(Effect.scoped(lockFile(join(home, "lock.sqlite")))),
             );
             downloads++;
             const archive = f.archives.find((candidate) => candidate.digest === hash);
@@ -178,9 +178,7 @@ it.effect(
             Effect.gen(function* () {
               if (to.startsWith(join(home, "originals") + sep)) {
                 assert.isFalse(
-                  yield* Effect.isSuccess(
-                    Effect.scoped(acquireFileLock(join(home, "lock.sqlite"))),
-                  ),
+                  yield* Effect.isSuccess(Effect.scoped(lockFile(join(home, "lock.sqlite")))),
                 );
                 publications++;
               }

@@ -6,7 +6,7 @@ import type { SkillMetadata } from "./skill-metadata.js";
 import { collectionVersionPath } from "../../collection-version.js";
 import { versionBacking, type SourceIdentity } from "../../library-contracts.js";
 import { ImportContentInvalid } from "../../failures.js";
-import { type InstallScope as Scope } from "../../scope.js";
+import { type InstallScope } from "../../scope.js";
 import { Effect, FileSystem, Result } from "effect";
 import { join } from "node:path";
 import { LibrarySubjectNotFound, resolveLibrarySubject } from "../../subject-resolution.js";
@@ -25,7 +25,7 @@ import {
 } from "./set-enabled.js";
 
 export interface ScopeRow {
-  readonly scope: Scope;
+  readonly scope: InstallScope;
   readonly invocation: InvocationOption;
   readonly policy?: InvocationReadModel;
   readonly label: string;
@@ -47,7 +47,7 @@ export interface LibrarySkillRow extends SkillMetadata {
 interface PreviewFacts {
   readonly action: "enable" | "disable";
   readonly skills: readonly string[];
-  readonly scope: Scope;
+  readonly scope: InstallScope;
   readonly destination: string;
   readonly invocation?: InvocationOption;
   readonly writes:
@@ -255,7 +255,7 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
 export function proposeLibraryEnable(
   state: LibrarySessionState,
   row: LibrarySkillRow,
-  selection: { readonly scope: Scope; readonly invocation?: InvocationOption },
+  selection: { readonly scope: InstallScope; readonly invocation?: InvocationOption },
 ) {
   const policy = libraryPolicyAfter(row, selection.invocation ?? "declared");
   if (Result.isFailure(policy) && selection.invocation !== undefined)
@@ -284,7 +284,10 @@ export function proposeLibraryDisable(
   });
 }
 
-export function libraryCollectionScopes(state: LibrarySessionState, collectionId: string): Scope[] {
+export function libraryCollectionScopes(
+  state: LibrarySessionState,
+  collectionId: string,
+): InstallScope[] {
   return state[sessionSelection]?.view.scopesFor(collectionId) ?? [];
 }
 
@@ -293,7 +296,7 @@ export function proposeLibraryCollectionChange(
   state: LibrarySessionState,
   collectionId: string,
   enabled: boolean,
-  scopes: readonly Scope[],
+  scopes: readonly InstallScope[],
 ) {
   return proposeLibraryChange(state, {
     subject: collectionId,

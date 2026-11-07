@@ -78,7 +78,7 @@ for (const kind of ["file", "directory", "symlink"] as const)
         yield* Effect.flip(
           writeWorkspaceTree(root, from, files({ notes: "new", ".gitignore": "notes/private\n" })),
         ),
-      ).toMatchObject({ _tag: "AuthorLocalPathNotObserved", path: "notes/private" });
+      ).toMatchObject({ _tag: "AuthorLocalPathUnchecked", path: "notes/private" });
       expect(yield* fs.readFileString(join(root, "notes/a.txt"))).toBe("reviewed");
       expect(yield* fs.readFileString(secret)).toBe("private");
       if (kind === "directory") expect((yield* fs.stat(privatePath)).type).toBe("Directory");

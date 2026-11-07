@@ -52,10 +52,18 @@ Do not encode the type in the name. An Effect-returning function is not named
 `...Effect`; a schema is not named `...Schema` unless a plain value of the same
 name also exists.
 
-Rename stored names (state file fields, manifest keys, ownership markers, history
-event names) only together with a migration in the store loader. Published
-contract names, released CLI flags, and Registry wire names change only with a
-contract or compatibility decision.
+Compatibility is required for released formats and contracts. Before adding a
+migration, legacy loader, fallback decoder, or compatibility alias, identify the
+released version or explicit compatibility commitment that requires it.
+
+Change unreleased formats directly and update their callers and fixtures together.
+A format's presence in Git, tests, or development files does not establish a
+compatibility requirement. Preserve unreleased formats only when explicitly
+requested.
+
+Renaming stored names used by released versions requires a migration in the owning
+store loader. Published contract names, released CLI flags, and Registry wire
+names require a contract or compatibility decision.
 
 ## Investigate Effect v4 APIs before building utilities
 

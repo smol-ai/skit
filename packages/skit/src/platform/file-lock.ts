@@ -36,7 +36,7 @@ const isBusy = Schema.is(
  * apps/server/src/serverOwnership.ts:177-219). The caller creates the parent directory and checks
  * the path; this only takes the lock.
  */
-export const acquireFileLock = Effect.fn("FileLock.acquire")(function* (path: string) {
+export const lockFile = Effect.fn("FileLock.acquire")(function* (path: string) {
   yield* Effect.acquireRelease(
     Effect.try({
       try: () => new Database(path),

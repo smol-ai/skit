@@ -3,7 +3,7 @@ import { Context, Effect, Exit, FileSystem, Layer, Option, Schema } from "effect
 import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
-import { observePathEvidence } from "../src/library/folder-evidence.js";
+import { readPathEvidence } from "../src/library/folder-evidence.js";
 import { reviewInstalledSkillChanges } from "../src/library/installed-skill-review.js";
 import { LibraryState } from "../src/library/library-state.js";
 import * as Library from "../src/library/library.js";
@@ -108,7 +108,7 @@ const withLibrary = <A, E, R>(
   });
 
 const evidenceAt = (path: string) =>
-  Effect.flatMap(observePathEvidence(path), (evidence) =>
+  Effect.flatMap(readPathEvidence(path), (evidence) =>
     Option.isSome(evidence) && evidence.value._tag === "Directory"
       ? Effect.succeed(evidence.value)
       : Effect.die(`no folder at ${path}`),
@@ -503,7 +503,7 @@ it.effect("retires an approved link to the managed copy once SKIT's copy is read
     const claude = join(copy, "..", "..", "claude");
     yield* fs.makeDirectory(claude, { recursive: true });
     yield* fs.symlink(copy, join(claude, "review"));
-    const observed = yield* observePathEvidence(join(claude, "review"));
+    const observed = yield* readPathEvidence(join(claude, "review"));
     const link = Option.getOrUndefined(observed);
     if (link?._tag !== "SymbolicLink") return assert.fail("no link evidence");
     const step = manage(yield* evidenceAt(copy));
@@ -822,7 +822,7 @@ it.effect(
             : copy,
         ),
       });
-      const link = Option.getOrUndefined(yield* observePathEvidence(alias));
+      const link = Option.getOrUndefined(yield* readPathEvidence(alias));
       if (link?._tag !== "SymbolicLink") return assert.fail("no link evidence");
 
       const result = yield* setup([yield* bind("retire-aliases", [link])]);

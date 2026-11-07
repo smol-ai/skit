@@ -19,7 +19,7 @@ import { globalEnabled } from "../src/library/enabled.js";
 import { inspectLibrary, libraryLayer, saveLibrary } from "./helpers/library-store.js";
 import { migrateLocalLibraryState } from "../src/library/store/library-store.js";
 import * as Library from "../src/library/library.js";
-import { acquireFileLock } from "../src/platform/file-lock.js";
+import { lockFile } from "../src/platform/file-lock.js";
 
 /** The state a Library opened at `home` reads: a legacy state.json is migrated first. */
 const openedState = (home: string) =>
@@ -972,7 +972,7 @@ it.effect("building the layer fails HomeBusy, migrating nothing, while the lock 
     const legacy = yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json"));
     yield* fs.writeFileString(join(home, "state.json"), legacy);
     // Another holder, as another process would be.
-    yield* acquireFileLock(join(home, "lock.sqlite"));
+    yield* lockFile(join(home, "lock.sqlite"));
 
     const error = yield* Effect.flip(Layer.build(libraryLayer(home)));
 

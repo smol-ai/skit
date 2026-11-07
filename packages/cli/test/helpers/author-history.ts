@@ -2,10 +2,10 @@ import { Effect, FileSystem, Layer, Option, Schema, Stream } from "effect";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import * as History from "@smolai/skit-core/history";
-import { authorLayer as owners, captureAuthorWorkspace } from "@smolai/skit-core/author";
+import { authorLayer as owners, refreshAuthorWorkspace } from "@smolai/skit-core/author";
 
 export const authorLayer = (home: string) => Layer.fresh(owners({ home }));
-export const captureWorkspace = captureAuthorWorkspace;
+export const refreshWorkspace = refreshAuthorWorkspace;
 
 const Manifest = Schema.fromJsonString(
   Schema.Struct({

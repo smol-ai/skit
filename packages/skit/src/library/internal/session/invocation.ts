@@ -15,7 +15,7 @@ import { LibraryInvocationOption } from "../../invocation-option.js";
 import { Record, Schema } from "effect";
 import { harnessLabel } from "../../../harnesses/discovery.js";
 import type { InvocationOption } from "./invocation-option.js";
-import { type InstallScope as Scope } from "../../scope.js";
+import { type InstallScope } from "../../scope.js";
 
 export const AuthorInvocation = Schema.Record(HarnessName, DeclaredInvocationResolution);
 export type AuthorInvocation = typeof AuthorInvocation.Type;
@@ -62,7 +62,7 @@ function authorPolicyLabel(policy: ResolvedDeclaredPolicy): string {
   return policy === "unspecified" ? "Not specified" : policyLabel(policy);
 }
 
-export function destinationLabel(scope: Scope): string {
+export function destinationLabel(scope: InstallScope): string {
   return scope.kind === "global" ? "All projects" : scope.root;
 }
 

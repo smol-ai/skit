@@ -27,13 +27,13 @@ type SkillPathDetails = Effect.Success<ReturnType<typeof readSkillPathDetails>>;
  * entry, or null for nothing there. `unmarked` identifies its bytes without SKIT's marker, by the
  * hash the record kept: a recovery fingerprint for a link, or a tree hash for a directory.
  */
-export type { UndoFile as SetupFile } from "./undo-evidence.js";
-import type { UndoFile as SetupFile } from "./undo-evidence.js";
-import { observePathEvidence } from "../../folder-evidence.js";
+export type { UndoFile } from "./undo-evidence.js";
+import type { UndoFile } from "./undo-evidence.js";
+import { readPathEvidence } from "../../folder-evidence.js";
 
 /** What a setup changed and recorded in state.json, as undo needs it. */
 export interface SetupChanges {
-  readonly files: readonly SetupFile[];
+  readonly files: readonly UndoFile[];
   readonly installedSkillsBefore: readonly InstalledSkill[];
   readonly installedSkillsAfter: readonly InstalledSkill[];
   /** Paths where a save the setup confirmed installed a copy. */
@@ -69,7 +69,7 @@ export const installedSkillChoice = (installedSkill: InstalledSkill | undefined)
 const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
 
 /** Check the original namespace anchor, even when today's nearest existing parent has changed. */
-export const checkAnchor = Effect.fn("SetupUndo.checkAnchor")(function* (file: SetupFile) {
+export const checkAnchor = Effect.fn("SetupUndo.checkAnchor")(function* (file: UndoFile) {
   const links = yield* LinkStat;
   const physical = yield* links.realPathNative(file.anchor.path);
   const anchor = yield* links.identity.lstat(physical);
@@ -101,7 +101,7 @@ export const checkAnchor = Effect.fn("SetupUndo.checkAnchor")(function* (file: S
 
 export const restoreMarker = Effect.fn("SetupUndo.restoreMarker")(function* (
   path: string,
-  entry: NonNullable<SetupFile["entry"]>,
+  entry: NonNullable<UndoFile["entry"]>,
 ) {
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
@@ -355,7 +355,7 @@ export const planUndoFiles = Effect.fn("SetupUndo.planFiles")(function* (
   }
   const preserve = yield* Effect.forEach(moves, ({ installedSkill }) =>
     Effect.gen(function* () {
-      const evidence = yield* observePathEvidence(installedSkill.path);
+      const evidence = yield* readPathEvidence(installedSkill.path);
       if (evidence._tag === "None")
         return yield* new RecoveryInvalid({ detail: `Missing successor: ${installedSkill.path}` });
       return evidence.value;

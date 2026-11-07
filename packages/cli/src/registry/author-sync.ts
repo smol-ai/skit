@@ -6,7 +6,7 @@ import {
   CurrentMovedResponse,
   SkitExistsResponse,
   SkitNotFoundResponse,
-} from "@smolai/skit-core/universal/api";
+} from "@smolai/skit-core/api";
 import {
   type AuthorRemoteHome,
   type AuthorVisibility,

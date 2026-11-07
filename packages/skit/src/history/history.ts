@@ -61,7 +61,7 @@ export const Revision = Schema.Struct({
 export type Revision = typeof Revision.Type;
 
 /** The hash of a value's canonical JSON. A typed value always encodes, so failing to is a defect. */
-const digest = <A, I>(schema: Schema.Codec<A, I>, value: A) =>
+const hashValue = <A, I>(schema: Schema.Codec<A, I>, value: A) =>
   Schema.encodeEffect(Schema.toCodecJson(schema))(value).pipe(
     Effect.orDie,
     Effect.flatMap((json) => sha256Hash(new TextEncoder().encode(canonicalJson(json)))),
@@ -75,10 +75,10 @@ export const sortTree = (tree: Tree): Tree =>
   );
 
 export const treeHash = (tree: Tree) =>
-  digest(Tree, sortTree(tree)).pipe(Effect.map((hash) => TreeHash.make(hash)));
+  hashValue(Tree, sortTree(tree)).pipe(Effect.map((hash) => TreeHash.make(hash)));
 
 export const revisionId = (revision: Revision) =>
-  digest(Revision, revision).pipe(Effect.map((hash) => RevisionId.make(hash)));
+  hashValue(Revision, revision).pipe(Effect.map((hash) => RevisionId.make(hash)));
 
 /** What a store holds: trees and the revisions that name them. */
 export type Kind = "tree" | "revision";

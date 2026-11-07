@@ -10,7 +10,7 @@ import {
   AuthoringAuthenticatedApi,
   PublicationAuthenticatedApi,
   CreatedPat,
-} from "@smolai/skit-core/universal/api";
+} from "@smolai/skit-core/api";
 import * as History from "@smolai/skit-core/history";
 import { sha256Hash } from "@smolai/skit-core/universal/consumer";
 import { legacyGrantsTable } from "./fixtures/legacy-grants.js";

@@ -13,7 +13,7 @@ import {
   SnapshotArchive,
   SnapshotUploadResponse,
   StorageFailureResponse,
-} from "@smolai/skit-core/universal/api";
+} from "@smolai/skit-core/api";
 
 /** Every one-shot failure a sync test can inject, each consumed at the boundary it targets. */
 export type Fault =

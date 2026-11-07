@@ -10,7 +10,7 @@ export interface ResolvedSkitConfiguration {
   /** Absent/empty XDG state means skills.sh stores its lock under ~/.agents. */
   readonly xdgStateHome: string | undefined;
   readonly authPath: string;
-  readonly syncBindingsPath: string;
+  readonly authorSyncPath: string;
   /** `SKIT_SERVER_URL`; an environment credential applies only to this origin. */
   readonly registryOrigin: string | undefined;
   /** `SKIT_TOKEN`, redacted so the configuration snapshot never logs or traces it. */
@@ -27,7 +27,7 @@ const pathsForHome = (home: string) => {
   return {
     skitHome,
     authPath: join(skitHome, "auth.json"),
-    syncBindingsPath: join(skitHome, "sync-bindings.json"),
+    authorSyncPath: join(skitHome, "author-sync.json"),
   };
 };
 

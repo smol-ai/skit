@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
 import { ServerLibrary } from "../library/service.js";
 import { requirePrincipalScope } from "./authentication.js";
-import { ConsumerAuthenticatedApi } from "@smolai/skit-core/universal/api";
+import { ConsumerAuthenticatedApi } from "@smolai/skit-core/api";
 import {
   invalidRequestResponse,
   libraryNotFoundResponse,

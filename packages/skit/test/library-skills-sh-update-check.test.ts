@@ -181,8 +181,8 @@ it.effect("checks skills.sh status against real Git history without saving Libra
       );
       const sourceImport = localState.imports[0]!;
       const collectionVersion = localState.collection_versions[0]!;
-      type Observation = LibraryState["imports"][number]["lock_file_entries"][number];
-      const checkLockEntry = (change: Partial<Observation> = {}) => {
+      type SavedRevision = LibraryState["imports"][number]["lock_file_entries"][number];
+      const checkLockEntry = (change: Partial<SavedRevision> = {}) => {
         const state = {
           ...localState,
           imports: [

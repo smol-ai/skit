@@ -5,21 +5,21 @@ import {
   type InvocationPolicyChoice,
   type InvocationReadModel,
 } from "./invocation.js";
-import { type InstallScope as Scope } from "../../scope.js";
+import { type InstallScope } from "../../scope.js";
 
 export interface ScopeChoice {
   value: "global" | "repository";
   label: string;
   hint?: string;
-  scope: Scope;
+  scope: InstallScope;
 }
 
 export interface InvocationScopeRow {
-  readonly scope: Scope;
+  readonly scope: InstallScope;
   readonly policy?: InvocationReadModel;
 }
 
-export function scopeKey(scope: Scope): string {
+export function scopeKey(scope: InstallScope): string {
   return scope.kind === "global" ? "global" : `repository:${scope.root}`;
 }
 
@@ -58,4 +58,4 @@ export function scopeRowLabel(scopeRow: InvocationScopeRow): string {
 
 export { destinationLabel };
 
-export { type InstallScope as Scope } from "../../scope.js";
+export { type InstallScope } from "../../scope.js";

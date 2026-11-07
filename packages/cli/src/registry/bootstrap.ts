@@ -1,6 +1,6 @@
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 import { Data, Cause, Effect, Exit, FileSystem, Result, Schedule, Schema, Stream } from "effect";
-import { BootstrapApi } from "@smolai/skit-core/universal/api";
+import { BootstrapApi } from "@smolai/skit-core/api";
 import { HttpApiClient } from "effect/http-api";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { SecureRandom } from "effect/crypto";

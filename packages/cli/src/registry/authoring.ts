@@ -4,7 +4,7 @@ import {
   AuthoringAuthenticatedApi,
   DeleteRequiresPrivateResponse,
   SkitNotFoundResponse,
-} from "@smolai/skit-core/universal/api";
+} from "@smolai/skit-core/api";
 import type { AuthorRemoteHome } from "@smolai/skit-core/author";
 import { Data, Effect, Schema } from "effect";
 import { HttpApiClient } from "effect/http-api";

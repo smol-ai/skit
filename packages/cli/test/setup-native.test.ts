@@ -25,7 +25,7 @@ import { SourceProcess, skitConfigurationLayer } from "@smolai/skit-core/platfor
 import {
   classifySetupOnboarding,
   classifyOwner,
-  computeSkillsLockCompatibleHash,
+  computeSkillsShCompatibleHash,
   revalidateSetupPlan,
   runSetup,
   openSetupReview,
@@ -422,7 +422,7 @@ it.effect("reports Git preservation and verifies a project skills.sh lock", () =
     ]);
     const unreadableFile = join(tracked, "private.txt");
     yield* f.fs.writeFileString(unreadableFile, "private");
-    const unreadableHash = yield* computeSkillsLockCompatibleHash(tracked, tracked).pipe(
+    const unreadableHash = yield* computeSkillsShCompatibleHash(tracked, tracked).pipe(
       Effect.provideService(FileSystem.FileSystem, {
         ...f.fs,
         readFile: (path) => {

@@ -1,6 +1,6 @@
 import { Data, Effect, Schema } from "effect";
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
-import { FeedbackInput } from "@smolai/skit-core/universal/api";
+import { FeedbackInput } from "@smolai/skit-core/api";
 
 class FeedbackInputInvalid
   extends Data.TaggedError("FeedbackInputInvalid")<{ readonly message: string }>

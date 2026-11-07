@@ -5,11 +5,11 @@ import { Context, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Option, Sche
 import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
-import { observePathEvidence } from "../src/library/folder-evidence.js";
+import { readPathEvidence } from "../src/library/folder-evidence.js";
 import * as Library from "../src/library/library.js";
 import { OperationStatus, type SetupStep } from "../src/library/store/state-schema.js";
 import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
-import { acquireFileLock } from "../src/platform/file-lock.js";
+import { lockFile } from "../src/platform/file-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { inspectLibrary, libraryLayer } from "./helpers/library-store.js";
 
@@ -53,7 +53,7 @@ const fixture = Effect.gen(function* () {
   const folder = join(skills, "review");
   yield* fs.makeDirectory(folder, { recursive: true });
   yield* fs.writeFileString(join(folder, "SKILL.md"), "---\nname: review\n---\nReview.\n");
-  const evidence = yield* observePathEvidence(folder);
+  const evidence = yield* readPathEvidence(folder);
   assert.isTrue(Option.isSome(evidence));
   if (Option.isNone(evidence)) return yield* Effect.die("no evidence");
   const remove: SetupStep = { _tag: "Remove", folders: [evidence.value] };
@@ -347,7 +347,7 @@ it.effect("refuses to remove the Library's own storage", () =>
   Effect.gen(function* () {
     const { fs, home } = yield* fixture;
     yield* fs.makeDirectory(join(home, "originals"), { recursive: true });
-    const own = yield* observePathEvidence(join(home, "originals"));
+    const own = yield* readPathEvidence(join(home, "originals"));
     if (Option.isNone(own)) return assert.fail("no evidence");
     const error = yield* withLibrary(home, (library) =>
       Effect.flatMap(library.read, (base) =>
@@ -413,11 +413,11 @@ it.effect("setup keeps the home lock after an additive step until later steps fi
     const saved = yield* inspectLocalLibraryState(home);
     assert.isTrue(saved.present);
     if (saved.present) assert.strictEqual(saved.state.collections.length, 1);
-    const failure = yield* Effect.flip(Effect.scoped(acquireFileLock(join(home, "lock.sqlite"))));
+    const failure = yield* Effect.flip(Effect.scoped(lockFile(join(home, "lock.sqlite"))));
     assert.strictEqual(failure._tag, "FileLockBusy");
     yield* Deferred.succeed(continueMove, undefined);
     assert.strictEqual((yield* Fiber.join(applying))._tag, "Done");
     // The independent holder can acquire it once the whole operation completes.
-    yield* Effect.scoped(acquireFileLock(join(home, "lock.sqlite")));
+    yield* Effect.scoped(lockFile(join(home, "lock.sqlite")));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

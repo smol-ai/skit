@@ -5,7 +5,7 @@ import {
   RevisionPostRequest,
 } from "@smolai/skit-core/universal/authoring";
 import { Skits } from "../skits/service.js";
-import { AuthoringAuthenticatedApi } from "@smolai/skit-core/universal/api";
+import { AuthoringAuthenticatedApi } from "@smolai/skit-core/api";
 import { requirePrincipalScope } from "./authentication.js";
 import {
   skitExistsResponse,

@@ -357,7 +357,7 @@ export const restoredState = Effect.fn("Library.restoredState")(function* (
 });
 
 /** Publish only previously resolved, verified bytes; the owner supplies its writer around this step. */
-export const retainRestoreArchives = Effect.fn("Library.retainRestoreArchives")(function* (
+export const importRestoreArchives = Effect.fn("Library.importRestoreArchives")(function* (
   manifest: LibraryManifest,
   available: {
     readonly archives: readonly SnapshotArchive[];

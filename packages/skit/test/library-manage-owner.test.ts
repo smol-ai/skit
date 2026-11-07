@@ -3,7 +3,7 @@ import { Effect, Exit, FileSystem, Option, Schema } from "effect";
 import { join } from "node:path";
 import * as Library from "../src/library/library.js";
 import { makeMachineId } from "../src/library/entity-ids.js";
-import { observePathEvidence } from "../src/library/folder-evidence.js";
+import { readPathEvidence } from "../src/library/folder-evidence.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { systemError } from "effect/PlatformError";
@@ -20,7 +20,7 @@ const fixture = Effect.gen(function* () {
   const bytes = "---\nname: review\ndescription: Manage fixture\n---\nExact reviewed bytes.\n";
   yield* fs.makeDirectory(copy, { recursive: true });
   yield* fs.writeFileString(join(copy, "SKILL.md"), bytes);
-  const observed = yield* observePathEvidence(copy);
+  const observed = yield* readPathEvidence(copy);
   if (Option.isNone(observed) || observed.value._tag !== "Directory")
     return yield* Effect.die("Expected reviewed folder");
   const source = observed.value;
@@ -302,7 +302,7 @@ for (const readable of [true, false])
         const duplicate = join(legacy, "review");
         yield* f.fs.makeDirectory(duplicate, { recursive: true });
         yield* f.fs.writeFileString(join(duplicate, "SKILL.md"), f.bytes);
-        const observed = yield* observePathEvidence(duplicate);
+        const observed = yield* readPathEvidence(duplicate);
         if (Option.isNone(observed) || observed.value._tag !== "Directory")
           return yield* Effect.die("Expected duplicate");
         const copy = observed.value;

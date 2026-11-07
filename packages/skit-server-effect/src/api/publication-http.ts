@@ -7,7 +7,7 @@ import {
 } from "@smolai/skit-core/universal/authoring";
 import { Skits } from "../skits/service.js";
 import { requirePrincipalScope } from "./authentication.js";
-import { PublicationAuthenticatedApi } from "@smolai/skit-core/universal/api";
+import { PublicationAuthenticatedApi } from "@smolai/skit-core/api";
 import {
   archiveTooLargeResponse,
   skitNotFoundResponse,

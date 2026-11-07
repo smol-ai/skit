@@ -8,7 +8,7 @@ import {
   parseSkitReadme,
   type RegistrySkitDescriptor,
 } from "@smolai/skit-core/universal/consumer";
-import type { IntegrityErrorCode } from "@smolai/skit-core/universal/api";
+import type { IntegrityErrorCode } from "@smolai/skit-core/api";
 import {
   MAX_ARTIFACT_CONTENT_BYTES,
   MAX_ARTIFACT_FILES,

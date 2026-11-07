@@ -1,6 +1,6 @@
 import { type ContractData } from "../../commands/output-contracts.js";
 
-export const renderProjectionRetentionPlan = (data: ContractData<"projectionRetentionPlan">) =>
+export const renderEditImportPlan = (data: ContractData<"projectionRetentionPlan">) =>
   [
     `Would retain changed ${data.skill_name} bytes from ${data.selected_installed_skill_id}`,
     `Observed: ${data.current_hash}`,
@@ -12,7 +12,7 @@ export const renderProjectionRetentionPlan = (data: ContractData<"projectionRete
     ),
   ].join("\n");
 
-export const renderProjectionRetention = (data: ContractData<"projectionRetention">) =>
+export const renderEditImport = (data: ContractData<"projectionRetention">) =>
   [
     data.imported
       ? `Retained ${data.skill_name} as ${data.imported_skill_version_id}`

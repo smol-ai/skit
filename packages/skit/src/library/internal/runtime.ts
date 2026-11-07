@@ -58,9 +58,9 @@ import type {
   Outcome,
   PlanningIntent,
   ReviewedPlan,
-  PlanError as PlanningError,
+  PlanError,
   ApplyRequest,
-  ApplyError as ApplyingError,
+  ApplyError,
 } from "../library.js";
 
 /**
@@ -118,14 +118,14 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
       readonly base: Snapshot;
       readonly approvals?: readonly Approval[];
     },
-  ): Effect.Effect<Extract<ReviewedPlan, { readonly _tag: I["_tag"] }>, PlanningError>;
+  ): Effect.Effect<Extract<ReviewedPlan, { readonly _tag: I["_tag"] }>, PlanError>;
   function planFor(
     intent: PlanningIntent,
     options: {
       readonly base: Snapshot;
       readonly approvals?: readonly Approval[];
     },
-  ): Effect.Effect<ReviewedPlan, PlanningError> {
+  ): Effect.Effect<ReviewedPlan, PlanError> {
     // The plan owns its Snapshot from the call, not from when its Effect runs.
     const base = structuredClone(options.base);
     if (intent._tag === "Restore")
@@ -167,8 +167,8 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
   }
   function applyFor<Request extends ApplyRequest>(
     request: Request,
-  ): Effect.Effect<Extract<Outcome, { readonly _tag: Request["plan"]["_tag"] }>, ApplyingError>;
-  function applyFor(request: ApplyRequest): Effect.Effect<Outcome, ApplyingError> {
+  ): Effect.Effect<Extract<Outcome, { readonly _tag: Request["plan"]["_tag"] }>, ApplyError>;
+  function applyFor(request: ApplyRequest): Effect.Effect<Outcome, ApplyError> {
     return applyRequest(request).pipe(
       Effect.catchTag("LibraryChanged", () =>
         Effect.fail(
@@ -181,7 +181,7 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
   }
   function applyRequest(
     request: ApplyRequest,
-  ): Effect.Effect<Outcome, ApplyingError | LibraryChanged> {
+  ): Effect.Effect<Outcome, ApplyError | LibraryChanged> {
     const applying = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
       effect.pipe(
         Effect.provideService(InstalledSkills.Service, files),

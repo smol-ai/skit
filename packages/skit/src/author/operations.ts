@@ -12,9 +12,9 @@ export const readAuthorWorkspace = Effect.fn("Author.readWorkspace")(function* (
 });
 
 /** Preserve an observation of the workspace without installing it or changing its connection. */
-export const captureAuthorWorkspace = Effect.fn("Author.captureWorkspace")(function* (
+export const refreshAuthorWorkspace = Effect.fn("Author.refreshWorkspace")(function* (
   input: string,
 ) {
   const root = yield* (yield* AuthorWorkspace).resolveRoot(input);
-  return yield* (yield* AuthorHistory).capture(root);
+  return yield* (yield* AuthorHistory).refresh(root);
 });

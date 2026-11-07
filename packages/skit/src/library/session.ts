@@ -28,4 +28,4 @@ export {
   cancelLibraryChange,
   confirmLibraryChange,
 } from "./internal/session/session.js";
-export type { InstallScope as Scope } from "./scope.js";
+export type { InstallScope } from "./scope.js";

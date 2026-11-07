@@ -1,7 +1,7 @@
 import { Effect, Option } from "effect";
 import { HttpEffect, HttpServerRequest, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
-import { FeedbackApi, FeedbackInput } from "@smolai/skit-core/universal/api";
+import { FeedbackApi, FeedbackInput } from "@smolai/skit-core/api";
 import { Identity } from "../identity/service.js";
 import { RequestConversionError } from "../identity/request-context.js";
 import { Feedback } from "../feedback/service.js";

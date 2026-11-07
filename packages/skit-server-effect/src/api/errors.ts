@@ -28,4 +28,4 @@ export {
   tokenNotFoundResponse,
   unauthorizedPrincipalResponse,
   unauthorizedResponse,
-} from "@smolai/skit-core/universal/api";
+} from "@smolai/skit-core/api";

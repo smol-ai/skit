@@ -31,7 +31,7 @@ import { readSnapshotArchive, verifySnapshotArchive } from "../../snapshot-archi
 import { libraryOriginalsPath, libraryStatePath } from "../../store/library-store.js";
 import {
   completeRestoreArchives,
-  retainRestoreArchives,
+  importRestoreArchives,
   restoredState,
   restorePlanProblem,
   RestoreInvalid,
@@ -193,7 +193,7 @@ export const stageContent = Effect.fn("Library.content.stage")(function* <E = ne
   const available = yield* completeRestoreArchives(manifest, plan, options);
   const { state } = yield* withHomeLock(
     home,
-    Effect.scoped(retainRestoreArchives(manifest, available, options)),
+    Effect.scoped(importRestoreArchives(manifest, available, options)),
   );
   return {
     manifestDigest,

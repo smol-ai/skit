@@ -8,7 +8,7 @@ import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
 import {
   authorLayer,
   capturedTree,
-  captureWorkspace,
+  refreshWorkspace,
   storedTrees,
   storedTreesAt,
 } from "./helpers/author-history.js";
@@ -16,7 +16,7 @@ import { testPlatformLayer } from "./helpers/platform.js";
 
 /** Capture `workspace` through its own owners over `home`. */
 const capture = (workspace: string, home: string) =>
-  captureWorkspace(workspace).pipe(Effect.provide(authorLayer(home)));
+  refreshWorkspace(workspace).pipe(Effect.provide(authorLayer(home)));
 
 /** The ids reachable from `id` in `home`'s history, newest first. */
 const lineage = (id: History.RevisionId, home: string) =>
@@ -36,13 +36,13 @@ it.effect("A → B → A records three ordered revisions referencing two stored 
     yield* Effect.gen(function* () {
       yield* TestClock.setTime(1000);
       yield* a.edit("notes/a.txt", "A");
-      const first = yield* captureWorkspace(a.workspace);
+      const first = yield* refreshWorkspace(a.workspace);
       yield* a.edit("notes/a.txt", "B");
-      const second = yield* captureWorkspace(a.workspace);
+      const second = yield* refreshWorkspace(a.workspace);
       // Equal times above and a backwards wall clock below cannot reorder revisions.
       yield* TestClock.setTime(500);
       yield* a.edit("notes/a.txt", "A");
-      const third = yield* captureWorkspace(a.workspace);
+      const third = yield* refreshWorkspace(a.workspace);
       const observations = [first, second, third];
       expect(observations.map((saved) => saved.revision.author.at)).toEqual([1000, 1000, 500]);
       expect(observations.map((saved) => saved.revision.tree)).toEqual([
@@ -61,7 +61,7 @@ it.effect("A → B → A records three ordered revisions referencing two stored 
       expect(fileText(yield* capturedTree(second, a.home), "notes/a.txt")).toBe("B");
       expect(new Set(observations.map((saved) => saved.revision.author.device)).size).toBe(1);
       // The latest is still the third: an unchanged capture records nothing.
-      expect((yield* captureWorkspace(a.workspace)).id).toBe(third.id);
+      expect((yield* refreshWorkspace(a.workspace)).id).toBe(third.id);
     }).pipe(Effect.provide(authorLayer(a.home)));
     expect(yield* lineage((yield* capture(a.workspace, a.home)).id, a.home)).toHaveLength(3);
   }).pipe(Effect.provide(testPlatformLayer)),
@@ -72,9 +72,9 @@ it.effect("unchanged concurrent observations add no duplicate events", () =>
     const { a } = yield* makeAuthorSyncWorld();
     yield* a.edit("notes/a.txt", "unchanged");
     yield* Effect.gen(function* () {
-      const first = yield* captureWorkspace(a.workspace);
+      const first = yield* refreshWorkspace(a.workspace);
       const repeated = yield* Effect.all(
-        Array.from({ length: 4 }, () => captureWorkspace(a.workspace)),
+        Array.from({ length: 4 }, () => refreshWorkspace(a.workspace)),
         { concurrency: "unbounded" },
       );
       expect(repeated.map((saved) => saved.id)).toEqual(Array.from({ length: 4 }, () => first.id));
@@ -130,13 +130,13 @@ it.effect("a pending B observation cannot be overtaken by an unchanged A scan", 
     let pausing = false;
     yield* Effect.gen(function* () {
       yield* a.edit("notes/a.txt", "A");
-      const first = yield* captureWorkspace(a.workspace);
+      const first = yield* refreshWorkspace(a.workspace);
       yield* a.edit("notes/a.txt", "B");
       pausing = true;
-      const pendingB = yield* captureWorkspace(a.workspace).pipe(Effect.forkScoped);
+      const pendingB = yield* refreshWorkspace(a.workspace).pipe(Effect.forkScoped);
       yield* Deferred.await(entered);
       yield* a.edit("notes/a.txt", "A");
-      const pendingA = yield* captureWorkspace(a.workspace).pipe(Effect.forkScoped);
+      const pendingA = yield* refreshWorkspace(a.workspace).pipe(Effect.forkScoped);
       yield* Deferred.succeed(released, undefined);
       const second = yield* Fiber.join(pendingB);
       const third = yield* Fiber.join(pendingA);
@@ -144,7 +144,7 @@ it.effect("a pending B observation cannot be overtaken by an unchanged A scan", 
       expect(third.revision.parents).toEqual([second.id]);
       expect(second.treeHash).not.toBe(first.treeHash);
       expect(third.treeHash).toBe(first.treeHash);
-      expect((yield* captureWorkspace(a.workspace)).id).toBe(third.id);
+      expect((yield* refreshWorkspace(a.workspace)).id).toBe(third.id);
     }).pipe(
       Effect.provide(authorLayer(a.home)),
       Effect.provideService(FileSystem.FileSystem, {
@@ -173,7 +173,7 @@ it.effect(
       const entered = yield* Deferred.make<void>();
       const directory = join(a.home, "history", "trees");
       yield* TestClock.setTime(1000);
-      const pending = yield* captureWorkspace(a.workspace).pipe(
+      const pending = yield* refreshWorkspace(a.workspace).pipe(
         Effect.provide(authorLayer(a.home)),
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
@@ -215,7 +215,7 @@ it.effect(
       yield* TestClock.setTime(1000);
       let interrupted = false;
       const failed = yield* Effect.result(
-        captureWorkspace(a.workspace).pipe(
+        refreshWorkspace(a.workspace).pipe(
           Effect.provide(authorLayer(a.home)),
           Effect.provideService(FileSystem.FileSystem, {
             ...fs,
@@ -251,15 +251,15 @@ it.effect("history is kept per workspace", () =>
     const { a, b } = yield* makeAuthorSyncWorld();
     yield* Effect.gen(function* () {
       yield* a.edit("notes/a.txt", "A");
-      const first = yield* captureWorkspace(a.workspace);
+      const first = yield* refreshWorkspace(a.workspace);
       yield* b.edit("notes/b.txt", "B");
-      const other = yield* captureWorkspace(b.workspace);
+      const other = yield* refreshWorkspace(b.workspace);
       yield* a.edit("notes/a.txt", "A2");
-      const second = yield* captureWorkspace(a.workspace);
+      const second = yield* refreshWorkspace(a.workspace);
       expect(first.revision.parents).toEqual([]);
       expect(other.revision.parents).toEqual([]);
       expect(second.revision.parents).toEqual([first.id]);
-      expect((yield* captureWorkspace(b.workspace)).id).toBe(other.id);
+      expect((yield* refreshWorkspace(b.workspace)).id).toBe(other.id);
     }).pipe(Effect.provide(authorLayer(a.home)));
   }).pipe(Effect.provide(testPlatformLayer)),
 );
@@ -272,7 +272,7 @@ it.effect(
       const fs = yield* FileSystem.FileSystem;
       yield* Effect.gen(function* () {
         yield* a.edit("notes/a.txt", "before registration");
-        const first = yield* captureWorkspace(a.workspace);
+        const first = yield* refreshWorkspace(a.workspace);
         yield* fs.makeDirectory(join(a.workspace, ".skit"));
         yield* fs.writeFileString(
           join(a.workspace, ".skit", "workspace.json"),
@@ -283,11 +283,11 @@ it.effect(
         );
         // Workspace metadata is not part of the tree; each step edits a file so it saves a revision.
         yield* a.edit("notes/a.txt", "after registration");
-        const second = yield* captureWorkspace(a.workspace);
+        const second = yield* refreshWorkspace(a.workspace);
         const moved = join(dirname(a.workspace), "moved");
         yield* fs.rename(a.workspace, moved);
         yield* fs.writeFileString(join(moved, "notes/a.txt"), "after move");
-        const third = yield* captureWorkspace(moved);
+        const third = yield* refreshWorkspace(moved);
         expect([first, second, third].map((saved) => saved.revision.parents)).toEqual([
           [],
           [first.id],
@@ -296,9 +296,9 @@ it.effect(
         // The old path can now belong to a different, anonymous workspace.
         yield* fs.makeDirectory(a.workspace);
         yield* fs.writeFileString(join(a.workspace, "fresh.txt"), "independent");
-        const fresh = yield* captureWorkspace(a.workspace);
+        const fresh = yield* refreshWorkspace(a.workspace);
         expect(fresh.revision.parents).toEqual([]);
-        expect((yield* captureWorkspace(moved)).id).toBe(third.id);
+        expect((yield* refreshWorkspace(moved)).id).toBe(third.id);
       }).pipe(Effect.provide(authorLayer(a.home)));
     }).pipe(Effect.provide(testPlatformLayer)),
 );
@@ -316,12 +316,12 @@ it.effect("copied live workspace identity cannot merge two folders' histories", 
       yield* fs.writeFileString(join(root, ".skit", "workspace.json"), metadata);
     }
     yield* Effect.gen(function* () {
-      const original = yield* captureWorkspace(a.workspace);
-      expect(yield* Effect.flip(captureWorkspace(b.workspace))).toMatchObject({
+      const original = yield* refreshWorkspace(a.workspace);
+      expect(yield* Effect.flip(refreshWorkspace(b.workspace))).toMatchObject({
         _tag: "AuthorWorkspaceAlreadyRegistered",
         at: yield* fs.realPath(a.workspace),
       });
-      expect((yield* captureWorkspace(a.workspace)).id).toBe(original.id);
+      expect((yield* refreshWorkspace(a.workspace)).id).toBe(original.id);
     }).pipe(Effect.provide(authorLayer(a.home)));
   }).pipe(Effect.provide(testPlatformLayer)),
 );
@@ -336,7 +336,7 @@ it.effect("existing stored trees stay available without inventing a pre-journal 
     yield* Effect.gen(function* () {
       expect(fileText(yield* capturedTree(saved, a.home), "notes/a.txt")).toBe("existing tree");
       yield* TestClock.setTime(1000);
-      const recorded = yield* captureWorkspace(a.workspace);
+      const recorded = yield* refreshWorkspace(a.workspace);
       expect(recorded.treeHash).toBe(saved.treeHash);
       expect(recorded.revision.parents).toEqual([]);
       expect(recorded.revision.author.at).toBe(1000);

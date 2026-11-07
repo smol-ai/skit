@@ -3,7 +3,7 @@ import { Cause, Effect, FileSystem } from "effect";
 import { TestClock } from "effect/testing";
 import { join } from "node:path";
 import * as History from "@smolai/skit-core/history";
-import { authorLayer, captureWorkspace } from "./helpers/author-history.js";
+import { authorLayer, refreshWorkspace } from "./helpers/author-history.js";
 import { makeAuthorSyncWorld } from "./helpers/author-sync-world.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
@@ -22,10 +22,10 @@ for (const winner of ["file", "directory"] as const)
             ? device.edit("notes", "file side", "remote")
             : device.edit("notes/a.txt", "directory side", "remote");
         yield* edit(older);
-        yield* captureWorkspace(older.workspace).pipe(Effect.provide(authorLayer(older.home)));
+        yield* refreshWorkspace(older.workspace).pipe(Effect.provide(authorLayer(older.home)));
         yield* TestClock.adjust("1 minute");
         yield* edit(newer);
-        yield* captureWorkspace(newer.workspace).pipe(Effect.provide(authorLayer(newer.home)));
+        yield* refreshWorkspace(newer.workspace).pipe(Effect.provide(authorLayer(newer.home)));
         yield* world[first].sync();
         const second = first === "a" ? "b" : "a";
         const merged = yield* world[second].sync();

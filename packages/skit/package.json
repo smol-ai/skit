@@ -28,10 +28,6 @@
       "types": "./dist/api/index.d.ts",
       "import": "./dist/api/index.js"
     },
-    "./universal/api": {
-      "types": "./dist/api/index.d.ts",
-      "import": "./dist/api/index.js"
-    },
     "./library/setup": {
       "types": "./dist/library/setup.d.ts",
       "import": "./dist/library/setup.js"

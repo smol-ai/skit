@@ -1,7 +1,7 @@
 import { D1Client } from "@effect/sql-d1";
 import { Effect, Schema } from "effect";
 import { BlobStore, databaseError, type DatabaseSqlClient, type RuntimeEnv } from "./cloudflare.js";
-import type { Readiness, ReadinessCheck } from "@smolai/skit-core/universal/api";
+import type { Readiness, ReadinessCheck } from "@smolai/skit-core/api";
 import { expectedMigrations } from "./migrations.generated.js";
 
 const MigrationRow = Schema.Struct({ name: Schema.String });

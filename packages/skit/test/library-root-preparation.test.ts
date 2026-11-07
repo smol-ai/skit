@@ -3,7 +3,7 @@ import { Effect, FileSystem, Layer, Option, Schema } from "effect";
 import { join } from "node:path";
 import * as Library from "../src/library/library.js";
 import { LibraryState } from "../src/library/library-state.js";
-import { observePathEvidence } from "../src/library/folder-evidence.js";
+import { readPathEvidence } from "../src/library/folder-evidence.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { makeMachineId } from "../src/library/entity-ids.js";
 import { skitLayer } from "../src/platform/layer.js";
@@ -23,7 +23,7 @@ const fixture = Effect.fn("test.rootPreparation.fixture")(function* () {
   const bytes = "---\nname: review\ndescription: Recorded roots\n---\nReviewed bytes\n";
   yield* fs.makeDirectory(source, { recursive: true });
   yield* fs.writeFileString(join(source, "SKILL.md"), bytes);
-  const observed = yield* observePathEvidence(source);
+  const observed = yield* readPathEvidence(source);
   const request = yield* localImportRequest(source, "2026-11-05T00:00:00.000Z");
   if (Option.isNone(observed) || observed.value._tag !== "Directory" || Option.isNone(request))
     return yield* Effect.die("Invalid independent fixture");

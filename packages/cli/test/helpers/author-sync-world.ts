@@ -94,6 +94,8 @@ export const makeAuthorSyncWorld = Effect.fn("Test.makeAuthorSyncWorld")(functio
             home,
             ...(first ? { to: "swyx/tools", visibility: "private" as const } : {}),
           }).pipe(
+            // This is the command's Registry environment; the Library's home layer must not replace it.
+            Effect.provide(registryCredentialLayer(remote.origin)),
             Effect.provide(registryHttpLayer(testHttpClientLayer(server.transport(name)))),
             // Fresh, so the author owners write through a FileSystem a test provides here.
             Effect.provide(authorLayer(home)),
@@ -102,8 +104,6 @@ export const makeAuthorSyncWorld = Effect.fn("Test.makeAuthorSyncWorld")(functio
             Effect.provideService(LinkStat, yield* LinkStat),
             // A first sync without workspace.json adopts an id from this home's Library (A3).
             Effect.provide(libraryLayer().pipe(Layer.provide(skitConfigurationLayer(home)))),
-            // The environment's token is for the test Registry only.
-            Effect.provide(registryCredentialLayer(remote.origin)),
           ),
         ),
         yield* Ref.get(runtime),

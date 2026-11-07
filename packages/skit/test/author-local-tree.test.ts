@@ -68,7 +68,7 @@ it.effect("normal missing parents remain writable after they are created", () =>
     expect(yield* tree.checkTarget("notes/new/deep.txt")).toBe(target);
     yield* fs.writeFileString(target, "unrecorded editor save\n");
     expect(yield* Effect.flip(tree.checkTarget("notes/new/deep.txt"))).toMatchObject({
-      _tag: "AuthorLocalPathNotObserved",
+      _tag: "AuthorLocalPathUnchecked",
     });
     expect(yield* fs.readFileString(target)).toBe("unrecorded editor save\n");
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
