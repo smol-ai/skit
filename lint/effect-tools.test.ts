@@ -17,6 +17,49 @@ const fixed = broken
   .replace("  Effect.succeed(1);", "  yield* Effect.succeed(1);")
   .replace("export type Open = Record<string, any>;", "");
 
+test("Library state spreads remain plain records while class spreads warn", async () => {
+  const directory = await mkdtemp(join(root, "packages/devtools/.effect-spread-"));
+  const file = join(directory, "sample.ts");
+  const source = `import type { LibraryState } from "../../skit/src/library/library-state.js";
+class Instance {
+  value = "instance";
+  method() { return this.value; }
+}
+export const copyState = (state: LibraryState) => ({ ...state });
+export const copyInstance = (instance: Instance) => ({ ...instance });
+`;
+  try {
+    await writeFile(
+      join(directory, "tsconfig.json"),
+      JSON.stringify({ extends: "../tsconfig.json", include: ["sample.ts"] }),
+    );
+    await writeFile(file, source);
+    const result = spawnSync(process.execPath, [oxlint, "--format=json", file], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    expect(result.status, result.stdout + result.stderr).toBe(0);
+    const report = JSON.parse(result.stdout) as {
+      diagnostics: Array<{
+        code: string;
+        severity: string;
+        labels: Array<{ span: { offset: number; length: number } }>;
+      }>;
+    };
+    expect(report.diagnostics.filter((item) => item.severity === "error")).toEqual([]);
+    expect(
+      report.diagnostics
+        .filter((item) => item.code === "typescript(no-misused-spread)")
+        .map((item) => {
+          const { offset, length } = item.labels[0].span;
+          return source.slice(offset, offset + length);
+        }),
+    ).toEqual(["...instance"]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 interface Diagnostic {
   code: string;
   severity: number;

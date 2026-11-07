@@ -49,7 +49,10 @@ export const LibraryState = Schema.Struct({
     { message: "Repositories and installed skills must name retained entities" },
   ),
 );
-export interface LibraryState extends Schema.Schema.Type<typeof LibraryState> {}
+export namespace LibraryState {
+  export interface Type extends Schema.Schema.Type<typeof LibraryState> {}
+}
+export type LibraryState = LibraryState.Type;
 
 export const currentLibraryState = (fields: Omit<LibraryState, "schemaVersion">): LibraryState => ({
   ...fields,
