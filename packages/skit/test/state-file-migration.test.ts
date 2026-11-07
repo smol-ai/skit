@@ -1,5 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { Context, Effect, FileSystem, Layer } from "effect";
+import { systemError } from "effect/PlatformError";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { skitLayer } from "../src/platform/layer.js";
@@ -755,12 +756,6 @@ it.effect("migrates v9 Bindings to enabled lists and renames stored records", ()
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-/** A current state written as the v11 document it migrates from: v11 recorded no operations. */
-const asV11 = ({ operations: _operations, ...state }: LibraryState) => ({
-  ...state,
-  schemaVersion: 11,
-});
-
 /** The status fields a v10 installed copy stored, written as raw JSON. */
 interface StoredStatusFields {
   readonly status: string;
@@ -776,19 +771,15 @@ it.effect(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-v10-migration-" });
-      yield* fs.writeFileString(
-        join(home, "state.json"),
-        yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
+      const historical = JSON.parse(
+        yield* fs.readFileString(join(fixtures, "v11-well-known-subset.json")),
       );
-      const current = yield* openedState(home);
-      assert.strictEqual(current.present, true);
-      if (!current.present) return;
       const {
         installed_skill_id: _id,
         path,
         status: _status,
         ...copy
-      } = current.state.installed_skills[0]!;
+      } = historical.installed_skills[0]!;
       const hash = copy.expected_hash;
       const row = (name: string, fields: StoredStatusFields) => ({
         ...copy,
@@ -812,7 +803,11 @@ it.effect(
       ];
       yield* fs.writeFileString(
         join(home, "state.json"),
-        JSON.stringify({ ...asV11(current.state), schemaVersion: 10, installed_skills: rows }),
+        JSON.stringify({
+          ...historical,
+          schemaVersion: 10,
+          installed_skills: rows,
+        }),
       );
 
       const migrated = yield* openedState(home);
@@ -870,20 +865,17 @@ it.effect("migrates v11 state to v12 with no operation records", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-v11-migration-" });
-    yield* fs.writeFileString(
-      join(home, "state.json"),
-      yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
-    );
-    const current = yield* openedState(home);
-    assert.strictEqual(current.present, true);
-    if (!current.present) return;
-    yield* fs.writeFileString(join(home, "state.json"), JSON.stringify(asV11(current.state)));
+    const historical = yield* fs.readFileString(join(fixtures, "v11-well-known-subset.json"));
+    yield* fs.writeFileString(join(home, "state.json"), historical);
 
     const migrated = yield* openedState(home);
     assert.strictEqual(migrated.present, true);
     if (!migrated.present) return;
-    assert.deepStrictEqual(migrated.state, current.state);
-    assert.deepStrictEqual(migrated.state.operations, []);
+    assert.deepStrictEqual(migrated.state, {
+      ...JSON.parse(historical),
+      schemaVersion: 12,
+      operations: [],
+    });
     assert.isTrue(
       (yield* fs.readDirectory(home)).some((name) => name.startsWith("state.json.v11.backup-")),
     );
@@ -987,5 +979,38 @@ it.effect("building the layer fails HomeBusy, migrating nothing, while the lock 
     assert.strictEqual(error._tag, "HomeBusy");
     assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), legacy);
     assert.deepStrictEqual(yield* stateBackups(home), []);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("a failed backup flush preserves the historical state and can retry migration", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-migration-flush-" });
+    const path = join(home, "state.json");
+    const historical = yield* fs.readFileString(join(fixtures, "v11-well-known-subset.json"));
+    yield* fs.writeFileString(path, historical);
+    const faulting = FileSystem.FileSystem.of({
+      ...fs,
+      open: (file, options) =>
+        file.includes(".v11.backup-")
+          ? Effect.fail(
+              systemError({ _tag: "PermissionDenied", module: "FileSystem", method: "open" }),
+            )
+          : fs.open(file, options),
+    });
+    const error = yield* Effect.flip(
+      migrateLocalLibraryState(home).pipe(Effect.provideService(FileSystem.FileSystem, faulting)),
+    );
+    assert.strictEqual(error._tag, "PlatformError");
+    assert.strictEqual(yield* fs.readFileString(path), historical);
+    const backups = yield* stateBackups(home);
+    assert.strictEqual(backups.length, 1);
+    assert.deepStrictEqual(
+      JSON.parse(yield* fs.readFileString(join(home, backups[0]!))),
+      JSON.parse(historical),
+    );
+    const migrated = yield* openedState(home);
+    assert.strictEqual(migrated.present, true);
+    if (migrated.present) assert.strictEqual(migrated.state.schemaVersion, 12);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

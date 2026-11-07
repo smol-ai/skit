@@ -160,11 +160,11 @@ export const migrateLocalLibraryState = Effect.fn("Library.migrateState")(functi
         ),
       );
       // Keep the pre-migration file: migration retains legacy documents that cannot safely execute.
-      yield* writeJsonAtomic(
-        `${path}.v${lockedVersion}.backup-${new Date(yield* Clock.currentTimeMillis).toISOString().replaceAll(":", "")}`,
-        lockedValue,
-      );
+      const backup = `${path}.v${lockedVersion}.backup-${new Date(yield* Clock.currentTimeMillis).toISOString().replaceAll(":", "")}`;
+      yield* writeJsonAtomic(backup, lockedValue);
+      yield* syncPaths([backup, dirname(path)]);
       yield* writeJsonAtomic(path, migrated);
+      yield* syncPaths([path, dirname(path)]);
     }),
   );
 });
