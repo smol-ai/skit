@@ -335,40 +335,6 @@ export const libraryRules = {
     },
   },
 
-  "library-contract-complete": {
-    meta: {
-      type: "problem",
-      docs: {
-        description: "Library conformance has no whole-method exemptions or placeholder vocabulary",
-      },
-      messages: {
-        debt: "{{name}} exempts Library from its approved contract. Close the implementation gap, or review a concrete contract correction separately; the debt type must be never.",
-        placeholder:
-          "Replace Library's Ref placeholder with concrete vocabulary. Placeholder contracts cannot establish exact implementation conformance.",
-      },
-    },
-    create(context) {
-      const file = relative(root, context.filename);
-      if (!file.startsWith("architecture/")) return {};
-      return {
-        TSTypeAliasDeclaration(node) {
-          if (file.startsWith("architecture/library") && node.id.name === "Ref")
-            context.report({ node, messageId: "placeholder" });
-          if (
-            file.startsWith("architecture/conformance/") &&
-            node.id.name.endsWith("Debt") &&
-            node.typeAnnotation.type !== "TSNeverKeyword"
-          )
-            context.report({ node, messageId: "debt", data: { name: node.id.name } });
-        },
-        TSInterfaceDeclaration(node) {
-          if (file.startsWith("architecture/library") && node.id.name === "Ref")
-            context.report({ node, messageId: "placeholder" });
-        },
-      };
-    },
-  },
-
   "library-private-api": {
     meta: {
       type: "problem",

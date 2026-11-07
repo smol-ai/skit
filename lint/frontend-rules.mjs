@@ -1,6 +1,6 @@
 import { relative, resolve } from "node:path";
 import ts from "typescript-parser";
-import { coreExports } from "../architecture/app.ts";
+import { coreExports } from "../architecture/exports.mjs";
 import { contains } from "./effect-hygiene-rules.mjs";
 
 const root = resolve(import.meta.dirname, "..");

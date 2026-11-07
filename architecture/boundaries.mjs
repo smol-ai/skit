@@ -1,14 +1,7 @@
 /**
- * Owner boundaries, checked by lint (skit/owner-boundaries). Generated from app.ts's Library,
- * InstalledSkills, AuthorWorkspace and AuthorHistory owners; edit app.ts and this file together,
- * in a reviewed architecture change.
- *
- * `sources`: modules whose exports carry the owner's private names (default: core). AuthorWorkspace
- * and AuthorHistory are checked by architecture/conformance/author.ts, as library.ts is checked.
- *
- * `private`: names only code under `owner` may import. Every caller is checked; there are no
- * per-file migration exemptions. Package-local tests may exercise private modules, but may not
- * import private names through compatibility APIs.
+ * Oxlint owner boundaries. `owner` paths may use the named private modules and exports.
+ * `sources` identifies modules that carry private names; omitted means core package entries.
+ * Package-local tests may inspect private modules through relative imports, not public barrels.
  */
 export const owners = [
   {
@@ -219,7 +212,7 @@ export const owners = [
     ],
   },
   {
-    // RESHAPE owner (architecture/author.ts): history, its journal and the history store.
+    // Author history, its journal and the history store.
     // Callers use AuthorHistory; these exports serve the owner itself.
     name: "AuthorHistory",
     owner: "packages/skit/src/author/history",

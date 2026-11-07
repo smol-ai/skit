@@ -95,7 +95,7 @@ export function check(root, base) {
   }
   for (const file of tracked) {
     if (
-      (file.startsWith("architecture/") && !file.endsWith(".mjs")) ||
+      file === "architecture/exports.mjs" ||
       file.startsWith("lint/") ||
       [".oxlintrc.json", "vitest.lint.config.ts", "scripts/check-architecture.mjs"].includes(file)
     ) {

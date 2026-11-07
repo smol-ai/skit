@@ -1,7 +1,7 @@
 import { dirname, relative, resolve } from "node:path";
 import { readFileSync } from "node:fs";
 import { approvedServices, owners as boundaryOwners } from "../architecture/boundaries.mjs";
-import { coreExports } from "../architecture/app.ts";
+import { coreExports } from "../architecture/exports.mjs";
 import { layout, undecided } from "../architecture/layout.mjs";
 import { libraryRules } from "./library-rules.mjs";
 import { effectHygieneRules } from "./effect-hygiene-rules.mjs";
@@ -716,10 +716,10 @@ const effectRules = {
         coreApplication:
           "Core cannot depend on application code ({{target}}). Keep prompts, rendering and runtime composition in the application; call core from there.",
         publicEntry:
-          "{{target}} bypasses the core package API. Import a declared @smolai/skit-core subpath from architecture/app.ts.",
+          "{{target}} bypasses the core package API. Import a declared @smolai/skit-core subpath from architecture/exports.mjs.",
         coreRoot: "The core root entry is removed. Import a declared owner or shared subpath.",
         installedPolicy:
-          "Installed-skill file adapters consume copy/identity facts, not Library state or owner policy. Move retained-version decisions into Library (architecture/app.ts).",
+          "Installed-skill file adapters consume copy/identity facts, not Library state or owner policy. Move retained-version decisions into Library.",
         frontend:
           "{{target}} is CLI source. The TUI imports core public APIs; Storybook may also use the CLI public story export, never CLI source (architecture/layout.mjs).",
         internal:

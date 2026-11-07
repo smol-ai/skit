@@ -133,7 +133,7 @@ export const SyncPublication: Schema.Codec<SyncPublication, unknown> = Schema.Un
 );
 
 // ── Operation records ───────────────────────────────────────────────────────────────────────────
-// Setup's record of each operation (architecture/library.ts OperationStatus, RecordedSetupStep).
+// Setup records each operation durably before applying its folder changes (ADR-0020).
 // Each codec decodes to the contract's shape; `state.json` holds its JSON encoding, so the state
 // document stays a plain JSON value: Options are optional keys and device and inode numbers text.
 

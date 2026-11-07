@@ -1,5 +1,5 @@
 // What a setup's record keeps of the Library, before any step runs and once it finishes or stops
-// (architecture/app.ts: setup intent carries prior and expected-after evidence in the same write).
+// (ADR-0020: setup records prior and expected-after evidence with its operation).
 
 import {
   currentCollectionSkills,

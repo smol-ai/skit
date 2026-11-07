@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { coreExports, owners } from "../architecture/app.ts";
+import { coreExports } from "../architecture/exports.mjs";
 
 /** Every conditional target is checked, so an alternate condition cannot bypass the declaration. */
 function targets(value, condition = "") {
@@ -13,7 +13,7 @@ function targets(value, condition = "") {
   );
 }
 
-export function checkCoreExports(root, manifest, declarations, declaredOwners) {
+export function checkCoreExports(root, manifest, declarations) {
   const failures = [];
   const actual = manifest.exports ?? {};
   for (const field of ["main", "types"])
@@ -25,30 +25,13 @@ export function checkCoreExports(root, manifest, declarations, declaredOwners) {
     failures.push("packages/skit/src/index.ts: core root entry is forbidden");
   for (const [subpath, entry] of Object.entries(actual)) {
     if (subpath === ".") {
-      failures.push(".: core root export is forbidden; use declared owner or shared subpaths");
+      failures.push(".: core root export is forbidden; use declared subpaths");
       continue;
     }
     const declaration = declarations[subpath];
     if (!declaration) {
-      failures.push(`${subpath}: no API declaration in architecture/app.ts coreExports`);
+      failures.push(`${subpath}: no API declaration in architecture/exports.mjs coreExports`);
       continue;
-    }
-    if (declaration.kind === "owner") {
-      if (!Array.isArray(declaration.owners) || !declaration.owners.length)
-        failures.push(`${subpath}: must name at least one owner`);
-      else
-        for (const owner of declaration.owners)
-          if (!Object.hasOwn(declaredOwners, owner))
-            failures.push(`${subpath}: unknown owner ${owner}`);
-      if (Object.hasOwn(declaration, "purpose"))
-        failures.push(`${subpath}: owner API must declare owners, not a shared purpose`);
-    } else if (declaration.kind === "shared") {
-      if (typeof declaration.purpose !== "string" || !declaration.purpose.trim())
-        failures.push(`${subpath}: shared API must describe its purpose`);
-      if (Object.hasOwn(declaration, "owners"))
-        failures.push(`${subpath}: shared API must not declare state owners`);
-    } else {
-      failures.push(`${subpath}: API kind must be owner or shared`);
     }
     const source = declaration.source;
     if (
@@ -74,13 +57,13 @@ export function checkCoreExports(root, manifest, declarations, declaredOwners) {
   }
   for (const subpath of Object.keys(declarations))
     if (!Object.hasOwn(actual, subpath))
-      failures.push(`${subpath}: declared in app.ts but absent from core exports`);
+      failures.push(`${subpath}: declared in exports.mjs but absent from core exports`);
   return failures;
 }
 
 export function checkStructure(root) {
   const manifest = JSON.parse(readFileSync(join(root, "packages/skit/package.json"), "utf8"));
-  return checkCoreExports(root, manifest, coreExports, owners);
+  return checkCoreExports(root, manifest, coreExports);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

@@ -5,9 +5,9 @@
   "rules": { "cycles": "error" },
   "workspaces": {
     ".": {
-      // Architecture contracts are compiled directly; tooling is invoked by Node or Oxlint.
-      "entry": ["scripts/**/*.{mjs,ts}", "lint/**/*.test.ts", "architecture/**/*.ts"],
-      "project": ["scripts/**/*.{mjs,ts}", "lint/**/*.{mjs,ts}", "architecture/**/*.{mjs,ts}"],
+      // Tooling is invoked by Node or Oxlint; policy modules are reached through their imports.
+      "entry": ["scripts/**/*.{mjs,ts}", "lint/**/*.test.ts"],
+      "project": ["scripts/**/*.{mjs,ts}", "lint/**/*.{mjs,ts}", "architecture/**/*.mjs"],
     },
     "packages/*": {
       "includeEntryExports": true,

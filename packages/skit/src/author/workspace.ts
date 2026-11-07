@@ -1,5 +1,5 @@
 /**
- * AuthorWorkspace: the owner of an author workspace's own state (architecture/author.ts).
+ * AuthorWorkspace: the owner of an author workspace's own state (ADR-0026).
  *
  * It owns <root>/.skit/workspace.json, .skit/.gitignore, .skit/connection.json,
  * .skit/lock.sqlite, .skit/stage-*, <root>/skit.remote.json, and the file writes sync makes.
@@ -339,7 +339,7 @@ export interface AuthorWorkspaceShape {
   >;
 }
 
-/** What AuthorWorkspace.layer requires (architecture/author.ts AuthorWorkspaceRequires). */
+/** What AuthorWorkspace.layer requires (the workspace owner captures these dependencies). */
 type Requires =
   | FileSystem.FileSystem
   | Path.Path

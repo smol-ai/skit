@@ -37,7 +37,7 @@ type Destination =
   | { readonly _tag: "ConnectedRemote"; readonly remote: AuthorRemoteHome };
 
 /**
- * `skit author sync` (architecture/author.ts "Commands"). Applying holds the workspace lease for
+ * `skit author sync`. Applying holds the workspace lease for
  * the whole command; a preview takes none and creates nothing but history backups.
  */
 export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(

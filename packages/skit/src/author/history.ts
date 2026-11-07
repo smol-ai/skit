@@ -1,5 +1,5 @@
 /**
- * AuthorHistory: the owner of this device's author history (architecture/author.ts).
+ * AuthorHistory: the owner of this device's author history (ADR-0027).
  *
  * It owns <home>/history/{trees,revisions}/**, <home>/history/journal.sqlite* and
  * <home>/author-sync.json. Callers save a workspace's files with `refresh` and `saveTree`, run the
@@ -478,7 +478,7 @@ export interface AuthorHistoryConfig {
   readonly home: string;
 }
 
-/** What AuthorHistory.layer requires (architecture/author.ts AuthorHistoryRequires). */
+/** What AuthorHistory.layer requires (the history owner captures these dependencies). */
 type Requires =
   | FileSystem.FileSystem
   | Path.Path

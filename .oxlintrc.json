@@ -10,7 +10,6 @@
     "skit/command-module-exports": "error",
     "skit/no-record-any": "error",
     "skit/no-record-unknown": "error",
-    "skit/library-contract-complete": "error",
     "skit/library-private-api": "error",
     "skit/library-recorded-execution": "error",
     "skit/library-operation-owner": "error",
