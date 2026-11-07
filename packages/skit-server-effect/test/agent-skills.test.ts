@@ -118,13 +118,13 @@ describe("Agent Skills discovery", () => {
         ],
         16,
       );
-      const index = Schema.decodeUnknownSync(Index)(
+      const index = yield* Schema.decodeUnknownEffect(Index)(
         JSON.parse(
           new TextDecoder().decode(
             yield* bytesOf(yield* request("/tim/tools/.well-known/agent-skills/index.json")),
           ),
         ),
-      );
+      ).pipe(Effect.orDie);
 
       expect(index.skills.map(({ name }) => name)).toEqual(["lint", "review"]);
       for (const entry of index.skills) {

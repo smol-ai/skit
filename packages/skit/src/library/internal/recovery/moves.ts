@@ -241,7 +241,9 @@ const applyRecoveryMoves = Effect.fn("RecoveryMoves.apply")(
     // Write once, exclusively, before any move. Filesystem evidence supplies progress.
     yield* writeJsonExclusive(
       join(recoveryDirectory, "receipt.json"),
-      Schema.encodeSync(CurrentMoveRecord)({ schemaVersion: 3, entries }),
+      yield* Schema.encodeEffect(CurrentMoveRecord)({ schemaVersion: 3, entries }).pipe(
+        Effect.orDie,
+      ),
     );
     for (const entry of entries) {
       yield* checkApproved(entry);

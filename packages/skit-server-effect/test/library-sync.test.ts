@@ -80,9 +80,9 @@ const upload = Effect.fn("Test.uploadSnapshot")(function* (headers: HeadersInit)
     }),
   );
   expect(response.status).toBe(200);
-  return Schema.decodeUnknownSync(
+  return yield* Schema.decodeUnknownEffect(
     Schema.Struct({ library_id: Schema.String, reused: Schema.Boolean }),
-  )(yield* Effect.promise(() => response.json()));
+  )(yield* Effect.promise(() => response.json())).pipe(Effect.orDie);
 });
 
 const stored = Effect.fn("Test.storedLibrary")(function* (libraryId: string) {
@@ -209,7 +209,9 @@ describe("Library sync Worker persistence", () => {
   it.effect("snapshot upload and a first revision share one default Library", () =>
     Effect.gen(function* () {
       const headers = yield* session();
-      const empty = Schema.decodeUnknownSync(LibraryManifest)(emptyManifestFixture);
+      const empty = yield* Schema.decodeUnknownEffect(LibraryManifest)(emptyManifestFixture).pipe(
+        Effect.orDie,
+      );
       const [uploaded, response] = yield* Effect.all(
         [upload(headers), write(headers, null, empty)],
         {
@@ -217,9 +219,9 @@ describe("Library sync Worker persistence", () => {
         },
       );
       expect(response.status).toBe(200);
-      const committed = Schema.decodeUnknownSync(remote)(
+      const committed = (yield* Schema.decodeUnknownEffect(remote)(
         yield* Effect.promise(() => response.json()),
-      ).library;
+      ).pipe(Effect.orDie)).library;
       expect(committed.library_id).toBe(uploaded.library_id);
       const libraries = yield* Effect.promise(() =>
         env.DB.prepare("SELECT library_id FROM libraries").all(),
@@ -232,11 +234,13 @@ describe("Library sync Worker persistence", () => {
   it.effect("smoke: competing HTTP submissions accept one writer (not proof of D1 atomicity)", () =>
     Effect.gen(function* () {
       const headers = yield* session();
-      const empty = Schema.decodeUnknownSync(LibraryManifest)(emptyManifestFixture);
-      const other = Schema.decodeUnknownSync(LibraryManifest)({
+      const empty = yield* Schema.decodeUnknownEffect(LibraryManifest)(emptyManifestFixture).pipe(
+        Effect.orDie,
+      );
+      const other = yield* Schema.decodeUnknownEffect(LibraryManifest)({
         ...empty,
         bindings: [{ scope: { kind: "global" }, entries: [] }],
-      });
+      }).pipe(Effect.orDie);
       expect(
         (yield* Effect.promise(() => env.DB.prepare("SELECT library_id FROM libraries").all()))
           .results,
@@ -246,9 +250,9 @@ describe("Library sync Worker persistence", () => {
         { concurrency: "unbounded" },
       );
       expect(responses.map((response) => response.status).sort(Order.Number)).toEqual([200, 409]);
-      const winner = Schema.decodeUnknownSync(remote)(
+      const winner = (yield* Schema.decodeUnknownEffect(remote)(
         yield* Effect.promise(() => responses.find((response) => response.status === 200)!.json()),
-      ).library;
+      ).pipe(Effect.orDie)).library;
       const libraries = yield* Effect.promise(() =>
         env.DB.prepare("SELECT library_id, current_revision_id FROM libraries").all(),
       );
@@ -274,13 +278,13 @@ describe("Library sync Worker persistence", () => {
       const headers = yield* session();
       const { library_id } = yield* upload(headers);
       const first = yield* write(headers, null, manifest);
-      const base = Schema.decodeUnknownSync(remote)(
+      const base = (yield* Schema.decodeUnknownEffect(remote)(
         yield* Effect.promise(() => first.json()),
-      ).library;
+      ).pipe(Effect.orDie)).library;
       const advance = yield* write(headers, base.revision_id, changed);
-      const winner = Schema.decodeUnknownSync(remote)(
+      const winner = (yield* Schema.decodeUnknownEffect(remote)(
         yield* Effect.promise(() => advance.json()),
-      ).library;
+      ).pipe(Effect.orDie)).library;
       yield* Effect.promise(() =>
         env.DB.prepare("UPDATE libraries SET current_revision_id = ? WHERE library_id = ?")
           .bind(base.revision_id, library_id)
@@ -313,14 +317,14 @@ describe("Library sync Worker persistence", () => {
       const { library_id } = yield* upload(headers);
       const first = yield* write(headers, null, manifest);
       expect(first.status).toBe(200);
-      const base = Schema.decodeUnknownSync(remote)(
+      const base = (yield* Schema.decodeUnknownEffect(remote)(
         yield* Effect.promise(() => first.json()),
-      ).library;
+      ).pipe(Effect.orDie)).library;
       const advance = yield* write(headers, base.revision_id, changed);
       expect(advance.status).toBe(200);
-      const accepted = Schema.decodeUnknownSync(remote)(
+      const accepted = (yield* Schema.decodeUnknownEffect(remote)(
         yield* Effect.promise(() => advance.json()),
-      ).library;
+      ).pipe(Effect.orDie)).library;
       const before = yield* stored(library_id);
       const rejected = yield* write(headers, base.revision_id, competing);
       expect(rejected.status).toBe(409);
@@ -361,8 +365,9 @@ describe("Library sync Worker persistence", () => {
           let expected: string | null = null;
           if (baseKind === "existing") {
             const first = yield* write(headers, null, manifest);
-            expected = Schema.decodeUnknownSync(remote)(yield* Effect.promise(() => first.json()))
-              .library.revision_id;
+            expected = (yield* Schema.decodeUnknownEffect(remote)(
+              yield* Effect.promise(() => first.json()),
+            ).pipe(Effect.orDie)).library.revision_id;
           }
           // Let the actual Worker commit, then discard its response instead of fabricating an outage.
           const lost = yield* write(headers, expected, changed);
@@ -375,14 +380,16 @@ describe("Library sync Worker persistence", () => {
             SELF.fetch(`${origin}/api/library/portable`, { headers }),
           );
           expect(recovered.status).toBe(200);
-          const head = Schema.decodeUnknownSync(remote)(
+          const head = (yield* Schema.decodeUnknownEffect(remote)(
             yield* Effect.promise(() => recovered.json()),
-          ).library;
+          ).pipe(Effect.orDie)).library;
           expect(head.manifest).toEqual(changed);
           const retry = yield* write(headers, head.revision_id, changed);
           expect(retry.status).toBe(200);
           expect(
-            Schema.decodeUnknownSync(remote)(yield* Effect.promise(() => retry.json())).library,
+            (yield* Schema.decodeUnknownEffect(remote)(
+              yield* Effect.promise(() => retry.json()),
+            ).pipe(Effect.orDie)).library,
           ).toEqual(head);
           expect(yield* stored(library_id)).toEqual(before);
           yield* assertArchive(library_id);
@@ -406,7 +413,9 @@ describe("Library sync Worker persistence", () => {
       );
       expect(download.status).toBe(200);
       expect(
-        Schema.decodeUnknownSync(SnapshotArchive)(yield* Effect.promise(() => download.json())),
+        yield* Schema.decodeUnknownEffect(SnapshotArchive)(
+          yield* Effect.promise(() => download.json()),
+        ).pipe(Effect.orDie),
       ).toEqual(archive);
       yield* assertArchive(first.library_id);
     }),

@@ -55,7 +55,9 @@ export const devices = Effect.gen(function* () {
             yield* fs.makeDirectory(change.home, { recursive: true });
             yield* fs.writeFileString(
               join(change.home, "state.json"),
-              Schema.encodeSync(Schema.fromJsonString(LibraryState))(change.state),
+              yield* Schema.encodeEffect(Schema.fromJsonString(LibraryState))(change.state).pipe(
+                Effect.orDie,
+              ),
             );
           }
           return HttpClientResponse.fromWeb(incoming, response);

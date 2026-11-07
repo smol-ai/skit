@@ -340,7 +340,7 @@ it.effect("reads a global skills.sh well-known base URL and preserves its digest
         ],
       }),
     ]);
-    const lock = Schema.decodeSync(SetupLockMatch)({
+    const lock = yield* Schema.decodeEffect(SetupLockMatch)({
       scope: "global",
       lockPath: "/state/skills/.skill-lock.json",
       lockVersion: 3,
@@ -355,7 +355,7 @@ it.effect("reads a global skills.sh well-known base URL and preserves its digest
         wellKnownHash: `sha256:${"1".repeat(64)}`,
         originalEntry: { source: "wellknown/skills.example", sourceType: "well-known" },
       },
-    });
+    }).pipe(Effect.orDie);
     const selected = resolveSkillsShSelectedSource([{ lock, name: "review" }]);
     expect(selected).toEqual({
       _tag: "Resolved",
@@ -369,8 +369,8 @@ it.effect("reads a global skills.sh well-known base URL and preserves its digest
 );
 
 it.effect("turns selected GitHub lock paths into a structured GitHub Source", () =>
-  Effect.sync(() => {
-    const lock = Schema.decodeSync(SetupLockMatch)({
+  Effect.gen(function* () {
+    const lock = yield* Schema.decodeEffect(SetupLockMatch)({
       scope: "project",
       lockPath: "/project/skills-lock.json",
       lockVersion: 1,
@@ -385,7 +385,7 @@ it.effect("turns selected GitHub lock paths into a structured GitHub Source", ()
         computedHash: "2".repeat(64),
         originalEntry: { source: "acme/skills", sourceType: "github" },
       },
-    });
+    }).pipe(Effect.orDie);
     expect(resolveSkillsShSelectedSource([{ lock, name: "review" }])).toEqual({
       _tag: "Resolved",
       source: {

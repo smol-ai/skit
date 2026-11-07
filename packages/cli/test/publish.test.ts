@@ -80,17 +80,17 @@ it.effect.each(["/registry/{owner}/{slug}/publish", "http://["])(
         body?: typeof releasePublishRequestSchema.Type;
       } = {};
       const fetcher: TestHttpHandler = (input, url) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
           if (input.url.endsWith("/.well-known/agent-skills/"))
             return Response.json({ publish: template });
           received = {
             url: url.toString(),
             authorization: input.headers["authorization"],
-            body: Schema.decodeSync(Schema.fromJsonString(releasePublishRequestSchema))(
+            body: yield* Schema.decodeEffect(Schema.fromJsonString(releasePublishRequestSchema))(
               new TextDecoder().decode(
                 input.body._tag === "Uint8Array" ? input.body.body : undefined,
               ),
-            ),
+            ).pipe(Effect.orDie),
           };
           return Response.json(
             {
@@ -181,14 +181,16 @@ it.effect("publish uses skit.remote.json without including it in the Release", (
     yield* runPublish(root, "1.2.3", revision, {
       credentialOrigin: "https://registry.example",
       transport: (input, url) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
           if (input.url.includes(".well-known")) return new Response(null, { status: 404 });
           publishUrl = url.toString();
-          archiveBase64 = Schema.decodeSync(Schema.fromJsonString(releasePublishRequestSchema))(
+          archiveBase64 = (yield* Schema.decodeEffect(
+            Schema.fromJsonString(releasePublishRequestSchema),
+          )(
             new TextDecoder().decode(
               input.body._tag === "Uint8Array" ? input.body.body : undefined,
             ),
-          ).archive_base64;
+          ).pipe(Effect.orDie)).archive_base64;
           return Response.json(
             {
               release: {
@@ -221,13 +223,13 @@ it.effect("publish lets the Registry select its current SKIT when --revision is 
     yield* runPublish(root, "1.2.3", undefined, {
       credentialOrigin: "https://registry.test",
       transport: (input, url) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
           if (url.toString().includes(".well-known")) return new Response(null, { status: 404 });
-          publishedRevision = Schema.decodeSync(Schema.fromJsonString(Schema.JsonObject))(
+          publishedRevision = (yield* Schema.decodeEffect(Schema.fromJsonString(Schema.JsonObject))(
             new TextDecoder().decode(
               input.body._tag === "Uint8Array" ? input.body.body : undefined,
             ),
-          ).revision_id;
+          ).pipe(Effect.orDie)).revision_id;
           return Response.json(
             {
               release: {

@@ -202,12 +202,12 @@ export const makeAuthorSyncServer = Effect.fn("Test.makeAuthorSyncServer")(funct
         return found === undefined
           ? notFound()
           : Response.json(
-              Schema.encodeSync(Schema.toCodecJson(RevisionReadResponse))({
+              yield* Schema.encodeEffect(Schema.toCodecJson(RevisionReadResponse))({
                 revision: found.revision,
                 tree: found.tree,
                 diagnostics: [],
                 descriptor: null,
-              }),
+              }).pipe(Effect.orDie),
             );
       }
       if (request.method === "GET" && url.pathname === `${prefix}/revisions`) {
@@ -229,10 +229,10 @@ export const makeAuthorSyncServer = Effect.fn("Test.makeAuthorSyncServer")(funct
         const offset = Number(url.searchParams.get("cursor") ?? "0");
         const page = order.slice(offset, offset + 2);
         return Response.json(
-          Schema.encodeSync(Schema.toCodecJson(RevisionPage))({
+          yield* Schema.encodeEffect(Schema.toCodecJson(RevisionPage))({
             revisions: page.map(({ id, revision }) => ({ id, revision, diagnostics: [] })),
             next_cursor: offset + 2 < order.length ? String(offset + 2) : null,
-          }),
+          }).pipe(Effect.orDie),
         );
       }
       return yield* Effect.die(new Error(`Unexpected SKIT request: ${request.method} ${url}`));

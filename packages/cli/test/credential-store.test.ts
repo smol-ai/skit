@@ -118,9 +118,9 @@ it.effect("the next write moves a token from auth.json into the OS store", () =>
         Effect.provide(skitConfigurationLayer(home)),
       );
 
-      const written = Schema.decodeSync(StoredFile)(
+      const written = yield* Schema.decodeEffect(StoredFile)(
         yield* fs.readFileString(join(home, "auth.json")),
-      );
+      ).pipe(Effect.orDie);
       assert.deepStrictEqual(written.servers[origin], {
         tokenStorage: "secret-service",
         tokenStorageKey: "token-1",

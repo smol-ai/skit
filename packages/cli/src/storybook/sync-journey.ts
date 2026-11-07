@@ -26,11 +26,13 @@ export const syncJourney = (failDownload: boolean) =>
         Layer.succeed(
           HttpClient.HttpClient,
           HttpClient.make((request) =>
-            Effect.sync(() => {
+            Effect.gen(function* () {
               const path = new URL(request.url).pathname;
               let response: Response;
               if (request.method === "GET" && path === "/api/library/portable") {
-                response = Response.json(Schema.encodeSync(LibraryResponse)({ library: remote }));
+                response = Response.json(
+                  yield* Schema.encodeEffect(LibraryResponse)({ library: remote }),
+                );
               } else if (request.method === "GET" && path.startsWith("/api/libraries/")) {
                 const hash = decodeURIComponent(path.slice(path.lastIndexOf("/") + 1));
                 const archive = seeded.archives.find((candidate) => candidate.digest === hash);
@@ -38,11 +40,13 @@ export const syncJourney = (failDownload: boolean) =>
                 response =
                   failDownload && downloads === 2
                     ? Response.json(
-                        Schema.encodeSync(StorageFailureResponse)({ error: "storage_failure" }),
+                        yield* Schema.encodeEffect(StorageFailureResponse)({
+                          error: "storage_failure",
+                        }),
                         { status: 500 },
                       )
                     : archive
-                      ? Response.json(Schema.encodeSync(SnapshotArchive)(archive))
+                      ? Response.json(yield* Schema.encodeEffect(SnapshotArchive)(archive))
                       : new Response(null, { status: 404 });
               } else {
                 response = new Response(`Unexpected fixture request: ${request.method} ${path}`, {
@@ -50,7 +54,7 @@ export const syncJourney = (failDownload: boolean) =>
                 });
               }
               return HttpClientResponse.fromWeb(request, response);
-            }),
+            }).pipe(Effect.orDie),
           ),
         ),
       );

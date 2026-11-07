@@ -930,13 +930,13 @@ it.effect(
 );
 
 it.effect("matches an unresolvable lock to a retained Collection by canonical reference", () =>
-  Effect.sync(() => {
+  Effect.gen(function* () {
     const collectionId = makeCollectionId();
     const skillId = makeSkillId();
     const skillVersionId = makeSkillVersionId();
     const machineId = makeMachineId();
     const locator = "https://skills.example.test";
-    const imported = Schema.decodeUnknownSync(LibraryState)({
+    const imported = yield* Schema.decodeUnknownEffect(LibraryState)({
       schemaVersion: emptyLibraryFixture().schemaVersion,
       collections: [
         {
@@ -966,7 +966,7 @@ it.effect("matches an unresolvable lock to a retained Collection by canonical re
       unmanaged: [],
       operations: [],
       adoption_receipts: [],
-    });
+    }).pipe(Effect.orDie);
     const instance = setupInstance("Bad_Name", "/repo/Bad_Name", {
       git: { status: "ignored", repository: "/repo" },
       contentIdentity: {
@@ -1134,7 +1134,7 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
     });
     yield* f.fs.writeFileString(join(installedSkill, ".skit-ownership.json"), installedSkillMarker);
     yield* f.fs.writeFileString(join(copiedSkill, ".skit-ownership.json"), installedSkillMarker);
-    const state = Schema.decodeUnknownSync(LibraryState)({
+    const state = yield* Schema.decodeUnknownEffect(LibraryState)({
       schemaVersion: emptyLibraryFixture().schemaVersion,
       collections: [
         {
@@ -1221,7 +1221,7 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
       unmanaged: [],
       operations: [],
       adoption_receipts: [],
-    });
+    }).pipe(Effect.orDie);
     yield* f.fs.makeDirectory(f.libraryHome, { recursive: true });
     yield* f.fs.writeFileString(join(f.libraryHome, "state.json"), JSON.stringify(state));
     const scan = yield* scanForSetup(f.options);
@@ -1398,7 +1398,7 @@ it.effect(
           harness: "codex",
         }),
       );
-      const state = Schema.decodeUnknownSync(LibraryState)({
+      const state = yield* Schema.decodeUnknownEffect(LibraryState)({
         schemaVersion: emptyLibraryFixture().schemaVersion,
         collections: [
           {
@@ -1504,7 +1504,7 @@ it.effect(
         unmanaged: [],
         operations: [],
         adoption_receipts: [],
-      });
+      }).pipe(Effect.orDie);
       yield* f.fs.makeDirectory(f.libraryHome, { recursive: true });
       yield* f.fs.writeFileString(join(f.libraryHome, "state.json"), JSON.stringify(state));
       const scan = yield* scanForSetup(f.options);
@@ -1527,7 +1527,7 @@ it.effect(
 
 for (const kind of ["source", "edit"] as const) {
   it.effect(`requires matching retained lock evidence for a ${kind} acquisition`, () =>
-    Effect.sync(() => {
+    Effect.gen(function* () {
       const machineId = makeMachineId();
       const collectionId = makeCollectionId();
       const copyId = makeCollectionVersionId();
@@ -1537,7 +1537,7 @@ for (const kind of ["source", "edit"] as const) {
         locks: [lock],
         contentIdentity: { status: "none", currentHash: hash, libraryMatches: [] },
       });
-      const library = Schema.decodeUnknownSync(LibraryState)({
+      const library = yield* Schema.decodeUnknownEffect(LibraryState)({
         schemaVersion: emptyLibraryFixture().schemaVersion,
         collections: [{ collection_id: collectionId, label: "Reviews" }],
         skills: [
@@ -1614,7 +1614,7 @@ for (const kind of ["source", "edit"] as const) {
         unmanaged: [],
         operations: [],
         adoption_receipts: [],
-      });
+      }).pipe(Effect.orDie);
       expect(classifySetupOnboarding([instance], { library, machineId })).toEqual([]);
       const offered: readonly SetupSkillInstance[] = [instance];
       const expectImport = (

@@ -365,7 +365,9 @@ const cases = [
         assert.ok((yield* Effect.flip(b.sync())) instanceof SyncLocalChanged);
         assert.strictEqual(
           yield* fs.readFileString(join(b.home, "state.json")),
-          Schema.encodeSync(Schema.fromJsonString(LibraryState))(concurrent),
+          yield* Schema.encodeEffect(Schema.fromJsonString(LibraryState))(concurrent).pipe(
+            Effect.orDie,
+          ),
         );
         assert.deepStrictEqual(yield* b.state, concurrent);
         assert.deepStrictEqual(server.remote, head);
@@ -394,7 +396,9 @@ const cases = [
         assert.ok((yield* Effect.flip(a.sync())) instanceof SyncLocalChanged);
         assert.strictEqual(
           yield* fs.readFileString(join(a.home, "state.json")),
-          Schema.encodeSync(Schema.fromJsonString(LibraryState))(concurrent),
+          yield* Schema.encodeEffect(Schema.fromJsonString(LibraryState))(concurrent).pipe(
+            Effect.orDie,
+          ),
         );
         assert.deepStrictEqual(yield* a.state, concurrent);
         assert.deepStrictEqual(yield* fs.readFile(join(a.root, "first", "SKILL.md")), skillBefore);
