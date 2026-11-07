@@ -126,7 +126,7 @@ it.effect("malformed direct Skill downloads preserve the validation exit code", 
   Effect.gen(function* () {
     const routes = HttpRouter.serve(
       HttpRouter.addAll([
-        HttpRouter.route(
+        HttpRouter.route<never, never>(
           "GET",
           "/SKILL.md",
           HttpServerResponse.text("not a skill", { contentType: "text/markdown" }),
