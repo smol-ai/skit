@@ -6,7 +6,7 @@ import { inspectLibrarySource } from "../library/source.js";
 import { updateAdapters } from "../library/update/adapters.js";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { handleSourceCommand } from "../application.js";
+
 import {
   CommandMetadata,
   credentialStoreReadSubprocesses,
@@ -33,54 +33,51 @@ export const updateCliCommand = Command.make(
   "update",
   { subject, dryRun, fromProjection, ...localFlags },
   (input) =>
-    handleSourceCommand(
-      Effect.gen(function* () {
-        const renderer = yield* Renderer;
-        const library = yield* Library.Service;
-        const query = Option.getOrUndefined(input.subject);
-        const installedSkillSelector = Option.getOrUndefined(input.fromProjection);
-        if (installedSkillSelector !== undefined) {
-          if (query === undefined)
-            return yield* new EditImportMissing({
-              message: "A Skill is required with --from-projection",
-            });
-          const value = yield* renderer.withStatus(
-            input.dryRun
-              ? "Inspecting changed installed-skill bytes"
-              : "Retaining changed installed-skill bytes",
-            Effect.gen(function* () {
-              const prepared = yield* library.edit(query, installedSkillSelector);
-              return input.dryRun
-                ? result(
-                    "projectionRetentionPlan",
-                    updateOutputContracts.projectionRetentionPlan,
-                    prepared.preview,
-                  )
-                : result(
-                    "projectionRetention",
-                    updateOutputContracts.projectionRetention,
-                    yield* prepared.apply(),
-                  );
-            }),
-          );
-          return yield* renderer.result(value);
-        }
-        if (input.dryRun) {
-          const value = yield* renderer.withStatus(
-            "Checking Source observations",
-            library.previewSourceUpdates(query, inspectLibrarySource),
-          );
-          return yield* renderer.result(
-            result("updatePlan", updateOutputContracts.updatePlan, value),
-          );
-        }
-        const value = yield* library.update(query, yield* updateAdapters);
-        yield* renderer.result(
-          result("update", updateOutputContracts.update, value, updateExitCode(value)),
+    Effect.gen(function* () {
+      const renderer = yield* Renderer;
+      const library = yield* Library.Service;
+      const query = Option.getOrUndefined(input.subject);
+      const installedSkillSelector = Option.getOrUndefined(input.fromProjection);
+      if (installedSkillSelector !== undefined) {
+        if (query === undefined)
+          return yield* new EditImportMissing({
+            message: "A Skill is required with --from-projection",
+          });
+        const value = yield* renderer.withStatus(
+          input.dryRun
+            ? "Inspecting changed installed-skill bytes"
+            : "Retaining changed installed-skill bytes",
+          Effect.gen(function* () {
+            const prepared = yield* library.edit(query, installedSkillSelector);
+            return input.dryRun
+              ? result(
+                  "projectionRetentionPlan",
+                  updateOutputContracts.projectionRetentionPlan,
+                  prepared.preview,
+                )
+              : result(
+                  "projectionRetention",
+                  updateOutputContracts.projectionRetention,
+                  yield* prepared.apply(),
+                );
+          }),
         );
-      }),
-      input,
-    ),
+        return yield* renderer.result(value);
+      }
+      if (input.dryRun) {
+        const value = yield* renderer.withStatus(
+          "Checking Source observations",
+          library.previewSourceUpdates(query, inspectLibrarySource),
+        );
+        return yield* renderer.result(
+          result("updatePlan", updateOutputContracts.updatePlan, value),
+        );
+      }
+      const value = yield* library.update(query, yield* updateAdapters);
+      yield* renderer.result(
+        result("update", updateOutputContracts.update, value, updateExitCode(value)),
+      );
+    }),
 ).pipe(
   Command.withDescription("Update sources from their recorded origins."),
   Command.withExamples([

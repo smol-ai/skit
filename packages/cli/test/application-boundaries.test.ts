@@ -1,4 +1,4 @@
-import { sourceApplicationLayer } from "../src/application.js";
+import { sourceLayer } from "../src/application.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { addRegistryRemote, readConfig } from "../src/registry/auth.js";
 import {
@@ -7,10 +7,11 @@ import {
   SkitConfiguration,
 } from "@smolai/skit-core/platform";
 import { assert, it } from "@effect/vitest";
+import { NodeServices } from "@effect/platform-node";
 import { ConfigProvider, Deferred, Effect, Fiber, FileSystem, Layer } from "effect";
 import { join, resolve } from "node:path";
 import * as Library from "@smolai/skit-core/library";
-import { libraryApplicationLayer } from "../src/application.js";
+import { libraryLayer } from "../src/application.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import type { CommandFailure, CommandResult } from "../src/commands/types.js";
@@ -118,7 +119,7 @@ it.effect("parsed configuration commands honor ConfigProvider without a home fla
     assert.isTrue(yield* fs.exists(join(home, "auth.json")));
     assert.isFalse(yield* fs.exists(join(home, "state.json")));
     assert.isTrue(yield* homeLockIsFree(home));
-  }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
 
 it.effect(
@@ -227,7 +228,7 @@ it.effect("application layers consume the supplied paths without re-reading conf
       assert.isTrue(yield* fs.exists(paths.authPath));
       assert.isFalse(yield* fs.exists(join(root, "ignored")));
     }).pipe(
-      Effect.provide(sourceApplicationLayer()),
+      Effect.provide(sourceLayer()),
       Effect.provideService(SkitConfiguration, paths),
       Effect.provide(
         ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: join(root, "ignored") })),
@@ -255,9 +256,7 @@ it.effect("separate application boundaries retain their own storage roots", () =
         assert.isTrue(yield* fs.exists(join(home, "state.json")));
         return home;
       }).pipe(
-        Effect.provide(
-          libraryApplicationLayer().pipe(Layer.provideMerge(skitConfigurationLayer(home))),
-        ),
+        Effect.provide(libraryLayer().pipe(Layer.provideMerge(skitConfigurationLayer(home)))),
       ),
     );
     assert.deepStrictEqual(resolved, homes);

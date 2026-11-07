@@ -1,5 +1,11 @@
 import { usageCliCommand } from "./library-usage.js";
 import { Command } from "effect/cli";
+import { Layer } from "effect";
+import { skitLayer } from "@smolai/skit-core/platform";
+import { configurationLayer, libraryLayer, sourceLayer } from "../application.js";
+import { registryHttpLayer } from "../registry/registry-http.js";
+import { terminalPrompterLayer } from "../terminal/prompter.js";
+import { terminalLibraryProgressLayer } from "../library/update/present-progress.js";
 import { checkCliCommand } from "./library-check.js";
 import { serverBootstrapCliCommand } from "../registry/commands/bootstrap.js";
 import { authLogoutCliCommand } from "../registry/commands/auth-logout.js";
@@ -31,55 +37,76 @@ import { registryAddCliCommand } from "../registry/commands/registry-add.js";
 import { registryDefaultCliCommand } from "../registry/commands/registry-default.js";
 import { registryListCliCommand } from "../registry/commands/registry-list.js";
 import { registryRemoveCliCommand } from "../registry/commands/registry-remove.js";
-import { JsonOutputFlag } from "./parameters.js";
+import { homeFlag, localFlags, JsonOutputFlag } from "./parameters.js";
 
 const authCommand = Command.make("auth").pipe(
+  Command.withSharedFlags({ home: homeFlag }),
   Command.withDescription("Manage Registry authentication."),
   Command.withSubcommands([authLoginCliCommand, authLogoutCliCommand, authStatusCliCommand]),
+  Command.provide((input) => Layer.merge(configurationLayer(input), registryHttpLayer())),
 );
 
 const feedbackCommand = Command.make("feedback").pipe(
+  Command.withSharedFlags({ home: homeFlag }),
   Command.withDescription("Tell SKIT's maintainers what got in your way."),
   Command.withSubcommands([feedbackSendCliCommand]),
+  Command.provide((input) => Layer.merge(configurationLayer(input), registryHttpLayer())),
 );
 
-const securityCommand = Command.make("security").pipe(
-  Command.withDescription("Review and accept retained artifact security findings."),
-  Command.withSubcommands([securityAcceptCliCommand, securityReviewCliCommand]),
+const securityCommand = Command.provide(
+  Command.make("security").pipe(
+    Command.withSharedFlags(localFlags),
+    Command.withDescription("Review and accept retained artifact security findings."),
+    Command.withSubcommands([securityAcceptCliCommand, securityReviewCliCommand]),
+  ),
+  libraryLayer,
 );
 
 const serverCommand = Command.make("server").pipe(
   Command.withDescription("Operate a deployed skit-server."),
   Command.withSubcommands([serverBootstrapCliCommand]),
+  Command.provide(registryHttpLayer()),
 );
 
-const registryCommand = Command.make("registry").pipe(
-  Command.withDescription("Manage named Registry locations."),
-  Command.withSubcommands([
-    registryAddCliCommand,
-    registryDefaultCliCommand,
-    registryListCliCommand,
-    registryRemoveCliCommand,
-  ]),
+const registryCommand = Command.provide(
+  Command.make("registry").pipe(
+    Command.withSharedFlags({ home: homeFlag }),
+    Command.withDescription("Manage named Registry locations."),
+    Command.withSubcommands([
+      registryAddCliCommand,
+      registryDefaultCliCommand,
+      registryListCliCommand,
+      registryRemoveCliCommand,
+    ]),
+  ),
+  configurationLayer,
 );
 
-const libraryCommand = Command.make("library").pipe(
-  Command.withDescription("Manage local Library storage."),
-  Command.withSubcommands([
-    libraryHistoryCliCommand,
-    libraryRecoveryCliCommand,
-    librarySetupUndoCliCommand,
-  ]),
+const libraryCommand = Command.provide(
+  Command.make("library").pipe(
+    Command.withSharedFlags({ home: homeFlag }),
+    Command.withDescription("Manage local Library storage."),
+    Command.withSubcommands([
+      libraryHistoryCliCommand,
+      libraryRecoveryCliCommand,
+      librarySetupUndoCliCommand,
+    ]),
+  ),
+  libraryLayer,
 );
 
-const repositoryCommand = Command.make("repository").pipe(
-  Command.withDescription("Manage this machine's repository inventory decisions."),
-  Command.withSubcommands([
-    repositoryListCliCommand,
-    repositoryWatchCliCommand,
-    repositoryIgnoreCliCommand,
-    repositoryForgetCliCommand,
-  ]),
+const repositoryCommand = Command.provide(
+  Command.make("repository").pipe(
+    Command.withSharedFlags({ home: homeFlag }),
+    Command.withDescription("Manage this machine's repository inventory decisions."),
+    Command.withSubcommands([
+      repositoryListCliCommand,
+      repositoryWatchCliCommand,
+      repositoryIgnoreCliCommand,
+      repositoryForgetCliCommand,
+    ]),
+  ),
+  configurationLayer,
 );
 
 /** The executable CLI grammar. Its leaves own parsing, metadata, and execution. */
@@ -88,24 +115,25 @@ export const skitCommand = Command.make("skit").pipe(
   Command.withGlobalFlags([JsonOutputFlag]),
   Command.withSubcommands([
     authCommand,
-    addCliCommand,
-    checkCliCommand,
-    doctorCliCommand,
-    disableCliCommand,
-    enableCliCommand,
+    Command.provide(addCliCommand, sourceLayer),
+    Command.provide(checkCliCommand, sourceLayer),
+    Command.provide(doctorCliCommand, libraryLayer),
+    Command.provide(disableCliCommand, libraryLayer),
+    Command.provide(enableCliCommand, libraryLayer),
     feedbackCommand,
-    inventoryCliCommand,
+    Command.provide(inventoryCliCommand, libraryLayer),
     libraryCommand,
-    listCliCommand,
+    Command.provide(listCliCommand, libraryLayer),
     registryCommand,
     repositoryCommand,
-    removeCliCommand,
+    Command.provide(removeCliCommand, libraryLayer),
     securityCommand,
     serverCommand,
-    setupCliCommand,
-    librarySyncCliCommand,
-    updateCliCommand,
+    Command.provide(setupCliCommand, sourceLayer),
+    Command.provide(librarySyncCliCommand, sourceLayer),
+    Command.provide(updateCliCommand, sourceLayer),
     versionCliCommand,
-    usageCliCommand,
+    Command.provide(usageCliCommand, libraryLayer),
   ]),
+  Command.provide(Layer.mergeAll(skitLayer, terminalPrompterLayer, terminalLibraryProgressLayer)),
 );

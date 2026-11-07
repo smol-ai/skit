@@ -1,10 +1,10 @@
 // A process entrypoint: one program, run once, on the Node platform.
 import { Effect } from "effect";
-import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import { NodeRuntime } from "@effect/platform-node";
 import { join, resolve } from "node:path";
 import { commandContractArtifacts } from "./artifacts.js";
 import { writeCommandContractArtifacts } from "../platform/command-contracts.js";
-import { commandApplicationLayer } from "../application.js";
+import { cliLayer } from "../application.js";
 
 const target = resolve(import.meta.dirname, "../../../contracts");
 
@@ -15,8 +15,5 @@ const program = Effect.gen(function* () {
 });
 
 NodeRuntime.runMain(
-  program.pipe(
-    Effect.provide(commandApplicationLayer(false, join(target, ".generation-home"))),
-    Effect.provide(NodeServices.layer),
-  ),
+  program.pipe(Effect.scoped, Effect.provide(cliLayer(false, join(target, ".generation-home")))),
 );

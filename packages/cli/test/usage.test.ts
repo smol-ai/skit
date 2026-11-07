@@ -6,7 +6,7 @@ import { skitLayer } from "@smolai/skit-core/platform";
 import { join } from "node:path";
 import { commandDescriptions } from "../src/commands/manifest.js";
 import { skitCommand } from "../src/commands/tree.js";
-import { commandApplicationLayer } from "../src/application.js";
+import { cliLayer } from "../src/application.js";
 import { result } from "../src/commands/result.js";
 import { defaultTerminalEnvironment, renderResultFrame } from "../src/commands/output-frame.js";
 import { renderUsage } from "../src/library/usage/present.js";
@@ -123,7 +123,7 @@ it.effect("exposes the read-only command and output schema", () =>
       outputSchemas: expect.arrayContaining(["skit.usage.v4"]),
       interactive: false,
     });
-  }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-usage-contract"))),
+  }).pipe(Effect.provide(cliLayer(false, "/tmp/skit-usage-contract"))),
 );
 
 it.effect("runs the real command against isolated transcripts without creating Library state", () =>

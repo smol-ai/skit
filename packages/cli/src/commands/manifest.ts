@@ -48,7 +48,11 @@ export function commandDocuments<Name extends string, Input, ContextInput, E, R>
     Effect.gen(function* () {
       const document = yield* helpDocument(root, path);
       const metadata = Context.get(document.annotations, CommandMetadata);
-      const allFlags = [...document.flags, ...(document.globalFlags ?? [])];
+      const allFlags = [
+        ...document.flags,
+        ...(document.inheritedFlags ?? []),
+        ...(document.globalFlags ?? []),
+      ];
       return {
         path,
         summary: document.description,

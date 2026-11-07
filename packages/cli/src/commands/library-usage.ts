@@ -5,7 +5,7 @@ import { Effect, Option } from "effect";
 import { Command, Flag } from "effect/cli";
 import { scanLocalUsage } from "../library/usage/scan.js";
 import { usageOutputContracts } from "../library/usage/output.js";
-import { handleLibraryCommand } from "../application.js";
+
 import { CommandMetadata } from "./metadata.js";
 
 import { homeFlag, jsonFlag, optionalString } from "./parameters.js";
@@ -37,32 +37,29 @@ export const usageCliCommand = Command.make(
     ),
   },
   (input) =>
-    handleLibraryCommand(
-      Effect.gen(function* () {
-        const paths = yield* SkitConfiguration;
-        const renderer = yield* Renderer;
-        const library = yield* Library.Service;
-        const installedSkills = yield* library.installedSkills;
-        const report = yield* renderer.withStatus(
-          "Scanning local transcripts",
-          scanLocalUsage(installedSkills, {
-            userHome: paths.userHome,
-            harness: input.harness,
-            homes: {
-              codex: Option.getOrUndefined(input.codexHome),
-              "claude-code": Option.getOrUndefined(input.claudeHome),
-            },
-            days: input.days,
-            end: Option.getOrUndefined(input.end),
-            project: Option.getOrUndefined(input.project),
-            progress: (completed, total) =>
-              renderer.updateStatus(`Scanning local transcripts: ${completed}/${total} files`),
-          }),
-        );
-        yield* renderer.result(result("usage", usageOutputContracts.usage, report));
-      }),
-      input,
-    ),
+    Effect.gen(function* () {
+      const paths = yield* SkitConfiguration;
+      const renderer = yield* Renderer;
+      const library = yield* Library.Service;
+      const installedSkills = yield* library.installedSkills;
+      const report = yield* renderer.withStatus(
+        "Scanning local transcripts",
+        scanLocalUsage(installedSkills, {
+          userHome: paths.userHome,
+          harness: input.harness,
+          homes: {
+            codex: Option.getOrUndefined(input.codexHome),
+            "claude-code": Option.getOrUndefined(input.claudeHome),
+          },
+          days: input.days,
+          end: Option.getOrUndefined(input.end),
+          project: Option.getOrUndefined(input.project),
+          progress: (completed, total) =>
+            renderer.updateStatus(`Scanning local transcripts: ${completed}/${total} files`),
+        }),
+      );
+      yield* renderer.result(result("usage", usageOutputContracts.usage, report));
+    }),
 ).pipe(
   Command.withDescription(
     "Experimental: show skill activity from local Claude and Codex transcripts.",

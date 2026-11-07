@@ -6,7 +6,7 @@ import { skitLayer } from "@smolai/skit-core/platform";
 import { describe, expect, test } from "vitest";
 import { commandContractArtifacts } from "../src/commands/artifacts.js";
 import { outputContracts } from "../src/commands/output-contracts.js";
-import { commandApplicationLayer } from "../src/application.js";
+import { cliLayer } from "../src/application.js";
 import { result } from "../src/commands/result.js";
 import { encodeResult } from "../src/commands/encode-result.js";
 import { enableOutputContracts } from "../src/library/enable.js";
@@ -25,7 +25,7 @@ describe("generated command contracts", () => {
       for (const [name, contents] of Object.entries(expected))
         expect(yield* fs.readFileString(join(contractsRoot, name))).toBe(contents);
     }).pipe(
-      Effect.provide(commandApplicationLayer(false, "/tmp/skit-contract-generation-test")),
+      Effect.provide(cliLayer(false, "/tmp/skit-contract-generation-test")),
       Effect.provide(skitLayer),
     ),
   );
@@ -43,7 +43,7 @@ describe("generated command contracts", () => {
       const files = new Set(Object.keys(artifacts));
       for (const id of manifest.commands.flatMap((command) => command.outputSchemas))
         expect(files.has(`${id}.json`), `${id} must resolve to a generated contract`).toBe(true);
-    }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-contract-json-test"))),
+    }).pipe(Effect.provide(cliLayer(false, "/tmp/skit-contract-json-test"))),
   );
 
   it.effect("overwrites and prunes branch-local generated artifacts", () =>

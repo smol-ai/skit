@@ -27,10 +27,18 @@ modules. A folder does not need a sibling re-export file.
 | `library/recovery` | Recovery inspection and reviewed restores |
 | `library/security` | Review and acceptance of security findings |
 
-`packages/cli/src/application.ts` constructs the production owner layers and
-supplies command configuration, terminal services and failure rendering.
-`commands/runtime.ts` runs the CLI grammar; `main.ts` supplies the Node process
-environment. Commands do not construct the Library or open its storage.
+`packages/cli/src/application.ts` defines concrete owner layers. `commands/tree.ts`
+uses Effect CLI's `Command.provide` to supply them to the selected command. Groups
+inherit configuration flags with `Command.withSharedFlags`; flat Library commands
+pass their parsed flags directly to the Library layer. Registry configuration,
+authentication, repository settings, feedback and version do not open Library.
+
+The root command supplies platform, prompt and progress services once around
+selected execution. `commands/runtime.ts` owns the execution scope and one failure
+renderer covering parsing, owner construction and execution. `main.ts` supplies
+the process configuration and Renderer. An explicit home derives from that
+configuration snapshot. Command handlers call owners and render results; they do
+not select runners, provide application layers, or open Library storage.
 
 For example, enable/disable follows:
 

@@ -1,7 +1,10 @@
 import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import { commandFailure, renderCommandFailures } from "../src/application.js";
+import { commandFailure } from "../src/commands/failure-classification.js";
+import { runCommandTree } from "../src/commands/runtime.js";
+import { Command } from "effect/cli";
+import { NodeServices } from "@effect/platform-node";
 import { RegistryRejectedWrite } from "../src/registry/failures.js";
 import { Renderer } from "../src/terminal/renderer.js";
 import { consoleRenderer } from "../src/terminal/console-renderer.js";
@@ -31,7 +34,7 @@ it.effect("presentation waits for cleanup and reports its defect after interrupt
     const interaction = yield* makeScriptedInteraction([]);
     const imported = yield* Deferred.make<void>();
     let cleaned = false;
-    const fiber = yield* renderCommandFailures(
+    const command = Command.make("cleanup", {}, () =>
       Effect.acquireRelease(Deferred.succeed(imported, undefined), () =>
         Effect.yieldNow.pipe(
           Effect.andThen(
@@ -41,8 +44,13 @@ it.effect("presentation waits for cleanup and reports its defect after interrupt
           ),
           Effect.andThen(Effect.die(new Error("cleanup failed"))),
         ),
-      ).pipe(Effect.andThen(Effect.never), Effect.scoped),
-    ).pipe(Effect.provide(interaction.layer), Effect.forkChild);
+      ).pipe(Effect.andThen(Effect.never)),
+    );
+    const fiber = yield* runCommandTree(command, [], "test").pipe(
+      Effect.provide(interaction.layer),
+      Effect.provide(NodeServices.layer),
+      Effect.forkChild,
+    );
 
     yield* Deferred.await(imported);
     yield* Fiber.interrupt(fiber);
@@ -62,7 +70,12 @@ it.effect("interruption is not rendered as a command error", () =>
   Effect.gen(function* () {
     let rendered = false;
     const exit = yield* Effect.exit(
-      renderCommandFailures(Effect.interrupt).pipe(
+      runCommandTree(
+        Command.make("interrupt", {}, () => Effect.interrupt),
+        [],
+        "test",
+      ).pipe(
+        Effect.provide(NodeServices.layer),
         Effect.provideService(Renderer, {
           ...consoleRenderer(true),
           failure: () =>

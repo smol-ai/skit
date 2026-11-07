@@ -3,7 +3,7 @@ import { Effect, Option } from "effect";
 import { descriptionLoadMessage } from "../library/presentation/description-size.js";
 import { inspectSource } from "@smolai/skit-core/library/source";
 import { Argument, Command, Flag } from "effect/cli";
-import { handleSourceCommand } from "../application.js";
+
 import {
   CommandMetadata,
   credentialStoreReadSubprocesses,
@@ -28,35 +28,29 @@ export const addCliCommand = Command.make(
   "add",
   { source, registry, preview, ...localFlags },
   (input) =>
-    handleSourceCommand(
-      Effect.gen(function* () {
-        const renderer = yield* Renderer;
-        const request = yield* addSourceRequest(
-          input.source,
-          Option.getOrUndefined(input.registry),
+    Effect.gen(function* () {
+      const renderer = yield* Renderer;
+      const request = yield* addSourceRequest(input.source, Option.getOrUndefined(input.registry));
+      if (input.preview) {
+        const value = yield* renderer.withStatus(
+          `Inspecting ${input.source}`,
+          inspectSource(request),
         );
-        if (input.preview) {
-          const value = yield* renderer.withStatus(
-            `Inspecting ${input.source}`,
-            inspectSource(request),
-          );
-          return yield* renderer.result(result("addPreview", addOutputContracts.addPreview, value));
-        }
-        const library = yield* Library.Service;
-        const { added, descriptionLoad } = yield* renderer.withStatus(
-          "Adding source",
-          library.addSource(request),
-        );
-        yield* renderer.result(result("add", addOutputContracts.add, added));
-        yield* renderer.note(
-          descriptionLoad === undefined
-            ? "Description size unavailable."
-            : descriptionLoadMessage(descriptionLoad),
-          "Description size",
-        );
-      }),
-      input,
-    ),
+        return yield* renderer.result(result("addPreview", addOutputContracts.addPreview, value));
+      }
+      const library = yield* Library.Service;
+      const { added, descriptionLoad } = yield* renderer.withStatus(
+        "Adding source",
+        library.addSource(request),
+      );
+      yield* renderer.result(result("add", addOutputContracts.add, added));
+      yield* renderer.note(
+        descriptionLoad === undefined
+          ? "Description size unavailable."
+          : descriptionLoadMessage(descriptionLoad),
+        "Description size",
+      );
+    }),
 ).pipe(
   Command.withDescription("Add a source to the local library without enabling it."),
   Command.withExamples([

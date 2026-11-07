@@ -1,10 +1,10 @@
 import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 import { SkitConfiguration, resolveSkitConfiguration } from "@smolai/skit-core/platform";
-import { Data, Console, Effect, Option } from "effect";
+import { Cause, Data, Console, Effect, Option } from "effect";
 import { CliError, CliOutput, Command, type HelpDoc } from "effect/cli";
 import { skitCliConfigLayer } from "./parameters.js";
 
-import { renderCommandFailures } from "../application.js";
+import { commandFailure } from "./failure-classification.js";
 import { Renderer } from "../terminal/renderer.js";
 import { result } from "./result.js";
 
@@ -63,34 +63,46 @@ export function runCommandTree<Name extends string, Input, ContextInput, E, R>(
     },
   };
 
-  return Effect.gen(function* () {
-    const renderer = yield* Renderer;
-    // Standalone command runners share the same configuration boundary as main.
-    // Keep an already resolved application snapshot when one was supplied.
-    const supplied = yield* Effect.serviceOption(SkitConfiguration);
-    const configuration = Option.isSome(supplied)
-      ? supplied.value
-      : yield* resolveSkitConfiguration();
-    yield* Command.runWith(command, { version, renderErrors: false })(argv).pipe(
-      Effect.provideService(SkitConfiguration, configuration),
-      Effect.provideService(CliOutput.Formatter, formatter),
-      Effect.provide(skitCliConfigLayer),
-      Effect.provideService(Console.Console, quietConsole),
-      Effect.catchIf(
-        (error): error is CliError.ShowHelp =>
-          CliError.isCliError(error) && error._tag === "ShowHelp",
-        (request) =>
-          request.errors.length
-            ? Effect.fail(
-                new CommandLineInvalid({
-                  message: request.errors.map((error) => error.message).join("\n"),
-                }),
-              )
-            : Effect.void,
+  return Effect.uninterruptibleMask((restore) =>
+    restore(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const renderer = yield* Renderer;
+          // Standalone command runners share the same configuration boundary as main.
+          // Keep an already resolved application snapshot when one was supplied.
+          const supplied = yield* Effect.serviceOption(SkitConfiguration);
+          const configuration = Option.isSome(supplied)
+            ? supplied.value
+            : yield* resolveSkitConfiguration();
+          yield* Command.runWith(command, { version, renderErrors: false })(argv).pipe(
+            Effect.provideService(SkitConfiguration, configuration),
+            Effect.provideService(CliOutput.Formatter, formatter),
+            Effect.provide(skitCliConfigLayer),
+            Effect.provideService(Console.Console, quietConsole),
+            Effect.catchIf(
+              (error): error is CliError.ShowHelp =>
+                CliError.isCliError(error) && error._tag === "ShowHelp",
+              (request) =>
+                request.errors.length
+                  ? Effect.fail(
+                      new CommandLineInvalid({
+                        message: request.errors.map((error) => error.message).join("\n"),
+                      }),
+                    )
+                  : Effect.void,
+            ),
+          );
+          if (help) yield* renderer.help(formatHelpDocument(help));
+          if (requestedVersion !== undefined)
+            yield* renderer.result(result("version", { version: requestedVersion }));
+        }),
       ),
-    );
-    if (help) yield* renderer.help(formatHelpDocument(help));
-    if (requestedVersion !== undefined)
-      yield* renderer.result(result("version", { version: requestedVersion }));
-  }).pipe(renderCommandFailures);
+    ).pipe(
+      Effect.catchCause((cause) =>
+        Cause.hasInterruptsOnly(cause)
+          ? Effect.failCause(cause)
+          : Effect.flatMap(Renderer, (renderer) => renderer.failure(commandFailure(cause))),
+      ),
+    ),
+  );
 }

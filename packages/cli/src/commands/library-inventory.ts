@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 import { Command } from "effect/cli";
 import { Renderer } from "../terminal/renderer.js";
-import { handleLibraryCommand } from "../application.js";
+
 import { CommandMetadata } from "./metadata.js";
 import { localFlags } from "./parameters.js";
 import { encodeResult as result } from "./encode-result.js";
@@ -24,19 +24,16 @@ const machineInventoryMetadata = {
   interactive: false,
 } as const;
 
-export const inventoryCliCommand = Command.make("inventory", localFlags, (input) =>
-  handleLibraryCommand(
-    Effect.gen(function* () {
-      const renderer = yield* Renderer;
-      const library = yield* Library.Service;
-      const inventory = yield* renderer.withStatus(
-        "Scanning repository and harness skills",
-        library.inventory.refreshMachine,
-      );
-      yield* renderer.result(result("inventory", inventoryOutputContracts.inventory, inventory));
-    }),
-    input,
-  ),
+export const inventoryCliCommand = Command.make("inventory", localFlags, () =>
+  Effect.gen(function* () {
+    const renderer = yield* Renderer;
+    const library = yield* Library.Service;
+    const inventory = yield* renderer.withStatus(
+      "Scanning repository and harness skills",
+      library.inventory.refreshMachine,
+    );
+    yield* renderer.result(result("inventory", inventoryOutputContracts.inventory, inventory));
+  }),
 ).pipe(
   Command.withDescription(
     "Show every Skill folder found on this machine, its Git state, and refreshed installed skills.",

@@ -8,7 +8,8 @@ import { listAuthorSkits, AuthorListIdentityError } from "@smolai/skit-core/auth
 import { listAuthorInventory } from "../src/registry/authoring.js";
 import { SkitContractError } from "@smolai/skit-core/api";
 
-import { renderCommandFailures } from "../src/application.js";
+import { runCommandTree } from "../src/commands/runtime.js";
+import { Command } from "effect/cli";
 import type { ResolvedAuth } from "../src/registry/auth.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { registryApiFailureMessage } from "../src/registry/api-client.js";
@@ -41,7 +42,11 @@ const classifiedFailures = Effect.fn("AuthorListTest.classifiedFailures")(functi
   response: Response,
 ) {
   const interaction = yield* makeScriptedInteraction([]);
-  yield* renderCommandFailures(authorListCommand({ authState })).pipe(
+  yield* runCommandTree(
+    Command.make("author-list", {}, () => authorListCommand({ authState })),
+    [],
+    "test",
+  ).pipe(
     Effect.provide(interaction.layer),
     Effect.provide(registryHttpLayer(testHttpClientLayer(() => Effect.succeed(response)))),
     Effect.provide(NodeServices.layer),

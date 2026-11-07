@@ -1,15 +1,14 @@
 import { passiveCheckEnabled } from "./releases.js";
 import { noticeRelease } from "./platform/releases.js";
-import { skitConfigurationLayer } from "@smolai/skit-core/platform";
+import { cliLayer } from "./application.js";
 import { FetchHttpClient } from "effect/http";
-import { NodeRuntime, NodeServices } from "@effect/platform-node";
+import { NodeRuntime } from "@effect/platform-node";
 import { Effect, Fiber, Runtime } from "effect";
 import { commandActor } from "./commands/actor.js";
 import { skitCommand } from "./commands/tree.js";
 import { jsonRequested } from "./commands/parameters.js";
 import { runCommandTree } from "./commands/runtime.js";
 import { Renderer } from "./terminal/renderer.js";
-import { consoleRendererLayer } from "./terminal/console-renderer.js";
 
 import { cliBuild } from "./commands/build-info.js";
 
@@ -42,9 +41,7 @@ const program = (
     : command
 ).pipe(
   Effect.annotateLogs({ "skit.library.workflow": commandActor(skitCommand, argv) }),
-  Effect.provide(skitConfigurationLayer()),
-  Effect.provide(consoleRendererLayer(json)),
-  Effect.provide(NodeServices.layer),
+  Effect.provide(cliLayer(json)),
 );
 
 NodeRuntime.runMain(program, {

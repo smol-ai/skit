@@ -11,7 +11,7 @@ import {
 } from "@smolai/skit-core/universal/api";
 import { librarySyncCommand } from "../library/sync.js";
 import { result } from "../commands/result.js";
-import { commandFailure } from "../application.js";
+import { commandFailure } from "../commands/failure-classification.js";
 import { Renderer } from "../terminal/renderer.js";
 import { registryHttpLayer } from "../registry/registry-http.js";
 

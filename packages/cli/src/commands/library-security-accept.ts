@@ -1,11 +1,10 @@
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { handleLibraryCommand } from "../application.js";
+
 import { CommandMetadata } from "./metadata.js";
 import { securityOutputContracts } from "../library/security/output.js";
 import * as Library from "@smolai/skit-core/library";
 import { securityAcceptCommand } from "../library/security/accept.js";
-import { localFlags } from "./parameters.js";
 
 import { Renderer } from "../terminal/renderer.js";
 import { encodeResult as result } from "./encode-result.js";
@@ -31,28 +30,25 @@ const expiresAt = Flag.String("expires-at").pipe(
 
 export const securityAcceptCliCommand = Command.make(
   "accept",
-  { skill, finding, principal, rationale, expiresAt, ...localFlags },
-  ({ skill, finding, principal, rationale, expiresAt, home }) =>
-    handleLibraryCommand(
-      Effect.gen(function* () {
-        const renderer = yield* Renderer;
-        const library = yield* Library.Service;
-        const value = yield* securityAcceptCommand(
-          { acceptSecurityFindingEffect: library.acceptSecurityFinding },
-          {
-            query: skill,
-            fingerprint: finding,
-            principal,
-            rationale,
-            expiresAt: Option.getOrUndefined(expiresAt),
-          },
-        );
-        yield* renderer.result(
-          result("securityAccept", securityOutputContracts.securityAccept, value),
-        );
-      }),
-      { home },
-    ),
+  { skill, finding, principal, rationale, expiresAt },
+  ({ skill, finding, principal, rationale, expiresAt }) =>
+    Effect.gen(function* () {
+      const renderer = yield* Renderer;
+      const library = yield* Library.Service;
+      const value = yield* securityAcceptCommand(
+        { acceptSecurityFindingEffect: library.acceptSecurityFinding },
+        {
+          query: skill,
+          fingerprint: finding,
+          principal,
+          rationale,
+          expiresAt: Option.getOrUndefined(expiresAt),
+        },
+      );
+      yield* renderer.result(
+        result("securityAccept", securityOutputContracts.securityAccept, value),
+      );
+    }),
 ).pipe(
   Command.withDescription(
     "Accept one finding for installing one exact Skill version in your Library.",

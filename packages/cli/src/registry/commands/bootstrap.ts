@@ -2,7 +2,7 @@ import { Effect, Option } from "effect";
 import { Command } from "effect/cli";
 import { bootstrapServer } from "../bootstrap.js";
 import { Renderer } from "../../terminal/renderer.js";
-import { handleRegistryCommand } from "../../application.js";
+
 import { CommandMetadata } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
 import { jsonFlag, optionalString } from "../../commands/parameters.js";
@@ -20,24 +20,21 @@ export const serverBootstrapCliCommand = Command.make(
   "bootstrap",
   { config, env: environment, url, wrangler, json: jsonFlag },
   ({ config, env, url, wrangler }) =>
-    handleRegistryCommand(
-      Effect.gen(function* () {
-        const renderer = yield* Renderer;
-        const value = yield* bootstrapServer({
-          configPath: Option.getOrUndefined(config),
-          environment: Option.getOrUndefined(env),
-          origin: Option.getOrUndefined(url),
-          wrangler: Option.getOrUndefined(wrangler),
-        });
-        yield* renderer.result(
-          result("serverBootstrap", {
-            origin: value.origin,
-            status: value.status,
-          }),
-        );
-      }),
-      { home: Option.none() },
-    ),
+    Effect.gen(function* () {
+      const renderer = yield* Renderer;
+      const value = yield* bootstrapServer({
+        configPath: Option.getOrUndefined(config),
+        environment: Option.getOrUndefined(env),
+        origin: Option.getOrUndefined(url),
+        wrangler: Option.getOrUndefined(wrangler),
+      });
+      yield* renderer.result(
+        result("serverBootstrap", {
+          origin: value.origin,
+          status: value.status,
+        }),
+      );
+    }),
 ).pipe(
   Command.withDescription("Create the first operator for a deployed skit-server."),
   Command.withExamples([

@@ -66,15 +66,15 @@
           "valueName": "boolean",
           "description": "Replace the saved credential even if it is still valid."
         },
-        "home": {
-          "type": "string",
-          "valueName": "string",
-          "description": "Override the SKIT state directory."
-        },
         "json": {
           "type": "boolean",
           "valueName": "boolean",
           "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
         },
         "help": {
           "type": "boolean",
@@ -142,15 +142,15 @@
         }
       ],
       "flags": {
-        "home": {
-          "type": "string",
-          "valueName": "string",
-          "description": "Override the SKIT state directory."
-        },
         "json": {
           "type": "boolean",
           "valueName": "boolean",
           "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
         },
         "help": {
           "type": "boolean",
@@ -211,15 +211,15 @@
           "valueName": "string",
           "description": "Show one Registry credential."
         },
-        "home": {
-          "type": "string",
-          "valueName": "string",
-          "description": "Override the SKIT state directory."
-        },
         "json": {
           "type": "boolean",
           "valueName": "boolean",
           "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
         },
         "help": {
           "type": "boolean",
@@ -854,15 +854,15 @@
           "valueName": "string",
           "description": "A contact address for a reply. Only one the user gave you for this report."
         },
-        "home": {
-          "type": "string",
-          "valueName": "string",
-          "description": "Override the SKIT state directory."
-        },
         "json": {
           "type": "boolean",
           "valueName": "boolean",
           "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
         },
         "help": {
           "type": "boolean",
@@ -1058,15 +1058,15 @@
       "examples": [],
       "positionals": [],
       "flags": {
-        "home": {
-          "type": "string",
-          "valueName": "string",
-          "description": "Override the SKIT state directory."
-        },
         "json": {
           "type": "boolean",
           "valueName": "boolean",
           "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
         },
         "help": {
           "type": "boolean",
@@ -1121,15 +1121,15 @@
         }
       ],
       "flags": {
-        "home": {
-          "type": "string",
-          "valueName": "string",
-          "description": "Override the SKIT state directory."
-        },
         "json": {
           "type": "boolean",
           "valueName": "boolean",
           "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
         },
         "help": {
           "type": "boolean",
@@ -1192,15 +1192,15 @@
           "valueName": "string",
           "description": "Restore only if this reviewed recovery planId still matches. Omit to preview."
         },
-        "home": {
-          "type": "string",
-          "valueName": "string",
-          "description": "Override the SKIT state directory."
-        },
         "json": {
           "type": "boolean",
           "valueName": "boolean",
           "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
         },
         "help": {
           "type": "boolean",
@@ -1255,11 +1255,6 @@
         }
       ],
       "flags": {
-        "home": {
-          "type": "string",
-          "valueName": "string",
-          "description": "Override the SKIT state directory."
-        },
         "json": {
           "type": "boolean",
           "valueName": "boolean",
@@ -1269,6 +1264,11 @@
           "type": "string",
           "valueName": "string",
           "description": "Undo only the exact reviewed planId. Omit to preview without writing."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
         },
         "help": {
           "type": "boolean",
@@ -1417,15 +1417,15 @@
         }
       ],
       "flags": {
-        "home": {
-          "type": "string",
-          "valueName": "string",
-          "description": "Override the SKIT state directory."
-        },
         "json": {
           "type": "boolean",
           "valueName": "boolean",
           "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
         },
         "help": {
           "type": "boolean",
@@ -1491,15 +1491,15 @@
         }
       ],
       "flags": {
-        "home": {
-          "type": "string",
-          "valueName": "string",
-          "description": "Override the SKIT state directory."
-        },
         "json": {
           "type": "boolean",
           "valueName": "boolean",
           "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
         },
         "help": {
           "type": "boolean",
@@ -1554,15 +1554,15 @@
       ],
       "positionals": [],
       "flags": {
-        "home": {
-          "type": "string",
-          "valueName": "string",
-          "description": "Override the SKIT state directory."
-        },
         "json": {
           "type": "boolean",
           "valueName": "boolean",
           "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
         },
         "help": {
           "type": "boolean",
@@ -1628,15 +1628,15 @@
         }
       ],
       "flags": {
-        "home": {
-          "type": "string",
-          "valueName": "string",
-          "description": "Override the SKIT state directory."
-        },
         "json": {
           "type": "boolean",
           "valueName": "boolean",
           "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
         },
         "help": {
           "type": "boolean",
@@ -1683,15 +1683,15 @@
       "examples": [],
       "positionals": [],
       "flags": {
-        "home": {
-          "type": "string",
-          "valueName": "string",
-          "description": "Override the SKIT state directory."
-        },
         "json": {
           "type": "boolean",
           "valueName": "boolean",
           "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
         },
         "help": {
           "type": "boolean",
@@ -1745,15 +1745,15 @@
         }
       ],
       "flags": {
-        "home": {
-          "type": "string",
-          "valueName": "string",
-          "description": "Override the SKIT state directory."
-        },
         "json": {
           "type": "boolean",
           "valueName": "boolean",
           "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
         },
         "help": {
           "type": "boolean",
@@ -1807,15 +1807,15 @@
         }
       ],
       "flags": {
-        "home": {
-          "type": "string",
-          "valueName": "string",
-          "description": "Override the SKIT state directory."
-        },
         "json": {
           "type": "boolean",
           "valueName": "boolean",
           "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
         },
         "help": {
           "type": "boolean",
@@ -1869,15 +1869,15 @@
         }
       ],
       "flags": {
-        "home": {
-          "type": "string",
-          "valueName": "string",
-          "description": "Override the SKIT state directory."
-        },
         "json": {
           "type": "boolean",
           "valueName": "boolean",
           "description": "Emit structured JSON."
+        },
+        "home": {
+          "type": "string",
+          "valueName": "string",
+          "description": "Override the SKIT state directory."
         },
         "help": {
           "type": "boolean",

@@ -6,7 +6,7 @@ import { doctorOutputContracts } from "../library/doctor/output.js";
 import * as Library from "@smolai/skit-core/library";
 import { libraryDoctorReport, inspectNativeDiscovery } from "@smolai/skit-core/library/inventory";
 import { Renderer } from "../terminal/renderer.js";
-import { handleLibraryCommand } from "../application.js";
+
 import { CommandMetadata } from "./metadata.js";
 
 import { enableOutputContracts } from "../library/enable.js";
@@ -36,45 +36,42 @@ export const doctorCliCommand = Command.make(
     ),
   },
   (input) =>
-    handleLibraryCommand(
-      Effect.gen(function* () {
-        const paths = yield* SkitConfiguration;
-        const options = inventoryRootOptions(input, paths);
-        const renderer = yield* Renderer;
-        const library = yield* Library.Service;
-        /** Diagnose the freshly saved inventory; the report itself is pure. */
-        const doctor = Effect.gen(function* () {
-          const inventory = yield* renderer.withStatus(
-            "Scanning harness installations",
-            library.inventory.refresh,
-          );
-          const native = yield* renderer.withStatus(
-            "Checking native harness skill discovery",
-            inspectNativeDiscovery(inventory, { ...options, cwd: process.cwd() }),
-          );
-          return { ...libraryDoctorReport(inventory), ...native };
-        });
-        const value = yield* doctor;
-        yield* renderer.result(
-          result("doctor", doctorOutputContracts.doctor, value, value.ok ? undefined : 12),
+    Effect.gen(function* () {
+      const paths = yield* SkitConfiguration;
+      const options = inventoryRootOptions(input, paths);
+      const renderer = yield* Renderer;
+      const library = yield* Library.Service;
+      /** Diagnose the freshly saved inventory; the report itself is pure. */
+      const doctor = Effect.gen(function* () {
+        const inventory = yield* renderer.withStatus(
+          "Scanning harness installations",
+          library.inventory.refresh,
         );
-        if (!input.reportOnly && promptsAllowed({ json: input.json })) {
-          const changed = yield* presentDoctorCleanup(
-            value.listing_budgets,
-            options,
-            input.days,
-            input.dryRun,
-          ).pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(false)));
-          if (changed) {
-            const checked = yield* doctor;
-            yield* renderer.result(
-              result("doctor", doctorOutputContracts.doctor, checked, checked.ok ? 0 : 12),
-            );
-          }
+        const native = yield* renderer.withStatus(
+          "Checking native harness skill discovery",
+          inspectNativeDiscovery(inventory, { ...options, cwd: process.cwd() }),
+        );
+        return { ...libraryDoctorReport(inventory), ...native };
+      });
+      const value = yield* doctor;
+      yield* renderer.result(
+        result("doctor", doctorOutputContracts.doctor, value, value.ok ? undefined : 12),
+      );
+      if (!input.reportOnly && promptsAllowed({ json: input.json })) {
+        const changed = yield* presentDoctorCleanup(
+          value.listing_budgets,
+          options,
+          input.days,
+          input.dryRun,
+        ).pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(false)));
+        if (changed) {
+          const checked = yield* doctor;
+          yield* renderer.result(
+            result("doctor", doctorOutputContracts.doctor, checked, checked.ok ? 0 : 12),
+          );
         }
-      }),
-      input,
-    ),
+      }
+    }),
 ).pipe(
   Command.withDescription(
     "Diagnose local skills and interactively review over-budget skill context.",

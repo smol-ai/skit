@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Layer } from "effect";
-import { libraryApplicationLayer } from "../src/application.js";
+import { libraryLayer } from "../src/application.js";
 import { syncAuthorWorkspace } from "../src/author/sync/workflow.js";
 import { parseAuthorDestination } from "@smolai/skit-core/author";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
@@ -41,9 +41,7 @@ const runAuthorSync = (
         Effect.provide(registryHttpLayer(testHttpClientLayer(transport))),
         Effect.provide(authorLayer(historyHome)),
         // A first sync without workspace.json adopts an id from this home's Library (A3).
-        Effect.provide(
-          libraryApplicationLayer().pipe(Layer.provide(skitConfigurationLayer(historyHome))),
-        ),
+        Effect.provide(libraryLayer().pipe(Layer.provide(skitConfigurationLayer(historyHome)))),
         // The environment's token is for the test Registry only.
         Effect.provide(registryCredentialLayer("https://registry.example")),
       ),

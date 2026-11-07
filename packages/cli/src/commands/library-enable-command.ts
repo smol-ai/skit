@@ -5,7 +5,6 @@ import { type InstallScope as Scope } from "@smolai/skit-core/library";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { resolve } from "node:path";
-import { handleLibraryCommand } from "../application.js";
 
 import { CommandMetadata } from "./metadata.js";
 import { enableOutputContracts, presentSetEnabled } from "../library/enable.js";
@@ -54,41 +53,38 @@ export const setEnabledCliCommand = (enabled: boolean) => {
       ...localFlags,
     },
     (input) =>
-      handleLibraryCommand(
-        Effect.gen(function* () {
-          if (input.global && Option.isSome(input.repo))
-            return yield* new OptionCombinationInvalid({
-              detail: "Choose one scope: --global or --repo <path>",
-            });
-          const selectedSubject = Option.getOrUndefined(input.subject);
-          const selectedScope: Scope | undefined = input.global
-            ? { kind: "global" }
-            : Option.getOrUndefined(
-                Option.map(input.repo, (root): Scope => ({
-                  kind: "repository",
-                  root: resolve(root),
-                })),
-              );
-          const selectedInvocation = Option.getOrUndefined(input.invocation) as
-            | InvocationOption
-            | undefined;
-          const interactive = promptsAllowed({ json: input.json });
-
-          yield* presentSetEnabled({
-            action,
-            enabled,
-            subject: selectedSubject,
-            scope: selectedScope,
-            cwd: resolve(process.cwd()),
-            all: input.all,
-            allowDuplicate: input.allowDuplicate,
-            invocation: selectedInvocation,
-            dryRun: input.dryRun,
-            interactive,
+      Effect.gen(function* () {
+        if (input.global && Option.isSome(input.repo))
+          return yield* new OptionCombinationInvalid({
+            detail: "Choose one scope: --global or --repo <path>",
           });
-        }),
-        input,
-      ),
+        const selectedSubject = Option.getOrUndefined(input.subject);
+        const selectedScope: Scope | undefined = input.global
+          ? { kind: "global" }
+          : Option.getOrUndefined(
+              Option.map(input.repo, (root): Scope => ({
+                kind: "repository",
+                root: resolve(root),
+              })),
+            );
+        const selectedInvocation = Option.getOrUndefined(input.invocation) as
+          | InvocationOption
+          | undefined;
+        const interactive = promptsAllowed({ json: input.json });
+
+        yield* presentSetEnabled({
+          action,
+          enabled,
+          subject: selectedSubject,
+          scope: selectedScope,
+          cwd: resolve(process.cwd()),
+          all: input.all,
+          allowDuplicate: input.allowDuplicate,
+          invocation: selectedInvocation,
+          dryRun: input.dryRun,
+          interactive,
+        });
+      }),
   ).pipe(
     Command.withDescription(
       `${enabled ? "Enable" : "Disable"} Skills from your Library for every harness at a scope.`,

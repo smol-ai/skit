@@ -11,7 +11,7 @@ import { inspectSource } from "@smolai/skit-core/library/source";
 import { HarnessMetadataInvalid } from "@smolai/skit-core/harnesses";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { productionUrlTestClient } from "./helpers/http-test-client.js";
-import { commandApplicationLayer } from "../src/application.js";
+import { cliLayer } from "../src/application.js";
 import { commandDescriptions } from "../src/commands/manifest.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { classifyFailure, failureExitCodes } from "../src/commands/failure-classification.js";
@@ -33,7 +33,7 @@ describe("declared exit codes", () => {
         (code) => !NON_FAILURE_CODES.has(code) && !produced.has(code),
       );
       expect(unproducible).toEqual([]);
-    }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-exit-codes-test"))),
+    }).pipe(Effect.provide(cliLayer(false, "/tmp/skit-exit-codes-test"))),
   );
 
   it.effect("every exit status in the table is declared, including partial update failure", () =>
@@ -45,7 +45,7 @@ describe("declared exit codes", () => {
       // rather than only a shared unexpected failure.
       const update = commands.find((command) => command.path.join(" ") === "update");
       expect(update?.successExitCodes).toContain(1);
-    }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-exit-taxonomy-test"))),
+    }).pipe(Effect.provide(cliLayer(false, "/tmp/skit-exit-taxonomy-test"))),
   );
 
   // The parser rejects an unknown flag or extra argument on any command before its handler runs.
@@ -56,7 +56,7 @@ describe("declared exit codes", () => {
         .filter((command) => !command.successExitCodes.includes(failureExitCodes.INVALID_ARGUMENT))
         .map((command) => command.path.join(" "));
       expect(undeclared).toEqual([]);
-    }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-exit-parse-test"))),
+    }).pipe(Effect.provide(cliLayer(false, "/tmp/skit-exit-parse-test"))),
   );
 
   // A missing effects annotation publishes `capabilities: []`, which reads as "no side effects".
@@ -67,7 +67,7 @@ describe("declared exit codes", () => {
         .filter((command) => command.effects.capabilities.length === 0)
         .map((command) => command.path.join(" "));
       expect(undeclared).toEqual([]);
-    }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-effects-test"))),
+    }).pipe(Effect.provide(cliLayer(false, "/tmp/skit-effects-test"))),
   );
 
   test("a named failure classifies by its own code and remediation", () => {

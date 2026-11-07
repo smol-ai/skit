@@ -16,7 +16,7 @@ import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Cause, Effect, Option } from "effect";
 import { Command, Flag } from "effect/cli";
 import { resolve } from "node:path";
-import { commandFailure, handleSourceCommand } from "../application.js";
+import { commandFailure } from "./failure-classification.js";
 import { CommandMetadata } from "./metadata.js";
 
 import { inventoryRootOptions, localFlags, optionalString } from "./parameters.js";
@@ -114,207 +114,204 @@ export const setupCliCommand = Command.make(
     ...localFlags,
   },
   (input) =>
-    handleSourceCommand(
-      Effect.gen(function* () {
-        const paths = yield* SkitConfiguration;
-        const selectedHome = paths.skitHome;
-        const apply = Option.getOrUndefined(input.apply);
-        const reviewId = Option.getOrUndefined(input.review);
-        const compare = Option.getOrUndefined(input.compare);
-        const reviewedPlanId = Option.getOrUndefined(input.reviewed);
-        const duplicates = Option.getOrUndefined(input.duplicates);
-        const workDir = Option.getOrUndefined(input.workDir);
-        const explicit =
-          input.onlySelected ||
-          input.selectPath.length > 0 ||
-          input.selectSource.length > 0 ||
-          input.removePath.length > 0 ||
-          input.reconcileSkill.length > 0 ||
-          input.useRetained.length > 0 ||
-          input.useCopy.length > 0;
-        const choice = {
-          ...(explicit
-            ? {
-                selection: {
-                  reconcileSkillIds: input.reconcileSkill,
-                  useRetainedSkillIds: input.useRetained,
-                  useCopyPaths: input.useCopy.map((path) => resolve(path)),
-                  sourceIds: input.selectSource,
-                  copyPaths: input.selectPath.map((path) => resolve(path)),
-                  removePaths: input.removePath.map((path) => resolve(path)),
-                },
-              }
-            : {}),
-          ...(duplicates === undefined ? {} : { duplicates }),
-        };
-        const interactive =
-          apply === undefined &&
-          reviewId === undefined &&
-          compare === undefined &&
-          !input.dryRun &&
-          promptsAllowed({ json: input.json, needsStdout: true });
-        const renderer = yield* Renderer;
-        const context = {
-          home: selectedHome,
-          inventory: inventoryRootOptions(input, paths),
-          ...(workDir === undefined ? {} : { workDir }),
-        };
-        const execution = yield* Effect.result(
-          Effect.gen(function* () {
-            const options = {
-              libraryHome: selectedHome,
-              inventory: context.inventory,
-              probePath: process.env.PATH,
-              skillsStateHome: paths.xdgStateHome,
-            };
-            const manageOptions = {
-              installOptions: context.inventory,
-            };
-            if (
-              [apply, reviewId, compare].filter((value) => value !== undefined).length > 1 ||
-              (apply !== undefined && input.dryRun)
-            )
-              return yield* new OptionCombinationInvalid({
-                detail: "Use --review to preview or --apply to apply, one at a time",
-              });
-            if (
-              (duplicates !== undefined || explicit) &&
-              apply === undefined &&
-              reviewId === undefined &&
-              compare === undefined
-            )
-              return yield* new OptionCombinationInvalid({
-                detail:
-                  "Selections require --review, --compare or --apply; duplicate decisions apply to review/apply",
-              });
-            if (reviewedPlanId !== undefined && apply === undefined)
-              return yield* new OptionCombinationInvalid({
-                detail: "--reviewed requires --apply",
-              });
-            const selected = {
-              options,
-              manageOptions,
-              ...(workDir === undefined ? {} : { workDirFlag: workDir }),
-              ...choice,
-            };
-            if (compare !== undefined) {
-              if (
-                duplicates !== undefined ||
-                input.selectSource.length ||
-                input.reconcileSkill.length ||
-                input.useRetained.length ||
-                input.useCopy.length ||
-                input.removePath.length ||
-                input.onlySelected
-              )
-                return yield* new OptionCombinationInvalid({
-                  detail: "--compare accepts --select-path choices only",
-                });
-              const opened = yield* openSetupCommandReview({
-                ...selected,
-                planId: compare,
-              });
-              const copies = yield* opened.review.compareCopies(choice.selection?.copyPaths ?? []);
-              const discovery = setupDiscoveryOutput(opened.scan, opened.review, context);
-              return result("setupComparison", setupOutputContracts.setupComparison, {
-                planId: opened.planId,
-                copies,
-                actions: [
-                  setupScanAction(context),
-                  ...discovery.choices
-                    .filter(
-                      (item) =>
-                        (item.kind === "copy" && copies.some((copy) => copy.path === item.path)) ||
-                        (item.kind === "version" &&
-                          opened.scan.changes?.some(
-                            (fact) =>
-                              fact.skillId === item.skillId &&
-                              copies.some((copy) => copy.name === fact.name),
-                          )),
-                    )
-                    .flatMap((item) => item.actions.filter((action) => action.rel === "review")),
-                ],
-              });
-            }
-            if (reviewId !== undefined) {
-              const prepared = yield* prepareSetupCommand({
-                ...selected,
-                planId: reviewId,
-              });
-              return result("setupReview", setupOutputContracts.setupReview, {
-                planId: prepared.planId,
-                reviewId: prepared.plan.reviewId,
-                hasChanges: prepared.plan.hasChanges,
-                canApply: prepared.plan.canApply,
-                summary: setupReviewSummary(prepared.plan.summary),
-                actions: [
-                  setupScanAction(context),
-                  setupReviewAction(context, prepared.planId, choice),
-                  ...setupDiscoveryOutput(prepared.scan, prepared.review, context)
-                    .choices.filter(
-                      (item) =>
-                        item.kind === "version" &&
-                        prepared.plan.summary.changes.some((fact) => fact.skillId === item.skillId),
-                    )
-                    .flatMap((item) => item.actions),
-                  ...(prepared.plan.canApply
-                    ? [setupApplyAction(context, prepared.planId, prepared.plan.reviewId, choice)]
-                    : []),
-                ],
-              });
-            }
-            if (apply !== undefined) {
-              const applied = yield* setupApplyCommand({
-                ...selected,
-                planId: apply,
-                ...(reviewedPlanId === undefined ? {} : { reviewedPlanId }),
-              });
-              return result("setupApplied", setupOutputContracts.setupApplied, {
-                ...applied,
-                actions: setupResultActions(context, applied),
-              });
-            }
-            yield* setupCommand({
-              ...(workDir === undefined ? {} : { workDirFlag: workDir }),
-              interactive,
-              dryRun: input.dryRun || input.json,
-              options,
-              manageOptions,
-            });
-            if (interactive) return undefined;
-            const setup = {
-              ...options,
-              repositoryRoots: workDir ? [resolve(workDir)] : [],
-              persistRoots: false,
-            };
-            const review = yield* openSetupReview(setup, manageOptions);
-            return result(
-              "setup",
-              setupOutputContracts.setup,
-              setupDiscoveryOutput(review.scan, review, context),
-            );
-          }),
-        );
-        if (execution._tag === "Failure") {
-          const failed = commandFailure(Cause.fail(execution.failure));
-          return yield* renderer.result(
-            result(
-              "setupFailed",
-              setupOutputContracts.setupFailed,
-              {
-                code: failed.code,
-                message: failed.message,
-                remediation: failed.remediation,
-                actions: [setupScanAction(context), setupRecoveryListAction(selectedHome)],
+    Effect.gen(function* () {
+      const paths = yield* SkitConfiguration;
+      const selectedHome = paths.skitHome;
+      const apply = Option.getOrUndefined(input.apply);
+      const reviewId = Option.getOrUndefined(input.review);
+      const compare = Option.getOrUndefined(input.compare);
+      const reviewedPlanId = Option.getOrUndefined(input.reviewed);
+      const duplicates = Option.getOrUndefined(input.duplicates);
+      const workDir = Option.getOrUndefined(input.workDir);
+      const explicit =
+        input.onlySelected ||
+        input.selectPath.length > 0 ||
+        input.selectSource.length > 0 ||
+        input.removePath.length > 0 ||
+        input.reconcileSkill.length > 0 ||
+        input.useRetained.length > 0 ||
+        input.useCopy.length > 0;
+      const choice = {
+        ...(explicit
+          ? {
+              selection: {
+                reconcileSkillIds: input.reconcileSkill,
+                useRetainedSkillIds: input.useRetained,
+                useCopyPaths: input.useCopy.map((path) => resolve(path)),
+                sourceIds: input.selectSource,
+                copyPaths: input.selectPath.map((path) => resolve(path)),
+                removePaths: input.removePath.map((path) => resolve(path)),
               },
-              failed.exitCode,
-            ),
+            }
+          : {}),
+        ...(duplicates === undefined ? {} : { duplicates }),
+      };
+      const interactive =
+        apply === undefined &&
+        reviewId === undefined &&
+        compare === undefined &&
+        !input.dryRun &&
+        promptsAllowed({ json: input.json, needsStdout: true });
+      const renderer = yield* Renderer;
+      const context = {
+        home: selectedHome,
+        inventory: inventoryRootOptions(input, paths),
+        ...(workDir === undefined ? {} : { workDir }),
+      };
+      const execution = yield* Effect.result(
+        Effect.gen(function* () {
+          const options = {
+            libraryHome: selectedHome,
+            inventory: context.inventory,
+            probePath: process.env.PATH,
+            skillsStateHome: paths.xdgStateHome,
+          };
+          const manageOptions = {
+            installOptions: context.inventory,
+          };
+          if (
+            [apply, reviewId, compare].filter((value) => value !== undefined).length > 1 ||
+            (apply !== undefined && input.dryRun)
+          )
+            return yield* new OptionCombinationInvalid({
+              detail: "Use --review to preview or --apply to apply, one at a time",
+            });
+          if (
+            (duplicates !== undefined || explicit) &&
+            apply === undefined &&
+            reviewId === undefined &&
+            compare === undefined
+          )
+            return yield* new OptionCombinationInvalid({
+              detail:
+                "Selections require --review, --compare or --apply; duplicate decisions apply to review/apply",
+            });
+          if (reviewedPlanId !== undefined && apply === undefined)
+            return yield* new OptionCombinationInvalid({
+              detail: "--reviewed requires --apply",
+            });
+          const selected = {
+            options,
+            manageOptions,
+            ...(workDir === undefined ? {} : { workDirFlag: workDir }),
+            ...choice,
+          };
+          if (compare !== undefined) {
+            if (
+              duplicates !== undefined ||
+              input.selectSource.length ||
+              input.reconcileSkill.length ||
+              input.useRetained.length ||
+              input.useCopy.length ||
+              input.removePath.length ||
+              input.onlySelected
+            )
+              return yield* new OptionCombinationInvalid({
+                detail: "--compare accepts --select-path choices only",
+              });
+            const opened = yield* openSetupCommandReview({
+              ...selected,
+              planId: compare,
+            });
+            const copies = yield* opened.review.compareCopies(choice.selection?.copyPaths ?? []);
+            const discovery = setupDiscoveryOutput(opened.scan, opened.review, context);
+            return result("setupComparison", setupOutputContracts.setupComparison, {
+              planId: opened.planId,
+              copies,
+              actions: [
+                setupScanAction(context),
+                ...discovery.choices
+                  .filter(
+                    (item) =>
+                      (item.kind === "copy" && copies.some((copy) => copy.path === item.path)) ||
+                      (item.kind === "version" &&
+                        opened.scan.changes?.some(
+                          (fact) =>
+                            fact.skillId === item.skillId &&
+                            copies.some((copy) => copy.name === fact.name),
+                        )),
+                  )
+                  .flatMap((item) => item.actions.filter((action) => action.rel === "review")),
+              ],
+            });
+          }
+          if (reviewId !== undefined) {
+            const prepared = yield* prepareSetupCommand({
+              ...selected,
+              planId: reviewId,
+            });
+            return result("setupReview", setupOutputContracts.setupReview, {
+              planId: prepared.planId,
+              reviewId: prepared.plan.reviewId,
+              hasChanges: prepared.plan.hasChanges,
+              canApply: prepared.plan.canApply,
+              summary: setupReviewSummary(prepared.plan.summary),
+              actions: [
+                setupScanAction(context),
+                setupReviewAction(context, prepared.planId, choice),
+                ...setupDiscoveryOutput(prepared.scan, prepared.review, context)
+                  .choices.filter(
+                    (item) =>
+                      item.kind === "version" &&
+                      prepared.plan.summary.changes.some((fact) => fact.skillId === item.skillId),
+                  )
+                  .flatMap((item) => item.actions),
+                ...(prepared.plan.canApply
+                  ? [setupApplyAction(context, prepared.planId, prepared.plan.reviewId, choice)]
+                  : []),
+              ],
+            });
+          }
+          if (apply !== undefined) {
+            const applied = yield* setupApplyCommand({
+              ...selected,
+              planId: apply,
+              ...(reviewedPlanId === undefined ? {} : { reviewedPlanId }),
+            });
+            return result("setupApplied", setupOutputContracts.setupApplied, {
+              ...applied,
+              actions: setupResultActions(context, applied),
+            });
+          }
+          yield* setupCommand({
+            ...(workDir === undefined ? {} : { workDirFlag: workDir }),
+            interactive,
+            dryRun: input.dryRun || input.json,
+            options,
+            manageOptions,
+          });
+          if (interactive) return undefined;
+          const setup = {
+            ...options,
+            repositoryRoots: workDir ? [resolve(workDir)] : [],
+            persistRoots: false,
+          };
+          const review = yield* openSetupReview(setup, manageOptions);
+          return result(
+            "setup",
+            setupOutputContracts.setup,
+            setupDiscoveryOutput(review.scan, review, context),
           );
-        }
-        if (execution.success) yield* renderer.result(execution.success);
-      }),
-      input,
-    ),
+        }),
+      );
+      if (execution._tag === "Failure") {
+        const failed = commandFailure(Cause.fail(execution.failure));
+        return yield* renderer.result(
+          result(
+            "setupFailed",
+            setupOutputContracts.setupFailed,
+            {
+              code: failed.code,
+              message: failed.message,
+              remediation: failed.remediation,
+              actions: [setupScanAction(context), setupRecoveryListAction(selectedHome)],
+            },
+            failed.exitCode,
+          ),
+        );
+      }
+      if (execution.success) yield* renderer.result(execution.success);
+    }),
 ).pipe(
   Command.withDescription(
     "Find the skills already on this machine and bring them under SKIT: guided in a terminal, or review with --json and apply with --apply.",

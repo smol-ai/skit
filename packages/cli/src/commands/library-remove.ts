@@ -1,6 +1,5 @@
 import { Effect } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
 import { removeOutputContracts } from "../library/remove/output.js";
 import * as Library from "@smolai/skit-core/library";
@@ -20,25 +19,22 @@ export const removeCliCommand = Command.make(
   "remove",
   { subject, dryRun, ...localFlags },
   (input) =>
-    handleLibraryCommand(
-      Effect.gen(function* () {
-        const renderer = yield* Renderer;
-        const library = yield* Library.Service;
-        const outcome = yield* renderer.withStatus(
-          input.dryRun ? "Planning Collection removal" : "Removing retained Collection",
-          library.remove({
-            query: input.subject,
-            dryRun: input.dryRun,
-          }),
+    Effect.gen(function* () {
+      const renderer = yield* Renderer;
+      const library = yield* Library.Service;
+      const outcome = yield* renderer.withStatus(
+        input.dryRun ? "Planning Collection removal" : "Removing retained Collection",
+        library.remove({
+          query: input.subject,
+          dryRun: input.dryRun,
+        }),
+      );
+      if (outcome.kind === "plan")
+        return yield* renderer.result(
+          result("removePlan", removeOutputContracts.removePlan, outcome.value),
         );
-        if (outcome.kind === "plan")
-          return yield* renderer.result(
-            result("removePlan", removeOutputContracts.removePlan, outcome.value),
-          );
-        yield* renderer.result(result("remove", removeOutputContracts.remove, outcome.value));
-      }),
-      input,
-    ),
+      yield* renderer.result(result("remove", removeOutputContracts.remove, outcome.value));
+    }),
 ).pipe(
   Command.withDescription(
     "Remove a Collection from your Library and the skills SKIT installed from it.",

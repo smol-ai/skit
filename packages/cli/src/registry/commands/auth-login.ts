@@ -1,10 +1,10 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { handleRegistryCommand } from "../../application.js";
+
 import { CommandMetadata, credentialStoreSubprocesses } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import { homeFlag, jsonFlag, jsonRequested } from "../../commands/parameters.js";
+import { jsonFlag, jsonRequested } from "../../commands/parameters.js";
 import { Renderer } from "../../terminal/renderer.js";
 import { result } from "../../commands/result.js";
 import { personReachable, promptsAllowed } from "../../terminal/interactivity.js";
@@ -30,31 +30,26 @@ const scopes = Flag.String("scopes").pipe(
 
 export const authLoginCliCommand = Command.make(
   "login",
-  { registry, alias, scopes, relogin, home: homeFlag, json: jsonFlag },
-  ({ registry, alias, scopes, relogin, home }) =>
-    handleRegistryCommand(
-      Effect.gen(function* () {
-        const paths = yield* SkitConfiguration;
+  { registry, alias, scopes, relogin, json: jsonFlag },
+  ({ registry, alias, scopes, relogin }) =>
+    Effect.gen(function* () {
+      const paths = yield* SkitConfiguration;
 
-        const selectedHome = paths.skitHome;
-        const renderer = yield* Renderer;
-        const value = yield* authLoginCommand({
-          registry: Option.getOrUndefined(registry),
-          alias: Option.getOrUndefined(alias),
-          scopes: Option.getOrElse(scopes, () => ["library:sync"]),
-          home: selectedHome,
-          relogin,
-          interactive: promptsAllowed({ json: jsonRequested() }),
-          browserApproval: personReachable(),
-        });
-        yield* renderer.result(
-          "verificationUri" in value
-            ? result("authLoginPending", value)
-            : result("authLogin", value),
-        );
-      }),
-      { home },
-    ),
+      const selectedHome = paths.skitHome;
+      const renderer = yield* Renderer;
+      const value = yield* authLoginCommand({
+        registry: Option.getOrUndefined(registry),
+        alias: Option.getOrUndefined(alias),
+        scopes: Option.getOrElse(scopes, () => ["library:sync"]),
+        home: selectedHome,
+        relogin,
+        interactive: promptsAllowed({ json: jsonRequested() }),
+        browserApproval: personReachable(),
+      });
+      yield* renderer.result(
+        "verificationUri" in value ? result("authLoginPending", value) : result("authLogin", value),
+      );
+    }),
 ).pipe(
   Command.withDescription(
     "Reuse saved authentication or sign in by approving this login in your browser, and store a CLI credential in the system keychain, or ~/.skit/auth.json without one.",

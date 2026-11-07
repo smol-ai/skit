@@ -1,14 +1,14 @@
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
-import { handlePlatformCommand } from "./application.js";
+
 import { CommandMetadata, credentialStoreReadSubprocesses } from "./commands/metadata.js";
 import { outputContracts } from "./commands/output-contracts.js";
-import { homeFlag, jsonFlag, optionalString } from "./commands/parameters.js";
+import { jsonFlag, optionalString } from "./commands/parameters.js";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { feedbackInput } from "./feedback/send.js";
 import { submitFeedback } from "./registry/feedback.js";
 import { Renderer } from "./terminal/renderer.js";
-import { registryHttpLayer } from "./registry/registry-http.js";
+
 import { result } from "./commands/result.js";
 
 const text = Argument.String("message").pipe(
@@ -36,29 +36,26 @@ export const feedbackSendCliCommand = Command.make(
       "email",
       "A contact address for a reply. Only one the user gave you for this report.",
     ),
-    home: homeFlag,
+
     json: jsonFlag,
   },
   (options) =>
-    handlePlatformCommand(
-      Effect.gen(function* () {
-        const { skitHome } = yield* SkitConfiguration;
-        const renderer = yield* Renderer;
-        const input = yield* feedbackInput({
-          text: Option.getOrUndefined(options.text),
-          message: Option.getOrUndefined(options.message),
-          harness: Option.getOrUndefined(options.harness),
-          model: Option.getOrUndefined(options.model),
-          email: Option.getOrUndefined(options.email),
-        });
-        const sent = yield* submitFeedback(input, {
-          signedIn: options.signedIn,
-          home: skitHome,
-        });
-        yield* renderer.result(result("feedbackSend", sent));
-      }).pipe(Effect.provide(registryHttpLayer())),
-      { home: options.home },
-    ),
+    Effect.gen(function* () {
+      const { skitHome } = yield* SkitConfiguration;
+      const renderer = yield* Renderer;
+      const input = yield* feedbackInput({
+        text: Option.getOrUndefined(options.text),
+        message: Option.getOrUndefined(options.message),
+        harness: Option.getOrUndefined(options.harness),
+        model: Option.getOrUndefined(options.model),
+        email: Option.getOrUndefined(options.email),
+      });
+      const sent = yield* submitFeedback(input, {
+        signedIn: options.signedIn,
+        home: skitHome,
+      });
+      yield* renderer.result(result("feedbackSend", sent));
+    }),
 ).pipe(
   Command.withDescription(
     "Tell SKIT's maintainers about friction with SKIT itself: an unclear error, a gap in the docs, a step that took longer than it should.",
