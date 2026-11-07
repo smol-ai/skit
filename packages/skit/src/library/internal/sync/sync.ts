@@ -142,10 +142,13 @@ export interface SyncOutcome {
   readonly _tag: "Sync";
   readonly result: SyncResult;
 }
-class SyncStopped extends Schema.TaggedError<SyncStopped>()("Library.SyncStopped", {
-  operationId: OperationId,
-  reason: SetupStopReason,
-}) {
+class SyncStopped extends Schema.TaggedError<SyncStopped, { readonly brand: unique symbol }>()(
+  "Library.SyncStopped",
+  {
+    operationId: OperationId,
+    reason: SetupStopReason,
+  },
+) {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT";
   readonly remediation =

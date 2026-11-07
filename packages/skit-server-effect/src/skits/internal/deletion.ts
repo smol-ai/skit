@@ -31,12 +31,15 @@ interface SkitDeletePlan {
   readonly release_versions: ReadonlyArray<string>;
 }
 
-class DeleteRequiresPrivate extends Schema.TaggedError<DeleteRequiresPrivate>()(
-  "SkitDelete.RequiresPrivate",
-  {},
-) {}
+class DeleteRequiresPrivate extends Schema.TaggedError<
+  DeleteRequiresPrivate,
+  { readonly brand: unique symbol }
+>()("SkitDelete.RequiresPrivate", {}) {}
 
-class DeleteNotFound extends Schema.TaggedError<DeleteNotFound>()("SkitDelete.NotFound", {}) {}
+class DeleteNotFound extends Schema.TaggedError<
+  DeleteNotFound,
+  { readonly brand: unique symbol }
+>()("SkitDelete.NotFound", {}) {}
 
 export interface Deletion {
   readonly planDelete: (

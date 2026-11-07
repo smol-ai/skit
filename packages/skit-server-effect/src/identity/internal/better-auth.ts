@@ -37,19 +37,19 @@ interface SessionIdentity {
   readonly authorizationGeneration: number;
 }
 
-export class BetterAuthError extends Schema.TaggedError<BetterAuthError>()(
-  "BetterAuth.AdapterError",
-  { operation: Schema.String, cause: Schema.Defect() },
-) {}
+export class BetterAuthError extends Schema.TaggedError<
+  BetterAuthError,
+  { readonly brand: unique symbol }
+>()("BetterAuth.AdapterError", { operation: Schema.String, cause: Schema.Defect() }) {}
 
-class InvalidUsername extends Schema.TaggedError<InvalidUsername>()(
-  "BetterAuth.InvalidUsername",
-  {},
-) {}
-class UsernameUnavailable extends Schema.TaggedError<UsernameUnavailable>()(
-  "BetterAuth.UsernameUnavailable",
-  {},
-) {}
+class InvalidUsername extends Schema.TaggedError<
+  InvalidUsername,
+  { readonly brand: unique symbol }
+>()("BetterAuth.InvalidUsername", {}) {}
+class UsernameUnavailable extends Schema.TaggedError<
+  UsernameUnavailable,
+  { readonly brand: unique symbol }
+>()("BetterAuth.UsernameUnavailable", {}) {}
 
 export interface BetterAuthService {
   readonly handle: (request: Request) => Effect.Effect<Response, BetterAuthError>;

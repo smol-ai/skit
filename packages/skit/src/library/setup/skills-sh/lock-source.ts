@@ -241,18 +241,18 @@ export const lockMatches = Effect.fn("Setup.lockMatches")(function* (
   return matches;
 });
 
-class SkillsShImportEvidenceInvalid extends Schema.TaggedError<SkillsShImportEvidenceInvalid>()(
-  "SkillsShImportEvidenceInvalid",
-  {
-    skillName: Schema.String,
-    reason: Schema.Literals([
-      "observation-missing",
-      "contested-observation",
-      "source-unresolvable",
-      "lock-changed",
-    ]),
-  },
-) {}
+class SkillsShImportEvidenceInvalid extends Schema.TaggedError<
+  SkillsShImportEvidenceInvalid,
+  { readonly brand: unique symbol }
+>()("SkillsShImportEvidenceInvalid", {
+  skillName: Schema.String,
+  reason: Schema.Literals([
+    "observation-missing",
+    "contested-observation",
+    "source-unresolvable",
+    "lock-changed",
+  ]),
+}) {}
 
 const lockSkillPath = (lockPath: string | undefined, name: string) => {
   if (!lockPath) return name;

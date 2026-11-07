@@ -84,20 +84,29 @@ export const revisionId = (revision: Revision) =>
 export type Kind = "tree" | "revision";
 
 /** Something the store was asked for and does not hold. */
-class StoreMissing extends Schema.TaggedError<StoreMissing>()("History.StoreMissing", {
-  kind: Schema.Literals(["tree", "revision"]),
-  hash: Hash,
-}) {}
+class StoreMissing extends Schema.TaggedError<StoreMissing, { readonly brand: unique symbol }>()(
+  "History.StoreMissing",
+  {
+    kind: Schema.Literals(["tree", "revision"]),
+    hash: Hash,
+  },
+) {}
 
 /** Stored bytes that no longer match the identity they are stored under. */
-export class StoreCorrupt extends Schema.TaggedError<StoreCorrupt>()("History.StoreCorrupt", {
+export class StoreCorrupt extends Schema.TaggedError<
+  StoreCorrupt,
+  { readonly brand: unique symbol }
+>()("History.StoreCorrupt", {
   kind: Schema.Literals(["tree", "revision"]),
   hash: Hash,
   reason: Schema.String,
 }) {}
 
 /** The store could not read or write, for example because its storage failed. */
-export class StoreFailed extends Schema.TaggedError<StoreFailed>()("History.StoreFailed", {
+export class StoreFailed extends Schema.TaggedError<
+  StoreFailed,
+  { readonly brand: unique symbol }
+>()("History.StoreFailed", {
   cause: Schema.Defect(),
 }) {}
 

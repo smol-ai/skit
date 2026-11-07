@@ -14,18 +14,18 @@ const RevisionRow = Schema.Struct({ manifest_json: Schema.String });
 const CountRow = Schema.Struct({ n: Schema.Finite });
 const StoredManifest = Schema.fromJsonString(StoredLibraryManifest);
 
-export class LibraryRevisionConflict extends Schema.TaggedError<LibraryRevisionConflict>()(
-  "Library.LibraryRevisionConflict",
-  {},
-) {}
-class LibrarySnapshotMissing extends Schema.TaggedError<LibrarySnapshotMissing>()(
-  "Library.LibrarySnapshotMissing",
-  { digest: Schema.String },
-) {}
-class LibraryRevisionInvalid extends Schema.TaggedError<LibraryRevisionInvalid>()(
-  "Library.LibraryRevisionInvalid",
-  {},
-) {}
+export class LibraryRevisionConflict extends Schema.TaggedError<
+  LibraryRevisionConflict,
+  { readonly brand: unique symbol }
+>()("Library.LibraryRevisionConflict", {}) {}
+class LibrarySnapshotMissing extends Schema.TaggedError<
+  LibrarySnapshotMissing,
+  { readonly brand: unique symbol }
+>()("Library.LibrarySnapshotMissing", { digest: Schema.String }) {}
+class LibraryRevisionInvalid extends Schema.TaggedError<
+  LibraryRevisionInvalid,
+  { readonly brand: unique symbol }
+>()("Library.LibraryRevisionInvalid", {}) {}
 export interface Sync {
   readonly read: (
     principal: Principal,

@@ -104,10 +104,13 @@ export interface ManageOutcome {
 }
 /** Work already recorded is visible by operationId; failure never implies rollback. */
 class ManageStopped
-  extends Schema.TaggedError<ManageStopped>()("Library.ManageStopped", {
-    operationId: OperationId,
-    reason: SetupStopReason,
-  })
+  extends Schema.TaggedError<ManageStopped, { readonly brand: unique symbol }>()(
+    "Library.ManageStopped",
+    {
+      operationId: OperationId,
+      reason: SetupStopReason,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;

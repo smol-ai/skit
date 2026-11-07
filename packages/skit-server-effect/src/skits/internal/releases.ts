@@ -26,15 +26,15 @@ interface DownloadableRelease {
   };
 }
 
-class StoredReleaseInvalid extends Schema.TaggedError<StoredReleaseInvalid>()(
-  "ReleaseStore.StoredReleaseInvalid",
-  { cause: Schema.Defect() },
-) {}
+class StoredReleaseInvalid extends Schema.TaggedError<
+  StoredReleaseInvalid,
+  { readonly brand: unique symbol }
+>()("ReleaseStore.StoredReleaseInvalid", { cause: Schema.Defect() }) {}
 
-class DownloadAuthenticationFailed extends Schema.TaggedError<DownloadAuthenticationFailed>()(
-  "ReleaseStore.AuthenticationFailed",
-  { cause: Schema.Defect() },
-) {}
+class DownloadAuthenticationFailed extends Schema.TaggedError<
+  DownloadAuthenticationFailed,
+  { readonly brand: unique symbol }
+>()("ReleaseStore.AuthenticationFailed", { cause: Schema.Defect() }) {}
 
 export interface Releases {
   readonly findLatestPublic: (input: {

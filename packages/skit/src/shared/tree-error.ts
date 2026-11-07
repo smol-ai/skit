@@ -53,7 +53,9 @@ const renderReason = (reason: TreeErrorReason): string => {
 
 /** Content that cannot be published as a SKIT tree. */
 export class TreeError
-  extends Schema.TaggedError<TreeError>()("TreeError", { reason: TreeErrorReason })
+  extends Schema.TaggedError<TreeError, { readonly brand: unique symbol }>()("TreeError", {
+    reason: TreeErrorReason,
+  })
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;

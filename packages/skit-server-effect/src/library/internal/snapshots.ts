@@ -22,18 +22,18 @@ const SnapshotRow = Schema.Struct({
 });
 const JsonUnknown = Schema.fromJsonString(Schema.Unknown);
 
-class SnapshotMissing extends Schema.TaggedError<SnapshotMissing>()(
-  "Library.SnapshotMissing",
-  {},
-) {}
-class SnapshotForbidden extends Schema.TaggedError<SnapshotForbidden>()(
-  "Library.SnapshotForbidden",
-  {},
-) {}
-class SnapshotStoreInvalid extends Schema.TaggedError<SnapshotStoreInvalid>()(
-  "Library.SnapshotStoreInvalid",
-  {},
-) {}
+class SnapshotMissing extends Schema.TaggedError<
+  SnapshotMissing,
+  { readonly brand: unique symbol }
+>()("Library.SnapshotMissing", {}) {}
+class SnapshotForbidden extends Schema.TaggedError<
+  SnapshotForbidden,
+  { readonly brand: unique symbol }
+>()("Library.SnapshotForbidden", {}) {}
+class SnapshotStoreInvalid extends Schema.TaggedError<
+  SnapshotStoreInvalid,
+  { readonly brand: unique symbol }
+>()("Library.SnapshotStoreInvalid", {}) {}
 
 type SnapshotFailure =
   | DatabaseError

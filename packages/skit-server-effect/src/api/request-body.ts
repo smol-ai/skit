@@ -1,10 +1,10 @@
 import { Effect, Schema, Stream } from "effect";
 import type { HttpServerRequest } from "effect/http";
 
-class RequestBodyTooLarge extends Schema.TaggedError<RequestBodyTooLarge>()(
-  "Http.RequestBodyTooLarge",
-  { limit: Schema.Int },
-) {}
+class RequestBodyTooLarge extends Schema.TaggedError<
+  RequestBodyTooLarge,
+  { readonly brand: unique symbol }
+>()("Http.RequestBodyTooLarge", { limit: Schema.Int }) {}
 
 interface BodyChunks {
   readonly chunks: Array<Uint8Array>;

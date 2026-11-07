@@ -4,7 +4,10 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export class VmError extends Schema.TaggedError<VmError>()("VmError", { message: Schema.String }) {}
+export class VmError extends Schema.TaggedError<VmError, { readonly brand: unique symbol }>()(
+  "VmError",
+  { message: Schema.String },
+) {}
 export const pins = {
   tart: "2.41.1",
   tartSha256: "e680a734febccfce7d4e910c1f7f13fc3b00f19a181c945e2d746de3214c32c2",

@@ -14,26 +14,35 @@ import {
   type DatabaseSqlClient,
 } from "../../platform/cloudflare.js";
 
-class PublicationForbidden extends Schema.TaggedError<PublicationForbidden>()(
-  "Publication.Forbidden",
-  {},
-) {}
+class PublicationForbidden extends Schema.TaggedError<
+  PublicationForbidden,
+  { readonly brand: unique symbol }
+>()("Publication.Forbidden", {}) {}
 
 const ReleaseRow = Schema.Struct({ release_id: Schema.String });
 
-class SkitNotFound extends Schema.TaggedError<SkitNotFound>()("Publication.SkitNotFound", {}) {}
-class CurrentRevisionMissing extends Schema.TaggedError<CurrentRevisionMissing>()(
-  "Publication.CurrentRevisionMissing",
+class SkitNotFound extends Schema.TaggedError<SkitNotFound, { readonly brand: unique symbol }>()(
+  "Publication.SkitNotFound",
   {},
 ) {}
-class StaleRevision extends Schema.TaggedError<StaleRevision>()("Publication.StaleRevision", {}) {}
-class PublishBlocked extends Schema.TaggedError<PublishBlocked>()("Publication.PublishBlocked", {
+class CurrentRevisionMissing extends Schema.TaggedError<
+  CurrentRevisionMissing,
+  { readonly brand: unique symbol }
+>()("Publication.CurrentRevisionMissing", {}) {}
+class StaleRevision extends Schema.TaggedError<StaleRevision, { readonly brand: unique symbol }>()(
+  "Publication.StaleRevision",
+  {},
+) {}
+class PublishBlocked extends Schema.TaggedError<
+  PublishBlocked,
+  { readonly brand: unique symbol }
+>()("Publication.PublishBlocked", {
   diagnostics: Schema.Array(ValidationDiagnostic),
 }) {}
-export class ReleaseConflict extends Schema.TaggedError<ReleaseConflict>()(
-  "Publication.ReleaseConflict",
-  {},
-) {}
+export class ReleaseConflict extends Schema.TaggedError<
+  ReleaseConflict,
+  { readonly brand: unique symbol }
+>()("Publication.ReleaseConflict", {}) {}
 
 interface PublicationInput {
   readonly owner: string;

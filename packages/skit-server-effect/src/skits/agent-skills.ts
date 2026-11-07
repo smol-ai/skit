@@ -20,10 +20,10 @@ export interface DiscoverableSkill {
   readonly files: ReadonlyMap<string, { readonly bytes: Uint8Array }>;
 }
 
-class AgentSkillsArchiveInvalid extends Schema.TaggedError<AgentSkillsArchiveInvalid>()(
-  "AgentSkills.ArchiveInvalid",
-  { cause: Schema.Defect() },
-) {}
+class AgentSkillsArchiveInvalid extends Schema.TaggedError<
+  AgentSkillsArchiveInvalid,
+  { readonly brand: unique symbol }
+>()("AgentSkills.ArchiveInvalid", { cause: Schema.Defect() }) {}
 
 const attempt = <A>(evaluate: () => A) =>
   Effect.try({

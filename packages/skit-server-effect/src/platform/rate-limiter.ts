@@ -1,6 +1,9 @@
 import { Effect, Schema } from "effect";
 
-class RateLimitError extends Schema.TaggedError<RateLimitError>()("Cloudflare.RateLimitError", {
+class RateLimitError extends Schema.TaggedError<
+  RateLimitError,
+  { readonly brand: unique symbol }
+>()("Cloudflare.RateLimitError", {
   operation: Schema.String,
   cause: Schema.Defect(),
 }) {}

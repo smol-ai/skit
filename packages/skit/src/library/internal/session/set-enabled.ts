@@ -24,11 +24,14 @@ export interface SetEnabledPlan {
 
 /** Accepted intent survives a later failure; callers must not mistake this for rejection. */
 export class SetEnabledIncomplete
-  extends Schema.TaggedError<SetEnabledIncomplete>()("Library.SetEnabledIncomplete", {
-    results: Schema.Array(SetEnabledResult),
-    reason: Schema.Literals(["destinations", "update"]),
-    failure: Schema.Unknown,
-  })
+  extends Schema.TaggedError<SetEnabledIncomplete, { readonly brand: unique symbol }>()(
+    "Library.SetEnabledIncomplete",
+    {
+      results: Schema.Array(SetEnabledResult),
+      reason: Schema.Literals(["destinations", "update"]),
+      failure: Schema.Unknown,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;

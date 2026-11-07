@@ -61,9 +61,12 @@ export interface UpdatedCopy {
 
 /** An update would write something other than the change reviewed at `path`. */
 export class ReviewedChangeDiffers
-  extends Schema.TaggedError<ReviewedChangeDiffers>()("Library.ReviewedChangeDiffers", {
-    path: Schema.String,
-  })
+  extends Schema.TaggedError<ReviewedChangeDiffers, { readonly brand: unique symbol }>()(
+    "Library.ReviewedChangeDiffers",
+    {
+      path: Schema.String,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;

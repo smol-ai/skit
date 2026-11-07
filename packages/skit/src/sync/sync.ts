@@ -69,16 +69,22 @@ export const Removal = Schema.Struct({
 export type Removal = typeof Removal.Type;
 
 /** Another device moved `current` first. */
-export class Moved extends Schema.TaggedError<Moved>()("Sync.Moved", {
-  current: Schema.NullOr(History.RevisionId),
-}) {}
+export class Moved extends Schema.TaggedError<Moved, { readonly brand: unique symbol }>()(
+  "Sync.Moved",
+  {
+    current: Schema.NullOr(History.RevisionId),
+  },
+) {}
 
 /** The Registry sent a revision or tree that does not match its identity. */
 class RemoteInvalid
-  extends Schema.TaggedError<RemoteInvalid>()("Sync.RemoteInvalid", {
-    id: History.RevisionId,
-    reason: Schema.String,
-  })
+  extends Schema.TaggedError<RemoteInvalid, { readonly brand: unique symbol }>()(
+    "Sync.RemoteInvalid",
+    {
+      id: History.RevisionId,
+      reason: Schema.String,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -90,7 +96,7 @@ class RemoteInvalid
 }
 
 class InvalidTree
-  extends Schema.TaggedError<InvalidTree>()("Sync.InvalidTree", {
+  extends Schema.TaggedError<InvalidTree, { readonly brand: unique symbol }>()("Sync.InvalidTree", {
     path: Schema.String,
     message: Schema.String,
   })
@@ -108,7 +114,9 @@ const checkTree = (tree: History.Tree) => {
 
 /** Other devices kept moving `current` while this one tried to sync. */
 class Unsettled
-  extends Schema.TaggedError<Unsettled>()("Sync.Unsettled", { steps: Schema.Int })
+  extends Schema.TaggedError<Unsettled, { readonly brand: unique symbol }>()("Sync.Unsettled", {
+    steps: Schema.Int,
+  })
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;

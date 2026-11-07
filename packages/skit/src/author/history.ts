@@ -53,10 +53,13 @@ import { makeHistoryStore, storedPath } from "./history-store.js";
 // ── Errors ─────────────────────────────────────────────────────────────────────────────────────
 
 export class AuthorHistoryInvalid
-  extends Schema.TaggedError<AuthorHistoryInvalid>()("AuthorHistoryInvalid", {
-    path: Schema.String,
-    reason: Schema.String,
-  })
+  extends Schema.TaggedError<AuthorHistoryInvalid, { readonly brand: unique symbol }>()(
+    "AuthorHistoryInvalid",
+    {
+      path: Schema.String,
+      reason: Schema.String,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -70,7 +73,10 @@ export class AuthorHistoryInvalid
 
 /** Contention is temporary; it says nothing about the validity of stored history. */
 class AuthorHistoryBusy
-  extends Schema.TaggedError<AuthorHistoryBusy>()("AuthorHistoryBusy", { path: Schema.String })
+  extends Schema.TaggedError<AuthorHistoryBusy, { readonly brand: unique symbol }>()(
+    "AuthorHistoryBusy",
+    { path: Schema.String },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -84,10 +90,13 @@ class AuthorHistoryBusy
 
 /** The saved checkpoint is no longer the one the step planned from. */
 class AuthorSyncStateConflict
-  extends Schema.TaggedError<AuthorSyncStateConflict>()("AuthorSyncStateConflict", {
-    key: SyncKey,
-    found: Sync.SyncState,
-  })
+  extends Schema.TaggedError<AuthorSyncStateConflict, { readonly brand: unique symbol }>()(
+    "AuthorSyncStateConflict",
+    {
+      key: SyncKey,
+      found: Sync.SyncState,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -101,10 +110,13 @@ class AuthorSyncStateConflict
 
 /** Another backup pass advanced this workspace's acknowledged observation. */
 class AuthorBackupStateConflict
-  extends Schema.TaggedError<AuthorBackupStateConflict>()("AuthorBackupStateConflict", {
-    key: SyncKey,
-    found: Schema.NullOr(History.RevisionId),
-  })
+  extends Schema.TaggedError<AuthorBackupStateConflict, { readonly brand: unique symbol }>()(
+    "AuthorBackupStateConflict",
+    {
+      key: SyncKey,
+      found: Schema.NullOr(History.RevisionId),
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -118,11 +130,14 @@ class AuthorBackupStateConflict
 
 /** `from → to` is not a step the sync engine takes (Sync.allowsStep). */
 class AuthorSyncStateIllegal
-  extends Schema.TaggedError<AuthorSyncStateIllegal>()("AuthorSyncStateIllegal", {
-    key: SyncKey,
-    from: Sync.SyncState,
-    to: Sync.SyncState,
-  })
+  extends Schema.TaggedError<AuthorSyncStateIllegal, { readonly brand: unique symbol }>()(
+    "AuthorSyncStateIllegal",
+    {
+      key: SyncKey,
+      from: Sync.SyncState,
+      to: Sync.SyncState,
+    },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;

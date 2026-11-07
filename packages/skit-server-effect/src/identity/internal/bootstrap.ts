@@ -14,23 +14,26 @@ export interface BootstrapClaimResult {
 const BootstrapClaim = Schema.Struct({ claimed: Schema.Finite });
 const UserCount = Schema.Struct({ count: Schema.Finite });
 
-class InvalidBootstrapSecret extends Schema.TaggedError<InvalidBootstrapSecret>()(
-  "Bootstrap.InvalidSecret",
-  {},
-) {}
-class InvalidBootstrapInput extends Schema.TaggedError<InvalidBootstrapInput>()(
-  "Bootstrap.InvalidInput",
-  {},
-) {}
-class BootstrapComplete extends Schema.TaggedError<BootstrapComplete>()("Bootstrap.Complete", {}) {}
-class BootstrapUnavailable extends Schema.TaggedError<BootstrapUnavailable>()(
-  "Bootstrap.Unavailable",
-  {},
-) {}
-class SecretComparisonError extends Schema.TaggedError<SecretComparisonError>()(
-  "Bootstrap.SecretComparisonError",
-  { cause: Schema.Defect() },
-) {}
+class InvalidBootstrapSecret extends Schema.TaggedError<
+  InvalidBootstrapSecret,
+  { readonly brand: unique symbol }
+>()("Bootstrap.InvalidSecret", {}) {}
+class InvalidBootstrapInput extends Schema.TaggedError<
+  InvalidBootstrapInput,
+  { readonly brand: unique symbol }
+>()("Bootstrap.InvalidInput", {}) {}
+class BootstrapComplete extends Schema.TaggedError<
+  BootstrapComplete,
+  { readonly brand: unique symbol }
+>()("Bootstrap.Complete", {}) {}
+class BootstrapUnavailable extends Schema.TaggedError<
+  BootstrapUnavailable,
+  { readonly brand: unique symbol }
+>()("Bootstrap.Unavailable", {}) {}
+class SecretComparisonError extends Schema.TaggedError<
+  SecretComparisonError,
+  { readonly brand: unique symbol }
+>()("Bootstrap.SecretComparisonError", { cause: Schema.Defect() }) {}
 
 export type CreateError =
   | InvalidBootstrapSecret

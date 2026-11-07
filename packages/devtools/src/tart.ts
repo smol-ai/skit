@@ -11,7 +11,10 @@ const Machine = Schema.Struct({
   State: Schema.Literals(["running", "stopped", "suspended"]),
 });
 const decodeMachines = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Machine)));
-class NotReady extends Schema.TaggedError<NotReady>()("NotReady", {}) {}
+class NotReady extends Schema.TaggedError<NotReady, { readonly brand: unique symbol }>()(
+  "NotReady",
+  {},
+) {}
 const poll = <E, R>(
   check: Effect.Effect<void, E | NotReady, R>,
   duration: Duration.Input,

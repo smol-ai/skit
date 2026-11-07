@@ -20,7 +20,10 @@ export type RuntimeEnv = Omit<
   readonly ASSETS?: Fetcher;
 };
 
-export class DatabaseError extends Schema.TaggedError<DatabaseError>()("Cloudflare.DatabaseError", {
+export class DatabaseError extends Schema.TaggedError<
+  DatabaseError,
+  { readonly brand: unique symbol }
+>()("Cloudflare.DatabaseError", {
   operation: Schema.String,
   cause: Schema.Defect(),
 }) {}
@@ -30,13 +33,13 @@ export const databaseLayer = (database: D1Database) => D1Client.layer({ db: data
 export const databaseError = (operation: string) =>
   Effect.mapError((cause: unknown) => new DatabaseError({ operation, cause }));
 
-export class BlobStorageError extends Schema.TaggedError<BlobStorageError>()(
-  "Cloudflare.BlobStorageError",
-  {
-    operation: Schema.String,
-    cause: Schema.Defect(),
-  },
-) {}
+export class BlobStorageError extends Schema.TaggedError<
+  BlobStorageError,
+  { readonly brand: unique symbol }
+>()("Cloudflare.BlobStorageError", {
+  operation: Schema.String,
+  cause: Schema.Defect(),
+}) {}
 
 /** R2 deletes at most this many keys per call. */
 const MAX_DELETE_KEYS = 1_000;

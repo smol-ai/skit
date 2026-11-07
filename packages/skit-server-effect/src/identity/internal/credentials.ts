@@ -52,19 +52,22 @@ const ListedPatRow = Schema.Struct({
 });
 const RFC_3339_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
-class SessionRequired extends Schema.TaggedError<SessionRequired>()(
-  "Authentication.SessionRequired",
+class SessionRequired extends Schema.TaggedError<
+  SessionRequired,
+  { readonly brand: unique symbol }
+>()("Authentication.SessionRequired", {}) {}
+class InvalidScope extends Schema.TaggedError<InvalidScope, { readonly brand: unique symbol }>()(
+  "Authentication.InvalidScope",
   {},
 ) {}
-class InvalidScope extends Schema.TaggedError<InvalidScope>()("Authentication.InvalidScope", {}) {}
-class InvalidExpiry extends Schema.TaggedError<InvalidExpiry>()(
+class InvalidExpiry extends Schema.TaggedError<InvalidExpiry, { readonly brand: unique symbol }>()(
   "Authentication.InvalidExpiry",
   {},
 ) {}
-class UnauthorizedPrincipal extends Schema.TaggedError<UnauthorizedPrincipal>()(
-  "Authentication.UnauthorizedPrincipal",
-  {},
-) {}
+class UnauthorizedPrincipal extends Schema.TaggedError<
+  UnauthorizedPrincipal,
+  { readonly brand: unique symbol }
+>()("Authentication.UnauthorizedPrincipal", {}) {}
 
 export interface AuthenticationService {
   readonly authenticate: (

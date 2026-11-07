@@ -21,7 +21,10 @@ export const RecoveryInspection = Schema.Struct({
 export type RecoveryInspection = typeof RecoveryInspection.Type;
 
 export class RecoveryInvalid
-  extends Schema.TaggedError<RecoveryInvalid>()("RecoveryInvalid", { detail: Schema.String })
+  extends Schema.TaggedError<RecoveryInvalid, { readonly brand: unique symbol }>()(
+    "RecoveryInvalid",
+    { detail: Schema.String },
+  )
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
