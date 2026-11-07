@@ -157,6 +157,10 @@ export interface UpdateOutcome {
   readonly _tag: "Update";
   readonly result: ExistingOutcome;
 }
+export interface InstallOutcome {
+  readonly _tag: "Install";
+  readonly result: ExistingOutcome;
+}
 interface UninstallOutcome {
   readonly _tag: "Uninstall";
   readonly result: ExistingOutcome;
@@ -171,6 +175,7 @@ export type Outcome =
   | EnabledOutcome
   | RemoveOutcome
   | UpdateOutcome
+  | InstallOutcome
   | UninstallOutcome
   | UndoOutcome
   | ManageOutcome

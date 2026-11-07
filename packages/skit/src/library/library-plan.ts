@@ -27,8 +27,16 @@ export const Enabled = Schema.TaggedStruct("Enabled", {
 export type Enabled = typeof Enabled.Type;
 /** Remove a Collection with its Skills, imports, enabled entries and installed copies. */
 const Remove = Schema.TaggedStruct("Remove", { collectionId: CollectionId });
-/** Bring installed copies up to date; omitted skills means all, an empty list means none. */
+/**
+ * Bring installed copies up to date where they are; omitted skills means all, an empty list means
+ * none. Adds no copies and moves none.
+ */
 const Update = Schema.TaggedStruct("Update", { skills: Schema.optional(Schema.Array(SkillId)) });
+/**
+ * Install what is enabled at this device's folders, these Skills or all: copies missing there are
+ * added, copies elsewhere retire. Sync and setup converge the device with it.
+ */
+const Install = Schema.TaggedStruct("Install", { skills: Schema.optional(Schema.Array(SkillId)) });
 /**
  * Uninstall these recorded copies ahead of a sync. Their records stay, as pending, unless listed
  * to drop.
@@ -37,7 +45,7 @@ const Uninstall = Schema.TaggedStruct("Uninstall", {
   copies: Schema.Array(InstalledSkillId),
   drop: Schema.Array(InstalledSkillId),
 });
-export const Intent = Schema.Union([Enabled, Remove, Update, Uninstall]);
+export const Intent = Schema.Union([Enabled, Remove, Update, Install, Uninstall]);
 export type Intent = typeof Intent.Type;
 
 /** What the user approved beyond the default safety rules, as previewed. */
@@ -219,6 +227,7 @@ export const Plan = Schema.TaggedUnion({
   Enabled: { ...planFields, intent: Enabled },
   Remove: { ...planFields, intent: Remove },
   Update: { ...planFields, intent: Update },
+  Install: { ...planFields, intent: Install },
   Uninstall: { ...planFields, intent: Uninstall },
 });
 export type Plan = typeof Plan.Type;

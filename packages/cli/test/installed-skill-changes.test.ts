@@ -316,9 +316,9 @@ it.effect(
         ),
       );
       expect(yield* f.fs.readFileString(join(f.copy, "SKILL.md"))).toBe(edited);
+      // The selection names one copy; the unrelated one is neither rewritten nor re-recorded.
       const after = (yield* f.home.durable).installed_skills.find((item) => item.path === f.copy);
-      expect(after?.status).toBe("conflicted");
-      expect(after?.expected_hash).toBe(before?.expected_hash);
+      expect(after).toEqual(before);
       expect(yield* f.fs.exists(join(newCopy, ".skit-ownership.json"))).toBe(true);
     }).pipe(Effect.provide(skitLayer)),
 );

@@ -99,17 +99,24 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <
       let installed = 0;
       const collectionId =
         before.kind === "collection" ? before.collection.collection_id : before.skill.collection_id;
-      // Reconcile even when the Source is current: a previous run may have retained
-      // this snapshot before installing failed or temporary-source cleanup interrupted it.
+      // Install the Collection's members where this device installs, even when the Source is
+      // current: a previous run may have retained this snapshot before installing failed or
+      // temporary-source cleanup interrupted it. New members follow an enabled Collection.
       {
         const current = yield* library.read;
+        const members =
+          current._tag === "Present"
+            ? current.state.skills
+                .filter((skill) => skill.collection_id === collectionId)
+                .map((skill) => skill.skill_id)
+            : [];
         phase = "install";
         const installedSkillUpdate = yield* progress.around(
           { kind: "install", subject },
           Effect.gen(function* () {
             const outcome = (yield* library.apply({
               _tag: "Apply",
-              plan: yield* library.plan({ _tag: "Update" }, { base: current }),
+              plan: yield* library.plan({ _tag: "Install", skills: members }, { base: current }),
             })).result;
             return {
               installed:

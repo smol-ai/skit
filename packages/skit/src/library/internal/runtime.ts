@@ -19,7 +19,6 @@ import {
   type ContentSource,
 } from "./content/content.js";
 import type { LibraryManifest } from "../library-contracts.js";
-import type { LibraryState } from "../library-state.js";
 import { Digest } from "effect/crypto";
 import * as InstalledSkills from "../installed-skills.js";
 import {
@@ -65,11 +64,6 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
     yield* recoverLibraryHistory(home);
   const startup = yield* recover(home);
   const files = yield* InstalledSkills.Service;
-  /** A change that adds no routes (Remove, Uninstall) works only where copies already are. */
-  const recordedFiles = Effect.fn("Library.recordedFiles")(function* (state: LibraryState) {
-    return yield* InstalledSkills.make(yield* InstalledSkills.recordedRouting(state));
-  });
-  const addsNoRoutes = (tag: string) => tag === "Remove" || tag === "Uninstall";
   // Only the platform services: an owner built inside a write must never carry that writer out.
   const writer = Context.pick(FileSystem.FileSystem)(
     yield* Effect.context<FileSystem.FileSystem>(),
@@ -153,18 +147,13 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
         Effect.provide(importing),
       );
     return Effect.gen(function* () {
-      const state = yield* planningState(home, base);
+      yield* planningState(home, base);
       return yield* planIntent(intent, {
         home,
         base,
         approvals: options.approvals,
-      }).pipe(
-        Effect.provideService(
-          InstalledSkills.Service,
-          addsNoRoutes(intent._tag) ? yield* recordedFiles(state) : files,
-        ),
-      );
-    }).pipe(Effect.provide(importing), Effect.provide(writer));
+      });
+    }).pipe(planning, Effect.provide(writer));
   }
   function applyFor<Request extends ApplyRequest>(
     request: Request,
@@ -209,17 +198,7 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
         Effect.map((result) => ({ _tag: "Undo" as const, result })),
         applying,
       );
-    return writeLibrary(
-      home,
-      addsNoRoutes(plan._tag)
-        ? applyRecorded(plan, "recorded").pipe(
-            Effect.provideServiceEffect(
-              InstalledSkills.Service,
-              Effect.flatMap(loadLibrary(home), recordedFiles),
-            ),
-          )
-        : applyRecorded(plan, roots),
-    ).pipe(
+    return writeLibrary(home, applyRecorded(plan, roots)).pipe(
       Effect.map((result) => ({ _tag: plan._tag, result })),
       applying,
     );

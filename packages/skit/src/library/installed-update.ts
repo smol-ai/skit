@@ -96,7 +96,7 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
 ) {
   const { home } = scope;
   const intent = {
-    _tag: "Update",
+    _tag: "Install",
     skills: [...new Set(reviewed.map((fact) => fact.skillId))],
   } as const;
   const chosen = new Set<string>(choices.map((choice) => choice.skillId));

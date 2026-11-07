@@ -10,6 +10,7 @@ import type { Intent } from "./library-plan.js";
 export const edit = Effect.fn("Library.edit")(function* (base: LibraryState, intent: Intent) {
   switch (intent._tag) {
     case "Update":
+    case "Install":
     case "Uninstall":
       return { next: base, requests: [] };
     case "Remove": {

@@ -64,11 +64,11 @@ const library = (
   });
 
 const count = (
-  outcome: Extract<Library.Outcome, { readonly _tag: "Update" }>["result"],
+  outcome: Extract<Library.Outcome, { readonly _tag: "Install" }>["result"],
   tag: Library.InstalledSkillResult["_tag"],
 ) => (outcome._tag === "Applied" ? outcome.copies.filter((copy) => copy._tag === tag).length : 0);
 
-/** Update every installed copy, with what is enabled at `scope` also routed to this destination. */
+/** Install what is enabled at `scope` at this destination, retiring its copies elsewhere. */
 export const installEnabledSkills = (options: {
   readonly target: InstallDestination;
   readonly root: string;
@@ -111,7 +111,7 @@ export const installEnabledSkills = (options: {
     ];
     const outcome = (yield* owner.apply({
       _tag: "Apply",
-      plan: yield* owner.plan({ _tag: "Update" }, { base: yield* owner.read, approvals }),
+      plan: yield* owner.plan({ _tag: "Install" }, { base: yield* owner.read, approvals }),
     })).result;
     if (outcome._tag === "Incomplete") return yield* Effect.fail(outcome.cause);
     return count(outcome, "Installed");

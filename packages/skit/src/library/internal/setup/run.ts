@@ -37,6 +37,8 @@ import { copiesOf } from "../operations/program.js";
 import { applyOutcome } from "../operations/result.js";
 import { runApply, operationScope } from "../operations/operations.js";
 import type { InventoryRootOptions } from "../../routing/roots.js";
+import type { StepRouting } from "../../store/state-schema.js";
+import { stepRouting } from "../../routing/step.js";
 import { snapshotOf, type Snapshot } from "../../snapshot.js";
 import {
   LibraryWriter,
@@ -695,9 +697,27 @@ export const setup = Effect.fn("Library.setup")(function* (
 /** Keep the ordinary apply surface while the existing runner owns its durable lifecycle. */
 export const applyRecorded = Effect.fn("Library.applyRecorded")(function* (
   plan: Plan,
-  routing: InventoryRootOptions | "recorded",
+  roots: InventoryRootOptions,
 ) {
   const { home } = yield* LibraryWriter;
+  // Enabling and installing read this device's folders; every other plan carries the routes it
+  // was made on. Apply refuses a plan whose next Library differs, so the reviewed one is exact.
+  const routing: StepRouting =
+    plan._tag === "Enabled" || plan._tag === "Install"
+      ? yield* stepRouting(roots, plan.next)
+      : {
+          active: [
+            ...new Set(
+              plan.routes.flatMap((route) =>
+                route.destinations.map((target) => target.destination),
+              ),
+            ),
+          ],
+          destinations: plan.routes.flatMap(({ scope, destinations }) =>
+            destinations.map((target) => ({ scope, ...target })),
+          ),
+          readable: [],
+        };
   const prepared = yield* prepareApply(home, plan, routing);
   if (prepared.noop) {
     const copies = copiesOf(prepared.step);

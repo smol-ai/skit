@@ -253,7 +253,7 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
         yield* library.apply({
           _tag: "Apply",
           plan: yield* library.plan(
-            { _tag: "Update" },
+            { _tag: "Update", skills: [preview.skill_id] },
             {
               base: snapshot,
               approvals: [...accepted].map(([installedSkillId, copy]) => ({

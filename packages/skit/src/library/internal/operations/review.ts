@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { Effect, Schema } from "effect";
+import { Effect, FileSystem, Schema } from "effect";
 import * as InstalledSkills from "../../installed-skills.js";
 import { inspectLocalLibraryState } from "../../store/library-store.js";
 import { emptyLibraryState } from "../../library-state.js";
@@ -15,7 +15,11 @@ import {
   StalePlan,
   type EnabledChange,
 } from "../../library-plan.js";
-import { planChanges } from "../../plan-changes.js";
+import { planChanges, type PlannedChanges } from "../../plan-changes.js";
+import type { LibraryState } from "../../library-state.js";
+import type { Snapshot } from "../../snapshot.js";
+import type { Scope } from "effect";
+import type { PlanError } from "../../library-plan.js";
 
 /** Policy: refuse a duplicate the request did not allow, or a link SKIT's copy would replace. */
 const refuseDuplicates = Effect.fn("Library.refuseDuplicates")(function* (
@@ -64,11 +68,29 @@ const refuseDuplicates = Effect.fn("Library.refuseDuplicates")(function* (
   if (links.length) return yield* new InstalledSkillWouldReplaceLink({ links });
 });
 
+export interface ReviewedApply {
+  readonly input: Plan;
+  readonly base: LibraryState;
+  readonly again: PlannedChanges;
+  readonly snapshot: Snapshot;
+}
+type ReviewApplyError =
+  | StalePlan
+  | UninstallConflict
+  | PlanError
+  | Effect.Error<ReturnType<typeof refuseDuplicates>>
+  | Effect.Error<ReturnType<typeof inspectLocalLibraryState>>
+  | Exclude<Effect.Error<ReturnType<InstalledSkills.Interface["check"]>>, InstalledSkills.Changed>;
+
 /** Revalidate the reviewed intent and folders without creating roots or changing state. */
 export const reviewApply = Effect.fn("Library.reviewApply")(function* (
   home: string,
   reviewed: Plan,
-) {
+): Effect.fn.Return<
+  ReviewedApply,
+  ReviewApplyError,
+  InstalledSkills.Service | FileSystem.FileSystem | Scope.Scope
+> {
   const files = yield* InstalledSkills.Service;
   const input = structuredClone(reviewed);
   if (input._tag !== input.intent._tag)

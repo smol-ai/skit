@@ -105,7 +105,7 @@ export const planInstalledSkillChanges = Effect.fn("Setup.planInstalledSkillChan
 ) {
   const owner = yield* Library.Service;
   const state = base._tag === "Present" ? base.state : emptyLibraryState();
-  return yield* owner.plan({ _tag: "Update" }, { base }).pipe(
+  return yield* owner.plan({ _tag: "Install" }, { base }).pipe(
     Effect.map(Library.reviewInstalledSkillChanges),
     // Setup still discovers when the Library cannot plan its copies, and touches none of them.
     Effect.catch((error) =>

@@ -234,7 +234,7 @@ export const runSyncStep = Effect.fn("Library.sync.recordedStep")(function* (
           return yield* scope.apply(
             "install",
             yield* planIntent(
-              { _tag: "Update" },
+              { _tag: "Install" },
               { home, base: snapshotOf({ present: true, state: current }) },
             ),
           );

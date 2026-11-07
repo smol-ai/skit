@@ -64,7 +64,7 @@ const library = (
   });
 
 const applied = (
-  outcome: Extract<Library.Outcome, { readonly _tag: "Update" }>["result"],
+  outcome: Extract<Library.Outcome, { readonly _tag: "Install" }>["result"],
   tag: Library.InstalledSkillResult["_tag"],
 ) => (outcome._tag === "Applied" ? outcome.copies.filter((copy) => copy._tag === tag).length : 0);
 
@@ -84,7 +84,7 @@ export const removeCollection = (home: string, state: LibraryState, collectionId
     })).result;
   });
 
-/** Update every installed copy, with what is enabled at `scope` also routed to this destination. */
+/** Install what is enabled at `scope` at this destination, retiring its copies elsewhere. */
 export const installEnabledSkills = (options: {
   readonly home: string;
   readonly target: InstallDestination;
@@ -131,16 +131,19 @@ export const installEnabledSkills = (options: {
     ];
     const outcome = (yield* owner.apply({
       _tag: "Apply",
-      plan: yield* owner.plan({ _tag: "Update" }, { base: snapshot, approvals }),
+      plan: yield* owner.plan(
+        { _tag: "Install" },
+        {
+          base: snapshot,
+          approvals,
+        },
+      ),
     })).result;
     if (outcome._tag === "Incomplete") return yield* Effect.fail(outcome.cause);
     return applied(outcome, "Installed");
   });
 
-/**
- * Plan an update of every installed copy, with what is enabled globally also routed to this
- * destination, and the apply of exactly that plan.
- */
+/** Plan installing what is enabled globally at this destination, and the apply of exactly that plan. */
 export const planUpdate = (options: {
   readonly home: string;
   readonly target: InstallDestination;
@@ -155,13 +158,16 @@ export const planUpdate = (options: {
       add: { scope: { kind: "global" }, destination: options.target, root: options.root },
     });
     const plan = yield* owner.plan(
-      { _tag: "Update" },
-      { base: snapshot, approvals: options.approvals },
+      { _tag: "Install" },
+      {
+        base: snapshot,
+        approvals: options.approvals,
+      },
     );
     return { plan, apply: owner.apply({ _tag: "Apply", plan: plan }) };
   });
 
-/** Update every installed copy with only these destinations active. */
+/** Install what is enabled globally with only these destinations active: the rest retire. */
 export const uninstallLeftovers = (options: {
   readonly home: string;
   readonly activeTargets: readonly InstallDestination[];
@@ -174,7 +180,7 @@ export const uninstallLeftovers = (options: {
     const owner = yield* library(home, state, { active: options.activeTargets });
     const outcome = (yield* owner.apply({
       _tag: "Apply",
-      plan: yield* owner.plan({ _tag: "Update" }, { base: snapshot }),
+      plan: yield* owner.plan({ _tag: "Install" }, { base: snapshot }),
     })).result;
     return applied(outcome, "Uninstalled");
   });

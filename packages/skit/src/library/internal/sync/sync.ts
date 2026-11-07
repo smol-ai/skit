@@ -321,9 +321,10 @@ export const planSync = Effect.fn("Library.planSync")(function* (
   const files = yield* routedInstalledSkills(routing);
   const paths = new Set(state.installed_skills.map((copy) => copy.path));
   const inspected = yield* Effect.result(
-    planIntent({ _tag: "Update" }, { home, base: snapshotOf({ present: true, state: next }) }).pipe(
-      Effect.provideService(InstalledSkills.Service, files),
-    ),
+    planIntent(
+      { _tag: "Install" },
+      { home, base: snapshotOf({ present: true, state: next }) },
+    ).pipe(Effect.provideService(InstalledSkills.Service, files)),
   );
   if (inspected._tag === "Success")
     for (const folder of inspected.success.folders) paths.add(folder.path);
@@ -454,7 +455,7 @@ export const applySync = Effect.fn("Library.applySync")(function* (
         const files = yield* routedInstalledSkills(fresh.routing);
         const update = yield* Effect.result(
           planIntent(
-            { _tag: "Update" },
+            { _tag: "Install" },
             {
               home,
               base: snapshotOf({

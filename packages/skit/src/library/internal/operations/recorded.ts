@@ -9,8 +9,8 @@ import { libraryStateRevision, type LibraryState } from "../../library-state.js"
 import { type InstalledSkill } from "../../device-state.js";
 import { OperationStatus } from "../../store/state-schema.js";
 import { LibraryWriter, loadLibrary, libraryOriginalsPath } from "../../store/library-store.js";
-import { stepRouting } from "../../routing/step.js";
-import type { InventoryRootOptions } from "../../routing/roots.js";
+
+import type { StepRouting } from "../../store/state-schema.js";
 import { compileApply, finalRows, type ApplyStep } from "./program.js";
 export type { ApplyStep } from "./program.js";
 
@@ -18,7 +18,7 @@ export type { ApplyStep } from "./program.js";
 export const prepareApply = Effect.fn("Library.prepareRecordedApply")(function* (
   home: string,
   plan: Plan,
-  configuration: InventoryRootOptions | "recorded",
+  routing: StepRouting,
 ) {
   const { input, base, again, snapshot } = yield* reviewApply(home, plan);
   const files = yield* InstalledSkills.Service;
@@ -88,16 +88,6 @@ export const prepareApply = Effect.fn("Library.prepareRecordedApply")(function* 
         : Status.installed(pending),
     );
   }
-  const routing =
-    configuration === "recorded"
-      ? {
-          active: yield* files.active,
-          destinations: input.routes.flatMap(({ scope, destinations }) =>
-            destinations.map((target) => ({ scope, ...target })),
-          ),
-          readable: [],
-        }
-      : yield* stepRouting(configuration, again.next);
   const reviewed = { ...input, next: again.next };
   const compiled = yield* compileApply(
     invalidSource

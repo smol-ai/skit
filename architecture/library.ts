@@ -246,7 +246,7 @@ export type ManageIntent =
 
 /** Every change, as one value. EXISTS: today's four. NEW: today's bypassing writers, as intents. */
 export type Intent =
-  | ExistingIntent // EXISTS: Enabled | Remove | Update | Uninstall (library-plan.ts:40)
+  | ExistingIntent // EXISTS: Enabled | Remove | Update | Install | Uninstall (library-plan.ts)
   | { readonly _tag: "Undo"; readonly operationId: string } // NEW: setup-undo.ts:272
   | { readonly _tag: "Restore"; readonly operationId: string } // NEW: recovery-moves.ts; revalidates saved folders (:557-585)
   | {

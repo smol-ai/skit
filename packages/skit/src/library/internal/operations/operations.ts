@@ -74,7 +74,7 @@ export const operationScope = Effect.fn("Library.operationScope")(function* (
     if (operation?._tag !== "Pending" || !operation.steps[index])
       return yield* new StalePlan({ message: "Installed changes require their Pending operation" });
     const prior = operation.steps[index].applies?.find((item) => item.key === key)?.apply;
-    const prepared = prior ?? (yield* prepareApply(writer.home, plan, "recorded")).step;
+    const prepared = prior ?? (yield* prepareApply(writer.home, plan, routing)).step;
     const step = { ...prepared, routing };
     if (!prior) yield* saveStep(operationId, index, step, key);
     return yield* runApply(operationId, index, step, key);

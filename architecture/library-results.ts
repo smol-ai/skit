@@ -96,7 +96,7 @@ import type {
 type UnmanagedEntry = LibraryState["unmanaged"][number];
 /** Apply stamps acceptedAt; a preview cannot claim the acceptance already happened. */
 type PlannedAcceptance = Omit<SkillAssessmentAcceptance, "acceptedAt">;
-type ExistingIntentTag = "Enabled" | "Remove" | "Update" | "Uninstall";
+type ExistingIntentTag = "Enabled" | "Remove" | "Update" | "Install" | "Uninstall";
 type IntentOf<Tag extends Intent["_tag"]> = Extract<Intent, { readonly _tag: Tag }>;
 type PlatformError = PlatformErrors.PlatformError;
 /** Public failures use StalePlan; LibraryChanged stays private to storage and saved step errors. */

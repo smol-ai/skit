@@ -234,14 +234,15 @@ for (const failurePhase of ["install", "source-cleanup"] as const) {
         assert.strictEqual(outcomes[0].phase, failurePhase === "install" ? "install" : "source");
         assert.strictEqual(outcomes[0].source_imported, true);
         assert.isTrue("changed" in outcomes[1]! && outcomes[1].changed);
-        // The next Collection's update brings every installed copy up to date, this one too.
-        assert.notStrictEqual(yield* f.fs.readFileString(installedSkillPath), original);
+        // Another Collection's update touches only its own copies: this one waits for its retry.
+        assert.strictEqual(yield* f.fs.readFileString(installedSkillPath), original);
         const imported = yield* f.load;
         const retry = yield* writingTo(
           f.home,
           run(updateSubjects().pipe(Effect.provide(rendererTestLayer()))),
         );
-        assert.isTrue("changed" in retry[0]! && !retry[0].changed && retry[0].installed === 0);
+        // The Source is current, so nothing changed; its retained snapshot installs this time.
+        assert.isTrue("changed" in retry[0]! && !retry[0].changed && retry[0].installed === 1);
         assert.include(yield* f.fs.readFileString(installedSkillPath), "after");
         const after = yield* f.load;
         assert.strictEqual(after.imports.length, imported.imports.length);

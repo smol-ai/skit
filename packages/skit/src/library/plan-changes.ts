@@ -198,20 +198,54 @@ const decide = Effect.fn("Library.decide")(function* (
   return { ...install, _tag: "Update", hash };
 });
 
+export interface PlannedChanges {
+  readonly next: LibraryState;
+  readonly routes: readonly Route[];
+  readonly folders: readonly InstalledSkills.Folder[];
+  readonly changes: readonly InstalledSkillChange[];
+  readonly enabled: readonly {
+    readonly request: Request;
+    readonly change: EnabledChange;
+    readonly skillIds: readonly SkillId[];
+  }[];
+}
+
 /**
- * Plan one intent: edit the Library, then compare the Installed Skills it has with what is recorded
- * and on disk. Builds bytes only to compare them, so they last as long as the Scope.
+ * Plan one intent: edit the Library, then compare the Installed Skills its intent names with what
+ * is recorded and on disk. Builds bytes only to compare them, so they last as long as the Scope.
  */
 export const planChanges = Effect.fn("Library.planChanges")(function* (
   home: string,
   base: LibraryState,
   intent: Intent,
   approvals: readonly Approval[],
-) {
+): Effect.fn.Return<PlannedChanges, PlanError, InstalledSkills.Service | Scope.Scope> {
   const files = yield* InstalledSkills.Service;
   const { next, requests } = yield* edit(base, intent);
-  const selected = (skillId: SkillId) =>
-    intent._tag !== "Update" || intent.skills === undefined || intent.skills.includes(skillId);
+  // A plan touches only the Skills its intent names. Enabling and installing read this device's
+  // folders; the others work where copies are already recorded. Uninstall names copies, below.
+  // Enabling also retires the copies of Skills the Library no longer has.
+  const subjects: ReadonlySet<SkillId> | undefined =
+    intent._tag === "Enabled"
+      ? new Set([
+          ...requests.flatMap(({ calculated }) => calculated.skillIds),
+          ...base.installed_skills
+            .filter((copy) => !next.skills.some((skill) => skill.skill_id === copy.skill_id))
+            .map((copy) => copy.skill_id),
+        ])
+      : intent._tag === "Update" || intent._tag === "Install"
+        ? intent.skills === undefined
+          ? undefined
+          : new Set(intent.skills)
+        : intent._tag === "Remove"
+          ? new Set(
+              base.skills
+                .filter((skill) => skill.collection_id === intent.collectionId)
+                .map((skill) => skill.skill_id),
+            )
+          : new Set();
+  const selected = (skillId: SkillId) => subjects === undefined || subjects.has(skillId);
+  const converges = intent._tag === "Enabled" || intent._tag === "Install";
   const enabling = requests.filter(({ request }) => request.enabled);
   // Enabling a Skill puts back its deleted folders; otherwise only an approved one comes back.
   const enabled = new Set<string>(enabling.flatMap(({ calculated }) => calculated.skillIds));
@@ -230,21 +264,57 @@ export const planChanges = Effect.fn("Library.planChanges")(function* (
     (scope, index, all) =>
       all.findIndex((other) => Schema.toEquivalence(InstallScope)(scope, other)) === index,
   );
-  const routes = yield* Effect.forEach(scopes, (scope) =>
-    Effect.map(files.destinations(scope), (destinations): Route => ({ scope, destinations })),
-  );
+  // Physical roots, so a configured symlink alias is the same place.
+  const identities = new Map<string, { readonly key: string; readonly canonicalPath: string }>();
+  const identify = Effect.fn("Library.identifyRoot")(function* (root: string) {
+    const known = identities.get(root);
+    if (known !== undefined) return known;
+    const identity = yield* files.identify(root);
+    identities.set(root, identity);
+    return identity;
+  });
+  for (const root of [
+    ...base.installed_skills.map((recorded) => recorded.root),
+    ...base.repositories.map((repository) => repository.root),
+  ])
+    yield* identify(root);
+  const canonical = (root: string) => identities.get(root)?.canonicalPath ?? root;
+  /** A recorded copy's scope: the repository whose root holds it, else global. */
+  const scopeOf = (recorded: InstalledSkill): InstallScope => {
+    const path = canonical(recorded.root);
+    const repository = base.repositories.find((item) => {
+      const root = canonical(item.root);
+      return path === root || path.startsWith(`${root}/`);
+    });
+    return repository === undefined
+      ? { kind: "global" }
+      : { kind: "repository", root: repository.root };
+  };
+  const recordedCopies = base.installed_skills.filter((recorded) => selected(recorded.skill_id));
+  const routes: readonly Route[] = converges
+    ? yield* Effect.forEach(scopes, (scope) =>
+        Effect.map(files.destinations(scope), (destinations): Route => ({ scope, destinations })),
+      )
+    : scopes.map((scope) => ({
+        scope,
+        destinations: recordedCopies
+          .filter((recorded) => Schema.toEquivalence(InstallScope)(scopeOf(recorded), scope))
+          .map((recorded) => ({ destination: recorded.destination, root: recorded.root }))
+          .filter(
+            (target, index, all) =>
+              all.findIndex(
+                (other) => other.destination === target.destination && other.root === target.root,
+              ) === index,
+          ),
+      }));
+  for (const root of routes.flatMap((route) => route.destinations.map((target) => target.root)))
+    yield* identify(root);
   const routeAt = (scope: InstallScope) =>
     routes.find((route) => Schema.toEquivalence(InstallScope)(route.scope, scope));
-  const active: readonly InstallDestination[] =
-    intent._tag === "Uninstall" ? [] : yield* files.active;
-
-  // Physical roots, so a configured symlink alias is the same place.
-  const keys = new Map<string, string>();
-  for (const root of new Set([
-    ...routes.flatMap((route) => route.destinations.map((target) => target.root)),
-    ...base.installed_skills.map((recorded) => recorded.root),
-  ]))
-    keys.set(root, (yield* files.identify(root)).key);
+  const active: readonly InstallDestination[] = converges
+    ? yield* files.active
+    : [...new Set(recordedCopies.map((recorded) => recorded.destination))];
+  const keys = new Map([...identities].map(([root, identity]) => [root, identity.key]));
   const at = (recorded: InstalledSkill, target: InstalledSkills.Destination) =>
     recorded.destination === target.destination &&
     keys.get(recorded.root) === keys.get(target.root);
@@ -274,6 +344,8 @@ export const planChanges = Effect.fn("Library.planChanges")(function* (
             at(item, target) &&
             basename(item.path) === basename(path),
         );
+        // Without this device's folders, a copy is brought up to date only where one is recorded.
+        if (!converges && recorded === undefined) continue;
         const folder = yield* files.inspect(path);
         const change = yield* decide(
           {
@@ -493,6 +565,8 @@ export const planIntent = Effect.fn("Library.plan")(function* (
       return { ...plan, _tag: "Remove", intent: reviewed } satisfies Plan;
     case "Update":
       return { ...plan, _tag: "Update", intent: reviewed } satisfies Plan;
+    case "Install":
+      return { ...plan, _tag: "Install", intent: reviewed } satisfies Plan;
     case "Uninstall":
       return { ...plan, _tag: "Uninstall", intent: reviewed } satisfies Plan;
   }
