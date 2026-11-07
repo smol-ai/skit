@@ -51,8 +51,9 @@ export function runCommandTree<Name extends string, Input, ContextInput, E, R>(
 ) {
   let help: HelpDoc.HelpDoc | undefined;
   let requestedVersion: string | undefined;
+  const defaults: Readonly<CliOutput.Formatter> = CliOutput.defaultFormatter({ colors: false });
   const formatter: CliOutput.Formatter = {
-    ...CliOutput.defaultFormatter({ colors: false }),
+    ...defaults,
     formatHelpDoc: (document) => {
       help = document;
       return "";
