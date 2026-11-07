@@ -15,7 +15,7 @@ import { scanWorkspaceWrite } from "./local-tree.js";
  *
  * Staged under <root>/.skit/stage-*, on the targets' filesystem, so each rename stays on one
  * mount; EXDEV from a nested mount is reported, never copied around. Every written file and every
- * directory whose entries changed is flushed before this returns (decisions.md A13). A stage
+ * directory whose entries changed is flushed before this returns (ADR-0027). A stage
  * folder left by a crash is removed at the next acquire.
  */
 export const writeWorkspaceTree = Effect.fn("AuthorWorkspace.writeTree")(function* (

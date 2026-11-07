@@ -31,7 +31,7 @@ const isBusy = Schema.is(
 /**
  * Hold an exclusive lock on `path` until the scope closes. Never waits: a held lock fails
  * FileLockBusy at once. SQLite because neither Node nor Effect has an OS file-lock API, and
- * an exclusive SQLite transaction takes one (decisions.md A8). The file never holds data and is
+ * an exclusive SQLite transaction takes one (ADR-0026). The file never holds data and is
  * never unlinked, so the OS releases the lock when the process exits, even on SIGKILL (t3code
  * apps/server/src/serverOwnership.ts:177-219). The caller creates the parent directory and checks
  * the path; this only takes the lock.

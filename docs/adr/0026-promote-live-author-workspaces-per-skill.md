@@ -235,9 +235,11 @@ owner or wait for it; they cannot run either pass concurrently for the same
 workspace. Lock acquisition and crash recovery must work across processes. Lock
 order is workspace coordinator before Library writer, never the reverse. Only the
 workspace owner may span a network wait; the Library writer must be released.
-Network attempts are bounded; a failed backup must still allow the local
-promotion pass, and retry sleeps release workspace ownership so manual/local
-work is not trapped behind an offline request.
+For a future automatic loop, network attempts must be bounded and a failed
+backup must still allow local promotion. The current manual sync has no retry
+schedule and holds its lease for the command. The earlier requirement to release
+and retake during retry sleeps is superseded; introduce that lifecycle only with
+a retry schedule.
 Unrelated workspaces remain independent except for existing Library mutation
 serialization. This is a required pre-watch rule, not implemented by the current
 Library writer alone.
@@ -274,3 +276,17 @@ Before calling live installation complete, prove at the real workflow boundary:
 - Interruption cannot publish an incomplete composition or lose the last-valid
   selection. Real Linux kill/wake and writer-recovery proof remain mandatory
   before a continuously running watcher is ready to ship.
+
+## Lock mechanism (amended 2026-11-07)
+
+A workspace lease uses an exclusive SQLite transaction, with no busy wait, on
+`.skit/lock.sqlite`. The shared home lock uses the same mechanism. SQLite supplies
+an OS lock without a native addon or timestamp-based stale-lock guesses; process
+exit, including SIGKILL, releases it. The lock files contain no application data
+and are never unlinked. Reads and previews do not acquire workspace ownership.
+
+Take the workspace lease before short home-lock writes and the Library writer.
+Only the workspace lease spans network waits. Built-in edits take that lease;
+external editors do not, so a filesystem check cannot exclude an editor save
+between the check and replacement. Only observed edits can be recovered from
+history.

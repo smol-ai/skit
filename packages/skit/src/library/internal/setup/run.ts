@@ -2,7 +2,7 @@ import { recordPreparation, prepareRoots } from "./prepare-roots.js";
 import { withLock as withHomeLock } from "../../../platform/home-lock.js";
 import { runUndo } from "./undo-execution.js";
 // Setup: steps saved in state.json before any runs, run in order, each marked Done as it ends
-// (decisions.md D4, "Crash halfway" and "Setup records"). Never rolls back on its own.
+// (ADR-0020, durable Library operations). Never rolls back on its own.
 
 import { Effect, Option, Predicate, Schema } from "effect";
 import { isPlatformError } from "effect/PlatformError";

@@ -4,7 +4,7 @@ This guide covers repository setup, local CLI usage, isolated testing, generated
 
 ## Prerequisites
 
-- Node.js 24.22.1+ on 24.x, or 26.12.1+ (Node 22 is not supported: see architecture/decisions.md A8)
+- Node.js 24.22.1+ on 24.x, or 26.12.1+ (Node 22 is unsupported because loading SQLite emits a warning that breaks CLI output contracts)
   ([October 2026 security release](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases))
 - pnpm 11.23.0
 

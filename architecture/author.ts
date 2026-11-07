@@ -1,12 +1,12 @@
 /** Public intent operations own lifecycle sequencing. The workspace/history interfaces below
- * specify their PRIVATE storage contracts, not capabilities available to frontends (A7). */
+ * specify their PRIVATE storage contracts, not capabilities available to frontends (ADR-0027). */
 /**
  * Architecture contract: the two device-side author owners, AuthorWorkspace and AuthorHistory.
  * Target API, types only. Approved. Both owners are enforced by conformance/author.ts. Same shape
  * as library.ts.
  *
  * Markers: FROM CODE = today's behaviour, cited at its file:line. NEW = not in today's code.
- * OPEN: = a choice the code does not settle; each names its entry in decisions.md "Author owners" (A1…).
+ * OPEN: = a choice the code does not settle; unresolved proposals belong in Arc Work.
  * OPEN-FOR-TIM: = a product choice waiting on Tim; the contract around it holds for every option.
  * Paths below are relative to packages/cli/src unless they start with packages/ or docs/.
  *
@@ -100,7 +100,7 @@ import type {
   AuthorWriteNotPrepared,
 } from "../packages/skit/src/author/index.js";
 
-// The NEW errors below, bound to their Schema.TaggedError classes (decisions.md "Errors"); each
+// The NEW errors below, bound to their Schema.TaggedError classes (docs/coding-standards.md); each
 // keeps the fields stated here.
 
 export type {
@@ -663,7 +663,7 @@ export type WritingRecovery = "merge";
  *      Identity None → plans from Idle { base: null } over scanAuthorSyncTree(root) alone, reports
  *      that sync would create an identity, and calls neither refresh nor saveTree: it creates no
  *      identity, device record, journal key or connection. (Sync.loadPlanInput may still cache the Registry's current
- *      revision in the content-addressed history store; accepted, decisions.md step 3 follow-ups.)
+ *      revision in the content-addressed history store; accepted, ADR-0027 "Workspace write recovery".)
  *      Identity Some → steps 5-8, whose only write is history: refresh and saveTree back up the
  *      files, as today (workflows/author/sync.ts:510, before the apply check at :601).
  *   3. Apply: lease = acquire(root) for the whole command (A8). ws = read(root).

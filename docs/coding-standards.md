@@ -156,3 +156,16 @@ Each meaningful refactor PR should explain:
   checks run locally from CI results and unverified expectations.
 
 Run the smallest relevant checks, following [AGENTS.md](../AGENTS.md#validation).
+
+## Services and errors
+
+Introduce a `Context.Service` only for an owner of state, a held resource, a
+platform boundary with a real alternative implementation, or a key required by
+the framework. Test substitution alone does not justify a service. Workflows
+that coordinate owners are plain functions.
+
+Define errors once beside their owner's interface. New errors use
+`Schema.TaggedError` with the class name as the tag, optionally prefixed by the
+owner. Convert existing `Data.TaggedError` classes when their owner is reworked,
+not in a separate sweep. Architecture contracts import those classes rather
+than duplicating their fields.

@@ -514,7 +514,7 @@ export type SetupStep =
 
 /**
  * One step as saved in state.json before any step runs; `after` evidence that depends on an earlier
- * step is saved in the write that marks that step Done (decisions.md D4, setup records). `before` and `after` are the evidence
+ * step is saved in the write that marks that step Done (ADR-0020, durable Library operations). `before` and `after` are the evidence
  * the step expects at each path it touches. Resume, per path (modelled on recovery-moves.ts:568-585):
  * observed = after → its own completed effect, skip; observed = before → safe to repeat, run;
  * anything else → Stopped (EvidenceDiffers), nothing more runs. Import is additive

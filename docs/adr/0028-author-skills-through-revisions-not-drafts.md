@@ -62,3 +62,19 @@ structural-sync and history-backup tests. Historical v2→v3 loader results from
 November 3 describe a superseded branch representation, not current compatibility.
 
 No deployment or live database upgrade is established by these local checks.
+
+## Server ownership and accepted follow-up policy
+
+Skits owns revisions, release archives, publication and deletion. Publication
+checks that the archive matches the selected revision before storing it.
+Private access is based on namespace ownership or team membership, without
+per-SKIT grants. Identity owns account state and credential invalidation;
+principal locking and authorization-generation checks remain in place.
+
+The accepted cleanup direction permits unreachable blobs and archives: deletion
+removes records, and publication need not compensate for an orphaned archive.
+Garbage collection is deferred until each owner can perform a reference-checked
+sweep. This is intended policy, not proof it is implemented: deletion still
+attempts archive cleanup and returns an archive-cleanup status at this revision.
+That implementation gap and the unresolved Identity table layout belong in
+Arc Work.

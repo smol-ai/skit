@@ -1,6 +1,6 @@
 /**
- * RESOLUTIONS of this file's OPEN items, following decisions already made (decisions.md D1, D4,
- * service rule). Anything not listed here stays OPEN. The declarations below follow them.
+ * RESOLUTIONS of this file's OPEN items, following the Library contract, ADR-0020 and
+ * docs/coding-standards.md. Anything not listed here stays OPEN. The declarations below follow them.
  * 1. Restore records its operation in state.json before moving folders (crash rule), so it does
  *    write state.json under the new model.
  * 2. Undo covers Library and folders; discovery folders are undone by MachineSettings, called by

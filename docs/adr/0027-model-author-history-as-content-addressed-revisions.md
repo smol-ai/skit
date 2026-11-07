@@ -154,3 +154,34 @@ blobs, and a `current` pointer per SKIT. The local history journal and sync bind
 device history store plus one `SyncState` per Author Workspace and SKIT locator. The diff3 core of `packages/skit/src/sync/merge.ts` survives
 inside `Merge.lines`. The author-sync demo replays `plan` and `run`, so it follows the real code
 path.
+
+## Workspace write recovery (amended 2026-11-07)
+
+Public Author operations own leases, backup acknowledgement and checkpoint
+sequencing. Workspace and history storage capabilities stay private; Registry
+transport receives no local writer or lease.
+
+Before any tree write, save a durable Writing checkpoint naming the stored
+before and target trees. Its single-use PreparedWrite is bound to the workspace,
+lease owner and checkpoint revision; a later transition or released lease makes
+it stale. Failed or partial attempts consume it too, so recovery prepares again.
+Advance beyond Writing only after the writer has flushed the changes.
+
+Stage on the workspace filesystem and flush written files and changed
+directories before success. Refuse cross-device rename rather than silently
+copying. Check all descendants, including ignored entries, before structural
+replacement; a rescan does not grant authority over an externally replaced path.
+
+If an interrupted write encounters newly authored edits, capture them and merge
+with the pending target, then prepare a new Writing checkpoint for that result.
+Unlike Library operation recovery, Author sync need not stop solely because the
+author continued editing. Keep both merge inputs recoverable and report choices.
+
+Capture and normalized scan must describe the same verbatim tree. Retry a
+mismatch a bounded number of times, then report `LocalFilesChangedDuringSync`.
+Backup reads workspace identity independently of connection metadata, so an
+invalid connection cannot prevent preserving authored content.
+
+A preview creates no workspace identity, connection or lease. It may cache a
+remote content-addressed tree; such a cache write is idempotent. Credentials for
+sync and publication must be resolved for the connected Registry's own origin.

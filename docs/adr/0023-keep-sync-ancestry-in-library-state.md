@@ -32,3 +32,13 @@ The v7-to-v8 migration happens once in the state-file loader and adds no ancestr
 - A remote write that commits without a response leaves state and its previous ancestry together. The retry re-merges against that coherent pair.
 - `state.json` grows by one normalized portable manifest. Inventory output omits it, along with the storage `schemaVersion`, so storage changes no longer reshape `skit.inventory`.
 - Arbitrary edits inside `state.json` that keep its ancestry are indistinguishable from legitimate local edits. The protection boundary is a coherent whole file, not tamper evidence.
+
+## Local recovery
+
+Before changing local copies, Library records the Sync program: target manifest,
+verified remote receipt, device references, frozen routing and folder evidence.
+Later phases reference that program rather than embedding earlier history.
+Startup replays only recorded local effects, accepting captured before-evidence
+or verified effects of that program. Divergent state, folders or parents stop
+recovery. Remote reads, transfers and compare-and-swap are never replayed by
+Library startup; remote transport remains outside Library.

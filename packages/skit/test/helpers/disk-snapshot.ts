@@ -73,7 +73,7 @@ export const captureDisk = Effect.fn("Test.captureDisk")(function* (
       });
     else if (info.type === "File") {
       const bytes = Buffer.from(yield* fs.readFile(path));
-      // An empty lock.sqlite is a home or workspace lock (decisions.md A8, D3): it never holds
+      // An empty lock.sqlite is a home or workspace lock (ADR-0026): it never holds
       // data and is never unlinked, so taking a lock is not a disk change. Bytes in it would be.
       if (segments.at(-1) === "lock.sqlite" && bytes.length === 0) return;
       entries.push({

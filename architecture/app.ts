@@ -5,7 +5,7 @@
  * Module and state descriptions are navigation, not a checked service graph or API contract.
  * Private imports, permitted services and placement are enforced by boundaries.mjs/layout.mjs.
  * Selected API signatures are checked by conformance/; see README.md for coverage.
- * Historical migration plans and decisions belong in Arc Work and decisions.md.
+ * Durable rationale belongs in docs/adr/; migration plans and progress belong in Arc Work.
  */
 
 export const owners = {

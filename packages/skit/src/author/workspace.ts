@@ -4,7 +4,7 @@
  * It owns <root>/.skit/workspace.json, .skit/.gitignore, .skit/connection.json,
  * .skit/lock.sqlite, .skit/stage-*, <root>/skit.remote.json, and the file writes sync makes.
  * Callers read with `read` / `readIdentity` and write only through a WorkspaceLease from
- * `acquire`, so every write runs under the per-workspace lock (decisions.md A8).
+ * `acquire`, so every write runs under the per-workspace lock (ADR-0026).
  */
 import {
   Context,
