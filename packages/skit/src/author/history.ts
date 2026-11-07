@@ -404,7 +404,15 @@ const writeHistoryEvent = Effect.fn("AuthorHistory.writeHistoryEvent")(function*
       ),
       // A journal SQLite or its schema cannot read is unusable history.
       Effect.catchTag(["SqlError", "SchemaError"], (error) =>
-        Effect.fail(new AuthorHistoryInvalid({ path, reason: String(error) })),
+        Effect.fail(
+          new AuthorHistoryInvalid({
+            path,
+            // SchemaError overrides string formatting; SqlError inherits Error's formatter.
+            reason: Schema.isSchemaError(error)
+              ? String(error)
+              : Error.prototype.toString.call(error),
+          }),
+        ),
       ),
     );
 });

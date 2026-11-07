@@ -154,7 +154,7 @@ export const publishRelease = Effect.fn("Registry.publishRelease")(function* (
       if (classified.kind === "response_decode" || classified.kind === "request_encoding")
         return new SkitContractError({
           contract: classified.kind === "request_encoding" ? "publish request" : "publish response",
-          issues: [{ path: "", message: String(error) }],
+          issues: [{ path: "", message: classified.detail }],
         });
       const failure = registryApiFailure(error, { defaultStatus: 400 });
       const detail = registryApiFailureMessage("SKIT publish", error, { defaultStatus: 400 });

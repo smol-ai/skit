@@ -4,6 +4,7 @@ import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Cause, Effect, Exit, FileSystem, Schema } from "effect";
 import { skitLayer } from "@smolai/skit-core/platform";
+import { releasePublishRequestSchema } from "@smolai/skit-core/api";
 import { publish } from "../src/author/publish.js";
 import { authorWorkspaceLayer } from "@smolai/skit-core/author";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
@@ -71,7 +72,7 @@ it.effect.each(["/registry/{owner}/{slug}/publish", "http://["])(
       let received: {
         url?: string;
         authorization?: string;
-        body?: Schema.Schema.Type<typeof Schema.JsonObject>;
+        body?: typeof releasePublishRequestSchema.Type;
       } = {};
       const fetcher: TestHttpHandler = (input, url) =>
         Effect.sync(() => {
@@ -80,7 +81,7 @@ it.effect.each(["/registry/{owner}/{slug}/publish", "http://["])(
           received = {
             url: url.toString(),
             authorization: input.headers["authorization"],
-            body: Schema.decodeSync(Schema.fromJsonString(Schema.JsonObject))(
+            body: Schema.decodeSync(Schema.fromJsonString(releasePublishRequestSchema))(
               new TextDecoder().decode(
                 input.body._tag === "Uint8Array" ? input.body.body : undefined,
               ),
@@ -114,7 +115,10 @@ it.effect.each(["/registry/{owner}/{slug}/publish", "http://["])(
       expect(received.body?.version).toBe("1.2.3");
       expect(received.body?.revision_id).toBe(revision);
       const archive = join(root, "uploaded.zip");
-      yield* writeBytes(archive, Buffer.from(String(received.body?.archive_base64), "base64"));
+      expect(received.body).toBeDefined();
+      if (!received.body)
+        return yield* Effect.die(new Error("Publication request was not observed"));
+      yield* writeBytes(archive, Buffer.from(received.body.archive_base64, "base64"));
       expect(yield* unzipList(archive)).toEqual([
         "README.md",
         "skills/review/SKILL.md",
@@ -175,13 +179,11 @@ it.effect("publish uses skit.remote.json without including it in the Release", (
         Effect.sync(() => {
           if (input.url.includes(".well-known")) return new Response(null, { status: 404 });
           publishUrl = url.toString();
-          archiveBase64 = String(
-            Schema.decodeSync(Schema.fromJsonString(Schema.JsonObject))(
-              new TextDecoder().decode(
-                input.body._tag === "Uint8Array" ? input.body.body : undefined,
-              ),
-            ).archive_base64,
-          );
+          archiveBase64 = Schema.decodeSync(Schema.fromJsonString(releasePublishRequestSchema))(
+            new TextDecoder().decode(
+              input.body._tag === "Uint8Array" ? input.body.body : undefined,
+            ),
+          ).archive_base64;
           return Response.json(
             {
               release: {

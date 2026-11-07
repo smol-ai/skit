@@ -48,7 +48,9 @@ export function normalizeDescriptorDeclarations(value: unknown): unknown {
       const skill = input as DescriptorObject;
       const legacy = legacyInvocation(skill.trigger_modes);
       if (typeof skill.invocation === "string" && legacy && skill.invocation !== legacy)
-        throw new ConflictingInvocationDeclaration({ skill: String(skill.name ?? "Skill") });
+        throw new ConflictingInvocationDeclaration({
+          skill: typeof skill.name === "string" ? skill.name : "Skill",
+        });
       const {
         trigger_modes: _triggerModes,
         mutation_scopes: _mutationScopes,
