@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import * as Library from "../src/library/library.js";
 import { LibraryState } from "../src/library/library-state.js";
-import { openSetupReview, runSetup } from "../src/library/setup.js";
+import { openSetupReview } from "../src/library/setup.js";
 import { OperationStatus } from "../src/library/store/state-schema.js";
 import { inspectLibrary, saveLibrary } from "./helpers/library-store.js";
 import { skitLayer } from "../src/platform/layer.js";

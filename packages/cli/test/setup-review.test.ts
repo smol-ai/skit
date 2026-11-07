@@ -4,7 +4,6 @@ import { Effect, FileSystem, Result } from "effect";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { openSetupReview } from "@smolai/skit-core/library/setup";
-import { runSetup } from "@smolai/skit-core/library/setup";
 import { captureDisk } from "./helpers/disk-snapshot.js";
 import { libraryHome, importCollectionIn, scratch, writingTo } from "./helpers/library-home.js";
 
