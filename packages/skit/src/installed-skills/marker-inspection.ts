@@ -38,7 +38,7 @@ export function inspectOwnershipMarker(
     // A missing marker is absent; unreadable is a real failure; unparseable is invalid.
     const text = yield* fs
       .readFileString(join(path, ".skit-ownership.json"))
-      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
     if (text === undefined) return { kind: "absent" as const };
     const parsed = Schema.decodeUnknownOption(OwnershipMarkerDocument)(text);
     return parsed._tag === "Some"

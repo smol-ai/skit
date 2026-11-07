@@ -338,7 +338,7 @@ export const make = Effect.fn("make")(function* (configuration?: Routing | Inven
     const absolute = resolve(path);
     const info = yield* links.identity
       .lstat(absolute)
-      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
     const ancestors = yield* pathChain(dirname(absolute));
     if (info === undefined)
       return {
@@ -349,7 +349,7 @@ export const make = Effect.fn("make")(function* (configuration?: Routing | Inven
       } satisfies Folder;
     const followed = yield* links.identity
       .stat(absolute)
-      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
     const kind =
       info.type === "Directory" || info.type === "SymbolicLink" || info.type === "File"
         ? info.type

@@ -58,7 +58,7 @@ const maybeStat = Effect.fn("SetupUndo.stat")(function* (path: string) {
     .lstat(path)
     .pipe(
       Effect.catchTag("PlatformError", (error) =>
-        error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
+        error.reason._tag === "NotFound" ? Effect.undefined : Effect.fail(error),
       ),
     );
 });

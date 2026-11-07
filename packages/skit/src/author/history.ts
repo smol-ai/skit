@@ -557,7 +557,7 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
     }
     const journalFile = yield* links
       .lstat(journalPath)
-      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
     if (journalFile?.type === "SymbolicLink")
       return yield* new AuthorHistoryInvalid({
         path: journalPath,
@@ -569,7 +569,7 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
       Effect.map((identity) =>
         Option.getOrUndefined(Option.map(identity, (value) => value.workspaceId)),
       ),
-      Effect.catchTag("AuthorWorkspaceMetadataInvalid", () => Effect.succeed(undefined)),
+      Effect.catchTag("AuthorWorkspaceMetadataInvalid", () => Effect.undefined),
     );
     // Machine identity may need the Library writer. Never acquire that writer while holding the
     // journal permit/transaction: promotion saves history under its Library writer, so the reverse

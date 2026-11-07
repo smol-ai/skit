@@ -218,7 +218,7 @@ export const prepareDeviceLogin = Effect.fn("Registry.prepareDeviceLogin")(funct
 }) {
   const origin = yield* validateAuthenticationOrigin(input.origin);
   const reusable = () =>
-    input.relogin ? Effect.succeed(undefined) : readPendingLogin(origin, input.home, input.scopes);
+    input.relogin ? Effect.undefined : readPendingLogin(origin, input.home, input.scopes);
   const pending = yield* reusable();
   if (pending) return { pending, resumed: true };
   const started = yield* startDeviceLogin({ ...input, origin });

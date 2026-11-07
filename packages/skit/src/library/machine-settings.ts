@@ -58,9 +58,7 @@ export const read = Effect.fn("MachineSettings.read")(function* (home: string) {
     .readFileString(path)
     .pipe(
       Effect.catchTag("PlatformError", (error) =>
-        error.reason._tag === "NotFound"
-          ? Effect.succeed(undefined)
-          : Effect.fail(new Unusable({ path })),
+        error.reason._tag === "NotFound" ? Effect.undefined : Effect.fail(new Unusable({ path })),
       ),
     );
   const document =

@@ -221,7 +221,7 @@ const applyRecoveryMoves = Effect.fn("RecoveryMoves.apply")(
         .pipe(
           Effect.catchTag("PlatformError", (error) =>
             error.reason._tag === "NotFound"
-              ? Effect.succeed(undefined)
+              ? Effect.undefined
               : Effect.fail(
                   new StalePlan({ message: "The Library changed since this was previewed" }),
                 ),
@@ -257,7 +257,7 @@ const missingStat = Effect.fn("Recovery.stat")(function* (path: string) {
     .lstat(path)
     .pipe(
       Effect.catchTag("PlatformError", (error) =>
-        error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
+        error.reason._tag === "NotFound" ? Effect.undefined : Effect.fail(error),
       ),
     );
 });

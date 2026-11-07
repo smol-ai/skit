@@ -91,11 +91,11 @@ export const publishRelease = Effect.fn("Registry.publishRelease")(function* (
         );
   }).pipe(
     Effect.catchTags({
-      RegistryTransportError: () => Effect.succeed(undefined),
-      HttpClientError: () => Effect.succeed(undefined),
+      RegistryTransportError: () => Effect.undefined,
+      HttpClientError: () => Effect.undefined,
     }),
     // Only discovery URL syntax remains in this channel.
-    Effect.catch(() => Effect.succeed(undefined)),
+    Effect.catch(() => Effect.undefined),
   );
   if (discovered) publishUrl = discovered;
   const client = yield* HttpApiClient.makeWith(PublicationAuthenticatedApi, {

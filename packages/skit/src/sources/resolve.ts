@@ -1095,7 +1095,7 @@ const fetchGitSource = Effect.fn("Source.fetchGit")(function* (
   for (const path of [...new Set(selectedPaths)].sort()) {
     const requested = yield* lockedSkillDirectory(root, path);
     const directory = yield* checkoutPath(checkoutRoot, requested).pipe(
-      Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
+      Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined),
     );
     if (directory !== undefined) selectedDirectories.set(path, directory);
   }

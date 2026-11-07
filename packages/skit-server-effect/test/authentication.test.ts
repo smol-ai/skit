@@ -13,7 +13,7 @@ const testLayer = Layer.merge(platformLayer, BrowserCrypto.layer);
 const allScopes = new Set(["library:sync", "authoring:write", "publication:write"] as const);
 const authenticationServiceFor = (
   supportedScopes = allScopes,
-  getSession: BetterAuthService["getSession"] = () => Effect.succeed(undefined),
+  getSession: BetterAuthService["getSession"] = () => Effect.undefined,
 ) =>
   Effect.gen(function* () {
     yield* TestClock.setTime(new Date("2026-09-11T03:04:05.000Z").getTime());

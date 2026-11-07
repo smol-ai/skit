@@ -364,7 +364,7 @@ export const makeBetterAuth = (configuration: BetterAuthConfiguration, sql: Data
         catch: (cause) => new BetterAuthError({ operation: "read session", cause }),
       }).pipe(
         Effect.flatMap((unknownSession) => {
-          if (unknownSession === null) return Effect.succeed(undefined);
+          if (unknownSession === null) return Effect.undefined;
           return Schema.decodeUnknownEffect(SessionIdentity)(unknownSession).pipe(
             Effect.map(({ user, session }) => ({
               userId: user.id,

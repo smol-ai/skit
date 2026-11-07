@@ -109,7 +109,7 @@ export const scanUsage = Effect.fn("Library.scanUsage")(function* (options: Usag
       Effect.catch((error) => {
         if (isRoot) c.status = error.reason._tag === "NotFound" ? "missing" : "unreadable";
         else c.unreadableFiles++;
-        return Effect.succeed(undefined);
+        return Effect.undefined;
       }),
     );
     if (!info) return;
@@ -122,7 +122,7 @@ export const scanUsage = Effect.fn("Library.scanUsage")(function* (options: Usag
         const snapshot = yield* fs.stat(dir).pipe(
           Effect.catch(() => {
             c.unreadableFiles++;
-            return Effect.succeed(undefined);
+            return Effect.undefined;
           }),
         );
         if (!snapshot) return;

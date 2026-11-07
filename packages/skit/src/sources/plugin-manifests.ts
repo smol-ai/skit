@@ -161,7 +161,7 @@ export const readPluginUnits = Effect.fn("Source.readPluginUnits")(function* (
           )
         )
           options.diagnostics?.push(diagnostic);
-        return Effect.succeed(undefined);
+        return Effect.undefined;
       }),
     );
   const addUnit = Effect.fn("Source.pluginUnit")(function* (

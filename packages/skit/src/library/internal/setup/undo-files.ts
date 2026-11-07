@@ -87,7 +87,7 @@ export const checkAnchor = Effect.fn("SetupUndo.checkAnchor")(function* (file: U
     .realPathNative(dirname(file.path))
     .pipe(
       Effect.catchTag("PlatformError", (error) =>
-        error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
+        error.reason._tag === "NotFound" ? Effect.undefined : Effect.fail(error),
       ),
     );
   if (
@@ -110,7 +110,7 @@ export const restoreMarker = Effect.fn("SetupUndo.restoreMarker")(function* (
     .lstat(marker)
     .pipe(
       Effect.catchTag("PlatformError", (error) =>
-        error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
+        error.reason._tag === "NotFound" ? Effect.undefined : Effect.fail(error),
       ),
     );
   if (existing && existing.type !== "File")

@@ -44,7 +44,7 @@ const makeReleaseNotice = Effect.gen(function* () {
   const read = fs.readFileString(path).pipe(
     Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(Cache))),
     Effect.map((cache) => (cache.source === source ? cache : undefined)),
-    Effect.catch(() => Effect.succeed(undefined)),
+    Effect.catch(() => Effect.undefined),
   );
   const write = Effect.fn("ReleaseNotice.write")(function* (cache: Cache) {
     const temporary = `${path}.${randomUUID()}.tmp`;

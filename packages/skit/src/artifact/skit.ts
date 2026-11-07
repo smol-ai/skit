@@ -45,7 +45,7 @@ export function readSkitDescriptor(
     // A missing skit.json falls back to the README; any other read failure is real.
     const config = yield* fs
       .readFileString(resolve(root, "skit.json"))
-      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
     if (config !== undefined) return yield* parseSkitConfig(config);
     const readme = yield* fs.readFileString(resolve(root, "README.md"));
     return yield* parseSkitReadme(readme);

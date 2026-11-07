@@ -33,7 +33,7 @@ export const readCollectionVersion = Effect.fn("Library.readCollectionVersion")(
   const invalid = (detail: string) => new InvalidLibraryState({ path: manifestPath, detail });
   const text = yield* fs
     .readFileString(manifestPath)
-    .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
   // Preserve the ordinary missing-whole-tree failure at the caller's read, without writes.
   if (text === undefined) return legacy;
   const manifest = yield* Schema.decodeEffect(Composition)(text).pipe(

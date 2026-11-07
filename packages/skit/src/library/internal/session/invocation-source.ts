@@ -68,7 +68,7 @@ const readInvocation = Effect.fn("Library.readSkillInvocation")(function* (
       .pipe(
         Effect.catchTag("PlatformError", (error) =>
           error.reason._tag === "NotFound" && !adapter.required
-            ? Effect.succeed(undefined)
+            ? Effect.undefined
             : Effect.fail(error),
         ),
       );

@@ -91,7 +91,7 @@ function readAuthDocument(home?: string) {
     const fs = yield* FileSystem.FileSystem;
     const text = yield* fs.readFileString(path).pipe(
       Effect.catchTag("PlatformError", (error) => {
-        if (isErrno(error, "ENOENT")) return Effect.succeed(undefined);
+        if (isErrno(error, "ENOENT")) return Effect.undefined;
         return Effect.fail(
           new CredentialsUnusable({
             path,

@@ -36,7 +36,7 @@ export const handleRequest = Effect.fn("BetterAuthHttp.handleRequest")(function*
       .limit(`${pathname}:${clientIp}`)
       .pipe(
         Effect.tapError((error) => Effect.logError("authentication rate limit failed", error)),
-        Effect.catchTag("Cloudflare.RateLimitError", () => Effect.succeed(undefined)),
+        Effect.catchTag("Cloudflare.RateLimitError", () => Effect.undefined),
       );
     if (outcome === undefined) return yield* storageFailure;
     if (!outcome.success)
@@ -61,7 +61,7 @@ export const handleUsernameClaim = Effect.fn("BetterAuthHttp.handleUsernameClaim
   const configuration = yield* ServerConfiguration;
   const request = yield* HttpServerRequest.HttpServerRequest;
   const webRequest = yield* HttpServerRequest.toWeb(request).pipe(
-    Effect.catch(() => Effect.succeed(undefined)),
+    Effect.catch(() => Effect.undefined),
   );
   if (webRequest === undefined)
     return yield* HttpServerResponse.json(
@@ -75,7 +75,7 @@ export const handleUsernameClaim = Effect.fn("BetterAuthHttp.handleUsernameClaim
     );
   const session = yield* betterAuth
     .authenticateSession(webRequest.headers)
-    .pipe(Effect.catchTag("BetterAuth.AdapterError", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("BetterAuth.AdapterError", () => Effect.undefined));
   if (session === undefined)
     return yield* HttpServerResponse.json(
       { error: "unauthorized" },
@@ -123,7 +123,7 @@ export const handleProvisionedUsername = Effect.fn("BetterAuthHttp.handleProvisi
     const request = yield* HttpServerRequest.HttpServerRequest;
     const session = yield* betterAuth
       .authenticateSession(new Headers(request.headers))
-      .pipe(Effect.catchTag("BetterAuth.AdapterError", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("BetterAuth.AdapterError", () => Effect.undefined));
     if (session === undefined)
       return yield* HttpServerResponse.json(
         { error: "unauthorized" },

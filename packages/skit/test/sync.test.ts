@@ -266,7 +266,7 @@ const makeRegistry = () => {
         never
       >([id], (queue) => {
         const [next, ...rest] = queue;
-        if (next === undefined) return Effect.succeed(undefined);
+        if (next === undefined) return Effect.undefined;
         const { revision } = revisions.get(next)!;
         return Effect.succeed([{ id: next, revision }, [...rest, ...revision.parents]] as const);
       }),

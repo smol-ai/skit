@@ -24,7 +24,7 @@ export const installedSkillStagingDirectory = Effect.fn("Install.stagingDirector
   while (realRoot === undefined) {
     realRoot = yield* fs
       .realPath(ancestor)
-      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
     if (realRoot === undefined) {
       const parent = dirname(ancestor);
       if (parent === ancestor) return yield* fs.realPath(ancestor);
@@ -99,7 +99,7 @@ const installedSkillBackups = Effect.fn("Install.backups")(function* (
     const type = yield* links.lstat(backups).pipe(
       Effect.map((info) => info.type),
       Effect.catchTag("PlatformError", (error) =>
-        error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
+        error.reason._tag === "NotFound" ? Effect.undefined : Effect.fail(error),
       ),
     );
     if (type !== "Directory") continue;

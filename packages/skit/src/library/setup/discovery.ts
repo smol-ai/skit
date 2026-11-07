@@ -165,8 +165,8 @@ export const suggestRepositoryRoots = Effect.fn("Setup.suggestRepositoryRoots")(
     const path = join(home, folder);
     // On a case-insensitive volume `Work` and `work` are one folder; report it once.
     const identity = yield* links.identity.lstat(path).pipe(
-      Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
-      Effect.catchReason("PlatformError", "PermissionDenied", () => Effect.succeed(undefined)),
+      Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined),
+      Effect.catchReason("PlatformError", "PermissionDenied", () => Effect.undefined),
     );
     if (identity?.type !== "Directory" || seen.has(`${identity.dev}:${identity.ino}`)) continue;
     seen.add(`${identity.dev}:${identity.ino}`);
