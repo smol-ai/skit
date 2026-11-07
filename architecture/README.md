@@ -15,17 +15,25 @@ Start at a command in `packages/cli/src/commands/` and follow its calls to core.
 CLI output schemas and rendering functions can be imported directly from their
 modules. A folder does not need a sibling re-export file.
 
-| Core entry | Responsibility |
+| Core package entry | Responsibility and current operation boundary |
 | --- | --- |
-| `library/source` | Source admissibility, acquisition, import lifetime and add reports |
-| `library/queries` | Passive reports and Skill metadata |
-| `library/session` | Interactive Library state, choices and transitions |
-| `library/enable` | Enable/disable selection, reviewed plans and outcomes |
-| `library/update`, `library/edit` | Source updates and reviewed local edit imports |
-| `library/remove` | Removal selection and reviewed plans |
-| `library/sync` | Library sync sessions and outcomes |
-| `library/recovery` | Recovery inspection and reviewed restores |
-| `library/security` | Review and acceptance of security findings |
+| `library` | `Library.Service` and its captured owner methods: `addSource`, `importSource`, `remove`, `update`, `edit`, queries, `inventory`, `enable`, `session`, `sync`, `syncSession`, `plan`, `apply`, `setup`, `history`, `recovery` |
+| `library/source` | Source requests, parsing and passive `inspectSource`; mutation goes through `Library.addSource` / `importSource` |
+| `library/queries` | Report schemas and query vocabulary; execute reports on Library methods |
+| `library/session` | Interactive session vocabulary and pure choice helpers; open with `Library.session.open` |
+| `library/enable` | Selection/result vocabulary and reviewed-plan application; open with `Library.enable.open` |
+| `library/update`, `library/edit` | Update/edit vocabulary and review helpers; start with `Library.update` / `edit` |
+| `library/sync` | Transport/session vocabulary and reviewed sync helpers; start with `Library.sync` / `syncSession` |
+| `library/recovery` | Compatibility recovery workflows; passive facts are `Library.recovery.list` / `inspect`, restores use owner plans |
+| `library/setup` | Setup scanning, review and application workflow over Library and MachineSettings |
+| `library/routing`, `library/inventory`, `library/usage` | Device routing, inventory vocabulary and local transcript reports |
+| `machine-settings` | Device-local roots, repository choices and independently durable setup-settings undo |
+
+These are package subpaths from `packages/skit/package.json`, not one public
+service per row. Removal and security operations have no separate package entry:
+use `Library.remove`, `securityReview` and `acceptSecurityFinding`. Owner-private
+implementations live under `library/internal/`; `architecture/app.ts` records
+their ownership rather than granting callers storage access.
 
 `packages/cli/src/application.ts` defines concrete owner layers. `commands/tree.ts`
 uses Effect CLI's `Command.provide` to supply them to the selected command. Groups
@@ -45,8 +53,10 @@ For example, enable/disable follows:
 ```text
 commands/library-enable-command.ts       parse flags and scope
   → library/enable.ts                    collect choices and render outcomes
-    → @smolai/skit-core/library/enable    open selection → plan intent → apply reviewed plan
-      → private Library implementation   own freshness, writes and recovery
+    → Library.Service.enable.open()      capture the owner's selection view
+    → selection.plan(intent)              review without holding a writer
+    → applySetEnabledPlan(plan)           apply the captured owner's reviewed plan
+      → private Library implementation    own freshness, writes and recovery
 ```
 
 The prompts stay outside writer scopes; core owns the plan and its application.
@@ -58,8 +68,9 @@ Add follows a shorter path:
 ```text
 commands/library-add.ts              flags, preview/add choice, progress and rendering
   → registry/library-source.ts       locator and credential selection → SourceRequest
-  → core library/source.ts           enforce source policy; preview or add
-    → addSource                      import and optional description report
+  → inspectSource(request)           passive preview via library/source
+  OR Library.Service.addSource(request)
+    → private source operation       source policy, acquisition/import lifetime and description report
 ```
 
 The command passes the source result directly to its output schema. It does not
