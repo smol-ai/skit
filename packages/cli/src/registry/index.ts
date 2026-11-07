@@ -16,7 +16,7 @@ import {
   removeRegistryRemote,
 } from "./auth.js";
 
-import { prepareDeviceLogin, completeDeviceLogin } from "./device-login.js";
+import { prepareDeviceLogin, completeDeviceLogin, readPendingLogin } from "./device-login.js";
 export type { PendingDeviceLogin } from "./device-login.js";
 
 export type { ResolvedAuth } from "./accounts.js";
@@ -40,7 +40,11 @@ export const Registry = {
   status: registryStatus,
   logout: logoutEffect,
   login: loginEffect,
-  reuseLogin,
+  // A pending browser login takes precedence over an older stored credential on continuation.
+  reuseLogin: Effect.fn("Registry.reuseLogin")(function* (input: Parameters<typeof reuseLogin>[0]) {
+    if (yield* readPendingLogin(input.origin, input.home, input.scopes)) return undefined;
+    return yield* reuseLogin(input);
+  }),
   loginTarget: resolveLoginTarget,
   prepareDeviceLogin,
   completeDeviceLogin,

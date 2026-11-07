@@ -128,6 +128,7 @@ export const authLoginCommand = Effect.fn("CLI.authLogin")(
       origin,
       scopes,
       home: options.home,
+      relogin: options.relogin,
     }).pipe(
       Effect.catchTag("DeviceLoginUnavailable", () =>
         options.interactive ? promptForPassword : new InteractiveLoginUnavailable(),
@@ -154,7 +155,6 @@ export const authLoginCommand = Effect.fn("CLI.authLogin")(
         scopes.join(","),
         ...(options.alias === undefined ? [] : ["--as", options.alias]),
         ...(options.home === undefined ? [] : ["--home", options.home]),
-        ...(options.relogin ? ["--relogin"] : []),
       ]
         .map((word) =>
           /^[\w@%+=:,./-]+$/u.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`,

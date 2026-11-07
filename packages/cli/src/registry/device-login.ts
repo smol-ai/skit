@@ -38,6 +38,9 @@ export const PendingDeviceLogin = Schema.Struct({
   verificationUri: Schema.String,
   interval: Schema.Number,
   expiresAt: Schema.String,
+  scopes: Schema.optionalKey(
+    Schema.Array(Schema.Literals(["library:sync", "authoring:write", "publication:write"])),
+  ),
 });
 export type PendingDeviceLogin = typeof PendingDeviceLogin.Type;
 
@@ -90,9 +93,17 @@ const readSavedPendingLogin = Effect.fn("Registry.readSavedPendingLogin")(functi
 export const readPendingLogin = Effect.fn("Registry.readPendingLogin")(function* (
   origin: string,
   home?: string,
+  scopes?: readonly string[],
 ) {
   const pending = yield* readSavedPendingLogin(home);
   if (Option.isNone(pending) || pending.value.origin !== origin) return undefined;
+  if (
+    scopes !== undefined &&
+    (pending.value.scopes === undefined ||
+      new Set(pending.value.scopes).size !== new Set(scopes).size ||
+      !pending.value.scopes.every((scope) => scopes.includes(scope)))
+  )
+    return undefined;
   return Date.parse(pending.value.expiresAt) > (yield* Clock.currentTimeMillis)
     ? pending.value
     : undefined;
@@ -135,7 +146,10 @@ const startDeviceLogin = Effect.fn("Auth.startDeviceLogin")(function* (input: {
   scopes: readonly AuthScope[];
 }) {
   const origin = yield* validateAuthenticationOrigin(input.origin);
-  return yield* requestDeviceCode(yield* openExchange(origin, input.scopes), origin);
+  return {
+    ...(yield* requestDeviceCode(yield* openExchange(origin, input.scopes), origin)),
+    scopes: [...input.scopes],
+  };
 });
 
 /**
@@ -192,18 +206,29 @@ const awaitDeviceApproval = Effect.fn("Auth.awaitDeviceApproval")(function* (
   }
 });
 
-/** Reuse or start/save exactly one pending browser login under the configuration writer. */
-export const prepareDeviceLogin = Effect.fn("Registry.prepareDeviceLogin")(
-  function* (input: { origin: string; scopes: readonly AuthScope[]; home?: string }) {
-    const origin = yield* validateAuthenticationOrigin(input.origin);
-    const pending = yield* readPendingLogin(origin, input.home);
-    if (pending) return { pending, resumed: true };
-    const started = yield* startDeviceLogin({ ...input, origin });
-    yield* writePendingLogin(started, input.home);
-    return { pending: started, resumed: false };
-  },
-  (effect, input) => withConfigurationWriter(input.home, effect),
-);
+/** Network requests run without the home lock; publication rechecks a concurrent saved login. */
+export const prepareDeviceLogin = Effect.fn("Registry.prepareDeviceLogin")(function* (input: {
+  origin: string;
+  scopes: readonly AuthScope[];
+  home?: string;
+  relogin?: boolean;
+}) {
+  const origin = yield* validateAuthenticationOrigin(input.origin);
+  const reusable = () =>
+    input.relogin ? Effect.succeed(undefined) : readPendingLogin(origin, input.home, input.scopes);
+  const pending = yield* reusable();
+  if (pending) return { pending, resumed: true };
+  const started = yield* startDeviceLogin({ ...input, origin });
+  return yield* withConfigurationWriter(
+    input.home,
+    Effect.gen(function* () {
+      const pending = yield* reusable();
+      if (pending) return { pending, resumed: true };
+      yield* writePendingLogin(started, input.home);
+      return { pending: started, resumed: false };
+    }),
+  );
+});
 
 /** Waiting for approval never holds the writer; only matching pending cleanup and minting do. */
 export const completeDeviceLogin = Effect.fn("Registry.completeDeviceLogin")(function* (input: {
