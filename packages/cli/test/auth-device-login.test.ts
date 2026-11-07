@@ -103,6 +103,34 @@ function deviceServer(
 
 const pending = Response.json({ error: "authorization_pending" }, { status: 400 });
 
+it.live.each([
+  { expires_in: "1e999", interval: "0" },
+  { expires_in: "600", interval: "1e999" },
+  { expires_in: "1e308", interval: "0" },
+])("rejects unusable device authorization timing: %o", (timing) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-device-timing-" });
+    const server = deviceServer([]);
+    const handler: TestHttpHandler = (request, url, body) =>
+      url.pathname === "/api/auth/device/code"
+        ? Effect.succeed(
+            new Response(
+              `{"device_code":"secret","user_code":"CODE","verification_uri":"${origin}/device","expires_in":${timing.expires_in},"interval":${timing.interval}}`,
+              { headers: { "content-type": "application/json" } },
+            ),
+          )
+        : server.handler(request, url, body);
+    const result = yield* Registry.prepareDeviceLogin({
+      origin,
+      scopes: ["library:sync"],
+      home,
+    }).pipe(Effect.provide(registryHttpLayer(testHttpClientLayer(handler))), Effect.result);
+    expect(result).toMatchObject({ _tag: "Failure", failure: { _tag: "SignInFailed" } });
+    expect(yield* fs.exists(join(home, "login-pending.json"))).toBe(false);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
 /** The command's composition: start, wait for approval, then mint and store with that session. */
 const deviceLogin = (polls: ReadonlyArray<Response>) =>
   Effect.gen(function* () {

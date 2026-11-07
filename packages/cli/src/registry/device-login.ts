@@ -21,8 +21,8 @@ const DeviceCodeResponse = Schema.Struct({
   device_code: Schema.String,
   user_code: Schema.String,
   verification_uri: Schema.String,
-  expires_in: Schema.Number,
-  interval: Schema.Number,
+  expires_in: Schema.Finite,
+  interval: Schema.Finite,
 });
 const DeviceTokenResponse = Schema.Struct({ access_token: Schema.String });
 const DeviceTokenError = Schema.Struct({ error: Schema.String });
@@ -36,7 +36,7 @@ export const PendingDeviceLogin = Schema.Struct({
   deviceCode: Schema.String,
   userCode: Schema.String,
   verificationUri: Schema.String,
-  interval: Schema.Number,
+  interval: Schema.Finite,
   expiresAt: Schema.String,
   scopes: Schema.optionalKey(
     Schema.Array(Schema.Literals(["library:sync", "authoring:write", "publication:write"])),
@@ -63,13 +63,16 @@ const requestDeviceCode = Effect.fn("Auth.requestDeviceCode")(function* (
       (error) => new SignInFailed({ message: `Device authorization is invalid: ${error.message}` }),
     ),
   );
+  const expiresAt = new Date((yield* Clock.currentTimeMillis) + code.expires_in * 1_000);
+  if (!Number.isFinite(expiresAt.getTime()))
+    return yield* new SignInFailed({ message: "Device authorization expiry is out of range" });
   return {
     origin,
     deviceCode: code.device_code,
     userCode: code.user_code,
     verificationUri: code.verification_uri,
     interval: code.interval,
-    expiresAt: new Date((yield* Clock.currentTimeMillis) + code.expires_in * 1_000).toISOString(),
+    expiresAt: expiresAt.toISOString(),
   } satisfies PendingDeviceLogin;
 });
 
