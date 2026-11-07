@@ -21,8 +21,8 @@ import { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { resolveSkitSource } from "../src/sources/resolve.js";
-import { createSkitArchive } from "../src/authoring/archive.js";
-import { initSkit } from "../src/authoring/scaffold.js";
+import { createSkitArchive } from "../src/artifact/archive.js";
+import { initSkit } from "../src/author/scaffold.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 const archive = Effect.scoped(

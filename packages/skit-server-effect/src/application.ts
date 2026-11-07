@@ -1,31 +1,11 @@
 import { BrowserCrypto } from "@effect/platform-browser";
 import { Layer } from "effect";
-import {
-  layer as authenticationLayer,
-  type Scope as AuthenticationScope,
-} from "./auth/authentication.js";
-import { layer as betterAuthLayer } from "./auth/better-auth.js";
-import { layer as passwordHasherLayer } from "./auth/password.js";
-import { layer as authorInventoryLayer } from "./author-inventory/service.js";
-import { layer as authorizationLayer } from "./authorization/service.js";
-import { layer as bootstrapServiceLayer } from "./bootstrap/service.js";
-import { ServerConfiguration } from "./configuration.js";
-import { layer as draftsLayer } from "./drafts/service.js";
+import { layer as identityLayer, type Scope as AuthenticationScope } from "./identity/service.js";
+import { ServerConfiguration } from "./platform/configuration.js";
+import { layer as skitsLayer } from "./skits/service.js";
 import { layer as feedbackServiceLayer } from "./feedback/service.js";
-import { layer as librarySyncLayer } from "./library/library-sync.js";
-import { layer as librarySnapshotsLayer } from "./library/snapshots.js";
-import { databaseLayer, layer as bindingsLayer, type RuntimeEnv } from "./platform/cloudflare.js";
-import { layer as nativeClockLayer } from "./platform/native-clock.js";
-import { layer as nativeCryptoLayer } from "./platform/native-crypto.js";
-import {
-  bootstrapLayer as bootstrapRateLimiterLayer,
-  feedbackLayer as feedbackRateLimiterLayer,
-  patLayer as patRateLimiterLayer,
-} from "./platform/rate-limiter.js";
-import { layer as publicationServiceLayer } from "./publication/service.js";
-import { layer as readinessLayer } from "./readiness/service.js";
-import { layer as releaseStoreLayer } from "./releases/store.js";
-import { layer as skitDeletionLayer } from "./skit-delete/service.js";
+import { layer as serverLibraryLayer } from "./library/service.js";
+import { blobStoreLayer, databaseLayer, type RuntimeEnv } from "./platform/cloudflare.js";
 import { layer as teamsLayer } from "./teams/service.js";
 
 export interface AuthenticatedConfiguration {
@@ -78,58 +58,34 @@ export const applicationLayers = (
   supportedScopes: ReadonlySet<AuthenticationScope>,
 ) => {
   const platform = Layer.mergeAll(
-    bindingsLayer(env),
+    blobStoreLayer(env.SKIT_BLOBS),
     databaseLayer(env.DB),
     BrowserCrypto.layer,
-    nativeCryptoLayer,
-    nativeClockLayer,
   );
-  const release = releaseStoreLayer.pipe(Layer.provide(platform));
+  const teams = teamsLayer.pipe(Layer.provideMerge(platform));
+  const release = skitsLayer.pipe(Layer.provide(teams));
   // Feedback does not wait for authentication to be configured: reports can always be anonymous.
   const feedback =
-    env.FEEDBACK_MODE === "open"
-      ? Layer.merge(
-          feedbackServiceLayer.pipe(Layer.provide(platform)),
-          feedbackRateLimiterLayer(env.FEEDBACK_RATE_LIMITER),
-        )
-      : undefined;
-  if (configured === undefined)
-    return { release, feedback, authenticated: undefined, bootstrap: undefined };
+    env.FEEDBACK_MODE === "open" ? feedbackServiceLayer.pipe(Layer.provide(platform)) : undefined;
+  if (configured === undefined) return { release, feedback, authenticated: undefined };
 
-  const passwordHasher = passwordHasherLayer.pipe(Layer.provideMerge(platform));
   const authenticated = Layer.mergeAll(
-    authenticationLayer(supportedScopes),
-    teamsLayer,
-    librarySnapshotsLayer,
-    librarySyncLayer,
-    readinessLayer(env),
-    releaseStoreLayer,
-    authorInventoryLayer,
-    skitDeletionLayer,
-    draftsLayer,
-    publicationServiceLayer,
-    patRateLimiterLayer(env.PAT_RATE_LIMITER),
-    Layer.succeed(ServerConfiguration, { publicAppOrigin: configured.publicAppOrigin }),
-  ).pipe(
-    Layer.provideMerge(
-      betterAuthLayer({
+    identityLayer(
+      {
+        database: env.DB,
         publicAppOrigin: configured.publicAppOrigin,
         secret: configured.betterAuthSecret,
         registrationMode: env.ACCOUNT_REGISTRATION_MODE,
         github: configured.github,
         email:
           env.EMAIL && env.EMAIL_FROM ? { binding: env.EMAIL, from: env.EMAIL_FROM } : undefined,
-      }).pipe(Layer.provideMerge(platform)),
+      },
+      supportedScopes,
+      env.SKIT_BOOTSTRAP_SECRET || undefined,
     ),
-    Layer.provideMerge(authorizationLayer.pipe(Layer.provideMerge(platform))),
-    Layer.provideMerge(passwordHasher),
-  );
-  const bootstrap = env.SKIT_BOOTSTRAP_SECRET
-    ? Layer.mergeAll(
-        bootstrapServiceLayer(env.SKIT_BOOTSTRAP_SECRET),
-        bootstrapRateLimiterLayer(env.BOOTSTRAP_RATE_LIMITER),
-        Layer.succeed(ServerConfiguration, { publicAppOrigin: configured.publicAppOrigin }),
-      ).pipe(Layer.provideMerge(passwordHasher))
-    : undefined;
-  return { release, feedback, authenticated, bootstrap };
+    serverLibraryLayer,
+    skitsLayer,
+    Layer.succeed(ServerConfiguration, { publicAppOrigin: configured.publicAppOrigin }),
+  ).pipe(Layer.provideMerge(teams));
+  return { release, feedback, authenticated };
 };

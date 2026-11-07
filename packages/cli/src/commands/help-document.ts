@@ -1,10 +1,10 @@
 import { Data, Effect, Option } from "effect";
 import { CliOutput, Command } from "effect/cli";
 import type { HelpDoc } from "effect/cli";
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 import { skitCliConfigLayer } from "./parameters.js";
 
-export class HelpDocumentMissing
+class HelpDocumentMissing
   extends Data.TaggedError("CLI.HelpDocumentMissing")<{
     command: string;
   }>
@@ -17,6 +17,8 @@ export class HelpDocumentMissing
     return `No help document for ${this.command}`;
   }
 }
+
+export type { HelpDocumentMissing };
 
 /**
  * Ask Effect CLI to build its structured help model without parsing rendered text.

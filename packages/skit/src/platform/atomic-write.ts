@@ -41,3 +41,17 @@ export const writeJsonExclusive = Effect.fn("Platform.writeJsonExclusive")(funct
 ) {
   yield* writeRawAtomic(path, `${JSON.stringify(value, null, 2)}\n`, true);
 });
+
+/**
+ * Flush each file or directory in turn: a file's bytes, or a directory's entries so that what was
+ * just linked or renamed into it survives a crash.
+ */
+export const syncPaths = Effect.fn("Platform.syncPaths")(function* (paths: Iterable<string>) {
+  const fs = yield* FileSystem.FileSystem;
+  yield* Effect.forEach(
+    paths,
+    (path) =>
+      Effect.scoped(fs.open(path, { flag: "r" }).pipe(Effect.flatMap((handle) => handle.sync))),
+    { discard: true },
+  );
+});

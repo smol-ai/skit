@@ -1,26 +1,28 @@
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
+import { join } from "node:path";
 import { Effect } from "effect";
-import { currentLibraryManifest, type LibraryManifest } from "@smolai/skit-core";
+import { type LibraryManifest } from "@smolai/skit-core/library";
 import { captureDisk, diskChanges, noDiskChanges } from "./helpers/disk-snapshot.js";
 import { devices } from "./helpers/library-sync-devices.js";
 
 // An absent remote, an existing remote holding an empty Library, an absent state.json, an empty
 // state.json, and an empty accepted base are five different facts. Each row's expected outcome is
-// read from the Preflight, Push, Pull, Clean and Adoption gate tables in
+// read from the Preflight, Push, Pull, Clean and empty-base merge tables in
 // docs/library-sync-outcomes.md.
 
 type Homes = Effect.Success<typeof devices>;
 type Device = Homes["a"];
 
-const empty: LibraryManifest = currentLibraryManifest({
+const empty: LibraryManifest = {
+  schema: "skit.library.v8",
   collections: [],
   skills: [],
   collection_versions: [],
   imports: [],
   snapshot_digests: [],
   enabled: [],
-});
+};
 
 /**
  * Assert that a sync published no local state, sent the Registry no write request, and left the
@@ -82,8 +84,8 @@ it.effect("absent R and absent L: clean, and nothing is created anywhere", () =>
       assert.deepStrictEqual(result, { status: "clean", changed: false });
       yield* unchanged;
     }
-    // Only the writer lock's home exists afterwards, and it holds nothing.
-    assert.deepStrictEqual(yield* homes.fs.readDirectory(a.home), []);
+    // A clean sync with no local or remote Library does not acquire a writer or create home.
+    assert.isFalse(yield* homes.fs.exists(a.home));
     assert.strictEqual(server.remote, null);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
@@ -105,7 +107,7 @@ it.effect("absent R and empty L: an empty Library is pushed and anchored", () =>
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("absent R with ancestry: base_mismatch, never a push of the old Library", () =>
+it.effect("absent R with ancestry: preview is read-only and apply creates a new Library", () =>
   Effect.gen(function* () {
     const homes = yield* devices;
     const { a, server } = homes;
@@ -113,11 +115,18 @@ it.effect("absent R with ancestry: base_mismatch, never a push of the old Librar
     yield* a.sync();
     yield* homes.resetRemote;
     const unchanged = yield* unwritten(homes, a);
-    for (const apply of [false, true]) {
-      assert.deepStrictEqual(yield* a.sync({ apply }), { status: "base_mismatch" });
-      yield* unchanged;
-    }
+    const preview = yield* a.sync({ apply: false });
+    assert.strictEqual(preview.status, "push_ready");
+    assert.ok("merge_base" in preview);
+    assert.strictEqual(preview.merge_base, "empty-different-library");
+    yield* unchanged;
     assert.strictEqual(server.remote, null);
+    const applied = yield* a.sync();
+    assert.strictEqual(applied.status, "pushed");
+    assert.ok("merge_base" in applied);
+    assert.strictEqual(applied.merge_base, "empty-different-library");
+    assert.strictEqual(server.remote?.manifest.collections.length, 1);
+    assert.strictEqual((yield* a.sync()).status, "clean");
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -151,14 +160,24 @@ it.effect("empty R and empty L without ancestry: clean, anchoring only local anc
     const unchanged = yield* unwritten(homes, a);
     assert.strictEqual((yield* a.sync({ apply: false })).status, "clean");
     yield* unchanged;
-    const saves = a.saves;
+    const operations = (yield* a.state).operations;
     const writeRequests = server.writeRequests;
     assert.strictEqual((yield* a.sync()).status, "clean");
-    // Anchoring is one local publication and no Registry write.
-    assert.strictEqual(a.saves, saves + 1);
+    const anchored = yield* a.state;
+    assert.strictEqual(anchored.operations.length, operations.length + 1);
+    assert.deepStrictEqual(anchored.operations.slice(0, -1), operations);
+    assert.strictEqual(anchored.operations.at(-1)?._tag, "Done");
+    assert.deepStrictEqual(
+      anchored.operations.at(-1)?.steps.map((step) => step.status),
+      ["Done", "Done", "Done"],
+    );
     assert.strictEqual(server.writeRequests, writeRequests);
     assert.strictEqual((yield* a.state).sync_ancestry?.revision_id, head.revision_id);
     assert.strictEqual(server.writes, 1);
+    const saves = a.saves;
+    assert.strictEqual((yield* a.sync()).status, "clean");
+    assert.strictEqual(a.saves, saves);
+    assert.deepStrictEqual(yield* a.state, anchored);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -203,7 +222,7 @@ it.effect("an anchored home that matches the remote: an applied clean writes not
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("empty R is not absent R: a Library without ancestry requires adoption", () =>
+it.effect("empty R is not absent R: a Library without ancestry merges add-only", () =>
   Effect.gen(function* () {
     const homes = yield* devices;
     const { a, server } = homes;
@@ -211,16 +230,16 @@ it.effect("empty R is not absent R: a Library without ancestry requires adoption
     yield* emptyRemote(homes);
     const head = server.remote!;
     const unchanged = yield* unwritten(homes, a);
-    for (const apply of [false, true]) {
-      assert.deepStrictEqual(yield* a.sync({ apply }), {
-        status: "adoption_required",
-        revision_id: head.revision_id,
-      });
-      yield* unchanged;
-    }
-    // Adopting merges against an empty base, so it only adds this home's records.
+    const preview = yield* a.sync({ apply: false });
+    assert.strictEqual(preview.status, "merge_ready");
+    assert.ok("merge_base" in preview);
+    assert.strictEqual(preview.merge_base, "empty-first-sync");
+    assert.ok("revision_id" in preview);
+    assert.strictEqual(preview.revision_id, head.revision_id);
+    yield* unchanged;
+    // Merging against an empty base, so it only adds this home's records.
     const local = yield* a.state;
-    assert.strictEqual((yield* a.sync({ adopt: true })).status, "merged");
+    assert.strictEqual((yield* a.sync()).status, "merged");
     assert.deepStrictEqual(
       server.remote!.manifest.collections.map((item) => item.collection_id),
       local.collections.map((item) => item.collection_id),
@@ -229,7 +248,7 @@ it.effect("empty R is not absent R: a Library without ancestry requires adoption
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("empty L is not absent L: an empty state without ancestry requires adoption", () =>
+it.effect("empty L is not absent L: an empty state without ancestry keeps remote records", () =>
   Effect.gen(function* () {
     const homes = yield* devices;
     const { a, b, server } = homes;
@@ -238,15 +257,15 @@ it.effect("empty L is not absent L: an empty state without ancestry requires ado
     const head = server.remote!;
     yield* emptyLocal(b);
     const unchanged = yield* unwritten(homes, b);
-    for (const apply of [false, true]) {
-      assert.deepStrictEqual(yield* b.sync({ apply }), {
-        status: "adoption_required",
-        revision_id: head.revision_id,
-      });
-      yield* unchanged;
-    }
-    // An empty base never infers a deletion: adopting keeps every remote Collection.
-    assert.strictEqual((yield* b.sync({ adopt: true })).status, "merged");
+    const preview = yield* b.sync({ apply: false });
+    assert.strictEqual(preview.status, "merge_ready");
+    assert.ok("merge_base" in preview);
+    assert.strictEqual(preview.merge_base, "empty-first-sync");
+    assert.ok("revision_id" in preview);
+    assert.strictEqual(preview.revision_id, head.revision_id);
+    yield* unchanged;
+    // An empty base never infers a deletion: merging keeps every remote Collection.
+    assert.strictEqual((yield* b.sync()).status, "merged");
     assert.deepStrictEqual(server.remote, head);
     assert.deepStrictEqual(
       (yield* b.state).collections.map((item) => item.collection_id),
@@ -285,5 +304,73 @@ it.effect("empty L with an accepted base removes what the base held, and only th
     assert.deepStrictEqual(server.remote!.manifest, empty);
     assert.strictEqual((yield* a.sync()).status, "merged");
     assert.deepStrictEqual((yield* a.state).collections, []);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect(
+  "a recreated Library restores remotely held Skills and preserves independent device selection",
+  () =>
+    Effect.gen(function* () {
+      const homes = yield* devices;
+      const { a, b, fs, resetRemote } = homes;
+      const removed = yield* a.importSource("removed");
+      const kept = yield* a.importSource("kept");
+      yield* a.edit((state) => ({
+        ...state,
+        enabled: [
+          { collection: removed.collection.collection_id },
+          { collection: kept.collection.collection_id },
+        ],
+      }));
+      yield* a.sync();
+      yield* b.sync();
+      yield* a.sync({ deviceSelection: { skills: [kept.skills[0]!.skill_id], collections: [] } });
+      yield* a.remove(removed.collection.collection_id);
+      const local = yield* a.state;
+      assert.strictEqual(local.collections.length, 1);
+      yield* resetRemote;
+      assert.strictEqual((yield* b.sync()).status, "pushed");
+      const unchanged = yield* unwritten(homes, a);
+      const preview = yield* a.sync({ apply: false });
+      assert.strictEqual(preview.status, "merge_ready");
+      assert.ok("merge_base" in preview);
+      assert.strictEqual(preview.merge_base, "empty-different-library");
+      yield* unchanged;
+      assert.strictEqual((yield* a.sync()).status, "merged");
+      const merged = yield* a.state;
+      assert.strictEqual(merged.collections.length, 2);
+      assert.isTrue(merged.skills.some((skill) => skill.skill_id === removed.skills[0]!.skill_id));
+      assert.deepStrictEqual(merged.device_skill_selection, local.device_skill_selection);
+      assert.strictEqual(merged.enabled.length, 2);
+      assert.isFalse(yield* fs.exists(join(a.root, "removed")));
+      assert.strictEqual(yield* fs.readFileString(join(a.root, "kept", "SKILL.md")), "kept\n");
+      assert.strictEqual((yield* a.sync()).status, "clean");
+      assert.strictEqual((yield* b.sync()).status, "clean");
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect("a different recorded Registry origin uses an empty base without erasing records", () =>
+  Effect.gen(function* () {
+    const homes = yield* devices;
+    const { a, b } = homes;
+    const first = yield* a.importSource("first");
+    yield* a.sync();
+    yield* b.sync();
+    yield* a.remove(first.collection.collection_id);
+    yield* a.edit((state) => ({
+      ...state,
+      sync_ancestry: { ...state.sync_ancestry!, origin: "https://another-registry.example" },
+    }));
+    const unchanged = yield* unwritten(homes, a);
+    const preview = yield* a.sync({ apply: false });
+    assert.strictEqual(preview.status, "merge_ready");
+    assert.ok("merge_base" in preview);
+    assert.strictEqual(preview.merge_base, "empty-different-library");
+    yield* unchanged;
+    assert.strictEqual((yield* a.sync()).status, "merged");
+    const after = yield* a.state;
+    assert.strictEqual(after.collections.length, 1);
+    assert.notStrictEqual(after.sync_ancestry?.origin, "https://another-registry.example");
+    assert.strictEqual((yield* a.sync()).status, "clean");
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

@@ -1,16 +1,13 @@
+import { readLibraryManifest } from "./helpers/library-manifest.js";
+import { setupIntent } from "@smolai/skit-core/library/setup";
+import { originalArchive, originalTreePath } from "./helpers/original-tree.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Schema } from "effect";
 import { join } from "node:path";
-import {
-  readSnapshotArchive,
-  currentSkillVersion,
-  libraryManifestFromLocalState,
-  LibraryManifest,
-  LibraryState,
-  collectionVersionPath,
-  type SkillId,
-} from "@smolai/skit-core";
+import { LibraryState } from "@smolai/skit-core/library";
+import { LibraryManifest } from "@smolai/skit-core/library";
+import { type SkillId } from "@smolai/skit-core/universal/consumer";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
 import { devices } from "./helpers/library-sync-devices.js";
 
@@ -38,13 +35,12 @@ const assertIntact = Effect.fn("Test.assertIntact")(function* (
 ) {
   const state = yield* device.state;
   assert.isTrue(Schema.is(LibraryState)(state));
-  yield* libraryManifestFromLocalState(state);
+  yield* readLibraryManifest(device.home, device.disk);
   const ancestry = state.sync_ancestry;
   if (ancestry !== undefined) assert.isTrue(Schema.is(LibraryManifest)(ancestry.base_manifest));
   for (const hash of new Set([...imported, ...state.collection_versions.map((copy) => copy.hash)]))
     assert.strictEqual(
-      (yield* readSnapshotArchive(collectionVersionPath(join(device.home, "originals"), hash)))
-        .digest,
+      (yield* originalArchive(originalTreePath(join(device.home, "originals"), hash), hash)).digest,
       hash,
     );
   const head = server.remote;
@@ -57,9 +53,14 @@ const assertIntact = Effect.fn("Test.assertIntact")(function* (
 const collectionVersionHashes = (device: Device) =>
   Effect.map(device.state, (state) => state.collection_versions.map((copy) => copy.hash));
 
-/** Raw state text, so retired handles are checked without going through the loader. */
-const stateBytes = (fs: FileSystem.FileSystem, device: Device) =>
-  fs.readFileString(join(device.home, "state.json"));
+/** Check every current reference, including unknown fields, without loader normalization.
+ * The operation journal deliberately retains the exact pre-Sync identities as recovery evidence.
+ */
+const publicationBytes = (fs: FileSystem.FileSystem, device: Device) =>
+  Effect.map(fs.readFileString(join(device.home, "state.json")), (text) => {
+    const { operations: _history, ...current } = JSON.parse(text);
+    return JSON.stringify(current);
+  });
 
 it.effect(
   "the same upstream under different Collection IDs adopts the published identity and remaps every device reference",
@@ -94,7 +95,7 @@ it.effect(
       const imported = yield* collectionVersionHashes(b);
       const installedSkillId = before.installed_skills[0]!.installed_skill_id;
       assert.strictEqual((yield* a.sync()).status, "pushed");
-      assert.strictEqual((yield* b.sync({ adopt: true })).status, "merged");
+      assert.strictEqual((yield* b.sync()).status, "merged");
 
       const after = yield* b.state;
       assert.deepStrictEqual(
@@ -149,9 +150,12 @@ it.effect(
         [publishedSkill.skill_id],
       );
       // No portable or device reference keeps a retired local handle.
-      const text = yield* stateBytes(fs, b);
+      const text = yield* publicationBytes(fs, b);
       for (const retired of [local.collection.collection_id, localSkill.skill_id, localVersion])
         assert.notInclude(text, retired);
+      const history = JSON.stringify(after.operations);
+      for (const retired of [local.collection.collection_id, localSkill.skill_id, localVersion])
+        assert.include(history, retired);
       yield* assertIntact(homes, b, imported);
 
       // A gains B's import without another write, then both homes are clean.
@@ -184,7 +188,7 @@ it.effect("distinct upstreams with identical bytes keep separate identities", ()
     );
     const imported = yield* collectionVersionHashes(b);
     assert.strictEqual((yield* a.sync()).status, "pushed");
-    assert.strictEqual((yield* b.sync({ adopt: true })).status, "merged");
+    assert.strictEqual((yield* b.sync()).status, "merged");
     assert.strictEqual((yield* a.sync()).status, "merged");
     for (const device of [a, b]) {
       const state = yield* device.state;
@@ -280,7 +284,7 @@ it.effect(
         ids(after.skills[0]!.versions, (item) => item.skill_version_id),
         [v1, remoteV2].sort(),
       );
-      assert.notInclude(yield* stateBytes(fs, b), localV2);
+      assert.notInclude(yield* publicationBytes(fs, b), localV2);
       // The rejected Version's import and bytes stay retained.
       assert.deepStrictEqual(
         ids(after.imports, (item) => item.import_id),
@@ -305,8 +309,8 @@ it.effect("many independent imports of one upstream converge on one published id
     for (const device of [a, b, c]) imports.push(...(yield* device.state).imports);
     const imported = yield* collectionVersionHashes(c);
     assert.strictEqual((yield* a.sync()).status, "pushed");
-    assert.strictEqual((yield* b.sync({ adopt: true })).status, "merged");
-    assert.strictEqual((yield* c.sync({ adopt: true })).status, "merged");
+    assert.strictEqual((yield* b.sync()).status, "merged");
+    assert.strictEqual((yield* c.sync()).status, "merged");
     assert.strictEqual((yield* a.sync()).status, "merged");
     assert.strictEqual((yield* b.sync()).status, "merged");
     for (const device of [a, b, c]) {
@@ -362,12 +366,15 @@ it.effect("an identical retained local edit aligns local_version_id to the publi
     const after = yield* b.state;
     const skill = after.skills[0]!;
     assert.strictEqual(skill.local_version_id, aEdit);
-    assert.strictEqual(currentSkillVersion(after, skill)?.skill_version_id, aEdit);
+    assert.strictEqual(
+      setupIntent(after).versions.find((version) => version.skillId === skill.skill_id)?.selected,
+      aEdit,
+    );
     assert.deepStrictEqual(
       ids(skill.versions, (item) => item.skill_version_id),
       ids((yield* a.state).skills[0]!.versions, (item) => item.skill_version_id),
     );
-    assert.notInclude(yield* stateBytes(fs, b), bEdit);
+    assert.notInclude(yield* publicationBytes(fs, b), bEdit);
     // The source import and both devices' retained edits.
     assert.strictEqual(after.imports.length, 3);
     assert.strictEqual(after.imports.filter((item) => item.kind === "edit").length, 2);
@@ -419,7 +426,7 @@ it.effect(
       const unchanged = yield* captureDisk(b.disk);
       const stored = server.stored;
       for (const apply of [false, true]) {
-        const stopped = yield* b.sync({ adopt: true, apply });
+        const stopped = yield* b.sync({ apply });
         assert.strictEqual(stopped.status, "conflicted");
         if (stopped.status === "conflicted") {
           // The Skill and import differences belong to the one Collection choice.
@@ -431,7 +438,7 @@ it.effect(
         assert.strictEqual(yield* fs.readFileString(join(b.root, "same", "SKILL.md")), "local\n");
       }
 
-      assert.strictEqual((yield* b.sync({ adopt: true, takeRemote: [key] })).status, "merged");
+      assert.strictEqual((yield* b.sync({ takeRemote: [key] })).status, "merged");
       const after = yield* b.state;
       assert.deepStrictEqual(
         ids(after.collections, (item) => item.collection_id),
@@ -442,7 +449,8 @@ it.effect(
         [publishedSkill.skill_id],
       );
       assert.strictEqual(
-        currentSkillVersion(after, after.skills[0]!)?.skill_version_id,
+        setupIntent(after).versions.find((version) => version.skillId === after.skills[0]?.skill_id)
+          ?.selected,
         publishedSkill.versions[0]!.skill_version_id,
       );
       // B's strictly older import stays as history, with its bytes.
@@ -474,7 +482,7 @@ it.effect(
       const key = `collection:${published.collection.collection_id}`;
       const unchanged = yield* captureDisk(b.disk);
       const stored = server.stored;
-      const stopped = yield* b.sync({ adopt: true, apply: false });
+      const stopped = yield* b.sync({ apply: false });
       assert.strictEqual(stopped.status, "conflicted");
       if (stopped.status === "conflicted") {
         assert.deepStrictEqual(stopped.conflicts, [key]);
@@ -483,7 +491,7 @@ it.effect(
       }
       for (const apply of [false, true])
         assert.strictEqual(
-          (yield* b.sync({ adopt: true, apply, takeRemote: [key] })).status,
+          (yield* b.sync({ apply, takeRemote: [key] })).status,
           "resolution_invalid",
         );
       yield* assertDiskUnchanged(unchanged);

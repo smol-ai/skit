@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { commandApplicationLayer } from "../src/application.js";
+import { cliLayer } from "../src/application.js";
 import { commandDescriptions } from "../src/commands/manifest.js";
 import { skitCommand } from "../src/commands/tree.js";
 
@@ -12,10 +12,10 @@ it.effect("derives public command metadata from the executable tree", () =>
       const inventory = commands.find((command) => command.path.join(" ") === "inventory");
       assert.ok(inventory);
       assert.deepStrictEqual(inventory.successExitCodes, [0, 12, 64, 65]);
-      assert.ok(inventory.outputSchemas.includes("skit.inventory.v13"));
+      assert.ok(inventory.outputSchemas.includes("skit.inventory.v14"));
       assert.ok(inventory.outputSchemas.includes("skit.error.v1"));
     }),
-    Effect.provide(commandApplicationLayer(false, "/tmp/skit-commands-command-test")),
+    Effect.provide(cliLayer(false, "/tmp/skit-commands-command-test")),
   ),
 );
 
@@ -28,6 +28,6 @@ it.effect("publishes only flags the executing parser accepts", () =>
         .map((command) => command.path.join(" "));
       assert.deepStrictEqual(withWizard, []);
     }),
-    Effect.provide(commandApplicationLayer(false, "/tmp/skit-commands-flags-test")),
+    Effect.provide(cliLayer(false, "/tmp/skit-commands-flags-test")),
   ),
 );

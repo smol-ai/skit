@@ -1,7 +1,7 @@
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { dirname, join, resolve } from "node:path";
-import { modelContextWindow } from "../../models/model-context-windows.js";
-import type { LibraryState } from "../../library/library-state.js";
+import { modelContextWindow } from "../model-context-windows.js";
+import type { LibraryInventory } from "../../library/library-state.js";
 import type { SkillsDirectoryOverrides } from "../contracts.js";
 import { invocationMetadataAdapters } from "../invocation-metadata.js";
 import { estimateCodexListing, type CodexListingSkill } from "./codex-allocation.js";
@@ -42,7 +42,7 @@ export const implicitInvocationAllowed = Effect.fn("CodexListing.implicitInvocat
 
 /** Read-only native discovery, configuration and local model catalog; never starts an inference turn. */
 export const readCodexListingBudget = Effect.fn("Library.codexListingBudget")(function* (
-  state: LibraryState,
+  state: LibraryInventory,
   options: CodexListingOptions,
   executable?: string,
   suppliedDiscovery?: Effect.Success<ReturnType<typeof readCodexSkills>>,

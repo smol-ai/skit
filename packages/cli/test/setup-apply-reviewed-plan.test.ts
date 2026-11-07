@@ -1,19 +1,20 @@
+import { recoveryInspection } from "./helpers/recovery.js";
 import { join } from "node:path";
 import { Effect, Exit, FileSystem, Option } from "effect";
 import { assert, it } from "@effect/vitest";
+import { inspectOwnershipMarker } from "@smolai/skit-core/library/inventory";
+import * as MachineSettings from "@smolai/skit-core/machine-settings";
+import { skitLayer } from "@smolai/skit-core/platform";
+import { setupApplyCommand, setupCommand } from "../src/library/setup.js";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import {
-  inspectOwnershipMarker,
-  MachineSettings,
-  SkillsDirectoryNotWritable,
-  skitLayer,
-} from "@smolai/skit-core";
-import { setupApplyCommand, setupCommand } from "../src/handlers/library/setup.js";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
-import { SetupPlanStale } from "../src/workflows/library/setup.js";
-import { OptionCombinationInvalid } from "../src/workflows/failures.js";
-import type { SetupDuplicateAction } from "../src/workflows/library/setup-decisions.js";
-import { inspectRecoveryOperation } from "../src/library-application/recovery-moves.js";
-import { prepareSetupUndo } from "../src/library-application/setup-undo.js";
+  SetupPlanStale,
+  SetupStopped,
+  type SetupDuplicateAction,
+} from "@smolai/skit-core/library/setup";
+import { OptionCombinationInvalid } from "../src/commands/input-failures.js";
+
+import { prepareSetupUndo } from "../src/library/setup/undo.js";
 import { captureDisk, diskChanges, noDiskChanges } from "./helpers/disk-snapshot.js";
 import { libraryHome, scratch } from "./helpers/library-home.js";
 import { withSandboxDenying } from "./helpers/sandbox.js";
@@ -28,9 +29,16 @@ const fixture = Effect.fn("Test.setupApplyReviewedPlan")(function* (input: {
   identical?: boolean;
   linked?: boolean;
   skillsSh?: boolean;
+  parentAlias?: boolean;
 }) {
   const fs = yield* FileSystem.FileSystem;
-  const root = yield* scratch("skit-setup-reviewed-");
+  const workspace = yield* scratch("skit-setup-reviewed-");
+  const root = input.parentAlias ? join(workspace, "alias") : workspace;
+  if (input.parentAlias) {
+    const physical = join(workspace, "physical");
+    yield* fs.makeDirectory(physical);
+    yield* fs.symlink(physical, root);
+  }
   const claudeRoot = join(root, ".claude", "skills");
   const write = (path: string, name: string) =>
     Effect.andThen(
@@ -118,11 +126,11 @@ const failure = (exit: Exit.Exit<unknown, unknown>) =>
   Exit.isFailure(exit) ? Option.getOrUndefined(Exit.findErrorOption(exit)) : undefined;
 
 it.effect(
-  "retain-only works without write access to skills directories, while enabling still fails before retention",
+  "denied enabling records a stopped setup without retention; a fresh retain-only review needs no skills-directory writes",
   () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
-      const f = yield* fixture({ alias: true });
+      const f = yield* fixture({ alias: true, parentAlias: true });
       // Leave only the duplicate copy whose approved action is retention without enabling.
       yield* fs.remove(join(f.root, ".claude", "skills", "beta"), { recursive: true });
       const reviewed = yield* f.review;
@@ -132,11 +140,33 @@ it.effect(
       const refused = yield* f
         .run({ planId: reviewed.onboarding.planId, duplicates: "retire-aliases" })
         .pipe(denied);
-      assert.instanceOf(failure(refused), SkillsDirectoryNotWritable);
-      assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
+      assert.instanceOf(failure(refused), SetupStopped);
+      const changes = yield* diskChanges(before);
+      assert.deepStrictEqual(
+        changes.created.map(({ path }) => join(...path)).sort(),
+        ["audit.jsonl", "machine.json", "state.json"].map((name) => join(f.home.home, name)).sort(),
+      );
+      assert.deepStrictEqual(changes.changed, []);
+      assert.deepStrictEqual(changes.deleted, []);
+      const stopped = yield* f.home.durable;
+      assert.deepStrictEqual(stopped.skills, []);
+      assert.deepStrictEqual(stopped.installed_skills, []);
+      assert.deepStrictEqual(
+        stopped.operations.map((operation) => operation._tag),
+        ["Stopped"],
+      );
+      assert.isFalse(yield* fs.exists(join(f.root, ".agents")));
 
-      const imported = yield* f
+      // The stopped record changes the Library revision; the old plan grants no further consent.
+      const afterRefusal = yield* captureDisk(f.disk);
+      const staleRetry = yield* f
         .run({ planId: reviewed.onboarding.planId, duplicates: "retain-only" })
+        .pipe(denied);
+      assert.instanceOf(failure(staleRetry), SetupPlanStale);
+      assert.deepStrictEqual(yield* diskChanges(afterRefusal), noDiskChanges);
+      const refreshed = yield* f.review;
+      const imported = yield* f
+        .run({ planId: refreshed.onboarding.planId, duplicates: "retain-only" })
         .pipe(denied);
       assert.isTrue(Exit.isSuccess(imported));
       const state = yield* f.home.durable;
@@ -259,7 +289,7 @@ it.effect(
       const operationId = applied.value.operationId;
       assert.isFalse(yield* fs.exists(alias));
       assert.strictEqual(yield* fs.readFileString(join(source, "SKILL.md")), skillBytes("alpha"));
-      const recovery = yield* inspectRecoveryOperation(f.home.home, operationId);
+      const recovery = yield* recoveryInspection(f.home.home, operationId);
       const saved = recovery.entries.find((entry) => entry.path === alias);
       assert.strictEqual(saved?.status, "saved");
       assert.strictEqual(yield* fs.readLink(saved!.recoveryPath), originalLink);
@@ -334,7 +364,7 @@ it.effect(
         "delta",
       );
 
-      const retired = yield* fixture({ alias: false, linked: true });
+      const retired = yield* fixture({ alias: false, linked: true, parentAlias: true });
       const retiredPlan = (yield* retired.review).onboarding.planId;
       const replaced = yield* retired.run({ planId: retiredPlan });
       assert.isTrue(Exit.isSuccess(replaced));

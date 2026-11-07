@@ -1,10 +1,9 @@
 import { Effect } from "effect";
 import { HttpEffect, HttpServerResponse } from "effect/http";
 import { HttpApiBuilder } from "effect/http-api";
-import { Bootstrap, BootstrapInput, type CreateError } from "../bootstrap/service.js";
-import { BetterAuth } from "../auth/better-auth.js";
-import { ServerConfiguration } from "../configuration.js";
-import { BootstrapRateLimiter } from "../platform/rate-limiter.js";
+import { Identity, BootstrapInput, type CreateError } from "../identity/service.js";
+import { ServerConfiguration } from "../platform/configuration.js";
+import type { RateLimiter } from "../platform/rate-limiter.js";
 import { BootstrapApi } from "./bootstrap.js";
 import {
   forbiddenOriginResponse,
@@ -36,67 +35,51 @@ const mapCreateError = (error: CreateError) => {
   }
 };
 
-export const bootstrapHandlers = HttpApiBuilder.group(BootstrapApi, "bootstrap", (handlers) =>
-  Effect.gen(function* () {
-    const bootstrap = yield* Bootstrap;
-    const authentication = yield* BetterAuth;
-    const configuration = yield* ServerConfiguration;
-    const rateLimiter = yield* BootstrapRateLimiter;
+export const bootstrapHandlers = (rateLimiter: RateLimiter) =>
+  HttpApiBuilder.group(BootstrapApi, "bootstrap", (handlers) =>
+    Effect.gen(function* () {
+      const authentication = yield* Identity;
+      const configuration = yield* ServerConfiguration;
 
-    return handlers
-      .handle("status", () =>
-        bootstrap.isNeeded().pipe(
-          Effect.tapError((error) => Effect.logError("bootstrap status failed", error)),
-          Effect.mapError(() => storageFailureResponse),
-          Effect.tap(() => noStore),
-          Effect.map((needed) => ({ needed })),
-        ),
-      )
-      .handleRaw("create", ({ request }) =>
-        Effect.gen(function* () {
-          if (request.headers.origin !== configuration.publicAppOrigin)
-            return yield* Effect.fail(forbiddenOriginResponse);
-          const clientIp = request.headers["cf-connecting-ip"] ?? "unknown";
-          const outcome = yield* rateLimiter.limit(clientIp).pipe(
-            Effect.tapError((error) => Effect.logError("bootstrap rate limit failed", error)),
+      return handlers
+        .handle("status", () =>
+          authentication.isBootstrapNeeded().pipe(
+            Effect.tapError((error) => Effect.logError("bootstrap status failed", error)),
             Effect.mapError(() => storageFailureResponse),
-          );
-          if (!outcome.success) {
-            yield* retryAfter;
-            return yield* Effect.fail(rateLimitedResponse);
-          }
-          const input = yield* schemaBodyJsonLimited(
-            request,
-            BootstrapInput,
-            MAX_BOOTSTRAP_REQUEST_BYTES,
-          ).pipe(Effect.mapError(() => invalidRequestResponse));
-          return yield* bootstrap.createInitialOperator(input).pipe(
-            Effect.tapError((error) =>
-              error._tag === "Bootstrap.SecretComparisonError" ||
-              error._tag === "PasswordHasher.PasswordHashError" ||
-              error._tag === "Cloudflare.DatabaseError"
-                ? Effect.logError("bootstrap creation failed", error)
-                : Effect.void,
-            ),
-            Effect.mapError(mapCreateError),
-            Effect.flatMap(({ email, username }) =>
-              authentication.sendVerificationEmail(email).pipe(
-                Effect.tapError((error) =>
-                  Effect.logError("bootstrap verification email failed", error),
-                ),
-                Effect.match({
-                  onFailure: () => ({ email, username, verificationEmailSent: false }),
-                  onSuccess: (verificationEmailSent) => ({
-                    email,
-                    username,
-                    verificationEmailSent,
-                  }),
-                }),
-              ),
-            ),
             Effect.tap(() => noStore),
-          );
-        }),
-      );
-  }),
-);
+            Effect.map((needed) => ({ needed })),
+          ),
+        )
+        .handleRaw("create", ({ request }) =>
+          Effect.gen(function* () {
+            if (request.headers.origin !== configuration.publicAppOrigin)
+              return yield* Effect.fail(forbiddenOriginResponse);
+            const clientIp = request.headers["cf-connecting-ip"] ?? "unknown";
+            const outcome = yield* rateLimiter.limit(clientIp).pipe(
+              Effect.tapError((error) => Effect.logError("bootstrap rate limit failed", error)),
+              Effect.mapError(() => storageFailureResponse),
+            );
+            if (!outcome.success) {
+              yield* retryAfter;
+              return yield* Effect.fail(rateLimitedResponse);
+            }
+            const input = yield* schemaBodyJsonLimited(
+              request,
+              BootstrapInput,
+              MAX_BOOTSTRAP_REQUEST_BYTES,
+            ).pipe(Effect.mapError(() => invalidRequestResponse));
+            return yield* authentication.createOperator(input).pipe(
+              Effect.tapError((error) =>
+                error._tag === "Bootstrap.SecretComparisonError" ||
+                error._tag === "PasswordHasher.PasswordHashError" ||
+                error._tag === "Cloudflare.DatabaseError"
+                  ? Effect.logError("bootstrap creation failed", error)
+                  : Effect.void,
+              ),
+              Effect.mapError(mapCreateError),
+              Effect.tap(() => noStore),
+            );
+          }),
+        );
+    }),
+  );

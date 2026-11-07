@@ -1,32 +1,40 @@
 import { D1Client } from "@effect/sql-d1";
 import { Clock, Context, Effect, Layer, Schema } from "effect";
-import type { Principal } from "../auth/authentication.js";
-import { normalizeNamespace } from "../domain/identifiers.js";
+import type { Principal } from "../identity/service.js";
+import { prepareTeamNamespaceClaim } from "../identity/team-namespace.js";
+import { normalizeNamespace } from "../identity/namespace-name.js";
 import { DatabaseError, databaseError, type DatabaseSqlClient } from "../platform/cloudflare.js";
-import { NativeCrypto } from "../platform/native-crypto.js";
-import { Team, TeamMember } from "@smolai/skit-core/universal/api";
+import { SecureRandom } from "effect/crypto";
+import { Team, TeamMember } from "@smolai/skit-core/api";
 
 const TEAM_SLUG = /^[a-z0-9][a-z0-9-]{2,38}$/;
 const TeamIdRow = Schema.Struct({ team_id: Schema.String });
 const PrincipalIdRow = Schema.Struct({ principal_id: Schema.String });
 
-export class TeamSessionRequired extends Schema.TaggedError<TeamSessionRequired>()(
+class TeamSessionRequired extends Schema.TaggedError<TeamSessionRequired>()(
   "Team.SessionRequired",
   {},
 ) {}
-export class InvalidTeam extends Schema.TaggedError<InvalidTeam>()("Team.Invalid", {}) {}
-export class TeamConflict extends Schema.TaggedError<TeamConflict>()("Team.Conflict", {}) {}
-export class TeamForbidden extends Schema.TaggedError<TeamForbidden>()("Team.Forbidden", {}) {}
-export class TeamPrincipalNotFound extends Schema.TaggedError<TeamPrincipalNotFound>()(
+class InvalidTeam extends Schema.TaggedError<InvalidTeam>()("Team.Invalid", {}) {}
+class TeamConflict extends Schema.TaggedError<TeamConflict>()("Team.Conflict", {}) {}
+class TeamForbidden extends Schema.TaggedError<TeamForbidden>()("Team.Forbidden", {}) {}
+class TeamPrincipalNotFound extends Schema.TaggedError<TeamPrincipalNotFound>()(
   "Team.PrincipalNotFound",
   {},
 ) {}
-export class OwnerRoleImmutable extends Schema.TaggedError<OwnerRoleImmutable>()(
+class OwnerRoleImmutable extends Schema.TaggedError<OwnerRoleImmutable>()(
   "Team.OwnerRoleImmutable",
   {},
 ) {}
 
 export interface TeamsService {
+  readonly memberTeamIds: (
+    principal: Principal,
+  ) => Effect.Effect<ReadonlyArray<string>, DatabaseError>;
+  readonly isMember: (
+    principal: Principal,
+    teamId: string,
+  ) => Effect.Effect<boolean, DatabaseError>;
   readonly create: (
     principal: Principal,
     input: { readonly slug: string; readonly name: string },
@@ -52,10 +60,32 @@ export const layer = Layer.effect(
   Teams,
   Effect.gen(function* () {
     const sql: DatabaseSqlClient = yield* D1Client.D1Client;
-    const crypto = yield* NativeCrypto;
+    const random = yield* SecureRandom.SecureRandom;
     const clock = yield* Clock.Clock;
     const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
       effect.pipe(databaseError(operation));
+
+    const memberTeamIds = Effect.fn("Teams.memberTeamIds")(function* (principal: Principal) {
+      const rows = yield* db(
+        "read team memberships",
+        sql`SELECT team_id FROM team_memberships WHERE principal_id = ${principal.id}`,
+      );
+      const memberships = yield* Schema.decodeUnknownEffect(Schema.Array(TeamIdRow))(rows).pipe(
+        Effect.mapError(
+          (cause) => new DatabaseError({ operation: "decode team memberships", cause }),
+        ),
+      );
+      return memberships.map(({ team_id }) => team_id);
+    });
+
+    const isMember = Effect.fn("Teams.isMember")(function* (principal: Principal, teamId: string) {
+      const rows = yield* db(
+        "check team membership",
+        sql`SELECT 1 member FROM team_memberships
+          WHERE team_id = ${teamId} AND principal_id = ${principal.id} LIMIT 1`,
+      );
+      return rows.length !== 0;
+    });
 
     const ownedTeam = Effect.fn("Teams.ownedTeam")(function* (principal: Principal, slug: string) {
       const rows = yield* db(
@@ -78,8 +108,9 @@ export const layer = Layer.effect(
       const slug = normalizeNamespace(input.slug);
       const name = input.name.trim();
       if (slug === undefined || !TEAM_SLUG.test(slug) || !name) return yield* new InvalidTeam();
-      const teamId = `team_${crypto.randomUUID().replaceAll("-", "")}`;
+      const teamId = `team_${(yield* random.uuidV4()).replaceAll("-", "")}`;
       const now = new Date(yield* clock.currentTimeMillis).toISOString();
+      const namespace = prepareTeamNamespaceClaim(sql, { namespace: slug, teamId, createdAt: now });
       const committed = yield* db(
         "create team",
         sql.batch([
@@ -87,17 +118,18 @@ export const layer = Layer.effect(
             VALUES (${teamId}, ${slug}, ${name}, ${now})`,
           sql`INSERT INTO team_memberships (team_id, principal_id, role, created_at)
             VALUES (${teamId}, ${principal.id}, 'owner', ${now})`,
-          sql`INSERT INTO namespaces (namespace_slug, subject_kind, subject_id, created_at)
-            VALUES (${slug}, 'team', ${teamId}, ${now})`,
+          namespace.statement,
         ]),
       ).pipe(Effect.result);
       if (committed._tag === "Failure") {
-        const conflict = yield* db(
-          "check team conflict",
-          sql`SELECT 1 found FROM teams WHERE slug = ${slug}
-              UNION ALL SELECT 1 found FROM namespaces WHERE namespace_slug = ${slug} LIMIT 1`,
-        );
-        if (conflict.length !== 0) return yield* new TeamConflict();
+        const [teamExists, namespaceTaken] = yield* Effect.all([
+          db(
+            "check team conflict",
+            sql`SELECT 1 found FROM teams WHERE slug = ${slug} LIMIT 1`,
+          ).pipe(Effect.map((rows) => rows.length !== 0)),
+          namespace.isTaken,
+        ]);
+        if (teamExists || namespaceTaken) return yield* new TeamConflict();
         return yield* Effect.fail(committed.failure);
       }
       return { team_id: teamId, slug, name };
@@ -155,6 +187,6 @@ export const layer = Layer.effect(
       return rows.length === 1;
     });
 
-    return Teams.of({ create, addMember, removeMember });
+    return Teams.of({ memberTeamIds, isMember, create, addMember, removeMember });
   }),
 );

@@ -1,7 +1,8 @@
 import { Clock, Effect, FileSystem, Result } from "effect";
 import { dirname, join, resolve } from "node:path";
-import type { HarnessName } from "../../contracts.js";
-import type { InstalledSkill, LibraryState } from "../library-state.js";
+import type { HarnessName } from "../../harnesses/contracts.js";
+import type { InstalledSkill } from "../device-state.js";
+import type { LibraryState } from "../library-state.js";
 import * as InstalledSkillStatus from "../installed-skill-status.js";
 import { LinkStat } from "../../platform/link-stat.js";
 import { deterministicTreeHash } from "../../artifact/skit.js";
@@ -9,32 +10,21 @@ import { physicalPath, pathIsWithin } from "../../platform/path-identity.js";
 import {
   expectedInstalledSkillHashResult,
   installedSkillDisplaced,
+} from "../../installed-skills/files.js";
+import {
   readOwnershipMarker,
   inspectOwnershipMarker,
-} from "../../install/files.js";
-import { keepInstalledSkillBackup, pendingInstalledSkillBackups } from "../../install/backups.js";
-import { LibraryStore } from "../store/library-store.js";
-export interface InventoryScanRoot {
-  readonly harness: HarnessName;
-  readonly root: string;
-}
-export function deduplicateInventoryRoots(
-  roots: readonly InventoryScanRoot[],
-): InventoryScanRoot[] {
-  return [
-    ...new Map(
-      roots.map(({ harness, root }) => [
-        JSON.stringify([harness, resolve(root)]),
-        { harness, root: resolve(root) },
-      ]),
-    ).values(),
-  ];
-}
+} from "../../installed-skills/marker-inspection.js";
+import { type InventoryScanRoot } from "./roots.js";
+export { deduplicateInventoryRoots, type InventoryScanRoot } from "./roots.js";
+
 /** Scan into a copy of `loaded`. Saves nothing and backs nothing up. */
 export const scanInventory = Effect.fn("Library.scanInventory")(function* (
   loaded: LibraryState,
   scanRoots: readonly InventoryScanRoot[],
+  observedAt?: string,
 ) {
+  const scannedAt = observedAt ?? new Date(yield* Clock.currentTimeMillis).toISOString();
   const fs = yield* FileSystem.FileSystem;
   const installedSkills = yield* Effect.forEach(
     loaded.installed_skills,
@@ -52,13 +42,18 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
         // Nor is the absence of the very copy SKIT moved aside before it could save why.
         return (yield* installedSkillDisplaced(installedSkill))
           ? InstalledSkillStatus.pending(installedSkill)
-          : InstalledSkillStatus.suppressed(
-              installedSkill,
-              new Date(yield* Clock.currentTimeMillis).toISOString(),
-            );
+          : InstalledSkillStatus.suppressed(installedSkill, scannedAt);
       }
       const currentHash = yield* deterministicTreeHash(installedSkill.path);
       const marker = yield* readOwnershipMarker(installedSkill.path);
+      // Recorded before its marker was written, and the folder is still exactly SKIT's bytes:
+      // the marker is pending, and the next change that plans this copy writes it.
+      if (
+        installedSkill.status === "pending" &&
+        marker === null &&
+        currentHash === installedSkill.expected_hash
+      )
+        return installedSkill;
       const expected = expectedInstalledSkillHashResult(installedSkill, marker);
       return marker && Result.isSuccess(expected) && currentHash === expected.success
         ? InstalledSkillStatus.installed(installedSkill)
@@ -221,27 +216,4 @@ export const scanInventory = Effect.fn("Library.scanInventory")(function* (
   if (scanIssues.length) state.scanIssues = scanIssues;
   else delete state.scanIssues;
   return state;
-});
-/** Refresh device observations on authoritative Collections without a legacy Entry view. */
-export const refreshLibraryInventory = Effect.fn("Library.refreshLibraryInventory")(function* (
-  loaded: LibraryState,
-  selectRoots: (state: LibraryState) => readonly InventoryScanRoot[],
-) {
-  const store = yield* LibraryStore;
-  const roots = deduplicateInventoryRoots(selectRoots(loaded));
-  const state = yield* scanInventory(loaded, roots);
-  yield* store.save(state, loaded);
-  // A verified installation resolves every older displacement of its installed skill. Those backups
-  // no longer explain an absence, so they are kept, never discarded.
-  for (const installedSkill of state.installed_skills) {
-    if (installedSkill.status !== "installed") continue;
-    const marker = yield* readOwnershipMarker(installedSkill.path);
-    if (
-      marker?.installed_skill_id === installedSkill.installed_skill_id &&
-      marker.skill_id === installedSkill.skill_id
-    )
-      for (const backup of yield* pendingInstalledSkillBackups(installedSkill))
-        yield* keepInstalledSkillBackup(backup);
-  }
-  return { state, roots };
 });

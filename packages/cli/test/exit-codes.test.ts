@@ -7,23 +7,16 @@ import { Effect, Layer } from "effect";
 import { HttpRouter, HttpServerResponse } from "effect/http";
 import { it } from "@effect/vitest";
 import { describe, expect, test } from "vitest";
-import {
-  DescriptorMalformed,
-  DirectSkillDocumentInvalid,
-  HarnessMetadataInvalid,
-  InvalidLibraryState,
-  NoSkitDescriptorFound,
-  InstalledSkillFileMissing,
-  ReadmeFrontmatterMissing,
-  resolveSkitSource,
-  skitLayer,
-} from "@smolai/skit-core";
+import { inspectSource } from "@smolai/skit-core/library/source";
+import { HarnessMetadataInvalid } from "@smolai/skit-core/harnesses";
+import { skitLayer } from "@smolai/skit-core/platform";
 import { productionUrlTestClient } from "./helpers/http-test-client.js";
-import { commandApplicationLayer } from "../src/application.js";
+import { cliLayer } from "../src/application.js";
 import { commandDescriptions } from "../src/commands/manifest.js";
 import { skitCommand } from "../src/commands/tree.js";
-import { classifyFailure, failureExitCodes } from "../src/failure-classification.js";
-import { SourceRestoreInvalid } from "@smolai/skit-core";
+import { classifyFailure, failureExitCodes } from "../src/commands/failure-classification.js";
+import * as Library from "@smolai/skit-core/library";
+import { FailureTypeId } from "@smolai/skit-core/shared";
 import { NoStoredCredentials, RegistryUnreachable } from "../src/registry/failures.js";
 
 const produced = new Set<number>(Object.values(failureExitCodes));
@@ -40,7 +33,7 @@ describe("declared exit codes", () => {
         (code) => !NON_FAILURE_CODES.has(code) && !produced.has(code),
       );
       expect(unproducible).toEqual([]);
-    }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-exit-codes-test"))),
+    }).pipe(Effect.provide(cliLayer(false, "/tmp/skit-exit-codes-test"))),
   );
 
   it.effect("every exit status in the table is declared, including partial update failure", () =>
@@ -52,7 +45,7 @@ describe("declared exit codes", () => {
       // rather than only a shared unexpected failure.
       const update = commands.find((command) => command.path.join(" ") === "update");
       expect(update?.successExitCodes).toContain(1);
-    }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-exit-taxonomy-test"))),
+    }).pipe(Effect.provide(cliLayer(false, "/tmp/skit-exit-taxonomy-test"))),
   );
 
   // The parser rejects an unknown flag or extra argument on any command before its handler runs.
@@ -63,7 +56,7 @@ describe("declared exit codes", () => {
         .filter((command) => !command.successExitCodes.includes(failureExitCodes.INVALID_ARGUMENT))
         .map((command) => command.path.join(" "));
       expect(undeclared).toEqual([]);
-    }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-exit-parse-test"))),
+    }).pipe(Effect.provide(cliLayer(false, "/tmp/skit-exit-parse-test"))),
   );
 
   // A missing effects annotation publishes `capabilities: []`, which reads as "no side effects".
@@ -74,14 +67,14 @@ describe("declared exit codes", () => {
         .filter((command) => command.effects.capabilities.length === 0)
         .map((command) => command.path.join(" "));
       expect(undeclared).toEqual([]);
-    }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-effects-test"))),
+    }).pipe(Effect.provide(cliLayer(false, "/tmp/skit-effects-test"))),
   );
 
   test("a named failure classifies by its own code and remediation", () => {
     for (const failure of [
       new NoStoredCredentials(),
       new RegistryUnreachable({ origin: "https://registry.example", cause: new Error("offline") }),
-      new SourceRestoreInvalid({
+      new Library.SourceRestoreInvalid({
         hash: `sha256:${"a".repeat(64)}`,
         detail: "pinned Git acquisition has no commit",
       }),
@@ -94,6 +87,19 @@ describe("declared exit codes", () => {
       });
   });
 
+  test("a failure the owner describes in domain terms gets this executable's command", () => {
+    const failure = {
+      [FailureTypeId]: FailureTypeId,
+      _tag: "InvalidLibraryState",
+      name: "InvalidLibraryState",
+      code: "VALIDATION_FAILED" as const,
+      message: "Invalid Library state at /home/state.json: schema v2",
+      remediation: "Back up the state file before recovery.",
+    };
+    expect(classifyFailure(failure).remediation).toContain("skit setup");
+    expect(classifyFailure(failure).remediation).not.toBe(failure.remediation);
+  });
+
   test("anything not named as a failure ends the command with exit 1", () => {
     for (const value of [new Error("boom"), { code: "NOT_FOUND", message: "lookalike" }, "text"]) {
       const classified = classifyFailure(value);
@@ -103,23 +109,17 @@ describe("declared exit codes", () => {
   });
 });
 
-test("validation failures from shipped commands carry their own remediation", () => {
-  for (const failure of [
-    new ReadmeFrontmatterMissing(),
-    new DescriptorMalformed({ format: "json", detail: "unexpected token" }),
-    new DirectSkillDocumentInvalid(),
-    new NoSkitDescriptorFound(),
-    new InstalledSkillFileMissing({ path: "/skills/review/SKILL.md" }),
-    new HarnessMetadataInvalid({ path: "/skills/review/SKILL.md", kind: "SKILL.md frontmatter" }),
-    new InvalidLibraryState({ path: "/home/.skit/state.json", detail: "schema v2" }),
-  ]) {
-    expect(classifyFailure(failure)).toMatchObject({
-      code: "VALIDATION_FAILED",
-      exitCode: 65,
-      remediation: failure.remediation,
-    });
-    expect(failure.remediation).not.toContain("skit author");
-  }
+test("a named validation failure uses its owner's remediation and exits 65", () => {
+  const failure = new HarnessMetadataInvalid({
+    path: "/skills/review/SKILL.md",
+    kind: "SKILL.md frontmatter",
+  });
+  expect(classifyFailure(failure)).toMatchObject({
+    code: "VALIDATION_FAILED",
+    exitCode: 65,
+    remediation: failure.remediation,
+  });
+  expect(failure.remediation).not.toContain("skit author");
 });
 
 it.effect("malformed direct Skill downloads preserve the validation exit code", () =>
@@ -137,7 +137,10 @@ it.effect("malformed direct Skill downloads preserve the validation exit code", 
       Layer.provideMerge(NodeHttpServer.layer(createServer, { port: 0 })),
     );
     const outcome = yield* Effect.scoped(
-      resolveSkitSource("https://example.com/SKILL.md").pipe(Effect.flip),
+      inspectSource({
+        source: { type: "url", url: "https://example.com/SKILL.md" },
+        input: "https://example.com/SKILL.md",
+      }).pipe(Effect.flip),
     ).pipe(Effect.provide(routes.pipe(Layer.provideMerge(client))), Effect.provide(skitLayer));
     expect(classifyFailure(outcome)).toMatchObject({ code: "VALIDATION_FAILED", exitCode: 65 });
   }),

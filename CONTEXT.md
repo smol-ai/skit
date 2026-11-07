@@ -11,7 +11,7 @@ Does SKIT own it?        Ownership
 
 A Locator provides access to an Artifact. Provenance explains how an Artifact Instance was derived. An Import records a Source's files as a Collection Version in the Library. Enabling a Skill at a Scope installs it into the skills directories Harnesses read. An Ownership Marker shows that SKIT installed a folder and may change it.
 
-An Author changes a Draft. A Publisher publishes a Release. A Library Owner imports Collections and chooses what is enabled. A Skill User uses Skills through Installed Skills that Harnesses read.
+An Author edits Skills and Collections, saving Revisions. A Publisher publishes a Release. A Library Owner imports Collections and chooses what is enabled. A Skill User uses Skills through Installed Skills that Harnesses read.
 
 ## Verbs
 
@@ -34,12 +34,15 @@ Each verb has one meaning. Use these and no others for Library work.
 | load / save | Read or write SKIT's saved state. |
 | read / write | Read or write one known thing on disk. |
 | scan | Walk skills directories to find what is there. Changes nothing. |
-| refresh | Scan, then save what was found into the Library. |
+| refresh | Scan, then save what was found. |
 | check | Verify without changing anything. |
-| sync | Merge this device's Library with the server's. |
+| sync | Bring an Author Workspace and its Registry current revision together, or merge this device's Library with the server's. These are separate operations. |
+| merge | Combine two changed versions of something with their common base. |
 | plan / apply | Preview a change, then make it. |
 | inspect | Show something in detail without changing it. |
 | send | Send feedback to SKIT's maintainers. |
+| lock | Hold exclusive access to a file for a resource scope. |
+| hash | Compute a content hash under the named hashing policy. |
 
 _Avoid_: acquire, retain, retire, preserve, reconcile, adopt, observe, bind, project, materialize, capture, reload, and publish for anything but Releases.
 
@@ -88,31 +91,30 @@ Portable credit naming the person or organization responsible for a Skill Collec
 _Avoid_: Authorship Grant, Registry account, ownership proof
 
 **Author Repository**:
-Server-managed storage for an editable Draft's history. An implementation may use a Git repository, but Authors interact with it only through SKIT authoring operations.
+Server-managed storage for a SKIT's revision history. An implementation may use a Git repository, but Authors interact with it only through SKIT authoring operations.
 _Avoid_: Git remote, Registry Binding, release archive
 
 **Author Workspace**:
 One device-local editable checkout in which an Author changes a SKIT. It has a stable device-local workspace identity and may take part in the local Library without becoming a local Collection Version or a Registry Release.
-_Avoid_: local Collection, Author Repository, Draft Revision
+_Avoid_: local Collection, Author Repository, Revision
 
 **Author Workspace Identity**:
 The opaque, device-local identity of one Author Workspace. It remains stable when that checkout moves, differs between clones, and is neither portable SKIT Identity nor an absolute path.
 _Avoid_: SKIT Identity, Collection Reference, Source Locator, Descriptor slug
 
-**Draft**:
-Mutable authored content associated with a SKIT. A draft can exist locally or through a remote draft service.
-_Avoid_: branch, prerelease, working copy
+**Revision**:
+One immutable saved state of authored Skills and their Collection, with its parent revisions and author provenance. A Registry SKIT has one current revision. Validity and publication are independent: an invalid revision can sync, and a revision is published when a Release references it.
+_Avoid_: Draft object, Draft Revision, release
 
-**Draft Revision**:
-One immutable state in the history of a Draft. A server may represent it internally as a Git commit.
-_Avoid_: release, public Git commit
+**Unpublished**:
+A revision no Release references. This describes authored content, not a separate identity, store or lifecycle. A SKIT can have Releases while its current revision is unpublished.
 
 **Release**:
 One immutable, versioned set of files published for a SKIT. A release does not become public merely because it exists.
 _Avoid_: draft, installation, publication
 
 **Artifact**:
-Concrete content that SKIT can import, store, validate, publish, or install. Skills, skill collections, drafts, and releases can be artifacts.
+Concrete content that SKIT can import, store, validate, publish, or install. Skills, skill collections, revisions, and releases can be artifacts.
 _Avoid_: source, location
 
 **Artifact Instance**:
@@ -168,17 +170,17 @@ _Avoid_: publication, import
 ### Authoring
 
 **Author**:
-A principal permitted to change a specific draft. Authorship is scoped to that draft.
+A principal permitted to change a specific SKIT. Authorship is scoped to that identity.
 _Avoid_: user, publisher, owner
 
 **Authorship Grant**:
-The relationship that permits a principal to read, change, or advance a draft.
+The relationship that permits a principal to read, change, or advance the current revision of a SKIT.
 _Avoid_: account role, publication grant
 
 ### Distribution
 
 **Registry**:
-A distribution service that accepts publications and supplies releases. A registry can also provide author-draft services, but those are separate capabilities.
+A distribution service that accepts publications and supplies releases. A registry can also provide authoring and revision sync, but those are separate capabilities.
 _Avoid_: product-specific names, forge, hub
 
 **Publication**:
@@ -226,6 +228,10 @@ _Avoid_: binding, installation, link
 **Library Manifest**:
 The portable form of the Library that sync exchanges: its Collections, Skills, Collection Versions, Imports and what is enabled everywhere. It holds what is wanted, not what this device has installed.
 _Avoid_: state file, backup
+
+**Overlap**:
+In a merge, a part both sides changed differently since their common base. A merge policy chooses which side wins it, or leaves it for the user; the losing side is reported, never dropped.
+_Avoid_: conflict (that is a folder SKIT cannot make match)
 
 **Sync Plan**:
 The changes a sync would make to bring this device's Library and the server's together.

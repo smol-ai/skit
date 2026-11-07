@@ -1,18 +1,17 @@
+import { readLibraryManifest } from "./helpers/library-manifest.js";
+import { originalTreePath } from "./helpers/original-tree.js";
 import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
-import {
-  inspectOwnershipMarker,
-  libraryManifestFromLocalState,
-  collectionVersionPath,
-  skitLayer,
-} from "@smolai/skit-core";
-import { importSource } from "../src/library-application/import-source.js";
-import { setupCommand } from "../src/handlers/library/setup.js";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
-import { setupStepTitles } from "../src/presentation/setup-steps.js";
+
+import { inspectOwnershipMarker } from "@smolai/skit-core/library/inventory";
+import { skitLayer } from "@smolai/skit-core/platform";
+import { importSource } from "../src/library/source.js";
+import { setupCommand } from "../src/library/setup.js";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
+import { setupStepTitles } from "../src/library/setup/steps.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 const skillDocument = (name: string, body: string) =>
@@ -96,7 +95,7 @@ it.effect("adds selected skills and takes ownership only of eligible global copi
       expect.objectContaining({ path: managedSkill, status: "installed" }),
     ]);
     const importedDocuments = yield* Effect.forEach(state.collection_versions, (copy) =>
-      fs.readFileString(join(collectionVersionPath(home.originals, copy.hash), "SKILL.md")),
+      fs.readFileString(join(originalTreePath(home.originals, copy.hash), "SKILL.md")),
     );
     expect(importedDocuments).toEqual(
       expect.arrayContaining([managedText, skillDocument("repo-only", "Repository skill")]),
@@ -107,7 +106,7 @@ it.effect("adds selected skills and takes ownership only of eligible global copi
     expect(yield* fs.readFileString(join(repositorySkill, "SKILL.md"))).toBe(
       skillDocument("repo-only", "Repository skill"),
     );
-    expect((yield* libraryManifestFromLocalState(state)).snapshot_digests).toEqual(
+    expect((yield* readLibraryManifest(home.home, [root])).snapshot_digests).toEqual(
       state.collection_versions.map((copy) => copy.hash).sort(),
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -166,7 +165,7 @@ it.effect("manages skills with empty directories and Finder metadata", () =>
     expect(state.installed_skills).toHaveLength(2);
     const imported = yield* Effect.forEach(state.collection_versions, (copy) =>
       Effect.gen(function* () {
-        const path = collectionVersionPath(home.originals, copy.hash);
+        const path = originalTreePath(home.originals, copy.hash);
         return {
           document: yield* fs.readFileString(join(path, "SKILL.md")),
           entries: yield* fs.readDirectory(path),

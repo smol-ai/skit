@@ -2,18 +2,14 @@ import { expect, layer } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { HttpServer } from "effect/http";
 import { HttpApiTest } from "effect/http-api";
-import {
-  CurrentPrincipal,
-  CurrentRequest,
-  PrincipalAuthentication,
-} from "../src/api/authentication.js";
-import { PublicationAuthenticatedApi } from "@smolai/skit-core/universal/api";
+import { CurrentPrincipal, PrincipalAuthentication } from "../src/api/authentication.js";
+import { PublicationAuthenticatedApi } from "@smolai/skit-core/api";
 import { publicationHandlers } from "../src/api/publication-http.js";
 import { requestDecodingLayer } from "../src/api/request-decoding.js";
-import { Authorization } from "../src/authorization/service.js";
-import { ServerConfiguration } from "../src/configuration.js";
+import { ServerConfiguration } from "../src/platform/configuration.js";
 import { DatabaseError } from "../src/platform/cloudflare.js";
-import { Publication, ReleaseConflict } from "../src/publication/service.js";
+import { Skits } from "../src/skits/service.js";
+import { ReleaseConflict } from "../src/skits/internal/publication.js";
 
 const principal = {
   id: "principal_test",
@@ -24,43 +20,37 @@ const principal = {
 const authentication = Layer.succeed(
   PrincipalAuthentication,
   PrincipalAuthentication.of((effect) =>
-    effect.pipe(
-      Effect.provideService(CurrentPrincipal, principal),
-      Effect.provideService(
-        CurrentRequest,
-        new Request("https://registry.test/api/skits/tim/tools/releases", {
-          method: "POST",
-          headers: { origin: "https://registry.test" },
-        }),
-      ),
-    ),
+    effect.pipe(Effect.provideService(CurrentPrincipal, principal)),
   ),
 );
 
+const unexpectedReleaseRead = () => Effect.die("Publication HTTP must not read release archives");
+
 const dependencies = Layer.mergeAll(
-  Layer.mock(Authorization, {
-    canPublish: () => Effect.succeed(true),
-  }),
   Layer.succeed(ServerConfiguration, { publicAppOrigin: "https://registry.test" }),
-  Layer.succeed(
-    Publication,
-    Publication.of({
-      publish: (input) =>
-        input.version === "2.0.0"
-          ? Effect.fail(new ReleaseConflict())
-          : input.version === "3.0.0"
-            ? Effect.fail(
-                new DatabaseError({ operation: "publish test release", cause: "unavailable" }),
-              )
-            : Effect.succeed({
-                release_id: "release_test",
-                version: input.version,
-                revision_id: "revision_test",
-                archive_digest:
-                  "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-              }),
-    }),
-  ),
+  Layer.mock(Skits, {
+    releases: {
+      findLatestPublic: unexpectedReleaseRead,
+      findDownload: unexpectedReleaseRead,
+    },
+    preparePublication: () =>
+      Effect.succeed({
+        publish: (input) =>
+          input.version === "2.0.0"
+            ? Effect.fail(new ReleaseConflict())
+            : input.version === "3.0.0"
+              ? Effect.fail(
+                  new DatabaseError({ operation: "publish test release", cause: "unavailable" }),
+                )
+              : Effect.succeed({
+                  release_id: "release_test",
+                  version: input.version,
+                  revision_id: "revision_test",
+                  archive_digest:
+                    "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                }),
+      }),
+  }),
 );
 
 const handlers = Layer.mergeAll(

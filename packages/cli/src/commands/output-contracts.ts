@@ -1,42 +1,34 @@
-import { UsageReport } from "@smolai/skit-core";
-import { VersionReport } from "../releases/checker.js";
+import { securityOutputContracts } from "../library/security/output.js";
+import { SkillAssessmentDecision, SkillAudit } from "@smolai/skit-core/audit";
+import { InvocationMetadataGeneration, SkitValidationDiagnostic } from "@smolai/skit-core/author";
 import {
   AuthorSkitDeleteResponse,
   AuthorSkitSummary,
-  Hash,
-  InvocationMetadataGeneration,
-  LibraryAuditEvent,
   releasePublishResponseSchema,
-  SkillAssessmentDecision,
-  SkillAudit,
-  SkillSecurityReview,
-  SkitValidationDiagnostic,
-} from "@smolai/skit-core";
+} from "@smolai/skit-core/api";
+import { Hash } from "@smolai/skit-core/shared";
+import { VersionReport } from "../releases.js";
+
 import { Schema } from "effect";
-import {
-  SetupOutput,
-  SetupComparisonOutput,
-  SetupAppliedOutput,
-  SetupReviewOutput,
-  SetupFailureOutput,
-} from "./setup-actions.js";
-import { RecoveryList, RecoveryOutput } from "./recovery-contract.js";
-import { SetupUndoOutput } from "./setup-undo-contract.js";
-import { AuditReportV1Alpha4 } from "../audit/schema.js";
-import { HarnessProbeReport } from "../harness/probe.js";
+import { setupOutputContracts } from "../library/setup.js";
+import { enableOutputContracts } from "../library/enable.js";
+import { recoveryOutputContracts } from "../library/recovery/output.js";
+import { historyOutputContracts } from "../library/history/output.js";
+import { AuditReportV1Alpha4 } from "@smolai/skit-core/audit";
+import { HarnessProbeReport } from "@smolai/skit-core/harnesses";
 import { RegistryRemoteChange, RegistryRemoteList } from "../registry/contracts.js";
-import { AuthorSyncResult } from "../workflows/author/sync-contract.js";
-import { RemovePlan, RemoveResult } from "../workflows/library/remove-contract.js";
-import { CheckResult } from "../workflows/library/check-contract.js";
-import { AddPreview, AddResult } from "../workflows/library/add-contract.js";
-import { UpdatePlan, UpdateResult } from "../workflows/library/update-contract.js";
-import { SyncResult } from "../workflows/library/library-sync-contract.js";
-import { ListResult } from "../workflows/library/list-contract.js";
-import { SetEnabledChange, SetEnabledResult } from "../workflows/library/set-enabled-contract.js";
-import { RepositoryPolicyResult } from "../workflows/library/setup-contract.js";
-import { EditImportPlan, EditImportResult } from "../workflows/library/import-edit-contract.js";
-import { MachineInventoryResult } from "../workflows/library/machine-inventory-contract.js";
-import { DoctorReport } from "../workflows/library/doctor-harnesses.js";
+import { AuthorSyncResult } from "../author/contracts.js";
+import { removeOutputContracts } from "../library/remove/output.js";
+import { checkOutputContracts } from "../library/check/output.js";
+import { addOutputContracts } from "../library/add/output.js";
+import { updateOutputContracts } from "../library/update/output.js";
+import { syncOutputContracts } from "../library/sync.js";
+import { listOutputContracts } from "../library/list.js";
+import { repositoryOutputContracts } from "../library/repository/output.js";
+import { usageOutputContracts } from "../library/usage/output.js";
+
+import { inventoryOutputContracts } from "../library/inventory/output.js";
+import { doctorOutputContracts } from "../library/doctor/output.js";
 
 function effectOutput<
   const TId extends string,
@@ -60,13 +52,13 @@ const effectValidation = Schema.Struct({
 });
 
 export const outputContracts = {
-  setupUndo: effectOutput("skit.setup.undo.v2", SetupUndoOutput),
-  setupComparison: effectOutput("skit.setup.comparison.v2", SetupComparisonOutput),
-  setupReview: effectOutput("skit.setup.review.v3", SetupReviewOutput),
-  setupFailed: effectOutput("skit.setup.failed.v1", SetupFailureOutput),
-  recoveryList: effectOutput("skit.recovery.list.v1", RecoveryList),
-  recovery: effectOutput("skit.recovery.v1", RecoveryOutput),
-  usage: effectOutput("skit.usage.v4", UsageReport),
+  setupUndo: setupOutputContracts.setupUndo,
+  setupComparison: setupOutputContracts.setupComparison,
+  setupReview: setupOutputContracts.setupReview,
+  setupFailed: setupOutputContracts.setupFailed,
+  recoveryList: recoveryOutputContracts.recoveryList,
+  recovery: recoveryOutputContracts.recovery,
+  usage: usageOutputContracts.usage,
   versionReport: effectOutput("skit.version.v2", VersionReport),
   version: effectOutput("skit.version.v1", Schema.Struct({ version: Schema.String })),
   init: effectOutput(
@@ -98,48 +90,46 @@ export const outputContracts = {
     }),
   ),
   authorList: effectOutput(
-    "skit.author.list.v1",
+    "skit.author.list.v2",
     Schema.Struct({
       registry: Schema.String,
       skits: Schema.Array(
         Schema.Struct({
           identity: Schema.String,
           visibility: AuthorSkitSummary.fields.visibility,
-          draft_revision_id: AuthorSkitSummary.fields.draft_revision_id,
+          current_revision_id: AuthorSkitSummary.fields.current_revision_id,
+          current_revision_published: AuthorSkitSummary.fields.current_revision_published,
           most_recent_release_version: AuthorSkitSummary.fields.most_recent_release_version,
         }),
       ),
     }),
   ),
-  authorDelete: effectOutput("skit.author.delete.v1", AuthorSkitDeleteResponse),
-  add: effectOutput("skit.add.v7", AddResult),
-  addPreview: effectOutput("skit.add.preview.v4", AddPreview),
-  list: effectOutput("skit.list.v7", ListResult),
-  securityReview: effectOutput("skit.security.review.v4", SkillSecurityReview),
-  securityAccept: effectOutput("skit.security.accept.v4", SkillSecurityReview),
-  inventory: effectOutput("skit.inventory.v13", MachineInventoryResult),
-  doctor: effectOutput("skit.doctor.v9", DoctorReport),
-  check: effectOutput("skit.check.v8", CheckResult),
-  update: effectOutput("skit.update.v9", UpdateResult),
-  updatePlan: effectOutput("skit.update.plan.v6", UpdatePlan),
-  projectionRetention: effectOutput("skit.update.projection-retention.v4", EditImportResult),
-  projectionRetentionPlan: effectOutput("skit.update.projection-retention.plan.v4", EditImportPlan),
-  remove: effectOutput("skit.remove.v5", RemoveResult),
-  removePlan: effectOutput("skit.remove.plan.v5", RemovePlan),
-  enable: effectOutput("skit.enable.v10", SetEnabledResult),
-  enablePlan: effectOutput("skit.enable.plan.v9", SetEnabledChange),
-  disable: effectOutput("skit.disable.v10", SetEnabledResult),
-  disablePlan: effectOutput("skit.disable.plan.v9", SetEnabledChange),
+  authorDelete: effectOutput("skit.author.delete.v2", AuthorSkitDeleteResponse),
+  add: addOutputContracts.add,
+  addPreview: addOutputContracts.addPreview,
+  list: listOutputContracts.list,
+  securityReview: securityOutputContracts.securityReview,
+  securityAccept: securityOutputContracts.securityAccept,
+  inventory: inventoryOutputContracts.inventory,
+  doctor: doctorOutputContracts.doctor,
+  check: checkOutputContracts.check,
+  update: updateOutputContracts.update,
+  updatePlan: updateOutputContracts.updatePlan,
+  projectionRetention: updateOutputContracts.projectionRetention,
+  projectionRetentionPlan: updateOutputContracts.projectionRetentionPlan,
+  remove: removeOutputContracts.remove,
+  removePlan: removeOutputContracts.removePlan,
+  enable: enableOutputContracts.enable,
+  enablePlan: enableOutputContracts.enablePlan,
+  disable: enableOutputContracts.disable,
+  disablePlan: enableOutputContracts.disablePlan,
   publish: effectOutput("skit.publish.v1", releasePublishResponseSchema),
-  sync: effectOutput("skit.author.sync.v3", AuthorSyncResult),
-  librarySync: effectOutput("skit.library.sync.v11", SyncResult),
-  libraryHistory: effectOutput(
-    "skit.library.history.v1",
-    Schema.Struct({ events: Schema.Array(LibraryAuditEvent) }),
-  ),
-  setup: effectOutput("skit.setup.v11", SetupOutput),
-  setupApplied: effectOutput("skit.setup.applied.v4", SetupAppliedOutput),
-  repositoryPolicy: effectOutput("skit.repository.policy.v1", RepositoryPolicyResult),
+  sync: effectOutput("skit.author.sync.v5", AuthorSyncResult),
+  librarySync: syncOutputContracts.librarySync,
+  libraryHistory: historyOutputContracts.libraryHistory,
+  setup: setupOutputContracts.setup,
+  setupApplied: setupOutputContracts.setupApplied,
+  repositoryPolicy: repositoryOutputContracts.repositoryPolicy,
   serverBootstrap: effectOutput(
     "skit.server.bootstrap.v1",
     Schema.Struct({
@@ -217,8 +207,8 @@ export const outputContracts = {
 } as const;
 
 export type AnyOutputContract = (typeof outputContracts)[keyof typeof outputContracts];
-export type ContractId = AnyOutputContract["id"];
-export type ContractFor<I extends ContractId> = Extract<AnyOutputContract, { readonly id: I }>;
+type ContractId = AnyOutputContract["id"];
+type ContractFor<I extends ContractId> = Extract<AnyOutputContract, { readonly id: I }>;
 export type ContractDataOf<C extends AnyOutputContract> = C["schema"]["Type"];
 export type ContractDataForId<I extends ContractId> = ContractDataOf<ContractFor<I>>;
 export type ContractKey = keyof typeof outputContracts;

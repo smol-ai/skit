@@ -3,13 +3,14 @@ import { expect, test } from "vitest";
 import { Clock, Deferred, Effect, Fiber, FileSystem, Stream } from "effect";
 import { join } from "node:path";
 import { zstdCompressSync } from "node:zlib";
-import { SkillUsage, skillUsageLayer, skitLayer } from "../src/index.js";
+import { scanUsage } from "../src/library/usage/scanner.js";
+import { skitLayer } from "../src/platform/layer.js";
 import {
   claudeTranscriptGrammar,
   codexTranscriptGrammar,
   extractUsage,
-} from "../src/usage/events.js";
-import { literalCommands, shellReadPaths } from "../src/usage/literals.js";
+} from "../src/library/usage/events.js";
+import { literalCommands, shellReadPaths } from "../src/library/usage/literals.js";
 import { systemError } from "effect/PlatformError";
 
 const start = "2026-10-01T00:00:00.000Z",
@@ -143,7 +144,7 @@ it.effect(
         join(root, "subagents/two.jsonl"),
         JSON.stringify(call(start, "one")),
       );
-      const report = yield* (yield* SkillUsage).scan({
+      const report = yield* scanUsage({
         roots: [{ root, harness: "claude-code" }],
         end,
       });
@@ -171,7 +172,7 @@ it.effect(
       expect(yield* fs.readFileString(join(root, "subagents/two.jsonl"))).toBe(
         JSON.stringify(call(start, "one")),
       );
-    }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 it.effect("path identity joins known installed skills and keeps same-name documents separate", () =>
@@ -204,7 +205,7 @@ it.effect("path identity joins known installed skills and keeps same-name docume
         .map((r) => JSON.stringify(r))
         .join("\n"),
     );
-    const report = yield* (yield* SkillUsage).scan({
+    const report = yield* scanUsage({
       roots: [{ root, harness: "codex" }],
       end,
       installedSkills: [{ path: alias, skillId: "skill-example", name: "Example skill" }],
@@ -223,7 +224,7 @@ it.effect("path identity joins known installed skills and keeps same-name docume
       ]),
     );
     expect(report.coverage[0].duplicates).toBe(1);
-    const ambiguous = yield* (yield* SkillUsage).scan({
+    const ambiguous = yield* scanUsage({
       roots: [{ root, harness: "codex" }],
       end,
       installedSkills: [
@@ -236,7 +237,7 @@ it.effect("path identity joins known installed skills and keeps same-name docume
       identity: "ambiguous",
       skillId: null,
     });
-  }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 it.effect("filters projects from raw cwd, reads large records and reports missing roots", () =>
@@ -268,7 +269,7 @@ it.effect("filters projects from raw cwd, reads large records and reports missin
         .map((r) => JSON.stringify(r))
         .join("\n"),
     );
-    const report = yield* (yield* SkillUsage).scan({
+    const report = yield* scanUsage({
       roots: [
         { root, harness: "claude-code" },
         { root: join(root, "missing"), harness: "codex" },
@@ -282,9 +283,9 @@ it.effect("filters projects from raw cwd, reads large records and reports missin
     expect(report.coverage[0].malformed).toBe(0);
     expect(report.coverage[1].status).toBe("missing");
     expect(report.incomplete).toBe(false);
-    const error = yield* (yield* SkillUsage).scan({ roots: [], days: 0 }).pipe(Effect.flip);
+    const error = yield* scanUsage({ roots: [], days: 0 }).pipe(Effect.flip);
     expect(error._tag).toBe("InvalidUsageOptions");
-  }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 it.effect.each(["jsonl", "jsonl.zst"])(
@@ -302,9 +303,8 @@ it.effect.each(["jsonl", "jsonl.zst"])(
         Stream.ensuring(Deferred.succeed(closed, undefined)),
       );
       const fiber = yield* Effect.gen(function* () {
-        return yield* (yield* SkillUsage).scan({ roots: [{ root, harness: "codex" }], end });
+        return yield* scanUsage({ roots: [{ root, harness: "codex" }], end });
       }).pipe(
-        Effect.provide(skillUsageLayer),
         Effect.provideService(FileSystem.FileSystem, { ...fs, stream: () => stream }),
         Effect.forkScoped,
       );
@@ -323,9 +323,8 @@ it.effect("retains healthy evidence when another transcript is unreadable", () =
     yield* fs.writeFileString(join(root, "healthy.jsonl"), JSON.stringify(call(start, "healthy")));
     const error = systemError({ _tag: "PermissionDenied", module: "FileSystem", method: "stream" });
     const report = yield* Effect.gen(function* () {
-      return yield* (yield* SkillUsage).scan({ roots: [{ root, harness: "claude-code" }], end });
+      return yield* scanUsage({ roots: [{ root, harness: "claude-code" }], end });
     }).pipe(
-      Effect.provide(skillUsageLayer),
       Effect.provideService(FileSystem.FileSystem, {
         ...fs,
         stream: (file, options) =>
@@ -366,7 +365,7 @@ it.effect("uses Codex turn working directories and resolves project aliases", ()
       join(root, "turns.jsonl"),
       [meta, turn, read].map((r) => JSON.stringify(r)).join("\n"),
     );
-    const report = yield* (yield* SkillUsage).scan({
+    const report = yield* scanUsage({
       roots: [{ root, harness: "codex" }],
       end,
       project,
@@ -379,22 +378,21 @@ it.effect("uses Codex turn working directories and resolves project aliases", ()
       },
     ]);
     expect(report.coverage[0].windowRecords).toBe(2);
-  }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 it.effect("rejects date underflow as an argument error and accepts the exact date boundary", () =>
   Effect.gen(function* () {
-    const usage = yield* SkillUsage;
-    const error = yield* usage
-      .scan({ roots: [], end: "-271821-04-20T00:00:00.000Z" })
-      .pipe(Effect.flip);
+    const error = yield* scanUsage({ roots: [], end: "-271821-04-20T00:00:00.000Z" }).pipe(
+      Effect.flip,
+    );
     expect(error._tag).toBe("InvalidUsageOptions");
-    const report = yield* usage.scan({ roots: [], end: "-271821-04-27T00:00:00.000Z" });
+    const report = yield* scanUsage({ roots: [], end: "-271821-04-27T00:00:00.000Z" });
     expect(report.window).toEqual({
       start: "-271821-04-20T00:00:00.000Z",
       end: "-271821-04-27T00:00:00.000Z",
     });
-  }).pipe(Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(skitLayer)),
 );
 
 it.effect("measures duration with monotonic time while the wall clock moves backwards", () =>
@@ -413,13 +411,13 @@ it.effect("measures duration with monotonic time while the wall clock moves back
       monotonicTimeNanos: Effect.sync(nanos),
       sleep: (duration) => clock.sleep(duration),
     };
-    const report = yield* (yield* SkillUsage)
-      .scan({ roots: [] })
-      .pipe(Effect.provideService(Clock.Clock, controlled));
+    const report = yield* scanUsage({ roots: [] }).pipe(
+      Effect.provideService(Clock.Clock, controlled),
+    );
     expect(report.window).toEqual({ start, end });
     expect(report.durationMs).toBe(1250);
     expect(wallTime()).toBe(Date.parse(end) - 1000);
-  }).pipe(Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+  }).pipe(Effect.provide(skitLayer)),
 );
 
 test("recognizes legacy shell argv and diagnoses unsupported command shapes", () => {
@@ -487,11 +485,11 @@ it.effect(
           .map((r) => JSON.stringify(r))
           .join("\n"),
       );
-      const report = yield* (yield* SkillUsage).scan({ roots: [{ root, harness: "codex" }], end });
+      const report = yield* scanUsage({ roots: [{ root, harness: "codex" }], end });
       expect(report.rows).toMatchObject([{ name: "example", reads: 1 }]);
       expect(report.coverage[0].unsupported).toBe(1);
       expect(report.incomplete).toBe(true);
-    }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 test("skill filename mentions and output callbacks do not diagnose unsupported reads", () => {
@@ -613,7 +611,7 @@ it.effect("correlates Claude selections and linked expansions without double cou
       join(root, "replay.jsonl"),
       records.map((r) => JSON.stringify(r)).join("\n"),
     );
-    const report = yield* (yield* SkillUsage).scan({
+    const report = yield* scanUsage({
       roots: [{ root, harness: "claude-code" }],
       end,
     });
@@ -626,7 +624,7 @@ it.effect("correlates Claude selections and linked expansions without double cou
     expect(report.rows.reduce((n, r) => n + r.uses, 0)).toBe(3);
     expect(report.rows.find((r) => r.name === "help")).toBeUndefined();
     expect(report.rows.every((r) => r.uses === r.explicit + r.implicit + r.unknown)).toBe(true);
-  }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 it.effect(
@@ -696,7 +694,7 @@ it.effect(
           .map((r) => JSON.stringify(r))
           .join("\n"),
       );
-      const report = yield* (yield* SkillUsage).scan({ roots: [{ root, harness: "codex" }], end });
+      const report = yield* scanUsage({ roots: [{ root, harness: "codex" }], end });
       expect(report.rows.find((r) => r.name === "example")).toMatchObject({
         uses: 4,
         explicit: 1,
@@ -707,7 +705,7 @@ it.effect(
         uses: 1,
         unknown: 1,
       });
-    }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 it.effect(
@@ -752,7 +750,7 @@ it.effect(
         join(root, "one.jsonl"),
         records.map((r) => JSON.stringify(r)).join("\n"),
       );
-      const report = yield* (yield* SkillUsage).scan({
+      const report = yield* scanUsage({
         roots: [{ root, harness: "claude-code" }],
         end,
       });
@@ -769,7 +767,7 @@ it.effect(
         uses: 2,
         implicit: 2,
       });
-    }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 it.effect("does not collapse Claude subagents sharing a parent session and prompt", () =>
@@ -794,12 +792,12 @@ it.effect("does not collapse Claude subagents sharing a parent session and promp
         records.map((r) => JSON.stringify(r)).join("\n"),
       );
     }
-    const report = yield* (yield* SkillUsage).scan({
+    const report = yield* scanUsage({
       roots: [{ root, harness: "claude-code" }],
       end,
     });
     expect(report.rows).toMatchObject([{ uses: 2, implicit: 2, calls: 2 }]);
-  }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 it.effect("keeps Claude document access and Codex multi-skill inspection out of usage counts", () =>
@@ -883,7 +881,7 @@ it.effect("keeps Claude document access and Codex multi-skill inspection out of 
       join(codex, "one.jsonl"),
       codexRecords.map((r) => JSON.stringify(r)).join("\n"),
     );
-    const report = yield* (yield* SkillUsage).scan({
+    const report = yield* scanUsage({
       roots: [
         { root: claude, harness: "claude-code" },
         { root: codex, harness: "codex" },
@@ -905,7 +903,7 @@ it.effect("keeps Claude document access and Codex multi-skill inspection out of 
       implicit: 1,
     });
     expect(report.rows.reduce((n, r) => n + r.uses, 0)).toBe(1);
-  }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 it.effect(
@@ -931,7 +929,7 @@ it.effect(
         join(root, "one.jsonl"),
         records.map((r) => JSON.stringify(r)).join("\n"),
       );
-      const report = yield* (yield* SkillUsage).scan({
+      const report = yield* scanUsage({
         roots: [{ root, harness: "claude-code" }],
         end,
       });
@@ -943,7 +941,7 @@ it.effect(
         implicit: 0,
         unknown: 0,
       });
-    }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 it.effect("decodes split UTF-8 and CRLF chunks and reads the final line without a newline", () =>
@@ -962,9 +960,8 @@ it.effect("decodes split UTF-8 and CRLF chunks and reads the final line without 
     const crlfSplit = bytes.indexOf(13) + 1;
     yield* fs.writeFileString(join(root, "one.jsonl"), content);
     const report = yield* Effect.gen(function* () {
-      return yield* (yield* SkillUsage).scan({ roots: [{ root, harness: "claude-code" }], end });
+      return yield* scanUsage({ roots: [{ root, harness: "claude-code" }], end });
     }).pipe(
-      Effect.provide(skillUsageLayer),
       Effect.provideService(FileSystem.FileSystem, {
         ...fs,
         stream: () =>
@@ -1003,9 +1000,8 @@ it.effect(
         method: "stream",
       });
       const report = yield* Effect.gen(function* () {
-        return yield* (yield* SkillUsage).scan({ roots: [{ root, harness: "claude-code" }], end });
+        return yield* scanUsage({ roots: [{ root, harness: "claude-code" }], end });
       }).pipe(
-        Effect.provide(skillUsageLayer),
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
           stream: () =>
@@ -1069,7 +1065,6 @@ it.effect(
       const compressedPath = join(compressed, "records.jsonl.zst");
       yield* fs.writeFileString(plainPath, transcript);
       yield* fs.writeFile(compressedPath, bytes);
-      const scanner = yield* SkillUsage;
       const options = {
         end,
         project: root,
@@ -1077,11 +1072,11 @@ it.effect(
           { path: "/synthetic/skills/example", skillId: "example-id", name: "example" },
         ],
       };
-      const expected = yield* scanner.scan({
+      const expected = yield* scanUsage({
         ...options,
         roots: [{ root: plain, harness: "codex" }],
       });
-      const actual = yield* scanner.scan({
+      const actual = yield* scanUsage({
         ...options,
         roots: [{ root: compressed, harness: "codex" }],
       });
@@ -1098,7 +1093,7 @@ it.effect(
         unreadableFiles: 0,
       });
       expect(actual.incomplete).toBe(false);
-      const both = yield* scanner.scan({
+      const both = yield* scanUsage({
         ...options,
         roots: [
           { root: plain, harness: "codex" },
@@ -1108,7 +1103,7 @@ it.effect(
       expect(both.rows).toEqual(expected.rows);
       expect(both.coverage[1].duplicates).toBe(1);
       expect(yield* fs.readFile(compressedPath)).toEqual(bytes);
-    }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+    }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 it.effect(
@@ -1135,9 +1130,8 @@ it.effect(
       );
       yield* fs.writeFile(join(root, "records.jsonl.zst"), bytes);
       const report = yield* Effect.gen(function* () {
-        return yield* (yield* SkillUsage).scan({ roots: [{ root, harness: "claude-code" }], end });
+        return yield* scanUsage({ roots: [{ root, harness: "claude-code" }], end });
       }).pipe(
-        Effect.provide(skillUsageLayer),
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
           stream: () =>
@@ -1169,7 +1163,7 @@ it.effect("corrupt compressed files are diagnosed without losing healthy transcr
       join(root, "c-healthy.jsonl.zst"),
       zstdCompressSync(JSON.stringify(call(start, "healthy"))),
     );
-    const report = yield* (yield* SkillUsage).scan({
+    const report = yield* scanUsage({
       roots: [{ root, harness: "claude-code" }],
       end,
     });
@@ -1181,7 +1175,7 @@ it.effect("corrupt compressed files are diagnosed without losing healthy transcr
       changedFiles: 0,
     });
     expect(report.incomplete).toBe(true);
-  }).pipe(Effect.scoped, Effect.provide(skillUsageLayer), Effect.provide(skitLayer)),
+  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
 it.effect("compressed reads keep the inventoried byte bound and diagnose concurrent appends", () =>
@@ -1200,9 +1194,8 @@ it.effect("compressed reads keep the inventoried byte bound and diagnose concurr
     );
     yield* fs.writeFile(path, before);
     const report = yield* Effect.gen(function* () {
-      return yield* (yield* SkillUsage).scan({ roots: [{ root, harness: "claude-code" }], end });
+      return yield* scanUsage({ roots: [{ root, harness: "claude-code" }], end });
     }).pipe(
-      Effect.provide(skillUsageLayer),
       Effect.provideService(FileSystem.FileSystem, {
         ...fs,
         stream: (file, options) =>

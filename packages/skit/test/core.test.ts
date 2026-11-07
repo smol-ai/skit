@@ -1,19 +1,20 @@
 import { Cause, Deferred, Effect, Fiber, FileSystem, Layer, Result, Stream } from "effect";
 import { it } from "@effect/vitest";
 import { ChildProcessSpawner } from "effect/process";
-import { skitLayer, sourceProcessLayer, validateSkitDirectory } from "../src/index.js";
+import { skitLayer } from "../src/platform/layer.js";
+import { sourceProcessLayer } from "../src/platform/source-process.js";
+import { validateSkitDirectory } from "../src/artifact/skit.js";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { expect, test, vi } from "vitest";
+import { deterministicTreeHash } from "../src/artifact/skit.js";
 import {
-  deterministicTreeHash,
   hashInstalledSkillFiles,
-  LinkStat,
   parseSkitConfig,
   parseSkitReadme,
-  inspectNormalizedTree,
-  walkTree,
-} from "../src/index.js";
+} from "../src/artifact/descriptor.js";
+import { LinkStat } from "../src/platform/link-stat.js";
+import { inspectNormalizedTree, walkTree, walkAuthorTree } from "../src/artifact/tree.js";
 import { invocationMetadataAdapters } from "../src/harnesses/invocation-metadata.js";
 import { copySkitFixtureEffect } from "./helpers/skit-fixture.js";
 
@@ -27,7 +28,7 @@ const validSkit = Effect.gen(function* () {
 /** Git is exercised through its CLI; the call is synchronous and stays out of the platform seam. */
 const git = (...args: string[]) => Effect.sync(() => void execFileSync("git", args));
 const author = (root: string) =>
-  validateSkitDirectory(root, "draft", { assessmentContext: "author" });
+  validateSkitDirectory(root, "unpublished", { assessmentContext: "author" });
 const authorFailure = (root: string) => Effect.flip(author(root));
 
 test("pins depth-first code-unit ordering for Skill Artifact digests", () => {
@@ -233,6 +234,25 @@ it.effect("normalized SKIT content excludes repository author-home metadata", ()
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
+it.effect("Author history and transport share native Git and control-path membership", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* validSkit;
+    yield* git("init", "--quiet", root);
+    yield* fs.writeFileString(join(root, ".gitignore"), ".env\n");
+    for (const path of [".env", ".DS_Store", "skit.remote.json", ".skit-ownership.json"])
+      yield* fs.writeFileString(join(root, path), "not author content\n");
+    const raw = yield* walkAuthorTree(root, "verbatim");
+    const transport = yield* walkAuthorTree(root, "normalized");
+    expect(transport.map((entry) => entry.path)).toEqual(
+      raw.filter((entry) => entry.kind === "file").map((entry) => entry.path.normalize("NFC")),
+    );
+    expect(raw.map((entry) => entry.path)).toContain("skills/review/SKILL.md");
+    for (const path of [".env", ".DS_Store", "skit.remote.json", ".skit-ownership.json"])
+      expect(raw.map((entry) => entry.path)).not.toContain(path);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
 it.effect("Author content follows Git's effective ignore decision", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -277,6 +297,20 @@ it.effect("Author content follows Git's effective ignore decision", () =>
     expect(paths).not.toContain("global-only.txt");
     expect(paths).not.toContain(".claude/settings.local.json");
     expect(paths).not.toContain(".codex/hooks.json");
+    const rawPaths = (yield* walkTree(root, "verbatim", { respectGitIgnore: true })).map(
+      (entry) => entry.path,
+    );
+    expect(rawPaths).toContain("tracked.log");
+    expect(rawPaths).toContain("nested/keep.tmp");
+    for (const ignored of [
+      "ignored.log",
+      "nested/drop.tmp",
+      "info-only.txt",
+      "global-only.txt",
+      ".claude/settings.local.json",
+      ".codex/hooks.json",
+    ])
+      expect(rawPaths).not.toContain(ignored);
     const withoutIgnoredSkillFile = validation.identity.skills[0].contentHash;
     yield* fs.writeFileString(
       join(root, "skills", "review", "ignored.log"),
@@ -284,6 +318,95 @@ it.effect("Author content follows Git's effective ignore decision", () =>
     );
     expect((yield* author(root)).identity.skills[0].contentHash).toBe(withoutIgnoredSkillFile);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("raw Git membership retains native tracked Unicode names and symlink text", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-raw-git-unicode-" });
+    yield* git("init", "--quiet", root);
+    const directory = "cafe\u0301";
+    const file = "re\u0301sume\u0301.md";
+    const link = "re\u0301fe\u0301rence.md";
+    yield* fs.makeDirectory(join(root, directory));
+    yield* fs.writeFileString(join(root, directory, file), "tracked before ignore\n");
+    yield* fs.symlink("../../outside.md", join(root, directory, link));
+    yield* git("-C", root, "add", "--", directory);
+    yield* fs.writeFileString(join(root, ".gitignore"), "*.md\n");
+    yield* fs.writeFileString(join(root, directory, "ignored.md"), "not in history\n");
+    const nativeNames = yield* fs.readDirectory(join(root, directory));
+    const nativeDirectory = (yield* fs.readDirectory(root)).find(
+      (name) => name.normalize("NFC") === directory.normalize("NFC"),
+    );
+    expect(nativeDirectory).toBeDefined();
+    const entries = yield* walkTree(root, "verbatim", { respectGitIgnore: true });
+    expect(entries).toContainEqual({
+      path: `${nativeDirectory}/${nativeNames.find((name) => name.normalize("NFC") === link.normalize("NFC"))}`,
+      kind: "symlink",
+      target: "../../outside.md",
+    });
+    expect(
+      entries.find(
+        (entry) =>
+          entry.kind === "file" &&
+          entry.path.endsWith(
+            nativeNames.find((name) => name.normalize("NFC") === file.normalize("NFC")) ??
+              "missing",
+          ),
+      ),
+    ).toMatchObject({ bytes: Buffer.from("tracked before ignore\n") });
+    expect(entries.some((entry) => entry.path.endsWith("ignored.md"))).toBe(false);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect(
+  "raw Git membership keeps exact Unicode twins distinct on normalization-sensitive filesystems",
+  (context) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-raw-git-twins-" });
+      yield* git("init", "--quiet", root);
+      const nfc = "café.md";
+      const nfd = nfc.normalize("NFD");
+      yield* fs.writeFileString(join(root, nfc), "included\n");
+      const distinct = yield* fs.writeFileString(join(root, nfd), "ignored\n", { flag: "wx" }).pipe(
+        Effect.as(true),
+        Effect.catch((error) =>
+          error.reason._tag === "AlreadyExists" ? Effect.succeed(false) : Effect.fail(error),
+        ),
+      );
+      if (!distinct) {
+        context.skip(
+          true,
+          "filesystem aliases NFC and NFD names; run on Linux for distinct-name proof",
+        );
+        return;
+      }
+      yield* fs.writeFileString(join(root, ".gitignore"), `${nfd}\n`);
+      const entries = yield* walkTree(root, "verbatim", { respectGitIgnore: true });
+      expect(entries.map((entry) => entry.path)).toContain(nfc);
+      expect(entries.map((entry) => entry.path)).not.toContain(nfd);
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect(
+  "raw Git membership preserves a symlink replacing a tracked directory without following it",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-raw-git-replaced-" });
+      const outside = yield* fs.makeTempDirectoryScoped({ prefix: "skit-raw-git-outside-" });
+      yield* git("init", "--quiet", root);
+      yield* fs.makeDirectory(join(root, "member"));
+      yield* fs.writeFileString(join(root, "member", "SKILL.md"), "tracked\n");
+      yield* git("-C", root, "add", "--", "member");
+      yield* fs.remove(join(root, "member"), { recursive: true });
+      yield* fs.writeFileString(join(outside, "SKILL.md"), "not authored here\n");
+      yield* fs.symlink(outside, join(root, "member"));
+      expect(yield* walkTree(root, "verbatim", { respectGitIgnore: true })).toEqual([
+        { path: "member", kind: "symlink", target: outside },
+      ]);
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("Author content remains available outside a Git worktree", () =>
@@ -486,7 +609,7 @@ it.effect.each([
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-parser-" });
     yield* fs.writeFileString(join(root, file), body);
     const failure = yield* Effect.flip(
-      validateSkitDirectory(root, "draft", { assessmentContext: "author" }),
+      validateSkitDirectory(root, "unpublished", { assessmentContext: "author" }),
     );
     expect(failure).toMatchObject(expected);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -523,7 +646,7 @@ it.effect.each(["author", "publish"] as const)(
               };
             }),
         };
-        return yield* validateSkitDirectory(root, "draft", { assessmentContext }).pipe(
+        return yield* validateSkitDirectory(root, "unpublished", { assessmentContext }).pipe(
           Effect.provide(
             Layer.fresh(
               sourceProcessLayer.pipe(
@@ -556,7 +679,9 @@ it.effect("malformed invocation metadata is a named validation failure", () =>
     );
     yield* fs.writeFileString(join(root, "skills/review/SKILL.md"), "---\nname: [\n---\n");
     expect(
-      yield* Effect.flip(validateSkitDirectory(root, "draft", { assessmentContext: "author" })),
+      yield* Effect.flip(
+        validateSkitDirectory(root, "unpublished", { assessmentContext: "author" }),
+      ),
     ).toMatchObject({ _tag: "HarnessMetadataInvalid" });
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -579,7 +704,9 @@ it.effect("projected content collisions enter the validation error channel", () 
       }),
     );
     expect(
-      yield* Effect.flip(validateSkitDirectory(root, "draft", { assessmentContext: "author" })),
+      yield* Effect.flip(
+        validateSkitDirectory(root, "unpublished", { assessmentContext: "author" }),
+      ),
     ).toMatchObject({ _tag: "SharedTargetCollision" });
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

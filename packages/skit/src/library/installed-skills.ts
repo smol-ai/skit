@@ -1,46 +1,63 @@
-import { Context, Data, Effect, FileSystem, Layer, Option, Path, Schema, Scope } from "effect";
+import { pathEntryIdentity, pathChain } from "../platform/path-evidence.js";
+import {
+  activeInstallDestinations,
+  skillsDirectoryFor,
+  type InventoryRootOptions,
+} from "./routing/roots.js";
+import { findDuplicates, readableSkillsDirectories } from "./routing/duplicates.js";
+import {
+  Destination,
+  Duplicate,
+  DuplicateScanIncomplete,
+  Warning,
+} from "./installed-skill-facts.js";
+export { Destination, Duplicate } from "./installed-skill-facts.js";
+
+import { Context, Data, Effect, FileSystem, Option, Path, Schema, Scope } from "effect";
 import { dirname, join, resolve } from "node:path";
 import { Digest } from "effect/crypto";
-import * as InstalledSkillFiles from "../install/files.js";
-import * as InstalledSkillBackups from "../install/backups.js";
+import * as InstalledSkillFiles from "../installed-skills/files.js";
+import * as InstalledSkillBackups from "../installed-skills/backups.js";
 import { LinkStat } from "../platform/link-stat.js";
 import { SourceProcess } from "../platform/source-process.js";
-import { TreeHasher } from "../artifact/tree-hasher.js";
-import { deterministicTreeHash } from "../artifact/skit.js";
-import { ensureSkillsDirectoryWritable } from "../install/writable.js";
+import { hashTree, deterministicTreeHash } from "../artifact/skit.js";
+
+import { ensureSkillsDirectoryWritable } from "../installed-skills/writable.js";
 import { installDestinationPathIdentity } from "../platform/path-identity.js";
-import { sha256Hash } from "../shared/hash.js";
-import { pnpmSkillOwner } from "../install/pnpm-skills.js";
+import { sha256Hash, Hash } from "../shared/hash.js";
+import { pnpmSkillOwner } from "../installed-skills/pnpm-skills.js";
 import type { TreeRequirements } from "../platform/tree-requirements.js";
 import type { PlatformError } from "effect/PlatformError";
-import { Hash, InstallDestination, type InstallScope } from "../vocabulary.js";
-import type { OwnershipMarker } from "../contracts.js";
+
+import { InstallDestination } from "../installed-skills/destination.js";
+import { type InstallScope } from "./scope.js";
+import type { OwnershipMarker } from "../installed-skills/ownership-marker.js";
 import type { LibraryState } from "./library-state.js";
 import type { InstalledSkillId, SkillId, SkillVersionId } from "./entity-ids.js";
 import {
-  OwnershipMarkerInspection,
   type InstalledSkillMutationError,
-  type reproducible,
   type StagedInstalledSkill,
-} from "../install/files.js";
+} from "../installed-skills/files.js";
+import {
+  inspectOwnershipMarker,
+  OwnershipMarkerInspection,
+} from "../installed-skills/marker-inspection.js";
 import { InstalledSkillInvalid } from "./installation/install-enabled.js";
+import { reproducible } from "./installation/retained-skill.js";
 import { installedSkillSource } from "./installation/installed-skill-source.js";
-import { declaredInvocationIntent, overrideInvocationIntent } from "../install/policy.js";
+import { declaredInvocationIntent, overrideInvocationIntent } from "../installed-skills/policy.js";
 import type { Invocation } from "./enabled-plan.js";
-import type { SkitFailure } from "../shared/failure.js";
-import { FailureTypeId } from "../shared/failure.js";
+import { type SkitFailure, FailureTypeId } from "../shared/failure.js";
+
 import type { TreeError } from "../shared/tree-error.js";
 
 /**
- * Facts about this device's skill folders, and operations that carry out what Library decided.
- * It never sees a Library row and never decides policy.
+ * Library's adapter from saved selections to installed-folder facts and operations.
+ * Stored-version selection and recovery policy stay in Library; file construction is separate.
  */
 
 /** Entries are compared by device identity, never by path alone. */
-export const Identity = Schema.Struct({ dev: Schema.String, ino: Schema.String });
-export type Identity = typeof Identity.Type;
-export const Destination = Schema.Struct({ destination: InstallDestination, root: Schema.String });
-export type Destination = typeof Destination.Type;
+const Identity = Schema.Struct({ dev: Schema.String, ino: Schema.String });
 export const Protection = Schema.Literals(["repository", "authored", "package-manager"]);
 export type Protection = typeof Protection.Type;
 /** What the installer reads at an existing folder, following a link as it always has. */
@@ -65,7 +82,7 @@ export const Facts = Schema.Struct({
   protection: Schema.NullOr(Protection),
 });
 export type Facts = typeof Facts.Type;
-export const Entry = Schema.Union([
+const Entry = Schema.Union([
   Schema.Struct({ _tag: Schema.Literal("Absent") }),
   Schema.Struct({
     _tag: Schema.Literal("Present"),
@@ -79,7 +96,6 @@ export const Entry = Schema.Union([
     facts: Schema.NullOr(Facts),
   }),
 ]);
-export type Entry = typeof Entry.Type;
 /** One path as it was when inspected. Plain data: it survives cloning into a plan. */
 export const Folder = Schema.Struct({
   path: Schema.String,
@@ -94,29 +110,12 @@ export interface Backup {
   readonly path: string;
   readonly marker: OwnershipMarkerInspection;
 }
-export interface Installed {
+interface Installed {
   readonly path: string;
   readonly hash: Hash;
   /** The predecessor this install moved to recovery, if there was one. */
   readonly replaced: Option.Option<Backup>;
 }
-export const Duplicate = Schema.Struct({
-  name: Schema.String,
-  harness: Schema.String,
-  canonicalPath: Schema.String,
-  aliases: Schema.Array(
-    Schema.Struct({
-      path: Schema.String,
-      via: Schema.Literals(["symlink", "directory", "unknown-root"]),
-      linkPath: Schema.optionalKey(Schema.String),
-      linkTarget: Schema.optionalKey(Schema.String),
-    }),
-  ),
-  documentHash: Schema.String,
-});
-export type Duplicate = typeof Duplicate.Type;
-export const Warning = Schema.Struct({ path: Schema.String, message: Schema.String });
-export type Warning = typeof Warning.Type;
 
 export type Cause =
   | InstalledSkillMutationError
@@ -137,18 +136,6 @@ export class Changed
     return `Installed skill evidence changed at ${this.path}`;
   }
 }
-export class DuplicateScanIncomplete
-  extends Data.TaggedError("DuplicateScanIncomplete")<{
-    path: string;
-    message: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly remediation = "Inspect the skills directory before enabling another copy.";
-}
-
 export interface Interface {
   /** Install destinations active on this device. Unknown routing counts every one as active. */
   readonly active: Effect.Effect<readonly InstallDestination[], Cause>;
@@ -163,7 +150,7 @@ export interface Interface {
   readonly hash: (path: string) => Effect.Effect<Hash, Cause>;
   /** Changes nothing: every folder is still exactly as it was inspected. */
   readonly check: (folders: readonly Folder[]) => Effect.Effect<void, Changed | Cause>;
-  /** Create roots and prove them writable, before the Library saves intent. */
+  /** Create roots and prove them writable before saving enablement. */
   readonly prepare: (roots: readonly string[]) => Effect.Effect<void, Cause>;
   /**
    * Build one Installed Skill's bytes from `state`, the Library being planned or applied, so
@@ -251,44 +238,48 @@ export interface Routing {
  * This device's skill folders. Without this machine's routing, its install destinations are
  * unknown rather than inactive: anything that needs them fails, and nothing is uninstalled for it.
  */
-export const make = Effect.fn("make")(function* (routing?: Routing) {
+export const make = Effect.fn("make")(function* (configuration?: Routing | InventoryRootOptions) {
   const unrouted = () =>
     Effect.fail(
       new InstalledSkillInvalid({ detail: "This device's install destinations are unknown" }),
     );
-  const context = (yield* Effect.context<TreeRequirements | TreeHasher | Digest.Digest>()).pipe(
-    Context.pick(
-      FileSystem.FileSystem,
-      Path.Path,
-      LinkStat,
-      SourceProcess,
-      TreeHasher,
-      Digest.Digest,
-    ),
+  const context = (yield* Effect.context<TreeRequirements | Digest.Digest>()).pipe(
+    Context.pick(FileSystem.FileSystem, Path.Path, LinkStat, SourceProcess, Digest.Digest),
   );
+  let routing: Routing | undefined;
+  if (configuration === undefined || !("home" in configuration)) routing = configuration;
+  else {
+    const roots = { ...configuration, overrides: structuredClone(configuration.overrides) };
+    routing = {
+      active: activeInstallDestinations(roots).pipe(Effect.provide(context)),
+      destinations: Effect.fn("InstalledSkills.destinations")(function* (scope: InstallScope) {
+        return (yield* activeInstallDestinations(roots).pipe(Effect.provide(context))).map(
+          (destination) => ({
+            destination,
+            root: skillsDirectoryFor(destination, scope, roots),
+          }),
+        );
+      }),
+      duplicates: {
+        scan: Effect.fn("InstalledSkills.duplicates")(function* (scope, names) {
+          const warnings: Warning[] = [];
+          const copies = names.length
+            ? yield* findDuplicates(roots, scope, names, warnings).pipe(Effect.provide(context))
+            : [];
+          return {
+            copies,
+            warnings,
+            roots: readableSkillsDirectories(roots, scope).map((root) => root.root),
+          };
+        }),
+      },
+    };
+  }
   const fs = yield* FileSystem.FileSystem;
   const links = yield* LinkStat;
-  const hasher = yield* TreeHasher;
 
-  /** The entry's own identity, and where a link points. Never follows a link to inspect it. */
-  const identity = Effect.fn("identity")(function* (path: string) {
-    return yield* links.identity.lstat(path).pipe(
-      Effect.flatMap((info) =>
-        info.type === "SymbolicLink"
-          ? links.identity.stat(path).pipe(
-              Effect.map(
-                (target) =>
-                  `${info.type}:${info.dev}:${info.ino}->${target.type}:${target.dev}:${target.ino}`,
-              ),
-              Effect.catchReason("PlatformError", "NotFound", () =>
-                Effect.succeed(`${info.type}:${info.dev}:${info.ino}->absent`),
-              ),
-            )
-          : Effect.succeed(`${info.type}:${info.dev}:${info.ino}`),
-      ),
-      Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed("absent")),
-    );
-  });
+  const identity = (path: string) =>
+    pathEntryIdentity(path).pipe(Effect.provideService(LinkStat, links));
   // Includes entries normalized hashes omit, and reads links without following them.
   const tree = Effect.fn("tree")(function* (path: string): Effect.fn.Return<string, PlatformError> {
     const entry = yield* identity(path);
@@ -329,7 +320,7 @@ export const make = Effect.fn("make")(function* (routing?: Routing) {
           ? "package-manager"
           : null;
     return {
-      marker: yield* InstalledSkillFiles.inspectOwnershipMarker(path),
+      marker: yield* inspectOwnershipMarker(path),
       hash: yield* deterministicTreeHash(path).pipe(
         Effect.map((hash): Facts["hash"] => hash),
         Effect.catchTag("TreeError", (error) =>
@@ -348,11 +339,7 @@ export const make = Effect.fn("make")(function* (routing?: Routing) {
     const info = yield* links.identity
       .lstat(absolute)
       .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
-    const ancestors: { path: string; evidence: string }[] = [];
-    for (let parent = dirname(absolute); ; parent = dirname(parent)) {
-      ancestors.push({ path: parent, evidence: yield* identity(parent) });
-      if (parent === dirname(parent)) break;
-    }
+    const ancestors = yield* pathChain(dirname(absolute));
     if (info === undefined)
       return {
         path: absolute,
@@ -419,7 +406,7 @@ export const make = Effect.fn("make")(function* (routing?: Routing) {
         "replace",
       ).pipe(
         Effect.flatMap((path) =>
-          Effect.map(InstalledSkillFiles.inspectOwnershipMarker(path), (marker) => {
+          Effect.map(inspectOwnershipMarker(path), (marker) => {
             displaced = Option.some({ path, marker });
           }),
         ),
@@ -446,7 +433,7 @@ export const make = Effect.fn("make")(function* (routing?: Routing) {
         Effect.provide(context),
       ),
     inspect: (path) => inspect(path).pipe(Effect.provide(context)),
-    hash: (path) => hasher.hash(path).pipe(Effect.provide(context)),
+    hash: (path) => hashTree(path).pipe(Effect.provide(context)),
     check: Effect.fn("check")(function* (folders) {
       for (const expected of folders) {
         const current = yield* inspect(expected.path).pipe(Effect.provide(context));
@@ -505,9 +492,7 @@ export const make = Effect.fn("make")(function* (routing?: Routing) {
       ).pipe(Effect.provide(context));
       return {
         path: backup,
-        marker: yield* InstalledSkillFiles.inspectOwnershipMarker(backup).pipe(
-          Effect.provide(context),
-        ),
+        marker: yield* inspectOwnershipMarker(backup).pipe(Effect.provide(context)),
       };
     }),
     duplicates: {
@@ -522,7 +507,7 @@ export const make = Effect.fn("make")(function* (routing?: Routing) {
         }).pipe(
           Effect.flatMap((paths) =>
             Effect.forEach(paths, (path) =>
-              Effect.map(InstalledSkillFiles.inspectOwnershipMarker(path), (marker) => ({
+              Effect.map(inspectOwnershipMarker(path), (marker) => ({
                 path,
                 marker,
               })),
@@ -531,7 +516,7 @@ export const make = Effect.fn("make")(function* (routing?: Routing) {
           Effect.provide(context),
         ),
       check: (backup, state, originalsPath, installedSkillId) =>
-        InstalledSkillFiles.reproducible(backup.path, state, originalsPath, installedSkillId).pipe(
+        reproducible(backup.path, state, originalsPath, installedSkillId).pipe(
           Effect.provide(context),
         ),
       keep: (backup) =>
@@ -540,44 +525,3 @@ export const make = Effect.fn("make")(function* (routing?: Routing) {
     },
   });
 });
-/**
- * Routes from where this device already has copies: each scope's recorded roots, each active. For
- * work that changes no routes, such as removing a Collection or updating copies in place.
- */
-export const recordedRouting = Effect.fn("recordedRouting")(function* (state: LibraryState) {
-  const fs = yield* FileSystem.FileSystem;
-  const real = new Map<string, string>();
-  for (const path of [
-    ...state.repositories.map((repository) => repository.root),
-    ...state.installed_skills.map((copy) => copy.root),
-  ])
-    real.set(path, yield* fs.realPath(path).pipe(Effect.orElseSucceed(() => resolve(path))));
-  const inside = (root: string, path: string) => {
-    const [parent, child] = [real.get(root) ?? root, real.get(path) ?? path];
-    return child === parent || child.startsWith(`${parent}/`);
-  };
-  const recorded = state.installed_skills;
-  const active = [...new Set(recorded.map((copy) => copy.destination))];
-  const destinations = (scope: InstallScope): readonly Destination[] =>
-    recorded
-      .filter((copy) =>
-        scope.kind === "repository"
-          ? inside(scope.root, copy.root)
-          : !state.repositories.some((repository) => inside(repository.root, copy.root)),
-      )
-      .map((copy) => ({ destination: copy.destination, root: copy.root }))
-      .filter(
-        (target, index, all) =>
-          all.findIndex(
-            (other) => other.destination === target.destination && other.root === target.root,
-          ) === index,
-      );
-  return {
-    active: Effect.succeed(active),
-    destinations: (scope) => Effect.succeed(destinations(scope)),
-    duplicates: { scan: () => Effect.succeed({ copies: [], warnings: [], roots: [] }) },
-  } satisfies Routing;
-});
-
-export const layer = (routing?: Routing) => Layer.effect(Service, make(routing));
-export * as InstalledSkills from "./installed-skills.js";

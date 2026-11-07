@@ -1,8 +1,9 @@
 import { posix } from "node:path";
 import { Record, Result, Schema } from "effect";
-import type { SkitDescriptor } from "../contracts.js";
-import type { HarnessMetadataInvalid } from "../failures.js";
-import { HarnessName, InvocationPolicy } from "../vocabulary.js";
+import type { SkitDescriptor } from "../artifact/schemas.js";
+import type { HarnessMetadataInvalid } from "../harnesses/metadata-failures.js";
+import { HarnessName } from "../harnesses/contracts.js";
+import { InvocationPolicy } from "../artifact/invocation-policy.js";
 import {
   AuthoredInvocationHarness,
   invocationMetadataAdapters,
@@ -10,7 +11,7 @@ import {
 } from "../harnesses/invocation-metadata.js";
 
 /** The command an Author runs to bring a Skill's native metadata into conformance. */
-export const INVOCATION_GENERATION_COMMAND = "skit author invocation";
+const INVOCATION_GENERATION_COMMAND = "skit author invocation";
 
 export type DeclaringSkill = Pick<SkitDescriptor["skills"][number], "name" | "path" | "invocation">;
 

@@ -1,19 +1,18 @@
-import { prepareRecoveryMoves } from "../src/library-application/recovery-moves.js";
+import { saveRecoveryFiles } from "./helpers/recovery-files.js";
 import { dirname, join } from "node:path";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import { Effect, FileSystem, Logger, References, Schema } from "effect";
-import { systemError } from "effect/PlatformError";
+import { Effect, FileSystem, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
-import { skitLayer } from "@smolai/skit-core";
-import { makePnpmSkillCheck, pnpmSkillOwner, leavePnpmSkill } from "@smolai/skit-core";
-import { fileProvenance } from "../src/audit/provenance.js";
-import { runSetup } from "../src/workflows/library/setup.js";
-import { SetupResult } from "../src/workflows/library/setup-contract.js";
-import { setupDiscoveredSkillChoices } from "../src/presentation/setup-skills.js";
-import { setupRemovablePaths } from "../src/workflows/library/setup-removal.js";
-import { manageSetupCopies } from "../src/workflows/library/setup-manage.js";
-import { importSource, inspectLibrarySource } from "../src/library-application/import-source.js";
+import { skitLayer, skitConfigurationLayer } from "@smolai/skit-core/platform";
+
+import { auditLocalCapabilitiesV1Alpha4 } from "@smolai/skit-core/audit";
+import { runSetup, SetupResult, setupRemovablePaths } from "@smolai/skit-core/library/setup";
+
+import { setupDiscoveredSkillChoices } from "../src/library/setup/skills.js";
+
+import { applySetupSelections } from "./helpers/setup-apply.js";
+import { importSource, inspectLibrarySource } from "../src/library/source.js";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 const fixture = Effect.fn("Test.pnpmFixture")(function* (yaml = false) {
@@ -45,183 +44,6 @@ const fixture = Effect.fn("Test.pnpmFixture")(function* (yaml = false) {
   return { fs, root, pkg, skill, alias, ledgerPath };
 });
 
-it.effect("shares document reads within a scan and starts fresh for mutation checks", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    const calls = new Map<string, number>();
-    const fs = FileSystem.FileSystem.of({
-      ...f.fs,
-      readFileString: (path, ...args) =>
-        Effect.suspend(() => {
-          calls.set(path, (calls.get(path) ?? 0) + 1);
-          return f.fs.readFileString(path, ...args);
-        }),
-    });
-    yield* Effect.gen(function* () {
-      const checkPnpm = yield* makePnpmSkillCheck();
-      expect((yield* checkPnpm(f.alias))?.kind).toBe("pnpm");
-      expect((yield* checkPnpm(f.skill))?.kind).toBe("pnpm");
-      expect((yield* checkPnpm(f.alias))?.kind).toBe("pnpm");
-      expect(calls.get(f.ledgerPath)).toBe(1);
-      expect(calls.get(join(f.pkg, "package.json"))).toBe(1);
-      expect([...calls.values()].every((count) => count === 1)).toBe(true);
-
-      const ledger = yield* f.fs.readFileString(f.ledgerPath);
-      yield* f.fs.writeFileString(f.ledgerPath, "{}");
-      const negativeScan = yield* makePnpmSkillCheck();
-      expect(yield* negativeScan(f.alias)).toBeUndefined();
-      yield* f.fs.writeFileString(f.ledgerPath, ledger);
-      const mutation = yield* Effect.result(leavePnpmSkill(f.alias));
-      expect(mutation._tag).toBe("Failure");
-      if (mutation._tag === "Failure") expect(mutation.failure._tag).toBe("PnpmSkillManaged");
-      const refreshed = yield* makePnpmSkillCheck();
-      expect((yield* refreshed(f.alias))?.kind).toBe("pnpm");
-    }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
-  }).pipe(Effect.provide(skitLayer)),
-);
-
-it.effect("reports unreadable evidence, retries it, and keeps missing-file probes quiet", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    let denied = true;
-    const messages: unknown[] = [];
-    const fs = FileSystem.FileSystem.of({
-      ...f.fs,
-      readFileString: (path, ...args) =>
-        Effect.suspend(() => {
-          if (path === f.ledgerPath && denied) {
-            denied = false;
-            return Effect.fail(
-              systemError({
-                _tag: "PermissionDenied",
-                module: "FileSystem",
-                method: "readFileString",
-                pathOrDescriptor: path,
-              }),
-            );
-          }
-          return f.fs.readFileString(path, ...args);
-        }),
-    });
-    yield* Effect.gen(function* () {
-      const checkPnpm = yield* makePnpmSkillCheck();
-      expect(yield* checkPnpm(f.alias)).toBeUndefined();
-      expect((yield* checkPnpm(f.alias))?.kind).toBe("pnpm");
-    }).pipe(
-      Effect.provideService(FileSystem.FileSystem, fs),
-      Effect.provideService(References.MinimumLogLevel, "Debug"),
-      Effect.provide(Logger.layer([Logger.make((entry) => messages.push(entry.message))])),
-    );
-    expect(messages).toEqual([
-      ["Cannot read pnpm Skill evidence", { path: f.ledgerPath, reason: "PermissionDenied" }],
-    ]);
-  }).pipe(Effect.provide(skitLayer)),
-);
-
-it.effect(
-  "validates document shapes without rejecting extra fields or invalid neighboring entries",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      yield* f.fs.writeFileString(
-        f.ledgerPath,
-        JSON.stringify({
-          packageManager: "pnpm@12.11.0",
-          linkedSkills: [null, 7, {}, ".agents/skills/pnpm-@acme+demo-guide"],
-          future: true,
-        }),
-      );
-      expect((yield* pnpmSkillOwner(f.alias))?.kind).toBe("pnpm");
-      yield* f.fs.writeFileString(
-        join(f.pkg, "package.json"),
-        JSON.stringify({ name: "@acme/demo", version: 1 }),
-      );
-      expect(yield* pnpmSkillOwner(f.alias)).toBeUndefined();
-      yield* f.fs.writeFileString(
-        join(f.pkg, "package.json"),
-        JSON.stringify({ name: "@acme/demo", version: "1.0.0", future: true }),
-      );
-      expect((yield* pnpmSkillOwner(f.alias))?.kind).toBe("pnpm");
-      yield* f.fs.writeFileString(
-        f.ledgerPath,
-        JSON.stringify({ packageManager: "pnpm@12.11.0", linkedSkills: "not-an-array" }),
-      );
-      expect(yield* pnpmSkillOwner(f.alias)).toBeUndefined();
-    }).pipe(Effect.provide(skitLayer)),
-);
-
-for (const yaml of [false, true]) {
-  it.effect(`attributes live pnpm links using ${yaml ? "YAML" : "JSON"} ledger evidence`, () =>
-    Effect.gen(function* () {
-      const f = yield* fixture(yaml);
-      const expected = {
-        kind: "pnpm",
-        package: "@acme/demo",
-        version: "1.0.0",
-        ledgerPath: f.ledgerPath,
-      };
-      expect(yield* pnpmSkillOwner(f.alias)).toEqual(expected);
-      expect(yield* pnpmSkillOwner(f.skill)).toEqual(expected);
-      expect(yield* fileProvenance(join(f.alias, "SKILL.md"), {}, "demo-guide")).toEqual({
-        confidence: "exact",
-        source: "pnpm · @acme/demo@1.0.0",
-        evidence: f.ledgerPath,
-      });
-      expect((yield* Effect.result(leavePnpmSkill(f.alias)))._tag).toBe("Failure");
-    }).pipe(Effect.provide(skitLayer)),
-  );
-}
-
-it.effect("does not infer pnpm management from a prefix, stale ledger, or replaced directory", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture();
-    yield* f.fs.writeFileString(f.ledgerPath, "{}");
-    expect(yield* pnpmSkillOwner(f.alias)).toBeUndefined();
-    yield* f.fs.writeFileString(
-      f.ledgerPath,
-      JSON.stringify({
-        packageManager: "pnpm@12.11.0",
-        linkedSkills: ["../.agents/skills/pnpm-@acme+demo-guide"],
-      }),
-    );
-    expect(yield* pnpmSkillOwner(f.alias)).toBeUndefined();
-    yield* f.fs.writeFileString(
-      f.ledgerPath,
-      JSON.stringify({
-        packageManager: "pnpm@12.11.0",
-        linkedSkills: [".agents/skills/pnpm-@acme+demo-guide"],
-      }),
-    );
-    yield* f.fs.remove(f.alias, { recursive: true });
-    yield* f.fs.makeDirectory(f.alias);
-    expect(yield* pnpmSkillOwner(f.skill)).toBeUndefined();
-    yield* f.fs.remove(f.alias, { recursive: true });
-    yield* f.fs.symlink(join(f.root, "missing"), f.alias);
-    expect(yield* pnpmSkillOwner(f.alias)).toBeUndefined();
-    yield* f.fs.writeFileString(f.ledgerPath, "[malformed");
-    expect(yield* pnpmSkillOwner(f.skill)).toBeUndefined();
-  }).pipe(Effect.provide(skitLayer)),
-);
-
-it.effect(
-  "recognizes linked workspace packages only when the installed dependency corroborates the target",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const local = join(f.root, "packages", "demo");
-      yield* f.fs.makeDirectory(dirname(local), { recursive: true });
-      yield* f.fs.rename(f.pkg, local);
-      yield* f.fs.remove(f.alias);
-      const skill = join(local, "skills", "guide");
-      yield* f.fs.symlink(skill, f.alias);
-      expect(yield* pnpmSkillOwner(f.alias)).toBeUndefined();
-      yield* f.fs.makeDirectory(join(f.root, "node_modules", "@acme"), { recursive: true });
-      yield* f.fs.symlink(local, join(f.root, "node_modules", "@acme", "demo"));
-      expect((yield* pnpmSkillOwner(f.alias))?.kind).toBe("pnpm");
-      expect(yield* pnpmSkillOwner(skill)).toBeUndefined();
-    }).pipe(Effect.provide(skitLayer)),
-);
-
 it.effect("refuses parent-directory acquisition before retaining any pnpm member", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
@@ -242,8 +64,7 @@ it.effect("refuses parent-directory acquisition before retaining any pnpm member
           if (result._tag === "Failure") expect(result.failure._tag).toBe("PnpmSkillManaged");
         }
       }
-      expect((yield* home.durable).skills).toHaveLength(0);
-      expect((yield* home.durable).collection_versions).toHaveLength(0);
+      expect((yield* home.snapshot)._tag).toBe("Absent");
     }
     expect(yield* f.fs.readLink(f.alias)).toBe(f.skill);
   }).pipe(Effect.provide(skitLayer)),
@@ -311,10 +132,15 @@ it.effect("does not attribute an unrecorded user alias to pnpm", () =>
     const f = yield* fixture();
     const alias = join(f.root, ".agents", "skills", "user-guide");
     yield* f.fs.symlink(f.skill, alias);
-    expect(yield* pnpmSkillOwner(alias)).toBeUndefined();
-    expect((yield* fileProvenance(join(alias, "SKILL.md"), {}, "demo-guide")).source).toBe(
-      "symlink",
+    // Audit deduplicates aliases of one physical Skill. Inspect the user alias on its own.
+    yield* f.fs.remove(f.alias);
+    const audited = yield* auditLocalCapabilitiesV1Alpha4({ home: f.root, cwd: f.root }).pipe(
+      Effect.provide(skitConfigurationLayer()),
     );
+    expect(
+      audited.skills.find((entry) => entry.location === join(alias, "SKILL.md"))?.provenance.source,
+    ).toBe("symlink");
+    yield* f.fs.symlink(f.skill, f.alias);
     const home = yield* libraryHome({
       home: join(f.root, "library"),
       inventoryHome: join(f.root, "home"),
@@ -376,19 +202,20 @@ it.effect("reports pnpm copies but excludes acquisition, setup selection and rem
     if (add._tag === "Failure") expect(add.failure._tag).toBe("PnpmSkillManaged");
     const takeover = yield* Effect.result(
       home.owned(
-        manageSetupCopies(
-          { installOptions: home.installOptions },
-          scan,
-          [{ name: "demo-guide", sourcePath: f.skill }],
-          "new",
-        ),
+        applySetupSelections(options, scan, home.installOptions, {
+          ownership: [{ name: "demo-guide", sourcePath: f.skill }],
+        }),
       ),
     );
     expect(takeover._tag).toBe("Failure");
-    const moves = yield* prepareRecoveryMoves(f.root, [{ name: "demo-guide", path: f.alias }]);
-    const removal = yield* Effect.result(moves.apply());
-    expect(removal._tag).toBe("Failure");
-    if (removal._tag === "Failure") expect(removal.failure._tag).toBe("PnpmSkillManaged");
+    const removal = (yield* saveRecoveryFiles(home.home, [f.alias])).result;
+    expect(removal._tag).toBe("Stopped");
+    if (removal._tag === "Stopped" && removal.reason._tag === "StepFailed")
+      expect(
+        Schema.is(Schema.Struct({ _tag: Schema.Literal("PnpmSkillManaged") }))(
+          removal.reason.error,
+        ),
+      ).toBe(true);
     expect(yield* f.fs.readLink(f.alias)).toBe(f.skill);
     expect((yield* home.durable).skills).toHaveLength(0);
     expect(yield* f.fs.exists(join(f.root, "removed"))).toBe(false);

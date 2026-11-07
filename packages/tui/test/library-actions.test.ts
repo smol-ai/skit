@@ -7,13 +7,13 @@ import { Effect, Exit, FileSystem, Layer, Scope } from "effect";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { expect, onTestFinished, test } from "vitest";
-import { skitLayer } from "@smolai/skit-core";
+import { skitLayer } from "@smolai/skit-core/platform";
 import {
   cancelLibraryChange,
   confirmLibraryChange,
-  probeHarness,
   proposeLibraryCollectionChange,
-} from "../../cli/src/front-end";
+} from "@smolai/skit-core/library/session";
+import { probeHarness } from "@smolai/skit-core/harnesses";
 import { tuiLibrary } from "./helpers/library-fixture";
 
 /**
@@ -42,13 +42,9 @@ test("cancelling a previewed change writes nothing and leaves nothing to confirm
   const before = await outside(library.tree);
   const session = await host.open();
   const previewed = await host.transition((state) =>
-    proposeLibraryCollectionChange(
-      state,
-      library.configuration,
-      session.skills[0]!.collectionId,
-      true,
-      [{ kind: "global" }],
-    ),
+    proposeLibraryCollectionChange(state, session.skills[0]!.collectionId, true, [
+      { kind: "global" },
+    ]),
   );
   expect(previewed?.kind).toBe("preview");
   const cancelled = await host.transition((state) => Effect.succeed(cancelLibraryChange(state)));
@@ -64,9 +60,7 @@ test("a confirmation applies only at the previewed revision, and the session rec
   const { library, host } = await fixture({ "alpha-pack": ["one", "two"], "beta-pack": ["three"] });
   const propose = (collectionId: string) =>
     host.transition((state) =>
-      proposeLibraryCollectionChange(state, library.configuration, collectionId, true, [
-        { kind: "global" },
-      ]),
+      proposeLibraryCollectionChange(state, collectionId, true, [{ kind: "global" }]),
     );
   const confirm = () => host.transition((state) => confirmLibraryChange(state));
   const session = await host.open();

@@ -1,11 +1,16 @@
-// The only code that addresses `state.json` by path. Deliberately absent from the package barrel:
-// workflows reach Library state through `LibraryStore`.
+import { StateEnvelope, type HistoryAction, HistoryDelivery } from "./history-delivery.js";
+import { appendLibraryAudit } from "../audit/audit-log.js";
+import { classifyLibraryAuditEvent, diffLibraryState } from "../audit/state-diff.js";
+import { makeOperationId, OperationId } from "../entity-ids.js";
+// Only this module addresses state.json. Its versioned history-delivery envelope is private;
+// callers see domain snapshots through Library, without delivery bookkeeping.
 
-import { Clock, Effect, FileSystem, Schema, SchemaIssue } from "effect";
+import { Clock, DateTime, Effect, FileSystem, Schema, SchemaIssue } from "effect";
 import type { PlatformError } from "effect/PlatformError";
-import { join, resolve } from "node:path";
-import { InvalidLibraryState, LibraryBusy, LibraryChanged } from "../../failures.js";
-import { writeJsonAtomic, writeRawAtomic } from "../../platform/atomic-write.js";
+import { dirname, join, resolve } from "node:path";
+import { InvalidLibraryState, LibraryChanged } from "../failures.js";
+import { HomeBusy } from "../../platform/lock-failures.js";
+import { writeJsonAtomic, writeRawAtomic, syncPaths } from "../../platform/atomic-write.js";
 import {
   decodeLibraryState,
   encodeLibraryState,
@@ -22,11 +27,20 @@ import { LibraryStateFromV7 } from "./state-schema-v7.js";
 import { LibraryStateFromV8 } from "./state-schema-v8.js";
 import { LibraryStateFromV9 } from "./state-schema-v9.js";
 import { LibraryStateFromV10 } from "./state-schema-v10.js";
+import { LibraryStateFromV11 } from "./state-schema-v11.js";
 import { withLibraryStateReplacement } from "./writer-lock.js";
 
 export type InspectedLibraryState =
   | { readonly present: false }
   | { readonly present: true; readonly state: LibraryState };
+
+const envelope = (path: string, value: unknown) =>
+  Schema.decodeUnknownEffect(StateEnvelope)(value).pipe(
+    Effect.mapError(
+      () => new InvalidLibraryState({ path, detail: "invalid Library storage envelope" }),
+    ),
+  );
+const emptyDelivery = (): HistoryDelivery => ({ schemaVersion: 1, pending: [] });
 
 const StateVersion = Schema.Struct({ schemaVersion: Schema.Number });
 
@@ -49,7 +63,8 @@ const decodeCurrentState = Effect.fn("Library.decodeCurrentState")(function* (
   path: string,
   value: unknown,
 ) {
-  const state = yield* decodeLibraryState(value).pipe(
+  const { historyDelivery: _delivery, ...domain } = yield* envelope(path, value);
+  const state = yield* decodeLibraryState(domain).pipe(
     Effect.mapError(() => new InvalidLibraryState({ path, detail: "invalid Library state" })),
   );
   yield* libraryManifestFromLocalState(state).pipe(
@@ -66,10 +81,11 @@ const decodeCurrentState = Effect.fn("Library.decodeCurrentState")(function* (
 
 /**
  * v4 is what the first public SKIT wrote. Each legacy version steps through the linear
- * v4 → v5 → v6 → v7 → v9 → v10 → v11 chain, with v8 joining at v9.
+ * v4–v11 follow their historical chain directly into the current state.
  */
 const OLDEST_LIBRARY_STATE_VERSION = 4;
 const LegacyLibraryState = Schema.Union([
+  LibraryStateFromV11,
   LibraryStateFromV10,
   LibraryStateFromV9,
   LibraryStateFromV8,
@@ -79,49 +95,58 @@ const LegacyLibraryState = Schema.Union([
   LibraryStateFromV4,
 ]);
 
-const openPresentState = Effect.fn("Library.openPresentState")(function* (
-  home: string,
-  path: string,
-  value: unknown,
-) {
-  const version = yield* Schema.decodeUnknownEffect(StateVersion)(value).pipe(
+const readStateVersion = (path: string, value: unknown) =>
+  Schema.decodeUnknownEffect(StateVersion)(value).pipe(
+    Effect.map(({ schemaVersion }) => schemaVersion),
     Effect.mapError(
       () => new InvalidLibraryState({ path, detail: "Library state has no schema version" }),
     ),
   );
-  if (version.schemaVersion === CURRENT_LIBRARY_STATE_VERSION)
-    return yield* decodeCurrentState(path, value);
-  if (version.schemaVersion > CURRENT_LIBRARY_STATE_VERSION)
+
+const isLegacyVersion = (version: number) =>
+  version >= OLDEST_LIBRARY_STATE_VERSION && version < CURRENT_LIBRARY_STATE_VERSION;
+
+/** Decode a stored state of the current version. Any other version is refused, never migrated. */
+const decodeStoredState = Effect.fn("Library.decodeStoredState")(function* (
+  path: string,
+  value: unknown,
+) {
+  const version = yield* readStateVersion(path, value);
+  if (version === CURRENT_LIBRARY_STATE_VERSION) return yield* decodeCurrentState(path, value);
+  if (version > CURRENT_LIBRARY_STATE_VERSION)
     return yield* new InvalidLibraryState({
       path,
-      detail: `Library state schema v${version.schemaVersion} was written by a newer SKIT; this CLI supports v${OLDEST_LIBRARY_STATE_VERSION}–v${CURRENT_LIBRARY_STATE_VERSION}`,
+      detail: `Library state schema v${version} was written by a newer SKIT; this CLI supports v${OLDEST_LIBRARY_STATE_VERSION}–v${CURRENT_LIBRARY_STATE_VERSION}`,
     });
-  if (version.schemaVersion < OLDEST_LIBRARY_STATE_VERSION)
+  if (isLegacyVersion(version))
     return yield* new InvalidLibraryState({
       path,
-      detail: `unsupported Library state schema v${version.schemaVersion}; this CLI supports v${OLDEST_LIBRARY_STATE_VERSION}–v${CURRENT_LIBRARY_STATE_VERSION}`,
+      detail: `Library state schema v${version} has not been migrated to v${CURRENT_LIBRARY_STATE_VERSION}; run SKIT again to migrate it`,
     });
-  return yield* withLibraryStateReplacement(
+  return yield* new InvalidLibraryState({
+    path,
+    detail: `unsupported Library state schema v${version}; this CLI supports v${OLDEST_LIBRARY_STATE_VERSION}–v${CURRENT_LIBRARY_STATE_VERSION}`,
+  });
+});
+
+/**
+ * Migrate a legacy `state.json` to the current version, once, under the home lock, keeping the
+ * pre-migration file as a backup. An absent file stays absent, and a file of any other version is
+ * left for reads to accept or refuse. Fails with `HomeBusy` when the lock is held elsewhere.
+ */
+export const migrateLocalLibraryState = Effect.fn("Library.migrateState")(function* (
+  home: string,
+): Effect.fn.Return<void, PlatformError | InvalidLibraryState | HomeBusy, FileSystem.FileSystem> {
+  const path = join(resolve(home), "state.json");
+  const value = yield* readStateValue(path);
+  if (value === undefined || !isLegacyVersion(yield* readStateVersion(path, value))) return;
+  yield* withLibraryStateReplacement(
     home,
     Effect.gen(function* () {
       const lockedValue = yield* readStateValue(path);
-      if (lockedValue === undefined)
-        return yield* new InvalidLibraryState({ path, detail: "Library state disappeared" });
-      const lockedVersion = yield* Schema.decodeUnknownEffect(StateVersion)(lockedValue).pipe(
-        Effect.mapError(
-          () => new InvalidLibraryState({ path, detail: "Library state has no schema version" }),
-        ),
-      );
-      if (lockedVersion.schemaVersion === CURRENT_LIBRARY_STATE_VERSION)
-        return yield* decodeCurrentState(path, lockedValue);
-      if (
-        lockedVersion.schemaVersion < OLDEST_LIBRARY_STATE_VERSION ||
-        lockedVersion.schemaVersion > CURRENT_LIBRARY_STATE_VERSION
-      )
-        return yield* new InvalidLibraryState({
-          path,
-          detail: "Library state changed while opening",
-        });
+      if (lockedValue === undefined) return;
+      const lockedVersion = yield* readStateVersion(path, lockedValue);
+      if (!isLegacyVersion(lockedVersion)) return;
       const migrated = yield* decodeCurrentState(
         path,
         yield* Schema.decodeUnknownEffect(LegacyLibraryState)(lockedValue).pipe(
@@ -129,33 +154,33 @@ const openPresentState = Effect.fn("Library.openPresentState")(function* (
             () =>
               new InvalidLibraryState({
                 path,
-                detail: `invalid v${lockedVersion.schemaVersion} Library state`,
+                detail: `invalid v${lockedVersion} Library state`,
               }),
           ),
         ),
       );
-      // Keep the pre-migration file: migration drops history it can no longer represent.
-      yield* writeJsonAtomic(
-        `${path}.v${lockedVersion.schemaVersion}.backup-${new Date(yield* Clock.currentTimeMillis).toISOString().replaceAll(":", "")}`,
-        lockedValue,
-      );
+      // Keep the pre-migration file: migration retains legacy documents that cannot safely execute.
+      const backup = `${path}.v${lockedVersion}.backup-${new Date(yield* Clock.currentTimeMillis).toISOString().replaceAll(":", "")}`;
+      yield* writeJsonAtomic(backup, lockedValue);
+      yield* syncPaths([backup, dirname(path)]);
       yield* writeJsonAtomic(path, migrated);
-      return migrated;
+      yield* syncPaths([path, dirname(path)]);
     }),
   );
 });
 
+/** Read `state.json`. Never writes and never takes the lock. */
 export const inspectLocalLibraryState = Effect.fn("Library.inspectState")(function* (
   home: string,
 ): Effect.fn.Return<
   InspectedLibraryState,
-  PlatformError | InvalidLibraryState | LibraryBusy,
+  PlatformError | InvalidLibraryState,
   FileSystem.FileSystem
 > {
   const path = join(resolve(home), "state.json");
   const value = yield* readStateValue(path);
   if (value === undefined) return { present: false as const };
-  return { present: true as const, state: yield* openPresentState(home, path, value) };
+  return { present: true as const, state: yield* decodeStoredState(path, value) };
 });
 
 /**
@@ -166,11 +191,12 @@ export const saveLibraryState = Effect.fn("Library.saveState")(function* (
   home: string,
   next: LibraryState,
   base: LibraryState,
+  action: HistoryAction,
 ) {
   const path = join(resolve(home), "state.json");
   // Refuse what the loader would refuse, so a save can never strand the Library unreadable.
-  yield* decodeCurrentState(path, next);
-  const text = yield* encodeLibraryState(next).pipe(
+  const cleanNext = yield* decodeCurrentState(path, next);
+  const text = yield* encodeLibraryState(cleanNext).pipe(
     Effect.mapError(
       () => new InvalidLibraryState({ path, detail: "refusing invalid Library state" }),
     ),
@@ -180,10 +206,119 @@ export const saveLibraryState = Effect.fn("Library.saveState")(function* (
     Effect.gen(function* () {
       const value = yield* readStateValue(path);
       const current =
-        value === undefined ? emptyLibraryState() : yield* decodeCurrentState(path, value);
+        value === undefined ? emptyLibraryState() : yield* decodeStoredState(path, value);
       if (libraryStateRevision(current) !== libraryStateRevision(base))
         return yield* new LibraryChanged({ path });
-      yield* writeRawAtomic(path, `${text}\n`);
+      const stored = value === undefined ? undefined : yield* envelope(path, value);
+      const delivery = stored?.historyDelivery ?? emptyDelivery();
+      const prior = delivery.pending.find((item) => item.event.eventId === action.eventId);
+      const added = yield* Schema.decodeUnknownEffect(Schema.Array(OperationId))(
+        cleanNext.operations
+          .filter(
+            (operation) =>
+              operation._tag === "Pending" &&
+              !base.operations.some((item) => item.operationId === operation.operationId),
+          )
+          .map((item) => item.operationId),
+      ).pipe(
+        Effect.mapError(
+          () => new InvalidLibraryState({ path, detail: "invalid operation identity for history" }),
+        ),
+      );
+      const changes = [...(prior?.event.changes ?? []), ...diffLibraryState(base, cleanNext)];
+      let pending = delivery.pending;
+      if (prior || changes.length || added.length) {
+        const record = {
+          event: {
+            ...action,
+            schemaVersion: 1 as const,
+            type: classifyLibraryAuditEvent(action.workflow, changes),
+            changes,
+          },
+          operationIds: [...new Set([...(prior?.operationIds ?? []), ...added])],
+        };
+        pending = prior
+          ? pending.map((item) => (item === prior ? record : item))
+          : [...pending, record];
+      }
+      // Domain state and its history draft share this single atomic replacement.
+      if (pending.length) {
+        const historyDelivery = yield* Schema.encodeEffect(HistoryDelivery)({
+          schemaVersion: 1,
+          pending,
+        }).pipe(
+          Effect.mapError(
+            () => new InvalidLibraryState({ path, detail: "invalid history delivery record" }),
+          ),
+        );
+        yield* writeJsonAtomic(path, { ...cleanNext, historyDelivery });
+      } else yield* writeRawAtomic(path, `${text}\n`);
+      yield* syncPaths([path, dirname(path)]);
+    }),
+  );
+});
+
+/** Reuse an interrupted operation's action identity; unrelated writes get their own identity. */
+export const libraryHistoryAction = Effect.fn("Library.historyAction")(function* (
+  home: string,
+  workflow: string,
+  resume?: OperationId,
+) {
+  const path = join(resolve(home), "state.json");
+  const value = yield* readStateValue(path);
+  if (value !== undefined && resume !== undefined) {
+    const stored = yield* envelope(path, value);
+    const prior = stored.historyDelivery?.pending.find((item) =>
+      item.operationIds.includes(resume),
+    );
+    if (prior)
+      return {
+        eventId: prior.event.eventId,
+        occurredAt: prior.event.occurredAt,
+        workflow: prior.event.workflow,
+      };
+  }
+  return {
+    eventId: makeOperationId(),
+    occurredAt: DateTime.formatIso(yield* DateTime.now),
+    workflow,
+  };
+});
+
+/** Deliver only finished actions. Pending operations retain their draft for their resumed saves. */
+export const deliverLibraryHistory = Effect.fn("Library.deliverHistory")(function* (
+  home: string,
+  actionId?: OperationId,
+) {
+  const path = join(resolve(home), "state.json");
+  const observed = yield* readStateValue(path);
+  if (observed === undefined) return;
+  const { historyDelivery } = yield* envelope(path, observed);
+  if (!historyDelivery?.pending.length) return;
+  // Only queued history needs the writer. Re-read under the lock before delivering anything.
+  yield* withLibraryStateReplacement(
+    home,
+    Effect.gen(function* () {
+      const value = yield* readStateValue(path);
+      if (value === undefined) return;
+      const { historyDelivery, ...domain } = yield* envelope(path, value);
+      if (!historyDelivery?.pending.length) return;
+      const state = yield* decodeStoredState(path, domain);
+      const pendingIds = new Set(
+        state.operations.filter((item) => item._tag === "Pending").map((item) => item.operationId),
+      );
+      let pending = historyDelivery.pending;
+      for (const item of historyDelivery.pending) {
+        if (actionId !== undefined && item.event.eventId !== actionId) continue;
+        if (item.operationIds.some((id) => pendingIds.has(id))) continue;
+        if (item.event.changes.length) yield* appendLibraryAudit(home, item.event);
+        pending = pending.filter((record) => record !== item);
+        // If delivery completed but this acknowledgement did not, the stable id deduplicates retry.
+        yield* writeJsonAtomic(
+          path,
+          pending.length ? { ...domain, historyDelivery: { schemaVersion: 1, pending } } : domain,
+        );
+      }
     }),
   );
 });

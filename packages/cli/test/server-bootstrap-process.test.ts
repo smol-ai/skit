@@ -1,15 +1,12 @@
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
 import { NodeServices } from "@effect/platform-node";
+import { SecureRandom } from "effect/crypto";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { TestClock } from "effect/testing";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
-import { consoleRendererLayer } from "../src/presentation/renderer.js";
-import {
-  BootstrapExternalFailure,
-  bootstrapServer,
-  bootstrapOperationsLayer,
-} from "../src/bootstrap/server-bootstrap.js";
+import { consoleRendererLayer } from "../src/terminal/console-renderer.js";
+import { BootstrapExternalFailure, bootstrapServer } from "../src/registry/bootstrap.js";
 
 it.effect("terminates a real Wrangler substitute that ignores SIGTERM", () =>
   Effect.gen(function* () {
@@ -37,15 +34,18 @@ it.effect("terminates a real Wrangler substitute that ignores SIGTERM", () =>
           );
       },
     });
-    const layer = bootstrapOperationsLayer("wrangler-substitute").pipe(
-      Layer.provide(Layer.merge(registryHttpLayer(), consoleRendererLayer(true))),
-      Layer.provide(Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner)),
+    const layer = Layer.mergeAll(
+      registryHttpLayer(),
+      consoleRendererLayer(true),
+      Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      Layer.succeed(SecureRandom.SecureRandom)(
+        SecureRandom.make((size) => new Uint8Array(size).fill(1)),
+      ),
     );
-    const fiber = yield* bootstrapServer({ origin: "https://skit.example" }).pipe(
-      Effect.provide(layer),
-      Effect.flip,
-      Effect.forkChild,
-    );
+    const fiber = yield* bootstrapServer({
+      origin: "https://skit.example",
+      wrangler: "wrangler-substitute",
+    }).pipe(Effect.provide(layer), Effect.flip, Effect.forkChild);
     yield* Deferred.await(ready);
     yield* TestClock.adjust("1 minute");
     const failure = yield* Fiber.join(fiber);

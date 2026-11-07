@@ -1,24 +1,17 @@
+import { emptyLibraryFixture } from "./helpers/library-home.js";
+import { readLibraryManifest } from "./helpers/library-manifest.js";
+import { originalArchive, originalTreePath } from "./helpers/original-tree.js";
+import * as Library from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
-import { Effect, Schema, Exit, type Layer, type Scope } from "effect";
-import type { SkillId } from "@smolai/skit-core";
+import { Effect, Schema, Option, Exit, type Layer, type Scope } from "effect";
+import type { SkillId } from "@smolai/skit-core/universal/consumer";
 import { join } from "node:path";
-import {
-  LibraryState,
-  libraryStoreLayer,
-  InvalidLibraryState,
-  readSnapshotArchive,
-  deterministicTreeHash,
-  collectionVersionPath,
-  libraryManifestFromLocalState,
-} from "@smolai/skit-core";
+import { LibraryState } from "@smolai/skit-core/library";
+import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { LibraryChangedOnServer, RegistryUnreachable } from "../src/registry/failures.js";
-import {
-  LibraryApiRejected,
-  LibraryManifestTooNew,
-} from "../src/workflows/library/library-sync-api.js";
-import { prepareSyncDeviceTransition } from "../src/workflows/library/library-sync-installed-skills.js";
-import { SyncLocalChanged } from "../src/workflows/library/library-sync.js";
+import { LibraryApiRejected, LibraryManifestTooNew } from "../src/library/sync/api.js";
+import { SyncLocalChanged } from "@smolai/skit-core/library/sync";
 import {
   assertDiskUnchanged,
   captureDisk,
@@ -27,6 +20,7 @@ import {
   type DiskSnapshot,
 } from "./helpers/disk-snapshot.js";
 import { devices } from "./helpers/library-sync-devices.js";
+import { testRoots } from "./helpers/roots.js";
 
 type Homes = Effect.Success<typeof devices>;
 
@@ -153,7 +147,7 @@ const cases: readonly {
       }),
   },
   {
-    row: "Preflight: base_mismatch",
+    row: "Different Library: preview merges from an empty base",
     run: (homes) =>
       Effect.gen(function* () {
         const { a, resetRemote, server } = homes;
@@ -161,7 +155,7 @@ const cases: readonly {
         yield* resetRemote;
         const unchanged = yield* captureDisk(a.disk);
         const before = server.stored;
-        assert.strictEqual((yield* a.sync()).status, "base_mismatch");
+        assert.strictEqual((yield* a.sync({ apply: false })).status, "push_ready");
         yield* assertDiskUnchanged(unchanged);
         assert.deepStrictEqual(server.stored, before);
       }),
@@ -187,27 +181,96 @@ const cases: readonly {
         yield* b.importSource("from-b");
         // The competitor uploads its bytes and commits before A's null-base CAS.
         const competingState = yield* b.state;
-        const archive = yield* readSnapshotArchive(
-          collectionVersionPath(
-            join(b.home, "originals"),
-            competingState.collection_versions[0]!.hash,
-          ),
+        const archive = yield* originalArchive(
+          originalTreePath(join(b.home, "originals"), competingState.collection_versions[0]!.hash),
+          competingState.collection_versions[0]!.hash,
         );
         assert.strictEqual(server.respond("POST", "/api/library/snapshots", archive).status, 200);
         inject({
           _tag: "CompetingWrite",
-          manifest: yield* libraryManifestFromLocalState(competingState),
+          manifest: yield* readLibraryManifest(b.home, b.disk),
         });
         const unchanged = yield* captureDisk(a.disk);
         assert.instanceOf(yield* Effect.flip(a.sync()), LibraryChangedOnServer);
         yield* assertDiskUnchanged(unchanged);
         const winner = server.remote;
         assert.ok(winner);
-        assert.strictEqual((yield* a.sync()).status, "adoption_required");
+        assert.strictEqual((yield* a.sync({ apply: false })).status, "merge_ready");
         yield* assertDiskUnchanged(unchanged);
         assert.deepStrictEqual(server.remote, winner);
-        assert.strictEqual((yield* a.sync({ adopt: true })).status, "merged");
+        assert.strictEqual((yield* a.sync()).status, "merged");
         assert.strictEqual((yield* a.state).collections.length, 2);
+      }),
+  },
+  {
+    row: "Push: accepted remotely, refused locally, then local enabled intent changes",
+    run: ({ a, inject, server }) =>
+      Effect.gen(function* () {
+        const imported = yield* a.importSource("first");
+        const skill = imported.skills[0]!;
+        inject({ _tag: "FailSave", anchoredOnly: false });
+        assert.strictEqual((yield* Effect.flip(a.sync()))._tag, "PlatformError");
+        const accepted = server.remote;
+        assert.ok(accepted);
+        assert.isUndefined((yield* a.state).sync_ancestry);
+        yield* a.edit((state) => ({ ...state, enabled: [{ skill: skill.skill_id }] }));
+        const changed = yield* a.state;
+        const before = yield* captureDisk(a.disk);
+        const preview = yield* a.sync({ apply: false });
+        assert.strictEqual(preview.status, "merge_ready");
+        assert.ok("merge_base" in preview);
+        assert.strictEqual(preview.merge_base, "empty-first-sync");
+        yield* assertDiskUnchanged(before);
+        assert.deepStrictEqual(server.remote, accepted);
+        const applied = yield* a.sync();
+        assert.strictEqual(applied.status, "merged");
+        const after = yield* a.state;
+        assert.deepStrictEqual(after.enabled, changed.enabled);
+        assert.deepStrictEqual(after.collections, changed.collections);
+        assert.strictEqual(after.sync_ancestry?.revision_id, server.remote?.revision_id);
+        assert.deepStrictEqual(after.sync_ancestry?.base_manifest.enabled, changed.enabled);
+        const writes = server.writes;
+        assert.strictEqual((yield* a.sync()).status, "clean");
+        assert.strictEqual((yield* a.sync()).status, "clean");
+        assert.strictEqual(server.writes, writes);
+      }),
+  },
+  {
+    row: "Push: collision choice survives refused publication with subsequent compatible edits",
+    run: ({ a, inject, server }) =>
+      Effect.gen(function* () {
+        const first = yield* a.importSource("first", { name: "review" });
+        const second = yield* a.importSource("second", { name: "review" });
+        const third = yield* a.importSource("third");
+        const firstId = first.skills[0]!.skill_id;
+        const secondId = second.skills[0]!.skill_id;
+        const thirdId = third.skills[0]!.skill_id;
+        yield* a.edit((state) => ({
+          ...state,
+          enabled: [{ skill: firstId }, { skill: secondId }],
+        }));
+        inject({ _tag: "FailSave", anchoredOnly: false });
+        assert.strictEqual(
+          (yield* Effect.flip(a.sync({ keepEnabled: [firstId] })))._tag,
+          "PlatformError",
+        );
+        assert.deepStrictEqual(server.remote?.manifest.enabled, [{ skill: firstId }]);
+        assert.isUndefined((yield* a.state).sync_ancestry);
+        yield* a.edit((state) => ({ ...state, enabled: [...state.enabled, { skill: thirdId }] }));
+        const before = yield* captureDisk(a.disk);
+        const head = server.remote;
+        assert.strictEqual((yield* a.sync()).status, "conflicted");
+        const preview = yield* a.sync({ apply: false, keepEnabled: [firstId] });
+        assert.strictEqual(preview.status, "merge_ready");
+        yield* assertDiskUnchanged(before);
+        assert.deepStrictEqual(server.remote, head);
+        assert.strictEqual((yield* a.sync({ keepEnabled: [firstId] })).status, "merged");
+        const after = yield* a.state;
+        assert.sameDeepMembers(after.enabled, [{ skill: firstId }, { skill: thirdId }]);
+        assert.strictEqual(after.skills.length, 3);
+        assert.deepStrictEqual(after.enabled, server.remote?.manifest.enabled);
+        assert.strictEqual((yield* a.sync()).status, "clean");
+        assert.strictEqual((yield* a.sync()).status, "clean");
       }),
   },
   {
@@ -248,7 +311,7 @@ const cases: readonly {
         yield* a.importSource("first");
         const unchanged = yield* captureDisk(a.disk);
         inject({ _tag: "FailSave", anchoredOnly: false });
-        assert.instanceOf(yield* Effect.flip(a.sync()), InvalidLibraryState);
+        assert.strictEqual((yield* Effect.flip(a.sync()))._tag, "PlatformError");
         yield* assertDiskUnchanged(unchanged);
         assert.ok(server.remote);
         assert.strictEqual((yield* a.sync()).status, "clean");
@@ -268,10 +331,10 @@ const cases: readonly {
         yield* b.importSource("second");
         yield* b.sync();
         const winner = server.remote;
-        assert.strictEqual((yield* a.sync()).status, "adoption_required");
+        assert.strictEqual((yield* a.sync({ apply: false })).status, "merge_ready");
         yield* assertDiskUnchanged(unchanged);
         assert.deepStrictEqual(server.remote, winner);
-        assert.strictEqual((yield* a.sync({ adopt: true })).status, "merged");
+        assert.strictEqual((yield* a.sync()).status, "merged");
         assert.strictEqual((yield* a.state).collections.length, 2);
         assert.strictEqual((yield* b.sync()).status, "clean");
       }),
@@ -285,7 +348,7 @@ const cases: readonly {
         const unchanged = yield* captureDisk(b.disk);
         const head = server.remote;
         inject({ _tag: "FailSave", anchoredOnly: false });
-        assert.instanceOf(yield* Effect.flip(b.sync()), InvalidLibraryState);
+        assert.strictEqual((yield* Effect.flip(b.sync()))._tag, "PlatformError");
         yield* onlyOrphanOriginals(unchanged, b.home);
         assert.deepStrictEqual(server.remote, head);
         assert.strictEqual((yield* b.sync()).status, "pulled");
@@ -385,8 +448,8 @@ const cases: readonly {
           ...state,
           enabled: [first, second].map((item) => ({ skill: item.skills[0]!.skill_id })),
         }));
-        // Without enabled roots nothing collides, so the Library can be pushed as it is.
-        yield* a.sync({ rootFor: () => undefined });
+        // A device that installs nothing has no collision, so the Library can be pushed as it is.
+        yield* a.sync({ deviceSelection: { skills: [], collections: [] } });
         yield* c.importSource("concurrent-local");
         yield* fs.makeDirectory(b.home, { recursive: true });
         yield* fs.copy(join(c.home, "originals"), join(b.home, "originals"));
@@ -446,7 +509,7 @@ const cases: readonly {
         yield* b.sync();
         const unchanged = yield* captureDisk(a.disk);
         inject({ _tag: "FailSave", anchoredOnly: false });
-        assert.instanceOf(yield* Effect.flip(a.sync()), InvalidLibraryState);
+        assert.strictEqual((yield* Effect.flip(a.sync()))._tag, "PlatformError");
         yield* onlyOrphanOriginals(unchanged, a.home);
         const committed = server.remote!;
         assert.strictEqual(committed.manifest.collections.length, 3);
@@ -477,7 +540,7 @@ const cases: readonly {
       }),
   },
   {
-    row: "Adoption gate: adoption_required writes nothing",
+    row: "First connection: add-only preview writes nothing",
     run: ({ a, b, server }) =>
       Effect.gen(function* () {
         yield* a.importSource("remote");
@@ -485,7 +548,7 @@ const cases: readonly {
         yield* b.importSource("local");
         const unchanged = yield* captureDisk(b.disk);
         const before = server.stored;
-        assert.strictEqual((yield* b.sync()).status, "adoption_required");
+        assert.strictEqual((yield* b.sync({ apply: false })).status, "merge_ready");
         yield* assertDiskUnchanged(unchanged);
         assert.deepStrictEqual(server.stored, before);
       }),
@@ -642,9 +705,9 @@ const cases: readonly {
         yield* a.importSource("local-only");
         const unchanged = yield* captureDisk(a.disk);
         inject({ _tag: "FailSave", anchoredOnly: false });
-        assert.instanceOf(
-          yield* Effect.flip(a.sync({ takeRemote: [`collection:${id}`] })),
-          InvalidLibraryState,
+        assert.strictEqual(
+          (yield* Effect.flip(a.sync({ takeRemote: [`collection:${id}`] })))._tag,
+          "PlatformError",
         );
         yield* assertDiskUnchanged(unchanged);
         const committed = server.remote!;
@@ -677,19 +740,32 @@ it.effect("oracle: every applying path commits remote before local, on the revis
       Effect.gen(function* () {
         events.length = 0;
         const exit = yield* Effect.exit(sync);
-        // A failure after the last expected save must not leave the order looking right.
+        // A stopped operation must not pass merely because its writes happened in order.
         assert.isTrue(Exit.isSuccess(exit), `${[...events]}`);
         return [...events];
       });
+    const ordered = (
+      recorded: readonly string[],
+      device: "a" | "b",
+      remoteEvents: readonly string[],
+    ) => {
+      const firstSave = recorded.findIndex((event) => event === `save ${device}`);
+      assert.isAtLeast(firstSave, 0, "Sync must durably record its local result");
+      assert.deepStrictEqual(recorded.slice(0, firstSave), remoteEvents);
+      assert.isTrue(
+        recorded.slice(firstSave).every((event) => event === `save ${device}`),
+        `${recorded}`,
+      );
+    };
     yield* a.importSource("first");
-    assert.deepStrictEqual(yield* committed(a.sync()), ["upload", "write on null", "save a"]);
+    ordered(yield* committed(a.sync()), "a", ["upload", "write on null"]);
     const pushed = server.remote!.revision_id;
-    assert.deepStrictEqual(yield* committed(b.sync()), ["save b"]);
+    ordered(yield* committed(b.sync()), "b", []);
     yield* b.importSource("second");
-    assert.deepStrictEqual(yield* committed(b.sync()), ["upload", `write on ${pushed}`, "save b"]);
+    ordered(yield* committed(b.sync()), "b", ["upload", `write on ${pushed}`]);
     const merged = server.remote!.revision_id;
     yield* a.importSource("third");
-    assert.deepStrictEqual(yield* committed(a.sync()), ["upload", `write on ${merged}`, "save a"]);
+    ordered(yield* committed(a.sync()), "a", ["upload", `write on ${merged}`]);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -708,8 +784,11 @@ it.effect("a --take-remote key is refused before collision checks on a push and 
     assert.strictEqual((yield* a.sync()).status, "conflicted");
     assert.deepStrictEqual(yield* a.sync({ takeRemote }), { status: "resolution_invalid" });
     assert.strictEqual(server.writeRequests, 0);
-    // Without enabled roots nothing collides, so the Library can be pushed as it is.
-    assert.strictEqual((yield* a.sync({ rootFor: () => undefined })).status, "pushed");
+    // A device that installs nothing has no collision, so the Library can be pushed as it is.
+    assert.strictEqual(
+      (yield* a.sync({ deviceSelection: { skills: [], collections: [] } })).status,
+      "pushed",
+    );
     const head = server.remote!;
     assert.strictEqual((yield* b.sync()).status, "conflicted");
     assert.deepStrictEqual(yield* b.sync({ takeRemote }), {
@@ -751,7 +830,7 @@ for (const home of ["current", "legacy", "absent"] as const)
             _tag: "ServeHead",
             body: JSON.parse(
               yield* fs.readFileString(
-                join(import.meta.dirname, "fixtures/library-wire/portable-v9.json"),
+                join(import.meta.dirname, "../../skit/test/fixtures/library-wire/portable-v9.json"),
               ),
             ),
           });
@@ -768,8 +847,7 @@ for (const home of ["current", "legacy", "absent"] as const)
           assert.deepStrictEqual(paths(changes.deleted), []);
           if (home === "current") assert.deepStrictEqual(changes, noDiskChanges);
           if (home === "absent") {
-            assert.deepStrictEqual([changes.changed, paths(changes.created)], [[], [""]]);
-            assert.strictEqual(changes.created[0]!.path[0], a.home);
+            assert.deepStrictEqual(changes, noDiskChanges);
           }
           if (home === "legacy") {
             assert.deepStrictEqual(paths(changes.changed), ["state.json"]);
@@ -855,32 +933,66 @@ it.effect("a failed snapshot download retains nothing and leaves the remote unch
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("a prepared device transition cannot save into another Library home", () =>
+/** Prepare through the owner; the resulting plan contains no writer callbacks. */
+const prepareLocalSync = (home: string, roots: readonly string[]) =>
+  Effect.gen(function* () {
+    const library = yield* Library.Service;
+    const base = yield* library.read;
+    const state = base._tag === "Present" ? base.state : emptyLibraryFixture();
+    const manifest = yield* readLibraryManifest(home, roots);
+    const localArchives = base._tag === "Present" ? yield* library.content.pack(base) : [];
+    const staged = yield* library.content.stage(manifest, {
+      localArchives,
+      registry: { origin: "https://registry.test", token: Option.none() },
+    });
+    const plan = yield* library.plan(
+      {
+        _tag: "Sync",
+        staged,
+        deviceSelection: Option.none(),
+        pendingOrigin: Option.none(),
+        acceptedBase: Option.fromUndefinedOr(state.sync_ancestry),
+        remote: Option.none(),
+      },
+      { base },
+    );
+    if (Library.isRemoteSyncPlan(plan)) return yield* Effect.die("Expected local Sync review");
+    return plan;
+  });
+
+it.effect("a Sync plan distinguishes an absent Library from a newly empty one", () =>
+  Effect.gen(function* () {
+    const { a, fs } = yield* devices;
+    const layer = Library.layer({ home: a.home, roots: testRoots(a.home) });
+    const plan = yield* prepareLocalSync(a.home, a.disk).pipe(Effect.provide(layer));
+    yield* fs.makeDirectory(a.home, { recursive: true });
+    const statePath = join(a.home, "state.json");
+    const bytes = JSON.stringify(emptyLibraryFixture());
+    yield* fs.writeFileString(statePath, bytes);
+    const failure = yield* Effect.flip(
+      Effect.flatMap(Library.Service, (library) => library.apply({ _tag: "Apply", plan })).pipe(
+        Effect.provide(layer),
+      ),
+    );
+    assert.strictEqual(failure._tag, "Library.StalePlan");
+    assert.strictEqual(yield* fs.readFileString(statePath), bytes);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect("a Sync plan cannot save into another Library home", () =>
   Effect.gen(function* () {
     const { a, b } = yield* devices;
     yield* a.importSource("first");
-    const state = yield* a.state;
-    const manifest = yield* libraryManifestFromLocalState(state);
-    const transition = yield* prepareSyncDeviceTransition({
-      current: state,
-      aligned: state,
-      manifest,
-      rootFor: undefined,
-    }).pipe(Effect.provide(libraryStoreLayer({ home: a.home })));
-    assert.strictEqual(transition._tag, "Ready");
-    if (transition._tag !== "Ready") return;
+    const plan = yield* prepareLocalSync(a.home, a.disk).pipe(
+      Effect.provide(Library.layer({ home: a.home, roots: testRoots(a.home) })),
+    );
     const before = yield* captureDisk([...a.disk, ...b.disk], { identity: true });
     const failure = yield* Effect.flip(
-      transition
-        .saveRestored(state, {
-          origin: "https://registry.test",
-          library_id: "library_test",
-          revision_id: "revision_test",
-          base_manifest: manifest,
-        })
-        .pipe(Effect.provide(libraryStoreLayer({ home: b.home }))),
+      Effect.flatMap(Library.Service, (library) => library.apply({ _tag: "Apply", plan })).pipe(
+        Effect.provide(Library.layer({ home: b.home, roots: testRoots(b.home) })),
+      ),
     );
-    assert.strictEqual(failure._tag, "LibraryChanged");
+    assert.strictEqual(failure._tag, "Library.StalePlan");
     yield* assertDiskUnchanged(before);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
@@ -891,9 +1003,9 @@ it.effect("sync reuses an orphan retained snapshot without downloading it", () =
     yield* a.importSource("first");
     yield* a.sync();
     const hash = server.remote!.manifest.snapshot_digests[0]!;
-    const destination = collectionVersionPath(join(b.home, "originals"), hash);
+    const destination = originalTreePath(join(b.home, "originals"), hash);
     yield* fs.makeDirectory(join(destination, ".."), { recursive: true });
-    yield* fs.copy(collectionVersionPath(join(a.home, "originals"), hash), destination);
+    yield* fs.copy(originalTreePath(join(a.home, "originals"), hash), destination);
     inject({ _tag: "FailDownload", hash });
     const before = yield* captureDisk(b.disk);
     const preview = yield* b.sync({ apply: false });
@@ -959,6 +1071,7 @@ it.effect("sync exposes bounded completed phases in transfer and save order", ()
     assert.strictEqual(result.status, "pulled");
     assert.deepStrictEqual(imported, [2]);
     assert.isBelow(completed.indexOf("download"), completed.indexOf("save-local"));
-    assert.strictEqual(completed.at(-1), "enable");
+    // One owner call now completes both the publication and its installations.
+    assert.strictEqual(completed.at(-1), "save-local");
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

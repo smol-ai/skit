@@ -1,0 +1,92 @@
+import { enabledAt } from "../../enabled.js";
+import { enabledSkillIds } from "../../library-contracts.js";
+import { type LibraryState } from "../../library-state.js";
+import { type InstallScope } from "../../scope.js";
+import { type ManageApproval } from "../../../installed-skills/files.js";
+import { Effect } from "effect";
+import {
+  sameInstallScope,
+  uniqueInstallScopes,
+  enabledCollections,
+  type SetupApproval,
+} from "../../enabled-plan.js";
+import type { InvocationOption } from "./invocation-option.js";
+import { OptionCombinationInvalid } from "../../../shared/input-failures.js";
+import { resolveLibrarySubject } from "../../subject-resolution.js";
+
+/** Names, members and scopes chosen by the front end; resolved by Library. */
+export interface SetEnabledIntent {
+  readonly subject: string;
+  readonly enabled: boolean;
+  readonly members?: "whole" | readonly string[];
+  readonly where: readonly InstallScope[] | "where-enabled";
+  readonly invocation?: InvocationOption;
+  readonly allowDuplicate?: boolean;
+  /** What a setup review approved, and nothing else. */
+  readonly setup?: SetupApproval;
+  /** The folder the user approved managing, as previewed. */
+  readonly manage?: ManageApproval;
+}
+
+export interface EnabledCollection {
+  readonly collectionId: string;
+  readonly scope: InstallScope;
+  readonly skillIds: readonly string[];
+  readonly invocationBySkill: Readonly<Record<string, InvocationOption>>;
+}
+
+export { sameInstallScope, uniqueInstallScopes, enabledCollections };
+
+/** Expand once, filtering a multi-Scope disable to the members actually enabled at each Scope. */
+export const expandSetEnabledIntent = Effect.fn("SetEnabled.expandIntent")(function* (
+  state: LibraryState,
+  intent: SetEnabledIntent,
+) {
+  const subject = yield* resolveLibrarySubject(state, intent.subject);
+  const selectedNames =
+    intent.members !== undefined && intent.members !== "whole" ? intent.members : undefined;
+  if (selectedNames?.some((name) => !subject.skills.some((skill) => skill.name === name)))
+    return yield* new OptionCombinationInvalid({
+      detail: "Selected Skill is absent from this Collection",
+    });
+  const collectionId =
+    subject.kind === "collection" ? subject.collection.collection_id : subject.skill.collection_id;
+  const scopes = uniqueInstallScopes(
+    intent.where === "where-enabled"
+      ? enabledCollections(state)
+          .filter(
+            (placement) =>
+              placement.collectionId === collectionId &&
+              (subject.kind === "collection" ||
+                placement.skillIds.includes(subject.skill.skill_id)),
+          )
+          .map((placement) => placement.scope)
+      : intent.where,
+  );
+  return scopes.flatMap((scope) => {
+    let names = selectedNames;
+    if (
+      !intent.enabled &&
+      intent.members !== "whole" &&
+      (scopes.length > 1 || intent.where === "where-enabled")
+    ) {
+      const atScope = enabledAt(state, scope);
+      const enabled = new Set(atScope === undefined ? [] : enabledSkillIds(state, atScope.enabled));
+      names = (names ?? subject.skills.map((skill) => skill.name)).filter((name) =>
+        subject.skills.some((skill) => skill.name === name && enabled.has(skill.skill_id)),
+      );
+      if (!names.length) return [];
+    }
+    return [
+      {
+        query: intent.subject,
+        scope,
+        enabled: intent.enabled,
+        all: intent.members === "whole",
+        ...(subject.kind === "collection" && names !== undefined ? { selectedSkills: names } : {}),
+        ...(intent.invocation === undefined ? {} : { invocation: intent.invocation }),
+        ...(intent.allowDuplicate === undefined ? {} : { allowDuplicate: intent.allowDuplicate }),
+      },
+    ];
+  });
+});

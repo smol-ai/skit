@@ -1,11 +1,9 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
-import { ServerConfiguration } from "../configuration.js";
 import { Teams } from "../teams/service.js";
-import { CurrentPrincipal, CurrentRequest } from "./authentication.js";
-import { ConsumerAuthenticatedApi } from "@smolai/skit-core/universal/api";
+import { CurrentPrincipal } from "./authentication.js";
+import { ConsumerAuthenticatedApi } from "@smolai/skit-core/api";
 import {
-  forbiddenOriginResponse,
   invalidTeamResponse,
   membershipNotFoundResponse,
   ownerRoleImmutableResponse,
@@ -20,13 +18,9 @@ import {
 export const teamHandlers = HttpApiBuilder.group(ConsumerAuthenticatedApi, "teams", (handlers) =>
   Effect.gen(function* () {
     const teams = yield* Teams;
-    const configuration = yield* ServerConfiguration;
     const requireSession = Effect.gen(function* () {
       const principal = yield* CurrentPrincipal;
       if (principal.credential !== "session") return yield* Effect.fail(sessionRequiredResponse);
-      const request = yield* CurrentRequest;
-      if (request.headers.get("origin") !== configuration.publicAppOrigin)
-        return yield* Effect.fail(forbiddenOriginResponse);
       return principal;
     });
 

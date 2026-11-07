@@ -4,15 +4,21 @@ import { chmod, cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "nod
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import process from "node:process";
-import { Schema } from "effect";
+import { BrowserCrypto } from "@effect/platform-browser";
+import { Effect, Schema } from "effect";
 // This Node test reads the CLI's device state file; it never runs in the Worker.
 // oxlint-disable-next-line no-restricted-imports
-import { LibraryState } from "@smolai/skit-core";
+import { LibraryState } from "@smolai/skit-core/library";
 import { createTestHarness } from "wrangler";
 import { expect, test } from "vitest";
 import type { RuntimeEnv } from "../src/platform/cloudflare.js";
-import { draftReadResponseSchema } from "@smolai/skit-core/universal/authoring";
-import { expectedMigrations } from "../src/readiness/migrations.generated.js";
+import * as History from "@smolai/skit-core/history";
+import {
+  SkitCurrentResponse,
+  RevisionPostRequest,
+  RevisionReadResponse,
+} from "@smolai/skit-core/universal/authoring";
+import { expectedMigrations } from "../src/platform/migrations.generated.js";
 
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
 
@@ -38,7 +44,7 @@ const commandsWithHarnessRoots = new Set([
 test.skip("runs the pre-release authoring product loop through the built CLI", async () => {
   // The v1 CLI deliberately has no `author` command. Retain this scenario as executable design
   // evidence until it is replaced by a supported authoring client or removed with the pre-release
-  // Draft and Publication surface; it is not part of the v1 E2E gate.
+  // SKIT and Publication surface; it is not part of the v1 E2E gate.
   let cliToken: string;
   const workspace = await mkdtemp(join(tmpdir(), "skit-e2e-"));
   const authorSource = join(workspace, "author-lifecycle");
@@ -263,7 +269,7 @@ test.skip("runs the pre-release authoring product loop through the built CLI", a
       schema: "skit.validate.v3",
       data: { valid: true, diagnostics: [] },
     });
-    const createdDraft = JSON.parse(
+    const createdSkit = JSON.parse(
       skit([
         "author",
         "sync",
@@ -278,8 +284,8 @@ test.skip("runs the pre-release authoring product loop through the built CLI", a
         "--json",
       ]).stdout,
     );
-    expect(createdDraft).toMatchObject({
-      schema: "skit.author.sync.v3",
+    expect(createdSkit).toMatchObject({
+      schema: "skit.author.sync.v4",
       data: { status: "created", changed: true, revision_id: expect.any(String) },
     });
     skit(["author", "publish", authorSource, "--version", "1.0.0"]);
@@ -308,38 +314,59 @@ test.skip("runs the pre-release authoring product loop through the built CLI", a
       "Published from the generated scaffold.",
     );
 
-    const draftUrl = new URL("/api/skits/lifecycle-author/author-lifecycle/draft", registryUrl);
-    const remoteDraftResponse = await fetch(draftUrl, {
-      headers: { authorization: `Bearer ${cliToken}` },
+    const draftPath = "/api/skits/lifecycle-author/author-lifecycle";
+    const authorization = {
+      authorization: `Bearer ${cliToken}`,
+      "content-type": "application/json",
+    };
+    const currentResponse = await fetch(new URL(`${draftPath}/current`, registryUrl), {
+      headers: authorization,
     });
-    expect(remoteDraftResponse.status).toBe(200);
-    const remoteDraft = Schema.decodeUnknownSync(draftReadResponseSchema)(
-      await remoteDraftResponse.json(),
+    expect(currentResponse.status).toBe(200);
+    // The first sync moved `current`, so it is a revision.
+    const { current } = Schema.decodeUnknownSync(
+      Schema.Struct({ ...SkitCurrentResponse.fields, current: History.RevisionId }),
+    )(await currentResponse.json());
+    const remoteResponse = await fetch(new URL(`${draftPath}/revisions/${current}`, registryUrl), {
+      headers: authorization,
+    });
+    expect(remoteResponse.status).toBe(200);
+    const remote = Schema.decodeUnknownSync(Schema.toCodecJson(RevisionReadResponse))(
+      await remoteResponse.json(),
     );
-    const remoteFiles = remoteDraft.draft.files.map((file) =>
-      file.path === "README.md"
+    const remoteTree = remote.tree.map((entry) =>
+      entry.kind === "file" && entry.path === "README.md"
         ? {
-            ...file,
-            content_base64: Buffer.from(
-              `${Buffer.from(file.content_base64, "base64").toString("utf8")}\nEdited remotely.\n`,
-            ).toString("base64"),
+            ...entry,
+            bytes: new TextEncoder().encode(
+              `${new TextDecoder().decode(entry.bytes)}\nEdited remotely.\n`,
+            ),
           }
-        : file,
+        : entry,
     );
-    const remoteUpdate = await fetch(draftUrl, {
-      method: "PUT",
-      headers: { authorization: `Bearer ${cliToken}`, "content-type": "application/json" },
-      body: JSON.stringify({
-        title: remoteDraft.draft.title,
-        description: remoteDraft.draft.description,
-        visibility: remoteDraft.draft.visibility,
-        descriptor: remoteDraft.draft.descriptor,
-        diagnostics: remoteDraft.draft.diagnostics,
-        expected_revision_id: remoteDraft.draft.revision_id,
-        files: remoteFiles,
-      }),
+    // oxlint-disable-next-line skit/no-nested-runtime -- this Node test is a plain async scenario; it hashes one revision as a device would.
+    const remoteEdit = await Effect.runPromise(
+      Effect.gen(function* () {
+        const revision = {
+          tree: yield* History.treeHash(remoteTree),
+          parents: [current],
+          author: { device: remote.revision.author.device, at: Date.now() },
+        };
+        return { id: yield* History.revisionId(revision), revision, tree: remoteTree };
+      }).pipe(Effect.provide(BrowserCrypto.layer)),
+    );
+    const posted = await fetch(new URL(`${draftPath}/revisions`, registryUrl), {
+      method: "POST",
+      headers: authorization,
+      body: JSON.stringify(Schema.encodeSync(Schema.toCodecJson(RevisionPostRequest))(remoteEdit)),
     });
-    expect(remoteUpdate.status).toBe(200);
+    expect(posted.status).toBe(200);
+    const moved = await fetch(new URL(`${draftPath}/current`, registryUrl), {
+      method: "PUT",
+      headers: authorization,
+      body: JSON.stringify({ expected: current, id: remoteEdit.id }),
+    });
+    expect(moved.status).toBe(200);
     await cp(
       join(fixtures, "author-local-edit", "SKILL.md"),
       join(authorSource, "skills", "author-lifecycle", "SKILL.md"),
@@ -348,34 +375,23 @@ test.skip("runs the pre-release authoring product loop through the built CLI", a
       skit(["author", "sync", authorSource, "--home", authorHome, "--json"]).stdout,
     );
     expect(preview).toMatchObject({
-      schema: "skit.author.sync.v3",
-      data: {
-        status: "merge_ready",
-        changed: false,
-        paths: ["README.md", "skills/author-lifecycle/SKILL.md"],
-      },
+      schema: "skit.author.sync.v4",
+      data: { status: "ready", changed: false, action: "merge" },
     });
     const merged = JSON.parse(
       skit(["author", "sync", authorSource, "--home", authorHome, "--apply", "--json"]).stdout,
     );
     expect(merged).toMatchObject({
-      schema: "skit.author.sync.v3",
+      schema: "skit.author.sync.v4",
       data: { status: "merged", changed: true, revision_id: expect.any(String) },
     });
     expect(await readFile(join(authorSource, "README.md"), "utf8")).toContain("Edited remotely.");
-    const staleUpdate = await fetch(draftUrl, {
+    const staleMove = await fetch(new URL(`${draftPath}/current`, registryUrl), {
       method: "PUT",
-      headers: { authorization: `Bearer ${cliToken}`, "content-type": "application/json" },
-      body: JSON.stringify({
-        title: remoteDraft.draft.title,
-        description: remoteDraft.draft.description,
-        visibility: remoteDraft.draft.visibility,
-        descriptor: remoteDraft.draft.descriptor,
-        expected_revision_id: remoteDraft.draft.revision_id,
-        files: remoteDraft.draft.files,
-      }),
+      headers: authorization,
+      body: JSON.stringify({ expected: current, id: current }),
     });
-    expect(staleUpdate.status, await staleUpdate.clone().text()).toBe(409);
+    expect(staleMove.status, await staleMove.clone().text()).toBe(409);
 
     skit(["disable", "author-lifecycle", "--home", consumerHome]);
     expect(existsSync(join(roots.codex, "author-lifecycle"))).toBe(false);
@@ -389,7 +405,8 @@ test.skip("runs the pre-release authoring product loop through the built CLI", a
       data: {
         status: "delete_ready",
         changed: false,
-        draft_revisions: 3,
+        // The first push, the remote edit, and the merge: the device's own revision and the merge.
+        revisions: 4,
         release_versions: ["1.0.0"],
       },
     });
@@ -705,7 +722,7 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
     first(["add", raw]);
     first(["add", gitRemote]);
     const imported = await state(firstHome);
-    expect(imported.schemaVersion).toBe(11);
+    expect(imported.schemaVersion).toBe(12);
     expect(imported.collections).toHaveLength(2);
     expect(imported.enabled).toEqual([]);
     const collectionId = imported.collections[0].collection_id;
@@ -747,7 +764,7 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
     expect(second(["sync"])).toMatchObject({ data: { status: "pull_ready" } });
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "pulled" } });
     const restored = await state(secondHome);
-    expect(restored.schemaVersion).toBe(11);
+    expect(restored.schemaVersion).toBe(12);
     expect(restored.collections.some((item) => item.collection_id === collectionId)).toBe(true);
     expect(restored.imports[0].lock_file_entries).toEqual([]);
     expect(restored.enabled).toEqual([]);
@@ -834,15 +851,16 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
         stdio: "ignore",
       },
     );
-    const exited = new Promise((resolveExit) => killed.once("exit", resolveExit));
+    const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+      (resolveExit) => killed.once("exit", (code, signal) => resolveExit({ code, signal })),
+    );
     // A CLI that exits before its write reaches the Registry fails here instead of hanging.
     expect(
       await Promise.race([committed.then(() => "committed"), exited.then(() => "exited")]),
     ).toBe("committed");
-    killed.kill("SIGKILL");
-    await exited;
-    // The killed writer left its lock and its previous state with the previous ancestry.
-    expect(existsSync(join(firstHome, ".lock"))).toBe(true);
+    expect(killed.kill("SIGKILL")).toBe(true);
+    expect(await exited).toEqual({ code: null, signal: "SIGKILL" });
+    // The Registry committed, but the device has not accepted that receipt yet.
     expect(await readFile(join(firstHome, "state.json"), "utf8")).toBe(stateBeforeKill);
     const head = await fetch(new URL("/api/library/portable", registryUrl), {
       headers: { authorization: `Bearer ${token}` },
@@ -856,15 +874,9 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
     )(await head.json()).library.manifest.collections;
     expect(committedCollections).toHaveLength(2);
 
-    // The dead writer's lock fails closed: the retry is refused and changes nothing.
-    expect(first(["sync", "--apply"], 12)).toMatchObject({ error: { code: "CONFLICT" } });
-    expect(existsSync(join(firstHome, ".lock"))).toBe(true);
-    expect(await readFile(join(firstHome, "state.json"), "utf8")).toBe(stateBeforeKill);
-    // Once its owner is known to be stopped, removing the lock lets the retry find the remote
-    // already holds its state.
-    await rm(join(firstHome, ".lock"));
+    // The OS releases the SQLite lease after SIGKILL. Retry discovers the committed
+    // remote state without deleting lock files or repeating the accepted mutation.
     expect(first(["sync", "--apply"])).toMatchObject({ data: { status: "clean" } });
-    expect(existsSync(join(firstHome, ".lock"))).toBe(false);
     expect(second(["sync", "--apply"])).toMatchObject({ data: { status: "merged" } });
     expect((await state(secondHome)).collections).toHaveLength(2);
     expect(first(["sync", "--apply"])).toMatchObject({ data: { status: "clean" } });

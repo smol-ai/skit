@@ -1,26 +1,22 @@
-import { ListResult } from "../src/workflows/library/list-contract.js";
+import { skitLayer } from "@smolai/skit-core/platform";
+import { deterministicTreeHash } from "@smolai/skit-core/author";
+import { ListResult } from "../src/library/list/output.js";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { Effect, FileSystem, Schema } from "effect";
 import { join } from "node:path";
-import {
-  deterministicTreeHash,
-  LibraryStore,
-  skitLayer,
-  importAuthoredCollection,
-  type SkillsShLockFileEntry,
-} from "@smolai/skit-core";
-import {
-  readLibrarySkillMetadata,
-  skillModificationTime,
-} from "../src/library-application/skill-metadata.js";
-import { inventoryCommand } from "../src/handlers/library/inventory.js";
-import { renderMachineSkills } from "../src/presentation/inventory.js";
-import { renderLibraryList } from "../src/presentation/library-list.js";
-import { presentListCommand } from "../src/handlers/library/list.js";
-import { openLibraryView } from "../src/library-application/library-view.js";
-import { openLibrarySession } from "../src/library-application/session.js";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+
+import * as Library from "@smolai/skit-core/library";
+type SkillsShLockFileEntry = Parameters<
+  Library.Interface["import"]["collection"]
+>[0]["lockFileEntries"][number];
+import { readLibrarySkillMetadata, readSkillPreviews } from "@smolai/skit-core/library/queries";
+
+import { renderMachineSkills } from "../src/library/inventory/present.js";
+import { renderLibraryList } from "../src/library/list/present.js";
+import { presentListCommand } from "../src/library/list.js";
+
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import {
   libraryHome,
   initializeLibraryMachine,
@@ -93,13 +89,10 @@ it.effect(
           lock_file_entries: [observation(index)],
         })),
       };
-      yield* home.owned(
-        writingTo(
-          home.home,
-          LibraryStore.use((store) => store.save(selected, state)),
-        ),
-      );
-      const view = yield* home.owned(openLibraryView());
+      yield* home.writeDurable(selected);
+      const view = yield* home.owned(Library.Service);
+      const viewBase = yield* view.read;
+      const viewFacts = yield* view.list({ base: viewBase });
       const interaction = yield* makeScriptedInteraction([]);
       yield* home.owned(presentListCommand().pipe(Effect.provide(interaction.layer)));
       const listing = yield* Schema.decodeUnknownEffect(ListResult)(
@@ -119,7 +112,9 @@ it.effect(
           },
         ],
       });
-      const session = yield* home.owned(openLibrarySession());
+      const session = yield* home.owned(
+        Effect.flatMap(Library.Service, (library) => library.session.open()),
+      );
       expect(session.skills[0]).toMatchObject({
         revision: "1".repeat(40),
         source_updated_at: "2026-04-20T00:00:00.000Z",
@@ -153,23 +148,24 @@ it.effect(
       );
       expect(conflicting.get(state.skills[0]!.skill_id)?.source_updated_at).toBeNull();
       expect(yield* home.durable).toEqual(selected);
-      const subjects = yield* view.readSubjects();
-      const rows = yield* view.readSkills();
+      const subjects = yield* view
+        .list({ base: viewBase })
+        .pipe(Effect.map((report) => report.subjects));
+      const rows = yield* view.skills({ base: viewBase });
       expect(subjects[0]?.skills[0]?.versions).toHaveLength(2);
       expect(subjects[0]?.skills[0]?.versionId).toBe(rows[0]?.versionId);
       expect(rows[0]?.revision).toBe("1".repeat(40));
       // A held view keeps the displayed selection even when another action selects newer bytes.
-      yield* home.owned(
-        writingTo(
-          home.home,
-          LibraryStore.use((store) => store.save(state, selected)),
-        ),
-      );
-      view.collections.length = 0;
-      expect((yield* view.readSubjects())[0]?.skills[0]?.revision).toBe("1".repeat(40));
-      expect((yield* view.readSkills())[0]?.revision).toBe("1".repeat(40));
-      const fresh = yield* home.owned(openLibraryView());
-      expect((yield* fresh.readSkills())[0]?.revision).toBe("2".repeat(40));
+      yield* home.writeDurable(state);
+      viewFacts.collections.length = 0;
+      expect(
+        (yield* view.list({ base: viewBase }).pipe(Effect.map((report) => report.subjects)))[0]
+          ?.skills[0]?.revision,
+      ).toBe("1".repeat(40));
+      expect((yield* view.skills({ base: viewBase }))[0]?.revision).toBe("1".repeat(40));
+      const fresh = yield* home.owned(Library.Service);
+      const freshBase = yield* fresh.read;
+      expect((yield* fresh.skills({ base: freshBase }))[0]?.revision).toBe("2".repeat(40));
       expect(yield* home.durable).toEqual(state);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -202,15 +198,19 @@ it.effect("inventory distinguishes physical copy dates and follows symlink targe
     });
     const interaction = yield* makeScriptedInteraction([]);
     const inventory = yield* home.owned(
-      inventoryCommand({ libraryHome: home.home, ...home.inventory }).pipe(
+      Effect.flatMap(Library.Service, (library) => library.inventory.refreshMachine).pipe(
         Effect.provide(interaction.layer),
       ),
     );
+    // Check the read model before the JSON codec can hide excess state fields.
+    expect(inventory).not.toHaveProperty("operations");
+    expect(inventory).not.toHaveProperty("schemaVersion");
+    expect(inventory).not.toHaveProperty("device_skill_selection");
     expect(
       inventory.machine.instances.map((instance) => instance.skill_md_modified_at).sort(),
     ).toEqual(["2026-01-03T00:00:00.000Z", "2026-09-20T00:00:00.000Z"]);
-    expect(yield* skillModificationTime(alias)).toBe("2026-01-03T00:00:00.000Z");
-    expect(yield* skillModificationTime(join(root, "missing"))).toBeNull();
+    expect((yield* readSkillPreviews([alias]))[0]?.modifiedAt).toBe("2026-01-03T00:00:00.000Z");
+    expect((yield* readSkillPreviews([join(root, "missing")]))[0]?.modifiedAt).toBeNull();
     const rendered = renderMachineSkills(inventory.machine);
     expect(rendered).toContain("SKILL.md modified 2026-01-03");
     expect(rendered).toContain("SKILL.md modified 2026-09-20");
@@ -259,12 +259,14 @@ skills:
       yield* home.owned(
         writingTo(
           home.home,
-          importAuthoredCollection({
-            root: source,
-            source: { type: "local", path: source },
-            input: source,
-            importedAt: "2026-09-29T00:00:00.000Z",
-          }),
+          Effect.flatMap(Library.Service, (library) =>
+            library.import.authored({
+              root: source,
+              source: { type: "local", path: source },
+              input: source,
+              importedAt: "2026-09-29T00:00:00.000Z",
+            }),
+          ),
         ),
       );
       const state = yield* home.durable;

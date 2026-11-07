@@ -1,9 +1,9 @@
 import { resolve } from "node:path";
-import { canonicalJson } from "../shared/json.js";
-import type { InstallScope } from "../vocabulary.js";
+import type { InstallScope } from "./scope.js";
 import type { Enabled, LibraryManifest } from "./library-contracts.js";
 import type { CollectionId, SkillId } from "./entity-ids.js";
-import type { DeviceSkillSelection, InvocationPolicies, LibraryState } from "./library-state.js";
+import type { DeviceSkillSelection, InvocationPolicies } from "./device-state.js";
+import type { LibraryState } from "./library-state.js";
 
 /** What is enabled at one install scope, with the invocation overrides chosen there. */
 export interface EnabledAtScope {
@@ -82,10 +82,6 @@ export function withDeviceSkillSelection(
     ...(pendingOrigin === undefined ? {} : { pending_device_selection_origin: pendingOrigin }),
   };
 }
-
-export const sameDeviceSkillSelection = (left: LibraryState, right: LibraryState): boolean =>
-  canonicalJson(left.device_skill_selection ?? null) ===
-  canonicalJson(right.device_skill_selection ?? null);
 
 /** Explicit device enablement verifies every requested Skill, including unchanged intent. */
 export function skillsToCheckForDuplicates(

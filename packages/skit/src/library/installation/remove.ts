@@ -9,7 +9,7 @@ export class CollectionRemovalMissing
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "OPERATION_FAILED" as const;
-  readonly remediation = "Run `skit list` to see the retained Collections.";
+  readonly remediation = "Check the retained Collections.";
   get message(): string {
     return `Collection is no longer retained: ${this.collection_id}`;
   }

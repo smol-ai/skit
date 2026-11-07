@@ -5,7 +5,7 @@ import {
   modelContextCatalog,
   modelContextWindow,
   modelMaxContextWindow,
-} from "../src/models/model-context-windows.js";
+} from "../src/harnesses/model-context-windows.js";
 
 test("bundled catalog resolves known models without native configuration or cache", () => {
   expect(Option.getOrNull(modelContextWindow("openai", "gpt-6.1-sol"))).toBe(500_000);

@@ -3,7 +3,7 @@ import { parse } from "yaml";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { expect } from "vitest";
-import { applyInvocationPolicy, overrideInvocationIntent } from "../src/install/policy.js";
+import { applyInvocationPolicy, overrideInvocationIntent } from "../src/installed-skills/policy.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 const makeDirectory = (path: string) => FileSystem.FileSystem.use((fs) => fs.makeDirectory(path));

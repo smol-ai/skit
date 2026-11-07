@@ -1,0 +1,107 @@
+{
+  "collections": [
+    {
+      "collection_id": "coll_01m2xxw78tfeva4p48mn5xbprh",
+      "label": "https://skills.example",
+      "upstream": {
+        "source_identity": {
+          "kind": "well-known",
+          "locator": {
+            "value": "https://skills.example"
+          }
+        },
+        "tracking": {
+          "kind": "default"
+        }
+      }
+    }
+  ],
+  "schemaVersion": 11,
+  "collection_versions": [
+    {
+      "copy_profile": "verbatim/v1",
+      "collection_version_id": "ret_01m2xxw78pfeva4p38pe2h1v0a",
+      "hash": "sha256:b29e120becf612c1be1c7f32fcabd38223538b5879fc229747155e51e64e9115",
+      "members": [
+        {
+          "source_path": "review",
+          "materialization_profile": "plain-skill/v1",
+          "source_hash": "sha256:b2f4d95bf22685697b6ff0384b3cd1e914cfd97f2a50583b3ab0fe6d5fdd882d",
+          "artifact_hash": "sha256:e829209f62220fbbca6ae938a9c7d4da76b76f6626aea53936ebba61806056a5"
+        }
+      ]
+    }
+  ],
+  "imports": [
+    {
+      "collection_id": "coll_01m2xxw78tfeva4p48mn5xbprh",
+      "source_identity": {
+        "kind": "well-known",
+        "locator": {
+          "value": "https://skills.example"
+        }
+      },
+      "input": {
+        "value": "wellknown:https://skills.example#skills=review"
+      },
+      "machine_id": "mach_01k58c0k00e3w9pw6d0q2zj348",
+      "import_id": "acq_01m2xxw78pfeva4p3qvm1hvpgc",
+      "kind": "source",
+      "collection_version_id": "ret_01m2xxw78pfeva4p38pe2h1v0a",
+      "imported_at": "2026-09-20T00:00:00.000Z",
+      "lock_file_entries": []
+    }
+  ],
+  "enabled": [
+    {
+      "collection": "coll_01m2xxw78tfeva4p48mn5xbprh"
+    }
+  ],
+  "invocation_policies": {
+    "skill_01m2xxw78pfeva4p3ymmydrc3z": "explicit"
+  },
+  "repositories": [
+    {
+      "root": "/workspace",
+      "enabled": [
+        {
+          "collection": "coll_01m2xxw78tfeva4p48mn5xbprh"
+        }
+      ],
+      "invocation_policies": {
+        "skill_01m2xxw78pfeva4p3ymmydrc3z": "implicit"
+      }
+    }
+  ],
+  "skills": [
+    {
+      "skill_id": "skill_01m2xxw78pfeva4p3ymmydrc3z",
+      "collection_id": "coll_01m2xxw78tfeva4p48mn5xbprh",
+      "path": "review",
+      "name": "review",
+      "versions": [
+        {
+          "skill_version_id": "skv_01m2xxw78pfeva4p43y4j73g7k",
+          "materialization_profile": "plain-skill/v1",
+          "source_hash": "sha256:b2f4d95bf22685697b6ff0384b3cd1e914cfd97f2a50583b3ab0fe6d5fdd882d",
+          "artifact_hash": "sha256:e829209f62220fbbca6ae938a9c7d4da76b76f6626aea53936ebba61806056a5",
+          "validation_identity_hash": "sha256:e829209f62220fbbca6ae938a9c7d4da76b76f6626aea53936ebba61806056a5"
+        }
+      ]
+    }
+  ],
+  "unmanaged": [],
+  "installed_skills": [
+    {
+      "skill_id": "skill_01m2xxw78pfeva4p3ymmydrc3z",
+      "skill_version_id": "skv_01m2xxw78pfeva4p43y4j73g7k",
+      "root": "/skills",
+      "path": "/skills/review",
+      "expected_hash": "sha256:e829209f62220fbbca6ae938a9c7d4da76b76f6626aea53936ebba61806056a5",
+      "installed_skill_id": "proj_01m2xxw78pfeva4p4n42pv0xqg",
+      "installed_at": "2026-09-20T00:00:00.000Z",
+      "destination": "agents",
+      "status": "installed"
+    }
+  ]
+}

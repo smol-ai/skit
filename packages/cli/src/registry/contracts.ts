@@ -1,11 +1,10 @@
 import { Schema } from "effect";
 
-export const RegistryRemote = Schema.Struct({
+const RegistryRemote = Schema.Struct({
   name: Schema.String,
   origin: Schema.String,
   isDefault: Schema.Boolean,
 });
-export type RegistryRemote = typeof RegistryRemote.Type;
 
 export const RegistryRemoteChange = RegistryRemote.pipe(
   Schema.fieldsAssign({ action: Schema.Literals(["added", "defaulted", "removed"]) }),

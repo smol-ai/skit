@@ -1,26 +1,35 @@
+import { systemError } from "effect/PlatformError";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
-import { Deferred, Effect, Fiber, FileSystem } from "effect";
+import { Deferred, Effect, Exit, Fiber, FileSystem } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import {
-  addRegistryRemote,
-  awaitDeviceApproval,
-  loginEffect,
-  readConfig,
-  readPendingLogin,
-  savePendingLogin,
-  startDeviceLogin,
-} from "../src/registry/auth.js";
-import { authLoginCommand } from "../src/handlers/auth/login.js";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+import { addRegistryRemote, readConfig } from "../src/registry/auth.js";
+import { readPendingLogin, type PendingDeviceLogin } from "../src/registry/device-login.js";
+import { Registry } from "../src/registry/index.js";
+import { authLoginCommand } from "../src/registry/commands/login.js";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
-import { skitConfigurationLayer } from "../src/configuration/skit-configuration.js";
+import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
 const origin = "https://skit.example";
+
+const savePendingLogin = Effect.fn("Test.writePendingLoginFixture")(function* (
+  pending: PendingDeviceLogin,
+  home: string,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  yield* fs.writeFileString(
+    join(home, "login-pending.json"),
+    JSON.stringify({ scopes: ["library:sync"], ...pending }),
+    {
+      mode: 0o600,
+    },
+  );
+});
 
 /** A Registry offering device authorization that answers each poll from `polls` in turn. */
 function deviceServer(
@@ -101,18 +110,15 @@ const deviceLogin = (polls: ReadonlyArray<Response>) =>
     const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-device-login-" });
     const server = deviceServer(polls);
     const scopes = ["library:sync" as const];
-    const started = yield* Effect.scoped(startDeviceLogin({ origin, scopes })).pipe(
+    const started = yield* Registry.prepareDeviceLogin({ origin, scopes, home }).pipe(
       Effect.provide(registryHttpLayer(testHttpClientLayer(server.handler))),
     );
-    const approvals = [started];
-    const result = yield* Effect.result(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const approvedSessionToken = yield* awaitDeviceApproval(started, scopes);
-          return yield* loginEffect({ origin, scopes: [...scopes], home, approvedSessionToken });
-        }),
-      ).pipe(Effect.provide(registryHttpLayer(testHttpClientLayer(server.handler)))),
-    );
+    const approvals = [started.pending];
+    const result = yield* Registry.completeDeviceLogin({
+      pending: started.pending,
+      scopes,
+      home,
+    }).pipe(Effect.provide(registryHttpLayer(testHttpClientLayer(server.handler))), Effect.result);
     const config = yield* readConfig(home).pipe(Effect.provide(skitConfigurationLayer(home)));
     return { result, approvals, seen: server.seen, stored: config.servers[origin]?.token };
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped);
@@ -198,7 +204,7 @@ it.live("an agent's login returns the code at once, and its next login waits for
 );
 
 it.live(
-  "the reported next command preserves scopes, alias, home and relogin through the shell",
+  "the continuation command preserves scopes, alias and home without restarting a forced login",
   () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -242,7 +248,6 @@ it.live(
         "private",
         "--home",
         home,
-        "--relogin",
       ]);
       const parsed = parseArgs({
         args: args.slice(2),
@@ -391,5 +396,231 @@ it.live("an invalid saved device code is cleared so the next login can start aga
       yield* readPendingLogin(origin, home).pipe(Effect.provide(skitConfigurationLayer(home))),
     ).toBeUndefined();
     expect("verificationUri" in (yield* run)).toBe(true);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.live("concurrent browser login preparation publishes one reusable device code", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-device-concurrent-" });
+    const server = deviceServer([]);
+    const attempts = yield* Effect.all(
+      [
+        Registry.prepareDeviceLogin({ origin, home, scopes: ["library:sync"] }),
+        Registry.prepareDeviceLogin({ origin, home, scopes: ["library:sync"] }),
+      ],
+      { concurrency: "unbounded" },
+    ).pipe(Effect.provide(registryHttpLayer(testHttpClientLayer(server.handler))));
+    expect(attempts.map((attempt) => attempt.resumed).sort()).toEqual([false, true]);
+    expect(attempts[0].pending).toEqual(attempts[1].pending);
+    expect(server.seen.filter((request) => request.path === "/api/auth/device/code")).toHaveLength(
+      2,
+    );
+    expect((yield* fs.stat(join(home, "login-pending.json"))).mode & 0o777).toBe(0o600);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.live.each(["approved", "denied"] as const)(
+  "an older %s login cannot erase a newer pending code",
+  (outcome) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-device-replacement-" });
+      const polled = yield* Deferred.make<void>();
+      const finish = yield* Deferred.make<void>();
+      const server = deviceServer([
+        Deferred.succeed(polled, undefined).pipe(
+          Effect.andThen(Deferred.await(finish)),
+          Effect.as(
+            outcome === "approved"
+              ? Response.json({ access_token: "session-token" })
+              : Response.json({ error: "access_denied" }, { status: 400 }),
+          ),
+        ),
+      ]);
+      const operation = Effect.gen(function* () {
+        const started = yield* Registry.prepareDeviceLogin({
+          origin,
+          home,
+          scopes: ["library:sync"],
+        });
+        const waiting = yield* Registry.completeDeviceLogin({
+          pending: started.pending,
+          home,
+          scopes: ["library:sync"],
+        }).pipe(Effect.result, Effect.forkChild);
+        yield* Deferred.await(polled);
+        const newer = { ...started.pending, deviceCode: "new-device-secret", userCode: "NEWERCOD" };
+        yield* savePendingLogin(newer, home);
+        yield* Deferred.succeed(finish, undefined);
+        const result = yield* Fiber.join(waiting);
+        expect(result._tag).toBe(outcome === "approved" ? "Success" : "Failure");
+        if (result._tag === "Failure")
+          expect(result.failure).toMatchObject({ _tag: "DeviceLoginEnded", reason: "denied" });
+        expect(yield* readPendingLogin(origin, home)).toEqual(newer);
+      });
+      yield* operation.pipe(Effect.provide(registryHttpLayer(testHttpClientLayer(server.handler))));
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.live("interrupted approval keeps its pending code and frees the writer", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-device-interrupted-" });
+    const polled = yield* Deferred.make<void>();
+    let finalized = false;
+    const server = deviceServer([
+      Deferred.succeed(polled, undefined).pipe(
+        Effect.andThen(Effect.never),
+        Effect.ensuring(
+          Effect.sync(() => {
+            finalized = true;
+          }),
+        ),
+      ),
+    ]);
+    yield* Effect.gen(function* () {
+      const started = yield* Registry.prepareDeviceLogin({
+        origin,
+        home,
+        scopes: ["library:sync"],
+      });
+      const waiting = yield* Registry.completeDeviceLogin({
+        pending: started.pending,
+        home,
+        scopes: ["library:sync"],
+      }).pipe(Effect.forkChild);
+      yield* Deferred.await(polled);
+      yield* Fiber.interrupt(waiting);
+      expect(Exit.hasInterrupts(yield* Fiber.await(waiting))).toBe(true);
+      expect(finalized).toBe(true);
+      expect(yield* readPendingLogin(origin, home)).toEqual(started.pending);
+      yield* addRegistryRemote("other", "https://other.example", home);
+      expect(server.seen.some((request) => request.path === "/api/tokens")).toBe(false);
+    }).pipe(Effect.provide(registryHttpLayer(testHttpClientLayer(server.handler))));
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.live("failed pending publication keeps the old code and removes its temporary file", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-device-atomic-" });
+    const server = deviceServer([]);
+    const expired = {
+      origin,
+      deviceCode: "old-code",
+      userCode: "ABCDEFGH",
+      verificationUri: `${origin}/device`,
+      interval: 0,
+      expiresAt: "2000-01-01T00:00:00.000Z",
+      scopes: ["library:sync"] as const,
+    };
+    yield* savePendingLogin(expired, home);
+    const path = join(home, "login-pending.json");
+    const previous = yield* fs.readFileString(path);
+    const renameError = systemError({
+      _tag: "PermissionDenied",
+      module: "FileSystem",
+      method: "rename",
+      pathOrDescriptor: path,
+    });
+    const failure = yield* Registry.prepareDeviceLogin({
+      origin,
+      home,
+      scopes: ["library:sync"],
+    }).pipe(
+      Effect.provide(registryHttpLayer(testHttpClientLayer(server.handler))),
+      Effect.provideService(FileSystem.FileSystem, {
+        ...fs,
+        rename: () => Effect.fail(renameError),
+      }),
+      Effect.flip,
+    );
+    expect(failure).toBe(renameError);
+    expect(yield* fs.readFileString(path)).toBe(previous);
+    expect(
+      (yield* fs.readDirectory(home)).filter((name) => name.startsWith("login-pending.json.tmp")),
+    ).toEqual([]);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.live("expiration removes the matching saved code even though it is no longer reusable", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-device-expired-" });
+    const expired = {
+      origin,
+      deviceCode: "expired",
+      userCode: "ABCDEFGH",
+      verificationUri: `${origin}/device`,
+      interval: 0,
+      expiresAt: "2000-01-01T00:00:00.000Z",
+      scopes: ["library:sync"] as const,
+    };
+    yield* savePendingLogin(expired, home);
+    const server = deviceServer([]);
+    const failure = yield* Registry.completeDeviceLogin({
+      pending: expired,
+      home,
+      scopes: ["library:sync"],
+    }).pipe(Effect.provide(registryHttpLayer(testHttpClientLayer(server.handler))), Effect.flip);
+    expect(failure).toMatchObject({ _tag: "DeviceLoginEnded", reason: "expired" });
+    expect(yield* fs.exists(join(home, "login-pending.json"))).toBe(false);
+    expect(server.seen.some((request) => request.path === "/api/auth/device/token")).toBe(false);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.live.each(["discovery", "device-code"] as const)(
+  "%s requests leave the home writer available",
+  (stage) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-device-network-" });
+      const requested = yield* Deferred.make<void>();
+      const respond = yield* Deferred.make<void>();
+      const server = deviceServer([]);
+      const path = stage === "discovery" ? "/.well-known/skit" : "/api/auth/device/code";
+      const handler: TestHttpHandler = (request, url, signal) =>
+        url.pathname === path
+          ? Deferred.succeed(requested, undefined).pipe(
+              Effect.andThen(Deferred.await(respond)),
+              Effect.andThen(server.handler(request, url, signal)),
+            )
+          : server.handler(request, url, signal);
+      const starting = yield* Registry.prepareDeviceLogin({
+        origin,
+        home,
+        scopes: ["library:sync"],
+      }).pipe(Effect.provide(registryHttpLayer(testHttpClientLayer(handler))), Effect.forkChild);
+      yield* Deferred.await(requested);
+      yield* addRegistryRemote("other", "https://other.example", home).pipe(
+        Effect.provide(skitConfigurationLayer(home)),
+      );
+      yield* Deferred.succeed(respond, undefined);
+      expect((yield* Fiber.join(starting)).resumed).toBe(false);
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.live("pending login reuse requires the same scopes and respects forced relogin", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-device-reuse-" });
+    const server = deviceServer([], ["library:sync", "authoring:write"]);
+    const prepare = (scopes: readonly ("library:sync" | "authoring:write")[], relogin = false) =>
+      Registry.prepareDeviceLogin({ origin, home, scopes, relogin }).pipe(
+        Effect.provide(registryHttpLayer(testHttpClientLayer(server.handler))),
+      );
+    expect((yield* prepare(["library:sync"])).resumed).toBe(false);
+    expect((yield* prepare(["library:sync"])).resumed).toBe(true);
+    expect((yield* prepare(["authoring:write"])).resumed).toBe(false);
+    expect((yield* prepare(["authoring:write"], true)).resumed).toBe(false);
+    expect((yield* prepare(["authoring:write"])).resumed).toBe(true);
+    expect(server.seen.filter((request) => request.path === "/api/auth/device/code")).toHaveLength(
+      3,
+    );
+    // Old pending records lack scope evidence and must start a fresh request.
+    const { scopes: _scopes, ...legacy } = (yield* readPendingLogin(origin, home))!;
+    yield* fs.writeFileString(join(home, "login-pending.json"), JSON.stringify(legacy));
+    expect((yield* prepare(["authoring:write"])).resumed).toBe(false);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

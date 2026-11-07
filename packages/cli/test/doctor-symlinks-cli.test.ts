@@ -1,4 +1,4 @@
-import { largeListingEntries } from "@smolai/skit-core";
+import { largeListingEntries } from "@smolai/skit-core/harnesses";
 import { it } from "@effect/vitest";
 import { spawnSync } from "node:child_process";
 import { NodeServices } from "@effect/platform-node";

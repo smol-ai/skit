@@ -1,6 +1,6 @@
 import { basename, resolve } from "node:path";
 import { hashParts } from "../artifact/descriptor.js";
-import type { InstalledSkills } from "./installed-skills.js";
+import type * as InstalledSkills from "./installed-skills.js";
 import type { Plan } from "./library-plan.js";
 
 const protection: Record<InstalledSkills.Protection, string> = {

@@ -1,21 +1,22 @@
-import { sourceApplicationLayer } from "../src/application.js";
+import { sourceLayer } from "../src/application.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { addRegistryRemote, readConfig } from "../src/registry/auth.js";
 import {
   resolveSkitConfiguration,
   skitConfigurationLayer,
   SkitConfiguration,
-} from "../src/configuration/skit-configuration.js";
+} from "@smolai/skit-core/platform";
 import { assert, it } from "@effect/vitest";
+import { NodeServices } from "@effect/platform-node";
 import { ConfigProvider, Deferred, Effect, Fiber, FileSystem, Layer } from "effect";
 import { join, resolve } from "node:path";
-import { LibraryStore, withLibraryWriter } from "@smolai/skit-core";
-import { libraryApplicationLayer } from "../src/library-application/layers.js";
+import * as Library from "@smolai/skit-core/library";
+import { libraryLayer } from "../src/application.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import type { CommandFailure, CommandResult } from "../src/commands/types.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
-import { withConfigurationWriter } from "../src/configuration-writer.js";
+import { holdHomeLock, homeLockIsFree } from "./helpers/home-lock.js";
 
 it.effect("configuration writers honor ConfigProvider and explicit home overrides", () =>
   Effect.gen(function* () {
@@ -23,27 +24,29 @@ it.effect("configuration writers honor ConfigProvider and explicit home override
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-config-provider-" });
     const configured = join(root, "configured");
     const explicit = join(root, "explicit");
-    const inside = (home: string) =>
-      Effect.gen(function* () {
-        assert.isTrue(yield* fs.exists(join(home, ".lock")));
-        assert.isFalse(yield* fs.exists(join(home, "state.json")));
-        yield* addRegistryRemote("fixture", "https://registry.example.test", undefined).pipe(
-          Effect.provide(
-            ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: join(root, "ignored") })),
-          ),
-        );
-        assert.isTrue(yield* fs.exists(join(home, "auth.json")));
-      });
-    yield* withConfigurationWriter(undefined, inside(configured)).pipe(
-      Effect.provide(skitConfigurationLayer()),
-      Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: configured }))),
-    );
-    yield* withConfigurationWriter(explicit, inside(explicit)).pipe(
-      Effect.provide(skitConfigurationLayer(explicit)),
-      Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: configured }))),
-    );
-    assert.isFalse(yield* fs.exists(join(configured, ".lock")));
-    assert.isFalse(yield* fs.exists(join(explicit, ".lock")));
+    const checked = new Set<string>();
+    const filesystem: FileSystem.FileSystem = {
+      ...fs,
+      rename: (from, to) =>
+        Effect.gen(function* () {
+          if (to.endsWith("/auth.json")) {
+            const home = to.slice(0, -"/auth.json".length);
+            assert.isFalse(yield* homeLockIsFree(home));
+            assert.isFalse(yield* fs.exists(join(home, "state.json")));
+            checked.add(home);
+          }
+          yield* fs.rename(from, to);
+        }),
+    };
+    for (const home of [undefined, explicit])
+      yield* addRegistryRemote("fixture", "https://registry.example.test", home).pipe(
+        Effect.provide(skitConfigurationLayer()),
+        Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: configured }))),
+        Effect.provideService(FileSystem.FileSystem, filesystem),
+      );
+    assert.deepStrictEqual([...checked], [configured, explicit]);
+    assert.isTrue(yield* homeLockIsFree(configured));
+    assert.isTrue(yield* homeLockIsFree(explicit));
     assert.isFalse(yield* fs.exists(join(root, "ignored")));
     for (const home of [configured, explicit]) {
       const config = yield* readConfig(home);
@@ -115,8 +118,8 @@ it.effect("parsed configuration commands honor ConfigProvider without a home fla
     assert.deepStrictEqual(failures, []);
     assert.isTrue(yield* fs.exists(join(home, "auth.json")));
     assert.isFalse(yield* fs.exists(join(home, "state.json")));
-    assert.isFalse(yield* fs.exists(join(home, ".lock")));
-  }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),
+    assert.isTrue(yield* homeLockIsFree(home));
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
 );
 
 it.effect(
@@ -127,20 +130,11 @@ it.effect(
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-read-during-write-" });
       const ready = yield* Deferred.make<void>();
       const release = yield* Deferred.make<void>();
-      const writer = yield* withLibraryWriter(
-        Effect.gen(function* () {
-          const store = yield* LibraryStore;
-          const state = yield* store.load;
-          yield* store.save(state, state);
-          yield* Deferred.succeed(ready, undefined);
-          yield* Deferred.await(release);
-        }),
-      ).pipe(
-        Effect.provide(
-          libraryApplicationLayer.pipe(Layer.provideMerge(skitConfigurationLayer(home))),
-        ),
-        Effect.forkScoped,
-      );
+      const writer = yield* Effect.gen(function* () {
+        yield* holdHomeLock(home);
+        yield* Deferred.succeed(ready, undefined);
+        yield* Deferred.await(release);
+      }).pipe(Effect.scoped, Effect.forkScoped);
       yield* Deferred.await(ready);
       const results: CommandResult[] = [];
       const failures: CommandFailure[] = [];
@@ -161,10 +155,10 @@ it.effect(
       assert.deepStrictEqual(failures, []);
       assert.strictEqual(results.length, 1);
       assert.strictEqual(results[0]?.schema, "skit.list.v7");
-      assert.isTrue(yield* fs.exists(join(home, ".lock")));
+      assert.isFalse(yield* homeLockIsFree(home));
       yield* Deferred.succeed(release, undefined);
       yield* Fiber.join(writer);
-      assert.isFalse(yield* fs.exists(join(home, ".lock")));
+      assert.isTrue(yield* homeLockIsFree(home));
     }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),
 );
 
@@ -199,16 +193,15 @@ it.effect("Registry configuration commands do not open or create Library storage
     assert.deepStrictEqual(failures, []);
     assert.strictEqual(results.length, 3);
     assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), "invalid Library state");
-    assert.isFalse(yield* fs.exists(join(home, ".lock")));
+    assert.isTrue(yield* homeLockIsFree(home));
     assert.isFalse(yield* fs.exists(join(home, "audit.jsonl")));
     // Configuration writes retain the existing storage exclusion, without state snapshots.
-    yield* fs.writeFileString(join(home, ".lock"), `${process.pid}\n`);
+    yield* holdHomeLock(home);
     yield* run(["registry", "add", "contended", "https://other.example.test"]);
     assert.strictEqual(failures.length, 1);
     assert.strictEqual(failures[0]?.code, "CONFLICT");
     yield* run(["registry", "list"]);
     assert.strictEqual(failures.length, 1);
-    assert.isTrue(yield* fs.exists(join(home, ".lock")));
   }).pipe(Effect.scoped, Effect.provide(testPlatformLayer)),
 );
 
@@ -220,15 +213,22 @@ it.effect("application layers consume the supplied paths without re-reading conf
       Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
     );
     yield* Effect.gen(function* () {
-      const store = yield* LibraryStore;
+      const library = yield* Library.Service;
+      yield* library.apply({
+        _tag: "Apply",
+        plan: yield* library.plan(
+          { _tag: "RefreshInventory", roots: [] },
+          { base: yield* library.read },
+        ),
+      });
+      assert.isTrue(yield* fs.exists(join(paths.skitHome, "state.json")));
       const supplied = yield* SkitConfiguration;
-      assert.strictEqual(store.home, paths.skitHome);
       assert.strictEqual(supplied.userHome, paths.userHome);
       yield* addRegistryRemote("fixture", "https://registry.example.test", undefined);
       assert.isTrue(yield* fs.exists(paths.authPath));
       assert.isFalse(yield* fs.exists(join(root, "ignored")));
     }).pipe(
-      Effect.provide(sourceApplicationLayer),
+      Effect.provide(sourceLayer()),
       Effect.provideService(SkitConfiguration, paths),
       Effect.provide(
         ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: join(root, "ignored") })),
@@ -244,14 +244,19 @@ it.effect("separate application boundaries retain their own storage roots", () =
     const homes = [join(root, "first"), join(root, "second")];
     const resolved = yield* Effect.forEach(homes, (home) =>
       Effect.gen(function* () {
-        const store = yield* LibraryStore;
-        const paths = yield* SkitConfiguration;
-        assert.strictEqual(store.home, paths.skitHome);
-        return store.home;
+        const library = yield* Library.Service;
+        assert.strictEqual((yield* library.read)._tag, "Absent");
+        yield* library.apply({
+          _tag: "Apply",
+          plan: yield* library.plan(
+            { _tag: "RefreshInventory", roots: [] },
+            { base: yield* library.read },
+          ),
+        });
+        assert.isTrue(yield* fs.exists(join(home, "state.json")));
+        return home;
       }).pipe(
-        Effect.provide(
-          libraryApplicationLayer.pipe(Layer.provideMerge(skitConfigurationLayer(home))),
-        ),
+        Effect.provide(libraryLayer().pipe(Layer.provideMerge(skitConfigurationLayer(home)))),
       ),
     );
     assert.deepStrictEqual(resolved, homes);

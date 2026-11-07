@@ -1,16 +1,16 @@
 import { Effect, type FileSystem } from "effect";
 import type { ChildProcessSpawner } from "effect/process";
 import { join } from "node:path";
-import type { HarnessName } from "../contracts.js";
-import type { LibraryState } from "../library/library-state.js";
-import type { UsageHarness } from "../usage/contracts.js";
+import type { HarnessName, HarnessProfile } from "./contracts.js";
+import type { LibraryInventory } from "../library/library-state.js";
+import type { UsageHarness } from "../library/usage/contracts.js";
 import {
   claudeTranscriptGrammar,
   codexTranscriptGrammar,
   type TranscriptGrammar,
-} from "../usage/events.js";
+} from "../library/usage/events.js";
 import { harnessProfiles } from "./catalog.js";
-import type { HarnessProfile } from "./contracts.js";
+
 import {
   invocationMetadataAdapters,
   type InvocationMetadataAdapter,
@@ -21,7 +21,7 @@ import type { ListingBudget, ListingHarness } from "./skill-listing/contracts.js
 import type { ListingOptions } from "./skill-listing/discovery.js";
 
 /** Where a Harness keeps the local transcripts SKIT reads for Skill usage, and how to read them. */
-export interface HarnessTranscripts {
+interface HarnessTranscripts {
   /** The environment variable naming the Harness's home, and its default under the user's home. */
   readonly home: { readonly variable: string; readonly directory: string };
   /** Transcript directories under that home. */
@@ -30,8 +30,8 @@ export interface HarnessTranscripts {
 }
 
 /** Estimate how much of the Harness's skill listing the Library's Skills occupy. */
-export type HarnessListing = (
-  state: LibraryState,
+type HarnessListing = (
+  state: LibraryInventory,
   options: ListingOptions,
 ) => Effect.Effect<
   ListingBudget,

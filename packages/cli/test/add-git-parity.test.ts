@@ -16,7 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import { Schema } from "effect";
-import { LibraryState } from "@smolai/skit-core";
+import { LibraryState } from "@smolai/skit-core/library";
 import { outputContracts } from "../src/commands/output-contracts.js";
 import { isolatedRoots } from "./helpers/isolated-library.js";
 
@@ -190,7 +190,6 @@ test.runIf(realGit)(
       const state = Schema.decodeUnknownSync(LibraryStateDocument)(
         await readFile(join(roots.home, "state.json"), "utf8"),
       );
-      expect(state.schemaVersion).toBe(11);
       expect(state.collections.map((item) => item.collection_id)).toEqual([entry.collection_id]);
       expect(state.collection_versions).toHaveLength(1);
       expect(state.collection_versions[0].hash).toBe(entry.snapshot_digest);

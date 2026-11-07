@@ -1,15 +1,18 @@
 import { join, resolve } from "node:path";
 import { Effect, FileSystem, Schema } from "effect";
 import { it } from "@effect/vitest";
-import { makeCollectionId, makeSkillId, skitLayer } from "@smolai/skit-core";
+import { makeCollectionId, makeSkillId } from "@smolai/skit-core/universal/consumer";
+import { skitLayer } from "@smolai/skit-core/platform";
 import { describe, expect, test } from "vitest";
 import { commandContractArtifacts } from "../src/commands/artifacts.js";
 import { outputContracts } from "../src/commands/output-contracts.js";
-import { commandApplicationLayer } from "../src/application.js";
-import { result } from "../src/handlers/contracts.js";
-import { renderContract } from "../src/presentation/contract-presenters.js";
-import { defaultTerminalEnvironment, renderResultFrame } from "../src/presentation/output-frame.js";
-import { writeCommandContractArtifacts } from "../src/commands/contract-writer.js";
+import { cliLayer } from "../src/application.js";
+import { result } from "../src/commands/result.js";
+import { encodeResult } from "../src/commands/encode-result.js";
+import { enableOutputContracts } from "../src/library/enable.js";
+import { renderContract } from "../src/commands/output-presenters.js";
+import { defaultTerminalEnvironment, renderResultFrame } from "../src/commands/output-frame.js";
+import { writeCommandContractArtifacts } from "../src/platform/command-contracts.js";
 
 const contractsRoot = resolve(import.meta.dirname, "../contracts");
 
@@ -22,7 +25,7 @@ describe("generated command contracts", () => {
       for (const [name, contents] of Object.entries(expected))
         expect(yield* fs.readFileString(join(contractsRoot, name))).toBe(contents);
     }).pipe(
-      Effect.provide(commandApplicationLayer(false, "/tmp/skit-contract-generation-test")),
+      Effect.provide(cliLayer(false, "/tmp/skit-contract-generation-test")),
       Effect.provide(skitLayer),
     ),
   );
@@ -40,7 +43,7 @@ describe("generated command contracts", () => {
       const files = new Set(Object.keys(artifacts));
       for (const id of manifest.commands.flatMap((command) => command.outputSchemas))
         expect(files.has(`${id}.json`), `${id} must resolve to a generated contract`).toBe(true);
-    }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-contract-json-test"))),
+    }).pipe(Effect.provide(cliLayer(false, "/tmp/skit-contract-json-test"))),
   );
 
   it.effect("overwrites and prunes branch-local generated artifacts", () =>
@@ -64,17 +67,21 @@ describe("generated command contracts", () => {
     const collectionId = makeCollectionId();
     const skillId = makeSkillId();
     expect(() => Schema.decodeUnknownSync(outputContracts.updatePlan.schema)([])).not.toThrow();
-    expect(() =>
-      Schema.decodeUnknownSync(outputContracts.enablePlan.schema)({
-        subject_id: collectionId,
-        skills: ["review"],
-        harnesses: ["codex"],
-        scope: { kind: "global" },
-        action: "enable",
-        changed: true,
-        enabled: [{ skill: skillId }],
-      }),
-    ).not.toThrow();
+    const enabled = Schema.decodeUnknownSync(outputContracts.enablePlan.schema)({
+      subject_id: collectionId,
+      skills: ["review"],
+      harnesses: ["codex"],
+      scope: { kind: "global" },
+      action: "enable",
+      changed: true,
+      enabled: [{ skill: skillId }],
+    });
+    expect(encodeResult("enablePlan", enableOutputContracts.enablePlan, enabled)).toEqual(
+      result("enablePlan", enabled),
+    );
+    // The payload schema is shared, but another contract's envelope ID cannot label this result.
+    // @ts-expect-error a disable definition cannot encode an enable result
+    encodeResult("enablePlan", enableOutputContracts.disablePlan, enabled);
     expect(() =>
       Schema.decodeUnknownSync(outputContracts.registryRemote.schema)({
         name: "public",

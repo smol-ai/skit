@@ -1,14 +1,15 @@
 import { test, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem, Schema } from "effect";
-import { UsageReport, skitLayer } from "@smolai/skit-core";
+import { UsageReport } from "@smolai/skit-core/library/usage";
+import { skitLayer } from "@smolai/skit-core/platform";
 import { join } from "node:path";
 import { commandDescriptions } from "../src/commands/manifest.js";
 import { skitCommand } from "../src/commands/tree.js";
-import { commandApplicationLayer } from "../src/application.js";
-import { result } from "../src/handlers/contracts.js";
-import { defaultTerminalEnvironment, renderResultFrame } from "../src/presentation/output-frame.js";
-import { renderUsage } from "../src/presentation/usage.js";
+import { cliLayer } from "../src/application.js";
+import { result } from "../src/commands/result.js";
+import { defaultTerminalEnvironment, renderResultFrame } from "../src/commands/output-frame.js";
+import { renderUsage } from "../src/library/usage/present.js";
 import { emptyUsageStory, usageStory } from "../src/storybook/usage-stories.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
@@ -122,7 +123,7 @@ it.effect("exposes the read-only command and output schema", () =>
       outputSchemas: expect.arrayContaining(["skit.usage.v4"]),
       interactive: false,
     });
-  }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-usage-contract"))),
+  }).pipe(Effect.provide(cliLayer(false, "/tmp/skit-usage-contract"))),
 );
 
 it.effect("runs the real command against isolated transcripts without creating Library state", () =>

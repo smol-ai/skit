@@ -1,4 +1,4 @@
-import type { BuildInfo } from "@smolai/skit-core";
+import type { BuildInfo } from "@smolai/skit-core/shared";
 
 /** Entry-point policy: passive network access is only for interactive release runs. */
 export function passiveCheckEnabled(

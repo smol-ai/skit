@@ -2,13 +2,13 @@ import { basename, join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import { skitLayer } from "@smolai/skit-core";
+import { skitLayer } from "@smolai/skit-core/platform";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
-import { renderContract } from "../src/presentation/contract-presenters.js";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
-import { prepareRecoveryMoves } from "../src/library-application/recovery-moves.js";
-import { deterministicTreeHash, scratch } from "./helpers/library-home.js";
+import { renderContract } from "../src/commands/output-presenters.js";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
+import { saveRecoveryFiles } from "./helpers/recovery-files.js";
+import { scratch } from "./helpers/library-home.js";
 
 const invoke = Effect.fn("Test.recoveryCommand")(function* (argv: readonly string[]) {
   const interaction = yield* makeScriptedInteraction([]);
@@ -27,10 +27,7 @@ it.effect("a client follows returned actions through the real grammar to restore
     const source = join(root, "installed");
     yield* fs.makeDirectory(source);
     yield* fs.writeFileString(join(source, "SKILL.md"), "preserve me");
-    const plan = yield* prepareRecoveryMoves(home, [
-      { name: "review", path: source, currentHash: yield* deterministicTreeHash(source) },
-    ]);
-    yield* plan.apply();
+    const plan = yield* saveRecoveryFiles(home, [source]);
     let response = yield* invoke(["skit", "library", "recovery", "list", "--json", "--home", home]);
     if (response.contract !== "recoveryList")
       return yield* Effect.die(new Error("Expected a recovery list"));
@@ -59,7 +56,7 @@ it.effect("a client follows returned actions through the real grammar to restore
     expect(followed).toEqual(["inspect", "preview-restore", "apply-restore"]);
     expect(response.contract === "recovery" && response.data.phase).toBe("restored");
     expect(yield* fs.readFileString(join(source, "SKILL.md"))).toBe("preserve me");
-    expect(yield* fs.exists(join(home, "state.json"))).toBe(false);
+    expect(yield* fs.exists(join(home, "state.json"))).toBe(true);
   }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -73,10 +70,7 @@ it.effect(
       const source = join(root, "installed");
       yield* fs.makeDirectory(source);
       yield* fs.writeFileString(join(source, "SKILL.md"), "old bytes");
-      const plan = yield* prepareRecoveryMoves(home, [
-        { name: "review", path: source, currentHash: yield* deterministicTreeHash(source) },
-      ]);
-      yield* plan.apply();
+      const plan = yield* saveRecoveryFiles(home, [source]);
       const preview = yield* invoke([
         "skit",
         "library",

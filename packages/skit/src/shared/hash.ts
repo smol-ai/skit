@@ -1,6 +1,8 @@
-import { Effect } from "effect";
+import { Schema, Effect } from "effect";
 import { Digest } from "effect/crypto";
-import type { Hash } from "../vocabulary.js";
+// Domain vocabulary shared by the Library store, the wire contracts, and Harness code.
+export const Hash = Schema.String.check(Schema.isPattern(/^sha256:[a-f0-9]{64}$/u));
+export type Hash = typeof Hash.Type;
 
 /**
  * Length-framed digest input: each part is `<byte length>:<bytes>\0`, so `["ab", "c"]` and
@@ -27,3 +29,6 @@ export const sha256Hash = Effect.fn("Hash.sha256")(function* (bytes: Uint8Array)
   const hex = yield* (yield* Digest.Digest).digestHex(Digest.sha256, bytes);
   return `sha256:${hex}` as const satisfies Hash;
 });
+
+/** A hash's hex digits without the `sha256:` prefix, as stored objects are named. */
+export const hashHex = (hash: Hash) => hash.slice("sha256:".length);

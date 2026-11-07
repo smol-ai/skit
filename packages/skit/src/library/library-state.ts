@@ -1,140 +1,24 @@
 import { createHash } from "node:crypto";
 import { Effect, Schema, Struct } from "effect";
-import { isAbsolute, resolve } from "node:path";
-import { InstalledSkillId, SkillId, SkillVersionId } from "./entity-ids.js";
+import { resolve } from "node:path";
 import {
-  Import,
-  Collection,
-  Enabled,
   currentLibraryManifest,
   LibraryManifest,
-  CollectionVersion,
-  Skill,
   librarySnapshotDigests,
 } from "./library-contracts.js";
-import { LibraryDeviceStateFields } from "./store/state-schema.js";
-import { Hash, InstallDestination, InvocationPolicy } from "../vocabulary.js";
+import {
+  LibraryStateFields,
+  OperationStatus,
+  CURRENT_LIBRARY_STATE_VERSION,
+} from "./store/state-schema.js";
 import { canonicalJson } from "../shared/json.js";
 
-export const AbsoluteDevicePath = Schema.String.check(
-  Schema.makeFilter(isAbsolute, { message: "Expected an absolute device path" }),
-);
-export type AbsoluteDevicePath = typeof AbsoluteDevicePath.Type;
-
-/** How agents may invoke each enabled skill, when the user overrode what its author declared. */
-export const InvocationPolicies = Schema.Record(SkillId, InvocationPolicy);
-export type InvocationPolicies = typeof InvocationPolicies.Type;
-
-/** What is enabled in one repository folder. It stays on this device; sync never sends it. */
-export const Repository = Schema.Struct({
-  root: AbsoluteDevicePath,
-  enabled: Schema.Array(Enabled),
-  invocation_policies: Schema.optionalKey(InvocationPolicies),
-});
-export interface Repository extends Schema.Schema.Type<typeof Repository> {}
-
-/** What every installed copy records, whatever its status. */
-const InstalledSkillFields = {
-  installed_skill_id: InstalledSkillId,
-  skill_id: SkillId,
-  skill_version_id: SkillVersionId,
-  destination: InstallDestination,
-  root: AbsoluteDevicePath,
-  path: AbsoluteDevicePath,
-  /** The hash of the folder SKIT wrote. */
-  expected_hash: Hash,
-  installed_at: Schema.String,
-} as const;
-
-/** On disk exactly as SKIT wrote it. */
-export const InstalledSkillInstalled = Schema.Struct({
-  ...InstalledSkillFields,
-  status: Schema.Literal("installed"),
-});
-export interface InstalledSkillInstalled extends Schema.Schema.Type<
-  typeof InstalledSkillInstalled
-> {}
-
-/** Recorded, but not on disk as SKIT wrote it: not written yet, or moved to recovery. */
-export const InstalledSkillPending = Schema.Struct({
-  ...InstalledSkillFields,
-  status: Schema.Literal("pending"),
-});
-export interface InstalledSkillPending extends Schema.Schema.Type<typeof InstalledSkillPending> {}
-
-/** The folder holds something other than what SKIT wrote: the user's edit, or a folder SKIT does not own. */
-export const InstalledSkillConflicted = Schema.Struct({
-  ...InstalledSkillFields,
-  status: Schema.Literal("conflicted"),
-  current_hash: Hash,
-});
-export interface InstalledSkillConflicted extends Schema.Schema.Type<
-  typeof InstalledSkillConflicted
-> {}
-
-/** The user deleted the folder; SKIT does not put it back unless asked to restore it. */
-export const InstalledSkillSuppressed = Schema.Struct({
-  ...InstalledSkillFields,
-  status: Schema.Literal("suppressed"),
-  suppression_reason: Schema.Literal("native_delete"),
-  suppressed_at: Schema.optionalKey(Schema.String),
-});
-export interface InstalledSkillSuppressed extends Schema.Schema.Type<
-  typeof InstalledSkillSuppressed
-> {}
-
-export const InstalledSkill = Schema.Union([
-  InstalledSkillInstalled,
-  InstalledSkillPending,
-  InstalledSkillConflicted,
-  InstalledSkillSuppressed,
-]);
-export type InstalledSkill =
-  | InstalledSkillInstalled
-  | InstalledSkillPending
-  | InstalledSkillConflicted
-  | InstalledSkillSuppressed;
-
-/**
- * The portable Library this state was last reconciled with. It lives in the same document as the
- * state it describes so that no write, crash, or restore can pair state with a newer base.
- */
-export const SyncAncestry = Schema.Struct({
-  origin: Schema.NonEmptyString,
-  library_id: Schema.NonEmptyString,
-  revision_id: Schema.NonEmptyString,
-  base_manifest: LibraryManifest,
-});
-export interface SyncAncestry extends Schema.Schema.Type<typeof SyncAncestry> {}
-
-/** What the account enables travels with sync; a device may instead choose what it installs. */
-export const DeviceSkillSelection = Schema.Union([
-  Schema.Struct({ mode: Schema.Literal("follow-account") }),
-  Schema.Struct({
-    mode: Schema.Literal("choose"),
-    enabled: Schema.Array(Enabled),
-    invocation_policies: Schema.optionalKey(InvocationPolicies),
-  }),
-]);
-export type DeviceSkillSelection = typeof DeviceSkillSelection.Type;
-
-export const CURRENT_LIBRARY_STATE_VERSION = 11 as const;
+export { CURRENT_LIBRARY_STATE_VERSION } from "./store/state-schema.js";
 
 export const LibraryState = Schema.Struct({
-  ...LibraryDeviceStateFields,
-  schemaVersion: Schema.Literal(CURRENT_LIBRARY_STATE_VERSION),
-  sync_ancestry: Schema.optionalKey(SyncAncestry),
-  device_skill_selection: Schema.optionalKey(DeviceSkillSelection),
-  pending_device_selection_origin: Schema.optionalKey(Schema.NonEmptyString),
-  collections: Schema.mutable(Schema.Array(Collection)),
-  skills: Schema.mutable(Schema.Array(Skill)),
-  collection_versions: Schema.mutable(Schema.Array(CollectionVersion)),
-  imports: Schema.mutable(Schema.Array(Import)),
-  /** What is enabled for every project: the account's selection, as this device last saw it. */
-  enabled: Schema.mutable(Schema.Array(Enabled)),
-  invocation_policies: Schema.optionalKey(InvocationPolicies),
-  repositories: Schema.mutable(Schema.Array(Repository)),
-  installed_skills: Schema.mutable(Schema.Array(InstalledSkill)),
+  ...LibraryStateFields,
+  /** Operation records are local; a Sync publication never embeds them. */
+  operations: Schema.Array(Schema.toEncoded(OperationStatus)),
 }).check(
   Schema.makeFilter(
     (state) => {
@@ -167,8 +51,6 @@ export const LibraryState = Schema.Struct({
 );
 export interface LibraryState extends Schema.Schema.Type<typeof LibraryState> {}
 
-export { globalEnabled, enabledAt, setEnabledAt, pruneEmptyEnabled } from "./enabled.js";
-
 export const currentLibraryState = (fields: Omit<LibraryState, "schemaVersion">): LibraryState => ({
   ...fields,
   schemaVersion: CURRENT_LIBRARY_STATE_VERSION,
@@ -185,6 +67,7 @@ export const emptyLibraryState = (): LibraryState =>
     repositories: [],
     installed_skills: [],
     unmanaged: [],
+    operations: [],
   });
 
 /** Content identity of a state; a save is accepted only onto the revision it was planned from. */
@@ -192,21 +75,13 @@ export const libraryStateRevision = (state: LibraryState): string =>
   createHash("sha256").update(canonicalJson(state)).digest("hex");
 
 export const LibraryInventory = LibraryState.mapFields(
-  Struct.omit([
-    "schemaVersion",
-    "assessmentAcceptances",
-    "sync_ancestry",
-    "device_skill_selection",
-    "pending_device_selection_origin",
-    "collections",
-    "collection_versions",
-    "imports",
-    "enabled",
-    "invocation_policies",
-    "repositories",
-  ]),
+  Struct.pick(["unmanaged", "ownershipIssues", "scanIssues", "skills", "installed_skills"]),
 );
 export type LibraryInventory = typeof LibraryInventory.Type;
+
+/** Project the public inventory without carrying private Library operations or device choices. */
+export const libraryInventory = (state: LibraryState): LibraryInventory =>
+  Struct.pick(state, Struct.keys(LibraryInventory.fields));
 
 // State schemas validate JSON without transformations. Refining the original value keeps
 // unknown fields at every depth now that Effect no longer offers `preserve` parsing, so loading

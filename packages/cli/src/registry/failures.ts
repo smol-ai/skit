@@ -1,25 +1,12 @@
 // Named failures for talking to a Registry: credentials, Registry selection, author
-// destinations, and Draft sync.
+// destinations, and SKIT sync.
 //
 // These were seventeen SkitError sites across four codes. The conditions are genuinely distinct —
 // an expired race against the server is not a malformed destination — and callers that want to
 // retry, re-authenticate or re-resolve need to tell them apart.
 
-import { FailureTypeId, type SkitFailure } from "@smolai/skit-core";
+import { FailureTypeId, type SkitFailure } from "@smolai/skit-core/shared";
 import { Data } from "effect";
-
-export class NotBoundToRegistry
-  extends Data.TaggedError("NotBoundToRegistry")<{}>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "INVALID_ARGUMENT" as const;
-  readonly remediation =
-    "Run `skit author sync --to <namespace/skit>` to give this SKIT a remote home.";
-  get message(): string {
-    return "This SKIT is not bound to a Registry";
-  }
-}
 
 /** The Registry could not be reached at all; nothing it would have said is known. */
 export class RegistryUnreachable
@@ -38,22 +25,6 @@ export class RegistryUnreachable
 }
 
 // -- Credentials --------------------------------------------------------------------------------
-
-export class InsecureOrigin
-  extends Data.TaggedError("InsecureOrigin")<{
-    purpose: "authentication" | "author remote";
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "INVALID_ARGUMENT" as const;
-  readonly remediation = "Use an https:// origin, or http://localhost for local development.";
-  get message(): string {
-    return this.purpose === "authentication"
-      ? "Authentication requires HTTPS outside localhost"
-      : "Author remotes require HTTPS outside localhost";
-  }
-}
 
 export class RegistryOriginInvalid
   extends Data.TaggedError("RegistryOriginInvalid")<{
@@ -211,114 +182,10 @@ export class RegistrySelectionRequiresRegistrySource
 
 // -- Author destinations ------------------------------------------------------------------------
 
-export class AuthorDestinationInvalid
-  extends Data.TaggedError("AuthorDestinationInvalid")<{
-    form: "bare" | "https";
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "INVALID_ARGUMENT" as const;
-  readonly remediation =
-    "Pass the destination as namespace/skit or https://<registry>/namespace/skit.";
-  get message(): string {
-    return this.form === "bare"
-      ? "Author destination must be namespace/skit"
-      : "HTTPS SKIT destination must end in /namespace/skit";
-  }
-}
+// -- SKIT synchronization ----------------------------------------------------------------------
 
-export class AuthorDestinationMalformed
-  extends Data.TaggedError("AuthorDestinationMalformed")<{
-    message: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "OPERATION_FAILED" as const;
-  readonly remediation =
-    "Pass the destination as namespace/skit or https://<registry>/namespace/skit.";
-}
-
-export class AuthorRemoteMetadataInvalid
-  extends Data.TaggedError("AuthorRemoteMetadataInvalid")<{
-    path: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  get remediation(): string {
-    return `Correct or remove the author remote metadata at ${this.path}, then retry.`;
-  }
-  get message(): string {
-    return `Author remote metadata at ${this.path} is invalid`;
-  }
-}
-
-export class AuthorRemoteAlreadyExists
-  extends Data.TaggedError("AuthorRemoteAlreadyExists")<{
-    locator: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly remediation = "Sync without --to to use the existing remote home.";
-  get message(): string {
-    return `Remote home already exists at ${this.locator}`;
-  }
-}
-
-export class NoAuthorRemote extends Data.TaggedError("NoAuthorRemote")<{}> implements SkitFailure {
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "INVALID_ARGUMENT" as const;
-  readonly remediation = "Run `skit author sync --to <namespace/skit>` to configure one.";
-  get message(): string {
-    return "No author remote is configured";
-  }
-}
-
-// -- Draft synchronization ----------------------------------------------------------------------
-
-export class VisibilityNotAccepted
-  extends Data.TaggedError("VisibilityNotAccepted")<{
-    reason: "already-synced" | "required";
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "INVALID_ARGUMENT" as const;
-  get remediation(): string {
-    return this.reason === "already-synced"
-      ? "Sync again without --visibility."
-      : "Pass --visibility private, unlisted or public.";
-  }
-  get message(): string {
-    return this.reason === "already-synced"
-      ? "--visibility is accepted only on first author sync"
-      : "First author sync requires --visibility";
-  }
-}
-
-export class SyncBlockedByValidation
-  extends Data.TaggedError("SyncBlockedByValidation")<{
-    stage: "local" | "merged";
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "VALIDATION_FAILED" as const;
-  readonly remediation = "Correct the reported validation diagnostics, then sync again.";
-  get message(): string {
-    return this.stage === "local"
-      ? "Sync is blocked until the local SKIT validates"
-      : "The merged SKIT does not validate";
-  }
-}
-
-export class RemoteDraftUnavailable
-  extends Data.TaggedError("RemoteDraftUnavailable")<{
+export class RemoteSkitUnavailable
+  extends Data.TaggedError("RemoteSkitUnavailable")<{
     identity: string;
   }>
   implements SkitFailure
@@ -326,36 +193,20 @@ export class RemoteDraftUnavailable
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "NOT_FOUND" as const;
   readonly remediation =
-    "Check that the Draft still exists and that the active credential can read it, then retry.";
+    "Check that the SKIT still exists and that the active credential can read it, then retry.";
   get message(): string {
-    return `Remote Draft ${this.identity} is unavailable`;
-  }
-}
-
-export class RemoteDraftIdentityMismatch
-  extends Data.TaggedError("RemoteDraftIdentityMismatch")<{}>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly remediation = "Check the author remote's Registry and destination, then retry.";
-  get message(): string {
-    return "Remote Draft identity does not match its Registry route";
+    return `Remote SKIT ${this.identity} is unavailable`;
   }
 }
 
 /** Someone edited the working tree while a sync was in flight. */
-export class LocalFilesChangedDuringSync
-  extends Data.TaggedError("LocalFilesChangedDuringSync")<{}>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly remediation = "Let local edits finish, then sync again.";
-  get message(): string {
-    return "Local files changed while sync was running";
-  }
-}
+
+/** Incoming bytes cannot replace a local path that was excluded from the captured inventory. */
+
+/** A canonical transport key cannot bless a distinct native filesystem entry. */
+/** Two local names normalize to the path sync would write, so receiving it would pick one. */
+
+/** A local path is spelled other than NFC, and this filesystem cannot reach it by its NFC name. */
 
 /** The Library moved underneath a synchronization that had already planned against it. */
 export class LibraryChangedOnServer
@@ -527,62 +378,25 @@ export class ScopesInvalid
 
 // -- Publication ------------------------------------------------------------------------------------
 
-export class NoRemoteHome extends Data.TaggedError("NoRemoteHome")<{}> implements SkitFailure {
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "INVALID_ARGUMENT" as const;
-  readonly remediation = "Run `skit author sync --to <namespace/skit>` first.";
-  get message(): string {
-    return "This SKIT has no remote home; run `skit author sync --to ...` first";
-  }
-}
+export { PublicationBlocked } from "@smolai/skit-core/author";
 
-/** The configured Registry is not the one this SKIT is bound to. */
-export class RegistryMismatch
-  extends Data.TaggedError("RegistryMismatch")<{
-    active: string;
-    expected: string;
-    subject: "remote home" | "author destination";
-  }>
+export class AuthorSyncRequired
+  extends Data.TaggedError("AuthorSyncRequired")<{ root: string }>
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
-  get remediation(): string {
-    return `Sign in to ${this.expected} with \`skit auth login ${this.expected}\`, then retry.`;
+  /** The workspace root as the user typed it, quoted only when the shell would need it. */
+  private get commandPath(): string {
+    return /^[A-Za-z0-9_./-]+$/.test(this.root)
+      ? this.root
+      : `'${this.root.replaceAll("'", `'\\''`)}'`;
   }
-  get message(): string {
-    return `Active Registry ${this.active} does not match ${this.subject} ${this.expected}`;
-  }
-}
-
-export class PublicationBlocked
-  extends Data.TaggedError("PublicationBlocked")<{
-    reason: "content" | "assessment";
-    detail: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "VALIDATION_FAILED" as const;
-  readonly remediation = "Resolve the reported findings, sync the Draft, then publish again.";
-  get message(): string {
-    return this.reason === "content"
-      ? `This SKIT cannot be published as it stands:\n${this.detail}`
-      : `Publication is blocked by the current Draft assessment${this.detail}`;
-  }
-}
-
-export class DraftOutOfSync
-  extends Data.TaggedError("DraftOutOfSync")<{ commandPath: string }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
   get remediation(): string {
     return `Run \`skit author sync ${this.commandPath} --apply\`, then publish again.`;
   }
   get message(): string {
-    return `Local files do not match the current Draft; run \`skit author sync ${this.commandPath} --apply\` before publishing`;
+    return `Local files do not match the current Registry revision; run \`skit author sync ${this.commandPath} --apply\` before publishing`;
   }
 }
 
@@ -614,52 +428,6 @@ export class DeleteRequiresPrivate
   }
 }
 
-// -- Draft destinations ------------------------------------------------------------------------------
+// -- SKIT destinations ------------------------------------------------------------------------------
 
-export class DestinationFormInvalid
-  extends Data.TaggedError("DestinationFormInvalid")<{
-    form: "canonical" | "relative-without-registry";
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "INVALID_ARGUMENT" as const;
-  get remediation(): string {
-    return this.form === "canonical"
-      ? "Pass the destination as skit://host/namespace/skit."
-      : "Run `skit auth login`, or pass a full destination.";
-  }
-  get message(): string {
-    return this.form === "canonical"
-      ? "Canonical SKIT destination must be skit://host/namespace/skit"
-      : "A relative author destination requires an active Registry; run `skit auth login`";
-  }
-}
-
-export class DraftSlugMismatch
-  extends Data.TaggedError("DraftSlugMismatch")<{
-    context: string;
-    remote: string;
-    local: string;
-  }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly remediation = "Use a destination whose slug matches the local SKIT, then retry.";
-  get message(): string {
-    return `${this.context} SKIT slug ${this.remote} does not match local slug ${this.local}`;
-  }
-}
-
-export class DestinationExistsWithoutHistory
-  extends Data.TaggedError("DestinationExistsWithoutHistory")<{ identity: string }>
-  implements SkitFailure
-{
-  readonly [FailureTypeId] = FailureTypeId;
-  readonly code = "CONFLICT" as const;
-  readonly remediation = "Choose a new destination, or sync from a SKIT that shares its history.";
-  get message(): string {
-    return `Destination ${this.identity} already exists without common history`;
-  }
-}
+export { DestinationExistsWithoutHistory } from "@smolai/skit-core/author";

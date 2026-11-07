@@ -5,7 +5,8 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Exit, FileSystem } from "effect";
 import { join } from "node:path";
-import { initSkit, skitLayer } from "../src/index.js";
+import { initSkit } from "../src/author/scaffold.js";
+import { skitLayer } from "../src/platform/layer.js";
 
 const SKILL = "---\nname: probe\ndescription: A probe skill\n---\n\nBody.\n";
 

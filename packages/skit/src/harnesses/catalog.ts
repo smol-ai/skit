@@ -1,11 +1,12 @@
 import { join, resolve } from "node:path";
-import type { HarnessName } from "../contracts.js";
 import {
+  type HarnessName,
   defineHarnessProfile,
   type HarnessProfile,
   type SkillsDirectory,
   type SkillsDirectoryContext,
 } from "./contracts.js";
+
 import {
   CODEX_SKILL_METADATA_CONTRACTS,
   CODEX_SKILL_METADATA_SOURCES,

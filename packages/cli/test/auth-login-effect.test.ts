@@ -15,8 +15,8 @@ import { expect } from "vitest";
 import { loginEffect } from "../src/registry/auth.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
-import { Prompter } from "../src/presentation/prompter.js";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+import { Prompter } from "../src/terminal/prompter.js";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 
 /** A temporary home on the platform FileSystem, so the suite never reaches node:fs to make one. */
 const scratch = (prefix: string) =>

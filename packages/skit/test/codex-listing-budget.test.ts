@@ -1,16 +1,16 @@
+import { skitLayer } from "../src/platform/layer.js";
 import { it } from "@effect/vitest";
 import { ConfigProvider, Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import {
-  LibraryStore,
   makeCollectionId,
   makeInstalledSkillId,
   makeSkillId,
   makeSkillVersionId,
-  Hash,
-  AbsoluteDevicePath,
-} from "../src/index.js";
+} from "../src/library/entity-ids.js";
+import { Hash } from "../src/shared/hash.js";
+import { AbsoluteDevicePath } from "../src/library/device-state.js";
 import {
   estimateCodexListing,
   type CodexListingSkill,
@@ -21,7 +21,8 @@ import {
 } from "../src/harnesses/skill-listing/codex.js";
 import { ListingBudget } from "../src/harnesses/skill-listing/contracts.js";
 import { Schema } from "effect";
-import { NativeLibraryFixture, nativeLibraryLayer } from "./helpers/listing-fixture.js";
+import { loadLibrary } from "../src/library/store/library-store.js";
+import { nativeLibraryFixture } from "./helpers/listing-fixture.js";
 
 const skill = (name: string, description = "Review code."): CodexListingSkill => ({
   name,
@@ -132,7 +133,7 @@ it.effect(
   "joins native discovery to canonical installed skills, excludes disabled and explicit-only skills, and refreshes policies",
   () =>
     Effect.gen(function* () {
-      const f = yield* NativeLibraryFixture;
+      const f = yield* nativeLibraryFixture;
       const fs = yield* FileSystem.FileSystem;
       const doc = join(f.root, "projection", "SKILL.md");
       const alias = join(f.root, "alias", "SKILL.md");
@@ -167,8 +168,7 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
         join(f.home, ".codex", "models_cache.json"),
         JSON.stringify({ models: [{ slug: "test-model", context_window: 100_000 }] }),
       );
-      const store = yield* LibraryStore;
-      const state = yield* store.load;
+      const state = yield* loadLibrary(f.home);
       const skillId = makeSkillId();
       const collectionId = makeCollectionId();
       const versionId = makeSkillVersionId();
@@ -308,15 +308,15 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
       expect(skipped._tag).toBe("Unavailable");
     }).pipe(
       Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
-      Effect.provide(nativeLibraryLayer),
+      Effect.scoped,
+      Effect.provide(skitLayer),
     ),
 );
 
 it.effect("uses the model default unless configuration overrides the context window", () =>
   Effect.gen(function* () {
-    const f = yield* NativeLibraryFixture;
-    const store = yield* LibraryStore;
-    const state = yield* store.load;
+    const f = yield* nativeLibraryFixture;
+    const state = yield* loadLibrary(f.home);
     // Codex lists within 2% of the context window: the model default is 500,000.
     for (const [configured, limit] of [
       [null, 10_000],
@@ -335,13 +335,14 @@ it.effect("uses the model default unless configuration overrides the context win
     }
   }).pipe(
     Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({}))),
-    Effect.provide(nativeLibraryLayer),
+    Effect.scoped,
+    Effect.provide(skitLayer),
   ),
 );
 
 it.effect("reads the invocation policy from agents/openai.yaml only", () =>
   Effect.gen(function* () {
-    const f = yield* NativeLibraryFixture;
+    const f = yield* nativeLibraryFixture;
     const fs = yield* FileSystem.FileSystem;
     const doc = join(f.root, "policy", "SKILL.md");
     yield* fs.makeDirectory(join(f.root, "policy", "agents"), { recursive: true });
@@ -356,5 +357,5 @@ it.effect("reads the invocation policy from agents/openai.yaml only", () =>
       "policy:\n  allow_implicit_invocation: false\n",
     );
     expect(yield* implicitInvocationAllowed(doc)).toBe(false);
-  }).pipe(Effect.provide(nativeLibraryLayer)),
+  }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );

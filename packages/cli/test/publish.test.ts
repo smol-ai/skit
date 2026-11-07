@@ -3,10 +3,12 @@ import { join } from "node:path";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import { Cause, Effect, Exit, FileSystem, Schema } from "effect";
-import { skitLayer } from "@smolai/skit-core";
-import { publish } from "../src/workflows/author/publish.js";
+import { skitLayer } from "@smolai/skit-core/platform";
+import { publish } from "../src/author/publish.js";
+import { authorWorkspaceLayer } from "@smolai/skit-core/author";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
+import { registryCredentialLayer } from "./helpers/registry-credential.js";
 import { copySkitFixtureEffect, scratch } from "./helpers/library-home.js";
 
 /**
@@ -19,12 +21,14 @@ const runPublish = (
   root: string,
   version: string,
   revision: string | undefined,
-  options: { transport: TestHttpHandler; baseUrl?: string; token?: string },
+  options: { transport: TestHttpHandler; credentialOrigin?: string },
 ) =>
-  publish(root, version, revision, {
-    baseUrl: options.baseUrl,
-    token: options.token,
-  }).pipe(Effect.provide(registryHttpLayer(testHttpClientLayer(options.transport))));
+  publish(root, version, revision).pipe(
+    Effect.provide(registryHttpLayer(testHttpClientLayer(options.transport))),
+    Effect.provide(authorWorkspaceLayer),
+    // The environment's token is for this Registry only.
+    Effect.provide(registryCredentialLayer(options.credentialOrigin ?? "https://registry.test")),
+  );
 
 /** The error a publication failed or died with, or `undefined` when it succeeded. */
 const failure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -33,6 +37,8 @@ const failure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   );
 
 const fs = FileSystem.FileSystem;
+/** The SKIT revision a publication names: a revision id, as the Registry issues them. */
+const revision = `sha256:${"1".repeat(64)}`;
 const writeText = (path: string, text: string) =>
   Effect.flatMap(fs, (fs) => fs.writeFileString(path, text));
 const readText = (path: string) => Effect.flatMap(fs, (fs) => fs.readFileString(path));
@@ -83,7 +89,7 @@ it.effect("publish sends a validated archive to the Registry", () =>
             release: {
               release_id: "rel_1",
               version: "1.2.3",
-              revision_id: "revision-1",
+              revision_id: revision,
               archive_digest: `sha256:${"a".repeat(64)}`,
               download_path: "/api/skits/test/tools/releases/1.2.3/download",
             },
@@ -91,17 +97,16 @@ it.effect("publish sends a validated archive to the Registry", () =>
           { status: 201 },
         );
       });
-    const result = yield* runPublish(root, "1.2.3", "revision-1", {
+    const result = yield* runPublish(root, "1.2.3", revision, {
       transport: fetcher,
-      baseUrl: "https://registry.test",
-      token: "test-token",
+      credentialOrigin: "https://registry.test",
     });
     expect(result.release.version).toBe("1.2.3");
-    expect(result.release.revision_id).toBe("revision-1");
+    expect(result.release.revision_id).toBe(revision);
     expect(received.url).toBe("https://registry.test/registry/test/tools/publish");
     expect(received.authorization).toBe("Bearer test-token");
     expect(received.body?.version).toBe("1.2.3");
-    expect(received.body?.revision_id).toBe("revision-1");
+    expect(received.body?.revision_id).toBe(revision);
     const archive = join(root, "uploaded.zip");
     yield* writeBytes(archive, Buffer.from(String(received.body?.archive_base64), "base64"));
     expect(yield* unzipList(archive)).toEqual([
@@ -158,8 +163,8 @@ it.effect("publish uses skit.remote.json without including it in the Release", (
     );
     let publishUrl = "";
     let archiveBase64 = "";
-    yield* runPublish(root, "1.2.3", "revision-1", {
-      baseUrl: "https://registry.example",
+    yield* runPublish(root, "1.2.3", revision, {
+      credentialOrigin: "https://registry.example",
       transport: (input, url) =>
         Effect.sync(() => {
           if (input.url.includes(".well-known")) return new Response(null, { status: 404 });
@@ -176,7 +181,7 @@ it.effect("publish uses skit.remote.json without including it in the Release", (
               release: {
                 release_id: "rel_json",
                 version: "1.2.3",
-                revision_id: "revision-1",
+                revision_id: revision,
                 archive_digest: `sha256:${"a".repeat(64)}`,
                 download_path: "/api/skits/test/tools/releases/1.2.3/download",
               },
@@ -194,15 +199,14 @@ it.effect("publish uses skit.remote.json without including it in the Release", (
   }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect("publish lets the Registry select its current Draft when --revision is omitted", () =>
+it.effect("publish lets the Registry select its current SKIT when --revision is omitted", () =>
   Effect.gen(function* () {
     const root = yield* scratch("skit-current-publish-test-");
     yield* writeRemote(root);
     yield* copySkitFixtureEffect("authored", root);
     let publishedRevision: unknown;
     yield* runPublish(root, "1.2.3", undefined, {
-      baseUrl: "https://registry.test",
-      token: "test-token",
+      credentialOrigin: "https://registry.test",
       transport: (input, url) =>
         Effect.sync(() => {
           if (url.toString().includes(".well-known")) return new Response(null, { status: 404 });
@@ -229,7 +233,7 @@ it.effect("publish lets the Registry select its current Draft when --revision is
   }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect("publish rejects a Registry authority mismatch before making a request", () =>
+it.effect("publish never sends another Registry's token to the remote home", () =>
   Effect.gen(function* () {
     const root = yield* scratch("skit-binding-publish-test-");
     yield* writeRemote(root, "https://registry.example");
@@ -243,8 +247,8 @@ it.effect("publish rejects a Registry authority mismatch before making a request
     let requests = 0;
     expect(
       yield* failure(
-        runPublish(root, "1.0.0", "revision-1", {
-          baseUrl: "https://other.example",
+        runPublish(root, "1.0.0", revision, {
+          credentialOrigin: "https://other.example",
           transport: () =>
             Effect.sync(() => {
               requests++;
@@ -252,7 +256,7 @@ it.effect("publish rejects a Registry authority mismatch before making a request
             }),
         }),
       ),
-    ).toMatchObject({ code: "CONFLICT" });
+    ).toMatchObject({ _tag: "AuthenticationRequired", origin: "https://registry.example" });
     expect(requests).toBe(0);
   }).pipe(Effect.provide(skitLayer)),
 );
@@ -264,7 +268,7 @@ it.effect("publish validates before making a request", () =>
     yield* writeText(join(root, "README.md"), "not a SKIT\n");
     expect(
       yield* failure(
-        runPublish(root, "1.0.0", "revision-1", {
+        runPublish(root, "1.0.0", revision, {
           transport: () =>
             Effect.sync(() => {
               requests++;
@@ -290,9 +294,8 @@ it.effect("publish rejects unbaked invocation policy before any archive exists",
 
     expect(
       yield* failure(
-        runPublish(root, "1.2.3", "revision-1", {
-          baseUrl: "https://registry.test",
-          token: "test-token",
+        runPublish(root, "1.2.3", revision, {
+          credentialOrigin: "https://registry.test",
           transport: () =>
             Effect.sync(() => {
               requests++;
@@ -316,8 +319,8 @@ it.effect("publish reports non-success responses without accepting their body", 
     yield* copySkitFixtureEffect("authored", root);
     expect(
       yield* failure(
-        runPublish(root, "1.0.0", "revision-1", {
-          baseUrl: "https://registry.test",
+        runPublish(root, "1.0.0", revision, {
+          credentialOrigin: "https://registry.test",
           transport: () =>
             Effect.succeed(Response.json({ error: "insufficient_scope" }, { status: 403 })),
         }),
@@ -326,8 +329,8 @@ it.effect("publish reports non-success responses without accepting their body", 
 
     expect(
       yield* failure(
-        runPublish(root, "1.0.0", "revision-1", {
-          baseUrl: "https://registry.test",
+        runPublish(root, "1.0.0", revision, {
+          credentialOrigin: "https://registry.test",
           transport: () => Effect.succeed(Response.json({ error: "forbidden" }, { status: 403 })),
         }),
       ),
@@ -342,8 +345,8 @@ it.effect("publish reports the diagnostics that block publication", () =>
     yield* copySkitFixtureEffect("authored", root);
     expect(
       yield* failure(
-        runPublish(root, "1.0.0", "revision-1", {
-          baseUrl: "https://registry.test",
+        runPublish(root, "1.0.0", revision, {
+          credentialOrigin: "https://registry.test",
           transport: (input) =>
             Effect.succeed(
               input.url.includes(".well-known")
@@ -378,7 +381,7 @@ it.effect("publish reports the diagnostics that block publication", () =>
   }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect("publish tells the author to sync when local files do not match the Draft", () =>
+it.effect("publish tells the author to sync when local files do not match the SKIT", () =>
   Effect.gen(function* () {
     const root = yield* scratch("skit-unsynced-publish-test-");
     yield* writeRemote(root);
@@ -386,7 +389,7 @@ it.effect("publish tells the author to sync when local files do not match the Dr
     expect(
       yield* failure(
         runPublish(root, "1.0.0", undefined, {
-          baseUrl: "https://registry.test",
+          credentialOrigin: "https://registry.test",
           transport: (input) =>
             Effect.succeed(
               input.url.includes(".well-known")
@@ -409,7 +412,7 @@ it.effect("publish uses the authored path in sync remediation", () =>
     expect(
       yield* failure(
         runPublish(root, "1.0.0", undefined, {
-          baseUrl: "https://registry.test",
+          credentialOrigin: "https://registry.test",
           transport: (input) =>
             Effect.succeed(
               input.url.includes(".well-known")
@@ -428,8 +431,8 @@ it.effect("publish accepts an older successful response without the selected rev
     yield* writeRemote(root);
     yield* copySkitFixtureEffect("authored", root);
     expect(
-      yield* runPublish(root, "1.0.0", "revision-1", {
-        baseUrl: "https://registry.test",
+      yield* runPublish(root, "1.0.0", revision, {
+        credentialOrigin: "https://registry.test",
         transport: (input) =>
           Effect.succeed(
             input.url.includes(".well-known")
@@ -459,7 +462,7 @@ it.effect("publish preserves non-JSON Registry error bodies", () =>
     expect(
       yield* failure(
         runPublish(root, "1.0.0", undefined, {
-          baseUrl: "https://registry.test",
+          credentialOrigin: "https://registry.test",
           transport: (input) =>
             Effect.succeed(
               input.url.includes(".well-known")
@@ -479,8 +482,8 @@ it.effect("publish carries immutable release conflicts as a typed error", () =>
     yield* copySkitFixtureEffect("authored", root);
     expect(
       yield* failure(
-        runPublish(root, "1.0.0", "revision-1", {
-          baseUrl: "https://registry.test",
+        runPublish(root, "1.0.0", revision, {
+          credentialOrigin: "https://registry.test",
           transport: (input) =>
             Effect.succeed(
               input.url.includes(".well-known")
@@ -500,8 +503,8 @@ it.effect("publish preserves a non-JSON conflict as a rejected write", () =>
     yield* copySkitFixtureEffect("authored", root);
     expect(
       yield* failure(
-        runPublish(root, "1.0.0", "revision-1", {
-          baseUrl: "https://registry.test",
+        runPublish(root, "1.0.0", revision, {
+          credentialOrigin: "https://registry.test",
           transport: (input) =>
             Effect.succeed(
               input.url.includes(".well-known")
@@ -521,7 +524,7 @@ it.effect("publish rejects a successful response that violates the server contra
     yield* copySkitFixtureEffect("authored", root);
     expect(
       yield* failure(
-        runPublish(root, "1.0.0", "revision-1", {
+        runPublish(root, "1.0.0", revision, {
           transport: () => Effect.succeed(Response.json({ release: {} })),
         }),
       ),

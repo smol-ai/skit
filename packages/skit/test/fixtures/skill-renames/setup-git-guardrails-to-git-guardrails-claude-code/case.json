@@ -1,0 +1,7 @@
+{
+  "source": "https://github.com/mattpocock/skills",
+  "commit": "b81729c6adec4fe7727da92020a5cb5358b2edd6",
+  "from": "setup-git-guardrails",
+  "to": "git-guardrails-claude-code",
+  "title": "Updates"
+}

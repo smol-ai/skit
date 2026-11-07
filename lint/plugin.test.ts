@@ -28,6 +28,7 @@ const allRules = [
   "no-handrolled-fetch-double",
   "no-node-fs",
   "no-member-access-on-yield",
+  "no-unconditional-cause-recovery",
 ];
 
 /** Runs the plugin over one source file and returns its diagnostics, newest oxlint JSON format. */
@@ -38,8 +39,12 @@ async function lint(source: string): Promise<Diagnostic[]> {
   await writeFile(
     join(directory, ".oxlintrc.json"),
     JSON.stringify({
+      plugins: ["typescript"],
       jsPlugins: [pluginPath],
-      rules: Object.fromEntries(allRules.map((rule) => [`skit/${rule}`, "error"])),
+      rules: {
+        ...Object.fromEntries(allRules.map((rule) => [`skit/${rule}`, "error"])),
+        "typescript/no-non-null-asserted-optional-chain": "error",
+      },
     }),
   );
   const result = spawnSync(
@@ -51,7 +56,11 @@ async function lint(source: string): Promise<Diagnostic[]> {
     diagnostics: Array<{ code: string; labels: Array<{ span: { line: number } }> }>;
   };
   return report.diagnostics
-    .filter((item) => item.code?.startsWith("skit(") === true)
+    .filter(
+      (item) =>
+        item.code?.startsWith("skit(") === true ||
+        item.code === "typescript(no-non-null-asserted-optional-chain)",
+    )
     .map((item) => ({ code: item.code, line: item.labels[0]?.span.line ?? 0 }));
 }
 
@@ -167,6 +176,20 @@ describe("skit/no-nested-runtime", () => {
 });
 
 describe("skit/no-promise-wrappers", () => {
+  test("allows only a direct module import, including an aliased Effect namespace", async () => {
+    expect(
+      await lint(`
+        import { Effect as Fx } from "effect";
+        export const module = Fx.promise(() => import("@effect/sql-sqlite-node"));
+        export const disguised = Fx.promise(() => import("driver").then(run));
+        export const work = Fx["tryPromise"](() => write());
+      `),
+    ).toEqual([
+      { code: "skit(no-promise-wrappers)", line: 4 },
+      { code: "skit(no-promise-wrappers)", line: 5 },
+    ]);
+  });
+
   test("rejects wrapping a Promise back into an Effect", async () => {
     expect(
       await lint(
@@ -182,6 +205,62 @@ describe("skit/no-promise-wrappers", () => {
       { code: "skit(no-promise-wrappers)", line: 3 },
       { code: "skit(no-promise-wrappers)", line: 4 },
     ]);
+  });
+});
+
+describe("skit/no-unconditional-cause-recovery", () => {
+  test("rejects logging or fallback success for the whole cause", async () => {
+    expect(
+      await lint(`
+        import { Effect as Fx } from "effect";
+        export const log = Fx.catchCause((cause) => Fx.logWarning("failed", cause));
+        export const fallback = Fx["catchCause"](program, () => Fx.succeed([]));
+        export const other = Fx.catchCause((cause) => Fx.failCause(unrelated));
+      `),
+    ).toEqual([
+      { code: "skit(no-unconditional-cause-recovery)", line: 3 },
+      { code: "skit(no-unconditional-cause-recovery)", line: 4 },
+      { code: "skit(no-unconditional-cause-recovery)", line: 5 },
+    ]);
+  });
+
+  test("allows explicit original-cause propagation and typed recovery", async () => {
+    expect(
+      await lint(`
+        import * as Fx from "effect/Effect";
+        export const observed = Fx.catchCause((cause) =>
+          Fx.logWarning("failed", cause).pipe(Fx.andThen(Fx.failCause(cause))));
+        export const classified = Fx.catchCause(program, (cause) =>
+          Cause.hasInterruptsOnly(cause) ? Fx.failCause(cause) : render(cause));
+        export const recover = Fx.catch((error) => Fx.logWarning("pending", error));
+      `),
+    ).toEqual([]);
+  });
+
+  test("checks direct named imports and requires inspectable cause recovery", async () => {
+    expect(
+      await lint(`
+        import { catchCause as recover, failCause as propagate } from "effect/Effect";
+        export const good = recover((cause) => propagate(cause));
+        export const bad = recover((cause) => log(cause));
+        export const opaque = recover(handler);
+      `),
+    ).toEqual([
+      { code: "skit(no-unconditional-cause-recovery)", line: 4 },
+      { code: "skit(no-unconditional-cause-recovery)", line: 5 },
+    ]);
+  });
+});
+
+describe("typescript/no-non-null-asserted-optional-chain", () => {
+  test("rejects asserting an optional result and allows explicit narrowing", async () => {
+    expect(
+      await lint(`
+        declare const input: { value: string } | undefined;
+        export const unsafe = input?.value!;
+        export const safe = input === undefined ? undefined : input.value;
+      `),
+    ).toEqual([{ code: "typescript(no-non-null-asserted-optional-chain)", line: 3 }]);
   });
 });
 

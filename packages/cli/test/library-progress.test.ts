@@ -1,21 +1,18 @@
+import * as Library from "@smolai/skit-core/library";
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem } from "effect";
 import { join } from "node:path";
-import {
-  createSkitArchive,
-  LibraryActor,
-  LibraryAuditLog,
-  LibraryStore,
-  skitLayer,
-} from "@smolai/skit-core";
+import { createSkitArchive } from "@smolai/skit-core/author";
+import { skitLayer } from "@smolai/skit-core/platform";
 import {
   LibraryProgress,
   libraryProgressLayer,
   type LibraryProgressEvent,
-} from "../src/library-application/progress.js";
-import { updateSubjects } from "../src/library-application/update.js";
-import { importSource } from "../src/library-application/import-source.js";
+} from "../src/library/update/progress.js";
+import { importSource } from "../src/library/source.js";
 import { copySkitFixtureEffect, libraryHome } from "./helpers/library-home.js";
+import { homeLockIsFree } from "./helpers/home-lock.js";
+import { updateAdapters } from "../src/library/update/adapters.js";
 
 it.effect("a headless update emits domain progress and records one attributed transaction", () =>
   Effect.gen(function* () {
@@ -42,16 +39,20 @@ it.effect("a headless update emits domain progress and records one attributed tr
     yield* home.owned(importSource({ type: "archive", url: "https://fixtures.test/source.zip" }));
     const before = yield* home.durable;
     const events: LibraryProgressEvent[] = [];
-    const history = home.owned(LibraryAuditLog.use((log) => log.list()));
+    const history = home.owned(
+      Effect.flatMap(Library.Service, (owner) =>
+        Effect.map(owner.history, (history) => history.events),
+      ),
+    );
     const previousEvents = (yield* history).length;
     const skillPath = join(source, "skills", "review", "SKILL.md");
     yield* fs.writeFileString(skillPath, `${yield* fs.readFileString(skillPath)}\nUpdated body.\n`);
     bytes = yield* archive;
     const results = yield* home
       .owned(
-        updateSubjects({
-          roots: home.inventory,
-        }).pipe(
+        Effect.flatMap(Library.Service, (library) =>
+          Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
+        ).pipe(
           Effect.provide(
             libraryProgressLayer((event) =>
               Effect.sync(() => {
@@ -61,7 +62,7 @@ it.effect("a headless update emits domain progress and records one attributed tr
           ),
         ),
       )
-      .pipe(Effect.provideService(LibraryActor, "headless"));
+      .pipe(Effect.annotateLogs({ "skit.library.workflow": "headless" }));
     assert.strictEqual(results.length, 1);
     assert.isTrue("changed" in results[0]! && results[0].changed);
     assert.deepStrictEqual(
@@ -73,7 +74,7 @@ it.effect("a headless update emits domain progress and records one attributed tr
         ["completed", "install"],
       ],
     );
-    const after = yield* home.owned(LibraryStore.use((store) => store.load));
+    const after = yield* home.durable;
     assert.notStrictEqual(
       after.collection_versions.at(-1)?.hash,
       before.collection_versions.at(-1)?.hash,
@@ -81,7 +82,7 @@ it.effect("a headless update emits domain progress and records one attributed tr
     const recorded = yield* history;
     assert.strictEqual(recorded.length, previousEvents + 1);
     assert.strictEqual(recorded.at(-1)?.workflow, "headless");
-    assert.isFalse(yield* fs.exists(join(home.home, ".lock")));
+    assert.isTrue(yield* homeLockIsFree(home.home));
   }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 

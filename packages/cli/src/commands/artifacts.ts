@@ -6,7 +6,9 @@ import { skitCommand } from "./tree.js";
 
 function contractJsonSchema(contract: AnyOutputContract): JsonSchema.JsonSchema {
   const document = JsonSchema.toDocumentDraft07(
-    Schema.toJsonSchemaDocument(contract.schema, { onExcessProperty: "ignore" }),
+    Schema.toJsonSchemaDocument(contract.schema, {
+      onExcessProperty: "ignore",
+    }),
   );
   return Object.keys(document.definitions).length
     ? { ...document.schema, definitions: document.definitions }

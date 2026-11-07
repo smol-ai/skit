@@ -1,0 +1,26 @@
+import { LibraryInventory } from "@smolai/skit-core/library/inventory";
+import { Schema } from "effect";
+import { SetupSkillInstance, SetupResult } from "@smolai/skit-core/library/setup";
+
+/** The refreshed Library view plus the complete read-only machine Skill observation. */
+export const MachineInventoryResult = Schema.Struct({
+  ...LibraryInventory.fields,
+  machine: Schema.Struct({
+    repositoryRoots: SetupResult.fields.machineConfig.fields.repositoryRoots,
+    repositoryDecisions: SetupResult.fields.machineConfig.fields.repositoryDecisions,
+    scan: SetupResult.fields.scan,
+    instances: Schema.Array(
+      Schema.Struct({
+        ...SetupSkillInstance.fields,
+        skill_md_modified_at: Schema.NullOr(Schema.String),
+      }),
+    ),
+    brokenLinks: SetupResult.fields.brokenLinks,
+    suppressed: SetupResult.fields.suppressed,
+  }),
+});
+export type MachineInventoryResult = typeof MachineInventoryResult.Type;
+
+export const inventoryOutputContracts = {
+  inventory: { id: "skit.inventory.v14", schema: MachineInventoryResult },
+} as const;

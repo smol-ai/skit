@@ -1,6 +1,4 @@
 import { emptyUsageStory, usageStory } from "./usage-stories.js";
-import { estimateCodexListing } from "@smolai/skit-core";
-import { Data } from "effect";
 import {
   makeCollectionId,
   makeOperationId,
@@ -8,11 +6,15 @@ import {
   makeCollectionVersionId,
   makeSkillId,
   makeSkillVersionId,
-} from "@smolai/skit-core";
+} from "@smolai/skit-core/universal/consumer";
+import * as History from "@smolai/skit-core/history";
+import { estimateCodexListing } from "@smolai/skit-core/harnesses";
+import { Data } from "effect";
+
 import type { CommandFailure, CommandResult } from "../commands/types.js";
-import { result } from "../handlers/contracts.js";
-import { recoveryActions } from "../commands/recovery-contract.js";
-import { setupUndoActions } from "../commands/setup-undo-contract.js";
+import { result } from "../commands/result.js";
+import { recoveryActions } from "../library/recovery/output.js";
+import { setupUndoActions } from "../library/setup.js";
 
 export type OutputStory = Data.TaggedEnum<{
   Result: { readonly name: string; readonly group: string; readonly result: CommandResult };
@@ -68,6 +70,18 @@ const doctorListingBudget = estimateCodexListing({
     },
   ],
 });
+
+const setupStoryInstance = {
+  name: "review",
+  path: "/home/story/.claude/skills/review",
+  aliases: ["/home/story/.claude/skills/review"],
+  scope: "global",
+  harnesses: ["claude-code"],
+  owner: { kind: "unknown" },
+  contentIdentity: { status: "none", libraryMatches: [] },
+  git: { status: "outside-git" },
+  locks: [],
+} as const;
 
 export const outputStories: ReadonlyArray<OutputStory> = [
   resultStory("usage", "empty", result("usage", emptyUsageStory)),
@@ -188,13 +202,15 @@ export const outputStories: ReadonlyArray<OutputStory> = [
         {
           identity: "https://registry.example/smol-ai/review-tools",
           visibility: "public",
-          draft_revision_id: "draft-7",
+          current_revision_id: History.RevisionId.make(`sha256:${"7".repeat(64)}`),
+          current_revision_published: true,
           most_recent_release_version: "1.2.0",
         },
         {
           identity: "https://registry.example/smol-ai/triage-tools",
           visibility: "private",
-          draft_revision_id: "draft-3",
+          current_revision_id: History.RevisionId.make(`sha256:${"3".repeat(64)}`),
+          current_revision_published: false,
           most_recent_release_version: null,
         },
       ],
@@ -207,7 +223,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       status: "deleted",
       skit_id: "smol-ai/review-tools",
       changed: true,
-      draft_revisions: 2,
+      revisions: 2,
       releases: 1,
       release_versions: ["1.2.0"],
       archive_cleanup: "complete",
@@ -309,6 +325,13 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       repositoryConfigs: [],
       authoredCollections: [],
       installedSkills: [],
+      collectionGroups: {
+        sources: [],
+        repositories: [],
+        loose: [setupStoryInstance],
+        installed: [],
+        authored: [],
+      },
       onboarding: {
         planId: `sha256:${"0".repeat(64)}`,
         candidates: [
@@ -327,19 +350,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
         },
       },
       locks: [],
-      instances: [
-        {
-          name: "review",
-          path: "/home/story/.claude/skills/review",
-          aliases: ["/home/story/.claude/skills/review"],
-          scope: "global",
-          harnesses: ["claude-code"],
-          owner: { kind: "unknown" },
-          contentIdentity: { status: "none", libraryMatches: [] },
-          git: { status: "outside-git" },
-          locks: [],
-        },
-      ],
+      instances: [setupStoryInstance],
       brokenLinks: [],
       suppressed: [],
     }),
@@ -555,6 +566,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       harnesses: [
         {
           harness: "claude-code",
+          findings: [],
           status: "checked",
           cwd: "/home/story/project",
           version: "2.1.284",
@@ -567,6 +579,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
         },
         {
           harness: "opencode",
+          findings: [],
           status: "checked",
           cwd: "/home/story/project",
           version: "1.18.18",
@@ -584,6 +597,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
         },
         {
           harness: "devin",
+          findings: [],
           status: "missing",
           cwd: "/home/story/project",
           coverage: "native-skills",
@@ -668,6 +682,17 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       harnesses: [
         {
           harness: "opencode",
+          findings: [
+            {
+              _tag: "NameCollision",
+              name: "review",
+              paths: [
+                "/home/story/.agents/skills/review/SKILL.md",
+                "/home/story/.claude/skills/review/SKILL.md",
+              ],
+              selectedPath: "/home/story/.agents/skills/review/SKILL.md",
+            },
+          ],
           status: "checked",
           cwd: "/home/story/project",
           version: "1.18.18",
@@ -736,7 +761,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
           origin: "https://registry.example",
           aliases: ["public"],
           tokenPrefix: "sk_live_…",
-          scopes: ["publish", "draft:write"],
+          scopes: ["publish", "skit:write"],
           expiresAt: "2027-01-01T00:00:00Z",
           expiry: "known",
           expired: false,
@@ -948,7 +973,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       release: {
         release_id: "release-1",
         version: "1.2.0",
-        revision_id: "draft-7",
+        revision_id: "skit-7",
         archive_digest: hash,
         download_path: "/api/skits/smol-ai/review-tools/releases/1.2.0",
       },
@@ -968,16 +993,18 @@ export const outputStories: ReadonlyArray<OutputStory> = [
       },
       visibility: "private",
       file_count: 3,
-      effects: ["create_skit", "create_draft", "record_remote_home"],
+      effects: ["create_skit", "save_revision", "record_remote_home"],
     }),
   ),
   resultStory(
     "sync",
-    "conflicted",
+    "merged",
     result("sync", {
-      status: "conflicted",
-      changed: false,
-      conflicts: [{ path: "SKIT.md", kind: "both_modified" }],
+      status: "merged",
+      changed: true,
+      revision_id: `sha256:${"a".repeat(64)}`,
+      paths: ["skills/review/SKILL.md"],
+      choices: [{ path: "skills/review/SKILL.md", kind: "both_modified", kept: "remote" }],
     }),
   ),
   resultStory(
@@ -1013,7 +1040,7 @@ export const outputStories: ReadonlyArray<OutputStory> = [
     result("authLogin", {
       origin: "https://registry.example",
       tokenPrefix: "sk_live_…",
-      scopes: ["publish", "draft:write"],
+      scopes: ["publish", "skit:write"],
       expiresAt: "2027-01-01T00:00:00Z",
     }),
   ),

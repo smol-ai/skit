@@ -1,30 +1,21 @@
-import { skitConfigurationLayer } from "../configuration/skit-configuration.js";
-import { presentDoctorCleanup } from "../workflows/library/doctor-cleanup.js";
+import {
+  importReview,
+  makeEnablePreviewFixture,
+  makeDoctorPreviewFixture,
+} from "../platform/storybook-fixtures.js";
+import { SkitConfiguration, skitConfigurationLayer, skitLayer } from "@smolai/skit-core/platform";
+import * as Library from "@smolai/skit-core/library";
+
+import { presentDoctorCleanup } from "../library/doctor/cleanup.js";
 import { syncJourney } from "./sync-journey.js";
 import { join } from "node:path";
-import { ConfigProvider, Effect, FileSystem, Option, Schema } from "effect";
-import {
-  CURRENT_LIBRARY_STATE_VERSION,
-  LibraryState,
-  LibraryStore,
-  libraryAuditLogLayer,
-  libraryStoreLayer,
-  makeImportId,
-  makeCollectionId,
-  makeMachineId,
-  makeInstalledSkillId,
-  makeCollectionVersionId,
-  makeSkillId,
-  makeSkillVersionId,
-  skitLayer,
-  skillUsageLayer,
-} from "@smolai/skit-core";
-import { libraryCommandConfiguration } from "../commands/library-configuration.js";
-import { presentSetEnabled } from "../handlers/library/set-enabled.js";
-import type { Prompter } from "../presentation/prompter.js";
-import type { Renderer } from "../presentation/renderer.js";
-import type { ScriptedAnswer } from "../presentation/interaction-recorder.js";
-import { openLibrarySession } from "../library-application/session.js";
+import { ConfigProvider, Effect } from "effect";
+
+import { inventoryRootOptions } from "@smolai/skit-core/library/routing";
+import { presentSetEnabled } from "../library/enable.js";
+import type { Prompter } from "../terminal/prompter.js";
+import type { Renderer } from "../terminal/renderer.js";
+import type { ScriptedAnswer } from "./interaction-recorder.js";
 
 export interface JourneyStory<A, E, R> {
   readonly name: string;
@@ -35,93 +26,16 @@ export interface JourneyStory<A, E, R> {
   readonly finalState: (result: A) => string;
 }
 
-const hash = `sha256:${"0".repeat(64)}`;
-const collectionId = makeCollectionId();
-const collectionVersionId = makeCollectionVersionId();
-const skillVersionId = makeSkillVersionId();
-const skillId = makeSkillId();
-const importId = makeImportId();
-const machineId = makeMachineId();
-const storyState = Schema.decodeUnknownSync(LibraryState)({
-  schemaVersion: CURRENT_LIBRARY_STATE_VERSION,
-  collections: [
-    {
-      collection_id: collectionId,
-      label: "review-tools",
-    },
-  ],
-  skills: [
-    {
-      skill_id: skillId,
-      collection_id: collectionId,
-      path: ".",
-      name: "review",
-      versions: [
-        {
-          skill_version_id: skillVersionId,
-          source_hash: hash,
-          artifact_hash: hash,
-          validation_identity_hash: hash,
-          materialization_profile: "plain-skill/v1",
-        },
-      ],
-    },
-  ],
-  collection_versions: [
-    {
-      collection_version_id: collectionVersionId,
-      hash: hash,
-      copy_profile: "verbatim/v1",
-      members: [
-        {
-          source_path: ".",
-          source_hash: hash,
-          artifact_hash: hash,
-          materialization_profile: "plain-skill/v1",
-        },
-      ],
-    },
-  ],
-  imports: [
-    {
-      import_id: importId,
-      collection_id: collectionId,
-      kind: "source",
-      collection_version_id: collectionVersionId,
-      input: { value: "/fixtures/review" },
-      source_identity: {
-        kind: "local",
-        machine_id: machineId,
-        path: { value: "/fixtures/review" },
-      },
-      imported_at: "2026-01-01T00:00:00.000Z",
-      machine_id: machineId,
-      lock_file_entries: [],
-    },
-  ],
-  enabled: [],
-  repositories: [],
-  installed_skills: [],
-  unmanaged: [],
-  adoption_receipts: [],
-});
-
 const previewEnable = Effect.scoped(
   Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-story-library-" });
-    const codexRoot = `${home}/codex`;
-    yield* fs.makeDirectory(codexRoot);
-    const configuration = yield* libraryCommandConfiguration({
-      home: Option.some(home),
-      codexRoot: Option.some(codexRoot),
-      claudeRoot: Option.none(),
-      opencodeRoot: Option.none(),
-      devinRoot: [],
-    });
+    const { home, codexRoot, installedEmpty } = yield* makeEnablePreviewFixture;
+    const configuration = {
+      inventory: inventoryRootOptions(yield* SkitConfiguration, { codex: [codexRoot] }),
+    };
     return yield* Effect.gen(function* () {
-      const store = yield* LibraryStore;
-      yield* store.save(storyState, yield* store.load);
+      const library = yield* Library.Service;
+      yield* importReview(home);
+      const before = yield* library.read;
       yield* presentSetEnabled({
         action: "enable",
         enabled: true,
@@ -129,51 +43,62 @@ const previewEnable = Effect.scoped(
         all: true,
         dryRun: true,
         interactive: true,
-        configuration,
       });
-      return yield* openLibrarySession();
+      const after = yield* library.read;
+      if (
+        before._tag !== "Present" ||
+        after._tag !== "Present" ||
+        before.revision !== after.revision ||
+        !(yield* installedEmpty)
+      )
+        return yield* Effect.die("The enable preview changed the Library or installed files");
+      return yield* library.session.open();
     }).pipe(
-      Effect.provide(libraryStoreLayer({ home })),
-      Effect.provide(libraryAuditLogLayer({ home })),
+      Effect.provide(Library.layer({ home, roots: configuration.inventory })),
+      Effect.provide(skitConfigurationLayer(home)),
     );
   }),
 ).pipe(Effect.provide(skitLayer), Effect.provide(skitConfigurationLayer()));
 
 const previewDoctorCleanup = Effect.scoped(
   Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-doctor-story-" });
-    const home = join(root, "library");
-    const account = join(root, "account");
-    const skillsRoot = join(account, ".agents", "skills");
-    const path = join(skillsRoot, "review");
+    const {
+      root,
+      home,
+      account,
+      skillsRoot,
+      path,
+      installed: documentExists,
+      document,
+    } = yield* makeDoctorPreviewFixture;
     const configuration = {
       home: account,
       configHome: account,
       overrides: { codex: [skillsRoot] },
     };
     return yield* Effect.gen(function* () {
-      const store = yield* LibraryStore;
-      yield* store.save(
+      const library = yield* Library.Service;
+      const imported = yield* importReview(root);
+      const skill = imported.skills[0];
+      if (!skill) return yield* Effect.die("Expected the imported review Skill");
+      const plan = yield* library.plan(
         {
-          ...storyState,
-          enabled: [{ skill: skillId }],
-          installed_skills: [
+          _tag: "Enabled",
+          changes: [
             {
-              installed_skill_id: makeInstalledSkillId(),
-              skill_id: skillId,
-              skill_version_id: skillVersionId,
-              destination: "agents",
-              root: skillsRoot,
-              path,
-              expected_hash: hash,
-              status: "installed",
-              installed_at: "2026-10-18T00:00:00.000Z",
+              _tag: "Enable",
+              subject: { _tag: "Skill", id: skill.skill_id },
+              where: [{ kind: "global" }],
             },
           ],
         },
-        yield* store.load,
+        { base: yield* library.read },
       );
+      const installed = (yield* library.apply({ _tag: "Apply", plan: plan })).result;
+      if (installed._tag !== "Applied" || !(yield* documentExists))
+        return yield* Effect.die("Expected the review Skill to be installed");
+      const before = yield* library.read;
+      const bytes = yield* document;
       yield* presentDoctorCleanup(
         [
           {
@@ -199,9 +124,18 @@ const previewDoctorCleanup = Effect.scoped(
         30,
         true,
       );
-      return "Preview only · 1 Skill remains enabled";
+      const after = yield* library.read;
+      if (
+        before._tag !== "Present" ||
+        after._tag !== "Present" ||
+        before.revision !== after.revision ||
+        (yield* document) !== bytes
+      )
+        return yield* Effect.die("The cleanup preview changed the Library or installed bytes");
+      return `Preview only · ${after.state.enabled.length} Skill remains enabled`;
     }).pipe(
-      Effect.provide(libraryStoreLayer({ home })),
+      Effect.provide(Library.layer({ home, roots: configuration })),
+      Effect.provide(skitConfigurationLayer(home)),
       Effect.provide(
         ConfigProvider.layer(
           ConfigProvider.fromUnknown({
@@ -212,20 +146,20 @@ const previewDoctorCleanup = Effect.scoped(
       ),
     );
   }),
-).pipe(Effect.provide(skillUsageLayer), Effect.provide(skitLayer));
+).pipe(Effect.provide(skitLayer));
 
 export const journeyStories: ReadonlyArray<JourneyStory<string, unknown, Prompter | Renderer>> = [
   {
     name: "doctor/cleanup-preview",
     initialState: "Codex listing ~12,000 / 10,000 tokens · no retained usage transcripts",
-    answers: [[`${skillId}:global`]],
+    answers: [{ labels: ["review"] }],
     run: previewDoctorCleanup.pipe(Effect.provide(skitConfigurationLayer())),
     finalState: (state) => state,
   },
   {
     name: "preview-enable-portable-collection",
     initialState: "1 Collection · 1 Skill · 0 Bindings",
-    answers: [collectionId, "global"],
+    answers: [{ label: "review-tools" }, "global"],
     run: previewEnable.pipe(
       Effect.map(
         (state) =>
@@ -238,7 +172,7 @@ export const journeyStories: ReadonlyArray<JourneyStory<string, unknown, Prompte
     name: "library-sync/fresh-device",
     initialState: "Empty fixture device · remote has 3 Collections and 3 enabled Skills",
     answers: [],
-    run: syncJourney(false).pipe(Effect.provide(skitConfigurationLayer())),
+    run: syncJourney(false),
     finalState: (state) => state,
   },
   {
@@ -246,7 +180,7 @@ export const journeyStories: ReadonlyArray<JourneyStory<string, unknown, Prompte
     expectedOutcome: "failure",
     initialState: "Empty fixture device · Registry rejects the second download",
     answers: [],
-    run: syncJourney(true).pipe(Effect.provide(skitConfigurationLayer())),
+    run: syncJourney(true),
     finalState: (state) => state,
   },
 ];

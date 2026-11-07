@@ -1,13 +1,9 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
-import { credentialOriginAllowed } from "../auth/request-context.js";
-import { ServerConfiguration } from "../configuration.js";
-import { LibrarySync } from "../library/library-sync.js";
-import { CurrentPrincipal, CurrentRequest } from "./authentication.js";
-import { ConsumerAuthenticatedApi } from "@smolai/skit-core/universal/api";
+import { ServerLibrary } from "../library/service.js";
+import { requirePrincipalScope } from "./authentication.js";
+import { ConsumerAuthenticatedApi } from "@smolai/skit-core/api";
 import {
-  forbiddenOriginResponse,
-  insufficientScopeResponse,
   invalidRequestResponse,
   libraryNotFoundResponse,
   revisionConflictResponse,
@@ -19,14 +15,8 @@ export const librarySyncHandlers = HttpApiBuilder.group(
   "librarySync",
   (handlers) =>
     Effect.gen(function* () {
-      const libraries = yield* LibrarySync;
-      const configuration = yield* ServerConfiguration;
-      const principalWithScope = Effect.gen(function* () {
-        const principal = yield* CurrentPrincipal;
-        if (!principal.scopes.has("library:sync"))
-          return yield* Effect.fail(insufficientScopeResponse);
-        return principal;
-      });
+      const libraries = yield* ServerLibrary;
+      const principalWithScope = requirePrincipalScope("library:sync");
       return handlers.handleAll({
         read: () =>
           Effect.gen(function* () {
@@ -46,11 +36,6 @@ export const librarySyncHandlers = HttpApiBuilder.group(
         write: ({ payload }) =>
           Effect.gen(function* () {
             const principal = yield* principalWithScope;
-            const request = yield* CurrentRequest;
-            if (
-              !credentialOriginAllowed(principal.credential, request, configuration.publicAppOrigin)
-            )
-              return yield* Effect.fail(forbiddenOriginResponse);
             const library = yield* libraries
               .write(principal, payload.expected_revision_id, payload.manifest)
               .pipe(

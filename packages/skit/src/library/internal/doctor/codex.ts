@@ -1,0 +1,239 @@
+import type { LibraryInventory } from "../../inventory.js";
+import { configurationForHome } from "../../../platform/index.js";
+import {
+  SkillAlias,
+  type DuplicateCopy,
+  scanSkillsDirectory,
+  readableSkillsDirectories,
+  type InventoryRootOptions,
+} from "../../routing/index.js";
+
+import { createHash } from "node:crypto";
+import { dirname, resolve } from "node:path";
+import { Effect, FileSystem, Schema } from "effect";
+import {
+  readCodexSkills,
+  readCodexListingBudget,
+  type ListingBudget,
+  probeHarness,
+} from "../../../harnesses/index.js";
+export { readCodexSkills } from "../../../harnesses/index.js";
+
+export const CodexDoctorInstance = Schema.Struct({
+  name: Schema.String,
+  displayName: Schema.String,
+  path: Schema.String,
+  canonicalPath: Schema.String,
+  scope: Schema.String,
+  pluginId: Schema.optionalKey(Schema.String),
+  skitManaged: Schema.Boolean,
+  documentHash: Schema.optionalKey(Schema.String),
+  aliases: Schema.optionalKey(Schema.Array(SkillAlias)),
+});
+export type CodexDoctorInstance = typeof CodexDoctorInstance.Type;
+export const CodexDoctorFinding = Schema.Struct({
+  kind: Schema.Literals(["duplicate-name", "display-name-collision", "layered-name"]),
+  name: Schema.String,
+  documents: Schema.Literals(["identical", "different", "unknown"]),
+  instances: Schema.Array(CodexDoctorInstance),
+});
+export type CodexDoctorFinding = typeof CodexDoctorFinding.Type;
+export const CodexDoctorCheck = Schema.Struct({
+  status: Schema.Literals(["checked", "missing", "failed", "skipped"]),
+  cwd: Schema.String,
+  version: Schema.optionalKey(Schema.String),
+  detail: Schema.optionalKey(Schema.String),
+  instances: Schema.Array(CodexDoctorInstance),
+  findings: Schema.Array(CodexDoctorFinding),
+  errors: Schema.Array(Schema.Struct({ path: Schema.String, message: Schema.String })),
+});
+export type CodexDoctorCheck = typeof CodexDoctorCheck.Type;
+
+function codexSkillAliases(
+  canonicalDocument: string,
+  reportedDocument: string,
+  index: readonly DuplicateCopy[],
+): readonly SkillAlias[] {
+  return (
+    index.find((instance) => instance.canonicalPath === dirname(canonicalDocument))?.aliases ?? [
+      { path: dirname(reportedDocument), via: "unknown-root" },
+    ]
+  );
+}
+
+/** Canonical document identity, not names or visible labels, collapses symlink aliases. */
+export function codexDuplicateFindings(
+  instances: readonly CodexDoctorInstance[],
+): CodexDoctorFinding[] {
+  const physical = new Map<string, CodexDoctorInstance>();
+  for (const item of instances) {
+    const prior = physical.get(item.canonicalPath);
+    const aliases = [
+      ...new Map(
+        [...(prior?.aliases ?? []), ...(item.aliases ?? [])].map((alias) => [alias.path, alias]),
+      ).values(),
+    ];
+    physical.set(item.canonicalPath, {
+      ...item,
+      skitManaged: item.skitManaged || prior?.skitManaged === true,
+      ...(aliases.length ? { aliases } : {}),
+    });
+  }
+  const unique = [...physical.values()];
+  const findings: CodexDoctorFinding[] = [];
+  for (const kind of ["duplicate-name", "display-name-collision"] as const) {
+    const groups = new Map<string, CodexDoctorInstance[]>();
+    for (const item of unique) {
+      const key = kind === "duplicate-name" ? item.name : item.displayName;
+      const scopedKey = `${item.scope}\0${key}`;
+      groups.set(scopedKey, [...(groups.get(scopedKey) ?? []), item]);
+    }
+    for (const [scopedName, group] of groups) {
+      if (group.length < 2) continue;
+      if (kind === "display-name-collision" && new Set(group.map((item) => item.name)).size < 2)
+        continue;
+      const hashes = group.map((item) => item.documentHash);
+      findings.push({
+        kind,
+        name: scopedName.slice(scopedName.indexOf("\0") + 1),
+        documents: hashes.some((hash) => hash === undefined)
+          ? "unknown"
+          : new Set(hashes).size === 1
+            ? "identical"
+            : "different",
+        instances: group.sort((a, b) => a.path.localeCompare(b.path)),
+      });
+    }
+  }
+  const layered = new Map<string, CodexDoctorInstance[]>();
+  for (const item of unique) layered.set(item.name, [...(layered.get(item.name) ?? []), item]);
+  for (const [name, group] of layered) {
+    if (new Set(group.map((item) => item.scope)).size < 2) continue;
+    const hashes = group.map((item) => item.documentHash);
+    findings.push({
+      kind: "layered-name",
+      name,
+      documents: hashes.some((hash) => hash === undefined)
+        ? "unknown"
+        : new Set(hashes).size === 1
+          ? "identical"
+          : "different",
+      instances: group.sort((a, b) => a.path.localeCompare(b.path)),
+    });
+  }
+  return findings.sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name));
+}
+
+export const doctorCodexCheck = Effect.fn("Doctor.codex")(function* (
+  state: LibraryInventory,
+  cwd: string,
+  overrideRoot?: string,
+  inventoryRoots?: InventoryRootOptions,
+) {
+  const empty = {
+    cwd,
+    instances: [],
+    findings: [],
+    errors: [],
+    listingBudget: undefined as ListingBudget | undefined,
+  };
+  if (overrideRoot)
+    return {
+      ...empty,
+      status: "skipped" as const,
+      detail:
+        "A custom --codex-root does not describe Codex's configured discovery. Run doctor without that override to check native discovery.",
+    };
+  const probe = yield* probeHarness("codex");
+  if (probe.status !== "installed" || !probe.executablePath)
+    return {
+      ...empty,
+      status: probe.status === "missing" ? ("missing" as const) : ("failed" as const),
+      detail: probe.error ?? "Codex CLI is unavailable",
+    };
+  const version = probe.version ? { version: probe.version } : {};
+  const executable = probe.executablePath;
+  return yield* Effect.gen(function* () {
+    const entry = yield* readCodexSkills(executable, cwd, undefined, true);
+    const fs = yield* FileSystem.FileSystem;
+    const managed = new Set(
+      yield* Effect.forEach(state.installed_skills, (installedSkill) =>
+        fs
+          .realPath(installedSkill.path)
+          .pipe(Effect.orElseSucceed(() => resolve(installedSkill.path))),
+      ),
+    );
+    const errors = [...entry.errors];
+    const roots =
+      inventoryRoots ??
+      (yield* Effect.map(configurationForHome(), (paths) => ({
+        home: paths.userHome,
+        configHome: paths.configHome,
+        overrides: {},
+      })));
+    const aliasIndex = yield* scanSkillsDirectory(
+      [
+        ...readableSkillsDirectories(roots, { kind: "global" }, ["codex"]),
+        ...readableSkillsDirectories(roots, { kind: "repository", root: cwd }, ["codex"]),
+      ],
+      { errors },
+    ).pipe(
+      Effect.catchTag("PlatformError", (error) => {
+        errors.push({
+          path: cwd,
+          message: `Could not inspect Codex skill aliases: ${String(error)}`,
+        });
+        return Effect.succeed([]);
+      }),
+    );
+    const instances = yield* Effect.forEach(
+      entry.skills.filter((skill) => skill.enabled),
+      (skill) =>
+        Effect.gen(function* () {
+          const canonicalPath = yield* fs
+            .realPath(skill.path)
+            .pipe(Effect.orElseSucceed(() => resolve(skill.path)));
+          const documentHash = yield* fs.readFile(skill.path).pipe(
+            Effect.map((bytes) => "sha256:" + createHash("sha256").update(bytes).digest("hex")),
+            Effect.catchTag("PlatformError", () => {
+              errors.push({
+                path: skill.path,
+                message: "Could not read the discovered SKILL.md for content comparison",
+              });
+              return Effect.succeed(undefined);
+            }),
+          );
+          return {
+            name: skill.name,
+            displayName: skill.interface?.displayName?.trim() || skill.name,
+            path: skill.path,
+            canonicalPath,
+            scope: skill.scope,
+            aliases: codexSkillAliases(canonicalPath, skill.path, aliasIndex),
+            ...(skill.pluginId ? { pluginId: skill.pluginId } : {}),
+            skitManaged: managed.has(dirname(canonicalPath)),
+            ...(documentHash ? { documentHash } : {}),
+          };
+        }),
+    );
+    const listingBudget = yield* readCodexListingBudget(state, { cwd }, executable, entry);
+    return {
+      ...empty,
+      ...version,
+      listingBudget,
+      status: "checked" as const,
+      instances,
+      findings: codexDuplicateFindings(instances),
+      errors,
+    };
+  }).pipe(
+    Effect.catch((error) =>
+      Effect.succeed({
+        ...empty,
+        ...version,
+        status: "failed" as const,
+        detail: String(error),
+      }),
+    ),
+  );
+});

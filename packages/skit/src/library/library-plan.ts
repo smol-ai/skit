@@ -1,17 +1,20 @@
+import { Revision } from "./snapshot.js";
 import { Schema } from "effect";
-import { InstalledSkills } from "./installed-skills.js";
+import * as InstalledSkills from "./installed-skills.js";
 import type { LibraryStateReadError, LibraryStateWriteError } from "./store/library-store.js";
-import { InstalledSkill, InvocationPolicies, LibraryState } from "./library-state.js";
+import { InstalledSkill } from "./device-state.js";
+import { LibraryState } from "./library-state.js";
 import { Intent as EnabledIntent, Invocation, type InvalidIntent } from "./enabled-plan.js";
-import { Enabled as EnabledItem } from "./library-contracts.js";
 import type { InstalledSkillInvalid } from "./installation/install-enabled.js";
 import type { CollectionRemovalMissing } from "./installation/remove.js";
 import { CollectionId, InstalledSkillId, SkillId, SkillVersionId } from "./entity-ids.js";
-import { ManageApproval } from "../install/files.js";
-import { OwnershipMarker } from "../contracts.js";
-import { Hash, InstallDestination, InstallScope } from "../vocabulary.js";
+import { ManageApproval } from "../installed-skills/files.js";
+import { OwnershipMarker } from "../installed-skills/ownership-marker.js";
+import { Hash } from "../shared/hash.js";
+import { InstallDestination } from "../installed-skills/destination.js";
+import { InstallScope } from "./scope.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
-import type { UninstallConflict } from "../failures.js";
+import type { UninstallConflict } from "../installed-skills/failures.js";
 
 // ── Intents ──────────────────────────────────────────────────────────────────────────────────────
 // Each intent says how the Library should change. Which Installed Skills to install or uninstall is
@@ -23,21 +26,26 @@ export const Enabled = Schema.TaggedStruct("Enabled", {
 });
 export type Enabled = typeof Enabled.Type;
 /** Remove a Collection with its Skills, imports, enabled entries and installed copies. */
-export const Remove = Schema.TaggedStruct("Remove", { collectionId: CollectionId });
-export type Remove = typeof Remove.Type;
-/** Change nothing; bring every installed copy on this device up to date. */
-export const Update = Schema.TaggedStruct("Update", {});
-export type Update = typeof Update.Type;
+const Remove = Schema.TaggedStruct("Remove", { collectionId: CollectionId });
+/**
+ * Bring installed copies up to date where they are; omitted skills means all, an empty list means
+ * none. Adds no copies and moves none.
+ */
+const Update = Schema.TaggedStruct("Update", { skills: Schema.optional(Schema.Array(SkillId)) });
+/**
+ * Install what is enabled at this device's folders, these Skills or all: copies missing there are
+ * added, copies elsewhere retire. Sync and setup converge the device with it.
+ */
+const Install = Schema.TaggedStruct("Install", { skills: Schema.optional(Schema.Array(SkillId)) });
 /**
  * Uninstall these recorded copies ahead of a sync. Their records stay, as pending, unless listed
  * to drop.
  */
-export const Uninstall = Schema.TaggedStruct("Uninstall", {
+const Uninstall = Schema.TaggedStruct("Uninstall", {
   copies: Schema.Array(InstalledSkillId),
   drop: Schema.Array(InstalledSkillId),
 });
-export type Uninstall = typeof Uninstall.Type;
-export const Intent = Schema.Union([Enabled, Remove, Update, Uninstall]);
+export const Intent = Schema.Union([Enabled, Remove, Update, Install, Uninstall]);
 export type Intent = typeof Intent.Type;
 
 /** What the user approved beyond the default safety rules, as previewed. */
@@ -58,8 +66,13 @@ export const Approval = Schema.Union([
 export type Approval = typeof Approval.Type;
 
 // ── Errors ───────────────────────────────────────────────────────────────────────────────────────
+/** The Library moved on since the change was planned; a revision check names both revisions. */
 export class StalePlan
-  extends Schema.TaggedError<StalePlan>()("Library.StalePlan", { message: Schema.String })
+  extends Schema.TaggedError<StalePlan>()("Library.StalePlan", {
+    message: Schema.String,
+    expected: Schema.optionalKey(Schema.String.pipe(Schema.brand("Revision"))),
+    actual: Schema.optionalKey(Schema.String.pipe(Schema.brand("Revision"))),
+  })
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
@@ -115,25 +128,8 @@ export class DestinationsIncomplete
 }
 
 // ── Plan and outcome ─────────────────────────────────────────────────────────────────────────────
-/** One enabled change at one scope, with what a review of it shows. */
-export const EnabledChange = Schema.Struct({
-  _tag: Schema.Literals(["Enable", "Disable"]),
-  subject_id: Schema.Union([SkillId, CollectionId]),
-  skills: Schema.Array(Schema.String),
-  scope: InstallScope,
-  action: Schema.Literals(["enable", "disable"]),
-  invocation: Schema.optionalKey(Invocation),
-  changed: Schema.Boolean,
-  enabled: Schema.Array(EnabledItem),
-  invocation_policies: Schema.optionalKey(InvocationPolicies),
-  repair: Schema.optionalKey(Schema.Boolean),
-  duplicates: Schema.optionalKey(Schema.Array(InstalledSkills.Duplicate)),
-  warnings: Schema.optionalKey(Schema.Array(InstalledSkills.Warning)),
-  unmanaged_destinations: Schema.optionalKey(
-    Schema.Array(Schema.Struct({ destination: InstallDestination, path: Schema.String })),
-  ),
-});
-export type EnabledChange = typeof EnabledChange.Type;
+import { EnabledChange } from "./enabled-change.js";
+export { EnabledChange } from "./enabled-change.js";
 
 /**
  * The Installed Skill the next Library has at one folder, and the Library's record there. A new
@@ -216,9 +212,8 @@ export type Route = typeof Route.Type;
  * Plain data. Nothing in it is trusted at apply: apply plans again from the loaded Library, and
  * refuses a different revision, different changes or different folders.
  */
-export const Plan = Schema.Struct({
-  baseRevision: Schema.String,
-  intent: Intent,
+const planFields = {
+  baseRevision: Revision,
   approvals: Schema.Array(Approval),
   routes: Schema.Array(Route),
   /** Every folder the changes were decided on, and every original they are built from. */
@@ -226,6 +221,14 @@ export const Plan = Schema.Struct({
   /** The Library the intent leaves, before apply records its Installed Skills. */
   next: LibraryState,
   changes: Schema.Array(Schema.Union([EnabledChange, InstalledSkillChange])),
+};
+/** The top-level tag and intent always name the same operation. */
+export const Plan = Schema.TaggedUnion({
+  Enabled: { ...planFields, intent: Enabled },
+  Remove: { ...planFields, intent: Remove },
+  Update: { ...planFields, intent: Update },
+  Install: { ...planFields, intent: Install },
+  Uninstall: { ...planFields, intent: Uninstall },
 });
 export type Plan = typeof Plan.Type;
 
@@ -247,6 +250,8 @@ export interface AppliedChange {
   readonly installedSkills: readonly InstalledSkill[];
   readonly copies: readonly InstalledSkillResult[];
   readonly unresolved: readonly string[];
+  /** Owner-attributed failure; null when this request reached its recorded result. */
+  readonly failure: ApplyError | null;
 }
 export type Outcome =
   | {
@@ -260,6 +265,8 @@ export type Outcome =
       readonly results: readonly AppliedChange[];
       readonly reason: "destinations" | "update";
       readonly cause: ApplyError;
+      /** Exact failing copy paths, or null for a shared operation failure. */
+      readonly failedPaths: readonly string[] | null;
     };
 
 export type PlanError =

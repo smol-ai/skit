@@ -4,15 +4,20 @@ import { helpDocument } from "./help-document.js";
 import { CommandMetadata } from "./metadata.js";
 import type { CommandDescription } from "./command-contracts.js";
 
-export type { CommandDescription } from "./command-contracts.js";
-
-export interface CommandDocument extends CommandDescription {
+interface CommandDocument extends CommandDescription {
   readonly examples: readonly string[];
-  readonly positionals: readonly { readonly name: string; readonly required: boolean }[];
+  readonly positionals: readonly {
+    readonly name: string;
+    readonly required: boolean;
+  }[];
   readonly documentedFlags: Readonly<
     Record<
       string,
-      { readonly type: string; readonly valueName: string; readonly description: string }
+      {
+        readonly type: string;
+        readonly valueName: string;
+        readonly description: string;
+      }
     >
   >;
 }
@@ -43,7 +48,11 @@ export function commandDocuments<Name extends string, Input, ContextInput, E, R>
     Effect.gen(function* () {
       const document = yield* helpDocument(root, path);
       const metadata = Context.get(document.annotations, CommandMetadata);
-      const allFlags = [...document.flags, ...(document.globalFlags ?? [])];
+      const allFlags = [
+        ...document.flags,
+        ...(document.inheritedFlags ?? []),
+        ...(document.globalFlags ?? []),
+      ];
       return {
         path,
         summary: document.description,

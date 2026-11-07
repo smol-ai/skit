@@ -1,3 +1,5 @@
+import * as Library from "@smolai/skit-core/library";
+import { withLibraryOwner } from "./helpers/library-owner.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
@@ -5,33 +7,32 @@ import { it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Result, Schema } from "effect";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { expect } from "vitest";
+import { LibraryState } from "@smolai/skit-core/library";
+import { emptyLibraryFixture } from "./helpers/library-home.js";
 import {
-  CURRENT_LIBRARY_STATE_VERSION,
-  type Hash,
-  deterministicTreeHash,
-  LibraryStore,
-  LibraryState,
-  libraryStoreLayer,
   makeImportId,
   makeCollectionId,
   makeMachineId,
-  MachineSettings,
-  SourceProcess,
   makeInstalledSkillId,
   makeCollectionVersionId,
   makeSkillId,
   makeSkillVersionId,
-} from "@smolai/skit-core";
+} from "@smolai/skit-core/universal/consumer";
+import * as MachineSettings from "@smolai/skit-core/machine-settings";
+import { deterministicTreeHash } from "@smolai/skit-core/author";
+import { type Hash } from "@smolai/skit-core/shared";
+import { SourceProcess, skitConfigurationLayer } from "@smolai/skit-core/platform";
 import {
   classifySetupOnboarding,
   classifyOwner,
-  computeSkillsLockCompatibleHash,
+  computeSkillsShCompatibleHash,
   revalidateSetupPlan,
   runSetup,
+  openSetupReview,
   type SetupOptions,
-} from "../src/workflows/library/setup.js";
-import type { SetupSkillInstance } from "../src/workflows/library/setup-contract.js";
-import { ownershipAt, collectSetupEvidence } from "../src/workflows/library/setup-discovery.js";
+} from "@smolai/skit-core/library/setup";
+import type { SetupSkillInstance } from "@smolai/skit-core/library/setup";
+import { ownershipAt, collectSetupEvidence } from "@smolai/skit-core/library/setup";
 
 const skillDocument = (name: string) =>
   `---\nname: ${name}\ndescription: ${name} skill\n---\n\n# ${name}\n`;
@@ -91,15 +92,34 @@ const setupLock = (
 
 const scanForSetup = (options: SetupOptions) =>
   runSetup(options).pipe(
+    withLibraryOwner(options.inventory),
     Effect.provide(
-      libraryStoreLayer({ home: options.libraryHome }).pipe(Layer.provide(testPlatformLayer)),
+      skitConfigurationLayer(options.libraryHome).pipe(Layer.provide(testPlatformLayer)),
+    ),
+  );
+
+const saveSettingsForSetup = (options: SetupOptions) =>
+  Effect.gen(function* () {
+    const review = yield* openSetupReview(options, { installOptions: options.inventory });
+    const plan = yield* review.prepare({
+      sources: [],
+      copies: [],
+      decisions: [],
+      reconcileExisting: false,
+    });
+    return (yield* plan.apply((_message, effect) => effect)).scan;
+  }).pipe(
+    withLibraryOwner(options.inventory),
+    Effect.provide(
+      skitConfigurationLayer(options.libraryHome).pipe(Layer.provide(testPlatformLayer)),
     ),
   );
 
 const revalidateSetup = (options: SetupOptions, planId: Hash) =>
   revalidateSetupPlan(options, planId).pipe(
+    withLibraryOwner(options.inventory),
     Effect.provide(
-      libraryStoreLayer({ home: options.libraryHome }).pipe(Layer.provide(testPlatformLayer)),
+      skitConfigurationLayer(options.libraryHome).pipe(Layer.provide(testPlatformLayer)),
     ),
   );
 
@@ -166,10 +186,14 @@ it.effect(
     }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect("persists repository roots only when requested and reuses the machine config", () =>
+it.effect("scans passively and saves repository roots only through an approved setup", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
-    const first = yield* scanForSetup({ ...f.options, persistRoots: true });
+    const before = yield* f.fs.exists(join(f.libraryHome, "machine.json"));
+    const passive = yield* scanForSetup({ ...f.options, persistRoots: true });
+    expect(passive.machineConfig.persisted).toBe(false);
+    expect(yield* f.fs.exists(join(f.libraryHome, "machine.json"))).toBe(before);
+    const first = yield* saveSettingsForSetup({ ...f.options, persistRoots: true });
     expect(first.machineConfig).toEqual({
       path: join(f.libraryHome, "machine.json"),
       machineId: expect.any(String),
@@ -222,7 +246,7 @@ it.effect("migrates the version-one machine config only when setup persists", ()
       repositoryRoots: [f.work],
     });
 
-    const migrated = yield* scanForSetup({
+    const migrated = yield* saveSettingsForSetup({
       ...f.options,
       repositoryRoots: undefined,
       persistRoots: true,
@@ -235,12 +259,14 @@ it.effect("migrates the version-one machine config only when setup persists", ()
     });
     // Saving roots decides nothing about repositories, so later scans still discover them.
     expect(JSON.parse(yield* f.fs.readFileString(join(f.libraryHome, "machine.json")))).toEqual({
-      schemaVersion: 5,
+      schemaVersion: 6,
+      undoneSetups: [],
       repositoryDecisionsInitialized: false,
       machineId: migrated.machineConfig.machineId,
       displayName: "Test machine",
       discoveryRoots: [f.work],
       repositories: [],
+      setups: [expect.objectContaining({ operationId: expect.any(String) })],
     });
   }).pipe(Effect.provide(testPlatformLayer)),
 );
@@ -259,7 +285,7 @@ it.effect("scans only repositories watched by machine configuration", () =>
       join(ignored, ".agents", "skills", "hidden", "SKILL.md"),
       skillDocument("hidden"),
     );
-    yield* scanForSetup({
+    yield* saveSettingsForSetup({
       ...f.options,
       persistRoots: true,
       repositoryDecisions: [
@@ -396,7 +422,7 @@ it.effect("reports Git preservation and verifies a project skills.sh lock", () =
     ]);
     const unreadableFile = join(tracked, "private.txt");
     yield* f.fs.writeFileString(unreadableFile, "private");
-    const unreadableHash = yield* computeSkillsLockCompatibleHash(tracked, tracked).pipe(
+    const unreadableHash = yield* computeSkillsShCompatibleHash(tracked, tracked).pipe(
       Effect.provideService(FileSystem.FileSystem, {
         ...f.fs,
         readFile: (path) => {
@@ -416,6 +442,16 @@ it.effect("reports Git preservation and verifies a project skills.sh lock", () =
     expect(byName.has("generated")).toBe(false);
     expect(scan.locks).toEqual([
       expect.objectContaining({ scope: "project", status: "valid", version: 1 }),
+    ]);
+    expect(
+      scan.collectionGroups.sources.map((group) => [
+        group.source,
+        group.instances.map((instance) => instance.name),
+      ]),
+    ).toEqual([["acme/tools", ["review"]]]);
+    expect(scan.collectionGroups.loose.map((instance) => instance.name).sort()).toEqual([
+      "private",
+      "root-local",
     ]);
     expect(scan.onboarding.candidates).toEqual([
       expect.objectContaining({
@@ -496,8 +532,11 @@ for (const failure of ["ls-files", "status"] as const) {
       }
       yield* git(f.repository, "add", ".");
       yield* git(f.repository, "commit", "-qm", "repository copies");
-      const evidence = yield* collectSetupEvidence(f.options).pipe(
-        Effect.provide(libraryStoreLayer({ home: f.libraryHome })),
+      const evidence = yield* Effect.flatMap(Library.Service, (library) =>
+        collectSetupEvidence(library, f.options),
+      ).pipe(
+        withLibraryOwner(f.options.inventory),
+        Effect.provide(skitConfigurationLayer(f.libraryHome)),
       );
       expect(evidence.hits.filter((hit) => hit.name === "local")).toHaveLength(1);
       const process = yield* SourceProcess;
@@ -509,7 +548,8 @@ for (const failure of ["ls-files", "status"] as const) {
               ? Effect.succeed({ exitCode: 1, stdout: new Uint8Array(), stderr: "fixture failure" })
               : process.output(command, args, options),
         }),
-        Effect.provide(libraryStoreLayer({ home: f.libraryHome })),
+        withLibraryOwner(f.options.inventory),
+        Effect.provide(skitConfigurationLayer(f.libraryHome)),
       );
       expect(scan.scan.complete).toBe(false);
       expect(scan.instances.map((item) => item.name).sort()).toEqual(
@@ -897,7 +937,7 @@ it.effect("matches an unresolvable lock to a retained Collection by canonical re
     const machineId = makeMachineId();
     const locator = "https://skills.example.test";
     const imported = Schema.decodeUnknownSync(LibraryState)({
-      schemaVersion: CURRENT_LIBRARY_STATE_VERSION,
+      schemaVersion: emptyLibraryFixture().schemaVersion,
       collections: [
         {
           collection_id: collectionId,
@@ -924,6 +964,7 @@ it.effect("matches an unresolvable lock to a retained Collection by canonical re
       installed_skills: [],
       tombstones: [],
       unmanaged: [],
+      operations: [],
       adoption_receipts: [],
     });
     const instance = setupInstance("Bad_Name", "/repo/Bad_Name", {
@@ -1094,7 +1135,7 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
     yield* f.fs.writeFileString(join(installedSkill, ".skit-ownership.json"), installedSkillMarker);
     yield* f.fs.writeFileString(join(copiedSkill, ".skit-ownership.json"), installedSkillMarker);
     const state = Schema.decodeUnknownSync(LibraryState)({
-      schemaVersion: CURRENT_LIBRARY_STATE_VERSION,
+      schemaVersion: emptyLibraryFixture().schemaVersion,
       collections: [
         {
           collection_id: collectionId,
@@ -1178,17 +1219,12 @@ it.effect("identifies a bound authored SKIT and joins it to its installed skills
       ],
       tombstones: [],
       unmanaged: [],
+      operations: [],
       adoption_receipts: [],
     });
-    const scan = yield* Effect.gen(function* () {
-      const store = yield* LibraryStore;
-      yield* store.save(state, yield* store.load);
-      return yield* runSetup(f.options);
-    }).pipe(
-      Effect.provide(
-        libraryStoreLayer({ home: f.libraryHome }).pipe(Layer.provide(testPlatformLayer)),
-      ),
-    );
+    yield* f.fs.makeDirectory(f.libraryHome, { recursive: true });
+    yield* f.fs.writeFileString(join(f.libraryHome, "state.json"), JSON.stringify(state));
+    const scan = yield* scanForSetup(f.options);
     const authoredSkillRealPath = yield* f.fs.realPath(authoredSkill);
 
     expect(scan.authoredCollections).toEqual([
@@ -1363,7 +1399,7 @@ it.effect(
         }),
       );
       const state = Schema.decodeUnknownSync(LibraryState)({
-        schemaVersion: CURRENT_LIBRARY_STATE_VERSION,
+        schemaVersion: emptyLibraryFixture().schemaVersion,
         collections: [
           {
             collection_id: collectionId,
@@ -1466,17 +1502,12 @@ it.effect(
         ],
         tombstones: [],
         unmanaged: [],
+        operations: [],
         adoption_receipts: [],
       });
-      const scan = yield* Effect.gen(function* () {
-        const store = yield* LibraryStore;
-        yield* store.save(state, yield* store.load);
-        return yield* runSetup(f.options);
-      }).pipe(
-        Effect.provide(
-          libraryStoreLayer({ home: f.libraryHome }).pipe(Layer.provide(testPlatformLayer)),
-        ),
-      );
+      yield* f.fs.makeDirectory(f.libraryHome, { recursive: true });
+      yield* f.fs.writeFileString(join(f.libraryHome, "state.json"), JSON.stringify(state));
+      const scan = yield* scanForSetup(f.options);
 
       expect(scan.installedSkills).toEqual(
         expect.arrayContaining([
@@ -1507,7 +1538,7 @@ for (const kind of ["source", "edit"] as const) {
         contentIdentity: { status: "none", currentHash: hash, libraryMatches: [] },
       });
       const library = Schema.decodeUnknownSync(LibraryState)({
-        schemaVersion: CURRENT_LIBRARY_STATE_VERSION,
+        schemaVersion: emptyLibraryFixture().schemaVersion,
         collections: [{ collection_id: collectionId, label: "Reviews" }],
         skills: [
           {
@@ -1581,6 +1612,7 @@ for (const kind of ["source", "edit"] as const) {
         installed_skills: [],
         tombstones: [],
         unmanaged: [],
+        operations: [],
         adoption_receipts: [],
       });
       expect(classifySetupOnboarding([instance], { library, machineId })).toEqual([]);

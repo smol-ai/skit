@@ -1,9 +1,10 @@
 import { join } from "node:path";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Result } from "effect";
-import { skitLayer, deterministicTreeHash } from "@smolai/skit-core";
-import { openSetupReview } from "../src/workflows/library/setup-review.js";
-import { runSetup } from "../src/workflows/library/setup.js";
+import { skitLayer } from "@smolai/skit-core/platform";
+import { deterministicTreeHash } from "@smolai/skit-core/author";
+import { openSetupReview } from "@smolai/skit-core/library/setup";
+import { runSetup } from "@smolai/skit-core/library/setup";
 import { captureDisk } from "./helpers/disk-snapshot.js";
 import { libraryHome, importCollectionIn, scratch, writingTo } from "./helpers/library-home.js";
 
@@ -56,10 +57,10 @@ const fixture = Effect.gen(function* () {
     probePath: "",
     skillsStateHome: join(root, "state"),
   };
-  const scan = yield* home.owned(runSetup(options));
   const review = yield* home.owned(
-    openSetupReview(options, scan, { installOptions: home.installOptions }),
+    openSetupReview(options, { installOptions: home.installOptions }),
   );
+  const scan = review.scan;
   const apply = <A, E, R>(_message: string, effect: Effect.Effect<A, E, R>) => effect;
   return { fs, root, home, agentRoot, linked, alias, options, observed: scan, review, apply };
 });
@@ -97,7 +98,7 @@ it.effect("prepares mixed choices without writes and applies their captured mean
     decisions.length = 0;
     plan.summary.removals.entries.length = 0;
     plan.summary.additions.length = 0;
-    yield* f.home.owned(plan.apply(f.apply));
+    const applied = yield* f.home.owned(plan.apply(f.apply));
     const state = yield* f.home.durable;
     assert.deepStrictEqual(state.skills.map((skill) => skill.name).sort(), ["alpha", "beta"]);
     assert.deepStrictEqual(state.enabled, []);
@@ -107,7 +108,7 @@ it.effect("prepares mixed choices without writes and applies their captured mean
       "---\nname: linked\ndescription: linked\n---\nlinked bytes.\n",
     );
     assert.strictEqual(
-      yield* f.fs.exists(join(plan.summary.removals.recoveryDirectory, "receipt.json")),
+      yield* f.fs.exists(join(applied.removalDirectory ?? "", "receipt.json")),
       true,
     );
     assert.strictEqual(yield* f.fs.exists(join(f.agentRoot, "beta", "SKILL.md")), true);

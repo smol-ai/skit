@@ -1,17 +1,16 @@
+import { originalTreePath } from "./helpers/original-tree.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
-import { Effect, Exit } from "effect";
+import { Context, Effect, Exit, Layer } from "effect";
 import { join } from "node:path";
-import {
-  currentSkillVersion,
-  inspectOwnershipMarker,
-  scanInventory,
-  makeImportId,
-  collectionVersionPath,
-  type SkillId,
-} from "@smolai/skit-core";
+import * as Library from "@smolai/skit-core/library";
+import { setupIntent } from "@smolai/skit-core/library/setup";
+import { inspectOwnershipMarker } from "@smolai/skit-core/library/inventory";
+import { makeImportId, type SkillId } from "@smolai/skit-core/universal/consumer";
 import { RegistryUnreachable } from "../src/registry/failures.js";
+import { captureDisk, assertDiskUnchanged } from "./helpers/disk-snapshot.js";
 import { devices } from "./helpers/library-sync-devices.js";
+import { testRoots } from "./helpers/roots.js";
 
 const enable = (ids: readonly SkillId[]) => ids.map((id) => ({ skill: id }));
 
@@ -35,7 +34,7 @@ it.effect(
       const head = yield* remote;
       assert.ok(before.skills[0]?.local_version_id);
       const key = `collection:${published.collection.collection_id}`;
-      const preview = yield* b.sync({ adopt: true, apply: false });
+      const preview = yield* b.sync({ apply: false });
       assert.equal(preview.status, "conflicted");
       if (preview.status === "conflicted") {
         assert.include(preview.conflicts, key);
@@ -45,10 +44,7 @@ it.effect(
         );
       }
       for (const apply of [false, true]) {
-        assert.equal(
-          (yield* b.sync({ adopt: true, apply, takeRemote: [key] })).status,
-          "resolution_invalid",
-        );
+        assert.equal((yield* b.sync({ apply, takeRemote: [key] })).status, "resolution_invalid");
         assert.deepEqual(yield* b.state, before);
         assert.deepEqual(yield* remote, head);
         assert.equal(
@@ -82,7 +78,7 @@ it.effect("same-name Skills from different Sources stop before writes and resolv
     const head = yield* remote;
     const marker = yield* fs.readFileString(join(b.root, "review", ".skit-ownership.json"));
     for (const apply of [false, true]) {
-      const stopped = yield* b.sync({ adopt: true, apply });
+      const stopped = yield* b.sync({ apply });
       assert.equal(stopped.status, "conflicted");
       if (stopped.status === "conflicted")
         assert.isTrue(stopped.conflicts.some((key) => key.endsWith(":collision")));
@@ -94,14 +90,10 @@ it.effect("same-name Skills from different Sources stop before writes and resolv
       );
     }
     assert.equal(
-      (yield* b.sync({ adopt: true, keepEnabled: [firstSkill.skill_id, secondSkill.skill_id] }))
-        .status,
+      (yield* b.sync({ keepEnabled: [firstSkill.skill_id, secondSkill.skill_id] })).status,
       "resolution_invalid",
     );
-    assert.equal(
-      (yield* b.sync({ adopt: true, keepEnabled: [secondSkill.skill_id] })).status,
-      "merged",
-    );
+    assert.equal((yield* b.sync({ keepEnabled: [secondSkill.skill_id] })).status, "merged");
     assert.equal((yield* b.state).skills.length, 3);
     assert.isTrue(
       (yield* b.state).enabled.some(
@@ -139,12 +131,12 @@ it.effect(
       yield* b.project();
       yield* a.sync();
       const before = yield* b.state;
-      assert.equal((yield* b.sync({ adopt: true, apply: false })).status, "adoption_ready");
+      assert.equal((yield* b.sync({ apply: false })).status, "merge_ready");
       assert.deepEqual(yield* b.state, before);
       inject({ _tag: "DropAfterCommit" });
-      assert.ok((yield* Effect.flip(b.sync({ adopt: true }))) instanceof RegistryUnreachable);
+      assert.ok((yield* Effect.flip(b.sync())) instanceof RegistryUnreachable);
       assert.deepEqual(yield* b.state, before);
-      assert.equal((yield* b.sync({ adopt: true })).status, "merged");
+      assert.equal((yield* b.sync()).status, "merged");
       const after = yield* b.state;
       assert.equal(after.collections.length, 1);
       assert.equal(after.skills.length, 1);
@@ -227,7 +219,9 @@ for (const repository of [false, true]) {
           );
           assert.equal(
             after.installed_skills[0]?.skill_version_id,
-            currentSkillVersion(after, after.skills[0])?.skill_version_id,
+            setupIntent(after).versions.find(
+              (version) => version.skillId === after.skills[0]?.skill_id,
+            )?.selected,
           );
           assert.equal(
             yield* fs.readFileString(join(root, "review", "SKILL.md")),
@@ -268,10 +262,14 @@ it.effect(
       yield* a.edit((state) => ({ ...state, enabled: enable([skill.skill_id]) }));
       yield* a.sync();
       yield* b.sync();
-      yield* fs.writeFileString(join(b.root, "review", "SKILL.md"), "native edit\n");
-      assert.equal((yield* b.sync({ rootFor: () => undefined })).status, "clean");
-      assert.equal((yield* b.state).installed_skills[0]?.status, "conflicted");
-      assert.equal(yield* fs.readFileString(join(b.root, "review", "SKILL.md")), "native edit\n");
+      // A copy at the claude destination is inactive here: Claude Code is not on this device.
+      const claude = join(b.root, "..", "b-claude");
+      yield* b.project({ kind: "global" }, claude, "claude");
+      yield* fs.writeFileString(join(claude, "review", "SKILL.md"), "native edit\n");
+      assert.equal((yield* b.sync()).status, "clean");
+      const copies = (yield* b.state).installed_skills;
+      assert.equal(copies.find((copy) => copy.destination === "claude")?.status, "conflicted");
+      assert.equal(yield* fs.readFileString(join(claude, "review", "SKILL.md")), "native edit\n");
     }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -393,22 +391,32 @@ it.effect(
       yield* a.edit((state) => ({ ...state, enabled: enable([firstSkill.skill_id]) }));
       yield* b.edit((state) => ({ ...state, enabled: enable([secondSkill.skill_id]) }));
       yield* b.project();
+      // Retain this real owner before interruption; opening another owner would replay recovery.
+      const inventory = Context.get(
+        yield* Layer.build(Library.layer({ home: b.home, roots: testRoots(b.home) })),
+        Library.Service,
+      );
       yield* a.sync();
       const before = yield* b.state;
       inject({ _tag: "RejectWrite" });
-      assert.isTrue(Exit.isFailure(yield* Effect.exit(b.sync({ adopt: true }))));
+      assert.isTrue(Exit.isFailure(yield* Effect.exit(b.sync())));
       assert.deepEqual(yield* b.state, before);
       assert.isTrue(yield* fs.exists(join(b.root, "same")));
       inject({ _tag: "FailSave", anchoredOnly: true });
-      assert.isTrue(Exit.isFailure(yield* Effect.exit(b.sync({ adopt: true }))));
+      assert.isTrue(Exit.isFailure(yield* Effect.exit(b.sync())));
       const interrupted = yield* b.state;
       assert.equal(interrupted.skills[0]?.skill_id, secondSkill.skill_id);
       assert.equal(interrupted.installed_skills[0]?.status, "pending");
       assert.isFalse(yield* fs.exists(join(b.root, "same")));
-      const observed = yield* scanInventory(interrupted, []);
-      assert.equal(observed.installed_skills[0]?.status, "pending");
-      yield* b.edit(() => observed);
-      assert.equal((yield* b.sync({ adopt: true })).status, "merged");
+      const observed = yield* inventory.plan(
+        { _tag: "RefreshInventory", roots: [] },
+        { base: yield* inventory.read },
+      );
+      assert.equal(observed.change.installedSkills[0]?.status, "pending");
+      const refreshed = yield* inventory.apply({ _tag: "Apply", plan: observed });
+      assert.equal(refreshed.result.inventory.installed_skills[0]?.status, "pending");
+      assert.equal((yield* b.state).installed_skills[0]?.status, "pending");
+      assert.equal((yield* b.sync()).status, "merged");
       assert.equal((yield* b.state).skills[0]?.skill_id, firstSkill.skill_id);
       assert.equal((yield* b.state).installed_skills[0]?.status, "installed");
       assert.equal(yield* fs.readFileString(join(b.root, "same", "SKILL.md")), "same\n");
@@ -435,14 +443,13 @@ for (const localBytes of ["B\n", "base\n"]) {
         yield* a.sync();
         const skill = remoteUpdate.skills[0];
         assert.ok(skill);
-        const conflict = yield* b.sync({ adopt: true, apply: false });
+        const conflict = yield* b.sync({ apply: false });
         assert.equal(conflict.status, "conflicted");
         if (conflict.status === "conflicted")
           assert.deepEqual(conflict.conflicts, [`collection:${skill.collection_id}`]);
         if (localBytes === "B\n")
           assert.equal(
-            (yield* b.sync({ adopt: true, takeRemote: [`collection:${skill.collection_id}`] }))
-              .status,
+            (yield* b.sync({ takeRemote: [`collection:${skill.collection_id}`] })).status,
             "resolution_invalid",
           );
         yield* b.edit((state) => ({
@@ -454,21 +461,23 @@ for (const localBytes of ["B\n", "base\n"]) {
           ),
         }));
         assert.equal(
-          (yield* b.sync({ adopt: true, takeRemote: [`collection:${skill.collection_id}`] }))
-            .status,
+          (yield* b.sync({ takeRemote: [`collection:${skill.collection_id}`] })).status,
           "merged",
         );
         const merged = yield* b.state;
         for (const copy of localCopies) {
-          assert.isTrue(
-            yield* fs.exists(collectionVersionPath(join(b.home, "originals"), copy.hash)),
-          );
+          assert.isTrue(yield* fs.exists(originalTreePath(join(b.home, "originals"), copy.hash)));
         }
         assert.equal(merged.skills[0]?.versions.length, 2);
         assert.equal(merged.skills[0]?.local_version_id, undefined);
         assert.equal(merged.imports.length, 3);
+        const selected = setupIntent(merged).versions.find(
+          (version) => version.skillId === merged.skills[0]?.skill_id,
+        );
         assert.equal(
-          currentSkillVersion(merged, merged.skills[0])?.source_hash,
+          merged.skills[0]?.versions.find(
+            (version) => version.skill_version_id === selected?.selected,
+          )?.source_hash,
           remoteUpdate.skills[0]?.versions.at(-1)?.source_hash,
         );
         assert.equal((yield* a.sync()).status, "merged");
@@ -479,8 +488,13 @@ for (const localBytes of ["B\n", "base\n"]) {
         });
         const updated = yield* b.state;
         assert.equal(updated.skills[0]?.local_version_id, undefined);
+        const updatedSelection = setupIntent(updated).versions.find(
+          (version) => version.skillId === updated.skills[0]?.skill_id,
+        );
         assert.equal(
-          currentSkillVersion(updated, updated.skills[0])?.source_hash,
+          updated.skills[0]?.versions.find(
+            (version) => version.skill_version_id === updatedSelection?.selected,
+          )?.source_hash,
           next.skills[0]?.versions.at(-1)?.source_hash,
         );
       }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -499,11 +513,20 @@ it.effect("identity alignment preserves a native deletion recorded before first 
     yield* a.edit((state) => ({ ...state, enabled: enable([published.skill_id]) }));
     yield* b.edit((state) => ({ ...state, enabled: enable([local.skill_id]) }));
     yield* b.project();
+    const inventory = Context.get(
+      yield* Layer.build(Library.layer({ home: b.home, roots: testRoots(b.home) })),
+      Library.Service,
+    );
     yield* fs.remove(join(b.root, "same"), { recursive: true });
-    const deleted = yield* scanInventory(yield* b.state, []);
-    yield* b.edit(() => deleted);
+    assert.equal((yield* b.state).installed_skills[0]?.status, "installed");
+    const observation = yield* inventory.plan(
+      { _tag: "RefreshInventory", roots: [] },
+      { base: yield* inventory.read },
+    );
+    const deleted = (yield* inventory.apply({ _tag: "Apply", plan: observation })).result.inventory;
+    assert.equal(deleted.installed_skills[0]?.status, "suppressed");
     yield* a.sync();
-    assert.equal((yield* b.sync({ adopt: true })).status, "merged");
+    assert.equal((yield* b.sync()).status, "merged");
     const after = yield* b.state;
     assert.equal(after.installed_skills[0]?.skill_id, published.skill_id);
     assert.equal(after.installed_skills[0]?.status, "suppressed");
@@ -566,14 +589,11 @@ it.effect("destination comparison follows the filesystem's case behavior", () =>
     yield* b.project();
     yield* a.sync();
     const folded = yield* fs.exists(join(b.root, "Review"));
-    const result = yield* b.sync({ adopt: true, apply: false });
-    assert.equal(result.status, folded ? "conflicted" : "adoption_ready");
+    const result = yield* b.sync({ apply: false });
+    assert.equal(result.status, folded ? "conflicted" : "merge_ready");
     if (folded)
-      assert.equal(
-        (yield* b.sync({ adopt: true, keepEnabled: [secondSkill.skill_id] })).status,
-        "merged",
-      );
-    else assert.equal((yield* b.sync({ adopt: true })).status, "merged");
+      assert.equal((yield* b.sync({ keepEnabled: [secondSkill.skill_id] })).status, "merged");
+    else assert.equal((yield* b.sync()).status, "merged");
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -606,8 +626,8 @@ it.effect(
       const secondSkill = second.skills[0];
       assert.ok(secondSkill);
       const scope = { kind: "repository" as const, root: join(b.home, "repo") };
-      const repositoryRoot = join(scope.root, "skills");
-      yield* fs.makeDirectory(scope.root, { recursive: true });
+      const repositoryRoot = join(scope.root, ".agents", "skills");
+      yield* fs.makeDirectory(join(scope.root, ".agents"), { recursive: true });
       yield* fs.makeDirectory(b.root, { recursive: true });
       yield* fs.symlink(b.root, repositoryRoot);
       yield* b.edit((state) => ({
@@ -617,6 +637,15 @@ it.effect(
       }));
       yield* b.project(scope, repositoryRoot);
       const before = yield* b.state;
+      const installed = before.installed_skills.find(
+        (copy) => copy.skill_id === secondSkill.skill_id,
+      );
+      assert.strictEqual(installed?.root, repositoryRoot);
+      assert.strictEqual(yield* fs.realPath(repositoryRoot), yield* fs.realPath(b.root));
+      assert.strictEqual(
+        yield* fs.readFileString(join(repositoryRoot, "review", "SKILL.md")),
+        "second\n",
+      );
       const head = yield* remote;
       const result = yield* b.sync();
       assert.equal(result.status, "conflicted");
@@ -664,7 +693,7 @@ it.effect("a copy becoming snapshot-backed during merge uploads its already-reta
       ],
     }));
     yield* a.sync();
-    yield* b.sync({ adopt: true });
+    yield* b.sync();
     yield* a.sync();
     const initialHead = yield* remote;
     assert.ok(initialHead);
@@ -686,3 +715,58 @@ it.effect("a copy becoming snapshot-backed during merge uploads its already-reta
     assert.equal((yield* b.sync()).status, "merged");
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
+
+for (const localFollows of [true, false])
+  it.effect(
+    `sync resolves local ${localFollows ? "follow" : "disable"} clash without dropping unrelated remote choices`,
+    () =>
+      Effect.gen(function* () {
+        const { a, b, remote } = yield* devices;
+        const tools = yield* a.importMany("tools", ["alpha", "beta"], "2026-01-01T00:00:00Z");
+        const unrelated = yield* a.importSource("unrelated");
+        const alpha = tools.skills.find((skill) => skill.name === "alpha")!.skill_id;
+        const beta = tools.skills.find((skill) => skill.name === "beta")!.skill_id;
+        const other = unrelated.skills[0]!.skill_id;
+        yield* a.edit((state) => ({ ...state, enabled: enable([alpha, beta, other]) }));
+        yield* a.sync();
+        yield* b.sync();
+        const chosen = localFollows
+          ? [{ collection: tools.collection.collection_id }]
+          : enable([beta]);
+        const competing = localFollows
+          ? enable([beta])
+          : [{ collection: tools.collection.collection_id }];
+        yield* b.edit((state) => ({ ...state, enabled: [...chosen, { skill: other }] }));
+        yield* a.edit((state) => ({ ...state, enabled: competing }));
+        yield* a.sync();
+        const before = yield* captureDisk([...a.disk, ...b.disk]);
+        const priorHead = yield* remote;
+        const preview = yield* b.sync({ apply: false });
+        assert.strictEqual(preview.status, "merge_ready");
+        assert.ok("plan" in preview && preview.plan);
+        const resolution = {
+          winner: "local" as const,
+          collections: [
+            { collection_id: tools.collection.collection_id, label: tools.collection.label },
+          ],
+        };
+        assert.deepStrictEqual(preview.plan.enabled_resolution, resolution);
+        assert.strictEqual(
+          (yield* b.sync({ takeRemote: ["binding:global"] })).status,
+          "resolution_invalid",
+        );
+        yield* assertDiskUnchanged(before);
+        assert.deepStrictEqual(yield* remote, priorHead);
+        const applied = yield* b.sync();
+        assert.strictEqual(applied.status, "merged");
+        assert.ok("plan" in applied && applied.plan);
+        assert.deepStrictEqual(applied.plan.enabled_resolution, resolution);
+        assert.deepStrictEqual((yield* b.state).enabled, chosen);
+        assert.strictEqual((yield* b.state).skills.length, 3);
+        assert.strictEqual((yield* b.state).collections.length, 2);
+        assert.strictEqual((yield* a.sync()).status, "merged");
+        assert.deepStrictEqual((yield* a.state).enabled, chosen);
+        assert.strictEqual((yield* b.sync()).status, "clean");
+        assert.strictEqual((yield* a.sync()).status, "clean");
+      }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+  );

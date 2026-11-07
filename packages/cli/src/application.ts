@@ -1,66 +1,41 @@
-import { Cause, Effect, Layer } from "effect";
+import { Effect, Layer } from "effect";
+import { NodeServices } from "@effect/platform-node";
+import { consoleRendererLayer } from "./terminal/console-renderer.js";
 import { registryHttpLayer } from "./registry/registry-http.js";
-import { registryAuthLayer } from "./registry/auth-service.js";
-import { skitLayer } from "@smolai/skit-core";
-import { libraryApplicationLayer } from "./library-application/layers.js";
-import { skitConfigurationLayer, SkitConfiguration } from "./configuration/skit-configuration.js";
-import { commandFailure } from "./failure-classification.js";
-import { Renderer, consoleRendererLayer } from "./presentation/renderer.js";
+import {
+  configurationForHome,
+  SkitConfiguration,
+  skitConfigurationLayer,
+} from "@smolai/skit-core/platform";
+import * as Library from "@smolai/skit-core/library";
+import { inventoryRootOptions } from "@smolai/skit-core/library/routing";
+import { rootOverrides, type RootFlags } from "./commands/parameters.js";
 
-export function renderCommandFailures<A, E, R>(program: Effect.Effect<A, E, R>) {
-  return Effect.uninterruptibleMask((restore) =>
-    restore(program).pipe(
-      Effect.catchCause((cause) =>
-        Cause.hasInterruptsOnly(cause)
-          ? Effect.failCause(cause)
-          : Effect.flatMap(Renderer, (renderer) => renderer.failure(commandFailure(cause))),
+/** Parsed configuration flags. Grouped commands inherit home from their parent. */
+type CommandInput = { readonly home?: string } & Partial<RootFlags>;
+
+/** Select home from the existing process snapshot; do not resolve its environment again. */
+export const configurationLayer = (input: CommandInput = {}) =>
+  Layer.effect(SkitConfiguration, configurationForHome(input.home));
+
+/** One configured Library for the selected command; its implementation owns startup recovery. */
+export const libraryLayer = (input: CommandInput = {}) =>
+  Layer.unwrap(
+    Effect.map(configurationForHome(input.home), (paths) =>
+      Layer.merge(
+        Layer.succeed(SkitConfiguration, paths),
+        Library.layer({
+          home: paths.skitHome,
+          roots: inventoryRootOptions(paths, rootOverrides(input)),
+        }),
       ),
     ),
   );
-}
 
-export const registryApplicationLayer = Layer.unwrap(
-  Effect.map(SkitConfiguration, (paths) =>
-    Layer.merge(registryHttpLayer(), registryAuthLayer(paths.skitHome)).pipe(
-      Layer.provideMerge(skitLayer),
-    ),
-  ),
-);
+/** Source commands use Library and Registry transport, without constructing Author owners. */
+export const sourceLayer = (input: CommandInput = {}) =>
+  Layer.merge(libraryLayer(input), registryHttpLayer());
 
-/** Combined domain services consume the same required configuration snapshot. */
-export const sourceApplicationLayer = Layer.merge(
-  libraryApplicationLayer,
-  registryApplicationLayer,
-);
-
-/** Full environment for contract generators and runners exercising multiple command families. */
-export function commandApplicationLayer(json: boolean, home: string) {
-  return Layer.merge(
-    sourceApplicationLayer.pipe(Layer.provideMerge(skitConfigurationLayer(home))),
-    consoleRendererLayer(json),
-  );
-}
-
-/** Keep requirements inferred until the selected composition boundary supplies them. */
-export function handlePlatformCommand<E, R>(program: Effect.Effect<void, E, R>) {
-  return renderCommandFailures(Effect.scoped(program)).pipe(Effect.provide(skitLayer));
-}
-
-export function handleLibraryCommand<E, R>(program: Effect.Effect<void, E, R>) {
-  return renderCommandFailures(Effect.scoped(program)).pipe(
-    Effect.provide(libraryApplicationLayer),
-  );
-}
-
-export function handleRegistryCommand<E, R>(program: Effect.Effect<void, E, R>) {
-  return renderCommandFailures(Effect.scoped(program)).pipe(
-    Effect.provide(registryApplicationLayer),
-  );
-}
-
-export function handleSourceCommand<E, R>(program: Effect.Effect<void, E, R>) {
-  return renderCommandFailures(Effect.scoped(program)).pipe(Effect.provide(sourceApplicationLayer));
-}
-
-export { commandFailure } from "./failure-classification.js";
-export { libraryApplicationLayer } from "./library-application/layers.js";
+/** Process services for the executable and command metadata tools; never opens Library. */
+export const cliLayer = (json: boolean, home?: string) =>
+  Layer.mergeAll(skitConfigurationLayer(home), consoleRendererLayer(json), NodeServices.layer);

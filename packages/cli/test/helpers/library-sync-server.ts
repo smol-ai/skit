@@ -1,7 +1,7 @@
 import { assert } from "@effect/vitest";
 import { Schema, SchemaAST } from "effect";
 import type { HttpClientRequest } from "effect/http";
-import type { LibraryState } from "@smolai/skit-core";
+import type { LibraryFixtureState as LibraryState } from "./library-home.js";
 import {
   InvalidRequestResponse,
   LibraryManifest,
@@ -13,7 +13,7 @@ import {
   SnapshotArchive,
   SnapshotUploadResponse,
   StorageFailureResponse,
-} from "@smolai/skit-core/universal/api";
+} from "@smolai/skit-core/api";
 
 /** Every one-shot failure a sync test can inject, each consumed at the boundary it targets. */
 export type Fault =

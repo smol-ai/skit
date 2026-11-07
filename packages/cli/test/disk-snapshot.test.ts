@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { skitLayer } from "@smolai/skit-core";
+import { skitLayer } from "@smolai/skit-core/platform";
 import { captureDisk, diskChanges, noDiskChanges } from "./helpers/disk-snapshot.js";
 
 const workspace = Effect.flatMap(FileSystem.FileSystem, (fs) =>

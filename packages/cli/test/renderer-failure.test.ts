@@ -4,7 +4,7 @@
 import { afterEach, describe, expect, vi } from "vitest";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
-import { consoleRenderer } from "../src/presentation/renderer.js";
+import { consoleRenderer } from "../src/terminal/console-renderer.js";
 import type { CommandFailure } from "../src/commands/types.js";
 
 function captureStderr() {

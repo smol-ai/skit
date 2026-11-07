@@ -1,7 +1,7 @@
 import { Data, Effect, FileSystem, Schema, SchemaIssue } from "effect";
 import { dirname, join } from "node:path";
 import { deterministicTreeHash, validateSkitDirectory } from "../artifact/skit.js";
-import { InvalidLibraryState } from "../failures.js";
+import { InvalidLibraryState } from "./failures.js";
 import { copyLocalTree } from "../platform/copy-tree.js";
 import {
   makeImportId,
@@ -29,18 +29,25 @@ import {
   SourceTracking,
 } from "./library-contracts.js";
 import { decodeLibraryState, libraryManifestFromLocalState } from "./library-state.js";
-import { LibraryStore } from "./store/library-store.js";
-import { originalTreeHash, writeCollectionVersion } from "./collection-version.js";
+import {
+  LibraryWriter,
+  libraryOriginalsPath,
+  libraryStatePath,
+  loadLibrary,
+  inspectLocalLibraryState,
+} from "./store/library-store.js";
+import { originalTreeHash } from "./collection-version.js";
+import { writeCollectionVersion } from "./internal/content/collection-version.js";
 import { installedSkillHash } from "./installed-skill-hash.js";
 import {
   collectionLabelFromSource,
   sourceIdentityFromSource,
   type SourceDeclaration,
 } from "./source-identity.js";
-import type { Hash } from "../vocabulary.js";
+import type { Hash } from "../shared/hash.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
-export class ImportRequestInvalid
+class ImportRequestInvalid
   extends Data.TaggedError("Library.ImportRequestInvalid")<{
     reason: string;
   }>
@@ -55,7 +62,7 @@ export class ImportRequestInvalid
   }
 }
 
-export interface ImportRequestSkill {
+interface ImportRequestSkill {
   readonly name: string;
   readonly sourcePath: string;
   readonly relativePath: string;
@@ -108,7 +115,7 @@ const safeRelative = (path: string) =>
   (path === "." || path.split("/").every((part) => part !== "" && part !== "." && part !== ".."));
 
 /** Member facts from verified retained bytes; `sourcePath` is relative to the retained copy. */
-export interface ImportedSkillFact {
+interface ImportedSkillFact {
   readonly name: string;
   readonly sourcePath: string;
   readonly sourceHash: Hash;
@@ -195,9 +202,9 @@ interface PersistPreparedRequest extends ImportRequest {
 const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function* (
   request: PersistPreparedRequest,
 ) {
-  const store = yield* LibraryStore;
-  const machineId = request.machineId ?? (yield* MachineSettings.ensureIdentity(store.home));
-  const base = yield* store.load;
+  const writer = yield* LibraryWriter;
+  const machineId = request.machineId ?? (yield* MachineSettings.ensureIdentity(writer.home));
+  const base = yield* loadLibrary(writer.home);
   const state = structuredClone(base);
   const source =
     request.sourceIdentity ??
@@ -361,7 +368,7 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
     : versionsChanged
       ? ("updated" as const)
       : ("unchanged" as const);
-  yield* store.save(successor, base);
+  yield* writer.save(successor, base);
   return { action, collection, skills, ...imported } satisfies ImportedCollection;
 });
 
@@ -369,9 +376,14 @@ const persistPrepared = Effect.fn("Library.persistPreparedCollection")(function*
 export const importCollection = Effect.fn("Library.importCollection")(function* (
   request: ImportRequest,
 ) {
-  const store = yield* LibraryStore;
+  const writer = yield* LibraryWriter;
   const prepared = yield* prepareImport(request.skills);
-  yield* writeCollectionVersion(prepared.staged, store.originalsPath, prepared.hash, true);
+  yield* writeCollectionVersion(
+    prepared.staged,
+    libraryOriginalsPath(writer.home),
+    prepared.hash,
+    true,
+  );
   return yield* persistPrepared({
     ...request,
     collectionVersionHash: prepared.hash,
@@ -379,7 +391,7 @@ export const importCollection = Effect.fn("Library.importCollection")(function* 
   });
 });
 
-export class InstalledSkillChanged
+class InstalledSkillChanged
   extends Data.TaggedError("Library.InstalledSkillChanged")<{ path: string }>
   implements SkitFailure
 {
@@ -398,11 +410,11 @@ export class InstalledSkillChanged
  * not alter the Collection's upstream or attribute the changed bytes to that upstream.
  */
 export const importEdit = Effect.fn("Library.importEdit")(function* (request: EditImport) {
-  const store = yield* LibraryStore;
-  const current = yield* store.inspect;
+  const writer = yield* LibraryWriter;
+  const current = yield* inspectLocalLibraryState(writer.home);
   if (!current.present)
     return yield* new InvalidLibraryState({
-      path: join(store.home, "state.json"),
+      path: libraryStatePath(writer.home),
       detail: "Retaining an installed skill's changes requires current Library state",
     });
   const state = structuredClone(current.state);
@@ -430,9 +442,14 @@ export const importEdit = Effect.fn("Library.importEdit")(function* (request: Ed
       Effect.fail(new InstalledSkillChanged({ path: request.path })),
     ),
   );
-  yield* writeCollectionVersion(prepared.staged, store.originalsPath, prepared.hash, true);
+  yield* writeCollectionVersion(
+    prepared.staged,
+    libraryOriginalsPath(writer.home),
+    prepared.hash,
+    true,
+  );
   const fact = prepared.facts[0]!;
-  const machineId = yield* MachineSettings.ensureIdentity(store.home);
+  const machineId = yield* MachineSettings.ensureIdentity(writer.home);
   const collectionVersion = state.collection_versions.find(
     (candidate) => candidate.hash === prepared.hash,
   );
@@ -481,12 +498,12 @@ export const importEdit = Effect.fn("Library.importEdit")(function* (request: Ed
     Effect.mapError(
       (error) =>
         new InvalidLibraryState({
-          path: join(store.home, "state.json"),
+          path: libraryStatePath(writer.home),
           detail: `Retaining an installed skill's changes produced invalid Library state: ${String(error)}`,
         }),
     ),
   );
-  yield* store.save(successor, current.state);
+  yield* writer.save(successor, current.state);
   return {
     skillVersionId: version.skill_version_id,
     collectionVersionId,
@@ -509,21 +526,30 @@ export interface AuthoredImport {
 }
 export const importAuthoredCollection = Effect.fn("Library.retainAuthoredCollectionUnderLock")(
   function* (request: AuthoredImport) {
-    const validated = yield* validateSkitDirectory(request.root, "retained", {
+    const candidate = yield* validateSkitDirectory(request.root, "retained", {
+      assessmentContext: "import",
+    });
+    if (candidate.diagnostics.some((item) => item.severity === "error"))
+      return yield* new ImportRequestInvalid({
+        reason: "authored Descriptor or Skill content is invalid",
+      });
+    const writer = yield* LibraryWriter;
+    const collectionVersionHash = yield* originalTreeHash(request.root);
+    const collectionVersionPath = yield* writeCollectionVersion(
+      request.root,
+      libraryOriginalsPath(writer.home),
+      collectionVersionHash,
+      true,
+    );
+    // The editable root can change after the early rejection check. All selected facts
+    // must describe the immutable bytes we actually retained, including their descriptor.
+    const validated = yield* validateSkitDirectory(collectionVersionPath, "retained", {
       assessmentContext: "import",
     });
     if (validated.diagnostics.some((item) => item.severity === "error"))
       return yield* new ImportRequestInvalid({
         reason: "authored Descriptor or Skill content is invalid",
       });
-    const store = yield* LibraryStore;
-    const collectionVersionHash = yield* originalTreeHash(request.root);
-    const collectionVersionPath = yield* writeCollectionVersion(
-      request.root,
-      store.originalsPath,
-      collectionVersionHash,
-      true,
-    );
     const validationByName = new Map(validated.identity.skills.map((skill) => [skill.name, skill]));
     const facts: ImportedSkillFact[] = [];
     for (const member of validated.descriptor.skills) {
@@ -562,3 +588,6 @@ export type ImportAuthoredCollectionError = Effect.Error<
   ReturnType<typeof importAuthoredCollection>
 >;
 export type ImportEditError = Effect.Error<ReturnType<typeof importEdit>>;
+
+// Required by the public declaration-only error vocabulary.
+export type { ImportRequestInvalid, InstalledSkillChanged };

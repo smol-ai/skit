@@ -1,13 +1,9 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { importCanBeRefetched, librarySnapshotDigests } from "@smolai/skit-core";
 import { LibraryChangedOnServer } from "../src/registry/failures.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
-import {
-  LibraryManifestTooNew,
-  librarySyncApi,
-} from "../src/workflows/library/library-sync-api.js";
+import { LibraryManifestTooNew, librarySyncApi } from "../src/library/sync/api.js";
 import { testHttpClientLayer } from "./helpers/http-test-client.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
@@ -17,7 +13,7 @@ import { testPlatformLayer } from "./helpers/platform.js";
 
 const wire = (name: string) =>
   Effect.flatMap(FileSystem.FileSystem, (fs) =>
-    fs.readFileString(join(import.meta.dirname, "fixtures/library-wire", name)),
+    fs.readFileString(join(import.meta.dirname, "../../skit/test/fixtures/library-wire", name)),
   ).pipe(Effect.map(JSON.parse));
 
 /** Run the client against one literal response, recording the request it sent. */
@@ -56,7 +52,6 @@ const exchange = <A, E>(
 it.effect("decodes a literal skit.library.v8 head without loss", () =>
   Effect.gen(function* () {
     const head = yield* wire("portable-v8.json");
-    const archive = yield* wire("snapshot-archive.json");
     const { result, sent } = yield* exchange(
       () => Response.json(head),
       (api) => api.read(),
@@ -66,9 +61,6 @@ it.effect("decodes a literal skit.library.v8 head without loss", () =>
     ]);
     assert.deepStrictEqual(result, head.library);
     assert.ok(result);
-    // The pinned Git import is restorable from its Source; the retained edit needs a snapshot.
-    assert.deepStrictEqual(result.manifest.imports.map(importCanBeRefetched), [true, false]);
-    assert.deepStrictEqual(librarySnapshotDigests(result.manifest), [archive.digest]);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 

@@ -1,25 +1,21 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
-import { Authorization } from "../authorization/service.js";
-import { credentialOriginAllowed } from "../auth/request-context.js";
-import { ServerConfiguration } from "../configuration.js";
 import {
   MAX_RELEASE_ARCHIVE_BASE64_LENGTH,
   MAX_RELEASE_ARCHIVE_BYTES,
   releasePublishRequestSchema,
 } from "@smolai/skit-core/universal/authoring";
-import { Publication } from "../publication/service.js";
-import { CurrentPrincipal, CurrentRequest } from "./authentication.js";
-import { PublicationAuthenticatedApi } from "@smolai/skit-core/universal/api";
+import { Skits } from "../skits/service.js";
+import { requirePrincipalScope } from "./authentication.js";
+import { PublicationAuthenticatedApi } from "@smolai/skit-core/api";
 import {
   archiveTooLargeResponse,
-  draftNotFoundResponse,
-  forbiddenOriginResponse,
+  skitNotFoundResponse,
   forbiddenResponse,
-  insufficientScopeResponse,
   invalidRequestResponse,
   releaseConflictResponse,
-  staleDraftRevisionResponse,
+  staleRevisionResponse,
+  currentRevisionMissingResponse,
   storageFailureResponse,
 } from "./errors.js";
 import { schemaBodyJsonLimited } from "./request-body.js";
@@ -33,33 +29,23 @@ export const publicationHandlers = HttpApiBuilder.group(
   "publication",
   (handlers) =>
     Effect.gen(function* () {
-      const authorization = yield* Authorization;
-      const configuration = yield* ServerConfiguration;
-      const publication = yield* Publication;
+      const skits = yield* Skits;
 
       return handlers.handleRaw("publish", ({ params, request: rawRequest }) =>
         Effect.gen(function* () {
-          const principal = yield* CurrentPrincipal;
-          if (!principal.scopes.has("publication:write"))
-            return yield* Effect.fail(insufficientScopeResponse);
+          const principal = yield* requirePrincipalScope("publication:write");
 
-          const request = yield* CurrentRequest;
-          if (
-            !credentialOriginAllowed(principal.credential, request, configuration.publicAppOrigin)
-          )
-            return yield* Effect.fail(forbiddenOriginResponse);
-
-          const allowed = yield* authorization
-            .canPublish(principal, params.owner, params.slug)
+          const publication = yield* skits
+            .preparePublication(principal, { owner: params.owner, slug: params.slug })
             .pipe(
               Effect.tapError((error) =>
                 Effect.logError("publication authorization failed", error),
               ),
-              Effect.catchTag("Cloudflare.DatabaseError", () =>
-                Effect.fail(storageFailureResponse),
-              ),
+              Effect.catchTags({
+                "Publication.Forbidden": () => Effect.fail(forbiddenResponse),
+                "Cloudflare.DatabaseError": () => Effect.fail(storageFailureResponse),
+              }),
             );
-          if (!allowed) return yield* Effect.fail(forbiddenResponse);
 
           const decoded = yield* schemaBodyJsonLimited(
             rawRequest,
@@ -81,8 +67,6 @@ export const publicationHandlers = HttpApiBuilder.group(
 
           const release = yield* publication
             .publish({
-              owner: params.owner,
-              slug: params.slug,
               version: payload.version,
               revisionId: payload.revision_id,
               archive,
@@ -91,10 +75,14 @@ export const publicationHandlers = HttpApiBuilder.group(
               Effect.catch((error) =>
                 Effect.gen(function* () {
                   switch (error._tag) {
-                    case "Publication.DraftNotFound":
-                      return yield* Effect.fail(draftNotFoundResponse);
-                    case "Publication.StaleDraftRevision":
-                      return yield* Effect.fail(staleDraftRevisionResponse);
+                    case "Publication.Forbidden":
+                      return yield* Effect.fail(forbiddenResponse);
+                    case "Publication.SkitNotFound":
+                      return yield* Effect.fail(skitNotFoundResponse);
+                    case "Publication.CurrentRevisionMissing":
+                      return yield* Effect.fail(currentRevisionMissingResponse);
+                    case "Publication.StaleRevision":
+                      return yield* Effect.fail(staleRevisionResponse);
                     case "Publication.PublishBlocked":
                       return yield* Effect.fail({
                         error: "publish_blocked" as const,

@@ -1,3 +1,4 @@
+import { registryCredentials, reuseLogin } from "../src/registry/auth.js";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { Effect, FileSystem } from "effect";
@@ -6,7 +7,7 @@ import {
   type AuthConfig,
   officialRegistryOrigin,
 } from "../src/registry/accounts.js";
-import { resolveAuth, reuseLogin } from "../src/registry/auth.js";
+
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer } from "./helpers/http-test-client.js";
 import { testPlatformLayer } from "./helpers/platform.js";
@@ -124,7 +125,7 @@ it.effect("resolves selection and credential from a single file read", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     let reads = 0;
-    const auth = yield* resolveAuth("/accounts", "work").pipe(
+    const auth = yield* registryCredentials({ home: "/accounts", registry: "work" }).pipe(
       Effect.provideService(FileSystem.FileSystem, {
         ...fs,
         readFileString: () =>

@@ -21,13 +21,13 @@ import {
   SkillsShLockFileEntry,
   SourceIdentity,
 } from "../library-contracts.js";
-import { Hash } from "../../vocabulary.js";
+import { Hash } from "../../shared/hash.js";
 
 // Frozen `skit.library.v7`. Every older manifest and Library state migrates through these shapes,
 // so they and the helpers below stay as v7 defined them while the current model moves on.
 
 /** A Skill Version as v7 stored it: its hashes were called digests. */
-export const SkillVersionV7 = Schema.Struct({
+const SkillVersionV7 = Schema.Struct({
   skill_version_id: SkillVersionId,
   source_digest: Hash,
   artifact_digest: Hash,
@@ -39,7 +39,7 @@ export const SkillV7 = Schema.Struct({
   versions: Schema.mutable(Schema.Array(SkillVersionV7)),
 });
 export type SkillV7 = typeof SkillV7.Type;
-export const CollectionVersionSkillV7 = Schema.Struct({
+const CollectionVersionSkillV7 = Schema.Struct({
   source_path: CollectionRelativePath,
   source_digest: Hash,
   artifact_digest: Hash,

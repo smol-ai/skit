@@ -3,14 +3,13 @@ import { NodeServices } from "@effect/platform-node";
 import { HttpClientError } from "effect/http";
 import { assert, it } from "@effect/vitest";
 import { expect } from "vitest";
-import {
-  authorListCommand,
-  listAuthorSkits,
-  AuthorListIdentityError,
-} from "../src/workflows/author/list.js";
-import { SkitContractError } from "@smolai/skit-core";
+import { authorListCommand } from "../src/author/list.js";
+import { listAuthorSkits, AuthorListIdentityError } from "@smolai/skit-core/author";
+import { listAuthorInventory } from "../src/registry/authoring.js";
+import { SkitContractError } from "@smolai/skit-core/api";
 
-import { renderCommandFailures } from "../src/application.js";
+import { runCommandTree } from "../src/commands/runtime.js";
+import { Command } from "effect/cli";
 import type { ResolvedAuth } from "../src/registry/auth.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { registryApiFailureMessage } from "../src/registry/api-client.js";
@@ -19,17 +18,20 @@ import {
   RegistryOriginInvalid,
   RegistryUnreachable,
 } from "../src/registry/failures.js";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 
 const listWithTransport = (input: { origin?: string; token?: string }, fetcher: TestHttpHandler) =>
-  listAuthorSkits(input).pipe(Effect.provide(registryHttpLayer(testHttpClientLayer(fetcher))));
+  listAuthorSkits({ list: () => listAuthorInventory(input) }).pipe(
+    Effect.provide(registryHttpLayer(testHttpClientLayer(fetcher))),
+  );
 
 const input = { origin: "https://registry.test", token: "test-token" };
 const item = {
   skit_id: "tim/tools",
   visibility: "private",
-  draft_revision_id: "draft_123",
+  current_revision_id: `sha256:${"1".repeat(64)}`,
+  current_revision_published: false,
   most_recent_release_version: null,
 };
 const page = (cursor: string | null = null, skits = [item]) =>
@@ -40,7 +42,11 @@ const classifiedFailures = Effect.fn("AuthorListTest.classifiedFailures")(functi
   response: Response,
 ) {
   const interaction = yield* makeScriptedInteraction([]);
-  yield* renderCommandFailures(authorListCommand({ authState })).pipe(
+  yield* runCommandTree(
+    Command.make("author-list", {}, () => authorListCommand({ authState })),
+    [],
+    "test",
+  ).pipe(
     Effect.provide(interaction.layer),
     Effect.provide(registryHttpLayer(testHttpClientLayer(() => Effect.succeed(response)))),
     Effect.provide(NodeServices.layer),

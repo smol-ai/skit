@@ -10,7 +10,7 @@ export default defineConfig(async () => ({
   ],
   test: {
     include: ["test/**/*.test.ts"],
-    exclude: ["test/e2e.test.ts", "test/e2e-skills-sh.test.ts"],
+    exclude: ["test/e2e.test.ts", "test/e2e-skills-sh.test.ts", "test/e2e-author-sync.test.ts"],
     maxWorkers: 1,
   },
 }));

@@ -5,7 +5,7 @@ import {
   makeSkillId,
   makeSkillVersionId,
 } from "../src/library/entity-ids.js";
-import { parseOwnershipMarker } from "../src/install/files.js";
+import { parseOwnershipMarker } from "../src/installed-skills/marker-inspection.js";
 
 const current = {
   schemaVersion: 5,

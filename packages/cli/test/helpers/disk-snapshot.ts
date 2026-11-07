@@ -1,8 +1,8 @@
+import { LinkStat } from "@smolai/skit-core/platform";
 import { assert } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { LinkStat } from "@smolai/skit-core";
 
 /**
  * One path exactly as `lstat` sees it. A link records its own target and is never followed. Small
@@ -73,6 +73,9 @@ export const captureDisk = Effect.fn("Test.captureDisk")(function* (
       });
     else if (info.type === "File") {
       const bytes = Buffer.from(yield* fs.readFile(path));
+      // An empty lock.sqlite is a home or workspace lock (ADR-0026): it never holds
+      // data and is never unlinked, so taking a lock is not a disk change. Bytes in it would be.
+      if (segments.at(-1) === "lock.sqlite" && bytes.length === 0) return;
       entries.push({
         path: segments,
         entry: {

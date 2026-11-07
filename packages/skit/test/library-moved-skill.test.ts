@@ -1,11 +1,13 @@
+import { openLibrary } from "./helpers/library-store.js";
+import type * as Library from "../src/library/library.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { currentCollectionSkills, currentSkillVersion } from "../src/library/library-contracts.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
-import { importCollection } from "../src/library/import-collection.js";
-import { LibraryStore, libraryStoreLayer } from "../src/library/store/library-store.js";
+
+import { loadLibrary } from "../src/library/store/library-store.js";
 import { skitLayer } from "../src/platform/layer.js";
 
 const machineId = migratedMachineId("019950c0-4c00-7000-8000-000000000001", "moved-skill-test");
@@ -28,23 +30,26 @@ it.effect("keeps a moved Skill's old row and retained Version beside its new pat
           currentHash: yield* deterministicTreeHash(path),
         };
       });
-    const importSource = (skills: Parameters<typeof importCollection>[0]["skills"]) =>
-      importCollection({
-        machineId,
-        source: { type: "local", path: source },
-        input: source,
-        importedAt: "2026-09-17T00:00:00.000Z",
-        skills,
-        lockFileEntries: [],
-      }).pipe(Effect.scoped, Effect.provide(libraryStoreLayer({ home })));
+    const importSource = (
+      skills: Parameters<Library.Interface["import"]["collection"]>[0]["skills"],
+    ) =>
+      Effect.gen(function* () {
+        const owner = yield* openLibrary(home);
+        return yield* owner.import.collection({
+          machineId,
+          source: { type: "local", path: source },
+          input: source,
+          importedAt: "2026-09-17T00:00:00.000Z",
+          skills,
+          lockFileEntries: [],
+        });
+      }).pipe(Effect.scoped);
 
     const before = yield* importSource([yield* skillAt("in-progress/spec")]);
     yield* fs.remove(join(source, "in-progress"), { recursive: true });
     const after = yield* importSource([yield* skillAt("engineering/spec")]);
 
-    const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
-      Effect.provide(libraryStoreLayer({ home })),
-    );
+    const state = yield* loadLibrary(home);
     assert.deepStrictEqual(
       state.skills.map((skill) => [skill.name, skill.path]),
       [

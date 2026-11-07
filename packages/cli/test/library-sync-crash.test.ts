@@ -2,7 +2,7 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { join } from "node:path";
-import { type LibraryState } from "@smolai/skit-core";
+import type { LibraryFixtureState as LibraryState } from "./helpers/library-home.js";
 import { RegistryUnreachable } from "../src/registry/failures.js";
 import { devices } from "./helpers/library-sync-devices.js";
 
@@ -101,7 +101,7 @@ it.effect("a write committed without a response leaves coherent state and conver
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("state without ancestry adopts explicitly and keeps remote-only Collections", () =>
+it.effect("state without ancestry merges add-only and keeps remote-only Collections", () =>
   Effect.gen(function* () {
     const { a, b, remoteCollections } = yield* devices;
     yield* a.importSource("first");
@@ -110,8 +110,8 @@ it.effect("state without ancestry adopts explicitly and keeps remote-only Collec
     yield* b.importSource("second");
     const remoteOnly = yield* remoteCollections;
 
-    assert.strictEqual((yield* b.sync()).status, "adoption_required");
-    assert.strictEqual((yield* b.sync({ adopt: true })).status, "merged");
+    assert.strictEqual((yield* b.sync({ apply: false })).status, "merge_ready");
+    assert.strictEqual((yield* b.sync()).status, "merged");
     const adopted = yield* remoteCollections;
     assert.strictEqual(adopted.length, 2);
     for (const collectionId of remoteOnly) assert.include(adopted, collectionId);
@@ -252,7 +252,7 @@ it.effect("sync saves only declared fields, and writes nothing that would drop o
 
 for (const ancestry of ["missing", "stale"] as const)
   it.effect(
-    `a clean sync anchoring ${ancestry} ancestry saves once, without undeclared fields`,
+    `a clean sync anchoring ${ancestry} ancestry records one completed Sync, without undeclared fields`,
     () =>
       Effect.gen(function* () {
         const { a, remote } = yield* devices;
@@ -277,29 +277,42 @@ for (const ancestry of ["missing", "stale"] as const)
         assert.deepStrictEqual(yield* a.state, before);
 
         assert.strictEqual((yield* a.sync()).status, "clean");
-        assert.strictEqual(a.saves, saves + 1);
+        const after = yield* a.state;
+        assert.strictEqual(after.operations.length, before.operations.length + 1);
+        assert.deepStrictEqual(after.operations.slice(0, -1), before.operations);
+        const record = after.operations.at(-1);
+        assert.strictEqual(record?._tag, "Done");
+        assert.deepStrictEqual(
+          record?.steps.map((step) => step.status),
+          ["Done", "Done", "Done"],
+        );
         const anchored = yield* a.state;
         assert.isFalse(Object.hasOwn(anchored, "extension"));
         assert.strictEqual(anchored.sync_ancestry?.revision_id, head.revision_id);
+        const saved = a.saves;
+        assert.strictEqual((yield* a.sync()).status, "clean");
+        assert.strictEqual(a.saves, saved);
+        assert.deepStrictEqual(yield* a.state, anchored);
       }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
   );
 
-it.effect("an install failure after sync saves leaves state and ancestry coherent", () =>
+it.effect("an obstructed install directory is refused before Sync publishes locally", () =>
   Effect.gen(function* () {
-    const { fs, a, b, remote } = yield* devices;
+    const { fs, a, b, remote, server } = yield* devices;
     yield* a.importSource("first");
     yield* a.edit(enable((yield* a.state).skills[0]!.skill_id));
     yield* a.sync();
-    // B's skills directory is occupied by a file, so nothing can be installed there.
     yield* fs.writeFileString(b.root, "not a directory\n");
-
-    yield* Effect.exit(b.sync());
-    const pulled = yield* b.state;
-    assert.strictEqual(pulled.collections.length, 1);
-    assert.strictEqual(pulled.sync_ancestry?.revision_id, (yield* remote)?.revision_id);
-
+    const head = yield* remote;
+    const writes = server.writeRequests;
+    const failure = yield* Effect.flip(b.sync());
+    assert.strictEqual(failure._tag, "PlatformError");
+    assert.isFalse(yield* fs.exists(join(b.home, "state.json")));
+    assert.strictEqual(yield* fs.readFileString(b.root), "not a directory\n");
+    assert.strictEqual(server.writeRequests, writes);
+    assert.deepStrictEqual(yield* remote, head);
     yield* fs.remove(b.root);
-    assert.strictEqual((yield* b.sync()).status, "clean");
+    assert.strictEqual((yield* b.sync()).status, "pulled");
     assert.isTrue(yield* fs.exists(join(b.root, "first", "SKILL.md")));
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
@@ -367,22 +380,24 @@ for (const removalSyncsFirst of [true, false])
       }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
   );
 
-it.effect("adoption recovers a home whose Library vanished without deleting anything", () =>
-  Effect.gen(function* () {
-    const { a, b, resetRemote, remoteCollections } = yield* devices;
-    yield* a.importSource("first");
-    yield* a.sync();
-    yield* b.sync();
-    yield* b.importSource("second");
-    yield* resetRemote;
+it.effect(
+  "an empty-base merge recovers a home whose Library vanished without deleting anything",
+  () =>
+    Effect.gen(function* () {
+      const { a, b, resetRemote, remoteCollections } = yield* devices;
+      yield* a.importSource("first");
+      yield* a.sync();
+      yield* b.sync();
+      yield* b.importSource("second");
+      yield* resetRemote;
 
-    assert.strictEqual((yield* a.sync()).status, "base_mismatch");
-    assert.strictEqual((yield* a.sync({ adopt: true })).status, "pushed");
-    assert.strictEqual((yield* b.sync()).status, "base_mismatch");
-    assert.strictEqual((yield* b.sync({ adopt: true })).status, "merged");
-    assert.strictEqual((yield* remoteCollections).length, 2);
-    assert.strictEqual((yield* a.sync()).status, "merged");
-    assert.strictEqual((yield* a.state).collections.length, 2);
-    assert.strictEqual((yield* b.sync()).status, "clean");
-  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+      assert.strictEqual((yield* a.sync({ apply: false })).status, "push_ready");
+      assert.strictEqual((yield* a.sync()).status, "pushed");
+      assert.strictEqual((yield* b.sync({ apply: false })).status, "merge_ready");
+      assert.strictEqual((yield* b.sync()).status, "merged");
+      assert.strictEqual((yield* remoteCollections).length, 2);
+      assert.strictEqual((yield* a.sync()).status, "merged");
+      assert.strictEqual((yield* a.state).collections.length, 2);
+      assert.strictEqual((yield* b.sync()).status, "clean");
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

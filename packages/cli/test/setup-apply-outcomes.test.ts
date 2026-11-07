@@ -1,28 +1,22 @@
+import { recoveryInspection, recoveryList } from "./helpers/recovery.js";
+import { withLibraryOwner } from "./helpers/library-owner.js";
 import { basename, join, relative } from "node:path";
 import { Effect, Exit, FileSystem, Option, Schema } from "effect";
 import { PlatformError, systemError } from "effect/PlatformError";
 import { assert, it } from "@effect/vitest";
-import {
-  InvalidLibraryState,
-  LibraryStore,
-  SkillsDirectoryNotWritable,
-  skitLayer,
-} from "@smolai/skit-core";
+import { LibraryState } from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
+import { skitLayer } from "@smolai/skit-core/platform";
 import { withSandboxDenying } from "./helpers/sandbox.js";
-import { SetupResult } from "../src/workflows/library/setup-contract.js";
-import { setupCommand } from "../src/handlers/library/setup.js";
+import { SetupResult, SetupPlanStale, SetupStopped } from "@smolai/skit-core/library/setup";
+import { setupCommand } from "../src/library/setup.js";
 import {
   makeScriptedInteraction,
   type ScriptedAnswer,
-} from "../src/presentation/interaction-recorder.js";
-import { Prompter } from "../src/presentation/prompter.js";
-import { setupPrompts } from "../src/presentation/setup-steps.js";
-import {
-  inspectRecoveryOperation,
-  listRecoveryOperations,
-} from "../src/library-application/recovery-moves.js";
-import { PlanIsStale } from "../src/library/failures.js";
-import { SetupDiscovery, SetupPlanStale } from "../src/workflows/library/setup.js";
+} from "../src/storybook/interaction-recorder.js";
+import { Prompter } from "../src/terminal/prompter.js";
+import { setupPrompts } from "../src/library/setup/steps.js";
+
 import { captureDisk, diskChanges, noDiskChanges, type DiskDiff } from "./helpers/disk-snapshot.js";
 import {
   deterministicTreeHash,
@@ -43,10 +37,11 @@ const skillBytes = (name: string, body = `${name} body`) =>
 interface Gates {
   /** Runs once the confirmation prompt has approved the plan. */
   readonly approved?: Effect.Effect<void, unknown>;
-  /** Runs once the first Library state has been saved. */
+  /** Runs once the first Library state has replaced state.json. */
   readonly published?: Effect.Effect<void, unknown>;
-  /** Refuses the nth Library state save. */
-  readonly failPublish?: number;
+  /** Refuses a publication selected by its domain state, independently of checkpoint count. */
+  readonly refusePublication?: (state: LibraryState) => boolean;
+  readonly directory?: (path: string) => Effect.Effect<void>;
   /** Runs before every rename; a failure refuses that rename. */
   readonly rename?: (from: string, to: string) => Effect.Effect<void, PlatformError>;
 }
@@ -77,10 +72,11 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
     flags: { interactive?: boolean; dryRun?: boolean; workDirFlag?: string } = {},
   ) =>
     Effect.gen(function* () {
-      // Full discovery scans, counted at the setup scan seam, in all and after approval.
+      // Each complete scan reads the global skills.sh lock once. Count that real IO,
+      // including an absent lock, rather than introducing a service to substitute the scan.
       let scans = 0;
       let approvedAt: number | undefined;
-      let publishes = 0;
+      let announcedPublication = false;
       const interaction = yield* makeScriptedInteraction(answers);
       const exit = yield* Effect.exit(
         home.owned(
@@ -91,6 +87,7 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
             ...(flags.workDirFlag ? { workDirFlag: flags.workDirFlag } : {}),
             manageOptions: { installOptions: home.installOptions },
           }).pipe(
+            withLibraryOwner(home.inventory),
             Effect.provideServiceEffect(
               Prompter,
               Effect.map(Prompter, (prompter) => ({
@@ -109,40 +106,34 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
               })),
             ),
             Effect.provideServiceEffect(
-              LibraryStore,
-              Effect.map(LibraryStore, (store) => ({
-                ...store,
-                save: (next: Parameters<typeof store.save>[0], base: typeof next) =>
-                  Effect.gen(function* () {
-                    publishes++;
-                    if (publishes === gates.failPublish)
-                      return yield* new InvalidLibraryState({
-                        path: home.statePath,
-                        detail: "Test refusal of a Library save",
-                      });
-                    yield* store.save(next, base);
-                    if (publishes === 1) yield* Effect.orDie(gates.published ?? Effect.void);
-                  }),
-              })),
-            ),
-            Effect.provideServiceEffect(
-              SetupDiscovery,
-              Effect.map(SetupDiscovery, (discovery) => ({
-                collect: (scanned: Parameters<typeof discovery.collect>[0]) =>
-                  Effect.andThen(
-                    Effect.sync(() => {
-                      scans++;
-                    }),
-                    discovery.collect(scanned),
-                  ),
-              })),
-            ),
-            Effect.provideServiceEffect(
               FileSystem.FileSystem,
               Effect.map(FileSystem.FileSystem, (files) => ({
                 ...files,
+                readFileString: (...args: Parameters<typeof files.readFileString>) =>
+                  Effect.suspend(() => {
+                    if (args[0] === join(options.skillsStateHome, "skills", ".skill-lock.json"))
+                      scans++;
+                    return files.readFileString(...args);
+                  }),
+                makeDirectory: (...args: Parameters<typeof files.makeDirectory>) =>
+                  Effect.gen(function* () {
+                    yield* gates.directory?.(args[0]) ?? Effect.void;
+                    return yield* files.makeDirectory(...args);
+                  }),
                 rename: (from: string, to: string) =>
-                  Effect.andThen(gates.rename?.(from, to) ?? Effect.void, files.rename(from, to)),
+                  Effect.gen(function* () {
+                    yield* gates.rename?.(from, to) ?? Effect.void;
+                    if (to !== home.statePath) return yield* files.rename(from, to);
+                    const state = yield* Schema.decodeUnknownEffect(
+                      Schema.fromJsonString(LibraryState),
+                    )(yield* files.readFileString(from)).pipe(Effect.orDie);
+                    if (gates.refusePublication?.(state)) return yield* refuseRename(to);
+                    yield* files.rename(from, to);
+                    if (!announcedPublication) {
+                      announcedPublication = true;
+                      yield* Effect.orDie(gates.published ?? Effect.void);
+                    }
+                  }),
               })),
             ),
             Effect.provide(interaction.layer),
@@ -283,20 +274,14 @@ it.effect("non-interactive setup with a work dir records a guarded settings-only
       assert.isTrue(exit.value.machineConfig.persisted);
       assert.deepStrictEqual(exit.value.machineConfig.repositoryRoots, [work]);
     }
+    // The Library records the setup, with no steps; the settings save under its operation ID.
     assert.deepStrictEqual(changedPaths(f.root, yield* diskChanges(before)), {
-      created: [
-        "library/removed",
-        "library/removed/*",
-        "library/removed/*/changes",
-        "library/removed/*/changes/00000001.json",
-        "library/removed/*/changes/00000001.published.json",
-        "library/removed/*/complete.json",
-        "library/removed/*/setup.json",
-      ],
+      created: ["library/audit.jsonl", "library/state.json"],
       deleted: [],
       changed: ["library/machine.json"],
     });
-    assert.strictEqual(scans, 3);
+    // The review's own scan, then the revalidation under apply; the apply reports its scan back.
+    assert.strictEqual(scans, 2);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -337,8 +322,9 @@ it.effect("an approved apply scans once after approval, whatever stages it runs"
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-// No stage observes again, so a selected copy changed after the apply-time scan, here while machine
-// identity is written ahead of ownership, cannot pass as approved: ownership checks its bytes first.
+// No step observes again, so a selected copy changed after the apply-time scan, here while machine
+// identity is written ahead of the steps, cannot pass as approved: its bytes are checked when its
+// step is recorded, and nothing reaches the Library.
 it.effect("bytes changed between the apply-time scan and a later stage fail stale", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: false });
@@ -350,27 +336,21 @@ it.effect("bytes changed between the apply-time scan and a later stage fail stal
           ? f.fs.writeFileString(join(f.path("alpha"), "SKILL.md"), changed)
           : Effect.void,
     });
-    assert.instanceOf(failure(exit), PlanIsStale);
-    assert.deepStrictEqual((yield* f.home.durable).skills, []);
+    assert.instanceOf(failure(exit), Library.StalePlan);
+    assert.strictEqual((yield* f.home.snapshot)._tag, "Absent");
     const changes = yield* diskChanges(before);
     assert.isFalse(holds(changes, changed));
     assert.deepStrictEqual(changedPaths(f.root, changes), {
-      created: [
-        "library/machine.json",
-        "library/removed",
-        "library/removed/*",
-        "library/removed/*/changes",
-        "library/removed/*/changes/00000001.json",
-        "library/removed/*/changes/00000001.published.json",
-        "library/removed/*/setup.json",
-      ],
+      created: ["library/machine.json"],
       deleted: [],
       changed: [".codex/skills/alpha/SKILL.md"],
     });
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("a selected copy changed after the first additive stage fails stale", () =>
+// Preparation validates the whole recorded input before creating directories or importing any
+// selected copy. An edited selection stops the attempt with no earlier selection retained.
+it.effect("a selected copy changed after the steps are recorded stops the setup", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: true });
     const changed = skillBytes("beta", "changed after the first stage");
@@ -378,72 +358,124 @@ it.effect("a selected copy changed after the first additive stage fails stale", 
     const { exit } = yield* f.setup([["alpha", "beta", "remove\0gamma"], true], {
       published: f.fs.writeFileString(join(f.path("beta"), "SKILL.md"), changed),
     });
-    assert.instanceOf(failure(exit), PlanIsStale);
+    assert.instanceOf(failure(exit), SetupStopped);
     assert.deepStrictEqual(
       (yield* f.home.durable).skills.map((skill) => skill.name),
-      ["alpha"],
+      [],
     );
     assert.isFalse(holds(yield* diskChanges(before), changed));
     assert.isTrue(yield* f.fs.exists(join(f.path("gamma"), "SKILL.md")));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-// Additive stages run before removals, so a failed additive stage removes nothing. Machine identity
-// and orphan originals may already be written; neither loses anything.
-it.effect("a failed additive stage leaves every selected removal in place", () =>
+// A setup whose record cannot be saved writes nothing to the Library; machine identity, which the
+// steps are recorded under, may already be written.
+it.effect("a setup whose record is refused writes nothing to the Library", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: false });
     const before = yield* captureDisk(f.disk);
-    const { exit } = yield* f.setup([["alpha", "remove\0gamma"], true], { failPublish: 1 });
-    assert.instanceOf(failure(exit), InvalidLibraryState);
+    const { exit } = yield* f.setup([["alpha", "remove\0gamma"], true], {
+      refusePublication: (state) =>
+        state.operations.some((operation) => operation._tag === "Pending"),
+    });
+    assert.instanceOf(failure(exit), PlatformError);
+    assert.deepStrictEqual(changedPaths(f.root, yield* diskChanges(before)), {
+      created: ["library/machine.json"],
+      deleted: [],
+      changed: [],
+    });
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+// Removals run last, so a failed additive step removes nothing. Orphan originals may already be
+// written; nothing is lost.
+it.effect("a failed additive step leaves every selected removal in place", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture({ machine: false });
+    const before = yield* captureDisk(f.disk);
+    const { exit } = yield* f.setup([["alpha", "remove\0gamma"], true], {
+      refusePublication: (state) => state.collections.length > 0,
+    });
+    assert.instanceOf(failure(exit), SetupStopped);
     const paths = changedPaths(f.root, yield* diskChanges(before));
     assert.deepStrictEqual(paths.changed, []);
     assert.deepStrictEqual(paths.deleted, []);
     assert.deepStrictEqual(
       [...new Set(paths.created.map((path) => path.split("/").slice(0, 2).join("/")))],
-      ["library/machine.json", "library/originals", "library/removed"],
+      ["library/audit.jsonl", "library/machine.json", "library/originals", "library/state.json"],
     );
-    for (const operationId of yield* listRecoveryOperations(f.home.home))
-      assert.deepStrictEqual(
-        (yield* inspectRecoveryOperation(f.home.home, operationId)).entries,
-        [],
-      );
-    assert.isFalse(yield* f.fs.exists(f.home.statePath));
+    assert.deepStrictEqual((yield* f.home.durable).skills, []);
+    assert.isTrue(yield* f.fs.exists(join(f.path("gamma"), "SKILL.md")));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-// Codex's default sandbox keeps `.agents` read-only inside its writable workspace. Setup must refuse
-// whole rather than manage a copy into a Library whose installed skills it cannot then write.
-it.effect("an unwritable skills directory fails the apply before any stage writes", () =>
+// A failed root preparation is durable, but no import, ownership or removal stage has run.
+it.effect(
+  "an unwritable skills directory records its stopped attempt before any stage writes",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture({ machine: false });
+      const roots = [join(f.root, ".codex"), join(f.root, "state")];
+      const before = yield* captureDisk(roots);
+      const { exit } = yield* f
+        .setup([["alpha", "remove\0gamma"], true])
+        .pipe(withSandboxDenying(join(f.root, ".codex")));
+      const error = failure(exit);
+      assert.instanceOf(error, SetupStopped);
+      assert.include(error.detail, "permission denied");
+      assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
+      const state = yield* f.home.durable;
+      assert.deepStrictEqual(state.collections, []);
+      assert.deepStrictEqual(state.installed_skills, []);
+      assert.deepStrictEqual(state.enabled, []);
+      assert.strictEqual(state.operations.length, 1);
+      const operation = state.operations[0];
+      assert.strictEqual(operation?._tag, "Stopped");
+      if (operation?._tag !== "Stopped" || operation.reason._tag !== "StepFailed")
+        return yield* Effect.die("Missing stopped preparation");
+      assert.strictEqual(operation.reason.error._tag, "SkillsDirectoryNotWritable");
+      assert.isFalse(yield* f.fs.exists(join(f.home.home, "originals")));
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("every destination directory write has its preparation recorded first", () =>
   Effect.gen(function* () {
-    const f = yield* fixture({ machine: false });
-    const before = yield* captureDisk(f.disk);
-    const { exit } = yield* f
-      .setup([["alpha", "remove\0gamma"], true])
-      .pipe(withSandboxDenying(join(f.root, ".codex")));
-    const error = failure(exit);
-    assert.instanceOf(error, SkillsDirectoryNotWritable);
-    assert.strictEqual(error.root, join(f.root, ".codex", "skills"));
-    assert.deepStrictEqual(yield* diskChanges(before), noDiskChanges);
+    const f = yield* fixture({ machine: true });
+    const root = join(f.root, ".codex", "skills");
+    let observed = 0;
+    const { exit } = yield* f.setup([["alpha"], true], {
+      directory: (path) =>
+        Effect.gen(function* () {
+          if (path !== root && !path.startsWith(root + "/")) return;
+          const state = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(LibraryState))(
+            yield* f.fs.readFileString(f.home.statePath),
+          );
+          const operation = state.operations.find((operation) => operation._tag === "Pending");
+          assert.strictEqual(operation?._tag, "Pending");
+          if (operation?._tag !== "Pending")
+            return yield* Effect.die("Unrecorded directory creation");
+          assert.isTrue(operation.preparation?.roots.some((saved) => saved.path === root));
+          observed++;
+        }).pipe(Effect.orDie),
+    });
+    assert.strictEqual(exit._tag, "Success");
+    assert.isAbove(observed, 0);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 // Removal consent covers the approved bytes, not only the directory's identity: a copy edited in
-// place after the apply-time scan stays where it is.
-it.effect("a removal selection edited after the first additive stage stays in place", () =>
+// place after its step was recorded stays where it is, and the setup stops.
+it.effect("a removal selection edited after the steps are recorded stays in place", () =>
   Effect.gen(function* () {
     const f = yield* fixture({ machine: true });
     const changed = skillBytes("gamma", "edited after the first stage");
     const { exit } = yield* f.setup([["alpha", "remove\0gamma"], true], {
       published: f.fs.writeFileString(join(f.path("gamma"), "SKILL.md"), changed),
     });
-    assert.instanceOf(failure(exit), PlanIsStale);
+    assert.instanceOf(failure(exit), SetupStopped);
     assert.strictEqual(yield* f.fs.readFileString(join(f.path("gamma"), "SKILL.md")), changed);
-    for (const operationId of yield* listRecoveryOperations(f.home.home))
-      assert.deepStrictEqual(
-        (yield* inspectRecoveryOperation(f.home.home, operationId)).entries,
-        [],
-      );
+    for (const operationId of yield* recoveryList(f.home.home))
+      assert.deepStrictEqual((yield* recoveryInspection(f.home.home, operationId)).entries, []);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -456,17 +488,14 @@ it.effect("a removal selection that gains an ownership marker after the scan sta
     const { exit } = yield* f.setup([["alpha", "remove\0gamma"], true], {
       published: f.fs.writeFileString(marker, "{}"),
     });
-    assert.instanceOf(failure(exit), PlanIsStale);
+    assert.instanceOf(failure(exit), SetupStopped);
     assert.strictEqual(
       yield* f.fs.readFileString(join(f.path("gamma"), "SKILL.md")),
       skillBytes("gamma"),
     );
     assert.strictEqual(yield* f.fs.readFileString(marker), "{}");
-    for (const operationId of yield* listRecoveryOperations(f.home.home))
-      assert.deepStrictEqual(
-        (yield* inspectRecoveryOperation(f.home.home, operationId)).entries,
-        [],
-      );
+    for (const operationId of yield* recoveryList(f.home.home))
+      assert.deepStrictEqual((yield* recoveryInspection(f.home.home, operationId)).entries, []);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -483,13 +512,10 @@ it.effect(
           before = yield* captureDisk([copy], { identity: true }).pipe(Effect.provide(skitLayer));
         }),
       });
-      assert.instanceOf(failure(exit), PlanIsStale);
+      assert.instanceOf(failure(exit), SetupStopped);
       assert.deepStrictEqual(yield* captureDisk([copy], { identity: true }), before);
-      for (const operationId of yield* listRecoveryOperations(f.home.home))
-        assert.deepStrictEqual(
-          (yield* inspectRecoveryOperation(f.home.home, operationId)).entries,
-          [],
-        );
+      for (const operationId of yield* recoveryList(f.home.home))
+        assert.deepStrictEqual((yield* recoveryInspection(f.home.home, operationId)).entries, []);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -514,10 +540,10 @@ it.effect("a removal entry replaced during an earlier move stays untouched", () 
             }).pipe(Effect.orDie)
           : Effect.void,
     });
-    assert.instanceOf(failure(exit), PlanIsStale);
+    assert.instanceOf(failure(exit), SetupStopped);
     const moveRecord = yield* readMoveRecord(f.home.home);
-    const [operation] = yield* listRecoveryOperations(f.home.home);
-    const inspection = yield* inspectRecoveryOperation(f.home.home, operation!);
+    const [operation] = yield* recoveryList(f.home.home);
+    const inspection = yield* recoveryInspection(f.home.home, operation!);
     assert.deepStrictEqual(
       inspection.entries.map((entry) => entry.status),
       ["saved", "conflict"],
@@ -545,13 +571,13 @@ it.effect("a failed removal move leaves a moved prefix, the rest in place, and a
       rename: (from) =>
         from.startsWith(f.path("")) && ++moves === 2 ? refuseRename(from) : Effect.void,
     });
-    assert.instanceOf(failure(exit), PlatformError);
+    // The refused rename stops the setup; what moved stays moved.
+    assert.instanceOf(failure(exit), SetupStopped);
     const moveRecord = yield* readMoveRecord(f.home.home);
     assert.deepStrictEqual(
-      (yield* inspectRecoveryOperation(
-        f.home.home,
-        (yield* listRecoveryOperations(f.home.home))[0]!,
-      )).entries.map((entry) => entry.status),
+      (yield* recoveryInspection(f.home.home, (yield* recoveryList(f.home.home))[0]!)).entries.map(
+        (entry) => entry.status,
+      ),
       ["saved", "at-original"],
     );
     const [moved, kept] = moveRecord.entries;
@@ -631,24 +657,6 @@ it.effect("a Library change committed after approval fails stale before any effe
       (yield* f.home.durable).skills.map((skill) => skill.name),
       ["delta"],
     );
-    assert.isTrue(yield* f.fs.exists(join(f.path("gamma"), "SKILL.md")));
-  }).pipe(Effect.provide(skitLayer), Effect.scoped),
-);
-
-// Every save must build on the approved revision or on the apply's own previous one, so a
-// Library change between stages is never rebased onto and stops every further effect. The stage
-// whose save meets the changed base reports it as its own conflict.
-it.effect("a Library change committed after the first additive stage stops the apply", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture({ machine: true });
-    const { exit } = yield* f.setup([["alpha", "beta", "remove\0gamma"], true], {
-      published: importDelta(f),
-    });
-    assert.propertyVal(failure(exit), "code", "CONFLICT");
-    assert.deepStrictEqual((yield* f.home.durable).skills.map((skill) => skill.name).sort(), [
-      "alpha",
-      "delta",
-    ]);
     assert.isTrue(yield* f.fs.exists(join(f.path("gamma"), "SKILL.md")));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

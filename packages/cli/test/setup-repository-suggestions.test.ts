@@ -1,8 +1,8 @@
 import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { assert, it } from "@effect/vitest";
-import { skitLayer } from "@smolai/skit-core";
-import { runSetup } from "../src/workflows/library/setup.js";
+import { skitLayer } from "@smolai/skit-core/platform";
+import { runSetup } from "@smolai/skit-core/library/setup";
 import { libraryHome, scratch } from "./helpers/library-home.js";
 
 it.effect("suggests common folders holding repositories only while none is configured", () =>

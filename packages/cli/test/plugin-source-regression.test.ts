@@ -1,14 +1,12 @@
+import { originalTreePath } from "./helpers/original-tree.js";
+import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  LibraryStore,
-  libraryStoreLayer,
-  collectionVersionPath,
-  skitLayer,
-} from "@smolai/skit-core";
-import { importSource, previewLibrarySource } from "../src/library-application/import-source.js";
+
+import * as Library from "@smolai/skit-core/library";
+import { importSource, previewLibrarySource } from "../src/library/source.js";
 import { gitBlobHash } from "./helpers/collection-import.js";
 import { writingTo } from "./helpers/library-home.js";
 import manifest from "./fixtures/source-regressions/humanlayer.json" with { type: "json" };
@@ -35,15 +33,19 @@ it.effect(
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-humanlayer-import-" });
       const result = yield* writingTo(home, importSource(source));
       assert.deepStrictEqual(result.skills, expected);
-      const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
-        Effect.provide(libraryStoreLayer({ home })),
+      const snapshot = yield* writingTo(
+        home,
+        Effect.flatMap(Library.Service, (library) => library.read),
       );
+      assert.strictEqual(snapshot._tag, "Present");
+      if (snapshot._tag !== "Present") return;
+      const state = snapshot.state;
       assert.strictEqual(state.collections.length, 1);
       assert.deepStrictEqual(
         state.skills.map((skill) => skill.path),
         manifest.skills.map((skill) => skill.path),
       );
-      const imported = collectionVersionPath(join(home, "originals"), result.snapshot_digest);
+      const imported = originalTreePath(join(home, "originals"), result.snapshot_digest);
       for (const file of manifest.files) {
         if (!manifest.skills.some((skill) => file.path.startsWith(`${skill.path}/`))) continue;
         assert.strictEqual(
@@ -52,5 +54,5 @@ it.effect(
           file.path,
         );
       }
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );

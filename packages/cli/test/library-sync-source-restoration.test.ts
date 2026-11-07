@@ -1,20 +1,17 @@
+import { readLibraryManifest } from "./helpers/library-manifest.js";
+import { originalArchive, originalTreePath } from "./helpers/original-tree.js";
 import { installEnabledSkills } from "./helpers/installed-skills.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer } from "effect";
+import { Effect, FileSystem, Layer, Schema } from "effect";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
-import {
-  readSnapshotArchive,
-  libraryManifestFromLocalState,
-  LibraryStore,
-  libraryStoreLayer,
-  collectionVersionPath,
-  SourceProcess,
-  type SkitSource,
-} from "@smolai/skit-core";
-import { importSource } from "../src/library-application/import-source.js";
-import { syncLibrary } from "../src/workflows/library/library-sync.js";
+import { LibraryState } from "@smolai/skit-core/library";
+import { type SkitSource } from "@smolai/skit-core/library/source";
+import * as Library from "@smolai/skit-core/library";
+import { SourceProcess } from "@smolai/skit-core/platform";
+import { importSource } from "../src/library/source.js";
+import { librarySyncApi } from "../src/library/sync/api.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { archiveBytes, writingTo } from "./helpers/library-home.js";
 import { librarySyncServer } from "./helpers/library-sync-server.js";
@@ -65,19 +62,28 @@ const fixture = Effect.gen(function* () {
   const home = join(workspace, "a");
   const freshHome = join(workspace, "b");
   const load = (home: string) =>
-    Effect.flatMap(LibraryStore, (store) => store.load).pipe(
-      Effect.provide(libraryStoreLayer({ home })),
+    writingTo(
+      home,
+      Effect.flatMap(Library.Service, (library) => library.read),
+    ).pipe(
+      Effect.flatMap((snapshot) =>
+        snapshot._tag === "Present" ? Effect.succeed(snapshot.state) : Effect.die("no Library"),
+      ),
     );
   const sync = () =>
-    writingTo(freshHome, syncLibrary({ origin, apply: true })).pipe(
-      Effect.provide(registryHttpLayer(http)),
-      Effect.provide(http),
-    );
+    writingTo(
+      freshHome,
+      Effect.flatMap(librarySyncApi({ origin }), (transport) =>
+        Effect.flatMap(Library.Service, (library) =>
+          library.sync({ origin, apply: true }, transport),
+        ),
+      ),
+    ).pipe(Effect.provide(registryHttpLayer(http)), Effect.provide(http));
   const seed = (source: SkitSource) =>
     Effect.gen(function* () {
       yield* writingTo(home, importSource(source)).pipe(Effect.provide(http));
       const state = yield* load(home);
-      const manifest = yield* libraryManifestFromLocalState(state);
+      const manifest = yield* readLibraryManifest(home, [workspace]);
       assert.deepStrictEqual(manifest.snapshot_digests, []);
       assert.strictEqual(
         server.respond("PUT", "/api/library/portable", { expected_revision_id: null, manifest })
@@ -106,7 +112,7 @@ const fixture = Effect.gen(function* () {
       assert.strictEqual(result.exitCode, 0);
       release = yield* fs.readFile(archive);
     }),
-    root: (hash: string) => collectionVersionPath(join(freshHome, "originals"), hash),
+    root: (hash: string) => originalTreePath(join(freshHome, "originals"), hash),
   };
 });
 
@@ -122,27 +128,24 @@ it.effect(
         state.collection_versions,
       );
       const hash = state.collection_versions[0]!.hash;
-      assert.strictEqual((yield* readSnapshotArchive(f.root(hash))).digest, hash);
+      assert.strictEqual((yield* originalArchive(f.root(hash), hash)).digest, hash);
       for (const [path, bytes] of Object.entries(f.files))
         assert.strictEqual(yield* f.fs.readFileString(join(f.root(hash), path)), bytes);
       const targetRoot = join(f.workspace, "agent-skills");
+      const restored = yield* f.load(f.freshHome);
+      yield* f.fs.writeFileString(
+        join(f.freshHome, "state.json"),
+        yield* Schema.encodeEffect(Schema.fromJsonString(LibraryState))({
+          ...restored,
+          enabled: restored.skills.map((skill) => ({ skill: skill.skill_id })),
+        }),
+      );
       yield* writingTo(
         f.freshHome,
-        Effect.gen(function* () {
-          const store = yield* LibraryStore;
-          const restored = yield* store.load;
-          yield* store.save(
-            {
-              ...restored,
-              enabled: restored.skills.map((skill) => ({ skill: skill.skill_id })),
-            },
-            restored,
-          );
-          yield* installEnabledSkills({
-            target: "agents",
-            root: targetRoot,
-            variantsPath: join(f.freshHome, "variants"),
-          });
+        installEnabledSkills({
+          target: "agents",
+          root: targetRoot,
+          variantsPath: join(f.freshHome, "variants"),
         }),
       );
       const installed = join(targetRoot, "review");
@@ -167,7 +170,7 @@ it.effect("plain Registry restore keeps the retained subset and excludes sibling
     const state = yield* f.seed(registrySource);
     yield* f.sync();
     const hash = state.collection_versions[0]!.hash;
-    assert.strictEqual((yield* readSnapshotArchive(f.root(hash))).digest, hash);
+    assert.strictEqual((yield* originalArchive(f.root(hash), hash)).digest, hash);
     assert.isFalse(yield* f.fs.exists(join(f.root(hash), "README.md")));
     assert.isFalse(yield* f.fs.exists(join(f.root(hash), "skills/.gitkeep")));
     assert.strictEqual(
@@ -189,6 +192,25 @@ it.effect("changed declared source bytes fail before saving a fresh Library", ()
     if (error._tag === "Library.SyncSourceRestoreInvalid") {
       assert.strictEqual(error.hash, state.collection_versions[0]!.hash);
       assert.include(error.detail, "source returned");
+    }
+    assert.isFalse(yield* f.fs.exists(join(f.freshHome, "state.json")));
+    assert.deepStrictEqual(f.server.stored, remote);
+  }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
+);
+
+it.effect("invalid restored source metadata reports its hash and cause before saving", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture;
+    const state = yield* f.seed(registrySource);
+    const remote = f.server.stored;
+    yield* f.fs.writeFileString(join(f.sourceRoot, "skit.json"), "{ invalid JSON");
+    yield* f.repack;
+    const error = yield* f.sync().pipe(Effect.flip);
+    assert.strictEqual(error._tag, "Library.SyncSourceRestoreInvalid");
+    if (error._tag === "Library.SyncSourceRestoreInvalid") {
+      assert.strictEqual(error.hash, state.collection_versions[0]!.hash);
+      assert.isDefined(error.cause);
+      assert.isNotEmpty(error.detail);
     }
     assert.isFalse(yield* f.fs.exists(join(f.freshHome, "state.json")));
     assert.deepStrictEqual(f.server.stored, remote);
@@ -261,7 +283,7 @@ it.effect.each(["git", "github"] as const)(
       );
       yield* f.sync().pipe(Effect.provide(localGit));
       const hash = state.collection_versions[0]!.hash;
-      assert.strictEqual((yield* readSnapshotArchive(f.root(hash))).digest, hash);
+      assert.strictEqual((yield* originalArchive(f.root(hash), hash)).digest, hash);
       assert.strictEqual(
         yield* f.fs.readFileString(join(f.root(hash), "skit.json")),
         f.files["skit.json"],

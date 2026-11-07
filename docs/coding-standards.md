@@ -16,6 +16,17 @@ Judge a boundary by what callers no longer need to know. Explain what a new
 abstraction hides and why that justifies its interface. Avoid wrappers that leave
 callers responsible for assembling the same lifecycle or enforcing the same rules.
 
+## Call services directly
+
+Do not introduce helpers that only retrieve a service and forward a method call.
+Call the service directly where it is used. This applies to tests too: test
+fixtures provide layers, and tests express the operations they exercise.
+
+Use `Effect.gen` or generator-based `Effect.fn` for workflows with multiple
+sequential steps. Read dependencies into named variables with `yield*`. Keep
+`Effect.flatMap` for a single transformation; do not nest callbacks to express a
+sequence.
+
 ## Name things plainly
 
 Use the simplest words that say what a thing is or does. A reader who knows
@@ -52,10 +63,18 @@ Do not encode the type in the name. An Effect-returning function is not named
 `...Effect`; a schema is not named `...Schema` unless a plain value of the same
 name also exists.
 
-Rename stored names (state file fields, manifest keys, ownership markers, history
-event names) only together with a migration in the store loader. Published
-contract names, released CLI flags, and Registry wire names change only with a
-contract or compatibility decision.
+Compatibility is required for released formats and contracts. Before adding a
+migration, legacy loader, fallback decoder, or compatibility alias, identify the
+released version or explicit compatibility commitment that requires it.
+
+Change unreleased formats directly and update their callers and fixtures together.
+A format's presence in Git, tests, or development files does not establish a
+compatibility requirement. Preserve unreleased formats only when explicitly
+requested.
+
+Renaming stored names used by released versions requires a migration in the owning
+store loader. Published contract names, released CLI flags, and Registry wire
+names require a contract or compatibility decision.
 
 ## Investigate Effect v4 APIs before building utilities
 
@@ -148,3 +167,16 @@ Each meaningful refactor PR should explain:
   checks run locally from CI results and unverified expectations.
 
 Run the smallest relevant checks, following [AGENTS.md](../AGENTS.md#validation).
+
+## Services and errors
+
+Introduce a `Context.Service` only for an owner of state, a held resource, a
+platform boundary with a real alternative implementation, or a key required by
+the framework. Test substitution alone does not justify a service. Workflows
+that coordinate owners are plain functions.
+
+Define errors once beside their owner's interface. New errors use
+`Schema.TaggedError` with the class name as the tag, optionally prefixed by the
+owner. Convert existing `Data.TaggedError` classes when their owner is reworked,
+not in a separate sweep. Architecture contracts import those classes rather
+than duplicating their fields.

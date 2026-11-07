@@ -1,7 +1,7 @@
 /* oxlint-disable skit/no-promise-wrappers -- Response.json is the native HTTP fake boundary; no application operation is wrapped. */
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Schema } from "effect";
-import { skitLayer } from "@smolai/skit-core";
+import { skitLayer } from "@smolai/skit-core/platform";
 import {
   InvalidRequestResponse,
   LibraryManifest,
@@ -9,7 +9,7 @@ import {
   RevisionConflictResponse,
   SnapshotArchive,
   SnapshotUploadResponse,
-} from "@smolai/skit-core/universal/api";
+} from "@smolai/skit-core/api";
 import { librarySyncServer } from "./helpers/library-sync-server.js";
 
 // The Worker suite proves these rules on real D1 with the same fixtures.

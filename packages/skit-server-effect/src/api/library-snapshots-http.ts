@@ -1,14 +1,10 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
-import { credentialOriginAllowed } from "../auth/request-context.js";
-import { ServerConfiguration } from "../configuration.js";
-import { LibrarySnapshots } from "../library/snapshots.js";
-import { CurrentPrincipal, CurrentRequest } from "./authentication.js";
-import { ConsumerAuthenticatedApi } from "@smolai/skit-core/universal/api";
+import { ServerLibrary } from "../library/service.js";
+import { requirePrincipalScope } from "./authentication.js";
+import { ConsumerAuthenticatedApi } from "@smolai/skit-core/api";
 import {
-  forbiddenOriginResponse,
   forbiddenResponse,
-  insufficientScopeResponse,
   invalidRequestResponse,
   libraryNotFoundResponse,
   storageFailureResponse,
@@ -19,23 +15,12 @@ export const librarySnapshotHandlers = HttpApiBuilder.group(
   "librarySnapshots",
   (handlers) =>
     Effect.gen(function* () {
-      const snapshots = yield* LibrarySnapshots;
-      const configuration = yield* ServerConfiguration;
-      const requirePrincipal = Effect.gen(function* () {
-        const principal = yield* CurrentPrincipal;
-        if (!principal.scopes.has("library:sync"))
-          return yield* Effect.fail(insufficientScopeResponse);
-        return principal;
-      });
+      const snapshots = (yield* ServerLibrary).snapshots;
+      const requirePrincipal = requirePrincipalScope("library:sync");
       return handlers.handleAll({
         upload: ({ payload }) =>
           Effect.gen(function* () {
             const principal = yield* requirePrincipal;
-            const request = yield* CurrentRequest;
-            if (
-              !credentialOriginAllowed(principal.credential, request, configuration.publicAppOrigin)
-            )
-              return yield* Effect.fail(forbiddenOriginResponse);
             return yield* snapshots.upload(principal, payload).pipe(
               Effect.catchTags({
                 "Library.SnapshotArchiveInvalid": () => Effect.fail(invalidRequestResponse),

@@ -1,25 +1,25 @@
 # Library sync outcomes
 
-This document is the test oracle for `skit sync`. It lists every path through `syncLibrary` (`packages/cli/src/workflows/library/library-sync.ts`), the durable effects each path makes in order, and the outcomes a crash, a lost response, or a competing writer may legally produce at each boundary. Multi-home tests assert against these tables rather than against an informal notion of "converges".
+This document is the test oracle for `skit sync`. It lists every path through `syncLibrary` (`packages/skit/src/library/internal/sync/library-sync.ts`), the durable effects each path makes in order, and the outcomes a crash, a lost response, or a competing writer may legally produce at each boundary. Multi-home tests assert against these tables rather than against an informal notion of "converges".
 
 | Coverage | Where |
 | --- | --- |
 | Named preflight, push, pull, and merge fault rows; byte-level state and projection checks; the commit order of every applying path; `--take-remote` refused before collision checks; edited copies recorded before reconciliation | `packages/cli/test/library-sync-outcomes.test.ts` |
 | Lost response on a later push, restored older state, ancestry, removals, device policies, every declared device field through push, merge and clean, and undeclared fields | `packages/cli/test/library-sync-crash.test.ts` |
-| Projection custody, collision resolution, identity retirement, and interrupted adoption | `packages/cli/test/library-sync-edge-cases.test.ts` |
+| Projection custody, collision resolution, identity retirement, and recorded local Sync recovery | `packages/cli/test/library-sync-edge-cases.test.ts` |
 | Stale bases, retries of a committed manifest, and snapshot readiness/reuse, on real D1 and on the client fake | `packages/skit-server-effect/test/library-sync.test.ts`, `packages/cli/test/library-sync-server.test.ts` |
-| Merge properties over generated manifests | `packages/cli/test/library-merge-properties.test.ts` |
+| Merge properties over generated manifests | `packages/skit/test/library-merge-properties.test.ts` |
 | Hand-derived alias cases: the same upstream under different Collection IDs (with device policy, repository Binding, projection and ancestry remapping), distinct upstreams with identical bytes, an equal artifact digest with a different validation digest, many homes converging on one identity, `local_version_id`, and a divergent import with and without a takeable remote choice | `packages/cli/test/library-sync-aliases.test.ts` |
-| Independently constructed conflict-free and conflicting merge families, including aligned-import families (same selection, older local history, equal artifact with a different source digest, a selected retained edit), alone and in combination | `packages/cli/test/library-merge-families.test.ts` |
+| Independently constructed conflict-free and conflicting merge families, including aligned-import families (same selection, older local history, equal artifact with a different source digest, a selected retained edit), alone and in combination | `packages/skit/test/library-merge-families.test.ts` |
 | Absent versus empty remote, absent versus empty local state, an empty accepted base, and no-op syncs that publish nothing locally and send no Registry write | `packages/cli/test/library-sync-absence.test.ts` |
 | Literal supported-wire bodies decoded and encoded by the client; a literal newer head and receipt refused | `packages/cli/test/library-sync-wire.test.ts` |
 | A sync killed after the Registry commits, and two homes racing with independent additions | `packages/skit-server-effect/test/e2e.test.ts` |
 
-The outcome matrix checks stopped operations against the row's permitted durable state and retries against the next legal outcome. It covers `local_bytes_changed`, legacy remote rejection, ancestry mismatch, first-push CAS loss, first-push lost responses (including a subsequent competing write), both `SyncLocalChanged` guards (including a merge and a `--keep-enabled` pull that would otherwise upload or write), merge CAS loss, failures before local publication, repeated `--take-remote`, and projection failures after publication. A lost response on a later push is covered by the existing crash suite rather than duplicated in the matrix.
+The outcome matrix checks stopped operations against the row's permitted durable state and retries against the next legal outcome. It covers `local_bytes_changed`, legacy remote rejection, empty-base first connections and changed-Library previews, first-push CAS loss, first-push lost responses (including a subsequent competing write), both `SyncLocalChanged` guards (including a merge and a `--keep-enabled` pull that would otherwise upload or write), merge CAS loss, failures before local publication, repeated `--take-remote`, and projection failures after publication. A lost response on a later push is covered by the existing crash suite rather than duplicated in the matrix.
 
 **Known bug characterization:** `local_bytes_changed` reports that sync stopped but the CLI exits `0`. `packages/cli/test/library-sync-local-bytes.e2e.test.ts` belongs to the subprocess suite and asserts that current status and structured outcome with a BUG comment requiring a nonzero exit when fixed. The ordinary in-process matrix row separately checks unchanged state/projection bytes and remote storage. There is no expected-failure mask.
 
-An applied `clean` sync of a home whose ancestry already names the head publishes nothing and sends no Registry write request. `packages/cli/test/library-sync-absence.test.ts` measures writes directly: the test devices count every `LibraryStore.publish` call and the fake Registry counts every write request it receives, separately from the revisions it commits, so an identical rewrite in place or an idempotent write answered with the head is still counted. Anchoring is not a no-op: an applied `clean` of an empty Library without ancestry over an empty remote is pinned at one publication and no write requests, and every other no-op row (each preview, `base_mismatch`, `adoption_required`, absent R with absent L, and an anchored clean) at zero of both. Lossless snapshots with file identity (`captureDisk(roots, { identity: true })`) are complementary durable-state evidence. They cannot prove or disprove a rewrite, because a filesystem may hand the replaced inode number to the next temporary file.
+An applied `clean` sync of a home whose ancestry already names the head publishes nothing and sends no Registry write request. `packages/cli/test/library-sync-absence.test.ts` measures writes directly: the test devices count every atomic replacement of `state.json` and the fake Registry counts every write request it receives, separately from the revisions it commits, so an identical rewrite in place or an idempotent write answered with the head is still counted. Anchoring is not a no-op: an applied `clean` of an empty Library without ancestry over an empty remote is pinned at one publication and no write requests, and every other no-op row (each preview, absent R with absent L, and an anchored clean) at zero of both. Lossless snapshots with file identity (`captureDisk(roots, { identity: true })`) are complementary durable-state evidence. They cannot prove or disprove a rewrite, because a filesystem may hand the replaced inode number to the next temporary file.
 
 The client fake (`packages/cli/test/helpers/library-sync-server.ts`) encodes every response with the core Library sync contract schemas the Worker uses, so status codes and bodies cannot drift; its compare-and-swap rules are asserted separately against the Worker. Faults are one typed union injected per test and consumed once at the boundary they target. Lost write responses are injected as transport failures after the fake commits, yielding `LibraryApiUnreachable`. An explicit HTTP `500` after commit yields the different `LibraryApiRejected` path; both are characterized. The existing crash and adoption-custody lost-response tests now use the transport fault. The concurrent-local-write hook fires when the fake serves the head GET, between the client's local inspection and publication, rather than counting internal inspections. Projection failure rows assert a failed first sync and recover the Skill bytes at the same interrupted root. The fake also records, in order, each snapshot upload, each Library write with the revision it names as its base, and each local publication, so the commit order is asserted as a sequence.
 
@@ -39,9 +39,18 @@ The refusal comes from the head read, so it happens before sync plans, uploads, 
 
 ## One pipeline
 
-Every path is the same three-way merge of L with R from B. A push merges L with an absent R against an empty base, a pull an absent L with R, and a clean sync is a merge whose result is both sides. Absent and empty stay distinct facts: only two existing Libraries can be clean or need adoption, and only an absent R is created by the write, so an empty L still pushes. One alias map, of Collection, Skill and Version handles, is computed once and applied to L, B and the device state at one site. A `--take-remote` key must name a conflict the merge can take remotely; it is checked before projection collisions on every path, so a push or a pull, which has no merge conflicts, refuses any key with `resolution_invalid`. A pull plans no device Projections, because an empty device has none and planning it would only report remote Bindings without a selected Version.
+Every path is the same three-way merge of L with R from B. A push merges L with an absent R against an empty base, a pull an absent L with R, and a clean sync is a merge whose result is both sides. Absent and empty stay distinct facts: only two existing Libraries can be clean, and only an absent R is created by the write, so an empty L still pushes. Library aligns Collection, Skill and Version handles in the review and revalidates the prepared local program against the reviewed snapshot. A `--take-remote` key must name a conflict the merge can take remotely; it is checked before projection collisions on every path, so a push or a pull, which has no merge conflicts, refuses any key with `resolution_invalid`. A pull plans no device Projections, because an empty device has none and planning it would only report remote Bindings without a selected Version.
 
-Every applying path commits in one order, stated once in `syncLibrary`:
+`openSyncSession` in Library owns ancestry/base choice, portable merge, identity alignment, device selection, destination checks and change summaries. Its reviewed target and facts are copies. It captures the base and remote head, rejects staged content that differs from its target, and constructs the local Sync plan and receipt internally. The CLI owns remote reads, transfer orchestration, remote compare-and-swap, progress and formatting; it no longer imports merge/device helpers or constructs receipts.
+
+```text
+CLI read + verify -> remote head -> Library.openSyncSession
+  -> reviewed target and changes -> stage content -> session.prepare
+  -> session freshness check -> upload -> remote CAS
+  -> prepared.apply(receipt) -> Library recorded local Sync -> reconciliation
+```
+
+Every applying path commits in this order:
 
 1. Retain every copy the result references in originals (downloading and reacquiring what is missing).
 2. Upload every snapshot the new head references that R lacks.
@@ -87,9 +96,9 @@ The unification is not behaviour-identical. These differences are intended, and 
 | --- | --- | --- | --- |
 | **Remote head** | D1 `libraries.current_revision_id` + `library_revisions` | `api.write` | Compare-and-swap batch on the expected revision |
 | **Remote snapshots** | R2 + D1 `library_snapshots` | `api.upload` | Content-addressed; idempotent |
-| **Originals** | `<home>/originals/<digest>` | `prepareRestore` | Content-addressed; unreferenced trees are inert |
-| **Local state** | `<home>/state.json`, including `sync_ancestry` | `store.publish` | Atomic rename, no fsync |
-| **Projections** | Harness roots | `reconcileLibraryProjections` | Per-projection; derived from local state |
+| **Originals** | `<home>/originals/<digest>` | `Library.content.stage` | Content-addressed; unreferenced trees are inert |
+| **Local state** | `<home>/state.json`, including `sync_ancestry` | Library recorded Sync | Atomic rename, no fsync |
+| **Projections** | Harness roots | Library recorded execution | Per-projection; derived from local state |
 
 A projection batch whose state is unchanged, which wrote nothing and has no pending backup to settle, publishes nothing. A batch with backups to settle publishes onto the state it loaded first, so a backup is never judged against a state the Library has moved on from.
 
@@ -105,12 +114,14 @@ Preflight writes nothing beyond the loader maintenance described under [Remote m
 | --- | --- |
 | A retained copy's bytes no longer hash to its digest | `local_bytes_changed` |
 | R's manifest schema is newer than this CLI supports | `LibraryManifestTooNew` (see [Remote manifest version](#remote-manifest-version)) |
-| B exists and (B.origin ≠ origin, or R is absent, or B.library_id ≠ R.library_id), without `--adopt` | `base_mismatch` |
+| B exists and (B.origin ≠ origin, or R is absent, or B.library_id ≠ R.library_id) | Continue with an empty base; report `merge_base: empty-different-library` |
 | Neither L nor R exists | `clean` (nothing written) |
 
-With `--adopt`, mismatched ancestry is set aside and sync continues as if B were absent, so the merge can only add records. Then exactly one of the paths below runs. Every applying path holds the home's writer lock for its whole duration: `syncLibrary` acquires it when applying, and reuses it reentrantly when its caller already holds it. Each local publish is also checked against the local state the path planned from: if that state has changed, which only a caller without the writer lock can allow, the publish is refused with `SyncLocalChanged` and changes no local state.
+Missing or mismatched ancestry uses an empty base, so the merge can only add records. For two existing Libraries without ancestry the output reports `merge_base: empty-first-sync`; a changed Registry/Library reports `empty-different-library`. Preview remains read-only and `--apply` uses the ordinary push/merge path. There is no adoption flag or gate. Then exactly one of the paths below runs. Review, staging and network transfer do not hold a Library writer. Library owns the writer for local mutation. The prepared session checks a merge/pull snapshot before upload/CAS, and Library checks the reviewed revision again before its recorded local publication. If local state changed, publication is refused with `SyncLocalChanged`; sync never anchors an unrelated local state.
 
 Every ready/apply path also checks enabled destinations using filesystem identity and previews affected projection custody before committing. A collision reports the Skill IDs and Collection labels. `--keep-enabled <skill-id>` keeps one competing Skill enabled and retains the others without enabling them; invalid or competing choices return `resolution_invalid`. Modified copies and repository Bindings that would lose their selected entities report device conflicts with specific remediation. These checks are read-only.
+
+When one device follows a whole Collection while another disables a member, sync uses the syncing device's enabled choices for that Collection. Other Collections retain their three-way merged choices. The preview and applied plan report the affected Collections in `enabled_resolution` with `winner: "local"`; they do not offer `binding:global` as a `--take-remote` conflict. This changes enabled intent only: retained content, Collection/Skill records and device selections are preserved. Ordinary content conflicts and destination collisions still require their existing explicit resolutions.
 
 Independent imports of the same upstream and tracking configuration adopt the published Collection identity; Skills match by source path within that Collection. New Skills independently discovered at the same path of an existing Collection also align. Matching names across different Sources never align identities. Equivalent Version handles then align as usual. Compatible histories and their Acquisition provenance are combined. Divergent independent observations whose remote selection follows the Source, or whose current membership differs, require a Collection conflict choice. Taking remote adopts its Collection observation graph and Version history, without pinning a Source Version as a local edit; strictly older local Acquisitions stay retained. Equal timestamps do not establish precedence. This choice is unavailable if local has a selected edit or any discarded Acquisition cannot be restored from a pinned Source revision. Rejected originals remain on disk. Ordinary updates to edited projections preserve the edited bytes and report the projection conflict during reconciliation; inactive edited copies also remain non-blocking while their references stay valid.
 
@@ -118,7 +129,7 @@ Independent imports of the same upstream and tracking configuration adopt the pu
 
 | Step | Effect | Commit point |
 | --- | --- | --- |
-| P0 | `prepareRestore` re-verifies L's retained copies | Originals (already present) |
+| P0 | `Library.content.inspect` re-verifies L's retained copies | Originals (already present) |
 | P1 | Upload each snapshot | Remote snapshots |
 | P2 | `api.write(null, L)` | **Remote head** |
 | P3 | Retire intact copies the Binding choice removes | Projections, local state (B unchanged) |
@@ -127,10 +138,10 @@ Independent imports of the same upstream and tracking configuration adopt the pu
 
 | Interruption | State left | Legal next outcome |
 | --- | --- | --- |
-| Before P2 | Orphan uploads | Push again; or, if another home pushed first, `adoption_required` |
-| P2 loses the CAS | Orphan uploads; `LibraryChangedOnServer` | `adoption_required` |
-| After P2, before P4, or P2's response lost | R = desired, no B | `clean` if L = R; otherwise `--adopt` with the same Binding choice |
-| As above, and another home writes R before the retry | R ≠ L, no B | `adoption_required`; `--adopt` merges against an empty base |
+| Before P2 | Orphan uploads | Push again; or, if another home pushed first, An ordinary empty-base merge preview |
+| P2 loses the CAS | Orphan uploads; `LibraryChangedOnServer` | An ordinary empty-base merge preview |
+| After P2, before P4, or P2's response lost | R = desired, no B | `clean` if L = R; otherwise an ordinary merge with the same Binding choice |
+| As above, and another home writes R before the retry | R ≠ L, no B | An ordinary merge preview against an empty base, then `--apply` |
 | P3 or P4 is refused because L changed since the plan | R = desired, no B; `SyncLocalChanged`; L as the other writer left it | As after P2, before P4, against the new L |
 | After P4, before P5 | Projections stale | `clean`, which reconciles |
 
@@ -139,7 +150,7 @@ Independent imports of the same upstream and tracking configuration adopt the pu
 | Step | Effect | Commit point |
 | --- | --- | --- |
 | U1 | Download snapshots; reacquire source-restorable copies | — |
-| U2 | `prepareRestore` retains trees | Originals |
+| U2 | `Library.content.stage` stores verified trees before owner planning | Originals |
 | U3 | Re-inspect; fail `SyncLocalChanged` if L now exists | — |
 | U4 | Publish restored state with B = R | **Local state** |
 | U5 | Reconcile global projections | Projections |
@@ -156,11 +167,13 @@ When `--keep-enabled` changes the pulled Binding, a CAS write of that choice occ
 
 Preview writes nothing. Apply transfers, writes and retires nothing. It publishes only when the state's ancestry does not already name R: it then publishes the state with B = R, and if L changed after it was compared with R, the publish is refused with `SyncLocalChanged` and B is unchanged. This is how a home without ancestry anchors when it already matches the remote. An anchored home publishes nothing and sends no write request. Either way it then reconciles projections, which publishes only what it changes. Interruption between anchoring and reconciliation leaves stale projections, which the next `clean` repairs.
 
-## Adoption gate — L and R differ, no B
+## First connection — L and R differ, no matching B
 
-Without `--adopt`: `adoption_required`, nothing written. With `--adopt`: the merge path below, with an empty base. An empty base keeps records either side holds alone and reports records both sides hold with different contents as conflicts. It never infers a deletion.
+This is the normal merge path below, with an empty base. An empty base keeps records either side holds alone and reports records both sides hold with different contents as conflicts. It never infers a deletion.
 
-## Merge — L and R differ, B present (or `--adopt`)
+If a first push was accepted remotely but its local publication was refused, a changed local manifest follows this same path on retry. Sync does not write an accepted base alone: state and ancestry still publish together. Compatible local enablement changes survive the retry; genuine content conflicts remain explicit. A successful retry anchors the resulting state, and subsequent unchanged syncs are clean.
+
+## Merge — L and R differ, matching B or an empty base
 
 Records merge three-way by identity. Global Binding intent merges per Skill and per followed Collection, and a Binding entry for a record the merge removed is dropped: removing a Collection on one device wins over enabling its Skills on another, as it would if the removal had happened second.
 
@@ -171,15 +184,15 @@ Resolution and conflict outcomes write nothing:
 | Condition | Outcome |
 | --- | --- |
 | A `--take-remote` key is not a current conflict | `resolution_invalid` |
-| Record, binding, custody, or manifest-invariant conflicts remain | `conflicted` |
-| Preview | `merge_ready` or `adoption_ready` |
+| Record, custody, or manifest-invariant conflicts remain | `conflicted` |
+| Preview | `merge_ready` |
 
 Apply:
 
 | Step | Effect | Commit point |
 | --- | --- | --- |
 | M1 | Download missing snapshots; reacquire source-restorable copies | — |
-| M2 | `prepareRestore` retains trees | Originals |
+| M2 | `Library.content.stage` stores verified trees before owner planning | Originals |
 | M3 | Re-inspect; fail `SyncLocalChanged` if L changed | — |
 | M4 | Upload snapshots the merge introduced | Remote snapshots |
 | M5 | `api.write(R.revision, merged)`, skipped when merged = R | **Remote head** |
@@ -190,7 +203,7 @@ Apply:
 | Interruption | State left | Legal next outcome |
 | --- | --- | --- |
 | Before M5 | Orphan originals and uploads | The same merge, or a new merge if R advanced |
-| The process is killed after M5 commits | As the row below, plus the writer's `.lock` naming the dead process | Later commands that need the writer lock fail `LibraryBusy`, naming the lock and its recorded owner; reads still work. Once that process is confirmed stopped, remove the lock by hand; then as below |
+| The process is killed after M5 commits | As the row below; the OS releases the writer lock with the process | As below |
 | M5 loses the CAS | Orphan originals and uploads; `LibraryChangedOnServer`; L, B, projections unchanged | A merge against the new R |
 | After M5 (or M5's response lost), before M7 | R = merged; L and B old; some projections possibly retired | Re-merge of (B, L, merged). If merged equals L this is `clean`; otherwise it yields merged and M5 is skipped. A `--take-remote` resolution must be repeated. If another home advanced R, a genuine `conflicted` is legal. |
 | M6 or M7 is refused because L changed since the plan | R = merged; L as the other writer left it, B old; `SyncLocalChanged` | As after M5, before M7, against the new L |

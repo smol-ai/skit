@@ -33,7 +33,7 @@ const Envelope = Schema.Struct({
   error: Schema.optionalKey(Schema.Struct({ message: Schema.String })),
 });
 
-export class CodexDoctorFailure
+class CodexDoctorFailure
   extends Data.TaggedError("CodexDoctorFailure")<{ message: string }>
   implements SkitFailure
 {

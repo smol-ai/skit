@@ -124,7 +124,7 @@ Implementation: [Claude adapter](../packages/skit/src/harnesses/skill-listing/cl
 ## Repo-owned model facts
 
 Context windows are bundled in the schema-backed
-[model catalog](../packages/skit/src/models/model-context-windows.json), with per-provider
+[model catalog](../packages/skit/src/harnesses/model-context-windows.json), with per-provider
 source timestamps. OpenAI facts came from the observed Codex model catalog; Anthropic facts
 came from [models.dev](https://models.dev/api.json).
 

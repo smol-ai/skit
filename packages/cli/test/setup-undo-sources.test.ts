@@ -1,34 +1,29 @@
+import { readLibraryManifest } from "./helpers/library-manifest.js";
+import { originalTreePath } from "./helpers/original-tree.js";
+import { withLibraryOwner } from "./helpers/library-owner.js";
 import { installEnabledSkills } from "./helpers/installed-skills.js";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
-import { Clock, Effect, FileSystem } from "effect";
+import { Clock, Effect, FileSystem, Option } from "effect";
 import { systemError } from "effect/PlatformError";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { TestClock } from "effect/testing";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import {
-  enabledSkillIds,
-  type LibraryState,
-  currentSkillVersion,
-  libraryManifestFromLocalState,
-  LibraryStore,
-  MachineSettings,
-  collectionVersionPath,
-  sourceImports,
-  skitLayer,
-} from "@smolai/skit-core";
-import { skillsDirectoryFor } from "../src/install/roots.js";
-import { prepareSetupCommand, setupApplyCommand } from "../src/handlers/library/setup-machine.js";
-import { prepareSetupUndo } from "../src/library-application/setup-undo.js";
-import { inspectSetupOperation } from "../src/library-application/setup-operation.js";
-import { listRecoveryOperations } from "../src/library-application/recovery-moves.js";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
-import { runSetup } from "../src/workflows/library/setup.js";
+
+import type { LibraryFixtureState as LibraryState } from "./helpers/library-home.js";
+import * as MachineSettings from "@smolai/skit-core/machine-settings";
+import { skitLayer } from "@smolai/skit-core/platform";
+import { skillsDirectoryFor } from "@smolai/skit-core/library/routing";
+import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply.js";
+import { prepareSetupUndo } from "../src/library/setup/undo.js";
+import { setupSourceChoiceId, runSetup, setupIntent } from "@smolai/skit-core/library/setup";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
+
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
-import { renderContract } from "../src/presentation/contract-presenters.js";
-import { mergeLibraryManifests } from "../src/workflows/library/library-merge.js";
+import { renderContract } from "../src/commands/output-presenters.js";
+import * as Library from "@smolai/skit-core/library";
 import {
   deterministicTreeHash,
   libraryHome,
@@ -42,7 +37,7 @@ const document = (name: string, body: string) =>
 
 const fixture = Effect.fn("Test.setupSourceUndo")(function* (
   selectedOverride = false,
-  failSourceAcknowledgement = false,
+  interruptAfterImport = false,
   projectExisting = false,
 ) {
   const fs = yield* FileSystem.FileSystem;
@@ -105,7 +100,7 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
         }))
       : initial.skills,
   };
-  yield* home.owned(Effect.flatMap(LibraryStore, (store) => store.save(before, initial)));
+  yield* home.writeDurable(before);
   if (projectExisting) {
     yield* home.owned(
       writingTo(
@@ -155,45 +150,64 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
   );
   expect(scan.onboarding.recommended.sources).toHaveLength(1);
   const interaction = yield* makeScriptedInteraction([]);
-  const executed = yield* Effect.result(
+  // Unprojected, the recommended plan would also install the enabled Collection, which the source
+  // import changes after review and so stops the setup: approve the source import alone.
+  const input = {
+    options,
+    workDirFlag: root,
+    manageOptions: { installOptions: home.installOptions },
+    planId: scan.onboarding.planId,
+    ...(projectExisting
+      ? {}
+      : {
+          selection: {
+            sourceIds: scan.onboarding.recommended.sources.map((source) =>
+              setupSourceChoiceId(source.groupKey),
+            ),
+            copyPaths: [],
+            removePaths: [],
+          },
+        }),
+  };
+  let saves = 0;
+  const executed = yield* Effect.exit(
     home.owned(
-      setupApplyCommand({
-        options,
-        workDirFlag: root,
-        manageOptions: { installOptions: home.installOptions },
-        planId: scan.onboarding.planId,
+      Effect.gen(function* () {
+        const reviewed = projectExisting
+          ? undefined
+          : (yield* prepareSetupCommand(input)).plan.reviewId;
+        return yield* setupApplyCommand({
+          ...input,
+          ...(reviewed === undefined ? {} : { reviewedPlanId: reviewed }),
+        });
       }).pipe(
         Effect.provide(interaction.layer),
+        // The record is the first state.json replacement and the import the second: dying there
+        // leaves it Pending.
+        withLibraryOwner(home.inventory),
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
-          link: (from, to) =>
-            Effect.gen(function* () {
-              if (failSourceAcknowledgement && to.endsWith(".published.json")) {
-                const change = JSON.parse(
-                  yield* fs.readFileString(to.replace(".published.json", ".json")),
-                );
-                if (change.kind === "library")
-                  return yield* systemError({
-                    _tag: "PermissionDenied",
-                    module: "FileSystem",
-                    method: "link",
-                    pathOrDescriptor: to,
-                  });
-              }
-              return yield* fs.link(from, to);
-            }),
+          rename: (from, to) =>
+            Effect.andThen(
+              fs.rename(from, to),
+              interruptAfterImport && to === home.statePath && ++saves === 2
+                ? Effect.interrupt
+                : Effect.void,
+            ),
         }),
       ),
     ),
   );
   let operationId: string | undefined;
-  if (failSourceAcknowledgement) {
+  if (interruptAfterImport) {
     expect(executed._tag).toBe("Failure");
-    if (executed._tag === "Failure") expect(executed.failure._tag).toBe("PlatformError");
-    [operationId] = yield* listRecoveryOperations(home.home);
+    const saved: { operations: readonly { operationId: string }[] } = JSON.parse(
+      yield* fs.readFileString(home.statePath),
+    );
+    operationId = saved.operations[0]?.operationId;
   } else {
-    if (executed._tag === "Failure") return yield* Effect.fail(executed.failure);
-    operationId = executed.success.operationId;
+    if (executed._tag === "Failure") return yield* Effect.failCause(executed.cause);
+    operationId = executed.value.operationId;
   }
   if (!operationId) return yield* Effect.die(new Error("Setup omitted operation evidence"));
   yield* TestClock.adjust("1 second");
@@ -202,11 +216,10 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
     root,
     home,
     options,
-    applied: executed._tag === "Success" ? executed.success : undefined,
+    applied: executed._tag === "Success" ? executed.value : undefined,
     existing,
     introduced,
     before,
-    enabled,
     importSource,
     operationId,
     collectionId,
@@ -214,19 +227,25 @@ const fixture = Effect.fn("Test.setupSourceUndo")(function* (
 });
 
 it.effect(
-  "full undo resolves an interrupted forward source publication from actual Library revision",
+  "full undo reverses a setup interrupted after its import, once the next Library finished it",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture(false, true);
-      const operation = yield* inspectSetupOperation(f.home.home, f.operationId);
-      expect(operation.complete).toBeUndefined();
-      expect(operation.changes.at(-1)?.saved).toBe(false);
-      expect(enabledSkillIds(yield* f.home.durable, f.enabled)).toHaveLength(2);
+      // The next Library finished the setup the import was interrupted in.
+      expect(
+        setupIntent(yield* f.home.durable).memberships?.find(
+          (membership) => membership.collectionId === f.collectionId,
+        )?.skillIds,
+      ).toHaveLength(2);
       const inverse = yield* f.home.owned(prepareSetupUndo(f.operationId));
       expect(inverse.summary.conflicts).toEqual([]);
       expect(inverse.summary.sourceSelections).toHaveLength(1);
       yield* f.home.owned(inverse.apply());
-      expect(enabledSkillIds(yield* f.home.durable, f.enabled)).toHaveLength(1);
+      expect(
+        setupIntent(yield* f.home.durable).memberships?.find(
+          (membership) => membership.collectionId === f.collectionId,
+        )?.skillIds,
+      ).toHaveLength(1);
       expect((yield* f.home.durable).skills).toHaveLength(2);
       expect((yield* MachineSettings.read(f.home.home)).discoveryRoots).toEqual([]);
     }).pipe(Effect.provide(skitLayer)),
@@ -264,7 +283,11 @@ it.effect(
       const action = preview.data.actions.find((item) => item.rel === "apply-undo");
       if (!action) return yield* Effect.die(new Error("Missing source undo action"));
       expect((yield* invoke(action.argv)).data.status).toBe("undone");
-      expect(enabledSkillIds(yield* f.home.durable, f.enabled)).toHaveLength(1);
+      expect(
+        setupIntent(yield* f.home.durable).memberships?.find(
+          (membership) => membership.collectionId === f.collectionId,
+        )?.skillIds,
+      ).toHaveLength(1);
     }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -284,10 +307,19 @@ it.effect(
       const restored = yield* f.home.durable;
       const skill = restored.skills.find((item) => item.skill_id === f.before.skills[0].skill_id)!;
       expect(skill.local_version_id).toBe(f.before.skills[0].local_version_id);
-      expect(currentSkillVersion(restored, skill)?.skill_version_id).toBe(
-        currentSkillVersion(f.before, f.before.skills[0])?.skill_version_id,
+      expect(
+        setupIntent(restored).versions.find((version) => version.skillId === skill.skill_id)
+          ?.selected,
+      ).toBe(
+        setupIntent(f.before).versions.find(
+          (version) => version.skillId === f.before.skills[0].skill_id,
+        )?.selected,
       );
-      expect(enabledSkillIds(restored, f.enabled)).toHaveLength(1);
+      expect(
+        setupIntent(restored).memberships?.find(
+          (membership) => membership.collectionId === f.collectionId,
+        )?.skillIds,
+      ).toHaveLength(1);
       expect(restored.collection_versions).toEqual(after.collection_versions);
     }).pipe(Effect.provide(skitLayer)),
 );
@@ -298,14 +330,45 @@ it.effect(
     Effect.gen(function* () {
       const f = yield* fixture();
       const after = yield* f.home.durable;
-      expect(enabledSkillIds(after, f.enabled)).toHaveLength(2);
+      expect(
+        setupIntent(after).memberships?.find(
+          (membership) => membership.collectionId === f.collectionId,
+        )?.skillIds,
+      ).toHaveLength(2);
+      const afterManifest = yield* readLibraryManifest(f.home.home, [f.root]);
+      const head = {
+        library_id: "source-undo-library",
+        revision_id: "after-setup",
+        manifest: afterManifest,
+      };
+      // Establish the accepted after-setup base through the owner, before undo makes a local edit.
+      yield* f.home.owned(
+        Effect.gen(function* () {
+          const library = yield* Library.Service;
+          const base = yield* library.read;
+          const session = yield* (yield* Library.Service).syncSession(
+            { origin: "https://registry.test", remote: head },
+            { base },
+          );
+          if (session._tag !== "Ready") return yield* Effect.die("Expected clean sync session");
+          const staged = yield* library.content.stage(session.target, {
+            localArchives: yield* library.content.pack(base),
+            registry: { origin: "https://registry.test", token: Option.none() },
+          });
+          yield* (yield* session.prepare(staged)).apply(head);
+        }),
+      );
       const inverse = yield* f.home.owned(prepareSetupUndo(f.operationId));
       expect(inverse.summary.conflicts).toEqual([]);
       expect(inverse.summary.sourceSelections).toHaveLength(1);
       yield* f.home.owned(inverse.apply());
       const restored = yield* f.home.durable;
       expect(restored.enabled).toEqual(f.before.enabled);
-      expect(enabledSkillIds(restored, f.enabled)).toEqual(enabledSkillIds(f.before, f.enabled));
+      expect(
+        setupIntent(restored).memberships?.find(
+          (membership) => membership.collectionId === f.collectionId,
+        )?.skillIds,
+      ).toEqual([f.before.skills[0].skill_id]);
       expect(restored.skills).toHaveLength(2);
       expect(restored.collection_versions).toEqual(after.collection_versions);
       expect(restored.imports).toHaveLength(after.imports.length + 1);
@@ -313,28 +376,60 @@ it.effect(
         expect(restored.imports).toContainEqual(sourceImport);
       const prior = f.before.skills[0];
       const selected = restored.skills.find((skill) => skill.skill_id === prior.skill_id)!;
-      expect(currentSkillVersion(restored, selected)?.skill_version_id).toBe(
-        currentSkillVersion(f.before, prior)?.skill_version_id,
+      expect(
+        setupIntent(restored).versions.find((version) => version.skillId === selected.skill_id)
+          ?.selected,
+      ).toBe(
+        setupIntent(f.before).versions.find((version) => version.skillId === prior.skill_id)
+          ?.selected,
       );
       expect(selected.local_version_id).toBeUndefined();
-      const observation = sourceImports(restored, f.collectionId)[0];
-      const original = sourceImports(f.before, f.collectionId)[0];
+      const restoredSource = setupIntent(restored).sources?.find(
+        (source) => source.collectionId === f.collectionId,
+      );
+      const originalSource = setupIntent(f.before).sources?.find(
+        (source) => source.collectionId === f.collectionId,
+      );
+      const observation = restored.imports.find(
+        (sourceImport) => sourceImport.import_id === restoredSource?.importId,
+      );
+      const original = f.before.imports.find(
+        (sourceImport) => sourceImport.import_id === originalSource?.importId,
+      );
+      if (!observation || !original)
+        return yield* Effect.die("Missing selected source observation");
       expect(observation.collection_version_id).toBe(original.collection_version_id);
       expect(observation.lock_file_entries).toEqual([]);
       const copy = restored.collection_versions.find(
         (item) => item.collection_version_id === original.collection_version_id,
       )!;
       expect(observation.input.value).toBe(
-        collectionVersionPath(join(f.home.home, "originals"), copy.hash),
+        originalTreePath(join(f.home.home, "originals"), copy.hash),
       );
-      const afterManifest = yield* libraryManifestFromLocalState(after);
-      const restoredManifest = yield* libraryManifestFromLocalState(restored);
+      const restoredManifest = yield* readLibraryManifest(f.home.home, [f.root]);
       expect(restoredManifest.imports).toEqual(restored.imports);
-      const synced = mergeLibraryManifests(afterManifest, restoredManifest, afterManifest);
-      expect(synced.conflicts).toEqual([]);
-      expect(enabledSkillIds(synced.manifest, f.enabled)).toHaveLength(1);
-      expect(synced.manifest.imports.map((item) => item.import_id).sort()).toEqual(
-        restored.imports.map((item) => item.import_id).sort(),
+      const synced = yield* f.home.owned(
+        Effect.gen(function* () {
+          const library = yield* Library.Service;
+          return yield* (yield* Library.Service).syncSession(
+            { origin: "https://registry.test", remote: head },
+            { base: yield* library.read },
+          );
+        }),
+      );
+      expect(synced._tag).toBe("Ready");
+      if (synced._tag !== "Ready") return;
+      expect(
+        synced.target.collection_versions.find(
+          (version) => version.collection_version_id === observation.collection_version_id,
+        )?.members,
+      ).toHaveLength(1);
+      expect(
+        synced.target.imports.toSorted((left, right) =>
+          left.import_id.localeCompare(right.import_id),
+        ),
+      ).toEqual(
+        restored.imports.toSorted((left, right) => left.import_id.localeCompare(right.import_id)),
       );
       expect((yield* MachineSettings.read(f.home.home)).discoveryRoots).toEqual([]);
       expect((yield* f.home.owned(prepareSetupUndo(f.operationId))).summary.status).toBe(
@@ -350,13 +445,18 @@ it.effect(
         { name: "introduced", path: f.introduced },
       ]);
       const refreshed = yield* f.home.durable;
-      expect(enabledSkillIds(refreshed, f.enabled)).toHaveLength(2);
       expect(
-        currentSkillVersion(
-          refreshed,
-          refreshed.skills.find((skill) => skill.skill_id === prior.skill_id)!,
-        )?.skill_version_id,
-      ).not.toBe(currentSkillVersion(f.before, prior)?.skill_version_id);
+        setupIntent(refreshed).memberships?.find(
+          (membership) => membership.collectionId === f.collectionId,
+        )?.skillIds,
+      ).toHaveLength(2);
+      expect(
+        setupIntent(refreshed).versions.find((version) => version.skillId === prior.skill_id)
+          ?.selected,
+      ).not.toBe(
+        setupIntent(f.before).versions.find((version) => version.skillId === prior.skill_id)
+          ?.selected,
+      );
     }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -388,8 +488,12 @@ it.effect(
       );
       expect(failure._tag).toBe("PlatformError");
       const partial = yield* f.home.durable;
-      expect(enabledSkillIds(partial, f.enabled)).toHaveLength(1);
-      expect((yield* Effect.flip(f.home.owned(inverse.apply())))._tag).toBe("PlanIsStale");
+      expect(
+        setupIntent(partial).memberships?.find(
+          (membership) => membership.collectionId === f.collectionId,
+        )?.skillIds,
+      ).toHaveLength(1);
+      expect((yield* Effect.flip(f.home.owned(inverse.apply())))._tag).toBe("Library.StalePlan");
       const refreshed = yield* f.home.owned(prepareSetupUndo(f.operationId));
       expect(refreshed.summary.conflicts).toEqual([]);
       expect(refreshed.summary.sourceSelections).toEqual([]);
@@ -404,12 +508,18 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const original = sourceImports(f.before, f.collectionId)[0];
+      const originalSource = setupIntent(f.before).sources?.find(
+        (source) => source.collectionId === f.collectionId,
+      );
+      const original = f.before.imports.find(
+        (sourceImport) => sourceImport.import_id === originalSource?.importId,
+      );
+      if (!original) return yield* Effect.die("Missing selected source observation");
       const copy = f.before.collection_versions.find(
         (item) => item.collection_version_id === original.collection_version_id,
       )!;
       const path = join(
-        collectionVersionPath(join(f.home.home, "originals"), copy.hash),
+        originalTreePath(join(f.home.home, "originals"), copy.hash),
         "existing",
         "SKILL.md",
       );
@@ -435,7 +545,11 @@ it.effect(
         `Clock has not advanced past the current source observation: ${f.collectionId}`,
       );
       expect((yield* Effect.flip(f.home.owned(inverse.apply())))._tag).toBe("RecoveryInvalid");
-      expect(enabledSkillIds(yield* f.home.durable, f.enabled)).toHaveLength(2);
+      expect(
+        setupIntent(yield* f.home.durable).memberships?.find(
+          (membership) => membership.collectionId === f.collectionId,
+        )?.skillIds,
+      ).toHaveLength(2);
     }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -460,7 +574,11 @@ it.effect(
       );
       expect((yield* Effect.flip(f.home.owned(inverse.apply())))._tag).toBe("RecoveryInvalid");
       expect(yield* f.home.durable).toEqual(current);
-      expect(enabledSkillIds(current, f.enabled)).toHaveLength(2);
+      expect(
+        setupIntent(current).memberships?.find(
+          (membership) => membership.collectionId === f.collectionId,
+        )?.skillIds,
+      ).toHaveLength(2);
     }).pipe(Effect.provide(skitLayer)),
 );
 
@@ -513,19 +631,12 @@ it.effect(
       const undoUpdate = yield* f.home.owned(prepareSetupUndo(reconciled.operationId));
       expect(undoUpdate.summary.conflicts).toEqual([]);
       yield* f.home.owned(undoUpdate.apply());
-      const undoImport = yield* f.home.owned(prepareSetupUndo(f.operationId));
-      expect(undoImport.summary.conflicts).toEqual([]);
-      yield* f.home.owned(undoImport.apply());
       expect(yield* f.fs.readFileString(join(original.path, "SKILL.md"))).toBe(
         document("existing", "Before setup"),
       );
-      const state = yield* f.home.durable;
-      expect(state.installed_skills).toEqual(f.before.installed_skills);
-      expect(
-        currentSkillVersion(
-          state,
-          state.skills.find((skill) => skill.skill_id === original.skill_id)!,
-        )?.skill_version_id,
-      ).toBe(original.skill_version_id);
+      expect((yield* f.home.durable).installed_skills).toEqual(f.before.installed_skills);
+      // The later setup replaced the import's record, so only the later one can be undone.
+      const undoImport = yield* Effect.flip(f.home.owned(prepareSetupUndo(f.operationId)));
+      expect(undoImport._tag).toBe("RecoveryInvalid");
     }).pipe(Effect.provide(skitLayer)),
 );

@@ -1,0 +1,7 @@
+{
+  "source": "https://github.com/mattpocock/skills",
+  "commit": "14c13c5bf9ec1bee9926c0c1f388534f0b9ab8e8",
+  "from": "skills/in-progress/review",
+  "to": "skills/engineering/code-review",
+  "title": "Rename review skill to code-review and promote to engineering"
+}

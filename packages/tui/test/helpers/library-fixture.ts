@@ -1,24 +1,16 @@
+import { LinkStat } from "@smolai/skit-core/platform";
+import * as Library from "@smolai/skit-core/library";
+import { skitConfigurationLayer, skitLayer } from "@smolai/skit-core/platform";
 import { join } from "node:path";
 import { Effect, FileSystem, Layer } from "effect";
-import {
-  deterministicTreeHash,
-  libraryStoreLayer,
-  LibraryStore,
-  LinkStat,
-  makeMachineId,
-  importCollection,
-  withLibraryWriter,
-} from "@smolai/skit-core";
+import { deterministicTreeHash } from "@smolai/skit-core/author";
+import { makeMachineId } from "@smolai/skit-core/universal/consumer";
 import {
   confirmLibraryChange,
-  LibraryActor,
-  libraryApplicationLayer,
-  openLibrarySession,
   proposeLibraryCollectionChange,
-  skitConfigurationLayer,
-  type Scope,
-} from "../../../cli/src/front-end";
-import { createLibraryHost } from "../../src/library-host";
+  type InstallScope,
+} from "@smolai/skit-core/library/session";
+import { createLibraryHost } from "../../src/library/host";
 
 /**
  * A temporary user home holding a Library at `<home>/.skit`, one retained local Collection per
@@ -32,6 +24,7 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
   const home = join(root, "home");
   const skitHome = join(home, ".skit");
   const cwd = join(root, "work");
+  const deviceRoots = { home, configHome: join(home, ".config"), overrides: {} };
   yield* fs.makeDirectory(skitHome, { recursive: true });
   yield* fs.makeDirectory(cwd, { recursive: true });
   yield* fs.writeFileString(
@@ -43,6 +36,8 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
       repositoryRoots: [],
     }),
   );
+  /** The Library as a second front end opens it: its own owner over the same home. */
+  const owner = Library.layer({ home: skitHome, roots: deviceRoots });
   const importSource = (collection: string, skills: readonly string[]) =>
     Effect.gen(function* () {
       const source = join(root, "sources", collection);
@@ -50,22 +45,23 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
         yield* fs.makeDirectory(join(source, skill), { recursive: true });
         yield* fs.writeFileString(join(source, skill, "SKILL.md"), `${skill}\n`);
       }
-      return yield* withLibraryWriter(
-        importCollection({
+      const skillRequests = yield* Effect.forEach(skills, (skill) =>
+        Effect.map(deterministicTreeHash(join(source, skill)), (currentHash) => ({
+          name: skill,
+          sourcePath: join(source, skill),
+          relativePath: skill,
+          currentHash,
+        })),
+      );
+      return yield* Effect.flatMap(Library.Service, (library) =>
+        library.import.collection({
           source: { type: "local", path: source },
           input: source,
           importedAt: "2026-10-14T00:00:00.000Z",
-          skills: yield* Effect.forEach(skills, (skill) =>
-            Effect.map(deterministicTreeHash(join(source, skill)), (currentHash) => ({
-              name: skill,
-              sourcePath: join(source, skill),
-              relativePath: skill,
-              currentHash,
-            })),
-          ),
+          skills: skillRequests,
           lockFileEntries: [],
         }),
-      ).pipe(Effect.provide(libraryStoreLayer({ home: skitHome })));
+      ).pipe(Effect.provide(owner));
     });
   for (const [collection, skills] of Object.entries(collections))
     yield* importSource(collection, skills);
@@ -77,9 +73,9 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
     overrides: {},
     now: () => "2026-10-14T00:00:00.000Z",
   };
-  const application = libraryApplicationLayer.pipe(
+  const application = Library.layer({ home: skitHome, roots: deviceRoots }).pipe(
+    Layer.provideMerge(skitLayer),
     Layer.provideMerge(skitConfigurationLayer(skitHome)),
-    Layer.provideMerge(Layer.succeed(LibraryActor)("tui")),
   );
   return {
     root,
@@ -91,22 +87,32 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
     /** The installed-skill options the TUI derives from its flags for this home. */
     configuration,
     /** Enable a whole Collection in `scopes` through the session workflows the TUI confirms. */
-    bind: (label: string, scopes: readonly Scope[]) =>
+    bind: (label: string, scopes: readonly InstallScope[]) =>
       Effect.gen(function* () {
-        const session = yield* openLibrarySession();
+        const session = yield* Effect.flatMap(Library.Service, (library) => library.session.open());
         const collectionId = session.skills.find((row) => row.heading === label)!.collectionId;
         const confirmed = yield* confirmLibraryChange(
-          yield* proposeLibraryCollectionChange(session, configuration, collectionId, true, scopes),
+          yield* proposeLibraryCollectionChange(session, collectionId, true, scopes),
         );
         if (confirmed.outcome?.kind !== "applied")
           return yield* Effect.die(`binding ${label} was ${confirmed.outcome?.kind}`);
         return collectionId;
       }).pipe(Effect.provide(application)),
-    durable: Effect.flatMap(LibraryStore, (store) => store.load).pipe(
-      Effect.provide(libraryStoreLayer({ home: skitHome })),
+    /** The Library's saved state, read through its owner. */
+    durable: Effect.flatMap(Library.Service, (library) => library.read).pipe(
+      Effect.flatMap((snapshot) =>
+        snapshot._tag === "Present"
+          ? Effect.succeed(snapshot.state)
+          : Effect.die("the fixture Library has no state.json"),
+      ),
+      Effect.provide(owner),
     ),
     /** The host the TUI builds for this Library, over the production application layer. */
-    host: () => createLibraryHost(application, openLibrarySession()),
+    host: () =>
+      createLibraryHost(
+        application,
+        Effect.flatMap(Library.Service, (library) => library.session.open()),
+      ),
     /** Every path under the fixture, by lstat: its type, mode, link target and bytes. */
     tree: Effect.gen(function* () {
       const links = yield* LinkStat;

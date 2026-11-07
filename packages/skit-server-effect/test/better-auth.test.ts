@@ -1,11 +1,11 @@
 import { applyD1Migrations, env, reset } from "cloudflare:test";
 import { D1Client } from "@effect/sql-d1";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { vi } from "vitest";
 import { makeWebHandler } from "../src/http.js";
-import { Bindings, databaseLayer } from "../src/platform/cloudflare.js";
-import { expectedMigrations } from "../src/readiness/migrations.generated.js";
+import { databaseLayer } from "../src/platform/cloudflare.js";
+import { expectedMigrations } from "../src/platform/migrations.generated.js";
 import {
   makeImportId,
   makeCollectionId,
@@ -15,10 +15,7 @@ import {
   makeSkillVersionId,
 } from "@smolai/skit-core/universal/consumer";
 
-const bindingsLayer = Layer.merge(
-  Layer.succeed(Bindings, { database: env.DB, blobs: env.SKIT_BLOBS }),
-  databaseLayer(env.DB),
-);
+const platformLayer = databaseLayer(env.DB);
 const web = makeWebHandler(env);
 
 const webPromise = <A>(evaluate: () => Promise<A>) =>
@@ -117,7 +114,7 @@ describe("Better Auth adapter", () => {
         { emailVerified: 1, providerId: "github" },
       ]);
       yield* webPromise(() => github.dispose());
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("keeps GitHub out of an unverified registrant's password account", () =>
@@ -162,7 +159,7 @@ describe("Better Auth adapter", () => {
       ]);
       expect((yield* passwordSignIn("/api/auth/sign-in/email", credentials)).status).toBe(403);
       yield* webPromise(() => github.dispose());
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("advertises only configured optional authentication services", () =>
@@ -371,7 +368,7 @@ describe("Better Auth adapter", () => {
         namespace_slug: "mail-user",
       });
       yield* webPromise(() => emailWeb.dispose());
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("rejects an expired email verification link", () =>
@@ -427,7 +424,7 @@ describe("Better Auth adapter", () => {
       );
       expect(identity[0]).toEqual({ emailVerified: 0, username: null });
       yield* webPromise(() => emailWeb.dispose());
-    }).pipe(Effect.ensuring(Effect.sync(() => vi.useRealTimers())), Effect.provide(bindingsLayer)),
+    }).pipe(Effect.ensuring(Effect.sync(() => vi.useRealTimers())), Effect.provide(platformLayer)),
   );
 
   it.effect("rate limits unauthenticated verification resends", () =>
@@ -472,7 +469,7 @@ describe("Better Auth adapter", () => {
         Array.from({ length: 6 }, () => [{ key: "/api/auth/send-verification-email:192.0.2.200" }]),
       );
       yield* webPromise(() => emailWeb.dispose());
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("starts GitHub OAuth when the provider is configured", () =>
@@ -501,7 +498,7 @@ describe("Better Auth adapter", () => {
       expect(body.url).toContain("github.com/login/oauth/authorize");
       expect(body.url).toContain("client_id=github-client");
       yield* webPromise(() => github.dispose());
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("emails the initial operator and blocks password sign-in until verification", () =>
@@ -560,7 +557,7 @@ describe("Better Auth adapter", () => {
       );
       expect(signIn.status).toBe(403);
       yield* webPromise(() => emailWeb.dispose());
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("reports bootstrap email failure without rearming the claim", () =>
@@ -596,7 +593,7 @@ describe("Better Auth adapter", () => {
       const replay = yield* webPromise(create);
       expect(replay.status).toBe(409);
       yield* webPromise(() => emailWeb.dispose());
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("lets a signed-in browser approve a CLI device code that then mints a token", () =>
@@ -810,6 +807,43 @@ describe("Better Auth adapter", () => {
       const tokenValue = Schema.decodeUnknownSync(Schema.Struct({ token: Schema.String }))(
         token,
       ).token;
+      const patLimit = vi.fn<RateLimit["limit"]>().mockResolvedValue({ success: false });
+      const unexpectedLimit = vi
+        .fn<RateLimit["limit"]>()
+        .mockRejectedValue(new Error("wrong limiter binding"));
+      const limitedWeb = makeWebHandler({
+        ...env,
+        PAT_RATE_LIMITER: { limit: patLimit },
+        AUTH_RATE_LIMITER: { limit: unexpectedLimit },
+        BOOTSTRAP_RATE_LIMITER: { limit: unexpectedLimit },
+        FEEDBACK_RATE_LIMITER: { limit: unexpectedLimit },
+      });
+      yield* Effect.gen(function* () {
+        const denied = yield* webPromise(() =>
+          limitedWeb.handler(
+            new Request("https://registry.test/api/tokens", {
+              method: "POST",
+              headers: {
+                cookie: sessionCookie,
+                origin: "https://registry.test",
+                "content-type": "application/json",
+              },
+              body: JSON.stringify({ name: "must not be stored", scopes: ["library:sync"] }),
+            }),
+          ),
+        );
+        expect(denied.status).toBe(429);
+        expect(denied.headers.get("retry-after")).toBe("60");
+        expect(patLimit).toHaveBeenCalledTimes(1);
+        expect(patLimit).toHaveBeenCalledWith({ key: expect.stringMatching(/^principal_/) });
+        expect(unexpectedLimit).not.toHaveBeenCalled();
+        const counts = yield* Effect.flatMap(
+          D1Client.D1Client,
+          (sql) => sql<{ n: number }>`SELECT COUNT(*) n FROM personal_access_tokens`,
+        );
+        expect(counts[0]?.n).toBe(1);
+      }).pipe(Effect.ensuring(webPromise(() => limitedWeb.dispose())));
+
       expect(
         (yield* request("/api/operator/readiness", {
           headers: { authorization: `Bearer ${tokenValue}` },
@@ -1202,8 +1236,8 @@ describe("Better Auth adapter", () => {
         D1Client.D1Client,
         (
           sql,
-        ) => sql`INSERT INTO drafts (owner_slug, skit_slug, title, visibility, current_revision_id, created_at, updated_at)
-          VALUES ('operator', 'tools', 'Tools', 'private', 'revision_tools', '2026-01-01', '2026-01-01')`,
+        ) => sql`INSERT INTO skits (owner_slug, skit_slug, visibility, current_revision_id, created_at, updated_at)
+          VALUES ('operator', 'tools', 'private', ${"sha256:7777777777777777777777777777777777777777777777777777777777777777"}, '2026-01-01', '2026-01-01')`,
       );
       const authorInventory = yield* request("/api/author/skits", {
         headers: { cookie: sessionCookie },
@@ -1214,7 +1248,9 @@ describe("Better Auth adapter", () => {
           {
             skit_id: "operator/tools",
             visibility: "private",
-            draft_revision_id: "revision_tools",
+            current_revision_id:
+              "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+            current_revision_published: false,
             most_recent_release_version: null,
           },
         ],
@@ -1246,7 +1282,7 @@ describe("Better Auth adapter", () => {
         skit_id: "operator/tools",
         changed: true,
       });
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("lets an authenticated user atomically claim a Registry username", () =>
@@ -1309,7 +1345,7 @@ describe("Better Auth adapter", () => {
         (sql) => sql`SELECT namespace_slug FROM namespaces WHERE namespace_slug = 'octocat'`,
       );
       expect(namespace[0]).toEqual({ namespace_slug: "octocat" });
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("accepts the configured origin for username claims despite a trailing slash", () =>
@@ -1330,7 +1366,7 @@ describe("Better Auth adapter", () => {
       expect((yield* claim("https://registry.test")).status).toBe(401);
       expect((yield* claim("https://elsewhere.test")).status).toBe(403);
       yield* webPromise(() => slashed.dispose());
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("keeps account registration closed by default", () =>
@@ -1358,7 +1394,7 @@ describe("Better Auth adapter", () => {
         (sql) => sql`SELECT COUNT(*) count FROM user`,
       );
       expect(users[0]).toEqual({ count: 0 });
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("provisions a principal and namespace when registration is open", () =>
@@ -1405,7 +1441,7 @@ describe("Better Auth adapter", () => {
         namespace_slug: "new-author",
         subject_kind: "principal",
       });
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect(
@@ -1502,7 +1538,7 @@ describe("Better Auth adapter", () => {
         )(yield* webPromise(() => bobUpload.json()));
         expect(bobSnapshot.library_id).not.toBe(winner.library.library_id);
         expect(bobSnapshot.reused).toBe(false);
-      }).pipe(Effect.provide(bindingsLayer)),
+      }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("creates a team and manages member lifecycle through a session", () =>
@@ -1557,6 +1593,35 @@ describe("Better Auth adapter", () => {
         "content-type": "application/json",
       };
 
+      const collision = yield* request("/api/teams", {
+        method: "POST",
+        headers: sessionHeaders,
+        body: JSON.stringify({ slug: "operator", name: "Cannot take the Principal namespace" }),
+      });
+      expect(collision.status).toBe(409);
+      const sql = yield* D1Client.D1Client;
+      expect(yield* sql`SELECT COUNT(*) count FROM teams`).toEqual([{ count: 0 }]);
+      expect(yield* sql`SELECT COUNT(*) count FROM team_memberships`).toEqual([{ count: 0 }]);
+      expect(
+        yield* sql`SELECT subject_kind FROM namespaces WHERE namespace_slug = 'operator'`,
+      ).toEqual([{ subject_kind: "principal" }]);
+      yield* sql.unsafe(`CREATE TRIGGER refuse_team_namespace BEFORE INSERT ON namespaces
+        WHEN NEW.subject_kind = 'team' AND NEW.namespace_slug = 'blocked-team'
+        BEGIN SELECT RAISE(ABORT, 'namespace storage unavailable'); END`);
+      const failed = yield* request("/api/teams", {
+        method: "POST",
+        headers: sessionHeaders,
+        body: JSON.stringify({ slug: "blocked-team", name: "Must roll back" }),
+      });
+      expect(failed.status).toBe(500);
+      expect(yield* webPromise(() => failed.json())).toEqual({ error: "storage_failure" });
+      expect(yield* sql`SELECT COUNT(*) count FROM teams`).toEqual([{ count: 0 }]);
+      expect(yield* sql`SELECT COUNT(*) count FROM team_memberships`).toEqual([{ count: 0 }]);
+      expect(
+        yield* sql`SELECT namespace_slug FROM namespaces WHERE namespace_slug = 'blocked-team'`,
+      ).toEqual([]);
+      yield* sql.unsafe("DROP TRIGGER refuse_team_namespace");
+
       const created = yield* request("/api/teams", {
         method: "POST",
         headers: sessionHeaders,
@@ -1566,6 +1631,12 @@ describe("Better Auth adapter", () => {
       expect(yield* webPromise(() => created.json())).toMatchObject({
         team: { slug: "tool-makers", name: "Tool Makers" },
       });
+      expect(
+        yield* sql`SELECT n.subject_kind, n.subject_id = t.team_id same_subject, m.role
+        FROM teams t JOIN namespaces n ON n.namespace_slug = t.slug
+        JOIN team_memberships m ON m.team_id = t.team_id
+        WHERE t.slug = 'tool-makers'`,
+      ).toEqual([{ subject_kind: "team", same_subject: 1, role: "owner" }]);
       expect(
         (yield* request("/api/teams", {
           method: "POST",
@@ -1595,7 +1666,7 @@ describe("Better Auth adapter", () => {
           headers: sessionHeaders,
         })).status,
       ).toBe(404);
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 });
 
@@ -1677,7 +1748,7 @@ describe("Principal provisioning", () => {
 
       expect(yield* libraryStatus(cookie)).toBe(404);
       expect(yield* provisionedRows).toEqual([provisioned("author")]);
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("lets a username claim repair a user that sign-in could not provision", () =>
@@ -1699,7 +1770,7 @@ describe("Principal provisioning", () => {
       expect(yield* webPromise(() => claimed.json())).toEqual({ username: "author" });
       expect(yield* libraryStatus(cookie)).toBe(404);
       expect(yield* provisionedRows).toEqual([provisioned("author")]);
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("reports a username to onboarding only once it is provisioned", () =>
@@ -1727,7 +1798,7 @@ describe("Principal provisioning", () => {
       });
       expect(claimed.status).toBe(201);
       expect(yield* onboarding(cookie)).toEqual({ status: 200, body: { username: "author" } });
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("refuses a signup whose username is another subject's Namespace", () =>
@@ -1749,7 +1820,7 @@ describe("Principal provisioning", () => {
         code: "USERNAME_UNAVAILABLE",
       });
       expect(yield* provisionedRows).toEqual([provisioned("owner")]);
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("provisions the same rows through bootstrap, signup, and username claim", () =>
@@ -1790,7 +1861,7 @@ describe("Principal provisioning", () => {
         provisioned("claimer"),
         provisioned("operator"),
       ]);
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 
   it.effect("never demotes a team owner while adding a member", () =>
@@ -1836,6 +1907,6 @@ describe("Principal provisioning", () => {
         { username: "member", role: "owner" },
         { username: "owner", role: "owner" },
       ]);
-    }).pipe(Effect.provide(bindingsLayer)),
+    }).pipe(Effect.provide(platformLayer)),
   );
 });

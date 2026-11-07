@@ -5,7 +5,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { spawnSync } from "node:child_process";
 import { join, resolve } from "node:path";
-import { skitLayer } from "@smolai/skit-core";
+import { skitLayer } from "@smolai/skit-core/platform";
 import { tuiLibrary } from "./helpers/library-fixture";
 
 const entry = resolve(import.meta.dirname, "../src/index.ts");

@@ -1,3 +1,4 @@
+import { registryCredentials } from "../src/registry/auth.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 // The two CLI readers of JSON this process did not write.
 //
@@ -8,8 +9,8 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, describe, it } from "@effect/vitest";
 import { Cause, Effect, Exit, FileSystem } from "effect";
 import { join } from "node:path";
-import { resolveAuth } from "../src/registry/auth.js";
-import { readAuthorRemote } from "../src/workflows/author/sync.js";
+
+import { readAuthorWorkspace } from "@smolai/skit-core/author";
 
 const ORIGIN = "https://registry.example";
 const credential = { token: "t", tokenId: "i", tokenPrefix: "p", scopes: ["library:sync"] };
@@ -18,14 +19,16 @@ const withAuth = Effect.fn("withAuth")(function* (config: string) {
   const fs = yield* FileSystem.FileSystem;
   const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-auth-" });
   yield* fs.writeFileString(join(home, "auth.json"), config);
-  return yield* Effect.exit(resolveAuth(home));
+  return yield* Effect.exit(registryCredentials({ home }));
 });
 
 const withRemote = Effect.fn("withRemote")(function* (document: string) {
   const fs = yield* FileSystem.FileSystem;
   const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-remote-" });
   yield* fs.writeFileString(join(root, "skit.remote.json"), document);
-  return yield* Effect.exit(readAuthorRemote(root));
+  return yield* Effect.exit(
+    readAuthorWorkspace(root).pipe(Effect.map(({ connection }) => connection)),
+  );
 });
 
 /** The tag of the single reason in a failed exit, or how it failed instead. */
@@ -98,7 +101,12 @@ describe("Author Workspace remote metadata", () => {
     Effect.gen(function* () {
       const exit = yield* withRemote(JSON.stringify(canonical));
       assert.isTrue(Exit.isSuccess(exit));
-      if (Exit.isSuccess(exit)) assert.deepStrictEqual({ ...exit.value }, canonical);
+      if (Exit.isSuccess(exit))
+        assert.deepStrictEqual(exit.value, {
+          _tag: "Connected",
+          remote: canonical,
+          leftover: { _tag: "None" },
+        });
     }).pipe(Effect.provide(testPlatformLayer)),
   );
 

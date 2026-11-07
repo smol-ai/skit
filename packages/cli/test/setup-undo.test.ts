@@ -1,26 +1,23 @@
+import { LinkStat } from "@smolai/skit-core/platform";
+import { recoveryInspection } from "./helpers/recovery.js";
+import { withLibraryOwner } from "./helpers/library-owner.js";
 import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { systemError } from "effect/PlatformError";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import {
-  LibraryStore,
-  LinkStat,
-  MachineSettings,
-  prepareInstalledSkillRebuild,
-  skitLayer,
-} from "@smolai/skit-core";
-import { checkSetupGlobalContent } from "../src/library-application/setup-external-ownership.js";
-import { recoveryFingerprint } from "../src/library-application/recovery-evidence.js";
-import { prepareSetupUndo } from "../src/library-application/setup-undo.js";
-import { setupResultActions } from "../src/commands/setup-actions.js";
+import * as Library from "@smolai/skit-core/library";
+import * as MachineSettings from "@smolai/skit-core/machine-settings";
+import { skitLayer } from "@smolai/skit-core/platform";
+
+import { prepareSetupUndo } from "../src/library/setup/undo.js";
+import { setupResultActions } from "../src/library/setup/actions.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
-import { renderContract } from "../src/presentation/contract-presenters.js";
-import { inspectRecoveryOperation } from "../src/library-application/recovery-moves.js";
-import { prepareSetupCommand, setupApplyCommand } from "../src/handlers/library/setup-machine.js";
-import { runSetup } from "../src/workflows/library/setup.js";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+import { renderContract } from "../src/commands/output-presenters.js";
+import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply.js";
+import { runSetup } from "@smolai/skit-core/library/setup";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import { libraryHome, scratch } from "./helpers/library-home.js";
 
 const fixture = Effect.fn("Test.setupUndoFixture")(function* (removeOnly = false) {
@@ -79,41 +76,13 @@ const fixture = Effect.fn("Test.setupUndoFixture")(function* (removeOnly = false
   };
 });
 
-it.effect(
-  "the installed-skill byte owner reconstructs a former independent copy from retained artifacts",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      yield* f.home.owned(
-        Effect.gen(function* () {
-          const store = yield* LibraryStore;
-          const state = yield* store.load;
-          const prior = state.installed_skills.find(
-            (installedSkill) => installedSkill.path === f.successor,
-          )!;
-          const rebuilt = yield* prepareInstalledSkillRebuild(state, store.originalsPath, prior, {
-            source: "declared",
-          });
-          const stage = join(f.root, "reconstructed");
-          yield* rebuilt.build(stage);
-          expect(yield* recoveryFingerprint(stage, "exclude")).toBe(
-            yield* recoveryFingerprint(f.successor, "exclude"),
-          );
-          expect(yield* f.fs.exists(join(stage, ".skit-ownership.json"))).toBe(false);
-          yield* f.fs.writeFileString(join(stage, "SKILL.md"), "Independent writable copy");
-          expect(yield* f.fs.readFileString(join(f.successor, "SKILL.md"))).toBe(f.markdown);
-        }),
-      );
-    }).pipe(Effect.provide(skitLayer)),
-);
-
 it.effect("undo of an explicit removal restores the original inode and move record state", () =>
   Effect.gen(function* () {
     const f = yield* fixture(true);
     yield* f.home.owned(
       Effect.gen(function* () {
         const links = yield* LinkStat;
-        const recovery = yield* inspectRecoveryOperation(f.home.home, f.operationId);
+        const recovery = yield* recoveryInspection(f.home.home, f.operationId);
         expect(recovery.entries[0].status).toBe("saved");
         const identity = yield* links.identity.lstat(recovery.entries[0].recoveryPath);
         const preview = yield* prepareSetupUndo(f.operationId);
@@ -121,49 +90,9 @@ it.effect("undo of an explicit removal restores the original inode and move reco
         expect(preview.summary.files).toEqual([{ path: f.source, kind: "restore" }]);
         expect((yield* preview.apply()).status).toBe("undone");
         expect(yield* links.identity.lstat(f.source)).toEqual(identity);
-        expect(
-          (yield* inspectRecoveryOperation(f.home.home, f.operationId)).entries[0].status,
-        ).toBe("at-original");
-        expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe(f.markdown);
-      }),
-    );
-  }).pipe(Effect.provide(skitLayer)),
-);
-
-it.effect("setup records save exact identities, and v2 numeric records still undo", () =>
-  Effect.gen(function* () {
-    const f = yield* fixture(true);
-    const path = join(f.home.home, "removed", f.operationId, "setup.json");
-    const record = JSON.parse(yield* f.fs.readFileString(path));
-    expect(record.schemaVersion).toBe(3);
-    expect(typeof record.files[0].anchor.ino).toBe("string");
-    const numeric = <A extends { dev: string; ino: string }>(identity: A) => ({
-      ...identity,
-      dev: Number(identity.dev),
-      ino: Number(identity.ino),
-    });
-    yield* f.fs.writeFileString(
-      path,
-      JSON.stringify({
-        ...record,
-        schemaVersion: 2,
-        files: record.files.map(
-          (file: {
-            anchor: { dev: string; ino: string };
-            entry: { dev: string; ino: string } | null;
-          }) => ({
-            ...file,
-            anchor: numeric(file.anchor),
-            entry: file.entry === null ? null : numeric(file.entry),
-          }),
-        ),
-      }),
-    );
-    yield* f.home.owned(
-      Effect.gen(function* () {
-        const preview = yield* prepareSetupUndo(f.operationId);
-        expect(preview.summary.conflicts).toEqual([]);
-        expect((yield* preview.apply()).status).toBe("undone");
+        expect((yield* recoveryInspection(f.home.home, f.operationId)).entries[0].status).toBe(
+          "at-original",
+        );
         expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe(f.markdown);
       }),
     );
@@ -202,16 +131,15 @@ it.effect(
       const f = yield* fixture();
       yield* f.home.owned(
         Effect.gen(function* () {
-          const store = yield* LibraryStore;
-          const installed = yield* store.load;
+          const installed = yield* f.home.durable;
           yield* (yield* prepareSetupUndo(f.operationId)).apply();
-          const undone = yield* store.load;
+          const undone = yield* f.home.durable;
           const later = { ...undone, enabled: installed.enabled };
-          yield* store.save(later, undone);
+          yield* f.home.writeDurable(later);
           const repeat = yield* prepareSetupUndo(f.operationId);
           expect(repeat.summary.status).toBe("already-undone");
           expect((yield* repeat.apply()).status).toBe("already-undone");
-          expect(yield* store.load).toEqual(later);
+          expect(yield* f.home.durable).toEqual(later);
         }),
       );
     }).pipe(Effect.provide(skitLayer)),
@@ -232,22 +160,24 @@ it.effect("an inverse record must save before any copy or intent changes", () =>
     const f = yield* fixture();
     yield* f.home.owned(
       Effect.gen(function* () {
-        const store = yield* LibraryStore;
-        const state = yield* store.load;
+        const state = yield* f.home.durable;
         const faultFs: typeof f.fs = {
           ...f.fs,
-          link: (from, to) =>
-            to.includes("/undo/") && to.endsWith(".json")
-              ? refusedPublication(to)
-              : f.fs.link(from, to),
+          rename: (from, to) =>
+            to === f.home.statePath ? refusedPublication(to) : f.fs.rename(from, to),
         };
         const plan = yield* prepareSetupUndo(f.operationId);
         expect(
           (yield* Effect.flip(
-            plan.apply().pipe(Effect.provideService(FileSystem.FileSystem, faultFs)),
+            plan
+              .apply()
+              .pipe(
+                withLibraryOwner(f.home.inventory),
+                Effect.provideService(FileSystem.FileSystem, faultFs),
+              ),
           ))._tag,
         ).toBe("PlatformError");
-        expect(yield* store.load).toEqual(state);
+        expect(yield* f.home.durable).toEqual(state);
         expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(true);
         expect(yield* f.fs.exists(f.successor)).toBe(true);
       }),
@@ -275,35 +205,54 @@ it.effect("a symlink replacing setup's marker never grants ownership of its targ
   }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect(
-  "an interrupted inverse after file effects is inspectable and can finish only after a fresh review",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      yield* f.home.owned(
-        Effect.gen(function* () {
-          const store = yield* LibraryStore;
-          const before = yield* store.load;
-          const interrupted = yield* prepareSetupUndo(f.operationId).pipe(
-            Effect.provideService(LibraryStore, {
-              ...store,
-              save: () => refusedPublication(store.statePath),
+it.effect("a cold owner finishes a recorded inverse interrupted before Library publication", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    yield* f.home.owned(
+      Effect.gen(function* () {
+        const before = yield* f.home.durable;
+        const reviewed = yield* prepareSetupUndo(f.operationId);
+        let interrupted = false;
+        const exit = yield* Effect.exit(
+          reviewed.apply().pipe(
+            withLibraryOwner(f.home.inventory),
+            Effect.provideService(FileSystem.FileSystem, {
+              ...f.fs,
+              rename: (from, to) =>
+                Effect.gen(function* () {
+                  if (to === f.home.statePath) {
+                    const next = JSON.parse(yield* f.fs.readFileString(from));
+                    if (next.enabled.length === 0) {
+                      interrupted = true;
+                      return yield* Effect.die("Process exited before Undo publication");
+                    }
+                  }
+                  yield* f.fs.rename(from, to);
+                }),
             }),
-          );
-          const failure = yield* Effect.flip(interrupted.apply());
-          expect(failure._tag).toBe("PlatformError");
-          expect(yield* store.load).toEqual(before);
-          expect(yield* f.fs.exists(f.successor)).toBe(false);
-          expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(false);
-          expect((yield* Effect.flip(interrupted.apply()))._tag).toBe("PlanIsStale");
-          const refreshed = yield* prepareSetupUndo(f.operationId);
-          expect(refreshed.summary.conflicts).toEqual([]);
-          expect((yield* refreshed.apply()).status).toBe("undone");
-          expect((yield* store.load).enabled).toEqual([]);
-          expect((yield* MachineSettings.read(f.home.home)).discoveryRoots).toEqual([]);
-        }),
-      );
-    }).pipe(Effect.provide(skitLayer)),
+          ),
+        );
+        expect(exit._tag).toBe("Failure");
+        expect(interrupted).toBe(true);
+        const pending = JSON.parse(yield* f.fs.readFileString(f.home.statePath));
+        expect(pending.enabled).toEqual(before.enabled);
+        expect(pending.operations.at(-1)._tag).toBe("Pending");
+        expect(yield* f.fs.exists(f.successor)).toBe(false);
+        expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(false);
+      }),
+    );
+    yield* f.home.owned(
+      Effect.gen(function* () {
+        const owner = yield* Library.Service;
+        expect(owner.startup.finished.length).toBe(1);
+        const repeated = yield* prepareSetupUndo(f.operationId);
+        expect(repeated.summary.intentChanged).toBe(false);
+        expect((yield* repeated.apply()).status).toBe("undone");
+        expect((yield* f.home.durable).enabled).toEqual([]);
+        expect((yield* MachineSettings.read(f.home.home)).discoveryRoots).toEqual([]);
+      }),
+    );
+  }).pipe(Effect.provide(skitLayer)),
 );
 
 it.effect(
@@ -326,11 +275,33 @@ it.effect(
             ),
           );
           expect(failure._tag).toBe("PlatformError");
-          expect((yield* (yield* LibraryStore).load).enabled).toEqual([]);
+          expect((yield* f.home.durable).enabled).toEqual([]);
+          // Library completed independently. Retrying settings must preserve new file edits and
+          // later repository choices, without creating another Library inverse attempt.
+          const recorded = (yield* f.home.durable).operations;
+          expect(
+            recorded.some(
+              (operation) =>
+                operation._tag === "Done" &&
+                operation.steps.some(({ step }) => step._tag === "Undo"),
+            ),
+          ).toBe(true);
+          yield* f.fs.writeFileString(
+            join(f.source, "SKILL.md"),
+            "Independent edit after Library undo",
+          );
+          yield* MachineSettings.setRepositoryDecision(f.home.home, "/later/repo", "watched");
           const refreshed = yield* prepareSetupUndo(f.operationId);
           expect(refreshed.summary.intentChanged).toBe(false);
           expect(refreshed.summary.settingsChanged).toBe(true);
           expect((yield* refreshed.apply()).status).toBe("undone");
+          expect((yield* f.home.durable).operations).toEqual(recorded);
+          expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe(
+            "Independent edit after Library undo",
+          );
+          expect((yield* MachineSettings.read(f.home.home)).repositories).toEqual([
+            { path: "/later/repo", status: "watched" },
+          ]);
         }),
       );
     }).pipe(Effect.provide(skitLayer)),
@@ -378,8 +349,7 @@ it.effect(
       const f = yield* fixture();
       yield* f.home.owned(
         Effect.gen(function* () {
-          const store = yield* LibraryStore;
-          const before = yield* store.load;
+          const before = yield* f.home.durable;
           expect(before.enabled.length).toBeGreaterThan(0);
           expect(yield* f.fs.exists(join(f.successor, ".skit-ownership.json"))).toBe(true);
           const plan = yield* prepareSetupUndo(f.operationId);
@@ -393,7 +363,7 @@ it.effect(
           );
           const undone = yield* plan.apply();
           expect(undone.status).toBe("undone");
-          const state = yield* store.load;
+          const state = yield* f.home.durable;
           expect(state.enabled).toEqual([]);
           expect(state.installed_skills).toEqual([]);
           expect(state.skills).toEqual(before.skills);
@@ -408,7 +378,7 @@ it.effect(
           expect(settings.machineId).toBeDefined();
           if (!("backupId" in undone))
             return yield* Effect.die(new Error("Missing preservation identity"));
-          const recovery = yield* inspectRecoveryOperation(f.home.home, undone.backupId);
+          const recovery = yield* recoveryInspection(f.home.home, undone.backupId);
           expect(recovery.entries).toHaveLength(1);
           expect(recovery.entries[0].status).toBe("saved");
           expect((yield* prepareSetupUndo(f.operationId)).summary.status).toBe("already-undone");
@@ -426,14 +396,14 @@ it.effect(
         Effect.gen(function* () {
           const plan = yield* prepareSetupUndo(f.operationId);
           yield* f.fs.writeFileString(join(f.successor, "notes.txt"), "Later user edits");
-          expect((yield* Effect.flip(plan.apply()))._tag).toBe("PlanIsStale");
+          expect((yield* Effect.flip(plan.apply()))._tag).toBe("Library.StalePlan");
           expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(true);
           const reviewed = yield* prepareSetupUndo(f.operationId);
           expect(reviewed.summary.conflicts).toEqual([]);
           const undone = yield* reviewed.apply();
           if (!("backupId" in undone))
             return yield* Effect.die(new Error("Missing preservation identity"));
-          const recovery = yield* inspectRecoveryOperation(f.home.home, undone.backupId);
+          const recovery = yield* recoveryInspection(f.home.home, undone.backupId);
           expect(
             yield* f.fs.readFileString(join(recovery.entries[0].recoveryPath, "notes.txt")),
           ).toBe("Later user edits");
@@ -449,13 +419,12 @@ it.effect(
       const f = yield* fixture();
       yield* f.home.owned(
         Effect.gen(function* () {
-          const store = yield* LibraryStore;
-          const before = yield* store.load;
+          const before = yield* f.home.durable;
           yield* f.fs.writeFileString(join(f.source, "SKILL.md"), "Edited original");
           const plan = yield* prepareSetupUndo(f.operationId);
           expect(plan.summary.status).toBe("conflicted");
           expect((yield* Effect.flip(plan.apply()))._tag).toBe("RecoveryInvalid");
-          expect(yield* store.load).toEqual(before);
+          expect(yield* f.home.durable).toEqual(before);
           expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe("Edited original");
           expect(yield* f.fs.exists(f.successor)).toBe(true);
         }),
@@ -486,21 +455,4 @@ it.effect.each([".git", "skit.json", "skit.remote.json"])(
       expect(yield* f.fs.readFileString(join(f.successor, "SKILL.md"))).toBe(bytes);
       expect(yield* f.fs.exists(join(f.root, "claude", marker))).toBe(true);
     }).pipe(Effect.provide(skitLayer)),
-);
-
-it.effect("physical ancestors of a configured root alias retain their ownership veto", () =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const root = yield* fs.realPath(yield* scratch("skit-protected-alias-"));
-    const physical = join(root, "checkout", "nested", "skills");
-    yield* fs.makeDirectory(physical, { recursive: true });
-    const alias = join(root, "alias");
-    yield* fs.symlink(physical, alias);
-    const destination = join(alias, "absent-skill");
-    yield* checkSetupGlobalContent(destination);
-    yield* fs.writeFileString(join(root, "checkout", ".git"), "gitdir: elsewhere");
-    expect((yield* Effect.result(checkSetupGlobalContent(destination)))._tag).toBe("Failure");
-    expect(yield* fs.exists(destination)).toBe(false);
-    expect(yield* fs.readLink(alias)).toBe(physical);
-  }).pipe(Effect.provide(skitLayer)),
 );

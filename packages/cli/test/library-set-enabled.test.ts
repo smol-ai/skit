@@ -2,23 +2,22 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import {
-  deterministicTreeHash,
-  LibraryStore,
-  libraryStoreLayer,
-  makeCollectionId,
-  makeSkillId,
-  type ImportRequestSkill,
-} from "@smolai/skit-core";
+import * as Library from "@smolai/skit-core/library";
+type ImportRequestSkill = Parameters<
+  Library.Interface["import"]["collection"]
+>[0]["skills"][number];
+import { deterministicTreeHash } from "@smolai/skit-core/author";
+import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { isolatedRoots } from "./helpers/isolated-library.js";
 import { setLibraryEnabled, planLibraryEnabled } from "./helpers/set-enabled.js";
-import { calculateSetEnabled } from "../src/workflows/library/set-enabled-request.js";
-import { applySetEnabledPlan } from "../src/library-application/set-enabled.js";
-import { planRemove } from "../src/workflows/library/remove.js";
-import { planUpdates } from "../src/library-application/update.js";
-import { checkSubjects } from "../src/workflows/library/check.js";
-import { matchingLibrarySubjects } from "../src/workflows/library/subject-resolution.js";
-import { initializeLibraryMachine, importCollectionIn, writingTo } from "./helpers/library-home.js";
+import { withLibraryOwner } from "./helpers/library-owner.js";
+import { setEnabledOutcomes } from "./helpers/set-enabled.js";
+import {
+  initializeLibraryMachine,
+  importCollectionIn,
+  libraryHome,
+  writingTo,
+} from "./helpers/library-home.js";
 
 it.effect("partially binds raw Skills and converges after enable and disable", () =>
   Effect.gen(function* () {
@@ -58,9 +57,9 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
         }),
       ),
     );
-    const layer = libraryStoreLayer({ home });
-    const state = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
-    assert.ok(state);
+    const layer = skitConfigurationLayer(home);
+    const library = yield* libraryHome({ home });
+    const state = yield* library.durable;
     const base = {
       libraryHome: home,
       query: collection.collection?.collection_id ?? "",
@@ -85,63 +84,6 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       enabled: true,
       dryRun: true,
     };
-    const member = state.skills.find((skill) => skill.name === "review");
-    assert.ok(member);
-    assert.deepStrictEqual(
-      matchingLibrarySubjects(state, member.skill_id).map((subject) => subject.kind),
-      ["skill"],
-    );
-    assert.strictEqual(
-      (yield* planRemove(state, member.skill_id).pipe(Effect.flip))._tag,
-      "Library.SkillRemovalRequiresCollection",
-    );
-    const sameNamed = {
-      ...state,
-      collections: state.collections.map((candidate) => ({ ...candidate, label: "review" })),
-    };
-    assert.deepStrictEqual(
-      matchingLibrarySubjects(sameNamed, "review").map((subject) => subject.kind),
-      ["collection"],
-    );
-    assert.strictEqual((yield* planRemove(sameNamed, "review")).subject_kind, "collection");
-    const secondCollectionId = makeCollectionId();
-    const ambiguous = {
-      ...sameNamed,
-      collections: [
-        ...sameNamed.collections,
-        { ...sameNamed.collections[0]!, collection_id: secondCollectionId },
-      ],
-      skills: [
-        ...sameNamed.skills,
-        { ...member, skill_id: makeSkillId(), collection_id: secondCollectionId },
-      ],
-    };
-    assert.strictEqual(matchingLibrarySubjects(ambiguous, "review").length, 2);
-    const previewStore = yield* LibraryStore.pipe(Effect.provide(layer));
-    assert.strictEqual(
-      (yield* planRemove(ambiguous, "review").pipe(Effect.flip))._tag,
-      "Library.SubjectAmbiguous",
-    );
-    assert.strictEqual(
-      (yield* planUpdates("review").pipe(
-        Effect.provideService(LibraryStore, { ...previewStore, load: Effect.succeed(ambiguous) }),
-        Effect.flip,
-      ))._tag,
-      "Library.SubjectAmbiguous",
-    );
-    assert.strictEqual(
-      (yield* checkSubjects(ambiguous, "review").pipe(Effect.provide(layer), Effect.flip))._tag,
-      "Library.SubjectAmbiguous",
-    );
-    assert.strictEqual(
-      (yield* calculateSetEnabled(ambiguous, {
-        ...base,
-        query: "review",
-        scope: invocation.scope,
-        enabled: invocation.enabled,
-      }).pipe(Effect.flip))._tag,
-      "Library.SubjectAmbiguous",
-    );
     const planned = yield* setLibraryEnabled({
       ...base,
       invocation,
@@ -149,36 +91,26 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
     assert.strictEqual(planned.kind, "plan");
     assert.deepEqual(planned.value.skills, ["review"]);
     assert.strictEqual(yield* fs.exists(join(roots.codexRoot, "review")), false);
-    const beforeApply = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
-    assert.deepEqual(beforeApply?.enabled, []);
+    assert.deepEqual((yield* library.durable).enabled, []);
 
     const previewed = yield* planLibraryEnabled({ ...base, invocation }).pipe(
       Effect.provide(layer),
     );
-    yield* writingTo(
-      home,
-      LibraryStore.use((store) =>
-        store.save({ ...state, ownershipIssues: state.ownershipIssues ?? [] }, state),
-      ).pipe(Effect.provide(layer)),
-    );
-    const stale = yield* applySetEnabledPlan(previewed).pipe(Effect.provide(layer), Effect.flip);
+    yield* library.writeDurable({ ...state, ownershipIssues: state.ownershipIssues ?? [] });
+    const stale = yield* Effect.gen(function* () {
+      const library = yield* Library.Service;
+      return yield* setEnabledOutcomes(
+        (yield* library.apply({ _tag: "Apply", plan: previewed.plan })).result,
+      );
+    }).pipe(withLibraryOwner(base.roots), Effect.provide(layer), Effect.flip);
     assert.strictEqual(stale._tag, "Library.StalePlan");
-    yield* writingTo(
-      home,
-      LibraryStore.use((store) =>
-        Effect.flatMap(store.load, (current) => store.save(state, current)),
-      ).pipe(Effect.provide(layer)),
-    );
+    yield* library.writeDurable(state);
 
     const apply = (enabled: boolean) =>
-      Effect.gen(function* () {
-        const current = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
-        assert.ok(current);
-        return yield* setLibraryEnabled({
-          ...base,
-          invocation: { ...invocation, enabled, dryRun: false },
-        }).pipe(Effect.provide(layer));
-      });
+      setLibraryEnabled({
+        ...base,
+        invocation: { ...invocation, enabled, dryRun: false },
+      }).pipe(Effect.provide(layer));
     const enabled = yield* writingTo(home, apply(true));
     assert.strictEqual(enabled.kind, "applied");
     assert.strictEqual(enabled.value.changed, true);
@@ -187,10 +119,10 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       "review raw bytes\n",
     );
     assert.strictEqual(yield* fs.exists(join(roots.codexRoot, "test")), false);
-    const imported = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
-    const reviewSkillId = imported?.skills.find((skill) => skill.name === "review")?.skill_id;
+    const imported = yield* library.durable;
+    const reviewSkillId = imported.skills.find((skill) => skill.name === "review")?.skill_id;
     assert.ok(reviewSkillId);
-    assert.deepEqual(imported?.enabled, [{ skill: reviewSkillId }]);
+    assert.deepEqual(imported.enabled, [{ skill: reviewSkillId }]);
     const repeated = yield* writingTo(home, apply(true));
     assert.strictEqual(repeated.value.changed, false);
     assert.strictEqual(repeated.value.repair, undefined);
@@ -205,9 +137,9 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
     const disabled = yield* writingTo(home, apply(false));
     assert.strictEqual(disabled.value.changed, true);
     assert.strictEqual(yield* fs.exists(join(roots.codexRoot, "review")), false);
-    const final = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
-    assert.deepEqual(final?.enabled, []);
-    assert.strictEqual(final?.skills.find((skill) => skill.name === "review")?.versions.length, 1);
+    const final = yield* library.durable;
+    assert.deepEqual(final.enabled, []);
+    assert.strictEqual(final.skills.find((skill) => skill.name === "review")?.versions.length, 1);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -248,7 +180,8 @@ it.effect("enables a whole Collection and converts it to Skills when one is disa
     const collectionId = imported.collection!.collection_id;
     const skillId = (name: string) =>
       imported.skills.find((skill) => skill.name === name)!.skill_id;
-    const layer = libraryStoreLayer({ home });
+    const layer = skitConfigurationLayer(home);
+    const library = yield* libraryHome({ home });
     const set = (query: string, enabled: boolean, all: boolean) =>
       Effect.gen(function* () {
         yield* writingTo(
@@ -269,8 +202,7 @@ it.effect("enables a whole Collection and converts it to Skills when one is disa
             },
           }).pipe(Effect.provide(layer)),
         );
-        const settled = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(layer));
-        return settled.enabled ?? [];
+        return (yield* library.durable).enabled;
       });
 
     assert.deepStrictEqual(yield* set(skillId("review"), true, false), [

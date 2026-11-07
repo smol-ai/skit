@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, test } from "vitest";
 import { Schema } from "effect";
-import { LibraryState } from "@smolai/skit-core";
+import { LibraryState } from "@smolai/skit-core/library";
 import { outputContracts } from "../src/commands/output-contracts.js";
 import { copySkitFixture } from "./helpers/skit-fixture.js";
 
@@ -359,7 +359,7 @@ describe("CLI contracts", () => {
             : JSON.parse(processResult.stderr).error;
         expect(failure.code).toBe("VALIDATION_FAILED");
         expect(failure.message).toContain("schema v2");
-        expect(failure.message).toContain("supports v4–v11");
+        expect(failure.message).toContain("supports v4–v12");
         expect(failure.remediation).toContain("Back up the state file");
         expect(failure.remediation).toContain("skit setup");
         expect(failure.remediation).not.toContain("author validate");
@@ -505,9 +505,11 @@ describe("CLI contracts", () => {
     );
     expect(result.status).toBe(12);
     expect(result.stderr).toBe("");
-    expect(JSON.parse(result.stdout)).toEqual(
+    const document = Schema.decodeUnknownSync(DoctorDocument)(result.stdout);
+    expect(document.data.harnesses.map((check) => check.findings)).toEqual([[], [], []]);
+    expect(document).toEqual(
       expect.objectContaining({
-        schema: "skit.doctor.v9",
+        schema: "skit.doctor.v10",
         data: expect.objectContaining({ ok: false, issues: expect.any(Array) }),
       }),
     );

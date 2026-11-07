@@ -1,14 +1,10 @@
+import { feedbackInput } from "../src/feedback/send.js";
 import { describe, expect } from "vitest";
 import { it } from "@effect/vitest";
 import { join } from "node:path";
 import { ConfigProvider, Effect, FileSystem } from "effect";
 import { HttpClientError } from "effect/http";
-import {
-  feedbackInput,
-  feedbackOrigin,
-  feedbackSigningToken,
-  sendFeedback,
-} from "../src/feedback/send.js";
+import { feedbackOrigin, feedbackSigningToken, sendFeedback } from "../src/registry/feedback.js";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 import { scratch } from "./helpers/library-home.js";
@@ -144,7 +140,7 @@ describe("signing feedback", () => {
       const error = yield* Effect.flip(feedbackSigningToken("https://skit.smol.ai", home));
 
       expect(error).toMatchObject({
-        _tag: "FeedbackSignInRequired",
+        _tag: "AuthenticationRequired",
         remediation: expect.stringContaining("skit auth login"),
       });
     }).pipe(Effect.provide(testPlatformLayer)),
@@ -176,7 +172,7 @@ describe("sending feedback", () => {
         ),
       );
 
-      expect(error._tag).toBe("FeedbackSignInRequired");
+      expect(error._tag).toBe("AuthenticationRequired");
     }),
   );
 

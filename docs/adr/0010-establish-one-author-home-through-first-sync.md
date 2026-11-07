@@ -15,3 +15,15 @@ This gives collaborators who clone the Author repository the same canonical dest
 We rejected a separate `bind` command because it exposes implementation language, conflicts with Library-to-Harness Binding terminology, and adds ceremony without producing the Author's intended outcome. We rejected storing the home only in device-local state because clones could silently select different Registries. We rejected storing it in `skit.json` because Registry location is authoring configuration rather than artifact content. We rejected Git-like multiple remotes because one SKIT has one authoritative Draft and Release history; migration, mirroring, and forking are distinct explicit lifecycle operations.
 
 This supersedes ADR-0003's unresolved placement of later Registry binding and its statement, attributed to ADR-0004, that no portable Registry binding would be added. ADR-0004's Draft storage decision remains unchanged.
+
+## Interrupted connection and remote deletion
+
+`skit.remote.json` is the portable authority. A matching leftover device
+connection checkpoint can be removed without resetting sync progress; a
+mismatched or invalid leftover stops sync. Completing first connection requires
+a matching Registry create receipt before resetting the sync base.
+
+Deleting the remote leaves local connection metadata, checkpoints and history
+intact. The next sync reports `RemoteSkitUnavailable`; it does not recreate or
+reconnect automatically. Absence may mean an outage or lost permission rather
+than deletion. Reconnection is an explicit user action.

@@ -8,10 +8,12 @@ import {
   RemoteLibrary,
   SnapshotArchive,
 } from "@smolai/skit-core/universal/consumer";
-import { RevisionConflictResponse } from "@smolai/skit-core/universal/api";
-import { commitLibraryRevision, LibraryRevisionConflict } from "../src/library/library-sync.js";
+import { RevisionConflictResponse } from "@smolai/skit-core/api";
+import { commitLibraryRevision, LibraryRevisionConflict } from "../src/library/internal/sync.js";
 import { databaseLayer } from "../src/platform/cloudflare.js";
-import { layer as nativeCryptoLayer } from "../src/platform/native-crypto.js";
+import { BrowserCrypto } from "@effect/platform-browser";
+import { legacyGrantsTable } from "./fixtures/legacy-grants.js";
+import { D1Client } from "@effect/sql-d1";
 import archiveFixture from "./fixtures/library-sync/archive.json" with { type: "json" };
 import manifestFixture from "./fixtures/library-sync/manifest.json" with { type: "json" };
 import emptyManifestFixture from "./fixtures/library-sync/empty-manifest.json" with { type: "json" };
@@ -151,6 +153,82 @@ const competing = {
 };
 
 describe("Library sync Worker persistence", () => {
+  it.effect(
+    "snapshot reads require the owner or current owning-team membership, never grants",
+    () =>
+      Effect.gen(function* () {
+        const headers = yield* session();
+        const uploaded = yield* upload(headers);
+        const sql = yield* D1Client.D1Client;
+        const download = () =>
+          Effect.promise(() =>
+            SELF.fetch(
+              `${origin}/api/libraries/${uploaded.library_id}/snapshots/${encodeURIComponent(archive.digest)}`,
+              { headers },
+            ),
+          );
+        expect((yield* download()).status).toBe(200);
+        const rows = yield* sql<{ owner_subject_id: string }>`SELECT owner_subject_id FROM libraries
+        WHERE library_id = ${uploaded.library_id}`;
+        const callerId = rows[0]?.owner_subject_id;
+        expect(callerId).toBeDefined();
+        if (callerId === undefined) return yield* Effect.die("missing fixture owner");
+        yield* sql.batch([
+          sql`UPDATE libraries SET owner_subject_id = 'principal_someone_else'
+          WHERE library_id = ${uploaded.library_id}`,
+          sql.unsafe(legacyGrantsTable),
+          sql`INSERT INTO resource_grants
+          (grant_id, subject_kind, subject_id, resource_kind, resource_id, permission, created_at)
+          VALUES ('library_read_probe', 'principal', ${callerId}, 'library', ${uploaded.library_id}, 'read', '2026-11-05')`,
+        ]);
+        expect((yield* download()).status).toBe(403);
+        yield* sql.batch([
+          sql`INSERT INTO teams (team_id, slug, name, created_at)
+          VALUES ('team_library', 'library-team', 'Library team', '2026-11-05'),
+                 ('team_other', 'other-team', 'Other team', '2026-11-05')`,
+          sql`INSERT INTO team_memberships (team_id, principal_id, role, created_at)
+          VALUES ('team_other', ${callerId}, 'member', '2026-11-05')`,
+          sql`UPDATE libraries SET owner_subject_kind = 'team', owner_subject_id = 'team_library'
+          WHERE library_id = ${uploaded.library_id}`,
+        ]);
+        // Belonging to an unrelated team and holding an old grant conveys no authority.
+        expect((yield* download()).status).toBe(403);
+        yield* sql`INSERT INTO team_memberships (team_id, principal_id, role, created_at)
+        VALUES ('team_library', ${callerId}, 'member', '2026-11-05')`;
+        const allowed = yield* download();
+        expect(allowed.status).toBe(200);
+        expect(yield* Effect.promise(() => allowed.json())).toEqual(archive);
+        // No grant-table dependency remains, and removing membership takes effect immediately.
+        yield* sql.unsafe("DROP TABLE resource_grants");
+        expect((yield* download()).status).toBe(200);
+        yield* sql`DELETE FROM team_memberships WHERE team_id = 'team_library' AND principal_id = ${callerId}`;
+        expect((yield* download()).status).toBe(403);
+        yield* assertArchive(uploaded.library_id);
+      }).pipe(Effect.provide(databaseLayer(env.DB))),
+  );
+  it.effect("snapshot upload and a first revision share one default Library", () =>
+    Effect.gen(function* () {
+      const headers = yield* session();
+      const empty = Schema.decodeUnknownSync(LibraryManifest)(emptyManifestFixture);
+      const [uploaded, response] = yield* Effect.all(
+        [upload(headers), write(headers, null, empty)],
+        {
+          concurrency: 2,
+        },
+      );
+      expect(response.status).toBe(200);
+      const committed = Schema.decodeUnknownSync(remote)(
+        yield* Effect.promise(() => response.json()),
+      ).library;
+      expect(committed.library_id).toBe(uploaded.library_id);
+      const libraries = yield* Effect.promise(() =>
+        env.DB.prepare("SELECT library_id FROM libraries").all(),
+      );
+      expect(libraries.results).toEqual([{ library_id: uploaded.library_id }]);
+      yield* assertArchive(uploaded.library_id);
+    }),
+  );
+
   it.effect("smoke: competing HTTP submissions accept one writer (not proof of D1 atomicity)", () =>
     Effect.gen(function* () {
       const headers = yield* session();
@@ -222,7 +300,7 @@ describe("Library sync Worker persistence", () => {
       ).toBe(true);
       expect(yield* stored(library_id)).toEqual(before);
       yield* assertArchive(library_id);
-    }).pipe(Effect.provide(databaseLayer(env.DB)), Effect.provide(nativeCryptoLayer)),
+    }).pipe(Effect.provide(databaseLayer(env.DB)), Effect.provide(BrowserCrypto.layerSecureRandom)),
   );
 
   it.effect("rejects a stale base without adding revisions or changing snapshot bytes", () =>

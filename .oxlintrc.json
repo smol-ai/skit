@@ -1,12 +1,33 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import"],
   "ignorePatterns": ["packages/cli/test/fixtures/source-regressions/humanlayer/**"],
   "jsPlugins": ["./lint/oxlint-plugin-skit.mjs"],
   "rules": {
+    "oxc/no-barrel-file": "error",
+    "skit/frontend-no-resources": "error",
+    "skit/no-failure-unions": "error",
+    "skit/command-module-exports": "error",
     "skit/no-record-any": "error",
-    "skit/no-record-unknown": "error"
+    "skit/no-record-unknown": "error",
+    "skit/library-private-api": "error",
+    "skit/library-recorded-execution": "error",
+    "skit/library-operation-owner": "error",
+    "skit/library-apply-program": "error"
   },
   "overrides": [
+    {
+      "files": [
+        "packages/skit/src/**/*.ts",
+        "packages/cli/src/**/*.ts",
+        "packages/tui/src/**/*.ts",
+        "packages/skit-server-effect/src/**/*.ts"
+      ],
+      "rules": {
+        "skit/no-unconditional-cause-recovery": "error",
+        "typescript/no-non-null-asserted-optional-chain": "error"
+      }
+    },
     {
       "files": ["packages/skit-server-effect/worker-configuration.d.ts"],
       "rules": {
@@ -38,13 +59,20 @@
     },
     {
       "files": ["packages/cli/src/**/*.ts"],
-      "excludeFiles": ["packages/cli/src/dispatch.ts", "packages/cli/src/presentation/prompter.ts"],
+      "excludeFiles": [
+        "packages/cli/src/terminal/console-renderer.ts",
+        "packages/cli/src/terminal/prompter.ts"
+      ],
       "rules": {
         "skit/no-direct-cli-output": "error"
       }
     },
     {
-      "files": ["packages/cli/src/handlers/**/*.ts"],
+      "files": [
+        "packages/cli/src/handlers/**/*.ts",
+        "packages/cli/src/**/commands/**/*.ts",
+        "packages/cli/src/**/*command.ts"
+      ],
       "rules": {
         "skit/no-member-access-on-yield": "error"
       }
@@ -67,7 +95,17 @@
         "skit/no-cast-parsed-json": "error",
         "skit/no-structural-object-probe": "error",
         "skit/no-handrolled-fetch-double": "warn",
-        "skit/no-node-fs": "error"
+        "skit/no-node-fs": "error",
+        "skit/owner-boundaries": "error",
+        "skit/approved-services": "error",
+        "skit/directory-layout": "error",
+        "skit/import-direction": "error"
+      }
+    },
+    {
+      "files": ["packages/storybook/**/*.ts"],
+      "rules": {
+        "skit/import-direction": "error"
       }
     },
     {
@@ -126,7 +164,8 @@
         "packages/cli/test/single-machine-journey.test.ts",
         "packages/cli/test/import-source.test.ts",
         "packages/skit-server-effect/test/e2e.test.ts",
-        "packages/skit-server-effect/test/e2e-skills-sh.test.ts"
+        "packages/skit-server-effect/test/e2e-skills-sh.test.ts",
+        "packages/skit-server-effect/test/e2e-author-sync.test.ts"
       ],
       "rules": {
         "skit/no-async-test-callback": "off",

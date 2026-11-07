@@ -4,16 +4,13 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { zipSync } from "fflate";
-import { readArchive, verifyReleaseArchive } from "../src/publication/archive.js";
+import { readArchive, verifyReleaseArchive } from "../src/skits/internal/release-archive.js";
 import { sha256Hash } from "@smolai/skit-core/universal/consumer";
-import { Bindings, databaseLayer } from "../src/platform/cloudflare.js";
+import { databaseLayer } from "../src/platform/cloudflare.js";
 
 const bytes = (value: string) => new TextEncoder().encode(value);
-const bindingsLayer = Layer.merge(
-  Layer.succeed(Bindings, { database: env.DB, blobs: env.SKIT_BLOBS }),
-  databaseLayer(env.DB),
-);
-const testLayer = Layer.merge(bindingsLayer, BrowserCrypto.layer);
+const platformLayer = databaseLayer(env.DB);
+const testLayer = Layer.merge(platformLayer, BrowserCrypto.layer);
 
 /**
  * One validated `a.txt`, plus a second `a.txt` record the end record hides: it counts one entry for
@@ -128,7 +125,7 @@ describe("Publication release archives", () => {
     }),
   );
 
-  it.effect("verifies the archive against its persisted draft revision and rejects drift", () =>
+  it.effect("verifies the archive against its persisted skit revision and rejects drift", () =>
     Effect.gen(function* () {
       const descriptor = {
         skit: 1,
@@ -150,17 +147,16 @@ describe("Publication release archives", () => {
       ]);
       yield* Effect.flatMap(D1Client.D1Client, (sql) =>
         sql.batch([
-          sql`DROP TABLE IF EXISTS draft_files`,
-          sql`DROP TABLE IF EXISTS draft_revisions`,
-          sql`CREATE TABLE draft_revisions (
-            revision_id TEXT PRIMARY KEY, owner_slug TEXT, skit_slug TEXT, descriptor_json TEXT
+          sql`DROP TABLE IF EXISTS revision_tree_entries`,
+          sql`DROP TABLE IF EXISTS revisions`,
+          sql`CREATE TABLE revisions (
+            owner_slug TEXT, skit_slug TEXT, revision_id TEXT, tree_hash TEXT, descriptor_json TEXT
           )`,
-          sql`CREATE TABLE draft_files (
-            revision_id TEXT, path TEXT, blob_digest TEXT, byte_length INTEGER,
-            media_type TEXT, executable INTEGER
+          sql`CREATE TABLE revision_tree_entries (
+            tree_hash TEXT, path TEXT, kind TEXT, mode INTEGER, blob_hash TEXT, byte_length INTEGER
           )`,
-          sql`INSERT INTO draft_revisions
-              VALUES ('draft_test', 'alice', 'tools', ${JSON.stringify(descriptor)})`,
+          sql`INSERT INTO revisions
+              VALUES ('alice', 'tools', 'draft_test', 'tree_test', ${JSON.stringify(descriptor)})`,
         ]),
       );
       for (const [path, content] of contents) {
@@ -168,16 +164,20 @@ describe("Publication release archives", () => {
         yield* Effect.flatMap(
           D1Client.D1Client,
           (sql) =>
-            sql`INSERT INTO draft_files
-                VALUES ('draft_test', ${path}, ${digest}, ${content.byteLength}, 'text/plain', 0)`,
+            sql`INSERT INTO revision_tree_entries
+                VALUES ('tree_test', ${path}, 'file', 420, ${digest}, ${content.byteLength})`,
         );
       }
 
+      const archive = zipSync(Object.fromEntries(contents));
+      expect(yield* verifyReleaseArchive("alice", "tools", "draft_test", archive)).toEqual([]);
       expect(
-        yield* verifyReleaseArchive("draft_test", zipSync(Object.fromEntries(contents))),
-      ).toEqual([]);
+        yield* Effect.flip(verifyReleaseArchive("bob", "tools", "draft_test", archive)),
+      ).toMatchObject({ code: "REVISION_MISSING" });
       const drifted = yield* Effect.result(
         verifyReleaseArchive(
+          "alice",
+          "tools",
           "draft_test",
           zipSync({ ...Object.fromEntries(contents), "skills/review/SKILL.md": bytes("changed") }),
         ),

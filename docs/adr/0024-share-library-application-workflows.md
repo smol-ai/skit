@@ -1,6 +1,18 @@
 # Share Library application workflows across front ends
 
-## Decision
+## Current ownership (amended 2026-11-07)
+
+Shared Library policy, read models and mutation lifecycles belong to core's
+Library owner. CLI and TUI call that owner; neither opens its store or writer.
+Command composition supplies owner layers, while adapters collect choices and
+render results. Review retains the inputs and revision the user approved;
+application revalidates them under the owner writer. Prompts hold no writer.
+
+This supersedes the CLI-owned application location and frontend store/writer
+coordination in the historical implementation description below. The durable
+decision is one shared owner across frontends, not a particular facade or folder.
+
+## Historical implementation
 
 `packages/cli/src/library-application` owns Library session transitions, update orchestration,
 shared read models, and the local application layer. CLI and TUI consume its supported

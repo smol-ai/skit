@@ -3,12 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+    "./harnesses": {
+      "types": "./dist/harnesses/index.d.ts",
+      "import": "./dist/harnesses/index.js"
+    },
+    "./library/routing": {
+      "types": "./dist/library/routing/index.d.ts",
+      "import": "./dist/library/routing/index.js"
+    },
+    "./library": {
+      "types": "./dist/library/index.d.ts",
+      "import": "./dist/library/index.js"
     },
     "./universal/consumer": {
       "types": "./dist/universal-consumer.d.ts",
@@ -18,9 +24,81 @@
       "types": "./dist/universal-authoring.d.ts",
       "import": "./dist/universal-authoring.js"
     },
-    "./universal/api": {
-      "types": "./dist/universal/api/index.d.ts",
-      "import": "./dist/universal/api/index.js"
+    "./api": {
+      "types": "./dist/api/index.d.ts",
+      "import": "./dist/api/index.js"
+    },
+    "./library/setup": {
+      "types": "./dist/library/setup.d.ts",
+      "import": "./dist/library/setup.js"
+    },
+    "./library/session": {
+      "types": "./dist/library/session.d.ts",
+      "import": "./dist/library/session.js"
+    },
+    "./author": {
+      "types": "./dist/author/index.d.ts",
+      "import": "./dist/author/index.js"
+    },
+    "./audit": {
+      "types": "./dist/auditing/index.d.ts",
+      "import": "./dist/auditing/index.js"
+    },
+    "./shared": {
+      "types": "./dist/shared/index.d.ts",
+      "import": "./dist/shared/index.js"
+    },
+    "./platform": {
+      "types": "./dist/platform/index.d.ts",
+      "import": "./dist/platform/index.js"
+    },
+    "./library/usage": {
+      "types": "./dist/library/usage.d.ts",
+      "import": "./dist/library/usage.js"
+    },
+    "./library/inventory": {
+      "types": "./dist/library/inventory.d.ts",
+      "import": "./dist/library/inventory.js"
+    },
+    "./history": {
+      "types": "./dist/history/history.d.ts",
+      "import": "./dist/history/history.js"
+    },
+    "./library/source": {
+      "types": "./dist/library/source.d.ts",
+      "import": "./dist/library/source.js"
+    },
+    "./machine-settings": {
+      "types": "./dist/library/machine-settings.d.ts",
+      "import": "./dist/library/machine-settings.js"
+    },
+    "./platform/home-lock": {
+      "types": "./dist/platform/home-lock.d.ts",
+      "import": "./dist/platform/home-lock.js"
+    },
+    "./library/enable": {
+      "types": "./dist/library/enable.d.ts",
+      "import": "./dist/library/enable.js"
+    },
+    "./library/queries": {
+      "types": "./dist/library/queries.d.ts",
+      "import": "./dist/library/queries.js"
+    },
+    "./library/edit": {
+      "types": "./dist/library/edit.d.ts",
+      "import": "./dist/library/edit.js"
+    },
+    "./library/update": {
+      "types": "./dist/library/update.d.ts",
+      "import": "./dist/library/update.js"
+    },
+    "./library/sync": {
+      "types": "./dist/library/sync.d.ts",
+      "import": "./dist/library/sync.js"
+    },
+    "./library/recovery": {
+      "types": "./dist/library/recovery.d.ts",
+      "import": "./dist/library/recovery.js"
     }
   },
   "scripts": {
@@ -30,6 +108,7 @@
   },
   "dependencies": {
     "@effect/platform-node": "4.1.1",
+    "@effect/sql-sqlite-node": "4.1.1",
     "acorn": "8.15.0",
     "effect": "4.1.1",
     "typeid-js": "^1.2.0",
@@ -43,6 +122,6 @@
     "vitest": "5.0.3"
   },
   "engines": {
-    "node": "^22.23.4 || ^24.22.1 || >=26.12.1"
+    "node": "^24.22.1 || >=26.12.1"
   }
 }

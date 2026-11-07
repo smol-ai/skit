@@ -1,13 +1,9 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
-import { AuthorInventory } from "../author-inventory/service.js";
-import { CurrentPrincipal } from "./authentication.js";
-import { AuthoringAuthenticatedApi } from "@smolai/skit-core/universal/api";
-import {
-  insufficientScopeResponse,
-  invalidCursorResponse,
-  storageFailureResponse,
-} from "./errors.js";
+import { Skits } from "../skits/service.js";
+import { requirePrincipalScope } from "./authentication.js";
+import { AuthoringAuthenticatedApi } from "@smolai/skit-core/api";
+import { invalidCursorResponse, storageFailureResponse } from "./errors.js";
 import { noStore } from "./response.js";
 
 export const authorInventoryHandlers = HttpApiBuilder.group(
@@ -15,14 +11,12 @@ export const authorInventoryHandlers = HttpApiBuilder.group(
   "authorInventory",
   (handlers) =>
     Effect.gen(function* () {
-      const inventory = yield* AuthorInventory;
+      const skits = yield* Skits;
       return handlers.handle("read", ({ query }) =>
         Effect.gen(function* () {
-          const principal = yield* CurrentPrincipal;
-          if (!principal.scopes.has("authoring:write"))
-            return yield* Effect.fail(insufficientScopeResponse);
-          const page = yield* inventory
-            .read(principal, {
+          const principal = yield* requirePrincipalScope("authoring:write");
+          const page = yield* skits
+            .list(principal, {
               limit: query.limit,
               cursor: query.cursor,
             })

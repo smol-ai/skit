@@ -2,7 +2,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
-    include: ["test/e2e.test.ts", "test/e2e-skills-sh.test.ts"],
+    include: ["test/e2e.test.ts", "test/e2e-skills-sh.test.ts", "test/e2e-author-sync.test.ts"],
     setupFiles: ["../../vitest.isolated-home.ts"],
     testTimeout: 180_000,
   },

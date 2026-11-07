@@ -1,8 +1,9 @@
 import { Option, Record } from "effect";
 import { CliConfig, Flag, GlobalFlag } from "effect/cli";
-import type { HarnessName } from "@smolai/skit-core";
-import type { ResolvedSkitConfiguration } from "../configuration/skit-configuration.js";
-import type { InventoryRootOptions } from "../install/roots.js";
+import type { HarnessName, SkillsDirectoryOverrides } from "@smolai/skit-core/harnesses";
+import { inventoryRootOptions as deviceRoots } from "@smolai/skit-core/library/routing";
+import type { ResolvedSkitConfiguration } from "@smolai/skit-core/platform";
+import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 
 /**
  * Effect's built-in global flags, without the interactive command wizard. SKIT asks its own
@@ -21,7 +22,9 @@ export const jsonFlag = Flag.Boolean("json").pipe(
 
 // Effect CLI only accepts flags on an intermediate command path when they are declared global.
 // The entrypoint still owns the value because it must select a renderer before parsing can fail.
-export const JsonOutputFlag = GlobalFlag.Setting("json-output")({ flag: jsonFlag });
+export const JsonOutputFlag = GlobalFlag.Setting("json-output")({
+  flag: jsonFlag,
+});
 
 export const jsonRequested = (argv: readonly string[] = process.argv.slice(2)): boolean => {
   const boundary = argv.indexOf("--");
@@ -29,22 +32,26 @@ export const jsonRequested = (argv: readonly string[] = process.argv.slice(2)): 
 };
 
 export const optionalString = (name: string, description: string) =>
-  Flag.String(name).pipe(Flag.withDescription(description), Flag.optional);
+  Flag.String(name).pipe(
+    Flag.withDescription(description),
+    Flag.optional,
+    Flag.map(Option.getOrUndefined),
+  );
 
 export const homeFlag = optionalString("home", "Override the SKIT state directory.");
-export const codexRootFlag = optionalString(
+const codexRootFlag = optionalString(
   "codex-root",
   "Override the shared .agents skills directory that Codex and other harnesses read.",
 );
-export const claudeRootFlag = optionalString(
+const claudeRootFlag = optionalString(
   "claude-root",
   "Override the Claude skills directory; treats Claude Code as present.",
 );
-export const opencodeRootFlag = optionalString(
+const opencodeRootFlag = optionalString(
   "opencode-root",
   "Scan an OpenCode skills directory for inventory; SKIT does not install there.",
 );
-export const devinRootFlag = Flag.String("devin-root").pipe(
+const devinRootFlag = Flag.String("devin-root").pipe(
   Flag.withDescription(
     "Scan additional Devin skills directories for inventory without changing install destinations.",
   ),
@@ -61,27 +68,27 @@ export const localFlags = {
   devinRoot: devinRootFlag,
 };
 
-export function inventoryRootOptions(
-  input: {
-    readonly codexRoot: Option.Option<string>;
-    readonly claudeRoot: Option.Option<string>;
-    readonly opencodeRoot: Option.Option<string>;
-    readonly devinRoot: readonly string[];
-  },
-  paths: ResolvedSkitConfiguration,
-): InventoryRootOptions {
-  const overrides: Record<HarnessName, readonly string[]> = {
-    codex: Option.toArray(input.codexRoot),
-    "claude-code": Option.toArray(input.claudeRoot),
-    opencode: Option.toArray(input.opencodeRoot),
-    devin: input.devinRoot,
-  };
-  return {
-    home: paths.userHome,
-    configHome: paths.configHome,
-    overrides: Record.filter(overrides, (roots) => roots.length > 0),
-  };
+/** The parsed root flags: skills directories named on the command line. */
+export interface RootFlags {
+  readonly codexRoot: string | undefined;
+  readonly claudeRoot: string | undefined;
+  readonly opencodeRoot: string | undefined;
+  readonly devinRoot: readonly string[];
 }
 
-export const optionValue = <A>(value: Option.Option<A>): A | undefined =>
-  Option.getOrUndefined(value);
+export function rootOverrides(input: Partial<RootFlags>): SkillsDirectoryOverrides {
+  const overrides: Record<HarnessName, readonly string[]> = {
+    codex: input.codexRoot === undefined ? [] : [input.codexRoot],
+    "claude-code": input.claudeRoot === undefined ? [] : [input.claudeRoot],
+    opencode: input.opencodeRoot === undefined ? [] : [input.opencodeRoot],
+    devin: input.devinRoot ?? [],
+  };
+  return Record.filter(overrides, (roots) => roots.length > 0);
+}
+
+export function inventoryRootOptions(
+  input: Partial<RootFlags>,
+  paths: ResolvedSkitConfiguration,
+): InventoryRootOptions {
+  return deviceRoots(paths, rootOverrides(input));
+}

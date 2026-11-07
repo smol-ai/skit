@@ -1,32 +1,35 @@
+import * as Construction from "effect/Layer";
+import * as Context from "effect/Context";
 import { installEnabledSkills } from "./installed-skills.js";
 import { assert } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Schema } from "effect";
+import { Effect, FileSystem, Layer, Schema, Struct } from "effect";
 import { join } from "node:path";
-import {
-  importEdit,
-  type InstalledSkill,
-  InvalidLibraryState,
-  LibraryStore,
-  deterministicTreeHash,
-  libraryStoreLayer,
-  makeMachineId,
-  Library,
-  InstalledSkills,
-  importCollection,
-  withLibraryWriter,
-  LibraryState,
-  type InstallDestination,
-} from "@smolai/skit-core";
+import { systemError } from "effect/PlatformError";
+import { LibraryState } from "@smolai/skit-core/library";
+import { emptyLibraryFixture, type LibraryFixtureState } from "./library-home.js";
+import { type InstallDestination } from "@smolai/skit-core/library";
+import { makeMachineId } from "@smolai/skit-core/universal/consumer";
+import { deterministicTreeHash } from "@smolai/skit-core/author";
+import * as Library from "@smolai/skit-core/library";
+import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
-import { syncLibrary } from "../../src/workflows/library/library-sync.js";
-import { syncInstalledSkills } from "../../src/workflows/library/library-sync-installed-skills.js";
+import { librarySyncApi } from "../../src/library/sync/api.js";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
+
+/** state.json as the store reads it: validated, with undeclared fields kept as written. */
+const StateFile = Schema.fromJsonString(
+  Schema.Unknown.pipe(Schema.refine(Schema.is(LibraryState))),
+);
 import { faultQueue, librarySyncServer } from "./library-sync-server.js";
+import { testRoots } from "./roots.js";
+import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 
 /** Devices sharing one compare-and-swap Library server, with injectable one-shot faults. */
 export const devices = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
-  const workspace = yield* fs.makeTempDirectoryScoped({ prefix: "skit-sync-crash-" });
+  const workspace = yield* fs.makeTempDirectoryScoped({
+    prefix: "skit-sync-crash-",
+  });
   const faults = faultQueue();
   yield* Effect.addFinalizer(() =>
     Effect.sync(() => assert.deepStrictEqual(faults.unconsumed(), [])),
@@ -60,7 +63,10 @@ export const devices = Effect.gen(function* () {
           Effect.mapError(
             (cause) =>
               new HttpClientError.HttpClientError({
-                reason: new HttpClientError.TransportError({ request: incoming, cause }),
+                reason: new HttpClientError.TransportError({
+                  request: incoming,
+                  cause,
+                }),
               }),
           ),
         ),
@@ -69,184 +75,263 @@ export const devices = Effect.gen(function* () {
   );
   const device = (name: string) => {
     const home = join(workspace, name);
+    const statePath = join(home, "state.json");
     let saves = 0;
-    const layer = Layer.effect(
-      LibraryStore,
-      Effect.map(LibraryStore, (store) => ({
-        ...store,
-        save: Effect.fn("Test.LibraryStore.save")(function* (
-          state: LibraryState,
-          base: LibraryState,
-        ) {
-          saves++;
-          if (
-            faults.take(
-              "FailSave",
-              (fault) =>
-                !fault.anchoredOnly ||
-                state.sync_ancestry?.revision_id === server.remote?.revision_id,
-            )
+    /**
+     * This home's real filesystem, observing the one durable commit of local state: the atomic
+     * rename onto state.json. Every Library operation below runs over it.
+     */
+    const files = FileSystem.FileSystem.of({
+      ...fs,
+      rename: Effect.fn("Test.Device.rename")(function* (from: string, to: string) {
+        if (to !== statePath) return yield* fs.rename(from, to);
+        saves++;
+        const next = yield* Effect.flatMap(
+          fs.readFileString(from),
+          Schema.decodeUnknownEffect(StateFile),
+        ).pipe(Effect.orDie);
+        if (
+          faults.take(
+            "FailSave",
+            (fault) =>
+              !fault.anchoredOnly || next.sync_ancestry?.revision_id === server.remote?.revision_id,
           )
-            return yield* new InvalidLibraryState({
-              path: home,
-              detail: "Test interruption before merged state save",
-            });
-          yield* store.save(state, base);
-          events.push(`save ${name}`);
-          const obstruction = faults.take("ObstructAfterSave", (fault) => fault.home === home);
-          if (obstruction) yield* fs.writeFileString(obstruction.path, "occupied by a file\n");
-        }),
-      })),
-    ).pipe(Layer.provide(libraryStoreLayer({ home })));
+        )
+          return yield* Effect.fail(
+            systemError({
+              _tag: "PermissionDenied",
+              module: "FileSystem",
+              method: "rename",
+              pathOrDescriptor: to,
+              description: "Test interruption before local state publication",
+            }),
+          );
+        yield* fs.rename(from, to);
+        events.push(`save ${name}`);
+        const obstruction = faults.take(
+          "ObstructAfterSave",
+          (fault) =>
+            fault.home === home && next.sync_ancestry?.revision_id === server.remote?.revision_id,
+        );
+        if (obstruction) yield* fs.writeFileString(obstruction.path, "occupied by a file\n");
+      }),
+    });
+    /** Durable local state as written, read without constructing an owner that could recover. */
+    const state = Effect.gen(function* () {
+      if (!(yield* fs.exists(statePath))) return emptyLibraryFixture();
+      return yield* Effect.flatMap(
+        fs.readFileString(statePath),
+        Schema.decodeUnknownEffect(StateFile),
+      );
+    });
     const root = join(workspace, `${name}-skills`);
+    const rootFor = (target: InstallDestination) => (target === "agents" ? root : undefined);
+    /** Loader maintenance happens here, outside the save-counting filesystem. */
+    const maintained = Effect.flatMap(Library.Service, (library) => library.read).pipe(
+      Effect.provide(Library.layer({ home, roots: testRoots(home) })),
+      Effect.provideService(FileSystem.FileSystem, fs),
+    );
+    /** How this device routes installs: the roots its Library is built from. */
+    const syncInventory = (
+      route: (target: InstallDestination) => string | undefined = rootFor,
+      inventory?: InventoryRootOptions,
+    ): InventoryRootOptions => {
+      const agents = route("agents");
+      const claude = route("claude");
+      return (
+        inventory ?? {
+          home: workspace,
+          configHome: join(workspace, "config"),
+          overrides: {
+            ...(agents ? { codex: [agents] } : {}),
+            ...(claude ? { "claude-code": [claude] } : {}),
+          },
+        }
+      );
+    };
+    /** This home's Library owner, routed as this device's sync installs. */
+    const owner = (
+      route: (target: InstallDestination) => string | undefined = rootFor,
+      inventory?: InventoryRootOptions,
+    ) =>
+      Effect.gen(function* () {
+        yield* maintained;
+        return Context.get(
+          yield* Construction.build(
+            Library.layer({ home, roots: syncInventory(route, inventory) }),
+          ),
+          Library.Service,
+        );
+      });
+    const owned = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+      effect.pipe(
+        Effect.provide(skitConfigurationLayer(home)),
+        Effect.provideService(FileSystem.FileSystem, files),
+      );
     const machineId = makeMachineId();
     return {
       home,
       root,
       /** Every root a sync may write: the home, its installed skills, and their backups. */
       disk: [home, root, join(workspace, ".skit-backups")],
-      /** Local state saves attempted through this home's LibraryStore, refused or not. */
+      /** Local state publications attempted on this home's state.json, refused or not. */
       get saves() {
         return saves;
       },
       corruptOriginal: Effect.gen(function* () {
-        const state = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
-          Effect.provide(layer),
-        );
-        const hash = state.collection_versions[0]!.hash.slice("sha256:".length);
+        const hash = (yield* state).collection_versions[0]!.hash.slice("sha256:".length);
         yield* fs.writeFileString(
           join(home, "originals", hash.slice(0, 2), hash, "SKILL.md"),
           "corrupted original\n",
         );
       }),
-      state: Effect.flatMap(LibraryStore, (store) => store.load).pipe(Effect.provide(layer)),
-      importInstalledSkillEdit: (installedSkill: InstalledSkill) =>
-        Effect.gen(function* () {
-          return yield* importEdit({
-            skillId: installedSkill.skill_id,
-            installedSkillId: installedSkill.installed_skill_id,
-            path: installedSkill.path,
-            currentHash: yield* deterministicTreeHash(installedSkill.path),
-            importedAt: "2026-02-01T00:00:00Z",
-          });
-        }).pipe(withLibraryWriter, Effect.provide(layer)),
-      /** A local edit made outside sync, as any Library command makes one. */
+      state,
+      importInstalledSkillEdit: (installedSkill: LibraryFixtureState["installed_skills"][number]) =>
+        owned(
+          Effect.gen(function* () {
+            const library = yield* owner();
+            return yield* library.import.edit({
+              skillId: installedSkill.skill_id,
+              installedSkillId: installedSkill.installed_skill_id,
+              path: installedSkill.path,
+              currentHash: yield* deterministicTreeHash(installedSkill.path),
+              importedAt: "2026-02-01T00:00:00Z",
+            });
+          }),
+        ),
+      /** A local edit made outside sync: another writer replacing state.json. */
       edit: (change: (state: LibraryState) => LibraryState) =>
-        withLibraryWriter(
-          Effect.flatMap(LibraryStore, (store) =>
-            Effect.flatMap(store.load, (state) => store.save(change(state), state)),
-          ),
-        ).pipe(Effect.provide(layer)),
+        Effect.gen(function* () {
+          const next = change(yield* state);
+          yield* fs.makeDirectory(home, { recursive: true });
+          yield* fs.writeFileString(statePath, yield* Schema.encodeEffect(StateFile)(next));
+        }),
       importSource: (
         repository: string,
         options: { name?: string; bytes?: string; importedAt?: string } = {},
       ) =>
-        Effect.gen(function* () {
-          const sourcePath = join(workspace, repository);
-          yield* fs.makeDirectory(sourcePath, { recursive: true });
-          yield* fs.writeFileString(
-            join(sourcePath, "SKILL.md"),
-            options.bytes ?? `${repository}\n`,
-          );
-          return yield* importCollection({
-            machineId,
-            source: { type: "github", owner: "fixture", repository },
-            input: sourcePath,
-            importedAt: options.importedAt ?? "2026-01-01T00:00:00.000Z",
-            skills: [
-              {
-                name: options.name ?? repository,
-                sourcePath,
-                relativePath: ".",
-                currentHash: yield* deterministicTreeHash(sourcePath),
-              },
-            ],
-            lockFileEntries: [],
-          });
-        }).pipe(withLibraryWriter, Effect.provide(layer)),
+        owned(
+          Effect.gen(function* () {
+            const sourcePath = join(workspace, repository);
+            yield* fs.makeDirectory(sourcePath, { recursive: true });
+            yield* fs.writeFileString(
+              join(sourcePath, "SKILL.md"),
+              options.bytes ?? `${repository}\n`,
+            );
+            const library = yield* owner();
+            return yield* library.import.collection({
+              machineId,
+              source: { type: "github", owner: "fixture", repository },
+              input: sourcePath,
+              importedAt: options.importedAt ?? "2026-01-01T00:00:00.000Z",
+              skills: [
+                {
+                  name: options.name ?? repository,
+                  sourcePath,
+                  relativePath: ".",
+                  currentHash: yield* deterministicTreeHash(sourcePath),
+                },
+              ],
+              lockFileEntries: [],
+            });
+          }),
+        ),
       importMany: (repository: string, names: readonly string[], importedAt: string) =>
-        Effect.gen(function* () {
-          const sourcePath = join(workspace, repository);
-          const skills = yield* Effect.forEach(names, (skillName) =>
-            Effect.gen(function* () {
-              const path = join(sourcePath, skillName);
-              yield* fs.makeDirectory(path, { recursive: true });
-              yield* fs.writeFileString(join(path, "SKILL.md"), `${skillName}\n`);
-              return {
-                name: skillName,
-                sourcePath: path,
-                relativePath: skillName,
-                currentHash: yield* deterministicTreeHash(path),
-              };
-            }),
-          );
-          return yield* importCollection({
-            machineId,
-            source: { type: "github", owner: "fixture", repository },
-            input: sourcePath,
-            importedAt,
-            skills,
-            lockFileEntries: [],
-          });
-        }).pipe(withLibraryWriter, Effect.provide(layer)),
+        owned(
+          Effect.gen(function* () {
+            const sourcePath = join(workspace, repository);
+            const skills = yield* Effect.forEach(names, (skillName) =>
+              Effect.gen(function* () {
+                const path = join(sourcePath, skillName);
+                yield* fs.makeDirectory(path, { recursive: true });
+                yield* fs.writeFileString(join(path, "SKILL.md"), `${skillName}\n`);
+                return {
+                  name: skillName,
+                  sourcePath: path,
+                  relativePath: skillName,
+                  currentHash: yield* deterministicTreeHash(path),
+                };
+              }),
+            );
+            const library = yield* owner();
+            return yield* library.import.collection({
+              machineId,
+              source: { type: "github", owner: "fixture", repository },
+              input: sourcePath,
+              importedAt,
+              skills,
+              lockFileEntries: [],
+            });
+          }),
+        ),
       remove: (collectionId: string) =>
-        Effect.flatMap(LibraryStore, (store) => store.load).pipe(
-          Effect.flatMap((state) =>
-            Effect.gen(function* () {
-              const id = state.collections.find(
-                (item) => item.collection_id === collectionId,
-              )?.collection_id;
-              assert.ok(id);
-              // Routed as this device's sync installs.
-              const library = yield* Library.make.pipe(
-                Effect.provideService(
-                  InstalledSkills.Service,
-                  yield* syncInstalledSkills(state, (target) =>
-                    target === "agents" ? root : undefined,
-                  ),
-                ),
-              );
-              return yield* library.apply(
-                yield* library.plan({ _tag: "Remove", collectionId: id }, { base: state }),
-              );
-            }),
-          ),
-          withLibraryWriter,
-          Effect.provide(layer),
+        owned(
+          Effect.gen(function* () {
+            const id = (yield* state).collections.find(
+              (item) => item.collection_id === collectionId,
+            )?.collection_id;
+            assert.ok(id);
+            const library = yield* owner();
+            return yield* library.apply({
+              _tag: "Apply",
+              plan: yield* library.plan(
+                { _tag: "Remove", collectionId: id },
+                { base: yield* library.read },
+              ),
+            });
+          }),
         ),
       project: (
-        scope: { kind: "global" } | { kind: "repository"; root: string } = { kind: "global" },
+        scope: { kind: "global" } | { kind: "repository"; root: string } = {
+          kind: "global",
+        },
         skillsDirectory = root,
+        target: InstallDestination = "agents",
       ) =>
-        installEnabledSkills({
-          target: "agents",
-          scope,
-          root: skillsDirectory,
-          variantsPath: join(home, "variants"),
-        }).pipe(withLibraryWriter, Effect.provide(layer)),
+        owned(
+          installEnabledSkills({
+            target,
+            scope,
+            root: skillsDirectory,
+            variantsPath: join(home, "variants"),
+          }),
+        ),
       sync: (
         options: {
-          progress?: Parameters<typeof syncLibrary>[0]["progress"];
-          restoreProgress?: Parameters<typeof syncLibrary>[0]["restoreProgress"];
-          onPlan?: Parameters<typeof syncLibrary>[0]["onPlan"];
+          progress?: Parameters<Library.Interface["sync"]>[0]["progress"];
+          restoreProgress?: Parameters<Library.Interface["sync"]>[0]["restoreProgress"];
+          onPlan?: Parameters<Library.Interface["sync"]>[0]["onPlan"];
           apply?: boolean;
-          adopt?: boolean;
           takeRemote?: readonly string[];
           keepEnabled?: readonly string[];
-          deviceSelection?: Parameters<typeof syncLibrary>[0]["deviceSelection"];
-          inventory?: Parameters<typeof syncLibrary>[0]["inventory"];
+          deviceSelection?: Parameters<Library.Interface["sync"]>[0]["deviceSelection"];
+          /** The roots this device's Library is built from; defaults to `rootFor`'s. */
+          inventory?: InventoryRootOptions;
           rootFor?: (target: InstallDestination) => string | undefined;
         } = {},
       ) =>
-        syncLibrary({
-          origin: "https://registry.test",
-          token: "test",
-          apply: true,
-          ...options,
-          installedSkill: {
-            rootFor: options.rootFor ?? ((target) => (target === "agents" ? root : undefined)),
-          },
-        }).pipe(withLibraryWriter, Effect.provide(layer), Effect.provide(http), Effect.scoped),
+        Effect.flatMap(
+          Effect.zip(
+            maintained,
+            librarySyncApi({ origin: "https://registry.test", token: "test" }),
+          ),
+          ([, transport]) =>
+            Effect.flatMap(Library.Service, (library) =>
+              library.sync(
+                {
+                  origin: "https://registry.test",
+                  token: "test",
+                  apply: true,
+                  ...Struct.omit(options, ["inventory", "rootFor"]),
+                },
+                transport,
+              ),
+            ).pipe(
+              Effect.provide(
+                Library.layer({ home, roots: syncInventory(options.rootFor, options.inventory) }),
+              ),
+            ),
+        ).pipe(Effect.provide(http), Effect.scoped, owned),
     };
   };
   return {

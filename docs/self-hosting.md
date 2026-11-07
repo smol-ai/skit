@@ -79,6 +79,24 @@ pnpm skit server bootstrap \
 
 Cloudflare documents `workers.dev` as an evaluation and personal-project endpoint. SKIT supports it as the first canonical origin, while recommending a Custom Domain for production.
 
+The unreleased owner-schema changes are consolidated into
+`0010_owner_schema.sql`, applied directly after the `0009` schema on `dev`.
+It creates the final SKIT revision tables and removes obsolete grants, SDK
+rate-limit counters and release-adoption metadata. Namespace ownership, current
+team membership, operator capability, credentials, releases and Library data are
+retained.
+
+For an existing installation, back up D1 and stop serving requests before applying
+`0010`; deploy the matching Worker and verify it before reopening traffic. The
+old Worker uses tables that this migration replaces or removes, and deployment
+applies migrations before switching Workers. The previous unreleased
+compatibility-revision deployment sequence does not apply to this flattened chain.
+
+The migration discards legacy Draft revisions, files and current Draft pointers;
+no released CLI could author Drafts. SKITs and their Releases are kept, and each
+SKIT starts with no current revision. Branch-only migrations and file formats are not supported upgrade sources;
+they were confirmed unused before consolidation.
+
 ## Promote to a custom domain
 
 The domain must already belong to a zone on the same Cloudflare account. Promote it with:
@@ -279,7 +297,7 @@ Session creation can occur after the identity transaction. If session creation f
 
 Server operation and content ownership are separate authority domains. Bootstrap grants a server-operator capability; it does not grant ownership of every Namespace, SKIT, Library, Draft, or Release.
 
-Bootstrap currently records one binary operator capability separately from content grants. Operator-management routes are not implemented yet. When added, they may use that capability for narrowly defined operations such as account provisioning, suspension, operator promotion or demotion, and recovery rather than introducing a general administrative RBAC system. Content access continues to use ordinary Namespace, team, and resource grants.
+Bootstrap currently records one binary operator capability separately from content ownership. Operator-management routes are not implemented yet. When added, they may use that capability for narrowly defined operations such as account provisioning, suspension, operator promotion or demotion, and recovery rather than introducing a general administrative RBAC system. Content operations and author inventory use Namespace ownership and current team membership; per-resource grants do not confer access.
 
 Future operator-management routes must require a browser session. A `skit_pat_` Personal Access Token must not provision accounts, promote operators, perform recovery, or change server configuration regardless of its product scopes. The server must also prevent deletion, suspension, or demotion of the last active operator.
 

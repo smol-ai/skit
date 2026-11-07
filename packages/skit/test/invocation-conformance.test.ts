@@ -5,16 +5,18 @@ import { skitLayer } from "../src/platform/layer.js";
 import { invocationMetadataAdapters } from "../src/harnesses/invocation-metadata.js";
 import { join } from "node:path";
 import { expect, test } from "vitest";
+import { applyInvocationPolicy } from "../src/installed-skills/policy.js";
 import {
-  applyInvocationPolicy,
   assessInvocationConformance,
-  createSkitArchive,
+  resolveDeclaredInvocation,
+} from "../src/invocation/conformance.js";
+import { createSkitArchive } from "../src/artifact/archive.js";
+import {
   generateInvocationMetadata,
   isAuthorWorkspace,
-  resolveDeclaredInvocation,
-  validateSkitDirectory,
-  type InvocationPolicy,
-} from "../src/index.js";
+} from "../src/author/invocation/generation.js";
+import { validateSkitDirectory } from "../src/artifact/skit.js";
+import { type InvocationPolicy } from "../src/artifact/invocation-policy.js";
 
 const CODEX_PATH = "skills/review/agents/openai.yaml";
 const CODEX = join("skills", "review", "agents", "openai.yaml");
@@ -90,7 +92,8 @@ effectIt.effect.each([
       expect(yield* read(join(root, "skills", "review", "SKILL.md"))).toContain(claude);
       expect(yield* read(join(root, CODEX))).toContain(codex);
       expect(
-        (yield* validateSkitDirectory(root, "draft", { assessmentContext: "publish" })).diagnostics,
+        (yield* validateSkitDirectory(root, "unpublished", { assessmentContext: "publish" }))
+          .diagnostics,
       ).toEqual([]);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -111,7 +114,8 @@ effectIt.effect("generation removes both fields for host policy", () =>
     );
     expect(yield* exists(join(root, CODEX))).toBe(false);
     expect(
-      (yield* validateSkitDirectory(root, "draft", { assessmentContext: "publish" })).diagnostics,
+      (yield* validateSkitDirectory(root, "unpublished", { assessmentContext: "publish" }))
+        .diagnostics,
     ).toEqual([]);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -128,7 +132,8 @@ effectIt.effect(
 
       expect(yield* generateInvocationMetadata(root)).toEqual([]);
       expect(
-        (yield* validateSkitDirectory(root, "draft", { assessmentContext: "publish" })).diagnostics,
+        (yield* validateSkitDirectory(root, "unpublished", { assessmentContext: "publish" }))
+          .diagnostics,
       ).toEqual([]);
       const archive = join(yield* makeTemporaryDirectory, "release.zip");
       yield* createSkitArchive(root, archive);
@@ -172,10 +177,10 @@ effectIt.effect("validation reports drift as an author warning and a publication
   Effect.gen(function* () {
     const root = yield* workspace("explicit");
 
-    const authoring = yield* validateSkitDirectory(root, "draft", {
+    const authoring = yield* validateSkitDirectory(root, "unpublished", {
       assessmentContext: "author",
     });
-    const publication = yield* validateSkitDirectory(root, "draft", {
+    const publication = yield* validateSkitDirectory(root, "unpublished", {
       assessmentContext: "publish",
     });
 
@@ -208,7 +213,8 @@ effectIt.effect("acquired sources are never assessed for conformance", () =>
 
     for (const context of ["import", "project"] as const)
       expect(
-        (yield* validateSkitDirectory(root, "draft", { assessmentContext: context })).diagnostics,
+        (yield* validateSkitDirectory(root, "unpublished", { assessmentContext: context }))
+          .diagnostics,
       ).toEqual([]);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

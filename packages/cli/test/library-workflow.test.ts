@@ -3,7 +3,7 @@ import {
   invocationEligibleScopes,
   scopeChoices,
   scopeKey,
-} from "../src/library-application/read-model.js";
+} from "@smolai/skit-core/library/session";
 
 describe("Library workflow choices", () => {
   test("keys a Scope by the destination it selects", () => {

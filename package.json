@@ -13,7 +13,10 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
-    "lint": "oxlint .",
+    "lint": "pnpm --parallel --no-bail --include-workspace-root run /^lint:/",
+    "lint:code": "oxlint .",
+    "lint:unused": "node scripts/check-unused.mjs",
+    "lint:structure": "node scripts/check-structure.mjs",
     "skit": "node packages/cli/bin/skit.js",
     "vm": "pnpm --filter @smolai/skit-devtools vm",
     "tui": "pnpm --filter @smolai/skit-tui dev",
@@ -27,14 +30,16 @@
     "cli:image": "bun packages/storybook/src/image/main.ts"
   },
   "devDependencies": {
+    "knip": "^6.44.1",
     "oxfmt": "^0.64.0",
     "oxlint": "^1.79.0",
     "skills": "1.5.26",
     "typescript": "7.0.2",
+    "typescript-parser": "npm:typescript@5.9.3",
     "vitest": "5.0.3"
   },
   "engines": {
-    "node": "^22.23.4 || ^24.22.1 || >=26.12.1"
+    "node": "^24.22.1 || >=26.12.1"
   },
   "packageManager": "pnpm@11.23.0"
 }

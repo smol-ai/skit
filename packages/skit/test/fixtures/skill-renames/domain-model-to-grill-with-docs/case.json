@@ -1,0 +1,7 @@
+{
+  "source": "https://github.com/mattpocock/skills",
+  "commit": "fb847c6aded783c1c4a67ec54bfc588fd44e91ab",
+  "from": "skills/engineering/domain-model",
+  "to": "skills/engineering/grill-with-docs",
+  "title": "Refactor skill references and documentation for grill-with-docs skill"
+}

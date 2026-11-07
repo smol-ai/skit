@@ -1,9 +1,11 @@
 import { Schema, SchemaGetter } from "effect";
 import { CollectionId, InstalledSkillId, SkillId, SkillVersionId } from "../entity-ids.js";
 import { Collection } from "../library-contracts.js";
-import { AbsoluteDevicePath } from "../library-state.js";
+import { AbsoluteDevicePath } from "../device-state.js";
 import { LibraryStateFromV10 } from "./state-schema-v10.js";
-import { Hash, HarnessName, InvocationPolicy } from "../../vocabulary.js";
+import { Hash } from "../../shared/hash.js";
+import { HarnessName } from "../../harnesses/contracts.js";
+import { InvocationPolicy } from "../../artifact/invocation-policy.js";
 import {
   BindingEntryV7,
   BindingV7,
@@ -17,12 +19,9 @@ import {
   skillFromV7,
   SkillV7,
 } from "./manifest-v7.js";
-import {
-  HarnessInstallStatus,
-  InventoryScanIssue,
-  SkillAssessmentAcceptance,
-  RecordedInstallDestination,
-} from "./state-schema.js";
+import { HarnessInstallStatus } from "../../installed-skills/metadata.js";
+import { InventoryScanIssue, RecordedInstallDestination } from "./state-schema.js";
+import { SkillAssessmentAcceptance } from "../assessment-acceptance.js";
 
 /** An assessment acceptance as v9 stored it: the content hash was `artifactContentDigest`. */
 const { artifactContentHash: _contentHash, ...acceptanceFields } = SkillAssessmentAcceptance.fields;
@@ -49,12 +48,12 @@ export const InstalledSkillV9 = Schema.Struct({
   projected_at: Schema.String,
 });
 
-export const DeviceBindingV9 = Schema.Struct({
+const DeviceBindingV9 = Schema.Struct({
   ...BindingV7.fields,
   invocation_policies: Schema.optionalKey(Schema.Record(SkillId, InvocationPolicy)),
 });
 
-export const RepositoryBindingV9 = Schema.Struct({
+const RepositoryBindingV9 = Schema.Struct({
   scope: Schema.Struct({ kind: Schema.Literal("repository"), root: AbsoluteDevicePath }),
   entries: Schema.Array(BindingEntryV7),
   invocation_policies: Schema.optionalKey(Schema.Record(SkillId, InvocationPolicy)),
@@ -122,10 +121,9 @@ export type LibraryStateV9 = typeof LibraryStateV9.Type;
 const policies = (invocation_policies: Readonly<Record<string, InvocationPolicy>> | undefined) =>
   invocation_policies === undefined ? {} : { invocation_policies };
 
-export const DeviceSkillSelectionV9 = LibraryStateV9.fields.device_skill_selection.schema;
-export type DeviceSkillSelectionV9 = typeof DeviceSkillSelectionV9.Type;
+type DeviceSkillSelectionV9 = typeof LibraryStateV9.fields.device_skill_selection.schema.Type;
 
-export const installedSkillFromV9 = ({
+const installedSkillFromV9 = ({
   projection_id,
   target,
   projected_at,
@@ -141,19 +139,19 @@ export const installedSkillFromV9 = ({
   ...(observed_digest === undefined ? {} : { current_hash: observed_digest }),
 });
 
-export const repositoryFromV9 = (binding: typeof RepositoryBindingV9.Type) => ({
+const repositoryFromV9 = (binding: typeof RepositoryBindingV9.Type) => ({
   root: binding.scope.root,
   enabled: enabledFromV7(binding.entries),
   ...policies(binding.invocation_policies),
 });
 
 /** The global list a v9 global Binding held; none means nothing enabled. */
-export const globalFromV9 = (binding: typeof DeviceBindingV9.Type | undefined) => ({
+const globalFromV9 = (binding: typeof DeviceBindingV9.Type | undefined) => ({
   enabled: binding === undefined ? [] : enabledFromV7(binding.entries),
   ...policies(binding?.invocation_policies),
 });
 
-export const deviceSelectionFromV9 = (selection: DeviceSkillSelectionV9) =>
+const deviceSelectionFromV9 = (selection: DeviceSkillSelectionV9) =>
   selection.mode === "choose"
     ? { mode: "choose" as const, ...globalFromV9(selection.binding) }
     : selection;

@@ -1,0 +1,86 @@
+import { Effect, Option } from "effect";
+import { Argument, Command, Flag } from "effect/cli";
+
+import { CommandMetadata, credentialStoreReadSubprocesses } from "./commands/metadata.js";
+import { outputContracts } from "./commands/output-contracts.js";
+import { jsonFlag, optionalString } from "./commands/parameters.js";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
+import { feedbackInput } from "./feedback/send.js";
+import { submitFeedback } from "./registry/feedback.js";
+import { Renderer } from "./terminal/renderer.js";
+
+import { result } from "./commands/result.js";
+
+const text = Argument.String("message").pipe(
+  Argument.withDescription("What surprised you or slowed you down."),
+  Argument.optional,
+);
+
+export const feedbackSendCliCommand = Command.make(
+  "send",
+  {
+    text,
+    message: optionalString("message", "The same as the argument; easier to build from a script."),
+    harness: optionalString(
+      "harness",
+      "The agent harness you run in, for example claude-code or codex.",
+    ),
+    model: optionalString("model", "The model you are, for example claude-opus-5-5."),
+    signedIn: Flag.Boolean("signed-in").pipe(
+      Flag.withDescription(
+        "Attribute the report to the account this machine is signed in to. Only with the user's agreement.",
+      ),
+      Flag.withDefault(false),
+    ),
+    email: optionalString(
+      "email",
+      "A contact address for a reply. Only one the user gave you for this report.",
+    ),
+
+    json: jsonFlag,
+  },
+  (options) =>
+    Effect.gen(function* () {
+      const { skitHome } = yield* SkitConfiguration;
+      const renderer = yield* Renderer;
+      const input = yield* feedbackInput({
+        text: Option.getOrUndefined(options.text),
+        message: options.message,
+        harness: options.harness,
+        model: options.model,
+        email: options.email,
+      });
+      const sent = yield* submitFeedback(input, {
+        signedIn: options.signedIn,
+        home: skitHome,
+      });
+      yield* renderer.result(result("feedbackSend", sent));
+    }),
+).pipe(
+  Command.withDescription(
+    "Tell SKIT's maintainers about friction with SKIT itself: an unclear error, a gap in the docs, a step that took longer than it should.",
+  ),
+  Command.withExamples([
+    {
+      command: 'skit feedback send "skit add said the Source was invalid but not which part"',
+    },
+    {
+      command:
+        'skit feedback send --message "setup --json had no field for skipped skills" --harness codex --model gpt-5.5',
+    },
+    {
+      command:
+        'skit feedback send "skit sync --json gave no reason for a conflict" --signed-in --email ada@example.com',
+    },
+  ]),
+  Command.annotate(CommandMetadata, {
+    stability: "experimental",
+    effects: {
+      capabilities: ["network.write", "filesystem.read", "process.execute"],
+      subprocesses: credentialStoreReadSubprocesses,
+    },
+    outputSchemas: [outputContracts.feedbackSend],
+    exitCodes: [0, 1, 13, 64],
+    interactive: false,
+  }),
+);

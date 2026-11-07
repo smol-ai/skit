@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { Schema } from "effect";
 import { fromString, fromUUIDBytes, typeidUnboxed } from "typeid-js";
 
-export const EntityIdPrefixes = {
+const EntityIdPrefixes = {
   collection: "coll",
   skill: "skill",
   skillVersion: "skv",

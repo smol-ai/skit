@@ -1,8 +1,10 @@
-import type { HarnessName } from "../contracts.js";
+import { Schema } from "effect";
+export const HarnessName = Schema.Literals(["codex", "claude-code", "opencode", "devin"]);
+export type HarnessName = typeof HarnessName.Type;
 
-export type SkillsDirectoryBase = "home" | "config" | "repository";
+type SkillsDirectoryBase = "home" | "config" | "repository";
 export type SkillsDirectoryRole = "native" | "compatibility";
-export type HarnessEvidence = "documented" | "observed" | "unknown";
+type HarnessEvidence = "documented" | "observed" | "unknown";
 export type FrontmatterValueType =
   | "string"
   | "boolean"
@@ -10,7 +12,7 @@ export type FrontmatterValueType =
   | "string-list"
   | "string-map"
   | "object";
-export type FrontmatterSupport = "required" | "optional" | "ignored" | "unsupported" | "unknown";
+type FrontmatterSupport = "required" | "optional" | "ignored" | "unsupported" | "unknown";
 
 export interface HarnessDocumentationSource {
   id: string;
@@ -46,15 +48,10 @@ export interface HarnessFrontmatterContract {
   fields: readonly HarnessFrontmatterField[];
 }
 
-export type SkillMetadataValueType =
-  | "string"
-  | "boolean"
-  | "integer"
-  | "string-list"
-  | "object-list";
-export type SkillMetadataRequiredness = "required" | "optional" | "conditional" | "unknown";
+type SkillMetadataValueType = "string" | "boolean" | "integer" | "string-list" | "object-list";
+type SkillMetadataRequiredness = "required" | "optional" | "conditional" | "unknown";
 
-export interface HarnessSkillMetadataField {
+interface HarnessSkillMetadataField {
   path: string;
   requiredness: SkillMetadataRequiredness;
   type: SkillMetadataValueType;

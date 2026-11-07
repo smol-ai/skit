@@ -3,14 +3,14 @@ import {
   InteractionEvent,
   makeScriptedInteraction,
   type InteractionEvent as Event,
-} from "../presentation/interaction-recorder.js";
+} from "./interaction-recorder.js";
 import { journeyStories, type JourneyStory } from "./journey-stories.js";
 import {
   defaultTerminalEnvironment,
   renderFailureFrame,
   renderResultFrame,
   type TerminalEnvironment,
-} from "../presentation/output-frame.js";
+} from "../commands/output-frame.js";
 
 const stableHint = (hint: string | undefined, cwd: string): string =>
   hint === cwd ? "<cwd>" : (hint ?? "");

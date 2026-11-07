@@ -4,7 +4,7 @@ import { deterministicTreeHash } from "../artifact/skit.js";
 import { copyLocalTree } from "../platform/copy-tree.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
-export class SkillMaterializationInvalid
+class SkillMaterializationInvalid
   extends Data.TaggedError("Library.SkillMaterializationInvalid")<{ detail: string }>
   implements SkitFailure
 {
@@ -41,3 +41,6 @@ export const installedSkillHash = Effect.fn("Library.installedSkillHash")(functi
   }
   return yield* deterministicTreeHash(artifact);
 });
+
+// Required by the public declaration-only error vocabulary.
+export type { SkillMaterializationInvalid };

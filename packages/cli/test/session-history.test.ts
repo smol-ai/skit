@@ -1,23 +1,17 @@
+import * as Library from "@smolai/skit-core/library";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import {
-  deterministicTreeHash,
-  LibraryActor,
-  LibraryStore,
-  LibraryAuditLog,
-  skitLayer,
-  type LibraryState,
-} from "@smolai/skit-core";
+import type { LibraryFixtureState as LibraryState } from "./helpers/library-home.js";
+import { deterministicTreeHash } from "@smolai/skit-core/author";
+import { skitLayer } from "@smolai/skit-core/platform";
 import {
   confirmLibraryChange,
-  openLibrarySession,
-  readLibrarySkillContent,
   proposeLibraryEnable,
   proposeLibraryDisable,
   proposeLibraryCollectionChange,
   libraryCollectionScopes,
-} from "../src/library-application/session.js";
+} from "@smolai/skit-core/library/session";
 import {
   initializeLibraryMachine,
   libraryHome,
@@ -55,18 +49,24 @@ it.effect("a front end that confirms a Library session change leaves attributed 
         }),
       ),
     );
-    const history = home.owned(Effect.flatMap(LibraryAuditLog, (audit) => audit.list()));
+    const history = home.owned(
+      Effect.flatMap(Library.Service, (owner) =>
+        Effect.map(owner.history, (history) => history.events),
+      ),
+    );
     const importedEvents = (yield* history).length;
 
-    const session = yield* home.owned(openLibrarySession());
+    const session = yield* home.owned(
+      Effect.flatMap(Library.Service, (library) => library.session.open()),
+    );
     const proposed = yield* home.owned(
-      proposeLibraryEnable(session, home.installOptions, session.skills[0]!, {
+      proposeLibraryEnable(session, session.skills[0]!, {
         scope: { kind: "global" },
       }),
     );
     const confirmed = yield* home
       .owned(confirmLibraryChange(proposed))
-      .pipe(Effect.provideService(LibraryActor, "tui"));
+      .pipe(Effect.annotateLogs({ "skit.library.workflow": "tui" }));
     assert.notStrictEqual(confirmed.outcome?.kind, "failed");
 
     const events = yield* history;
@@ -112,7 +112,9 @@ it.effect("Collection actions preview and apply all Skills together", () =>
         }),
       ),
     );
-    const session = yield* home.owned(openLibrarySession());
+    const session = yield* home.owned(
+      Effect.flatMap(Library.Service, (library) => library.session.open()),
+    );
     const collectionId = (yield* home.durable).collections[0]!.collection_id;
     assert.strictEqual(session.skills.length, 2);
     assert.ok(session.skills.every((row) => row.collectionId === collectionId));
@@ -124,24 +126,30 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     yield* fs.writeFileString(join(source, "alpha", "SKILL.md"), "changed native source\n");
     const alpha = session.skills.find((row) => row.name === "alpha")!;
     assert.strictEqual(
-      yield* home.owned(readLibrarySkillContent(alpha.skillVersionId)),
+      yield* home.owned(
+        Effect.flatMap(Library.Service, (library) =>
+          library.session.readSkillContent(alpha.skillVersionId),
+        ),
+      ),
       "# alpha\n",
     );
     const scopes = [{ kind: "global" } as const];
     const proposed = yield* home.owned(
-      proposeLibraryCollectionChange(session, home.installOptions, collectionId, true, scopes),
+      proposeLibraryCollectionChange(session, collectionId, true, scopes),
     );
     assert.strictEqual(proposed.outcome.kind, "preview");
     assert.deepStrictEqual(proposed.pending?.facts[0]?.skills.slice().sort(), ["alpha", "beta"]);
     assert.ok(
-      (yield* home.owned(openLibrarySession())).skills.every((row) => row.scopes.length === 0),
+      (yield* home.owned(
+        Effect.flatMap(Library.Service, (library) => library.session.open()),
+      )).skills.every((row) => row.scopes.length === 0),
     );
     const enabled = yield* home.owned(confirmLibraryChange(proposed));
     assert.strictEqual(enabled.outcome?.kind, "applied");
     assert.ok(enabled.skills.every((row) => row.scopes.length === 1));
     assert.deepStrictEqual((yield* home.durable).enabled, [{ collection: collectionId }]);
     const unchanged = yield* home.owned(
-      proposeLibraryCollectionChange(enabled, home.installOptions, collectionId, true, scopes),
+      proposeLibraryCollectionChange(enabled, collectionId, true, scopes),
     );
     assert.strictEqual(unchanged.outcome.kind, "unchanged");
     assert.strictEqual(unchanged.pending, undefined);
@@ -152,7 +160,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     const installedSkill = beforeRepair.installed_skills[0]!;
     yield* fs.remove(installedSkill.path, { recursive: true });
     const repair = yield* home.owned(
-      proposeLibraryCollectionChange(enabled, home.installOptions, collectionId, true, scopes),
+      proposeLibraryCollectionChange(enabled, collectionId, true, scopes),
     );
     assert.strictEqual(repair.outcome.kind, "preview");
     const repaired = yield* home.owned(confirmLibraryChange(repair));
@@ -161,25 +169,11 @@ it.effect("Collection actions preview and apply all Skills together", () =>
 
     const withLeftover = yield* home.durable;
     const beta = withLeftover.skills.find((skill) => skill.name === "beta")!;
-    yield* home.owned(
-      writingTo(
-        home.home,
-        LibraryStore.use((store) =>
-          store.save(
-            {
-              ...withLeftover,
-              enabled: [{ skill: beta.skill_id }],
-            },
-            withLeftover,
-          ),
-        ),
-      ),
-    );
+    yield* home.writeDurable({ ...withLeftover, enabled: [{ skill: beta.skill_id }] });
     const alphaRow = repaired.skills.find((row) => row.name === "alpha")!;
     const cleanup = yield* home.owned(
       proposeLibraryDisable(
-        yield* home.owned(openLibrarySession()),
-        home.installOptions,
+        yield* home.owned(Effect.flatMap(Library.Service, (library) => library.session.open())),
         alphaRow,
         alphaRow.scopes,
       ),
@@ -197,7 +191,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     );
 
     const removal = yield* home.owned(
-      proposeLibraryCollectionChange(cleaned, home.installOptions, collectionId, false, scopes),
+      proposeLibraryCollectionChange(cleaned, collectionId, false, scopes),
     );
     assert.strictEqual(removal.outcome.kind, "preview");
     const disabled = yield* home.owned(confirmLibraryChange(removal));
@@ -237,11 +231,12 @@ const twoScopeProposal = (scopeCount = 2) =>
         }),
       ),
     );
-    const session = yield* home.owned(openLibrarySession());
+    const session = yield* home.owned(
+      Effect.flatMap(Library.Service, (library) => library.session.open()),
+    );
     const proposed = yield* home.owned(
       proposeLibraryCollectionChange(
         session,
-        home.installOptions,
         (yield* home.durable).collections[0]!.collection_id,
         true,
         ([{ kind: "global" }, { kind: "repository", root: repository }] as const).slice(
@@ -261,34 +256,29 @@ const unplanned = (state: LibraryState): LibraryState => {
   return rest;
 };
 
-const confirmThrough = (
-  home: Effect.Success<ReturnType<typeof twoScopeProposal>>["home"],
-  proposed: Parameters<typeof confirmLibraryChange>[0],
-  wrap: (store: LibraryStore["Service"]) => LibraryStore["Service"],
-) =>
-  home.owned(
-    Effect.flatMap(LibraryStore, (store) =>
-      confirmLibraryChange(proposed).pipe(Effect.provideService(LibraryStore, wrap(store))),
-    ),
-  );
-
 it.effect("refuses a confirmation when the Library changes after its revision check", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const fixture = yield* twoScopeProposal();
-    let loads = 0;
-    const confirmed = yield* confirmThrough(fixture.home, fixture.proposed, (store) => ({
-      ...store,
-      // The first load is the revision check; another writer changes the Library right after it.
-      load: Effect.gen(function* () {
-        const current = yield* store.load;
-        if (++loads === 1)
-          yield* fixture.home
-            .writeDurable(unplanned(current))
-            .pipe(Effect.provideService(FileSystem.FileSystem, fs), Effect.orDie);
-        return current;
+    let armed = false;
+    let changed = false;
+    let statePath = "";
+    const fixture = yield* twoScopeProposal().pipe(
+      Effect.provideService(FileSystem.FileSystem, {
+        ...fs,
+        readFileString: (...args: Parameters<typeof fs.readFileString>) =>
+          Effect.gen(function* () {
+            const text = yield* fs.readFileString(...args);
+            if (armed && !changed && args[0] === statePath) {
+              changed = true;
+              yield* fs.writeFileString(statePath, JSON.stringify(unplanned(JSON.parse(text))));
+            }
+            return text;
+          }),
       }),
-    }));
+    );
+    statePath = fixture.home.statePath;
+    armed = true;
+    const confirmed = yield* fixture.home.owned(confirmLibraryChange(fixture.proposed));
     assert.strictEqual(confirmed.outcome?.kind, "failed");
     if (confirmed.outcome?.kind === "failed")
       assert.strictEqual(confirmed.outcome.failure.code, "CONFLICT");

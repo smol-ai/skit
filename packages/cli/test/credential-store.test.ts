@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Schema } from "effect";
 import { join } from "node:path";
-import { skitConfigurationLayer } from "../src/configuration/skit-configuration.js";
+import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { addRegistryRemote, loginEffect, readConfig } from "../src/registry/auth.js";
 import {
   readStoredToken,

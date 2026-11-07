@@ -1,13 +1,18 @@
+import { LinkStat } from "@smolai/skit-core/platform";
+import { recoveryInspection } from "./helpers/recovery.js";
+import { withLibraryOwner } from "./helpers/library-owner.js";
 import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import { LibraryStore, LinkStat, skitLayer } from "@smolai/skit-core";
-import { prepareSetupCommand, setupApplyCommand } from "../src/handlers/library/setup-machine.js";
-import { runSetup } from "../src/workflows/library/setup.js";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
-import { inspectRecoveryOperation } from "../src/library-application/recovery-moves.js";
-import { prepareSetupUndo } from "../src/library-application/setup-undo.js";
+
+import type { LibraryFixtureState as LibraryState } from "./helpers/library-home.js";
+import { skitLayer } from "@smolai/skit-core/platform";
+import type { PlatformError } from "effect/PlatformError";
+import { prepareSetupCommand, setupApplyCommand } from "../src/library/setup/apply.js";
+import { runSetup } from "@smolai/skit-core/library/setup";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
+import { prepareSetupUndo } from "../src/library/setup/undo.js";
 import { libraryHome, scratch } from "./helpers/library-home.js";
 
 const fixture = Effect.fn("Test.setupDuplicateCopies")(function* () {
@@ -52,6 +57,30 @@ const fixture = Effect.fn("Test.setupDuplicateCopies")(function* () {
   return { fs, root, home, source, duplicate, markdown, prepared, apply, input, interaction };
 });
 
+/**
+ * The real filesystem, except each replacement of `state.json` then runs `onSaved` with the state
+ * it saved. Provided outside the owner, so the owner's saves go through it.
+ */
+const afterSaves =
+  (statePath: string, onSaved: (next: LibraryState) => Effect.Effect<void, PlatformError>) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      return yield* effect.pipe(
+        Effect.provideService(FileSystem.FileSystem, {
+          ...fs,
+          rename: (from, to) =>
+            to === statePath
+              ? Effect.gen(function* () {
+                  const next: LibraryState = JSON.parse(yield* fs.readFileString(from));
+                  yield* fs.rename(from, to);
+                  yield* onSaved(next);
+                })
+              : fs.rename(from, to),
+        }),
+      );
+    });
+
 it.effect("a protected authored copy has an explicit choice and no automatic preservation", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
@@ -81,30 +110,18 @@ it.effect("a directory that becomes repository-owned before cleanup stays in pla
     const f = yield* fixture();
     const failed = yield* Effect.flip(
       f.home.owned(
-        Effect.gen(function* () {
-          const store = yield* LibraryStore;
-          return yield* f.apply.pipe(
-            Effect.provideService(LibraryStore, {
-              ...store,
-              save: (next, base) =>
-                Effect.gen(function* () {
-                  yield* store.save(next, base);
-                  if (
-                    next.installed_skills.some(
-                      (installedSkill) => installedSkill.status === "installed",
-                    )
-                  )
-                    yield* f.fs.writeFileString(
-                      join(f.duplicate, ".git"),
-                      "gitdir: newly-owned-checkout\n",
-                    );
-                }),
-            }),
-          );
-        }),
+        f.apply.pipe(
+          withLibraryOwner(f.home.inventory),
+          afterSaves(f.home.statePath, (next) =>
+            next.installed_skills.some((installedSkill) => installedSkill.status === "installed")
+              ? f.fs.writeFileString(join(f.duplicate, ".git"), "gitdir: newly-owned-checkout\n")
+              : Effect.void,
+          ),
+        ),
       ),
     );
-    expect(failed._tag).toBe("PlanIsStale");
+    // The copy no longer matches what the step recorded, so setup stops before moving it.
+    expect(failed._tag).toBe("SetupStopped");
     expect(yield* f.fs.readFileString(join(f.duplicate, "SKILL.md"))).toBe(f.markdown);
     expect(yield* f.fs.readFileString(join(f.duplicate, ".git"))).toBe(
       "gitdir: newly-owned-checkout\n",
@@ -131,7 +148,7 @@ it.effect(
         ),
       ).toBe(true);
       if (!applied.operationId) return yield* Effect.die(new Error("Missing operation ID"));
-      const recovery = yield* inspectRecoveryOperation(f.home.home, applied.operationId);
+      const recovery = yield* recoveryInspection(f.home.home, applied.operationId);
       expect(recovery.entries).toHaveLength(1);
       expect(recovery.entries[0].status).toBe("saved");
       expect(yield* f.fs.readFileString(join(recovery.entries[0].recoveryPath, ".DS_Store"))).toBe(
@@ -158,37 +175,62 @@ it.effect("a duplicate changed after selection invalidates the approval without 
       "Newer independent contents",
     );
     expect(yield* f.fs.exists(join(f.source, ".skit-ownership.json"))).toBe(false);
-    expect((yield* f.home.durable).skills).toEqual([]);
+    expect((yield* f.home.snapshot)._tag).toBe("Absent");
   }).pipe(Effect.provide(skitLayer)),
 );
 
-it.effect(
-  "an installed replacement edited before cleanup leaves the old copy active and reports why",
-  () =>
+it.effect.each(["installing", "cleanup"] as const)(
+  "an installed replacement edited during %s preserves both copies and reports why",
+  (boundary) =>
     Effect.gen(function* () {
       const f = yield* fixture();
-      const applied = yield* f.home.owned(
-        Effect.gen(function* () {
-          const store = yield* LibraryStore;
-          return yield* f.apply.pipe(
-            Effect.provideService(LibraryStore, {
-              ...store,
-              save: (next, base) =>
-                Effect.gen(function* () {
-                  yield* store.save(next, base);
-                  if (
-                    next.installed_skills.some(
-                      (installedSkill) => installedSkill.status === "installed",
-                    )
+      let edited = false;
+      const outcome = yield* f.home
+        .owned(
+          f.apply.pipe(
+            withLibraryOwner(f.home.inventory),
+            afterSaves(f.home.statePath, (next) => {
+              const operation = next.operations.find((operation) => operation._tag === "Pending");
+              const apply =
+                operation?._tag === "Pending"
+                  ? operation.steps.find((step) => step.step._tag === "Manage")?.applies?.at(-1)
+                      ?.apply
+                  : undefined;
+              const atBoundary =
+                apply !== undefined &&
+                (boundary === "cleanup"
+                  ? apply.phase._tag === "Done"
+                  : apply.phase._tag !== "Done" &&
+                    next.installed_skills.some((copy) => copy.status === "installed"));
+              return !edited && atBoundary
+                ? f.fs.writeFileString(join(f.source, "SKILL.md"), "New user edits").pipe(
+                    Effect.tap(() =>
+                      Effect.sync(() => {
+                        edited = true;
+                      }),
+                    ),
                   )
-                    yield* f.fs.writeFileString(join(f.source, "SKILL.md"), "New user edits");
-                }),
+                : Effect.void;
             }),
-          );
-        }),
-      );
+          ),
+        )
+        .pipe(Effect.result);
+      expect(edited).toBe(true);
       expect(yield* f.fs.exists(f.duplicate)).toBe(true);
       expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toBe("New user edits");
+      expect(yield* f.fs.exists(join(f.home.home, "removed"))).toBe(false);
+      if (boundary === "installing") {
+        expect(outcome._tag).toBe("Failure");
+        if (outcome._tag !== "Failure") return;
+        expect(outcome.failure._tag).toBe("SetupStopped");
+        expect((yield* f.home.durable).operations.map((operation) => operation._tag)).toEqual([
+          "Stopped",
+        ]);
+        return;
+      }
+      expect(outcome._tag).toBe("Success");
+      if (outcome._tag !== "Success") return;
+      const applied = outcome.success;
       expect(
         applied.backupWarnings?.some((warning) =>
           warning.message.includes("changed before preservation"),

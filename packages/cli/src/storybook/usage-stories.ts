@@ -1,4 +1,4 @@
-import type { UsageReport } from "@smolai/skit-core";
+import type { UsageReport } from "@smolai/skit-core/library/usage";
 
 export const emptyUsageStory: UsageReport = {
   window: { start: "2026-10-01T00:00:00.000Z", end: "2026-10-08T00:00:00.000Z" },

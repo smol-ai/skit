@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
-import { securityAcceptCommand } from "../src/handlers/security/accept.js";
+import { securityAcceptCommand } from "../src/library/security/accept.js";
 
 it.effect("requires the Skill and acceptance fields", () =>
   Effect.gen(function* () {

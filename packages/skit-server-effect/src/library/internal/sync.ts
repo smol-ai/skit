@@ -1,0 +1,141 @@
+import { Clock, Effect, Schema } from "effect";
+import { D1Client } from "@effect/sql-d1";
+import {
+  LibraryManifest,
+  RemoteLibrary,
+  StoredLibraryManifest,
+} from "@smolai/skit-core/universal/consumer";
+import type { Principal } from "../../identity/service.js";
+import { DatabaseError, databaseError, type DatabaseSqlClient } from "../../platform/cloudflare.js";
+import { SecureRandom } from "effect/crypto";
+import type { FindLibrary } from "./owned.js";
+
+const RevisionRow = Schema.Struct({ manifest_json: Schema.String });
+const CountRow = Schema.Struct({ n: Schema.Number });
+const StoredManifest = Schema.fromJsonString(StoredLibraryManifest);
+
+export class LibraryRevisionConflict extends Schema.TaggedError<LibraryRevisionConflict>()(
+  "Library.LibraryRevisionConflict",
+  {},
+) {}
+class LibrarySnapshotMissing extends Schema.TaggedError<LibrarySnapshotMissing>()(
+  "Library.LibrarySnapshotMissing",
+  { digest: Schema.String },
+) {}
+class LibraryRevisionInvalid extends Schema.TaggedError<LibraryRevisionInvalid>()(
+  "Library.LibraryRevisionInvalid",
+  {},
+) {}
+export interface Sync {
+  readonly read: (
+    principal: Principal,
+  ) => Effect.Effect<RemoteLibrary | undefined, DatabaseError | LibraryRevisionInvalid>;
+  readonly write: (
+    principal: Principal,
+    expected: string | null,
+    manifest: LibraryManifest,
+  ) => Effect.Effect<
+    RemoteLibrary,
+    DatabaseError | LibraryRevisionInvalid | LibraryRevisionConflict | LibrarySnapshotMissing
+  >;
+}
+export const commitLibraryRevision = Effect.fn("LibrarySync.commitRevision")(function* (
+  library: { readonly library_id: string },
+  expected: string | null,
+  manifest: LibraryManifest,
+) {
+  const sql = yield* D1Client.D1Client;
+  const random = yield* SecureRandom.SecureRandom;
+  const clock = yield* Clock.Clock;
+  const json = JSON.stringify(manifest);
+  const id = `library_revision_${(yield* random.uuidV4()).replaceAll("-", "")}`;
+  const now = new Date(yield* clock.currentTimeMillis).toISOString();
+  const results = yield* sql
+    .batch([
+      sql`INSERT INTO library_revisions
+               (revision_id, library_id, parent_revision_id, manifest_json, created_at)
+               SELECT ${id}, ${library.library_id}, ${expected}, ${json}, ${now}
+               WHERE EXISTS (SELECT 1 FROM libraries WHERE library_id = ${library.library_id} AND current_revision_id IS ${expected})
+               AND NOT EXISTS (
+                 SELECT 1 FROM json_each(${json}, '$.snapshot_digests') AS required
+                 LEFT JOIN library_snapshots AS snapshot
+                   ON snapshot.library_id = ${library.library_id}
+                  AND snapshot.snapshot_digest = required.value
+                  AND snapshot.status = 'ready'
+                 WHERE snapshot.snapshot_digest IS NULL
+               )
+               RETURNING revision_id`,
+      sql`UPDATE libraries SET current_revision_id = ${id}, updated_at = ${now}
+              WHERE library_id = ${library.library_id} AND current_revision_id IS ${expected}
+                AND EXISTS (SELECT 1 FROM library_revisions WHERE revision_id = ${id})
+              RETURNING library_id`,
+    ])
+    .pipe(databaseError("commit portable Library revision"));
+  if (results[0]?.length !== 1 || results[1]?.length !== 1)
+    return yield* new LibraryRevisionConflict();
+  return { library_id: library.library_id, revision_id: id, manifest };
+});
+
+/** Revision reads and writes use the default-Library lookup captured by ServerLibrary. */
+export const makeSync = (
+  sql: DatabaseSqlClient,
+  random: SecureRandom.SecureRandom["Service"],
+  own: FindLibrary,
+): Sync => {
+  const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
+    effect.pipe(databaseError(operation));
+  const revision = Effect.fn("LibrarySync.revision")(function* (id: string) {
+    const rows = yield* db(
+      "read portable revision",
+      sql`SELECT manifest_json FROM library_revisions WHERE revision_id = ${id}`,
+    );
+    if (rows[0] === undefined) return yield* new LibraryRevisionInvalid();
+    return yield* Schema.decodeUnknownEffect(RevisionRow)(rows[0]).pipe(
+      Effect.mapError(
+        (cause) => new DatabaseError({ operation: "decode portable revision row", cause }),
+      ),
+    );
+  });
+  const read = Effect.fn("LibrarySync.read")(function* (principal: Principal) {
+    const library = yield* own(principal, false);
+    if (library?.current_revision_id === null || library === undefined) return undefined;
+    const record = yield* revision(library.current_revision_id);
+    const manifest = yield* Schema.decodeUnknownEffect(StoredManifest)(record.manifest_json).pipe(
+      Effect.mapError(() => new LibraryRevisionInvalid()),
+    );
+    return { library_id: library.library_id, revision_id: library.current_revision_id, manifest };
+  });
+  const write = Effect.fn("LibrarySync.write")(function* (
+    principal: Principal,
+    expected: string | null,
+    manifest: LibraryManifest,
+  ) {
+    const library = yield* own(principal, true);
+    if (library === undefined) return yield* new LibraryRevisionInvalid();
+    if (library.current_revision_id !== expected) return yield* new LibraryRevisionConflict();
+    const json = JSON.stringify(manifest);
+    if (expected !== null && (yield* revision(expected)).manifest_json === json)
+      return { library_id: library.library_id, revision_id: expected, manifest };
+    const digests = [...new Set(manifest.snapshot_digests)];
+    for (const digest of digests) {
+      const rows = yield* db(
+        "check ready snapshot",
+        sql`SELECT COUNT(*) AS n FROM library_snapshots
+              WHERE library_id = ${library.library_id}
+                AND snapshot_digest = ${digest}
+                AND status = 'ready'`,
+      );
+      const count = yield* Schema.decodeUnknownEffect(CountRow)(rows[0]).pipe(
+        Effect.mapError(
+          (cause) => new DatabaseError({ operation: "decode snapshot count", cause }),
+        ),
+      );
+      if (count.n !== 1) return yield* new LibrarySnapshotMissing({ digest });
+    }
+    return yield* commitLibraryRevision(library, expected, manifest).pipe(
+      Effect.provideService(D1Client.D1Client, sql),
+      Effect.provideService(SecureRandom.SecureRandom, random),
+    );
+  });
+  return { read, write };
+};

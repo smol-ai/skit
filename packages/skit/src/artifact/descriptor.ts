@@ -6,23 +6,25 @@ import { Effect, Result, Schema } from "effect";
 // Hashing is deterministic computation, not IO, so it stays on node:crypto.
 import { createHash } from "node:crypto";
 import { parse as parseYaml } from "yaml";
-import { encodeHashParts } from "../shared/hash.js";
-import type { Hash, SkillExampleManifest, SkitDescriptor } from "../contracts.js";
+import { encodeHashParts, type Hash } from "../shared/hash.js";
+
 import {
+  type SkillExampleManifest,
+  type SkitDescriptor,
   containedSkillSchema,
   skillExampleSchema,
   skitConfigSchema,
   skitDescriptorSchema,
-} from "../schemas.js";
+} from "./schemas.js";
+
 import {
   DescriptorMalformed,
   ConflictingInvocationDeclaration,
   DuplicateSkillNames,
   DuplicateSkillPaths,
-  InstalledPathCollision,
   ReadmeFrontmatterMissing,
-  SharedTargetCollision,
-} from "../failures.js";
+} from "./failures.js";
+import { InstalledPathCollision, SharedTargetCollision } from "../installed-skills/failures.js";
 
 type ParsedSkill = typeof containedSkillSchema.Type;
 type DescriptorObject = { [key: string]: unknown };
@@ -112,6 +114,10 @@ const validateDescriptor = Effect.fn("Descriptor.validate")(function* (
     return yield* new DuplicateSkillPaths();
   return descriptor;
 });
+
+/** Recognize declared README roots before choosing plain-folder discovery. Parsing stays strict. */
+export const hasSkitReadmeDeclaration = (text: string): boolean =>
+  /^---\r?\n[\s\S]*?^skit:\s*1\s*$/m.test(text);
 
 export const parseSkitReadme = Effect.fn("Descriptor.parseReadme")(function* (text: string) {
   const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);

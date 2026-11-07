@@ -1,9 +1,9 @@
-import { serverBuild } from "../src/build-info.js";
+import { serverBuild } from "../src/platform/build-info.js";
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { makeWebHandler } from "../src/http.js";
-import { makeServerDiscovery, serverDiscovery } from "../src/discovery.js";
+import { makeServerDiscovery, serverDiscovery } from "../src/api/discovery.js";
 
 const web = makeWebHandler(env);
 const releaseOnlyWeb = makeWebHandler(env, {});
@@ -36,12 +36,12 @@ describe("server discovery", () => {
       );
 
       // oxlint-disable-next-line skit/no-promise-wrappers -- Fetch-compatible Worker handlers are Promise APIs; this test owns that host boundary.
-      const draft = yield* Effect.tryPromise(() =>
+      const skit = yield* Effect.tryPromise(() =>
         releaseOnlyWeb.handler(
-          new Request("https://registry.test/api/skits/alice/tools/draft", { method: "GET" }),
+          new Request("https://registry.test/api/skits/alice/tools/skit", { method: "GET" }),
         ),
       ).pipe(Effect.orDie);
-      expect(draft.status).toBe(404);
+      expect(skit.status).toBe(404);
     }),
   );
   for (const path of ["/.well-known/agent-skills/", "/.well-known/skit"]) {

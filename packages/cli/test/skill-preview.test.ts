@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import stringWidth from "string-width";
-import { renderSkillPreview } from "../src/presentation/skill-preview.js";
+import { renderSkillPreview } from "../src/terminal/skill-preview.js";
 
 const input = {
   picker: ["Pick skills", "Ctrl+P preview", "☒ review"],

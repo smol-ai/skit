@@ -1,6 +1,6 @@
 import { Effect, FileSystem } from "effect";
 import { systemError } from "effect/PlatformError";
-import { pathIsWithin } from "@smolai/skit-core";
+import { pathIsWithin } from "@smolai/skit-core/platform";
 
 /**
  * The FileSystem a macOS agent sandbox leaves SKIT: every directory creation under `denied` fails

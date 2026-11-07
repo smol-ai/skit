@@ -2,23 +2,25 @@ import { Effect, FileSystem, Result } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { createHash } from "node:crypto";
 import { posix, resolve } from "node:path";
+import { type Hash, encodeHashParts, sha256Hash } from "../shared/hash.js";
+import type { SkillAssessmentContext } from "../auditing/skill-contracts.js";
+import type { SkillAssessmentAcceptance } from "../library/assessment-acceptance.js";
 import type {
-  Hash,
-  SkillAssessmentContext,
-  SkillAssessmentAcceptance,
   SkillExampleRecord,
-  SkitDescriptor,
   SkitFileRecord,
   SkitReleaseIdentity,
-  SkitValidationDiagnostic,
   ValidatedSkit,
-} from "../contracts.js";
+} from "./contracts.js";
+import type { SkitDescriptor } from "./schemas.js";
+import type { SkitValidationDiagnostic } from "./validation-diagnostic.js";
 import { auditSkill, evaluateSkillAudit } from "../auditing/skill-audit.js";
 import {
   assessInvocationConformance,
   describeInvocationConformanceIssue,
 } from "../invocation/conformance.js";
-import { walkTree, type TreeEntry } from "./tree.js";
+import { walkTree } from "./tree.js";
+
+import type { TreeEntry } from "./tree-entry.js";
 import type { TreeRequirements } from "../platform/tree-requirements.js";
 import type { TreeError } from "../shared/tree-error.js";
 import {
@@ -28,12 +30,12 @@ import {
   parseSkitConfig,
   parseSkitReadme,
 } from "./descriptor.js";
+import { type DescriptorFailure } from "./failures.js";
+import { type HarnessMetadataInvalid } from "../harnesses/metadata-failures.js";
 import {
-  type DescriptorFailure,
-  type HarnessMetadataInvalid,
   type InstalledPathCollision,
   type SharedTargetCollision,
-} from "../failures.js";
+} from "../installed-skills/failures.js";
 
 export function readSkitDescriptor(
   root: string,
@@ -43,11 +45,7 @@ export function readSkitDescriptor(
     // A missing skit.json falls back to the README; any other read failure is real.
     const config = yield* fs
       .readFileString(resolve(root, "skit.json"))
-      .pipe(
-        Effect.catchTag("PlatformError", (error) =>
-          error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
-        ),
-      );
+      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)));
     if (config !== undefined) return yield* parseSkitConfig(config);
     const readme = yield* fs.readFileString(resolve(root, "README.md"));
     return yield* parseSkitReadme(readme);
@@ -60,13 +58,21 @@ export function deterministicTreeHash(
   return walkTree(root, "normalized").pipe(Effect.map(hashNormalizedEntries));
 }
 
-export function hashNormalizedEntries(entries: readonly TreeEntry[]): Hash {
-  return hashParts(
-    entries.flatMap((entry) =>
-      entry.kind === "file" ? [entry.path, String(entry.mode), entry.bytes] : [],
-    ),
+/** What a normalized tree's hash covers: each file's path, mode and bytes. */
+const normalizedHashParts = (entries: readonly TreeEntry[]) =>
+  entries.flatMap((entry) =>
+    entry.kind === "file" ? [entry.path, String(entry.mode), entry.bytes] : [],
   );
+
+function hashNormalizedEntries(entries: readonly TreeEntry[]): Hash {
+  return hashParts(normalizedHashParts(entries));
 }
+
+/** `deterministicTreeHash`, computed through Effect's Digest service. The same hash. */
+export const hashTree = (root: string) =>
+  walkTree(root, "normalized").pipe(
+    Effect.flatMap((entries) => sha256Hash(encodeHashParts(normalizedHashParts(entries)))),
+  );
 
 function releaseIdentityFromEntries(
   descriptor: SkitDescriptor,
@@ -111,14 +117,6 @@ const MIME: Record<string, string> = {
   ".jpeg": "image/jpeg",
 };
 
-export function inventorySkitFiles(
-  root: string,
-): Effect.Effect<SkitFileRecord[], TreeError | PlatformError, TreeRequirements> {
-  return walkTree(root, "normalized", { respectGitIgnore: true }).pipe(
-    Effect.map(inventoryEntries),
-  );
-}
-
 function inventoryEntries(entries: TreeEntry[]): SkitFileRecord[] {
   return entries.flatMap((entry) => {
     if (entry.kind !== "file") return [];
@@ -137,7 +135,7 @@ function inventoryEntries(entries: TreeEntry[]): SkitFileRecord[] {
 
 export function validateSkitDirectory(
   root: string,
-  release = "draft",
+  release = "unpublished",
   options:
     | {
         assessmentContext: SkillAssessmentContext;

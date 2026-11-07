@@ -3,30 +3,49 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
-import { Cause, Deferred, Effect, Exit, Fiber, FileSystem } from "effect";
-import { parseAuthorDestination, syncDraft } from "../src/workflows/author/sync.js";
+import { Cause, Deferred, Effect, Exit, Fiber, FileSystem, Layer } from "effect";
+import { libraryLayer } from "../src/application.js";
+import { syncAuthorWorkspace } from "../src/author/sync/workflow.js";
+import { parseAuthorDestination } from "@smolai/skit-core/author";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
-import { copySkitFixtureEffect, scratch } from "./helpers/library-home.js";
+import { registryCredentialLayer } from "./helpers/registry-credential.js";
+import {
+  copySkitFixtureEffect,
+  initializeLibraryMachine,
+  libraryHome,
+  scratch,
+} from "./helpers/library-home.js";
+import { authorInitCommand } from "../src/author/init.js";
+import { SkitConfiguration, skitConfigurationLayer } from "@smolai/skit-core/platform";
+import { authorLayer, storedTreesAt } from "./helpers/author-history.js";
+import { makeAuthorSyncServer } from "./helpers/author-sync-server.js";
 
 /**
- * Run the native Draft sync over one test's transport.
+ * Run the native SKIT sync over one test's transport.
  *
  * A global stub cannot reach the client: `FetchHttpClient.Fetch` is a `Context.Reference` whose
  * default is computed once and cached on the Reference for the life of the process
  * (`Context.ts:1585`), so it captures whichever `globalThis.fetch` existed at first use. The
  * transport is provided as a Layer to the program instead.
  */
-const runSyncDraft = (
+const runAuthorSync = (
   root: string,
-  options: Parameters<typeof syncDraft>[1],
+  options: Parameters<typeof syncAuthorWorkspace>[1],
   transport: TestHttpHandler,
 ) =>
-  Effect.scoped(
-    syncDraft(root, options).pipe(
-      Effect.provide(registryHttpLayer(testHttpClientLayer(transport))),
-    ),
-  );
+  Effect.gen(function* () {
+    const historyHome = options.home ?? (yield* SkitConfiguration).skitHome;
+    return yield* Effect.scoped(
+      syncAuthorWorkspace(root, options).pipe(
+        Effect.provide(registryCredentialLayer("https://registry.example")),
+        Effect.provide(registryHttpLayer(testHttpClientLayer(transport))),
+        Effect.provide(authorLayer(historyHome)),
+        // A first sync without workspace.json adopts an id from this home's Library (A3).
+        Effect.provide(libraryLayer().pipe(Layer.provide(skitConfigurationLayer(historyHome)))),
+      ),
+    );
+  });
 
 /** The error a sync failed or died with, or `undefined` when it succeeded. */
 const failure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -41,20 +60,6 @@ const readText = (path: string) => Effect.flatMap(fs, (fs) => fs.readFileString(
 const makeDir = (path: string) =>
   Effect.flatMap(fs, (fs) => fs.makeDirectory(path, { recursive: true }));
 const exists = (path: string) => Effect.flatMap(fs, (fs) => fs.exists(path));
-
-const hash = `sha256:${"a".repeat(64)}`;
-
-/**
- * The request payload, as the client encoded it.
- *
- * Effect's HTTP client sends an encoded body and names the method on every request, including
- * reads; these tests distinguish the Draft read from a write by the method itself rather than by
- * the absence of one.
- */
-function payload(request: Parameters<TestHttpHandler>[0]): string {
-  return request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "";
-}
-const isWrite = (request: Parameters<TestHttpHandler>[0]) => request.method !== "GET";
 
 it.effect("first sync previews then records one remote home without publishing it", () =>
   Effect.gen(function* () {
@@ -84,7 +89,7 @@ it.effect("first sync previews then records one remote home without publishing i
       "---\nname: review\ndescription: Review code.\n---\n# Review\n",
     );
     yield* makeDir(join(root, ".skit"));
-    yield* writeText(join(root, ".skit", "workspace.json"), '{"device":"local"}\n');
+    yield* writeText(join(root, ".skit", "device.json"), '{"device":"local"}\n');
     yield* makeDir(join(root, "skills", "review", ".skit"));
     yield* writeText(join(root, "skills", "review", ".skit", "fixture.txt"), "included\n");
     yield* Effect.sync(() => execFileSync("git", ["init", "--quiet", root]));
@@ -92,133 +97,185 @@ it.effect("first sync previews then records one remote home without publishing i
     yield* writeText(join(root, "device-local.json"), '{"local":true}\n');
     yield* writeText(join(root, "new-author-content.md"), "included before commit\n");
 
-    let posts = 0;
-    let createBody: {
-      descriptor: { id: string };
-      visibility: string;
-      files: Array<{ path: string }>;
+    const server = yield* makeAuthorSyncServer();
+    const writes: Array<string> = [];
+    const transport: TestHttpHandler = (request, url, signal) => {
+      if (request.method !== "GET") writes.push(`${request.method} ${url.pathname}`);
+      return server.transport("a")(request, url, signal);
     };
-    const transport: TestHttpHandler = (request) =>
-      Effect.sync(() => {
-        if (!isWrite(request)) return Response.json({ error: "draft_not_found" }, { status: 404 });
-        posts++;
-        createBody = JSON.parse(payload(request));
-        return Response.json(
-          {
-            draft: {
-              skit_id: "tim/tools",
-              revision_id: "draft_first",
-              manifest_digest: hash,
-              bundle_digest: hash,
-              files: [],
-              diagnostics: [],
-            },
-          },
-          { status: 201 },
-        );
-      });
+    const options = {
+      home,
+      to: "swyx/tools",
+      visibility: "private" as const,
+    };
 
-    expect(
-      yield* runSyncDraft(
-        root,
-        {
-          apply: false,
-          home,
-          baseUrl: "https://registry.example",
-          to: "tim/tools",
-          visibility: "private",
-        },
-        transport,
-      ),
-    ).toMatchObject({
+    expect(yield* runAuthorSync(root, { ...options, apply: false }, transport)).toMatchObject({
       status: "first_sync_ready",
       changed: false,
-      identity: { locator: "skit://registry.example/tim/tools" },
+      identity: { locator: "skit://registry.example/swyx/tools" },
     });
-    expect(posts).toBe(0);
+    expect(writes).toEqual([]);
     expect(yield* exists(join(root, "skit.remote.json"))).toBe(false);
+    expect(yield* exists(join(root, ".skit/connection.json"))).toBe(false);
 
-    expect(
-      yield* runSyncDraft(
-        root,
-        {
-          apply: true,
-          home,
-          baseUrl: "https://registry.example",
-          to: "tim/tools",
-          visibility: "private",
-        },
-        transport,
-      ),
-    ).toMatchObject({
+    expect(yield* runAuthorSync(root, { ...options, apply: true }, transport)).toMatchObject({
       status: "created",
       changed: true,
       remote_home_recorded: true,
       published: false,
     });
-    expect(posts).toBe(1);
-    expect(createBody!).toMatchObject({ descriptor: { id: "tim/tools" }, visibility: "private" });
-    expect(createBody!.files.map(({ path }) => path)).not.toContain("skit.remote.json");
-    expect(createBody!.files.map(({ path }) => path)).not.toContain(".skit/workspace.json");
-    expect(createBody!.files.map(({ path }) => path)).not.toContain("device-local.json");
-    expect(createBody!.files.map(({ path }) => path)).toContain("new-author-content.md");
-    expect(createBody!.files.map(({ path }) => path)).toContain("skills/review/.skit/fixture.txt");
+    // Create, preserve the raw observation, send the normalized current revision, then move. No Release.
+    expect(writes).toEqual([
+      "POST /api/skits",
+      "POST /api/skits/swyx/tools/revisions",
+      "POST /api/skits/swyx/tools/revisions",
+      "PUT /api/skits/swyx/tools/current",
+    ]);
+    const [created] = yield* server.currentHistory();
+    expect(yield* server.current()).toBe(created?.id);
+    const paths = created?.tree.map((entry) => entry.path) ?? [];
+    expect(paths).not.toContain("skit.remote.json");
+    expect(paths).not.toContain(".skit/device.json");
+    expect(paths).not.toContain(".skit/workspace.json");
+    expect(paths).not.toContain("device-local.json");
+    expect(paths).toContain("new-author-content.md");
+    expect(paths).toContain("skills/review/.skit/fixture.txt");
     expect(JSON.parse(yield* readText(join(root, "skit.remote.json")))).toEqual({
       schema: "skit.remote.v1",
       origin: "https://registry.example",
-      namespace: "tim",
+      namespace: "swyx",
       skit: "tools",
     });
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
+it.effect("a first sync without workspace.json reuses the id its authored Collection carries", () =>
+  Effect.gen(function* () {
+    const root = yield* scratch("skit-sync-adopt-");
+    const source = join(root, "source");
+    yield* copySkitFixtureEffect("authored", source);
+    const library = yield* libraryHome({ home: join(root, "home") });
+    yield* initializeLibraryMachine(library.home);
+    const imported = yield* library.owned(authorInitCommand(source));
+    const metadata = join(source, ".skit", "workspace.json");
+    const { workspace_id } = JSON.parse(yield* readText(metadata));
+    expect(imported.entry?.collection.upstream?.source_identity).toEqual({
+      kind: "authored-workspace",
+      workspace_id,
+    });
+    yield* Effect.flatMap(fs, (fs) => fs.remove(metadata));
+
+    const server = yield* makeAuthorSyncServer();
+    expect(
+      yield* runAuthorSync(
+        source,
+        { home: library.home, to: "swyx/tools", visibility: "private", apply: true },
+        server.transport("a"),
+      ),
+    ).toMatchObject({ status: "created" });
+    // Backed up under the Library's id, as identity only: sync never registers for installation.
+    expect(JSON.parse(yield* readText(metadata))).toEqual({
+      schema: "skit.author-workspace.v1",
+      workspace_id,
+    });
+  }).pipe(Effect.provide(testPlatformLayer)),
+);
+
+it.effect("a pending first connection cannot be redirected or change visibility", () =>
+  Effect.gen(function* () {
+    const root = yield* scratch("skit-pending-sync-test-");
+    const home = yield* scratch("skit-pending-sync-home-");
+    yield* copySkitFixtureEffect("authored", root);
+    const server = yield* makeAuthorSyncServer();
+    const transport = server.transport("a");
+    const options = {
+      apply: true,
+      home,
+      to: "swyx/tools",
+      visibility: "private" as const,
+    };
+    yield* server.dropNextResponse("a", "after-create");
+    yield* Effect.result(runAuthorSync(root, options, transport));
+    const path = join(
+      yield* Effect.flatMap(FileSystem.FileSystem, (fs) => fs.realPath(root)),
+      ".skit/connection.json",
+    );
+    const pending = yield* readText(path);
+    const events = yield* server.events();
+    expect(
+      yield* Effect.flip(runAuthorSync(root, { ...options, to: "swyx/other" }, transport)),
+    ).toMatchObject({ _tag: "AuthorRemoteAlreadyExists" });
+    expect(
+      yield* Effect.flip(runAuthorSync(root, { ...options, visibility: "public" }, transport)),
+    ).toMatchObject({ _tag: "VisibilityNotAccepted" });
+    expect(yield* readText(path)).toBe(pending);
+    expect(yield* server.events()).toEqual(events);
+    expect(yield* server.revisions()).toHaveLength(0);
+    // A damaged receipt must fail closed, with its bytes available for repair.
+    yield* writeText(path, "{unfinished");
+    expect(yield* Effect.flip(runAuthorSync(root, { apply: true, home }, transport))).toMatchObject(
+      { _tag: "AuthorSyncStateInvalid", path },
+    );
+    expect(yield* readText(path)).toBe("{unfinished");
+    expect(yield* server.events()).toEqual(events);
+    yield* writeText(path, pending);
+    expect((yield* runAuthorSync(root, { apply: true, home }, transport)).status).toBe("created");
+  }).pipe(Effect.provide(testPlatformLayer)),
+);
+
 it.effect("first sync distinguishes credential scope from Namespace authority", () =>
   Effect.gen(function* () {
-    for (const [serverError, message] of [
-      ["insufficient_scope", "lacks authoring:write"],
-      ["forbidden", "not authorized to author this Namespace or SKIT"],
+    for (const [serverError, tag] of [
+      ["insufficient_scope", "CredentialLacksScope"],
+      ["forbidden", "PrincipalNotAuthorized"],
     ] as const) {
       const root = yield* scratch(`skit-first-sync-${serverError}-`);
       yield* copySkitFixtureEffect("authored", root);
       const transport: TestHttpHandler = (request) =>
         Effect.succeed(
-          isWrite(request)
-            ? Response.json({ error: serverError }, { status: 403 })
-            : Response.json({ error: "draft_not_found" }, { status: 404 }),
+          request.method === "GET"
+            ? Response.json({ error: "skit_not_found" }, { status: 404 })
+            : Response.json({ error: serverError }, { status: 403 }),
         );
 
       expect(
         yield* failure(
-          runSyncDraft(
+          runAuthorSync(
             root,
             {
               apply: true,
-              baseUrl: "https://registry.example",
               to: "tim/tools",
               visibility: "private",
             },
             transport,
           ),
         ),
-      ).toMatchObject({ message: expect.stringContaining(message) });
+      ).toMatchObject({ _tag: tag });
+      expect(yield* exists(join(root, "skit.remote.json"))).toBe(false);
     }
 
+    // A 404 without the Registry's reason is not proof the SKIT is missing: nothing is created.
     const root = yield* scratch("skit-first-sync-bare-not-found-");
     yield* copySkitFixtureEffect("authored", root);
+    let writes = 0;
     expect(
       yield* failure(
-        runSyncDraft(
+        runAuthorSync(
           root,
           {
             apply: true,
-            baseUrl: "https://registry.example",
             to: "tim/tools",
             visibility: "private",
           },
-          () => Effect.succeed(new Response(null, { status: 404 })),
+          (request) =>
+            Effect.sync(() => {
+              if (request.method !== "GET") writes++;
+              return new Response(null, { status: 404 });
+            }),
         ),
       ),
-    ).toMatchObject({ message: expect.stringContaining("draft read failed (404)") });
+    ).toMatchObject({ _tag: "SyncRejected" });
+    expect(writes).toBe(0);
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
@@ -239,126 +296,67 @@ it.effect("author destinations are Registry-qualified", () =>
   }),
 );
 
-it.effect("sync apply reads identity and Skill declarations from a merged skit.json tree", () =>
+it.effect("sync sends the whole tree, skit.json included, and leaves human-owned files", () =>
   Effect.gen(function* () {
     const root = yield* scratch("skit-json-sync-test-");
     const home = yield* scratch("skit-json-sync-home-");
     yield* makeDir(join(root, "skills", "review"));
     yield* writeText(join(root, "README.md"), "# Human-owned tools documentation\n");
-    const config = {
-      slug: "tools",
-      skills: [
-        {
-          name: "review",
-          path: "skills/review",
-          invocation: "explicit",
-          capabilities: ["filesystem_read"],
-        },
-      ],
-    };
-    yield* writeText(join(root, "skit.json"), `${JSON.stringify(config, null, 2)}\n`);
+    const config = `${JSON.stringify(
+      {
+        slug: "tools",
+        skills: [
+          {
+            name: "review",
+            path: "skills/review",
+            invocation: "explicit",
+            capabilities: ["filesystem_read"],
+          },
+        ],
+      },
+      null,
+      2,
+    )}\n`;
+    yield* writeText(join(root, "skit.json"), config);
     yield* writeText(
       join(root, "skills", "review", "SKILL.md"),
       "---\nname: review\ndescription: Review code.\n---\n# Review\n",
     );
-
-    let baseFiles: Array<{
-      path: string;
-      content_base64: string;
-      media_type: string;
-      executable?: boolean;
-    }> = [];
-    let created = false;
-    let updateBody: { descriptor?: { id?: string } } | undefined;
-    const transport: TestHttpHandler = (request) =>
-      Effect.sync(() => {
-        if (!created && !isWrite(request))
-          return Response.json({ error: "draft_not_found" }, { status: 404 });
-        if (request.method === "POST") {
-          baseFiles = JSON.parse(payload(request)).files;
-          created = true;
-          return Response.json(
-            {
-              draft: {
-                skit_id: "test/tools",
-                revision_id: "draft_1",
-                manifest_digest: hash,
-                bundle_digest: hash,
-                files: [],
-                diagnostics: [],
-              },
-            },
-            { status: 201 },
-          );
-        }
-        if (request.method === "PUT") {
-          updateBody = JSON.parse(payload(request));
-          return Response.json({
-            draft: {
-              skit_id: "test/tools",
-              revision_id: "draft_2",
-              manifest_digest: hash,
-              bundle_digest: hash,
-              files: [],
-              diagnostics: [],
-            },
-          });
-        }
-        return Response.json({
-          draft: {
-            revision_id: "draft_1",
-            bundle_digest: hash,
-            title: "tools",
-            visibility: "private",
-            descriptor: {
-              skit: 1,
-              id: "test/tools",
-              slug: "tools",
-              skills: config.skills.map((skill) => ({ ...skill, default_enabled: true })),
-            },
-            diagnostics: [],
-            files: baseFiles.map((file) => ({ ...file, executable: false })),
-          },
-        });
-      });
+    const server = yield* makeAuthorSyncServer();
+    const options = { apply: true, home };
 
     expect(
-      yield* runSyncDraft(
+      yield* runAuthorSync(
         root,
-        {
-          apply: true,
-          home,
-          baseUrl: "https://registry.example",
-          to: "test/tools",
-          visibility: "private",
-        },
-        transport,
+        { ...options, to: "swyx/tools", visibility: "private" },
+        server.transport("a"),
       ),
     ).toMatchObject({ status: "created" });
-    yield* writeText(
-      join(root, "skills", "review", "SKILL.md"),
-      "---\nname: review\ndescription: Review code.\n---\n# Locally edited review\n",
-    );
-    expect(
-      yield* runSyncDraft(
-        root,
-        { apply: true, home, baseUrl: "https://registry.example" },
-        transport,
-      ),
-    ).toMatchObject({ status: "merged" });
-    expect(updateBody?.descriptor).toMatchObject({ id: "test/tools", slug: "tools" });
+    const edited = "---\nname: review\ndescription: Review code.\n---\n# Locally edited review\n";
+    yield* writeText(join(root, "skills", "review", "SKILL.md"), edited);
+    expect(yield* runAuthorSync(root, options, server.transport("a"))).toMatchObject({
+      status: "pushed",
+    });
+    const current = yield* server.current();
+    const pushed = (yield* server.revisions()).find(({ id }) => id === current);
+    const text = (path: string) => {
+      const entry = pushed?.tree.find((candidate) => candidate.path === path);
+      return entry?.kind === "file" ? Buffer.from(entry.bytes).toString() : undefined;
+    };
+    expect(text("skit.json")).toBe(config);
+    expect(text("skills/review/SKILL.md")).toBe(edited);
     expect(yield* readText(join(root, "README.md"))).toBe("# Human-owned tools documentation\n");
   }).pipe(Effect.provide(testPlatformLayer)),
 );
 
-it.effect("an interrupted sync aborts its in-flight Draft request and writes nothing", () =>
+it.effect("an interrupted sync aborts its SKIT request without recording a binding", () =>
   Effect.gen(function* () {
     const root = yield* scratch("skit-sync-interrupt-");
     const home = yield* scratch("skit-sync-interrupt-home-");
     yield* copySkitFixtureEffect("authored", root);
     let aborted = false;
     const reached = yield* Deferred.make<void>();
-    // The Draft read never answers, so the only way out is the interrupt.
+    // The SKIT read never answers, so the only way out is the interrupt.
     const transport: TestHttpHandler = () =>
       Deferred.succeed(reached, undefined).pipe(
         Effect.andThen(Effect.never),
@@ -370,12 +368,11 @@ it.effect("an interrupted sync aborts its in-flight Draft request and writes not
       );
 
     const fiber = yield* Effect.forkScoped(
-      runSyncDraft(
+      runAuthorSync(
         root,
         {
           apply: true,
           home,
-          baseUrl: "https://registry.example",
           to: "tim/tools",
           visibility: "private",
         },
@@ -388,7 +385,13 @@ it.effect("an interrupted sync aborts its in-flight Draft request and writes not
     // The request belongs to the workflow's Scope: the promise implementation had no owner to
     // cancel it, and left the read to settle on its own.
     expect(aborted).toBe(true);
-    expect(yield* exists(join(home, "sync-bindings.json"))).toBe(false);
+    expect(yield* exists(join(home, "author-sync.json"))).toBe(false);
     expect(yield* exists(join(root, "skit.remote.json"))).toBe(false);
+    // The observed tree was saved on this device before sync spoke to the Registry.
+    expect(
+      (yield* storedTreesAt(home)).some(({ tree }) =>
+        tree.some((entry) => entry.path === "skit.json"),
+      ),
+    ).toBe(true);
   }).pipe(Effect.provide(testPlatformLayer)),
 );

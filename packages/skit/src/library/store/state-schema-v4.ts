@@ -1,5 +1,5 @@
 import { Schema, SchemaGetter } from "effect";
-import { AbsoluteDevicePath } from "../library-state.js";
+import { AbsoluteDevicePath } from "../device-state.js";
 import {
   AdoptionReceiptId,
   CollectionId,
@@ -8,7 +8,9 @@ import {
   SkillId,
   SkillVersionId,
 } from "../entity-ids.js";
-import { Hash, HarnessName, InvocationPolicy } from "../../vocabulary.js";
+import { Hash } from "../../shared/hash.js";
+import { HarnessName } from "../../harnesses/contracts.js";
+import { InvocationPolicy } from "../../artifact/invocation-policy.js";
 import {
   AcquisitionV4,
   BindingV4,
@@ -17,7 +19,7 @@ import {
   SkillV4,
   migrateLibraryEntitiesFromV4,
 } from "./manifest-v4.js";
-import { HarnessInstallStatus } from "./state-schema.js";
+import { HarnessInstallStatus } from "../../installed-skills/metadata.js";
 import { LibraryStateFromV5, type LibraryStateV5 } from "./state-schema-v5.js";
 import { LibraryDeviceStateFieldsV9 } from "./state-schema-v9.js";
 

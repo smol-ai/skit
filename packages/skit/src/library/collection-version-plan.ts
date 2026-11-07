@@ -1,5 +1,5 @@
 import { Effect, FileSystem } from "effect";
-import type { Hash } from "../contracts.js";
+import type { Hash } from "../shared/hash.js";
 import type { LibraryManifest, SnapshotArchive } from "./library-contracts.js";
 import { collectionVersionPath } from "./collection-version.js";
 

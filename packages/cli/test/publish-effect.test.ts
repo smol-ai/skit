@@ -1,13 +1,15 @@
 import { Cause, Deferred, Effect, Fiber, FileSystem, Sink } from "effect";
 import { systemError } from "effect/PlatformError";
-import { skitLayer } from "@smolai/skit-core";
+import { skitLayer } from "@smolai/skit-core/platform";
 import { join } from "node:path";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
 import { HttpClientError } from "effect/http";
 import { registryHttpLayer } from "../src/registry/registry-http.js";
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
-import { publish } from "../src/workflows/author/publish.js";
+import { registryCredentialLayer } from "./helpers/registry-credential.js";
+import { publish } from "../src/author/publish.js";
+import { authorWorkspaceLayer } from "@smolai/skit-core/author";
 import { copySkitFixtureEffect, scratch } from "./helpers/library-home.js";
 
 /** A scoped authored Skit with a Registry binding, built on the platform FileSystem. */
@@ -112,6 +114,8 @@ it.effect.each([
       const fs = yield* FileSystem.FileSystem;
       return yield* publish(root, "1.0.0", undefined).pipe(
         Effect.provide(registryHttpLayer(testHttpClientLayer(fetcher))),
+        Effect.provide(authorWorkspaceLayer),
+        Effect.provide(registryCredentialLayer("https://registry.test")),
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
           makeTempDirectory: (options) =>
@@ -212,6 +216,8 @@ it.effect.each([
             }),
           ),
         ),
+        Effect.provide(authorWorkspaceLayer),
+        Effect.provide(registryCredentialLayer("https://registry.test")),
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
           makeTempDirectory: (options) =>

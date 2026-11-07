@@ -13,7 +13,8 @@ import {
   UpstreamV5,
 } from "./manifest-v5.js";
 import { CollectionVersionV7 } from "./manifest-v7.js";
-import { Hash, HarnessName } from "../../vocabulary.js";
+import { Hash } from "../../shared/hash.js";
+import { HarnessName } from "../../harnesses/contracts.js";
 
 export const RetainedCopyV4 = Schema.Struct({
   ...CollectionVersionV7.fields,
@@ -63,7 +64,7 @@ export const BindingV4 = Schema.Struct({
   scope: Schema.Struct({ kind: Schema.Literal("global") }),
   skills: Schema.Array(SkillId),
 });
-export const LibraryManifestV4 = Schema.Struct({
+const LibraryManifestV4 = Schema.Struct({
   schema: Schema.Literal("skit.library.v4"),
   collections: Schema.Array(CollectionV4),
   skills: Schema.Array(SkillV4),
@@ -72,7 +73,6 @@ export const LibraryManifestV4 = Schema.Struct({
   snapshot_digests: Schema.Array(Hash),
   bindings: Schema.Array(BindingV4),
 });
-export type LibraryManifestV4 = typeof LibraryManifestV4.Type;
 
 const legacyWellKnownSelection = (value: string) => {
   const match = value.match(/^wellknown:(.+)#skills=([a-z0-9-]+(?:,[a-z0-9-]+)*)$/);

@@ -1,16 +1,17 @@
 import { parse as parseYaml } from "yaml";
 import { Schema } from "effect";
-import { HarnessName } from "../vocabulary.js";
-import type { YamlMapping } from "../shared/json.js";
-import type {
-  FrontmatterConstraint,
-  FrontmatterValueType,
-  HarnessFrontmatterContract,
-  HarnessFrontmatterField,
+import {
+  HarnessName,
+  type FrontmatterConstraint,
+  type FrontmatterValueType,
+  type HarnessFrontmatterContract,
+  type HarnessFrontmatterField,
 } from "./contracts.js";
+import type { YamlMapping } from "../shared/json.js";
+
 import { harnessProfile } from "./catalog.js";
 
-export const FrontmatterCompatibilityIssue = Schema.Struct({
+const FrontmatterCompatibilityIssue = Schema.Struct({
   code: Schema.Literals([
     "frontmatter-missing",
     "frontmatter-invalid",
@@ -23,7 +24,7 @@ export const FrontmatterCompatibilityIssue = Schema.Struct({
   severity: Schema.Literals(["error", "unknown"]),
   sourceIds: Schema.Array(Schema.String),
 });
-export type FrontmatterCompatibilityIssue = typeof FrontmatterCompatibilityIssue.Type;
+type FrontmatterCompatibilityIssue = typeof FrontmatterCompatibilityIssue.Type;
 
 export const FrontmatterCompatibilityResult = Schema.Struct({
   harness: HarnessName,
@@ -75,10 +76,7 @@ function constraintMatches(
   );
 }
 
-export function frontmatterContract(
-  harness: HarnessName,
-  variant?: string,
-): HarnessFrontmatterContract {
+function frontmatterContract(harness: HarnessName, variant?: string): HarnessFrontmatterContract {
   const contracts = harnessProfile(harness).frontmatter;
   const contract = variant
     ? contracts.find((candidate) => candidate.variant === variant)

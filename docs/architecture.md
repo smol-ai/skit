@@ -174,28 +174,42 @@ The local state also retains:
 - current native-deletion suppression on the affected Projection;
 - observations of unmanaged harness content.
 
-Device-local `audit.jsonl` separately records diagnostic semantic history. It is appended
-after authoritative state publication, so a crash may omit the final event. Audit history
-never drives reconciliation. These boundaries support reconciliation and diagnosis without
+Device-local `audit.jsonl` records semantic history. Undelivered events are saved alongside
+authoritative state, delivered by stable event ID, and acknowledged afterward. Startup retries
+interrupted delivery without duplicate events. Audit history never drives reconciliation. These boundaries support reconciliation and diagnosis without
 treating every file found in a harness root as SKIT-owned.
 
 ## Authoritative state and filesystem effects
 
 The default local library is `~/.skit`, overridable with `SKIT_HOME` or `--home`. Its `state.json` is the single authoritative metadata store. Content-addressed originals and normalized releases live alongside it.
 
-The core `LibraryStore` Layer owns fresh state loads and validated atomic publication. Standalone `refreshInventory` composes its load, read-only `scanInventory`, and completed observation publication; the CLI provides the store at application startup. Standalone `setProjectionEffect` owns one core enable/disable mutation through the acquired store. CLI code must use these core boundaries rather than implement a second state writer.
+`Library.layer` constructs the public owner. Its `read` returns a snapshot; `plan` prepares against that snapshot and `apply` revalidates before recorded mutation. Inventory refresh and enable/disable run through that owner. Stores and writers stay private to Library; CLI code does not provide a store or write state independently.
 
-Projection changes use one serialized, scoped mutation:
+`openSyncSession` is the shared Library boundary for portable sync review. It owns ancestry, merge, identity alignment, device selection and change summaries, then prepares the local Sync plan and remote receipt from the reviewed target. The caller owns remote transport and compare-and-swap. Library alone records and applies local mutations. A changed staged target or stale snapshot cannot inherit the original review.
+
+Library applies reviewed installed-skill changes through a serialized, scoped
+writer. Planning and interactive review stay outside that writer:
 
 ```text
-load authoritative state
+read a snapshot and review the plan
         ↓
-resolve bindings and concrete targets
+take the home lock and revalidate the reviewed state and file evidence
         ↓
-materialize all changed projections
+save the Pending operation, routing and recovery evidence
         ↓
-persist the new state once
+prepare recorded roots and execute recorded steps with durable checkpoints
+        ↓
+save Done or Stopped, retaining evidence for recovery
+        ↓
+deliver the recorded history event and acknowledge it
 ```
+
+State saves include pending history-delivery evidence. Startup retries unfinished
+delivery with stable event identities, so interruption after appending an event
+does not duplicate it. Startup also resumes recorded Pending operations; changed
+user files cause a stopped outcome instead of silently acquiring new consent.
+This protocol can save several checkpoints. It is not a single final state write
+after all filesystem changes.
 
 Foreign or drifted content is not silently overwritten. Materialization uses ownership markers and observed hashes to decide whether an operation is safe, a no-op, or a conflict.
 
@@ -231,25 +245,27 @@ reports a conflict with its path; a blocked new destination leaves the old worki
 Installations selected by repository Bindings remain in place. Physical aliases of one root are
 reconciled as one target rather than treated as a relocation.
 
-This native boundary covers core `setProjection`, each normalized CLI Binding batch,
-and complete local author initialization/registration.
-Install, update, remove, Binding reconciliation, and author refresh share this mutation and
-custody policy in `projection/mutation.ts`.
+Installed-skill writes use staging, ownership-marker and hash checks, and directory replacement
+in `packages/skit/src/installed-skills/files.ts`. Library owns install/update/remove planning,
+writer scopes and recovery; CLI binding changes call the captured owner through reviewed plans.
+Author initialization calls Library operations rather than writing its installed folders itself.
 
 ### Author initialization
 
-`author init` owns scaffold creation, workspace identity, local retention and registration
-under the application runtime. A durable `.skit/init-scaffold` checkpoint lets interrupted
+`author init` owns scaffold creation, workspace identity and local retention under the
+application runtime. A durable `.skit/init-scaffold` checkpoint lets interrupted
 fresh scaffolds resume without overwriting existing files. Workspace identity is published
 atomically and exclusively before retention; retries reuse it. Both retained representations
 come from a verified Original and share the existing hash and copy policies.
 
 One Projection mutation commits the Entry, Installation, removed-Skill retirement,
 surviving Binding refresh and current suppression. Bindings retain missing names and overrides as
-dormant intent; descriptor defaults never enable acquired Skills. Workspace registration is
-finalized after this commit. A failed finalization leaves the Library authoritative and
-retry repairs the marker, including an interrupted `--register` transition. Scaffold and
-identity files and verified immutable objects may survive failure; temporary copies do not.
+dormant intent; descriptor defaults never enable acquired Skills. Nothing records registration
+outside the Library: `.skit/workspace.json` holds the workspace id only, and a workspace is
+registered while the Library retains a Collection imported from it. Removing that Collection
+touches no workspace file; the next `author init` imports it again under the same identity.
+Scaffold and identity files and verified immutable objects may survive failure; temporary copies
+do not.
 See [the commit protocol](adr/0018-own-cli-workflows-with-effect.md#author-initialization-commit-protocol-issue-13).
 
 ### Add and pull
@@ -332,13 +348,29 @@ Exact release downloads are immutable. Public and unlisted Releases can be downl
 
 Better Auth owns email/password accounts and secure browser sessions. CLI automation uses separately revocable `skit_pat_` credentials whose hashes, scopes, expiry, generation, and last-use evidence are stored in D1. Both credential kinds normalize to an opaque SKIT Principal before domain authorization; route handlers do not treat a username, namespace string, descriptor ID, or bearer possession as authority by itself.
 
-Namespaces are controlled by an individual Principal or a registry-local team. Current team membership participates in Authorship, Publication, Library, and private Release access, so removing a membership removes authority on the next request. Authorship and Publication Grants remain distinct. Suspending a Principal or advancing its authorization generation invalidates previously issued credentials without rewriting every PAT.
+Namespaces are controlled by an individual Principal or a registry-local team. Current team membership participates in Authorship, Publication, Library, and private Release access, so removing a membership removes authority on the next request. Author inventory lists SKITs in those owned Namespaces; per-resource grants do not confer content access. Suspending a Principal or advancing its authorization generation invalidates previously issued credentials without rewriting every PAT.
+
+Identity owns namespace access queries and obtains current membership IDs from Teams. Resource owners use these queries to enforce their own access rules; there is no separate Authorization service. Namespace reads do not require constructing the account/session SDK, so public Release reads remain available when accounts are not configured.
+
+For team creation, Identity prepares the namespace claim and its conflict lookup. Teams commits the prepared claim with the team and initial owner membership in one three-statement D1 batch, so a namespace failure rolls all three back. Import rules restrict this commit API to Teams and package-local tests. This preserves atomicity with the installed D1 driver, which supports atomic batches but not transactions across separate Effects.
 
 The server retains immutable revisions of each principal's portable Library Manifest using optimistic concurrency. These revisions contain Library Entries and Bindings only. In accordance with ADR-0001 they reject device-local Projection, Custody, paths, observations, ownership markers, drift, conflicts, suppression, and audit history rather than importing those fields into portable intent.
+
+Private Library snapshots require the Library's owning Principal or current membership in its owning team. Per-resource grants do not authorize Library snapshot reads. Removing team membership removes access on the next request.
+
+Deleting a private SKIT or previewing its deletion requires ownership of its Namespace or current membership in that Namespace's team. A per-resource admin grant does not authorize either operation. Skits checks this rule for both direct callers and HTTP requests; non-owners receive the same HTTP 404 as a missing SKIT.
+
+Publication also requires Namespace ownership or current membership in the owning team; per-resource publication grants do not authorize it. Skits checks access before the HTTP adapter decodes the archive, binds the publication to that Namespace and SKIT, and checks access again before publishing. A prepared publication does not retain authority after team membership is removed.
+
+After archive validation and upload, the D1 release insert compares the selected current revision and visibility atomically. If either changed, publication returns the existing stale-revision error and removes the uncommitted archive. Cleanup failures are logged, as for other failed release inserts; the metadata is never committed from the stale selection.
+
+Skits selects private Release downloads using the same Namespace ownership or current team membership rule; per-Release and per-SKIT grants do not authorize them. `latest` selects the newest Release the caller can access, falling back to a public or unlisted Release if authentication fails. Exact public and unlisted downloads do not consult credentials.
 
 ### Draft synchronization
 
 Remote drafts are immutable revisions behind one guarded current-draft head. Draft files are content-addressed in R2; D1 records revision ancestry, metadata, manifests, and the selected head.
+
+Skits prepares authoring operations for one Principal and one Namespace/SKIT target, checking Namespace ownership or current team membership before preparation and again on every operation. Per-SKIT grants do not authorize authoring. The owner records the posting Principal's credential ID; HTTP retains scope checks and conceals unauthorized reads as 404 while refusing writes with 403.
 
 `sync` records the common revision and per-file baseline in the local SKIT home. It compares that baseline with the local working tree and current remote draft, then either reports a clean state, produces a read-only merge plan, or surfaces conflicts. `--apply` rechecks the local tree, validates the merged descriptor, advances the remote head only when `expected_revision_id` still matches, and updates local files only after the remote write succeeds.
 
@@ -408,10 +440,10 @@ The packages are currently private and versioned `0.1.0`. The repository is lice
 
 The current boundaries are coherent, but several files concentrate change and should be watched:
 
-- `packages/skit/src/library/installation/install-directory.ts`: Installation state transitions and Projection transactions;
+- `packages/skit/src/installed-skills/files.ts`: staged folder writes and ownership verification;
 - `packages/skit/src/harnesses/catalog.ts`: a growing body of evidence-backed harness knowledge;
-- `packages/cli/src/library.ts`: CLI-to-core workflow adaptation;
-- `packages/cli/src/cli.ts`: command-handler orchestration.
+- `packages/cli/src/library/setup.ts`: guided setup across Library and MachineSettings;
+- `packages/cli/src/commands/tree.ts`: command grammar and owner provisioning.
 
 File size alone is not a reason to split them. Extract a component when it has a stable responsibility, invariant, and test boundary of its own.
 

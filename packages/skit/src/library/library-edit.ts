@@ -1,5 +1,6 @@
 import { Effect } from "effect";
-import { setEnabledAt, pruneEmptyEnabled, type LibraryState } from "./library-state.js";
+import { setEnabledAt, pruneEmptyEnabled } from "./enabled.js";
+import { type LibraryState } from "./library-state.js";
 import { calculateEnabled, expandIntent } from "./enabled-plan.js";
 import { removeFromEnabled } from "./enabled.js";
 import { CollectionRemovalMissing } from "./installation/remove.js";
@@ -9,6 +10,7 @@ import type { Intent } from "./library-plan.js";
 export const edit = Effect.fn("Library.edit")(function* (base: LibraryState, intent: Intent) {
   switch (intent._tag) {
     case "Update":
+    case "Install":
     case "Uninstall":
       return { next: base, requests: [] };
     case "Remove": {

@@ -1,14 +1,18 @@
+import { openLibrary, inLibrary } from "./helpers/library-store.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { deterministicTreeHash } from "../src/artifact/skit.js";
+import { deterministicTreeHash, validateSkitDirectory } from "../src/artifact/skit.js";
 import { currentCollectionSkills, currentSkillVersion } from "../src/library/library-contracts.js";
 import { makeMachineId } from "../src/library/entity-ids.js";
-import { importAuthoredCollection, importCollection } from "../src/library/import-collection.js";
+
 import { originalTreeHash, collectionVersionPath } from "../src/library/collection-version.js";
-import { LibraryStore, withLibraryWriter } from "../src/library/store/library-store.js";
+import {
+  libraryOriginalsPath,
+  LibraryWriter,
+  loadLibrary,
+} from "../src/library/store/library-store.js";
 import { skitLayer } from "../src/platform/layer.js";
-import { inLibrary } from "./helpers/library-store.js";
 
 for (const kind of ["observed", "authored"] as const) {
   it.effect(`${kind} import returns a durable result on creation, no-op, and content reuse`, () =>
@@ -40,10 +44,14 @@ for (const kind of ["observed", "authored"] as const) {
           importedAt,
         };
         return yield* Effect.scoped(
-          withLibraryWriter(
-            kind === "authored"
-              ? importAuthoredCollection({ ...request, root: path })
-              : importCollection({
+          kind === "authored"
+            ? Effect.gen(function* () {
+                const owner = yield* openLibrary(home);
+                return yield* owner.import.authored({ ...request, root: path });
+              })
+            : Effect.gen(function* () {
+                const owner = yield* openLibrary(home);
+                return yield* owner.import.collection({
                   ...request,
                   skills: [
                     {
@@ -54,15 +62,14 @@ for (const kind of ["observed", "authored"] as const) {
                     },
                   ],
                   lockFileEntries: [],
-                }),
-          ).pipe(inLibrary(home)),
+                });
+              }),
         );
       });
 
       // Preparation has already finalized when the caller consumes this result.
       const imported = yield* importSource(source, "2026-10-16T00:00:00.000Z");
-      const store = yield* Effect.service(LibraryStore).pipe(inLibrary(home));
-      const state = yield* store.load;
+      const state = yield* loadLibrary(home);
       const copy = state.collection_versions.find(
         (candidate) => candidate.collection_version_id === imported.collectionVersionId,
       );
@@ -70,7 +77,10 @@ for (const kind of ["observed", "authored"] as const) {
       assert.strictEqual(copy.hash, imported.snapshotDigest);
       assert.strictEqual(state.imports[0]?.collection_version_id, imported.collectionVersionId);
       assert.strictEqual(state.skills[0]?.skill_id, imported.skills[0]?.skill_id);
-      const retainedRoot = collectionVersionPath(store.originalsPath, imported.snapshotDigest);
+      const retainedRoot = collectionVersionPath(
+        libraryOriginalsPath(home),
+        imported.snapshotDigest,
+      );
       assert.strictEqual(yield* originalTreeHash(retainedRoot), imported.snapshotDigest);
       const member = imported.members[0];
       assert.ok(member);
@@ -104,7 +114,7 @@ for (const kind of ["observed", "authored"] as const) {
       assert.strictEqual(reused.collectionVersionId, imported.collectionVersionId);
       assert.strictEqual(reused.snapshotDigest, imported.snapshotDigest);
       assert.notStrictEqual(reused.collection.collection_id, imported.collection.collection_id);
-      const final = yield* store.load;
+      const final = yield* loadLibrary(home);
       assert.strictEqual(final.collection_versions.length, 1);
       assert.strictEqual(final.collections.length, 2);
       assert.strictEqual(final.imports.length, 2);
@@ -141,10 +151,14 @@ for (const kind of ["observed", "authored"] as const) {
           importedAt: new Date(Date.UTC(2026, 9, 22, 0, tick++)).toISOString(),
         };
         return yield* Effect.scoped(
-          withLibraryWriter(
-            kind === "authored"
-              ? importAuthoredCollection({ ...request, root: source })
-              : importCollection({
+          kind === "authored"
+            ? Effect.gen(function* () {
+                const owner = yield* openLibrary(home);
+                return yield* owner.import.authored({ ...request, root: source });
+              })
+            : Effect.gen(function* () {
+                const owner = yield* openLibrary(home);
+                return yield* owner.import.collection({
                   ...request,
                   skills: [
                     {
@@ -155,20 +169,19 @@ for (const kind of ["observed", "authored"] as const) {
                     },
                   ],
                   lockFileEntries: [],
-                }),
-          ).pipe(inLibrary(home)),
+                });
+              }),
         );
       });
-      const store = yield* Effect.service(LibraryStore).pipe(inLibrary(home));
       yield* write("first");
       const first = yield* importSource("a".repeat(40));
       assert.strictEqual(first.action, "added");
       assert.strictEqual((yield* importSource("a".repeat(40))).action, "unchanged");
-      assert.strictEqual((yield* store.load).imports.length, 1);
+      assert.strictEqual((yield* loadLibrary(home)).imports.length, 1);
 
       // A new upstream revision is recorded even when it contains the same bytes.
       assert.strictEqual((yield* importSource("b".repeat(40))).action, "unchanged");
-      assert.strictEqual((yield* store.load).imports.length, 2);
+      assert.strictEqual((yield* loadLibrary(home)).imports.length, 2);
       yield* write("second");
       const changed = yield* importSource("c".repeat(40));
       assert.strictEqual(changed.action, "updated");
@@ -184,10 +197,10 @@ for (const kind of ["observed", "authored"] as const) {
 
       // A retained local selection survives identical Source bytes, but a Source change clears it.
       yield* Effect.scoped(
-        withLibraryWriter(
+        inLibrary(home)(
           Effect.gen(function* () {
-            const base = yield* store.load;
-            yield* store.save(
+            const base = yield* loadLibrary(home);
+            yield* (yield* LibraryWriter).save(
               {
                 ...base,
                 skills: base.skills.map((skill) => ({
@@ -198,7 +211,7 @@ for (const kind of ["observed", "authored"] as const) {
               base,
             );
           }),
-        ).pipe(inLibrary(home)),
+        ),
       );
       const preserved = yield* importSource("e".repeat(40));
       assert.strictEqual(preserved.action, "unchanged");
@@ -249,10 +262,14 @@ for (const kind of ["observed", "authored"] as const) {
             importedAt: "2026-10-22T00:00:00.000Z",
           };
           return yield* Effect.scoped(
-            withLibraryWriter(
-              kind === "authored"
-                ? importAuthoredCollection({ ...request, root: source })
-                : importCollection({
+            kind === "authored"
+              ? Effect.gen(function* () {
+                  const owner = yield* openLibrary(home);
+                  return yield* owner.import.authored({ ...request, root: source });
+                })
+              : Effect.gen(function* () {
+                  const owner = yield* openLibrary(home);
+                  return yield* owner.import.collection({
                     ...request,
                     lockFileEntries: [],
                     skills: yield* Effect.forEach(names, (name) =>
@@ -266,16 +283,15 @@ for (const kind of ["observed", "authored"] as const) {
                         };
                       }),
                     ),
-                  }),
-            ).pipe(inLibrary(home)),
+                  });
+                }),
           );
         });
         yield* write("review", "original review");
         yield* write("plan", "stable plan");
         const initial = yield* importSource(["review", "plan"]);
         assert.strictEqual(initial.action, "added");
-        const store = yield* Effect.service(LibraryStore).pipe(inLibrary(home));
-        const before = yield* store.load;
+        const before = yield* loadLibrary(home);
         const planBefore = before.skills.find((skill) => skill.name === "plan");
         const reviewBefore = before.skills.find((skill) => skill.name === "review");
         assert.ok(planBefore);
@@ -291,7 +307,7 @@ for (const kind of ["observed", "authored"] as const) {
               ? ["plan"]
               : ["review", "plan"];
         const result = yield* importSource(names);
-        const after = yield* store.load;
+        const after = yield* loadLibrary(home);
         assert.strictEqual(result.collection.collection_id, initial.collection.collection_id);
         assert.strictEqual(after.collections.length, 1);
         assert.strictEqual(after.imports.length, 2);
@@ -335,8 +351,96 @@ for (const kind of ["observed", "authored"] as const) {
           );
         }
         assert.strictEqual((yield* importSource(names)).action, "unchanged");
-        assert.strictEqual((yield* store.load).imports.length, 2);
+        assert.strictEqual((yield* loadLibrary(home)).imports.length, 2);
       }).pipe(Effect.provide(skitLayer), Effect.scoped),
     );
   }
 }
+
+for (const change of ["valid-skill", "invalid-descriptor", "missing-skill"] as const)
+  it.effect(`authored import derives validation from retained bytes after ${change} changes`, () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const root = yield* fs.makeTempDirectoryScoped({ prefix: "skit-import-race-" });
+      const home = join(root, "library");
+      const source = join(root, "source");
+      const primary = join(source, "skills/review/SKILL.md");
+      const descriptor = { slug: "tools", skills: [{ name: "review", path: "skills/review" }] };
+      const original = "---\nname: review\ndescription: Review carefully\n---\nOriginal.\n";
+      const changed = original.replace("Original.", "Edited after validation read.");
+      yield* fs.makeDirectory(join(source, "skills/review"), { recursive: true });
+      yield* fs.writeFileString(primary, original);
+      yield* fs.writeFileString(join(source, "skit.json"), JSON.stringify(descriptor));
+      let edited = false;
+      const result = yield* Effect.gen(function* () {
+        const owner = yield* openLibrary(home);
+        const imported = yield* Effect.result(
+          owner.import.authored({
+            root: source,
+            source: { type: "local", path: source },
+            input: source,
+            importedAt: "2026-11-06T00:00:00.000Z",
+          }),
+        );
+        return { imported, snapshot: yield* owner.read };
+      }).pipe(
+        Effect.provideService(FileSystem.FileSystem, {
+          ...fs,
+          readFileString: (path, encoding) =>
+            fs.readFileString(path, encoding).pipe(
+              Effect.tap(() =>
+                Effect.gen(function* () {
+                  // Return the old validation read, then let the editor change the root before
+                  // retention hashes/copies it. No sleeps or changes to production scheduling.
+                  if (path !== primary || edited) return;
+                  edited = true;
+                  if (change === "valid-skill") yield* fs.writeFileString(primary, changed);
+                  else
+                    yield* fs.writeFileString(
+                      join(source, "skit.json"),
+                      change === "invalid-descriptor"
+                        ? "invalid JSON"
+                        : JSON.stringify({
+                            ...descriptor,
+                            skills: [{ name: "review", path: "skills/missing" }],
+                          }),
+                    );
+                }),
+              ),
+            ),
+        }),
+      );
+      assert.isTrue(edited);
+      if (change !== "valid-skill") {
+        if (result.imported._tag !== "Failure")
+          return yield* Effect.die("Invalid edited descriptor was imported");
+        assert.strictEqual(
+          result.imported.failure._tag,
+          change === "invalid-descriptor" ? "DescriptorMalformed" : "Library.ImportRequestInvalid",
+        );
+        assert.strictEqual(result.snapshot._tag, "Absent");
+      } else {
+        if (result.imported._tag !== "Success" || result.snapshot._tag !== "Present")
+          return yield* Effect.die("Valid edited bytes were not imported");
+        const imported = result.imported.success;
+        const retained = collectionVersionPath(libraryOriginalsPath(home), imported.snapshotDigest);
+        const validated = yield* validateSkitDirectory(retained, "retained", {
+          assessmentContext: "import",
+        });
+        const skill = result.snapshot.state.skills.find(
+          (skill) => skill.skill_id === imported.skills[0]?.skill_id,
+        );
+        const version =
+          skill === undefined ? undefined : currentSkillVersion(result.snapshot.state, skill);
+        assert.strictEqual(
+          version?.validation_identity_hash,
+          validated.identity.skills[0]?.contentHash,
+        );
+        assert.strictEqual(
+          yield* fs.readFileString(join(retained, "skills/review/SKILL.md")),
+          changed,
+        );
+        assert.strictEqual(yield* fs.readFileString(primary), changed);
+      }
+    }).pipe(Effect.provide(skitLayer)),
+  );

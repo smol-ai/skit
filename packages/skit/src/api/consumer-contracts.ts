@@ -1,0 +1,33 @@
+import { Schema } from "effect";
+import { Hash } from "../shared/hash.js";
+import { apiSemverPattern, parseContract, semver, SkitContractError } from "./contracts.js";
+
+/** Consumer-facing Registry contracts: Distribution reads and Server discovery. */
+export { parseContract, semver, SkitContractError };
+
+export const releaseSchema = Schema.Struct({
+  release_id: Schema.NonEmptyString,
+  version: Schema.String.check(Schema.isPattern(apiSemverPattern)),
+  revision_id: Schema.optionalKey(Schema.NonEmptyString),
+  archive_digest: Hash,
+  download_path: Schema.String.check(Schema.isStartingWith("/api/skits/")),
+});
+
+export const serverDiscoverySchema = Schema.Struct({
+  schema: Schema.Literal("skit.server.v1"),
+  // Diagnostic metadata must not prevent discovery of future server builds.
+  build: Schema.optionalKey(Schema.Unknown),
+  authorSkits: Schema.optionalKey(Schema.String),
+  skit: Schema.optionalKey(Schema.String),
+  createSkit: Schema.optionalKey(Schema.String),
+  currentRevision: Schema.optionalKey(Schema.String),
+  revisions: Schema.optionalKey(Schema.String),
+  publish: Schema.optionalKey(Schema.String),
+  download: Schema.String,
+  scopes: Schema.Array(Schema.String),
+  // RFC 8628 device authorization and token endpoints; absent on servers that only offer password
+  // sign-in.
+  deviceAuthorization: Schema.optionalKey(Schema.String),
+  deviceToken: Schema.optionalKey(Schema.String),
+});
+export type ServerDiscovery = typeof serverDiscoverySchema.Type;

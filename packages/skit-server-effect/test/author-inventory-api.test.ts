@@ -2,16 +2,16 @@ import { expect, layer } from "@effect/vitest";
 import { Effect, Layer } from "effect";
 import { HttpServer } from "effect/http";
 import { HttpApiTest } from "effect/http-api";
-import {
-  CurrentPrincipal,
-  CurrentRequest,
-  PrincipalAuthentication,
-} from "../src/api/authentication.js";
+import { CurrentPrincipal, PrincipalAuthentication } from "../src/api/authentication.js";
 import { authorInventoryHandlers } from "../src/api/author-inventory-http.js";
-import { AuthoringAuthenticatedApi } from "@smolai/skit-core/universal/api";
+import { AuthoringAuthenticatedApi } from "@smolai/skit-core/api";
 import { requestDecodingLayer } from "../src/api/request-decoding.js";
-import { AuthorInventory, type AuthorInventoryService } from "../src/author-inventory/service.js";
-import type { Principal } from "../src/auth/authentication.js";
+import { Skits } from "../src/skits/service.js";
+import type { Principal } from "../src/identity/service.js";
+import * as History from "@smolai/skit-core/history";
+import { Schema } from "effect";
+
+const revisionId = Schema.decodeUnknownSync(History.RevisionId)(`sha256:${"a".repeat(64)}`);
 
 const principal = (scopes: Principal["scopes"]): Principal => ({
   id: "principal_test",
@@ -23,35 +23,35 @@ const middleware = (current: Principal) =>
   Layer.succeed(
     PrincipalAuthentication,
     PrincipalAuthentication.of((effect) =>
-      effect.pipe(
-        Effect.provideService(CurrentPrincipal, current),
-        Effect.provideService(CurrentRequest, new Request("https://skit.test/api/author/skits")),
-      ),
+      effect.pipe(Effect.provideService(CurrentPrincipal, current)),
     ),
   );
 
-const inventory = Layer.succeed(
-  AuthorInventory,
-  AuthorInventory.of({
-    read: (_principal, query) =>
-      Effect.succeed(
-        query?.cursor === "invalid"
-          ? { outcome: "invalid_cursor" as const }
-          : {
-              outcome: "page" as const,
-              skits: [
-                {
-                  skit_id: "tim/tools",
-                  visibility: "private" as const,
-                  draft_revision_id: "revision_test",
-                  most_recent_release_version: "1.2.3",
-                },
-              ],
-              next_cursor: null,
-            },
-      ),
-  } satisfies AuthorInventoryService),
-);
+const unexpectedReleaseRead = () => Effect.die("Inventory HTTP must not read release archives");
+const inventory = Layer.mock(Skits, {
+  releases: {
+    findLatestPublic: unexpectedReleaseRead,
+    findDownload: unexpectedReleaseRead,
+  },
+  list: (_principal, query) =>
+    Effect.succeed(
+      query?.cursor === "invalid"
+        ? { outcome: "invalid_cursor" as const }
+        : {
+            outcome: "page" as const,
+            skits: [
+              {
+                skit_id: "tim/tools",
+                visibility: "private" as const,
+                current_revision_id: revisionId,
+                current_revision_published: false,
+                most_recent_release_version: "1.2.3",
+              },
+            ],
+            next_cursor: null,
+          },
+    ),
+});
 
 const makeClient = HttpApiTest.groups(AuthoringAuthenticatedApi, ["authorInventory"]);
 const handlers = (current: Principal) =>
@@ -70,7 +70,8 @@ layer(handlers(principal(new Set(["authoring:write"]))))("AuthorInventoryApi", (
           {
             skit_id: "tim/tools",
             visibility: "private",
-            draft_revision_id: "revision_test",
+            current_revision_id: revisionId,
+            current_revision_published: false,
             most_recent_release_version: "1.2.3",
           },
         ],

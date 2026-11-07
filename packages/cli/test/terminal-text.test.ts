@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { terminalData, terminalText } from "../src/presentation/terminal-text.js";
+import { terminalData, terminalText } from "../src/terminal/text.js";
 
 // OSC 52 asks the terminal to replace the clipboard; CSI 2J clears the screen.
 const clipboard = "\u001b]52;c;c2tpdC1hdWRpdC1tYXJrZXI=\u0007";

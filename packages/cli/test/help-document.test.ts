@@ -3,7 +3,7 @@ import { it } from "@effect/vitest";
 import { Context, Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { expect } from "vitest";
-import { commandApplicationLayer } from "../src/application.js";
+import { cliLayer } from "../src/application.js";
 import { helpDocument } from "../src/commands/help-document.js";
 import { commandDescriptions } from "../src/commands/manifest.js";
 import { skitCommand } from "../src/commands/tree.js";
@@ -91,5 +91,5 @@ it.effect("derives the public manifest from executable leaves", () =>
       "version",
       "usage",
     ]);
-  }).pipe(Effect.provide(commandApplicationLayer(false, "/tmp/skit-manifest-test"))),
+  }).pipe(Effect.provide(cliLayer(false, "/tmp/skit-manifest-test"))),
 );

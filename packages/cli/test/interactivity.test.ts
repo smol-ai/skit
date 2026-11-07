@@ -1,5 +1,5 @@
 import { assert, it } from "vitest";
-import { promptsAllowed } from "../src/presentation/interactivity.js";
+import { promptsAllowed } from "../src/terminal/interactivity.js";
 
 const terminal = { stdin: true, stdout: true, stderr: true };
 

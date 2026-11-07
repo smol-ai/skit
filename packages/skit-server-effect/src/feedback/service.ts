@@ -1,12 +1,12 @@
 import { D1Client } from "@effect/sql-d1";
 import { Clock, Context, Effect, Layer } from "effect";
-import type { FeedbackInput, FeedbackResult } from "@smolai/skit-core/universal/api";
+import type { FeedbackInput, FeedbackResult } from "@smolai/skit-core/api";
 import {
   databaseError,
   type DatabaseError,
   type DatabaseSqlClient,
 } from "../platform/cloudflare.js";
-import { NativeCrypto } from "../platform/native-crypto.js";
+import { SecureRandom } from "effect/crypto";
 
 /**
  * One report as stored. `client` is the sender's `skit-client` header, when it sent one;
@@ -29,11 +29,11 @@ export const layer = Layer.effect(
   Feedback,
   Effect.gen(function* () {
     const sql: DatabaseSqlClient = yield* D1Client.D1Client;
-    const crypto = yield* NativeCrypto;
+    const random = yield* SecureRandom.SecureRandom;
     const clock = yield* Clock.Clock;
 
     const record = Effect.fn("Feedback.record")(function* (input: FeedbackRecord) {
-      const id = `feedback_${crypto.randomUUID().replaceAll("-", "")}`;
+      const id = `feedback_${(yield* random.uuidV4()).replaceAll("-", "")}`;
       const createdAt = new Date(yield* clock.currentTimeMillis).toISOString();
       yield* sql`INSERT INTO feedback
           (id, message, harness, model, platform, runtime, client, principal_id, contact_email,

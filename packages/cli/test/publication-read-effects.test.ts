@@ -1,30 +1,67 @@
+import { registryCredentials, readConfig } from "../src/registry/auth.js";
 import { ChildProcessSpawner } from "effect/process";
-import { SkitConfiguration } from "../src/configuration/skit-configuration.js";
+import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { testPlatformLayer } from "./helpers/platform.js";
-import { Cause, Config, Deferred, Effect, Fiber, FileSystem } from "effect";
+import { Cause, Config, Deferred, Effect, Fiber, FileSystem, Layer } from "effect";
 import { it } from "@effect/vitest";
-import { systemError } from "effect/PlatformError";
+import { systemError, type PlatformError } from "effect/PlatformError";
 import { expect } from "vitest";
+import { RegistryOriginInvalid, type CredentialsUnusable } from "../src/registry/failures.js";
 import {
-  RegistryOriginInvalid,
   type AuthorRemoteMetadataInvalid,
-  type CredentialsUnusable,
-} from "../src/registry/failures.js";
-import { readAuthorRemote } from "../src/workflows/author/sync.js";
-import { readConfig, resolveAuthForOrigin } from "../src/registry/auth.js";
+  type AuthorWorkspaceMetadataInvalid,
+  type AuthorSyncStateInvalid,
+  type AuthorWorkspaceRootInvalid,
+  authorWorkspaceLayer,
+  readAuthorWorkspace,
+} from "@smolai/skit-core/author";
 
-const remote = readAuthorRemote("/author");
+type ReadError =
+  | AuthorRemoteMetadataInvalid
+  | AuthorWorkspaceMetadataInvalid
+  | AuthorSyncStateInvalid
+  | AuthorWorkspaceRootInvalid
+  | PlatformError
+  | CredentialsUnusable
+  | Config.ConfigError;
+
+/** The workspace read, with only skit.remote.json present: every other workspace file is absent. */
+const remote = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  return yield* Effect.gen(function* () {
+    return yield* readAuthorWorkspace("/");
+  }).pipe(
+    // Fresh: the platform layer's own AuthorWorkspace reads the real FileSystem.
+    Effect.provide(Layer.fresh(authorWorkspaceLayer)),
+    Effect.provideService(FileSystem.FileSystem, {
+      ...fs,
+      readFileString: (path, encoding) =>
+        path.endsWith("skit.remote.json")
+          ? fs.readFileString(path, encoding)
+          : Effect.fail(
+              systemError({
+                _tag: "NotFound",
+                module: "FileSystem",
+                method: "readFileString",
+                pathOrDescriptor: path,
+              }),
+            ),
+    }),
+  );
+});
 const config = readConfig("/auth");
+type Requirements =
+  | FileSystem.FileSystem
+  | SkitConfiguration
+  | ChildProcessSpawner.ChildProcessSpawner
+  | Layer.Services<typeof authorWorkspaceLayer>;
 
 it.effect.each(["remote", "config"] as const)(
   "%s read preserves defects and interruption",
   (helper) =>
     Effect.gen(function* () {
-      const operation: Effect.Effect<
-        void,
-        AuthorRemoteMetadataInvalid | CredentialsUnusable | Config.ConfigError,
-        FileSystem.FileSystem | SkitConfiguration | ChildProcessSpawner.ChildProcessSpawner
-      > = helper === "remote" ? remote.pipe(Effect.asVoid) : config.pipe(Effect.asVoid);
+      const operation: Effect.Effect<void, ReadError, Requirements> =
+        helper === "remote" ? remote.pipe(Effect.asVoid) : config.pipe(Effect.asVoid);
       // The effect signals readiness through an unsafe completion so the whole test can stay
       // inside one runtime instead of awaiting a raw Promise from outside it.
       const ready = Deferred.makeUnsafe<void>();
@@ -70,11 +107,8 @@ it.effect.each(["remote", "config"] as const)(
   "%s read retains legacy I/O and malformed-value classifications",
   (helper) =>
     Effect.gen(function* () {
-      const operation: Effect.Effect<
-        void,
-        AuthorRemoteMetadataInvalid | CredentialsUnusable | Config.ConfigError,
-        FileSystem.FileSystem | SkitConfiguration | ChildProcessSpawner.ChildProcessSpawner
-      > = helper === "remote" ? remote.pipe(Effect.asVoid) : config.pipe(Effect.asVoid);
+      const operation: Effect.Effect<void, ReadError, Requirements> =
+        helper === "remote" ? remote.pipe(Effect.asVoid) : config.pipe(Effect.asVoid);
       for (const input of [
         Effect.succeed("null"),
         Effect.fail(
@@ -106,7 +140,7 @@ it.effect.each(["remote", "config"] as const)(
 
 it.effect("origin parsing fails in the named Registry channel", () =>
   Effect.gen(function* () {
-    const exit = yield* resolveAuthForOrigin("not a URL").pipe(
+    const exit = yield* registryCredentials({ origin: "not a URL" }).pipe(
       Effect.provide(testPlatformLayer),
       Effect.exit,
     );

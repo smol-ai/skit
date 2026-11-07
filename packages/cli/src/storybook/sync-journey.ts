@@ -1,73 +1,21 @@
-import { localLibrary } from "../library-application/library-owner.js";
-import { Effect, FileSystem, Layer, Result, Schema } from "effect";
+import { makeSyncJourneyFixture } from "../platform/storybook-fixtures.js";
+import { Effect, Layer, Result, Schema } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { join } from "node:path";
-import {
-  LibraryStore,
-  readSnapshotArchive,
-  deterministicTreeHash,
-  libraryManifestFromLocalState,
-  libraryStoreLayer,
-  makeMachineId,
-  collectionVersionPath,
-  skitLayer,
-  withLibraryWriter,
-} from "@smolai/skit-core";
-import {
-  LibraryResponse,
-  SnapshotArchive,
-  StorageFailureResponse,
-} from "@smolai/skit-core/universal/api";
-import { librarySyncCommand } from "../handlers/library/sync.js";
-import { result } from "../handlers/contracts.js";
-import { commandFailure } from "../application.js";
-import { Renderer } from "../presentation/renderer.js";
+import * as Library from "@smolai/skit-core/library";
+import { skitConfigurationLayer, skitLayer } from "@smolai/skit-core/platform";
+import { LibraryResponse, SnapshotArchive, StorageFailureResponse } from "@smolai/skit-core/api";
+import { librarySyncCommand } from "../library/sync.js";
+import { result } from "../commands/result.js";
+import { commandFailure } from "../commands/failure-classification.js";
+import { Renderer } from "../terminal/renderer.js";
 import { registryHttpLayer } from "../registry/registry-http.js";
 
 /** Run the real sync command against a fixture Registry and disposable device homes. */
 export const syncJourney = (failDownload: boolean) =>
   Effect.scoped(
     Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const workspace = yield* fs.makeTempDirectoryScoped({ prefix: "skit-story-sync-" });
-      const seedHome = join(workspace, "seed");
-      const machineId = makeMachineId();
-      const seeded = yield* Effect.gen(function* () {
-        for (const name of ["review", "testing", "docs"]) {
-          const sourcePath = join(workspace, name);
-          yield* fs.makeDirectory(sourcePath);
-          yield* fs.writeFileString(
-            join(sourcePath, "SKILL.md"),
-            `# ${name}\nFixture Skill for sync preview.\n`,
-          );
-          yield* (yield* localLibrary).import.collection({
-            machineId,
-            source: { type: "github", owner: "fixture", repository: name },
-            input: sourcePath,
-            importedAt: "2026-01-01T00:00:00.000Z",
-            skills: [
-              {
-                name,
-                sourcePath,
-                relativePath: ".",
-                currentHash: yield* deterministicTreeHash(sourcePath),
-              },
-            ],
-            lockFileEntries: [],
-          });
-        }
-        const store = yield* LibraryStore;
-        const state = yield* store.load;
-        const bound = {
-          ...state,
-          enabled: state.skills.map((skill) => ({ skill: skill.skill_id })),
-        };
-        const manifest = yield* libraryManifestFromLocalState(bound);
-        const archives = yield* Effect.forEach(state.collection_versions, (tree) =>
-          readSnapshotArchive(collectionVersionPath(store.originalsPath, tree.hash)),
-        );
-        return { manifest, archives };
-      }).pipe(withLibraryWriter, Effect.provide(libraryStoreLayer({ home: seedHome })));
+      const { workspace, seeded } = yield* makeSyncJourneyFixture;
       const remote = {
         library_id: "library_story",
         revision_id: "revision_story",
@@ -115,13 +63,19 @@ export const syncJourney = (failDownload: boolean) =>
           source: "stored",
         }),
         apply: true,
-        adopt: false,
-        installedSkill: {
-          rootFor: (target) => (target === "agents" ? join(workspace, "agents-skills") : undefined),
-        },
       }).pipe(
-        withLibraryWriter,
-        Effect.provide(libraryStoreLayer({ home })),
+        // The fixture device's Library, routed as its installs.
+        Effect.provide(
+          Library.layer({
+            home,
+            roots: {
+              home: workspace,
+              configHome: workspace,
+              overrides: { codex: [join(workspace, "agents-skills")] },
+            },
+          }),
+        ),
+        Effect.provide(skitConfigurationLayer(home)),
         Effect.provide(transport),
         Effect.catchCause((cause) =>
           renderer.failure(commandFailure(cause)).pipe(Effect.andThen(Effect.failCause(cause))),

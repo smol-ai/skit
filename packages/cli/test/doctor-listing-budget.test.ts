@@ -1,9 +1,9 @@
 import { expect, test } from "vitest";
-import type { ListingBudget } from "@smolai/skit-core";
+import type { ListingBudget } from "@smolai/skit-core/harnesses";
 import {
   renderDoctorListingBudget,
   renderDoctorBudgetSelection,
-} from "../src/presentation/doctor-listing-budget.js";
+} from "../src/library/doctor/budget.js";
 
 const budget: Extract<ListingBudget, { _tag: "Estimated" }> = {
   _tag: "Estimated",

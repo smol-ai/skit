@@ -36,7 +36,9 @@ Ordinary `skit enable` and `skit disable` manage authored Skills through the exi
 
 This separation reuses the existing local Source refresh and reconciliation outcomes without coupling a successful remote Draft write to an independently failing device-local Projection write. Truly live Projections remain a separate decision requiring an explicit filesystem adapter and safety contract.
 
-Removing an editable Entry is an explicit opt-out. Author commands must not silently resurrect a deliberately removed Entry; device-local workspace metadata records that choice until the user explicitly registers the workspace again. Removing Library state never removes or edits the authored working tree.
+Removing an editable Entry is an explicit opt-out. Automatic author operations (sync, refresh) must not silently resurrect a deliberately removed Entry; only `author init` imports it again. Removing Library state never removes or edits the authored working tree.
+
+*Amended 2026-11-07:* device-local workspace metadata no longer records the removal. Whether a workspace is registered is whether the Library retains its Collection; `.skit/workspace.json` holds the identity only.
 
 Running `skit add .` inside a registered Author Workspace is rejected with remediation to use the existing editable Entry. Snapshot acquisition remains available only through an explicit future surface if a concrete journey requires both a snapshot and editable Entry for the same directory. It must not happen accidentally through the legacy local-source path.
 

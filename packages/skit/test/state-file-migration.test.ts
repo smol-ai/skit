@@ -1,5 +1,6 @@
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Context, Effect, FileSystem, Layer } from "effect";
+import { systemError } from "effect/PlatformError";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { skitLayer } from "../src/platform/layer.js";
@@ -13,12 +14,16 @@ import {
   makeSkillVersionId,
 } from "../src/library/entity-ids.js";
 import { currentSkillVersion, type Enabled } from "../src/library/library-contracts.js";
-import {
-  emptyLibraryState,
-  globalEnabled,
-  type LibraryState,
-} from "../src/library/library-state.js";
-import { inspectLibrary } from "./helpers/library-store.js";
+import { emptyLibraryState, type LibraryState } from "../src/library/library-state.js";
+import { globalEnabled } from "../src/library/enabled.js";
+import { inspectLibrary, libraryLayer, saveLibrary } from "./helpers/library-store.js";
+import { migrateLocalLibraryState } from "../src/library/store/library-store.js";
+import * as Library from "../src/library/library.js";
+import { lockFile } from "../src/platform/file-lock.js";
+
+/** The state a Library opened at `home` reads: a legacy state.json is migrated first. */
+const openedState = (home: string) =>
+  migrateLocalLibraryState(home).pipe(Effect.andThen(inspectLibrary(home)));
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "library-state");
 
@@ -39,6 +44,7 @@ const asV9 = ({
   repositories,
   installed_skills,
   skills,
+  operations: _operations,
   ...fields
 }: LibraryState) => {
   assert.isUndefined(fields.sync_ancestry);
@@ -129,10 +135,10 @@ it.effect("v8 state migrates to account-following without changing portable inte
       join(home, "state.json"),
       JSON.stringify({ ...asV9(emptyLibraryState()), schemaVersion: 8 }),
     );
-    const migrated = yield* inspectLibrary(home);
+    const migrated = yield* openedState(home);
     assert.isTrue(migrated.present);
     if (!migrated.present) return;
-    assert.strictEqual(migrated.state.schemaVersion, 11);
+    assert.strictEqual(migrated.state.schemaVersion, 12);
     assert.isUndefined(migrated.state.device_skill_selection);
     assert.deepStrictEqual(globalEnabled(migrated.state), { enabled: migrated.state.enabled });
     assert.isTrue(
@@ -150,10 +156,10 @@ it.effect(
       const fixture = yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json"));
       yield* fs.writeFileString(join(home, "state.json"), fixture);
 
-      const migrated = yield* inspectLibrary(home);
+      const migrated = yield* openedState(home);
       assert.strictEqual(migrated.present, true);
       if (!migrated.present) return;
-      assert.strictEqual(migrated.state.schemaVersion, 11);
+      assert.strictEqual(migrated.state.schemaVersion, 12);
       assert.strictEqual(migrated.state.collections.length, 1);
       assert.strictEqual(migrated.state.imports[0]?.kind, "source");
       assert.strictEqual(
@@ -195,7 +201,7 @@ it.effect(
         (yield* fs.readDirectory(home)).some((name) => name.startsWith("state.json.v4.backup-")),
       );
 
-      const reopened = yield* inspectLibrary(home);
+      const reopened = yield* openedState(home);
       assert.strictEqual(reopened.present, true);
       if (!reopened.present) return;
       assert.deepStrictEqual(reopened.state, migrated.state);
@@ -255,7 +261,7 @@ it.effect("merges legacy well-known subsets from the same origin deterministical
     });
     yield* fs.writeFileString(join(home, "state.json"), JSON.stringify(fixture));
 
-    const migrated = yield* inspectLibrary(home);
+    const migrated = yield* openedState(home);
     assert.strictEqual(migrated.present, true);
     if (!migrated.present) return;
     assert.strictEqual(migrated.state.collections.length, 1);
@@ -449,11 +455,11 @@ it.effect("migrates v5 state: whole Sources, entries, retained edits, all histor
     };
     yield* fs.writeFileString(join(home, "state.json"), JSON.stringify(v5));
 
-    const migrated = yield* inspectLibrary(home);
+    const migrated = yield* openedState(home);
     assert.strictEqual(migrated.present, true);
     if (!migrated.present) return;
     const state = migrated.state;
-    assert.strictEqual(state.schemaVersion, 11);
+    assert.strictEqual(state.schemaVersion, 12);
     assert.ok(
       (yield* fs.readDirectory(home)).some((name) => name.startsWith("state.json.v5.backup-")),
     );
@@ -505,7 +511,7 @@ for (const agreed of [true, false])
           join(home, "state.json"),
           yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
         );
-        const current = yield* inspectLibrary(home);
+        const current = yield* openedState(home);
         assert.strictEqual(current.present, true);
         if (!current.present) return;
         const { schemaVersion: _current, ...state } = asV9(current.state);
@@ -550,10 +556,10 @@ for (const agreed of [true, false])
           }),
         );
 
-        const migrated = yield* inspectLibrary(home);
+        const migrated = yield* openedState(home);
         assert.strictEqual(migrated.present, true);
         if (!migrated.present) return;
-        assert.strictEqual(migrated.state.schemaVersion, 11);
+        assert.strictEqual(migrated.state.schemaVersion, 12);
         assert.deepStrictEqual(migrated.state.enabled, enabled);
         // Harnesses that disagreed leave the Skill on its declared policy.
         assert.deepStrictEqual(
@@ -576,7 +582,7 @@ it.effect("relabels v7 state as v8 without inventing sync ancestry", () =>
       join(home, "state.json"),
       yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
     );
-    const current = yield* inspectLibrary(home);
+    const current = yield* openedState(home);
     assert.strictEqual(current.present, true);
     if (!current.present) return;
     yield* fs.writeFileString(
@@ -584,7 +590,7 @@ it.effect("relabels v7 state as v8 without inventing sync ancestry", () =>
       JSON.stringify({ ...asV9(current.state), schemaVersion: 7 }),
     );
 
-    const migrated = yield* inspectLibrary(home);
+    const migrated = yield* openedState(home);
     assert.strictEqual(migrated.present, true);
     if (!migrated.present) return;
     assert.deepStrictEqual(migrated.state, current.state);
@@ -601,7 +607,7 @@ it.effect("state load and publication retain nested extensions without skipping 
       path,
       yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
     );
-    const current = yield* inspectLibrary(home);
+    const current = yield* openedState(home);
     assert.strictEqual(current.present, true);
     if (!current.present) return;
     const value = {
@@ -614,7 +620,7 @@ it.effect("state load and publication retain nested extensions without skipping 
     };
     const original = JSON.stringify(value);
     yield* fs.writeFileString(path, original);
-    const reopened = yield* inspectLibrary(home);
+    const reopened = yield* openedState(home);
     assert.deepStrictEqual(reopened, { present: true, state: value });
     assert.strictEqual(yield* fs.readFileString(path), original);
 
@@ -628,7 +634,7 @@ it.effect("state load and publication retain nested extensions without skipping 
         })),
       }),
     );
-    const failure = yield* Effect.flip(inspectLibrary(home));
+    const failure = yield* Effect.flip(openedState(home));
     assert.strictEqual(failure._tag, "InvalidLibraryState");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
@@ -641,7 +647,7 @@ it.effect("migrates v9 Bindings to enabled lists and renames stored records", ()
       join(home, "state.json"),
       yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
     );
-    const current = yield* inspectLibrary(home);
+    const current = yield* openedState(home);
     assert.strictEqual(current.present, true);
     if (!current.present) return;
     const v9 = asV9(current.state);
@@ -708,11 +714,11 @@ it.effect("migrates v9 Bindings to enabled lists and renames stored records", ()
       }),
     );
 
-    const migrated = yield* inspectLibrary(home);
+    const migrated = yield* openedState(home);
     assert.strictEqual(migrated.present, true);
     if (!migrated.present) return;
     const state = migrated.state;
-    assert.strictEqual(state.schemaVersion, 11);
+    assert.strictEqual(state.schemaVersion, 12);
     assert.deepStrictEqual(state.enabled, []);
     assert.deepStrictEqual(state.invocation_policies, { [skill.skill_id]: "explicit" });
     assert.deepStrictEqual(state.device_skill_selection, {
@@ -765,19 +771,15 @@ it.effect(
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-v10-migration-" });
-      yield* fs.writeFileString(
-        join(home, "state.json"),
-        yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
+      const historical = JSON.parse(
+        yield* fs.readFileString(join(fixtures, "v11-well-known-subset.json")),
       );
-      const current = yield* inspectLibrary(home);
-      assert.strictEqual(current.present, true);
-      if (!current.present) return;
       const {
         installed_skill_id: _id,
         path,
         status: _status,
         ...copy
-      } = current.state.installed_skills[0]!;
+      } = historical.installed_skills[0]!;
       const hash = copy.expected_hash;
       const row = (name: string, fields: StoredStatusFields) => ({
         ...copy,
@@ -801,13 +803,17 @@ it.effect(
       ];
       yield* fs.writeFileString(
         join(home, "state.json"),
-        JSON.stringify({ ...current.state, schemaVersion: 10, installed_skills: rows }),
+        JSON.stringify({
+          ...historical,
+          schemaVersion: 10,
+          installed_skills: rows,
+        }),
       );
 
-      const migrated = yield* inspectLibrary(home);
+      const migrated = yield* openedState(home);
       assert.strictEqual(migrated.present, true);
       if (!migrated.present) return;
-      assert.strictEqual(migrated.state.schemaVersion, 11);
+      assert.strictEqual(migrated.state.schemaVersion, 12);
       assert.deepStrictEqual(migrated.state.installed_skills, [
         {
           ...copy,
@@ -853,4 +859,158 @@ it.effect(
         (yield* fs.readDirectory(home)).some((name) => name.startsWith("state.json.v10.backup-")),
       );
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("migrates v11 state to v12 with no operation records", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-v11-migration-" });
+    const historical = yield* fs.readFileString(join(fixtures, "v11-well-known-subset.json"));
+    yield* fs.writeFileString(join(home, "state.json"), historical);
+
+    const migrated = yield* openedState(home);
+    assert.strictEqual(migrated.present, true);
+    if (!migrated.present) return;
+    assert.deepStrictEqual(migrated.state, {
+      ...JSON.parse(historical),
+      schemaVersion: 12,
+      operations: [],
+    });
+    assert.isTrue(
+      (yield* fs.readDirectory(home)).some((name) => name.startsWith("state.json.v11.backup-")),
+    );
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+const stateBackups = (home: string) =>
+  Effect.map(
+    Effect.flatMap(FileSystem.FileSystem, (fs) => fs.readDirectory(home)),
+    (names) => names.filter((name) => name.startsWith("state.json.v")),
+  );
+
+/** What a write to state.json would change: its bytes, its file (atomic writes replace it), its mtime. */
+const stateFileEvidence = (home: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = join(home, "state.json");
+    const info = yield* fs.stat(path);
+    return { bytes: yield* fs.readFileString(path), ino: info.ino, mtime: info.mtime };
+  });
+
+it.effect("migrates a legacy state.json exactly once, when the Library layer is built", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-layer-migration-" });
+    yield* fs.writeFileString(
+      join(home, "state.json"),
+      yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json")),
+    );
+
+    const library = Context.get(yield* Layer.build(libraryLayer(home)), Library.Service);
+    assert.strictEqual((yield* stateBackups(home)).length, 1);
+    const migrated = yield* stateFileEvidence(home);
+    assert.strictEqual(JSON.parse(migrated.bytes).schemaVersion, 12);
+
+    const first = yield* library.read;
+    const second = yield* library.read;
+    assert.strictEqual(first._tag, "Present");
+    assert.deepStrictEqual(second, first);
+    // A second layer finds nothing to migrate.
+    const rebuilt = Context.get(yield* Layer.build(libraryLayer(home)), Library.Service);
+    assert.deepStrictEqual(yield* rebuilt.read, first);
+    assert.strictEqual((yield* stateBackups(home)).length, 1);
+    assert.deepStrictEqual(yield* stateFileEvidence(home), migrated);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("reading a current state.json leaves the file untouched", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-read-only-" });
+    yield* saveLibrary(home, emptyLibraryState());
+    const before = yield* stateFileEvidence(home);
+
+    const library = Context.get(yield* Layer.build(libraryLayer(home)), Library.Service);
+    yield* library.read;
+    yield* library.read;
+
+    assert.deepStrictEqual(yield* stateFileEvidence(home), before);
+    assert.deepStrictEqual(yield* stateBackups(home), []);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("a read refuses a legacy state.json that appeared after the layer was built", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-read-legacy-" });
+    const library = Context.get(yield* Layer.build(libraryLayer(home)), Library.Service);
+    const legacy = yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json"));
+    yield* fs.writeFileString(join(home, "state.json"), legacy);
+
+    const error = yield* Effect.flip(library.read);
+
+    assert.strictEqual(error._tag, "InvalidLibraryState");
+    assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), legacy);
+    assert.deepStrictEqual(yield* stateBackups(home), []);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("building the layer over an absent Library creates nothing", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-layer-absent-" });
+    const library = Context.get(yield* Layer.build(libraryLayer(home)), Library.Service);
+    assert.strictEqual((yield* library.read)._tag, "Absent");
+    assert.deepStrictEqual(yield* fs.readDirectory(home), []);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("building the layer fails HomeBusy, migrating nothing, while the lock is held", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-layer-busy-" });
+    const legacy = yield* fs.readFileString(join(fixtures, "v4-well-known-subset.json"));
+    yield* fs.writeFileString(join(home, "state.json"), legacy);
+    // Another holder, as another process would be.
+    yield* lockFile(join(home, "lock.sqlite"));
+
+    const error = yield* Effect.flip(Layer.build(libraryLayer(home)));
+
+    assert.strictEqual(error._tag, "HomeBusy");
+    assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), legacy);
+    assert.deepStrictEqual(yield* stateBackups(home), []);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("a failed backup flush preserves the historical state and can retry migration", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-migration-flush-" });
+    const path = join(home, "state.json");
+    const historical = yield* fs.readFileString(join(fixtures, "v11-well-known-subset.json"));
+    yield* fs.writeFileString(path, historical);
+    const faulting = FileSystem.FileSystem.of({
+      ...fs,
+      open: (file, options) =>
+        file.includes(".v11.backup-")
+          ? Effect.fail(
+              systemError({ _tag: "PermissionDenied", module: "FileSystem", method: "open" }),
+            )
+          : fs.open(file, options),
+    });
+    const error = yield* Effect.flip(
+      migrateLocalLibraryState(home).pipe(Effect.provideService(FileSystem.FileSystem, faulting)),
+    );
+    assert.strictEqual(error._tag, "PlatformError");
+    assert.strictEqual(yield* fs.readFileString(path), historical);
+    const backups = yield* stateBackups(home);
+    assert.strictEqual(backups.length, 1);
+    assert.deepStrictEqual(
+      JSON.parse(yield* fs.readFileString(join(home, backups[0]!))),
+      JSON.parse(historical),
+    );
+    const migrated = yield* openedState(home);
+    assert.strictEqual(migrated.present, true);
+    if (migrated.present) assert.strictEqual(migrated.state.schemaVersion, 12);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

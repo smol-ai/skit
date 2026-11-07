@@ -1,0 +1,40 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  // Keep existing findings visible. No baseline or automatic export removal.
+  "include": ["files", "exports", "types", "duplicates", "cycles"],
+  "rules": { "cycles": "error" },
+  "workspaces": {
+    ".": {
+      // Tooling is invoked by Node or Oxlint; policy modules are reached through their imports.
+      "entry": ["scripts/**/*.{mjs,ts}", "lint/**/*.test.ts"],
+      "project": ["scripts/**/*.{mjs,ts}", "lint/**/*.{mjs,ts}", "architecture/**/*.mjs"],
+    },
+    "packages/*": {
+      "includeEntryExports": true,
+      "entry": ["src/{index,main}.{ts,tsx}"],
+      "project": ["src/**/*.{ts,tsx}", "test/**/*.{ts,tsx}"],
+    },
+    "packages/cli": {
+      // The published Storybook API has external consumers; retain its entry exports.
+      "includeEntryExports": false,
+      "entry": [
+        "src/main.ts",
+        "src/storybook/main.ts",
+        "src/storybook/output-runner.ts",
+        "src/commands/generate-contracts.ts",
+      ],
+      "project": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.mjs"],
+    },
+    "packages/storybook": {
+      "project": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"],
+    },
+    "packages/skit-server-effect": {
+      // These configs execute build/Cloudflare setup when loaded. Trace the Worker,
+      // HTML module entry and tests directly, without running either tool's config.
+      "vite": false,
+      "vitest": false,
+      "entry": ["src/index.ts", "web/src/entry.ts", "test/**/*.test.ts", "scripts/**/*.mjs"],
+      "project": ["src/**/*.ts", "web/src/**/*.{ts,css}", "test/**/*.ts", "scripts/**/*.mjs"],
+    },
+  },
+}

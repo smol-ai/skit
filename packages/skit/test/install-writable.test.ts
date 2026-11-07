@@ -1,9 +1,9 @@
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { SkillsDirectoryNotWritable } from "../src/failures.js";
+import { SkillsDirectoryNotWritable } from "../src/installed-skills/failures.js";
 import { skitLayer } from "../src/platform/layer.js";
-import { ensureSkillsDirectoryWritable } from "../src/install/writable.js";
+import { ensureSkillsDirectoryWritable } from "../src/installed-skills/writable.js";
 
 it.effect("a writable root is created and left without scratch directories", () =>
   Effect.gen(function* () {

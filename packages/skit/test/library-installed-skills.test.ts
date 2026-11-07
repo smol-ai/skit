@@ -1,10 +1,10 @@
+import { openLibrary, inLibrary } from "./helpers/library-store.js";
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem, Layer, Result, Schema } from "effect";
+import { Effect, FileSystem, Layer, Result } from "effect";
 import { systemError } from "effect/PlatformError";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
-import { TreeHasher, treeHasherLayer } from "../src/artifact/tree-hasher.js";
 import { makeSkillVersionId, migratedMachineId } from "../src/library/entity-ids.js";
 import { currentSkillVersion, versionBacking } from "../src/library/library-contracts.js";
 import { collectionVersionPath } from "../src/library/collection-version.js";
@@ -15,24 +15,16 @@ import {
   uninstallCopies,
   uninstallLeftovers,
 } from "./helpers/library.js";
-import { importEdit, importCollection } from "../src/library/import-collection.js";
+
 import type { LibraryState } from "../src/library/library-state.js";
-import { Hash } from "../src/vocabulary.js";
-import {
-  LibraryStore,
-  lastSavedLibraryState,
-  libraryStoreLayer,
-  withLibraryWriter,
-} from "../src/library/store/library-store.js";
-import { withLibraryWriterLock } from "../src/library/store/writer-lock.js";
+import type { InstalledSkill } from "../src/library/device-state.js";
+import { LibraryWriter, loadLibrary } from "../src/library/store/library-store.js";
+
 import { skitLayer } from "../src/platform/layer.js";
-import { refreshLibraryInventory } from "../src/library/inventory/refresh.js";
-import {
-  backUpInstalledSkill,
-  losslessTree,
-  installedSkillStagingDirectory,
-} from "../src/install/backups.js";
-import { inspectOwnershipMarker } from "../src/install/files.js";
+import * as Library from "../src/library/library.js";
+import { losslessTree, installedSkillStagingDirectory } from "../src/installed-skills/backups.js";
+import { inspectOwnershipMarker } from "../src/installed-skills/marker-inspection.js";
+import { testRoots } from "./helpers/library-store.js";
 
 const machineId = migratedMachineId(
   "019950c0-4c00-7000-8000-000000000001",
@@ -59,9 +51,9 @@ const boundCollectionWith = (second = false, emptyDirectories: readonly string[]
       yield* fs.writeFileString(join(secondSource, "SKILL.md"), "second Skill bytes\n");
     }
     const imported = yield* Effect.scoped(
-      withLibraryWriterLock(
-        home,
-        importCollection({
+      Effect.gen(function* () {
+        const owner = yield* openLibrary(home);
+        return yield* owner.import.collection({
           machineId,
           source: { type: "local", path: source },
           input: source,
@@ -85,139 +77,138 @@ const boundCollectionWith = (second = false, emptyDirectories: readonly string[]
               : []),
           ],
           lockFileEntries: [],
-        }).pipe(Effect.provide(libraryStoreLayer({ home }))),
-      ),
+        });
+      }),
     );
-    const storeLayer = libraryStoreLayer({ home });
-    const initial = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
-      Effect.provide(storeLayer),
-    );
+    const initial = yield* loadLibrary(home);
     const skillId = imported.skills[0]?.skill_id;
     assert.ok(skillId);
-    yield* withLibraryWriterLock(
-      home,
-      Effect.flatMap(LibraryStore, (store) =>
-        store.save(
+    yield* inLibrary(home)(
+      Effect.flatMap(LibraryWriter, (writer) =>
+        writer.save(
           {
             ...initial,
             enabled: imported.skills.map((skill) => ({ skill: skill.skill_id })),
           },
           initial,
         ),
-      ).pipe(Effect.provide(storeLayer)),
+      ),
     );
 
-    return { fs, home, targetRoot, storeLayer };
+    return { fs, home, targetRoot };
   });
 
 const boundCollection = boundCollectionWith();
+
+/** A released pending-backup layout left by a killed process, independent of today's writer. */
+const interruptedBackup = Effect.fn("Test.interruptedBackup")(function* (
+  copy: Pick<InstalledSkill, "root" | "path" | "installed_skill_id">,
+) {
+  const fs = yield* FileSystem.FileSystem;
+  const directory = join(dirname(copy.root), ".skit-backups");
+  yield* fs.makeDirectory(directory, { recursive: true });
+  yield* fs.writeFileString(join(directory, ".gitignore"), "*\n");
+  const saved = join(
+    directory,
+    `pending-${copy.installed_skill_id}-2026-11-05T00-00-00.000Z-replace-interrupted`,
+  );
+  yield* fs.rename(copy.path, saved);
+  return saved;
+});
 
 it.effect(
   "projects bound retained bytes, preserves a foreign target, and retires unbound ownership",
   () =>
     Effect.gen(function* () {
-      const { fs, home, targetRoot, storeLayer } = yield* boundCollection;
+      const { fs, home, targetRoot } = yield* boundCollection;
 
       const target = join(targetRoot, "review");
       yield* fs.makeDirectory(target);
       yield* fs.writeFileString(join(target, "SKILL.md"), "foreign\n");
       const project = installEnabledSkills({
+        home,
         target: "agents",
         root: targetRoot,
         variantsPath: join(home, "variants"),
-      }).pipe(Effect.provide(storeLayer));
+      });
       assert.strictEqual(
-        Result.isSuccess(yield* withLibraryWriterLock(home, project).pipe(Effect.result)),
+        Result.isSuccess(yield* inLibrary(home)(project).pipe(Effect.result)),
         true,
       );
       assert.strictEqual(yield* fs.readFileString(join(target, "SKILL.md")), "foreign\n");
-      const conflicted = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
-        Effect.provide(storeLayer),
-      );
+      const conflicted = yield* loadLibrary(home);
       assert.strictEqual(conflicted.installed_skills[0]?.status, "conflicted");
 
       yield* fs.remove(target, { recursive: true });
-      yield* withLibraryWriterLock(home, project);
+      yield* inLibrary(home)(project);
       assert.strictEqual(yield* fs.readFileString(join(target, "SKILL.md")), "raw Skill bytes\n");
       assert.strictEqual(yield* fs.exists(join(target, ".skit-ownership.json")), true);
-      const installed = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
-        Effect.provide(storeLayer),
-      );
+      const installed = yield* loadLibrary(home);
       assert.strictEqual(installed.installed_skills[0]?.status, "installed");
       const markerV2 = yield* inspectOwnershipMarker(target);
       assert.strictEqual(markerV2.kind, "valid");
       if (markerV2.kind === "valid") assert.strictEqual(markerV2.marker.schemaVersion, 5);
 
-      yield* withLibraryWriterLock(
-        home,
-        Effect.flatMap(LibraryStore, (store) =>
-          store.save(
+      yield* inLibrary(home)(
+        Effect.flatMap(LibraryWriter, (writer) =>
+          writer.save(
             {
               ...installed,
               enabled: [],
             },
             installed,
           ),
-        ).pipe(Effect.provide(storeLayer)),
+        ),
       );
       const retire = uninstallLeftovers({
+        home,
         variantsPath: join(home, "variants"),
         activeTargets: ["agents", "claude"],
-      }).pipe(Effect.provide(storeLayer));
-      assert.strictEqual(yield* withLibraryWriterLock(home, retire), 1);
+      });
+      assert.strictEqual(yield* inLibrary(home)(retire), 1);
       assert.strictEqual(yield* fs.exists(target), false);
-      const retired = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
-        Effect.provide(storeLayer),
-      );
+      const retired = yield* loadLibrary(home);
       assert.deepStrictEqual(retired.installed_skills, []);
-    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect(
-  "saves nothing when the written installed skill does not hash to the retained bytes",
-  () =>
-    Effect.gen(function* () {
-      const { home, targetRoot, storeLayer } = yield* boundCollection;
-      const diverged = Layer.succeed(TreeHasher)({
-        hash: () => Effect.succeed(Schema.decodeUnknownSync(Hash)(`sha256:${"0".repeat(64)}`)),
-      });
-      const installed = yield* withLibraryWriterLock(
-        home,
-        installEnabledSkills({
-          target: "agents",
-          root: targetRoot,
-          variantsPath: join(home, "variants"),
-        }).pipe(Effect.provide(storeLayer), Effect.provide(diverged)),
-      ).pipe(Effect.result);
-      assert.strictEqual(Result.isFailure(installed), true);
-      if (Result.isFailure(installed))
-        assert.strictEqual(installed.failure._tag, "InstalledSkillFailure");
-      const after = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
-        Effect.provide(storeLayer),
-      );
-      assert.deepStrictEqual(after.installed_skills, []);
-    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+it.effect("records no installed copy when its written bytes fail verification", () =>
+  Effect.gen(function* () {
+    const { home, targetRoot } = yield* boundCollection;
+    const diverged = divergingOn(join(targetRoot, "review"));
+    const installed = yield* installEnabledSkills({
+      home,
+      target: "agents",
+      root: targetRoot,
+      variantsPath: join(home, "variants"),
+    })
+      .pipe(Effect.provide(diverged))
+      .pipe(Effect.result);
+    assert.strictEqual(Result.isFailure(installed), true);
+    if (Result.isFailure(installed))
+      assert.strictEqual(installed.failure._tag, "InstalledSkillFailure");
+    const after = yield* loadLibrary(home);
+    assert.deepStrictEqual(after.installed_skills, []);
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("refreshes an equivalent Version handle only on an intact owned installed skill", () =>
   Effect.gen(function* () {
-    const { fs, home, targetRoot, storeLayer } = yield* boundCollection;
+    const { fs, home, targetRoot } = yield* boundCollection;
     const target = join(targetRoot, "review");
     const project = installEnabledSkills({
+      home,
       target: "agents",
       root: targetRoot,
       variantsPath: join(home, "variants"),
-    }).pipe(Effect.provide(storeLayer));
-    yield* withLibraryWriterLock(home, project);
-    const before = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
-      Effect.provide(storeLayer),
-    );
+    });
+    yield* inLibrary(home)(project);
+    const before = yield* loadLibrary(home);
     const hash = yield* deterministicTreeHash(target);
     const newId = makeSkillVersionId();
-    yield* withLibraryWriterLock(
-      home,
-      Effect.flatMap(LibraryStore, (store) =>
-        store.save(
+    yield* inLibrary(home)(
+      Effect.flatMap(LibraryWriter, (writer) =>
+        writer.save(
           {
             ...before,
             skills: before.skills.map((skill) => ({
@@ -231,9 +222,9 @@ it.effect("refreshes an equivalent Version handle only on an intact owned instal
           },
           before,
         ),
-      ).pipe(Effect.provide(storeLayer)),
+      ),
     );
-    yield* withLibraryWriterLock(home, project);
+    yield* inLibrary(home)(project);
     const marker = yield* inspectOwnershipMarker(target);
     assert.strictEqual(marker.kind, "valid");
     if (marker.kind === "valid") {
@@ -247,13 +238,10 @@ it.effect("refreshes an equivalent Version handle only on an intact owned instal
     assert.strictEqual(yield* fs.readFileString(join(target, "SKILL.md")), "raw Skill bytes\n");
     // User edits still block metadata refresh and materialization.
     const editedId = makeSkillVersionId();
-    const installed = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
-      Effect.provide(storeLayer),
-    );
-    yield* withLibraryWriterLock(
-      home,
-      Effect.flatMap(LibraryStore, (store) =>
-        store.save(
+    const installed = yield* loadLibrary(home);
+    yield* inLibrary(home)(
+      Effect.flatMap(LibraryWriter, (writer) =>
+        writer.save(
           {
             ...installed,
             skills: installed.skills.map((skill) => ({
@@ -270,33 +258,26 @@ it.effect("refreshes an equivalent Version handle only on an intact owned instal
           },
           installed,
         ),
-      ).pipe(Effect.provide(storeLayer)),
+      ),
     );
     yield* fs.writeFileString(join(target, "SKILL.md"), "user edited bytes\n");
-    yield* withLibraryWriterLock(home, project);
+    yield* inLibrary(home)(project);
     const editedMarker = yield* inspectOwnershipMarker(target);
     assert.strictEqual(editedMarker.kind, "valid");
     if (editedMarker.kind === "valid")
       assert.strictEqual(editedMarker.marker.skill_version_id, newId);
     assert.strictEqual(yield* fs.readFileString(join(target, "SKILL.md")), "user edited bytes\n");
-    const conflicted = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
-      Effect.provide(storeLayer),
-    );
+    const conflicted = yield* loadLibrary(home);
     assert.strictEqual(conflicted.installed_skills[0]?.status, "conflicted");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("retires intact former roots when a globally bound Skill moves to a new root", () =>
   Effect.gen(function* () {
-    const { fs, home, targetRoot, storeLayer } = yield* boundCollection;
+    const { fs, home, targetRoot } = yield* boundCollection;
     const newRoot = join(home, "new-harness", "skills");
     const project = (root: string) =>
-      withLibraryWriterLock(
-        home,
-        installEnabledSkills({ target: "agents", root, variantsPath: join(home, "variants") }).pipe(
-          Effect.provide(storeLayer),
-        ),
-      );
+      installEnabledSkills({ home, target: "agents", root, variantsPath: join(home, "variants") });
     yield* project(targetRoot);
     yield* project(newRoot);
     assert.strictEqual(yield* fs.exists(join(targetRoot, "review")), false);
@@ -304,7 +285,7 @@ it.effect("retires intact former roots when a globally bound Skill moves to a ne
       yield* fs.readFileString(join(newRoot, "review", "SKILL.md")),
       "raw Skill bytes\n",
     );
-    const load = LibraryStore.use((store) => store.load).pipe(Effect.provide(storeLayer));
+    const load = loadLibrary(home);
     const after = yield* load;
     assert.strictEqual(after.installed_skills.length, 1);
     assert.strictEqual(after.installed_skills[0]?.root, newRoot);
@@ -319,23 +300,21 @@ for (const changed of ["bytes", "ownership"] as const)
     `refuses directory relocation when the former installed skill's ${changed} changed`,
     () =>
       Effect.gen(function* () {
-        const { fs, home, targetRoot, storeLayer } = yield* boundCollection;
+        const { fs, home, targetRoot } = yield* boundCollection;
         const newRoot = join(home, "new-harness", "skills");
         const project = (root: string) =>
-          withLibraryWriterLock(
+          installEnabledSkills({
             home,
-            installEnabledSkills({
-              target: "agents",
-              root,
-              variantsPath: join(home, "variants"),
-            }).pipe(Effect.provide(storeLayer)),
-          );
+            target: "agents",
+            root,
+            variantsPath: join(home, "variants"),
+          });
         yield* project(targetRoot);
         const path = join(targetRoot, "review");
         if (changed === "bytes")
           yield* fs.writeFileString(join(path, "SKILL.md"), "my local edits\n");
         else yield* fs.remove(join(path, ".skit-ownership.json"));
-        const load = LibraryStore.use((store) => store.load).pipe(Effect.provide(storeLayer));
+        const load = loadLibrary(home);
         const before = yield* load;
         const result = yield* project(newRoot).pipe(Effect.result);
         assert.strictEqual(Result.isFailure(result), true);
@@ -358,7 +337,7 @@ for (const alias of [false, true])
     `keeps repository-scoped and other-target installations during a global root change (alias=${alias})`,
     () =>
       Effect.gen(function* () {
-        const { fs, home, targetRoot, storeLayer } = yield* boundCollection;
+        const { fs, home, targetRoot } = yield* boundCollection;
         const repository = join(home, "repository");
         const repositoryRoot = join(repository, ".agents", "skills");
         const enabledRoot = alias ? join(home, "repository-alias") : repository;
@@ -368,50 +347,49 @@ for (const alias of [false, true])
         }
         const otherRoot = join(home, "claude", "skills");
         const newRoot = join(home, "new-harness", "skills");
-        const load = LibraryStore.use((store) => store.load).pipe(Effect.provide(storeLayer));
+        const load = loadLibrary(home);
         const state = yield* load;
         const enabled = state.enabled;
         assert.ok(enabled.length);
-        yield* withLibraryWriterLock(
-          home,
-          LibraryStore.use((store) =>
-            store.save(
+        yield* inLibrary(home)(
+          Effect.flatMap(LibraryWriter, (writer) =>
+            writer.save(
               {
                 ...state,
                 repositories: [{ root: enabledRoot, enabled }],
               },
               state,
             ),
-          ).pipe(Effect.provide(storeLayer)),
+          ),
         );
         const project = (
           target: "agents" | "claude",
           root: string,
           scope: { kind: "global" } | { kind: "repository"; root: string } = { kind: "global" },
         ) =>
-          withLibraryWriterLock(
-            home,
-            installEnabledSkills({
-              target,
-              root,
-              scope,
-              variantsPath: join(home, "variants"),
-            }).pipe(Effect.provide(storeLayer)),
-          );
+          installEnabledSkills({ home, target, root, scope, variantsPath: join(home, "variants") });
         yield* project("agents", targetRoot);
         yield* project("agents", repositoryRoot, { kind: "repository", root: enabledRoot });
         yield* project("claude", otherRoot);
         yield* project("agents", newRoot);
         assert.strictEqual(yield* fs.exists(join(targetRoot, "review")), false);
-        for (const root of [repositoryRoot, otherRoot, newRoot])
+        for (const root of [
+          repositoryRoot,
+          join(enabledRoot, ".claude", "skills"),
+          otherRoot,
+          newRoot,
+        ])
           assert.strictEqual(
             yield* fs.readFileString(join(root, "review", "SKILL.md")),
             "raw Skill bytes\n",
           );
         const after = yield* load;
         assert.deepStrictEqual(
-          after.installed_skills.map((installedSkill) => installedSkill.root).sort(),
-          [repositoryRoot, otherRoot, newRoot].sort(),
+          (yield* Effect.forEach(after.installed_skills, (copy) => fs.realPath(copy.root))).sort(),
+          (yield* Effect.forEach(
+            [repositoryRoot, join(enabledRoot, ".claude", "skills"), otherRoot, newRoot],
+            (root) => fs.realPath(root),
+          )).sort(),
         );
         assert.deepStrictEqual(after.repositories, [{ root: enabledRoot, enabled }]);
       }).pipe(Effect.provide(skitLayer), Effect.scoped),
@@ -421,18 +399,16 @@ it.effect(
   "keeps the old working installation when the new root is occupied by a foreign copy",
   () =>
     Effect.gen(function* () {
-      const { fs, home, targetRoot, storeLayer } = yield* boundCollection;
+      const { fs, home, targetRoot } = yield* boundCollection;
       const newRoot = join(home, "new-harness", "skills");
       const newPath = join(newRoot, "review");
       const project = (root: string) =>
-        withLibraryWriterLock(
+        installEnabledSkills({
           home,
-          installEnabledSkills({
-            target: "agents",
-            root,
-            variantsPath: join(home, "variants"),
-          }).pipe(Effect.provide(storeLayer)),
-        );
+          target: "agents",
+          root,
+          variantsPath: join(home, "variants"),
+        });
       yield* project(targetRoot);
       yield* fs.makeDirectory(newPath, { recursive: true });
       yield* fs.writeFileString(join(newPath, "SKILL.md"), "foreign Skill\n");
@@ -442,9 +418,7 @@ it.effect(
         yield* fs.readFileString(join(targetRoot, "review", "SKILL.md")),
         "raw Skill bytes\n",
       );
-      const blocked = yield* LibraryStore.use((store) => store.load).pipe(
-        Effect.provide(storeLayer),
-      );
+      const blocked = yield* loadLibrary(home);
       assert.strictEqual(
         blocked.installed_skills.find((installedSkill) => installedSkill.root === newRoot)?.status,
         "conflicted",
@@ -458,15 +432,10 @@ it.effect(
 
 it.effect("treats symlink aliases of the same root as one target without retiring its bytes", () =>
   Effect.gen(function* () {
-    const { fs, home, targetRoot, storeLayer } = yield* boundCollection;
+    const { fs, home, targetRoot } = yield* boundCollection;
     const alias = join(home, "root-alias");
     const project = (root: string) =>
-      withLibraryWriterLock(
-        home,
-        installEnabledSkills({ target: "agents", root, variantsPath: join(home, "variants") }).pipe(
-          Effect.provide(storeLayer),
-        ),
-      );
+      installEnabledSkills({ home, target: "agents", root, variantsPath: join(home, "variants") });
     yield* project(targetRoot);
     yield* fs.symlink(targetRoot, alias);
     yield* project(alias);
@@ -474,27 +443,20 @@ it.effect("treats symlink aliases of the same root as one target without retirin
       yield* fs.readFileString(join(targetRoot, "review", "SKILL.md")),
       "raw Skill bytes\n",
     );
-    const after = yield* LibraryStore.use((store) => store.load).pipe(Effect.provide(storeLayer));
+    const after = yield* loadLibrary(home);
     assert.strictEqual(after.installed_skills.length, 1);
     assert.strictEqual(after.installed_skills[0]?.root, alias);
     assert.strictEqual(after.installed_skills[0]?.status, "installed");
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("keeps every former copy when a later Skill fails relocation", () =>
+it.effect("checks every retained input before relocating any installed copy", () =>
   Effect.gen(function* () {
-    const { fs, home, targetRoot, storeLayer } = yield* boundCollectionWith(true);
+    const { fs, home, targetRoot } = yield* boundCollectionWith(true);
     const project = (root: string) =>
-      withLibraryWriterLock(
-        home,
-        installEnabledSkills({ target: "agents", root, variantsPath: join(home, "variants") }).pipe(
-          Effect.provide(storeLayer),
-        ),
-      );
+      installEnabledSkills({ home, target: "agents", root, variantsPath: join(home, "variants") });
     yield* project(targetRoot);
-    const before = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
-      Effect.provide(storeLayer),
-    );
+    const before = yield* loadLibrary(home);
     const second = before.skills.find((skill) => skill.name === "second");
     assert.ok(second);
     const version = currentSkillVersion(before, second);
@@ -522,48 +484,33 @@ it.effect("keeps every former copy when a later Skill fails relocation", () =>
       yield* fs.readFileString(join(targetRoot, "second", "SKILL.md")),
       "second Skill bytes\n",
     );
-    const after = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
-      Effect.provide(storeLayer),
-    );
-    // The copy already written at the new root is recorded, so a retry keeps its ownership.
-    assert.deepStrictEqual(after.installed_skills.slice(0, 2), before.installed_skills);
-    assert.deepStrictEqual(
-      after.installed_skills
-        .slice(2)
-        .map((installedSkill) => [installedSkill.path, installedSkill.status]),
-      [[join(newRoot, "review"), "installed"]],
-    );
-    assert.deepStrictEqual({ ...after, installed_skills: [] }, { ...before, installed_skills: [] });
-  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+    const after = yield* loadLibrary(home);
+    // The complete input set is checked before relocation starts. The prior copies stay live.
+    assert.deepStrictEqual(after.installed_skills, before.installed_skills);
+    assert.isFalse(yield* fs.exists(join(newRoot, "review")));
+    assert.deepStrictEqual(withoutOperations(after), withoutOperations(before));
+    assert.strictEqual(after.operations.at(-1)?._tag, "Stopped");
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("retires a bound Skill's copies at a target that is no longer active", () =>
   Effect.gen(function* () {
-    const { fs, home, targetRoot, storeLayer } = yield* boundCollection;
+    const { fs, home, targetRoot } = yield* boundCollection;
     const claudeRoot = join(home, "claude", "skills");
     for (const [target, root] of [
       ["agents", targetRoot],
       ["claude", claudeRoot],
     ] as const)
-      yield* withLibraryWriterLock(
-        home,
-        installEnabledSkills({ target, root, variantsPath: join(home, "variants") }).pipe(
-          Effect.provide(storeLayer),
-        ),
-      );
-    const retired = yield* withLibraryWriterLock(
+      yield* installEnabledSkills({ home, target, root, variantsPath: join(home, "variants") });
+    const retired = yield* uninstallLeftovers({
       home,
-      uninstallLeftovers({
-        variantsPath: join(home, "variants"),
-        activeTargets: ["agents"],
-      }).pipe(Effect.provide(storeLayer)),
-    );
+      variantsPath: join(home, "variants"),
+      activeTargets: ["agents"],
+    });
     assert.strictEqual(retired, 1);
     assert.strictEqual(yield* fs.exists(join(claudeRoot, "review")), false);
     assert.strictEqual(yield* fs.exists(join(targetRoot, "review")), true);
-    const after = yield* Effect.flatMap(LibraryStore, (store) => store.load).pipe(
-      Effect.provide(storeLayer),
-    );
+    const after = yield* loadLibrary(home);
     assert.deepStrictEqual(
       after.installed_skills.map((installedSkill) => installedSkill.destination),
       ["agents"],
@@ -573,28 +520,22 @@ it.effect("retires a bound Skill's copies at a target that is no longer active",
 
 it.effect("keeps and reports an edited copy at an inactive target without blocking", () =>
   Effect.gen(function* () {
-    const { fs, home, storeLayer } = yield* boundCollection;
+    const { fs, home } = yield* boundCollection;
     const claudeRoot = join(home, "claude", "skills");
-    yield* withLibraryWriterLock(
+    yield* installEnabledSkills({
       home,
-      installEnabledSkills({
-        target: "claude",
-        root: claudeRoot,
-        variantsPath: join(home, "variants"),
-      }).pipe(Effect.provide(storeLayer)),
-    );
+      target: "claude",
+      root: claudeRoot,
+      variantsPath: join(home, "variants"),
+    });
     const edited = join(claudeRoot, "review", "SKILL.md");
     yield* fs.writeFileString(edited, "my edit\n");
-    const retire = withLibraryWriterLock(
+    const retire = uninstallLeftovers({
       home,
-      uninstallLeftovers({
-        variantsPath: join(home, "variants"),
-        activeTargets: ["agents"],
-      }).pipe(Effect.provide(storeLayer)),
-    );
-    const load = Effect.flatMap(LibraryStore, (store) => store.load).pipe(
-      Effect.provide(storeLayer),
-    );
+      variantsPath: join(home, "variants"),
+      activeTargets: ["agents"],
+    });
+    const load = loadLibrary(home);
 
     assert.strictEqual(yield* retire, 0);
     assert.strictEqual(yield* fs.readFileString(edited), "my edit\n");
@@ -603,13 +544,22 @@ it.effect("keeps and reports an edited copy at an inactive target without blocki
         installedSkill.destination,
         installedSkill.status,
       ]),
-      [["claude", "conflicted"]],
+      [
+        ["agents", "installed"],
+        ["claude", "conflicted"],
+      ],
     );
 
-    // Once the operator removes the copy, the next pass releases the record.
+    const agents = (yield* load).installed_skills.find((copy) => copy.destination === "agents");
+    assert.ok(agents);
+    // Removing the inactive copy releases its record while the enabled agents copy stays installed.
     yield* fs.remove(join(claudeRoot, "review"), { recursive: true });
     yield* retire;
-    assert.deepStrictEqual((yield* load).installed_skills, []);
+    assert.deepStrictEqual((yield* load).installed_skills, [agents]);
+    assert.strictEqual(
+      yield* fs.readFileString(join(agents.path, "SKILL.md")),
+      "raw Skill bytes\n",
+    );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
@@ -617,50 +567,37 @@ it.effect("keeps and reports an edited copy at an inactive target without blocki
 const installedSkillFixture = (second = false, emptyDirectories: readonly string[] = []) =>
   Effect.gen(function* () {
     const bound = yield* boundCollectionWith(second, emptyDirectories);
-    const { home, targetRoot, storeLayer } = bound;
+    const { home, targetRoot } = bound;
     const variantsPath = join(home, "variants");
-    const load = LibraryStore.use((store) => store.load).pipe(Effect.provide(storeLayer));
+    const load = loadLibrary(home);
     const edit = (change: (state: LibraryState) => LibraryState) =>
-      withLibraryWriterLock(
-        home,
-        LibraryStore.use((store) =>
-          Effect.flatMap(store.load, (state) => store.save(change(state), state)),
-        ).pipe(Effect.provide(storeLayer)),
+      inLibrary(home)(
+        Effect.flatMap(LibraryWriter, (writer) =>
+          Effect.flatMap(loadLibrary(home), (state) => writer.save(change(state), state)),
+        ),
       );
     const project = (
-      options: Omit<Parameters<typeof installEnabledSkills>[0], "target" | "variantsPath"> = {
+      options: Omit<
+        Parameters<typeof installEnabledSkills>[0],
+        "home" | "target" | "variantsPath"
+      > = {
         root: targetRoot,
       },
-    ) =>
-      withLibraryWriterLock(
-        home,
-        installEnabledSkills({ target: "agents", variantsPath, ...options }).pipe(
-          Effect.provide(storeLayer),
-        ),
-      );
-    const retire = withLibraryWriterLock(
-      home,
-      uninstallLeftovers({ variantsPath, activeTargets: ["agents"] }).pipe(
-        Effect.asVoid,
-        Effect.provide(storeLayer),
-      ),
+    ) => installEnabledSkills({ home, target: "agents", variantsPath, ...options });
+    const retire = uninstallLeftovers({ home, variantsPath, activeTargets: ["agents"] }).pipe(
+      Effect.asVoid,
     );
     const remove = (state: LibraryState) =>
-      withLibraryWriterLock(
-        home,
-        removeCollection(state, state.collections[0]!.collection_id).pipe(
-          Effect.asVoid,
-          Effect.provide(storeLayer),
-        ),
+      removeCollection(home, state, state.collections[0]!.collection_id).pipe(Effect.asVoid);
+    const refresh = Effect.gen(function* () {
+      const library = yield* Library.Service;
+      const plan = yield* library.plan(
+        { _tag: "RefreshInventory", roots: [{ harness: "codex", root: targetRoot }] },
+        { base: yield* library.read },
       );
-    const refresh = withLibraryWriterLock(
-      home,
-      LibraryStore.use((store) =>
-        Effect.flatMap(store.load, (loaded) =>
-          refreshLibraryInventory(loaded, () => [{ harness: "codex", root: targetRoot }]),
-        ),
-      ).pipe(Effect.provide(storeLayer)),
-    );
+      return (yield* library.apply({ _tag: "Apply", plan: plan })).result;
+    }).pipe(Effect.provide(Library.layer({ home, roots: testRoots(home) })));
+
     return { ...bound, variantsPath, load, edit, project, retire, remove, refresh };
   });
 
@@ -684,16 +621,22 @@ const explicitPolicies = (state: LibraryState): LibraryState => ({
 
 const unbound = (state: LibraryState): LibraryState => ({ ...state, enabled: [] });
 
-/** A hasher that misreports the `nth` hash of one path, as a write diverging under SKIT would. */
-const divergingOn = (path: string, nth: number) => {
-  let calls = 0;
-  return Layer.succeed(TreeHasher)({
-    hash: (candidate) =>
-      candidate === path && ++calls === nth
-        ? Effect.succeed(Schema.decodeUnknownSync(Hash)(`sha256:${"0".repeat(64)}`))
-        : deterministicTreeHash(candidate),
-  });
-};
+/** Corrupt the real successor immediately after its rename, before installer verification. */
+const divergingOn = (path: string) =>
+  Layer.effect(
+    FileSystem.FileSystem,
+    Effect.map(FileSystem.FileSystem, (fs) => ({
+      ...fs,
+      rename: (from, to) =>
+        Effect.gen(function* () {
+          yield* fs.rename(from, to);
+          if (to === path)
+            yield* fs.writeFileString(join(path, "SKILL.md"), "Divergent successor bytes\n");
+        }),
+    })),
+  );
+
+const withoutOperations = ({ operations: _operations, ...state }: LibraryState) => state;
 
 it.effect(
   "manages equal content in place, keeping its excluded entries and empty directories",
@@ -717,7 +660,7 @@ it.effect(
       assert.strictEqual((yield* inspectOwnershipMarker(target)).kind, "valid");
       assert.strictEqual((yield* load).installed_skills[0]?.status, "installed");
       assert.deepStrictEqual(yield* backupsBeside(targetRoot), []);
-    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect(
@@ -762,7 +705,7 @@ it.effect(
       assert.strictEqual((yield* load).installed_skills[0]?.status, "installed");
       // The retained original and the recorded declared policy restage the original exactly.
       assert.deepStrictEqual(yield* backupsBeside(targetRoot), []);
-    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 for (const content of ["reproducible", "git-bytes", "empty-directory"] as const)
@@ -807,7 +750,7 @@ for (const content of ["reproducible", "git-bytes", "empty-directory"] as const)
         }
         if (content === "empty-directory")
           assert.deepStrictEqual(yield* fs.readDirectory(join(backups[0]!.path, "my-notes")), []);
-      }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+      }).pipe(Effect.provide(skitLayer), Effect.scoped),
     );
 
 for (const change of ["entry-name", "link-target", "root-mode"] as const)
@@ -835,7 +778,7 @@ for (const change of ["entry-name", "link-target", "root-mode"] as const)
         (yield* backupsBeside(targetRoot)).map((backup) => backup.disposition),
         ["kept"],
       );
-    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
 
 it.effect("retire discards a reproducible copy with empty directories", () =>
@@ -845,7 +788,7 @@ it.effect("retire discards a reproducible copy with empty directories", () =>
     yield* edit(unbound);
     yield* retire;
     assert.deepStrictEqual(yield* backupsBeside(targetRoot), []);
-  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 for (const original of ["intact", "missing", "corrupt"] as const)
@@ -854,7 +797,7 @@ for (const original of ["intact", "missing", "corrupt"] as const)
       `${action} discards a backup only with an intact retained original (${original})`,
       () =>
         Effect.gen(function* () {
-          const { fs, home, targetRoot, storeLayer, load, edit, project, retire, remove } =
+          const { fs, home, targetRoot, load, edit, project, retire, remove } =
             yield* installedSkillFixture();
           const target = join(targetRoot, "review");
           yield* project();
@@ -866,16 +809,16 @@ for (const original of ["intact", "missing", "corrupt"] as const)
             const first = (yield* load).installed_skills[0]!;
             bytes = "second Version bytes\n";
             yield* fs.writeFileString(join(target, "SKILL.md"), bytes);
-            const second = yield* withLibraryWriterLock(
-              home,
-              importEdit({
+            const second = yield* Effect.gen(function* () {
+              const owner = yield* openLibrary(home);
+              return yield* owner.import.edit({
                 skillId: first.skill_id,
                 installedSkillId: first.installed_skill_id,
                 path: target,
                 currentHash: yield* deterministicTreeHash(target),
                 importedAt: "2026-09-17T00:00:00.000Z",
-              }).pipe(Effect.provide(storeLayer)),
-            );
+              });
+            });
             backed = second.snapshotDigest;
             yield* fs.remove(target, { recursive: true });
             yield* project({ root: targetRoot, restoreNativeDeletedSkills: [first.skill_id] });
@@ -909,7 +852,7 @@ for (const original of ["intact", "missing", "corrupt"] as const)
           );
           if (original !== "intact")
             assert.strictEqual(yield* fs.readFileString(join(backups[0]!.path, "SKILL.md")), bytes);
-        }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+        }).pipe(Effect.provide(skitLayer), Effect.scoped),
     );
 
 for (const batch of ["uninstall", "remove-collection"] as const)
@@ -959,7 +902,7 @@ for (const batch of ["uninstall", "remove-collection"] as const)
             [second.installed_skill_id, "installed"],
           ],
         );
-      }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+      }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
 
 it.effect(
@@ -971,7 +914,7 @@ it.effect(
       const installedSkill = (yield* load).installed_skills[0];
       assert.ok(installedSkill);
       // A process killed after moving the copy aside, before publishing what it meant to do.
-      yield* backUpInstalledSkill(installedSkill, "replace");
+      yield* interruptedBackup(installedSkill);
       yield* refresh;
       assert.strictEqual((yield* load).installed_skills[0]?.status, "pending");
       yield* project();
@@ -982,7 +925,7 @@ it.effect(
       yield* refresh;
       const deleted = (yield* load).installed_skills[0];
       assert.strictEqual(deleted?.status, "suppressed");
-    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 for (const stale of ["observed-successor", "settle-failure"] as const)
@@ -994,7 +937,7 @@ for (const stale of ["observed-successor", "settle-failure"] as const)
       assert.ok(installedSkill);
       if (stale === "observed-successor") {
         // Killed after installing a successor but before publishing it; inventory then verifies it.
-        const backup = yield* backUpInstalledSkill(installedSkill, "replace");
+        const backup = yield* interruptedBackup(installedSkill);
         yield* fs.copy(backup, installedSkill.path);
         yield* refresh;
       } else {
@@ -1017,142 +960,79 @@ for (const stale of ["observed-successor", "settle-failure"] as const)
       yield* fs.remove(installedSkill.path, { recursive: true });
       yield* refresh;
       assert.strictEqual((yield* load).installed_skills[0]?.status, "suppressed");
-    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
 
-/** The fixture's store, counting every publication a workflow attempts through it. */
-const countingStore = (storeLayer: Layer.Layer<LibraryStore, never, FileSystem.FileSystem>) => {
-  const counter = { saves: 0 };
-  const layer = Layer.effect(
-    LibraryStore,
-    Effect.map(LibraryStore, (store) => ({
-      ...store,
-      save: (next: LibraryState, base: LibraryState) => {
-        counter.saves++;
-        return store.save(next, base);
-      },
-    })),
-  ).pipe(Layer.provide(storeLayer));
-  return { counter, layer };
-};
+/** The identity of the file `state.json` is: every save replaces it with a new one. */
+const stateFile = (home: string) =>
+  Effect.flatMap(FileSystem.FileSystem, (fs) => fs.stat(join(home, "state.json"))).pipe(
+    Effect.map((info) => info.ino),
+  );
 
 it.effect("a batch that changes nothing on disk or in state saves nothing", () =>
   Effect.gen(function* () {
-    const { fs, home, targetRoot, storeLayer, variantsPath, load, project } =
-      yield* installedSkillFixture();
+    const { fs, home, load, project } = yield* installedSkillFixture();
     yield* project();
     const before = yield* load;
     const bytes = yield* fs.readFileString(join(home, "state.json"));
-    const { counter, layer } = countingStore(storeLayer);
-    yield* withLibraryWriterLock(
-      home,
-      installEnabledSkills({ target: "agents", variantsPath, root: targetRoot }).pipe(
-        Effect.provide(layer),
-      ),
-    );
-    assert.strictEqual(counter.saves, 0);
+    const file = yield* stateFile(home);
+    yield* project();
+    assert.deepStrictEqual(yield* stateFile(home), file);
     assert.strictEqual(yield* fs.readFileString(join(home, "state.json")), bytes);
     assert.deepStrictEqual(yield* load, before);
-  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("an unchanged batch still saves onto its loaded state before settling a backup", () =>
   Effect.gen(function* () {
-    const { fs, home, targetRoot, storeLayer, variantsPath, load, project } =
-      yield* installedSkillFixture();
+    const { fs, home, targetRoot, load, project } = yield* installedSkillFixture();
     yield* project();
     const installedSkill = (yield* load).installed_skills[0]!;
     // Killed after moving the intact copy aside and restoring it, before publishing anything.
-    yield* fs.copy(yield* backUpInstalledSkill(installedSkill, "replace"), installedSkill.path);
-    const { counter, layer } = countingStore(storeLayer);
-    yield* withLibraryWriterLock(
-      home,
-      installEnabledSkills({ target: "agents", variantsPath, root: targetRoot }).pipe(
-        Effect.provide(layer),
-      ),
-    );
+    yield* fs.copy(yield* interruptedBackup(installedSkill), installedSkill.path);
+    const file = yield* stateFile(home);
+    yield* project();
     // The publication proves the state the backup is judged against is still the Library's.
-    assert.strictEqual(counter.saves, 1);
+    assert.notDeepEqual(yield* stateFile(home), file);
     assert.deepStrictEqual(yield* backupsBeside(targetRoot), []);
-  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("a backup is never settled against a state the Library has moved on from", () =>
   Effect.gen(function* () {
-    const { home, targetRoot, storeLayer, load, edit, project } = yield* installedSkillFixture();
+    const { home, targetRoot, load, edit, project } = yield* installedSkillFixture();
     yield* project();
     const loaded = yield* load;
     const installedSkill = loaded.installed_skills[0]!;
     // A reproducible copy moved aside, then a writer without the lock changes the Library.
-    yield* backUpInstalledSkill(installedSkill, "replace");
+    yield* interruptedBackup(installedSkill);
     yield* edit(explicitPolicies);
-    const failed = yield* withLibraryWriterLock(
-      home,
-      uninstallCopies(loaded, [installedSkill]).pipe(Effect.provide(storeLayer), Effect.flip),
-    );
-    assert.strictEqual(failed._tag, "LibraryChanged");
+    const failed = yield* uninstallCopies(home, loaded, [installedSkill]).pipe(Effect.flip);
+    assert.strictEqual(failed._tag, "Library.StalePlan");
     assert.deepStrictEqual(
       (yield* backupsBeside(targetRoot)).map((backup) => backup.disposition),
       ["pending"],
     );
-  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect("the last published state stays the Library's across unchanged and changed batches", () =>
-  Effect.gen(function* () {
-    const { targetRoot, storeLayer, variantsPath, load, project } = yield* installedSkillFixture();
-    yield* project();
-    const initial = yield* load;
-    const projectAgain = installEnabledSkills({ target: "agents", variantsPath, root: targetRoot });
-    yield* withLibraryWriter(
-      Effect.gen(function* () {
-        const store = yield* LibraryStore;
-        // What a caller applying several operations takes as the state the next one plans from.
-        const expected = Effect.map(lastSavedLibraryState, (published) => published ?? initial);
-        const current = Effect.gen(function* () {
-          assert.deepStrictEqual(yield* expected, yield* store.load);
-        });
-        // Unchanged, then changed.
-        yield* projectAgain;
-        assert.strictEqual(yield* lastSavedLibraryState, undefined);
-        yield* current;
-        yield* store.save(explicitPolicies(yield* expected), yield* expected);
-        yield* projectAgain;
-        assert.notDeepEqual(yield* expected, initial);
-        yield* current;
-        // Changed, unchanged, then changed again.
-        const changed = yield* expected;
-        yield* projectAgain;
-        assert.deepStrictEqual(yield* expected, changed);
-        yield* current;
-        yield* store.save(unbound(yield* expected), yield* expected);
-        yield* uninstallLeftovers({
-          variantsPath,
-          activeTargets: ["agents"],
-        });
-        assert.deepStrictEqual((yield* expected).installed_skills, []);
-        yield* current;
-      }),
-    ).pipe(Effect.provide(storeLayer));
-  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
-);
-
-it.effect("saves nothing for a replacement whose successor fails verification", () =>
+it.effect("keeps Library rows and records a stop when a replacement fails verification", () =>
   Effect.gen(function* () {
     const { fs, targetRoot, load, edit, project } = yield* installedSkillFixture();
     const target = join(targetRoot, "review");
     yield* project();
     yield* edit(explicitPolicies);
     const before = yield* load;
-    const failed = yield* project().pipe(Effect.provide(divergingOn(target, 1)), Effect.result);
+    const failed = yield* project().pipe(Effect.provide(divergingOn(target)), Effect.result);
     assert.strictEqual(Result.isFailure(failed), true);
     assert.strictEqual(yield* fs.exists(target), true);
-    assert.deepStrictEqual(yield* load, before);
+    assert.deepStrictEqual(withoutOperations(yield* load), withoutOperations(before));
+    assert.strictEqual((yield* load).operations.at(-1)?._tag, "Stopped");
     assert.deepStrictEqual(
       (yield* backupsBeside(targetRoot)).map((backup) => backup.disposition),
       ["pending"],
     );
-  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("records an earlier verified write when a later item's successor diverges", () =>
@@ -1162,7 +1042,7 @@ it.effect("records an earlier verified write when a later item's successor diver
     yield* edit(explicitPolicies);
     const before = yield* load;
     const second = join(targetRoot, "second");
-    const failed = yield* project().pipe(Effect.provide(divergingOn(second, 1)), Effect.result);
+    const failed = yield* project().pipe(Effect.provide(divergingOn(second)), Effect.result);
     assert.strictEqual(Result.isFailure(failed), true);
     assert.strictEqual(yield* fs.exists(second), true);
     const after = yield* load;
@@ -1172,7 +1052,7 @@ it.effect("records an earlier verified write when a later item's successor diver
     assert.strictEqual(row(after, review)?.status, "installed");
     assert.notStrictEqual(row(after, review)?.expected_hash, row(before, review)?.expected_hash);
     assert.deepStrictEqual(row(after, second), row(before, second));
-  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 for (const path of ["equivalent-version", "accepted-observation"] as const)
@@ -1224,7 +1104,7 @@ for (const path of ["equivalent-version", "accepted-observation"] as const)
       assert.strictEqual((yield* fs.readLink(target).pipe(Effect.result))._tag, "Failure");
       assert.strictEqual((yield* inspectOwnershipMarker(target)).kind, "valid");
       assert.strictEqual((yield* load).installed_skills[0]?.status, "installed");
-    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
 
 it.effect("backs up beside a symlinked root's real directory, on the copy's own device", () =>
@@ -1242,7 +1122,7 @@ it.effect("backs up beside a symlinked root's real directory, on the copy's own 
       ["kept"],
     );
     assert.strictEqual(yield* fs.exists(join(home, ".skit-backups")), false);
-  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 for (const planted of [
@@ -1283,7 +1163,7 @@ for (const planted of [
         "raw Skill bytes\n",
       );
       assert.strictEqual((yield* load).installed_skills[0]?.status, "installed");
-    }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
 
 for (const location of ["beside", "inside"] as const)
@@ -1316,7 +1196,7 @@ for (const location of ["beside", "inside"] as const)
 
           assert.ok(before);
           assert.strictEqual(yield* losslessTree(outside), before);
-        }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+        }).pipe(Effect.provide(skitLayer), Effect.scoped),
     );
 
 it.effect(
@@ -1372,7 +1252,7 @@ for (const protection of [
         assert.strictEqual(yield* fs.exists(join(target, protection.marker)), true);
         assert.deepStrictEqual((yield* load).installed_skills, recorded);
         assert.deepStrictEqual(yield* backupsBeside(targetRoot), []);
-      }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+      }).pipe(Effect.provide(skitLayer), Effect.scoped),
   );
 
 it.effect("still updates a copy inside a repository whose root is above the skills folder", () =>
@@ -1392,12 +1272,12 @@ it.effect("still updates a copy inside a repository whose root is above the skil
     assert.strictEqual(updated?.status, "installed");
     assert.strictEqual(updated?.installed_skill_id, recorded?.installed_skill_id);
     assert.notStrictEqual(updated?.expected_hash, recorded?.expected_hash);
-  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
 it.effect("replaces an edited copy only as approved, keeping the edit in recovery", () =>
   Effect.gen(function* () {
-    const { fs, home, targetRoot, storeLayer, load, project } = yield* installedSkillFixture();
+    const { fs, home, targetRoot, load, project } = yield* installedSkillFixture();
     const target = join(targetRoot, "review");
     yield* project();
     const written = yield* deterministicTreeHash(target);
@@ -1406,37 +1286,44 @@ it.effect("replaces an edited copy only as approved, keeping the edit in recover
     const [recorded] = (yield* load).installed_skills;
     assert.ok(recorded);
     const plan = (approvals: Parameters<typeof planUpdate>[0]["approvals"]) =>
-      planUpdate({ target: "agents", root: targetRoot, approvals }).pipe(
-        Effect.provide(storeLayer),
-      );
+      planUpdate({ home, target: "agents", root: targetRoot, approvals });
     const change = (planned: Effect.Success<ReturnType<typeof plan>>) =>
       planned.plan.changes.find((item) => "path" in item && item.path === target);
 
-    // Unapproved, or approved for different bytes, the edit is a conflict that stays.
-    const unapproved = yield* plan([]);
-    assert.deepInclude(change(unapproved), {
-      _tag: "Conflict",
-      edited: true,
-      skillVersionId: recorded.skill_version_id,
-      recorded,
-      currentHash: editedHash,
-      hash: written,
-      expectedHash: written,
-    });
-    const stale = yield* plan([
-      { _tag: "ReplaceEdit", installedSkillId: recorded.installed_skill_id, currentHash: written },
-    ]);
-    assert.strictEqual(change(stale)?._tag, "Conflict");
+    // Planned and applied in one write, as a reviewed change is.
+    yield* inLibrary(home)(
+      Effect.gen(function* () {
+        // Unapproved, or approved for different bytes, the edit is a conflict that stays.
+        const unapproved = yield* plan([]);
+        assert.deepInclude(change(unapproved), {
+          _tag: "Conflict",
+          edited: true,
+          skillVersionId: recorded.skill_version_id,
+          recorded,
+          currentHash: editedHash,
+          hash: written,
+          expectedHash: written,
+        });
+        const stale = yield* plan([
+          {
+            _tag: "ReplaceEdit",
+            installedSkillId: recorded.installed_skill_id,
+            currentHash: written,
+          },
+        ]);
+        assert.strictEqual(change(stale)?._tag, "Conflict");
 
-    const approved = yield* plan([
-      {
-        _tag: "ReplaceEdit",
-        installedSkillId: recorded.installed_skill_id,
-        currentHash: editedHash,
-      },
-    ]);
-    assert.strictEqual(change(approved)?._tag, "Update");
-    yield* withLibraryWriterLock(home, approved.apply.pipe(Effect.provide(storeLayer)));
+        const approved = yield* plan([
+          {
+            _tag: "ReplaceEdit",
+            installedSkillId: recorded.installed_skill_id,
+            currentHash: editedHash,
+          },
+        ]);
+        assert.strictEqual(change(approved)?._tag, "Update");
+        yield* approved.apply;
+      }),
+    );
 
     assert.strictEqual(yield* fs.readFileString(join(target, "SKILL.md")), "raw Skill bytes\n");
     const [installed] = (yield* load).installed_skills;
@@ -1448,5 +1335,5 @@ it.effect("replaces an edited copy only as approved, keeping the edit in recover
       ["kept"],
     );
     assert.strictEqual(yield* fs.readFileString(join(backups[0]!.path, "SKILL.md")), "my edit\n");
-  }).pipe(Effect.provide(treeHasherLayer), Effect.provide(skitLayer), Effect.scoped),
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

@@ -2,11 +2,12 @@ import { join } from "node:path";
 import { Effect, FileSystem } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import { MachineSettings, skitLayer } from "@smolai/skit-core";
+import * as MachineSettings from "@smolai/skit-core/machine-settings";
+import { skitLayer } from "@smolai/skit-core/platform";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import type { CommandAction } from "../src/commands/command-actions.js";
-import { makeScriptedInteraction } from "../src/presentation/interaction-recorder.js";
+import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import { scratch } from "./helpers/library-home.js";
 
 const invoke = Effect.fn("Test.setupAction")(function* (argv: readonly string[]) {
@@ -161,7 +162,11 @@ it.effect(
       expect(
         yield* f.fs.readFileString(join(recovered.data.entries[0].recoveryPath, "SKILL.md")),
       ).toContain("Original review bytes");
-      expect(yield* f.fs.exists(join(f.home, "state.json"))).toBe(false);
+      // The Library holds only the setup's record: removing a copy imports nothing.
+      const state: { skills: readonly unknown[] } = JSON.parse(
+        yield* f.fs.readFileString(join(f.home, "state.json")),
+      );
+      expect(state.skills).toEqual([]);
     }).pipe(Effect.provide(skitLayer)),
 );
 

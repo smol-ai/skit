@@ -2,7 +2,9 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect } from "effect";
 import { join } from "node:path";
-import { LibraryManifest, inspectOwnershipMarker, makeSkillVersionId } from "@smolai/skit-core";
+import { inspectOwnershipMarker } from "@smolai/skit-core/library/inventory";
+import { LibraryManifest } from "@smolai/skit-core/library";
+import { makeSkillVersionId } from "@smolai/skit-core/universal/consumer";
 import { assertDiskUnchanged, captureDisk } from "./helpers/disk-snapshot.js";
 import { devices } from "./helpers/library-sync-devices.js";
 

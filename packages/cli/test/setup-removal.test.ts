@@ -1,17 +1,25 @@
+import { LinkStat } from "@smolai/skit-core/platform";
 import { join } from "node:path";
 import { Effect, FileSystem, Schema } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import { LinkStat, skitLayer } from "@smolai/skit-core";
-import { setupCommand } from "../src/handlers/library/setup.js";
+
+import { skitLayer } from "@smolai/skit-core/platform";
+import { setupCommand } from "../src/library/setup.js";
 import {
   makeScriptedInteraction,
   type InteractionEvent,
   type ScriptedAnswer,
-} from "../src/presentation/interaction-recorder.js";
-import { setupPrompts, setupStepTitles } from "../src/presentation/setup-steps.js";
-import { runSetup, revalidateSetupPlan } from "../src/workflows/library/setup.js";
-import { planSetupRemovals, setupRemovablePaths } from "../src/workflows/library/setup-removal.js";
+} from "../src/storybook/interaction-recorder.js";
+import { setupPrompts, setupStepTitles } from "../src/library/setup/steps.js";
+import {
+  runSetup,
+  revalidateSetupPlan,
+  planSetupRemovals,
+  setupRemovablePaths,
+} from "@smolai/skit-core/library/setup";
+
+import * as Library from "@smolai/skit-core/library";
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
 const fixture = Effect.gen(function* () {
@@ -130,8 +138,9 @@ it.effect(
       expect(yield* f.fs.readFileString(join(f.source, "SKILL.md"))).toContain("Original contents");
       const removed = join(f.home.home, "removed");
       const directories = yield* f.fs.readDirectory(removed);
+      // Each step that moves folders aside keeps them in its own batch.
       const [batch] = (yield* f.fs.readDirectory(join(removed, directories[0]))).filter((name) =>
-        /^[a-f0-9-]{36}$/.test(name),
+        /^step-\d+$/.test(name),
       );
       const recovery = join(removed, directories[0], batch);
       const moveRecord = yield* Schema.decodeUnknownEffect(
@@ -166,7 +175,7 @@ it.effect("declining removal or using dry run leaves copies and Library unchange
       yield* f.setup(dryRun ? [] : [["remove\0copied"], false], dryRun);
       expect(yield* f.fs.exists(f.copy)).toBe(true);
       expect(yield* f.fs.exists(join(f.home.home, "removed"))).toBe(false);
-      expect((yield* f.home.durable).collections).toHaveLength(0);
+      expect((yield* f.home.snapshot)._tag).toBe("Absent");
     }
     yield* f.setup([[]]);
     expect(yield* f.fs.exists(f.copy)).toBe(true);
@@ -198,7 +207,7 @@ it.effect("rejects stale consent and replaced paths before moving any copy", () 
             (item) => item.name === "copied" || item.name === "linked",
           );
           const paths = yield* setupRemovablePaths(options, scan);
-          const plan = yield* planSetupRemovals(options, scan, candidates, paths);
+          const plan = yield* planSetupRemovals(scan, candidates, paths);
           yield* f.fs.writeFileString(
             join(f.copy, "SKILL.md"),
             "---\nname: copied\ndescription: Changed after preview\n---\n",
@@ -208,7 +217,11 @@ it.effect("rejects stale consent and replaced paths before moving any copy", () 
           ).toBe("SetupPlanStale");
           yield* f.fs.rename(f.copy, `${f.copy}-original`);
           yield* f.fs.makeDirectory(f.copy);
-          expect((yield* Effect.flip(plan.apply()))._tag).toBe("PlanIsStale");
+          const library = yield* Library.Service;
+          const removed = yield* library.setup([{ _tag: "Remove", folders: plan.folders }], {
+            base: yield* library.read,
+          });
+          expect(removed._tag === "Stopped" && removed.reason._tag).toBe("EvidenceDiffers");
           expect(yield* f.fs.readLink(f.link)).toBe(f.source);
           expect(yield* f.fs.exists(join(f.home.home, "removed"))).toBe(false);
         }),

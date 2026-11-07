@@ -1,14 +1,10 @@
 import { Effect } from "effect";
 import { HttpApiBuilder } from "effect/http-api";
-import { Authorization } from "../authorization/service.js";
-import { ServerConfiguration } from "../configuration.js";
-import { SkitDeletion } from "../skit-delete/service.js";
-import { CurrentPrincipal, CurrentRequest } from "./authentication.js";
-import { AuthoringAuthenticatedApi } from "@smolai/skit-core/universal/api";
+import { Skits } from "../skits/service.js";
+import { requirePrincipalScope } from "./authentication.js";
+import { AuthoringAuthenticatedApi } from "@smolai/skit-core/api";
 import {
   deleteRequiresPrivateResponse,
-  forbiddenOriginResponse,
-  insufficientScopeResponse,
   skitNotFoundResponse,
   storageFailureResponse,
 } from "./errors.js";
@@ -19,56 +15,34 @@ export const skitDeleteHandlers = HttpApiBuilder.group(
   "skitDelete",
   (handlers) =>
     Effect.gen(function* () {
-      const authorization = yield* Authorization;
-      const deletion = yield* SkitDeletion;
-      const configuration = yield* ServerConfiguration;
+      const skits = yield* Skits;
 
       return handlers.handle("deletePrivate", ({ params, query }) =>
         Effect.gen(function* () {
-          const principal = yield* CurrentPrincipal;
-          if (!principal.scopes.has("authoring:write"))
-            return yield* Effect.fail(insufficientScopeResponse);
-
-          const request = yield* CurrentRequest;
-          if (
-            principal.credential === "session" &&
-            request.headers.get("origin") !== configuration.publicAppOrigin
-          )
-            return yield* Effect.fail(forbiddenOriginResponse);
-
-          const permitted = yield* authorization
-            .canDeleteSkit(principal, params.owner, params.slug)
-            .pipe(
-              Effect.tapError((error) =>
-                Effect.logError("SKIT deletion authorization failed", error),
-              ),
-              Effect.catchTag("Cloudflare.DatabaseError", () =>
-                Effect.fail(storageFailureResponse),
-              ),
-            );
-          if (!permitted) return yield* Effect.fail(skitNotFoundResponse);
+          const principal = yield* requirePrincipalScope("authoring:write");
 
           const operation =
             query.dry_run === "true"
-              ? deletion.plan(params.owner, params.slug).pipe(
+              ? skits.planDelete(principal, params.owner, params.slug).pipe(
                   Effect.map((plan) =>
                     plan === undefined
                       ? {
                           status: "absent" as const,
                           skit_id: `${params.owner}/${params.slug}`,
                           changed: false,
-                          draft_revisions: 0,
+                          revisions: 0,
                           releases: 0,
                           release_versions: [],
                         }
                       : { status: "delete_ready" as const, changed: false, ...plan },
                   ),
                 )
-              : deletion.delete(params.owner, params.slug);
+              : skits.delete(principal, params.owner, params.slug);
 
           const result = yield* operation.pipe(
             Effect.tapError((error) => Effect.logError("SKIT deletion failed", error)),
             Effect.catchTags({
+              "SkitDelete.NotFound": () => Effect.fail(skitNotFoundResponse),
               "SkitDelete.RequiresPrivate": () => Effect.fail(deleteRequiresPrivateResponse),
               "Cloudflare.DatabaseError": () => Effect.fail(storageFailureResponse),
             }),

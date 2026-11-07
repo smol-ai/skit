@@ -1,5 +1,5 @@
 import { Data, Schema } from "effect";
-import { HarnessName } from "../../vocabulary.js";
+import { HarnessName } from "../contracts.js";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 
 export class ListingReadFailure

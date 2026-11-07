@@ -1,4 +1,5 @@
-import type { InvocationPolicies, LibraryState } from "../library-state.js";
+import type { InvocationPolicies } from "../device-state.js";
+import type { LibraryState } from "../library-state.js";
 import type { LibraryAuditChange } from "./audit-log.js";
 import { currentSkillVersion, enabledSkillIds, type Enabled } from "../library-contracts.js";
 
@@ -212,6 +213,20 @@ export const diffLibraryState = (
       ...(current.status === "conflicted" ? { digest: current.current_hash } : {}),
     });
   }
+
+  // Setup's records: each operation recorded, settled, or replaced by a later setup.
+  const operations = compare(before.operations, after.operations, (item) => item.operationId);
+  for (const item of operations.added)
+    changes.push({ entity: "library", id: item.operationId, action: `operation-${item._tag}` });
+  for (const item of operations.removed)
+    changes.push({ entity: "library", id: item.operationId, action: "operation-replaced" });
+  for (const { previous, current } of operations.kept)
+    if (previous._tag !== current._tag)
+      changes.push({
+        entity: "library",
+        id: current.operationId,
+        action: `operation-${current._tag}`,
+      });
 
   return changes;
 };

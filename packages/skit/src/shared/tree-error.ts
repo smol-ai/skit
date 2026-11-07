@@ -1,7 +1,7 @@
-import { Data, Schema } from "effect";
+import { Schema } from "effect";
 import { FailureTypeId, type SkitFailure } from "./failure.js";
 
-export const TreeErrorReason = Schema.Union([
+const TreeErrorReason = Schema.Union([
   Schema.Struct({
     _tag: Schema.Literal("GitCommandFailed"),
     command: Schema.String,
@@ -15,13 +15,14 @@ export const TreeErrorReason = Schema.Union([
   Schema.Struct({ _tag: Schema.Literal("EscapedPath"), path: Schema.String }),
   Schema.Struct({ _tag: Schema.Literal("InvalidSymlink"), path: Schema.String }),
   Schema.Struct({ _tag: Schema.Literal("UnsupportedEntry"), path: Schema.String }),
+  Schema.Struct({ _tag: Schema.Literal("ChangedDuringRead"), path: Schema.String }),
   Schema.Struct({
     _tag: Schema.Literal("CannotRetain"),
     entryType: Schema.String,
     path: Schema.String,
   }),
 ]);
-export type TreeErrorReason = typeof TreeErrorReason.Type;
+type TreeErrorReason = typeof TreeErrorReason.Type;
 
 const renderReason = (reason: TreeErrorReason): string => {
   switch (reason._tag) {
@@ -43,6 +44,8 @@ const renderReason = (reason: TreeErrorReason): string => {
       return `Symlinks are not valid SKIT content: ${reason.path}`;
     case "UnsupportedEntry":
       return `Unsupported filesystem entry: ${reason.path}`;
+    case "ChangedDuringRead":
+      return `Filesystem entry changed while reading: ${reason.path}`;
     case "CannotRetain":
       return `Cannot retain ${reason.entryType}: ${reason.path}`;
   }
@@ -50,7 +53,7 @@ const renderReason = (reason: TreeErrorReason): string => {
 
 /** Content that cannot be published as a SKIT tree. */
 export class TreeError
-  extends Data.TaggedError("TreeError")<{ reason: TreeErrorReason }>
+  extends Schema.TaggedError<TreeError>()("TreeError", { reason: TreeErrorReason })
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;

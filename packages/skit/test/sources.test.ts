@@ -16,7 +16,9 @@ import {
 } from "../src/sources/resolve.js";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { skitLayer, type SkitServices } from "../src/platform/layer.js";
-import { prepareImport } from "../src/library/import-collection.js";
+import { openLibrary } from "./helpers/library-store.js";
+import { makeMachineId } from "../src/library/entity-ids.js";
+import { collectionVersionPath } from "../src/library/collection-version.js";
 
 const git = (cwd: string, ...args: string[]) =>
   Effect.sync(() => execFileSync("git", args, { cwd, encoding: "utf8" }).trim());
@@ -113,20 +115,30 @@ describe("source contracts", () => {
           const observed = yield* resolve(source);
           expect(observed.foundSkillPaths).toEqual([selected.path]);
           const sourcePath = join(observed.originalRoot, selected.path);
-          const prepared = yield* prepareImport([
-            {
-              name: "review",
-              sourcePath,
-              relativePath: selected.path,
-              currentHash: yield* deterministicTreeHash(sourcePath),
-            },
-          ]);
-          expect(yield* readText(join(prepared.staged, selected.path, "SKILL.md"))).toEqual(
+          const home = yield* scratch("skit-selected-git-import-");
+          const owner = yield* openLibrary(home);
+          const imported = yield* owner.import.collection({
+            machineId: makeMachineId(),
+            source,
+            input: fixture.remote,
+            importedAt: "2026-11-05T00:00:00.000Z",
+            lockFileEntries: [],
+            skills: [
+              {
+                name: "review",
+                sourcePath,
+                relativePath: selected.path,
+                currentHash: yield* deterministicTreeHash(sourcePath),
+              },
+            ],
+          });
+          const retained = collectionVersionPath(join(home, "originals"), imported.snapshotDigest);
+          expect(yield* readText(join(retained, selected.path, "SKILL.md"))).toEqual(
             fixture.content,
           );
-          expect(
-            yield* readText(join(prepared.staged, selected.path, "references/guide.md")),
-          ).toEqual("Supporting reference.\n");
+          expect(yield* readText(join(retained, selected.path, "references/guide.md"))).toEqual(
+            "Supporting reference.\n",
+          );
         }
       }).pipe(provide),
   );

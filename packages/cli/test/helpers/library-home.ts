@@ -1,38 +1,41 @@
-import {
-  SkitConfiguration,
-  skitConfigurationLayer,
-} from "../../src/configuration/skit-configuration.js";
-import {
-  LibraryProgress,
-  silentLibraryProgressLayer,
-} from "../../src/library-application/progress.js";
-import { Effect, FileSystem, Layer, Result } from "effect";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { FetchHttpClient, type HttpClient } from "effect/http";
+import { skitConfigurationLayer } from "@smolai/skit-core/platform";
+import { makeMachineId } from "@smolai/skit-core/universal/consumer";
 import {
   createSkitArchive,
   deterministicTreeHash,
   initSkit,
-  libraryStoreLayer,
-  libraryAuditLogLayer,
-  treeHasherLayer,
-  TreeHasher,
-  LibraryStore,
-  LibraryAuditLog,
   readSkitDescriptor,
   validateSkitDirectory,
-  type HarnessName,
-  type SkillsDirectoryOverrides,
-  type LibraryState,
-  makeMachineId,
-  importCollection,
-  withLibraryWriter,
-} from "@smolai/skit-core";
-import type { InstalledSkillOptions } from "../../src/workflows/library/installed-skill-options.js";
+} from "@smolai/skit-core/author";
+import { type HarnessName, type SkillsDirectoryOverrides } from "@smolai/skit-core/harnesses";
+import { Effect, FileSystem, Layer } from "effect";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { FetchHttpClient, type HttpClient } from "effect/http";
+
+import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { testHttpClientLayer, type TestHttpHandler } from "./http-test-client.js";
-import { registryAuthAccessLayer } from "../../src/registry/auth-service.js";
-import { RegistryHttp, registryHttpLayer } from "../../src/registry/registry-http.js";
+import { registryHttpLayer } from "../../src/registry/registry-http.js";
+
+import * as Library from "@smolai/skit-core/library";
+import { testRoots } from "./roots.js";
+
+export type LibraryFixtureState = Extract<Library.Snapshot, { readonly _tag: "Present" }>["state"];
+/** Independent current-format empty-file fixture; absence is still asserted through Snapshot. */
+export const emptyLibraryFixture = (): LibraryFixtureState => ({
+  collections: [],
+  skills: [],
+  collection_versions: [],
+  imports: [],
+  enabled: [],
+  repositories: [],
+  installed_skills: [],
+  unmanaged: [],
+  operations: [],
+  schemaVersion: 12,
+});
+
+type ImportRequest = Parameters<Library.Interface["import"]["collection"]>[0];
 
 export type HarnessRoots = SkillsDirectoryOverrides;
 
@@ -93,50 +96,48 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
     configHome: join(input.inventoryHome ?? home, "config"),
     overrides: roots,
   };
-  const installOptions: InstalledSkillOptions = inventory;
+  const installOptions: InventoryRootOptions = inventory;
   const transport: Layer.Layer<HttpClient.HttpClient> = input.transport
     ? testHttpClientLayer(input.transport)
     : FetchHttpClient.layer;
-  const registryAuth = registryAuthAccessLayer({
-    authState: Result.succeed({
-      ...(input.registryBaseUrl === undefined ? {} : { origin: input.registryBaseUrl }),
-      ...(input.registryToken === undefined ? {} : { token: input.registryToken }),
-      source: input.registryToken === undefined ? "none" : "stored",
-    }),
-    ...(input.registryBaseUrl === undefined ? {} : { origin: input.registryBaseUrl }),
-    ...(input.registryToken === undefined ? {} : { token: input.registryToken }),
-  });
+  if (input.registryBaseUrl !== undefined) {
+    yield* fs.writeFileString(
+      join(home, "auth.json"),
+      JSON.stringify({
+        schemaVersion: 1,
+        activeOrigin: input.registryBaseUrl,
+        servers:
+          input.registryToken === undefined
+            ? {}
+            : {
+                [input.registryBaseUrl]: {
+                  token: input.registryToken,
+                  tokenId: "test-credential",
+                  tokenPrefix: "test",
+                  scopes: ["library:sync"],
+                },
+              },
+      }),
+    );
+  }
   const owned = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(
       Effect.provide(
         Layer.mergeAll(
           skitConfigurationLayer(home),
-          silentLibraryProgressLayer,
-          libraryStoreLayer({ home }),
-          libraryAuditLogLayer({ home }),
+          Library.layer({ home, roots: inventory }).pipe(Layer.provide(transport)),
           transport,
           registryHttpLayer(transport),
-          registryAuth,
-          treeHasherLayer,
         ),
       ),
-    ) as Effect.Effect<
-      A,
-      E,
-      | Exclude<
-          R,
-          | SkitConfiguration
-          | LibraryStore
-          | LibraryAuditLog
-          | HttpClient.HttpClient
-          | RegistryHttp
-          | TreeHasher
-          | LibraryProgress
-        >
-      | FileSystem.FileSystem
-    >;
-  const durable = owned(Effect.flatMap(LibraryStore, (store) => store.load));
-  const writeDurable = (state: LibraryState) =>
+    );
+  const snapshot = owned(Effect.flatMap(Library.Service, (library) => library.read));
+  const durable = Effect.flatMap(snapshot, (current): Effect.Effect<LibraryFixtureState> =>
+    current._tag === "Present"
+      ? Effect.succeed(current.state)
+      : Effect.die("Expected persisted Library state; use snapshot to assert absence"),
+  );
+  const writeDurable = (state: LibraryFixtureState) =>
     fs.writeFileString(statePath, `${JSON.stringify(state, null, 2)}\n`);
   return {
     home,
@@ -149,6 +150,7 @@ export const libraryHome = Effect.fn("Test.libraryHome")(function* (input: Libra
     installOptions,
     variantsPath: join(home, "variants"),
     owned,
+    snapshot,
     durable,
     writeDurable,
     installedSkill: (harness: HarnessName, ...segments: string[]) =>
@@ -212,11 +214,15 @@ export const archiveBytes = Effect.fn("Test.archiveBytes")(function* (
 
 export { deterministicTreeHash };
 
-/** Retain observed bytes into the Library at `home`, through the store production consumes. */
-export const importCollectionIn =
-  (home: string) => (request: Parameters<typeof importCollection>[0]) =>
-    importCollection(request).pipe(Effect.provide(libraryStoreLayer({ home })));
+/** Retain observed bytes into the Library at `home`, through the owner production consumes. */
+export const importCollectionIn = (home: string) => (request: ImportRequest) =>
+  Effect.flatMap(Library.Service, (library) => library.import.collection(request)).pipe(
+    Effect.provide(Library.layer({ home, roots: testRoots(home) })),
+  );
 
-/** Mutate the Library at `home` the way a front end does: under the recording writer lock. */
+/** Change the Library at `home` the way a front end does: through its owner. */
 export const writingTo = <A, E, R>(home: string, effect: Effect.Effect<A, E, R>) =>
-  withLibraryWriter(effect).pipe(Effect.provide(libraryStoreLayer({ home })));
+  effect.pipe(
+    Effect.provide(Library.layer({ home, roots: testRoots(home) })),
+    Effect.provide(skitConfigurationLayer(home)),
+  );

@@ -2,8 +2,10 @@ import { Effect, FileSystem } from "effect";
 import type { PlatformError } from "effect/PlatformError";
 import { dirname, join } from "node:path";
 
-import type { HarnessName, InvocationPolicy } from "../contracts.js";
-import { HarnessMetadataInvalid, InstalledSkillFileMissing } from "../failures.js";
+import type { HarnessName } from "./contracts.js";
+import type { InvocationPolicy } from "../artifact/invocation-policy.js";
+import { HarnessMetadataInvalid } from "./metadata-failures.js";
+import { InstalledSkillFileMissing } from "../installed-skills/failures.js";
 import { invocationMetadataAdapters } from "./invocation-metadata.js";
 
 export type HarnessInvocationWriteFailure =

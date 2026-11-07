@@ -3,7 +3,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 
 /**
- * The `@smolai/skit-core/universal/*` entries are what the Registry Worker imports, so their
+ * The core HTTP API and `@smolai/skit-core/universal/*` entries serve the Registry Worker, so their
  * import graphs must never reach the Node platform layer. The Worker runs on workerd, where
  * `@effect/platform-node` cannot load; the whole graph is evaluated on import, so one stray
  * re-export anywhere below the entry breaks the Worker even if nothing calls it.
@@ -11,7 +11,7 @@ import { describe, expect, test } from "vitest";
 const coreRoot = resolve(import.meta.dirname, "../packages/skit/src");
 const authoringEntry = join(coreRoot, "universal-authoring.ts");
 const consumerEntry = join(coreRoot, "universal-consumer.ts");
-const consumerApiEntry = join(coreRoot, "universal/api/index.ts");
+const consumerApiEntry = join(coreRoot, "api/index.ts");
 
 /** Modules and packages the universal graph must not reach. */
 const forbidden = (specifier: string): boolean =>
@@ -70,7 +70,7 @@ describe("@smolai/skit-core/universal", () => {
   for (const [name, rootEntry] of [
     ["universal/consumer", consumerEntry],
     ["universal/authoring", authoringEntry],
-    ["universal/api", consumerApiEntry],
+    ["api", consumerApiEntry],
   ] as const)
     test(`${name} never reaches the Node platform layer`, () => {
       const path = offendingPathFrom(rootEntry);
@@ -78,6 +78,14 @@ describe("@smolai/skit-core/universal", () => {
         path?.map((step) => (step.startsWith("/") ? relative(coreRoot, step) : step)).join(" -> "),
       ).toBeUndefined();
     });
+});
+
+test("shared vocabulary never reaches Node adapters or Node builtins", () => {
+  const path = offendingPathFrom(
+    join(coreRoot, "shared/index.ts"),
+    (specifier) => forbidden(specifier) || specifier.startsWith("node:"),
+  );
+  expect(path).toBeNull();
 });
 
 const repoRoot = resolve(import.meta.dirname, "..");
@@ -90,7 +98,11 @@ function sourceImports(directory: string): Array<{ file: string; dependency: str
 
 describe("optional capability boundaries", () => {
   test("the consumer universal surface does not reach Authoring protocol modules", () => {
-    const path = offendingPathFrom(consumerEntry, (dependency) => /\/authoring\//.test(dependency));
+    const path = offendingPathFrom(consumerEntry, (dependency) =>
+      /\/authoring\/|\/author\/(?:scaffold\.ts$|invocation\/)|\/api\/authoring(?:-contracts)?\.ts$/.test(
+        dependency,
+      ),
+    );
     expect(
       path?.map((step) => (step.startsWith("/") ? relative(coreRoot, step) : step)).join(" -> "),
     ).toBeUndefined();
@@ -100,32 +112,16 @@ describe("optional capability boundaries", () => {
     const roots = [
       "packages/skit/src/artifact",
       "packages/skit/src/library",
-      "packages/skit/src/install",
+      "packages/skit/src/installed-skills",
       "packages/cli/src/library",
-      "packages/cli/src/invocation",
-      "packages/cli/src/workflows/library",
-      "packages/cli/src/handlers/library",
     ].map((path) => join(repoRoot, path));
     const offending = roots
       .flatMap(sourceImports)
-      .filter(({ dependency }) => /\/authoring\/|\/workflows\/author\//.test(dependency));
-    expect(
-      offending.map(
-        ({ file, dependency }) =>
-          `${relative(repoRoot, file)} -> ${relative(repoRoot, dependency)}`,
-      ),
-    ).toEqual([]);
-  });
-
-  test("server consumer paths do not import Draft or Publication modules", () => {
-    const roots = [
-      "packages/skit-server-effect/src/integrity",
-      "packages/skit-server-effect/src/library",
-      "packages/skit-server-effect/src/releases",
-    ].map((path) => join(repoRoot, path));
-    const offending = roots
-      .flatMap(sourceImports)
-      .filter(({ dependency }) => /\/(drafts|publication)\//.test(dependency));
+      .filter(({ dependency }) =>
+        /\/authoring\/|\/author\/(?:scaffold\.ts$|invocation\/)|\/api\/authoring(?:-contracts)?\.ts$|\/workflows\/author\/|\/cli\/src\/author\//.test(
+          dependency,
+        ),
+      );
     expect(
       offending.map(
         ({ file, dependency }) =>

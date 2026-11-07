@@ -4,8 +4,8 @@ import { platform } from "node:os";
 import { harnessProfiles, resolveSkillsDirectory } from "../catalog.js";
 import type { SkillsDirectoryOverrides, SkillListingContract } from "../contracts.js";
 import { parseSkillFrontmatter } from "../frontmatter.js";
-import { modelContextWindow } from "../../models/model-context-windows.js";
-import type { LibraryState } from "../../library/library-state.js";
+import { modelContextWindow } from "../model-context-windows.js";
+import type { LibraryInventory } from "../../library/library-state.js";
 import type { YamlMapping } from "../../shared/json.js";
 import { ListingReadFailure, type ListingBudget, type ListingEntry } from "./contracts.js";
 export interface ClaudeListingOptions {
@@ -56,14 +56,14 @@ export interface ClaudeListingSettings {
   readonly overrides: Readonly<Record<string, string>>;
   readonly notes: readonly string[];
 }
-export interface ClaudeListingSnapshot {
+interface ClaudeListingSnapshot {
   readonly budget: ListingBudget;
   readonly entries: readonly ClaudeListingEntry[];
   readonly settings?: ClaudeListingSettings;
 }
 const characters = (value: string) => Array.from(value).length;
 
-export function deduplicateClaudeEntries(
+function deduplicateClaudeEntries(
   entries: readonly ClaudeListingEntry[],
 ): readonly ClaudeListingEntry[] {
   const selected = new Map<string, ClaudeListingEntry>();
@@ -176,7 +176,7 @@ export function claudeEntry(
   };
 }
 
-export function resolveClaudeListingSettings(
+function resolveClaudeListingSettings(
   contract: SkillListingContract,
   settings: typeof Settings.Type,
   sources: ReadonlyMap<string, string>,
@@ -232,7 +232,7 @@ export function resolveClaudeListingSettings(
 }
 
 export const readClaudeListingSnapshot = Effect.fn("Listing.claudeDiscovery")(function* (
-  state: LibraryState,
+  state: LibraryInventory,
   options: ClaudeListingOptions,
 ) {
   return yield* Effect.gen(function* () {

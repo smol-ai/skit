@@ -1,14 +1,15 @@
 import { Schema, SchemaGetter } from "effect";
 import { Collection } from "../library-contracts.js";
-import { SkillV7 } from "./manifest-v7.js";
-import { Hash, HarnessName } from "../../vocabulary.js";
 import {
+  SkillV7,
   BindingEntryV7,
   CollectionVersionV7,
   ImportV7,
   LibraryManifestFromV7,
   mergeGlobalBindingsV7,
 } from "./manifest-v7.js";
+import { Hash } from "../../shared/hash.js";
+import { HarnessName } from "../../harnesses/contracts.js";
 
 /** Frozen `skit.library.v6` Binding: one per Harness, decoded only to merge them. */
 export const BindingV6 = Schema.Struct({

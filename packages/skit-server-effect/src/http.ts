@@ -10,11 +10,11 @@ import {
   FeedbackApi,
   PublicationAuthenticatedApi,
   ReleaseApi,
-} from "@smolai/skit-core/universal/api";
+} from "@smolai/skit-core/api";
 import { authorInventoryHandlers } from "./api/author-inventory-http.js";
 import { bootstrapHandlers } from "./api/bootstrap-http.js";
 import { BootstrapApi } from "./api/bootstrap.js";
-import { draftHandlers } from "./api/drafts-http.js";
+import { skitAuthoringHandlers } from "./api/skit-authoring-http.js";
 import { feedbackHandlers } from "./api/feedback-http.js";
 import { librarySnapshotHandlers } from "./api/library-snapshots-http.js";
 import { librarySyncHandlers } from "./api/library-sync-http.js";
@@ -30,15 +30,15 @@ import {
   handleProvisionedUsername,
   handleRequest as handleAuthRequest,
   handleUsernameClaim,
-} from "./auth/better-auth.js";
+} from "./identity/http.js";
 import type { RuntimeEnv } from "./platform/cloudflare.js";
-import { artifactResponse, indexResponse } from "./releases/agent-skills-http.js";
-import { makeServerDiscovery, type ServerCapabilities } from "./discovery.js";
+import { makeRateLimiter, type RateLimiter } from "./platform/rate-limiter.js";
+import { artifactResponse, indexResponse } from "./api/agent-skills-http.js";
+import { makeServerDiscovery, type ServerCapabilities } from "./api/discovery.js";
 
 type ApplicationLayers = ReturnType<typeof applicationLayers>;
 type ReleaseApplication = ApplicationLayers["release"];
 type AuthenticatedApplication = NonNullable<ApplicationLayers["authenticated"]>;
-type BootstrapApplication = NonNullable<ApplicationLayers["bootstrap"]>;
 type FeedbackApplication = NonNullable<ApplicationLayers["feedback"]>;
 
 const allServerCapabilities: ServerCapabilities = {
@@ -154,11 +154,11 @@ const uiConfigurationRoutes = (env: RuntimeEnv) =>
   );
 
 const configuredBootstrapRoutes = (
-  application: BootstrapApplication,
   authentication: AuthenticatedApplication,
+  limiter: RateLimiter,
 ) =>
   HttpApiBuilder.layer(BootstrapApi).pipe(
-    Layer.provide(bootstrapHandlers.pipe(Layer.provide(Layer.merge(application, authentication)))),
+    Layer.provide(bootstrapHandlers(limiter).pipe(Layer.provide(authentication))),
     Layer.provide(HttpServer.layerServices),
   );
 
@@ -166,10 +166,11 @@ const configuredBootstrapRoutes = (
 const feedbackApi = (
   application: FeedbackApplication,
   authentication: AuthenticatedApplication | undefined,
+  limiter: RateLimiter,
 ) =>
   HttpApiBuilder.layer(FeedbackApi).pipe(
     Layer.provide(
-      feedbackHandlers.pipe(
+      feedbackHandlers(limiter).pipe(
         Layer.provide(authentication ? Layer.merge(application, authentication) : application),
       ),
     ),
@@ -193,13 +194,13 @@ const invalidAuthenticatedRoutes = (detail: string) =>
     ]),
   );
 
-const consumerAuthenticatedApi = (application: AuthenticatedApplication) => {
+const consumerAuthenticatedApi = (application: AuthenticatedApplication, env: RuntimeEnv) => {
   const handlers = Layer.mergeAll(
-    tokenHandlers,
+    tokenHandlers(makeRateLimiter(env.PAT_RATE_LIMITER)),
     teamHandlers,
     librarySnapshotHandlers,
     librarySyncHandlers,
-    readinessHandlers,
+    readinessHandlers(env),
   ).pipe(Layer.provide(application));
   return HttpApiBuilder.layer(ConsumerAuthenticatedApi).pipe(
     Layer.provide(handlers),
@@ -210,9 +211,11 @@ const consumerAuthenticatedApi = (application: AuthenticatedApplication) => {
 };
 
 const authoringAuthenticatedApi = (application: AuthenticatedApplication) => {
-  const handlers = Layer.mergeAll(authorInventoryHandlers, draftHandlers, skitDeleteHandlers).pipe(
-    Layer.provide(application),
-  );
+  const handlers = Layer.mergeAll(
+    authorInventoryHandlers,
+    skitAuthoringHandlers,
+    skitDeleteHandlers,
+  ).pipe(Layer.provide(application));
   return HttpApiBuilder.layer(AuthoringAuthenticatedApi).pipe(
     Layer.provide(handlers),
     Layer.provide(principalAuthenticationLayer.pipe(Layer.provide(application))),
@@ -247,7 +250,7 @@ const routeLayer = (env: RuntimeEnv, capabilities: ServerCapabilities) => {
           authenticatedReleaseApi(authentication),
           authenticatedRoutes(env),
           onboardingRoutes(authentication),
-          capabilities.library ? consumerAuthenticatedApi(authentication) : Layer.empty,
+          capabilities.library ? consumerAuthenticatedApi(authentication, env) : Layer.empty,
           capabilities.authoring ? authoringAuthenticatedApi(authentication) : Layer.empty,
           capabilities.publication ? publicationAuthenticatedApi(authentication) : Layer.empty,
         ).pipe(HttpRouter.provideRequest(authentication))
@@ -259,8 +262,8 @@ const routeLayer = (env: RuntimeEnv, capabilities: ServerCapabilities) => {
         );
   const bootstrap = env.SKIT_BOOTSTRAP_SECRET
     ? configured._tag === "Configured"
-      ? application.bootstrap && authentication
-        ? configuredBootstrapRoutes(application.bootstrap, authentication)
+      ? authentication
+        ? configuredBootstrapRoutes(authentication, makeRateLimiter(env.BOOTSTRAP_RATE_LIMITER))
         : Layer.empty
       : invalidBootstrapRoutes(configured.detail)
     : Layer.empty;
@@ -272,7 +275,13 @@ const routeLayer = (env: RuntimeEnv, capabilities: ServerCapabilities) => {
     typedSystem,
     uiConfigurationRoutes(env),
     agentSkillsRoutes(application.release),
-    application.feedback ? feedbackApi(application.feedback, authentication) : Layer.empty,
+    application.feedback
+      ? feedbackApi(
+          application.feedback,
+          authentication,
+          makeRateLimiter(env.FEEDBACK_RATE_LIMITER),
+        )
+      : Layer.empty,
     main,
     bootstrap,
   );

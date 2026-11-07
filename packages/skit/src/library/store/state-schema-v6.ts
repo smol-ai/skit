@@ -2,18 +2,20 @@ import { Schema, SchemaGetter } from "effect";
 import { resolve } from "node:path";
 import { SkillId } from "../entity-ids.js";
 import { Collection } from "../library-contracts.js";
-import { SkillV7 } from "./manifest-v7.js";
-import { AbsoluteDevicePath } from "../library-state.js";
-import { HarnessName, InvocationPolicy } from "../../vocabulary.js";
-import type { RecordedInstallDestination } from "./state-schema.js";
-import { BindingV6 } from "./manifest-v6.js";
 import {
+  SkillV7,
   BindingEntryV7,
   bindingSkillIdsV7,
   CollectionVersionV7,
   ImportV7,
   mergeBindingEntriesV7,
 } from "./manifest-v7.js";
+import { AbsoluteDevicePath } from "../device-state.js";
+import { HarnessName } from "../../harnesses/contracts.js";
+import { InvocationPolicy } from "../../artifact/invocation-policy.js";
+import type { RecordedInstallDestination } from "./state-schema.js";
+import { BindingV6 } from "./manifest-v6.js";
+
 import { LibraryStateFromV7, type LibraryStateV7 } from "./state-schema-v7.js";
 import { InstalledSkillV9, LibraryDeviceStateFieldsV9 } from "./state-schema-v9.js";
 
