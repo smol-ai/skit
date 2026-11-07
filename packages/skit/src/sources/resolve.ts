@@ -1059,7 +1059,8 @@ const fetchGitSource = Effect.fn("Source.fetchGit")(function* (
     Effect.catchTag("CommandFailed", (error) =>
       Effect.fail(
         new CommandFailed({
-          ...error,
+          command: error.command,
+          exitCode: error.exitCode,
           stderr: `Cannot acquire Git revision ${revision} from ${cloneUrl}. Restore access to that revision or explicitly run skit update on the retaining device and sync again. No newer revision was substituted. ${error.stderr}`,
         }),
       ),
