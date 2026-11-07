@@ -1,3 +1,4 @@
+import { renderSetEnabled } from "../src/library/enable/present.js";
 import { originalTreePath } from "./helpers/original-tree.js";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { it } from "@effect/vitest";
@@ -146,6 +147,17 @@ it.effect(
         proposeLibraryDisable(enabled, enabled.skills[0]!, enabled.skills[0]!.scopes),
       );
       expect(disabled.pending?.plan.changes[0]?.subject_id).toBe(row.skillId);
+      expect(disabled.pending?.facts[0]).toMatchObject({
+        action: "disable",
+        writes: "projection removed",
+      });
+      expect(renderSetEnabled(disabled.pending!.plan.changes[0]!, false)).toBe(
+        "Would disable review",
+      );
+      const removed = yield* home.owned(confirmLibraryChange(disabled));
+      expect(removed.outcome?.kind).toBe("applied");
+      expect(removed.skills[0]?.scopes).toEqual([]);
+      expect(yield* fs.exists(installedSkill.path)).toBe(false);
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
 );
 
