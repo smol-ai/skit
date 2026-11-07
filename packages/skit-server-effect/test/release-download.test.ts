@@ -1,13 +1,14 @@
-import { env } from "cloudflare:test";
+import { applyD1Migrations, env, reset } from "cloudflare:test";
 import { D1Client } from "@effect/sql-d1";
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
+import { afterEach, beforeEach } from "vitest";
 import { makeWebHandler } from "../src/http.js";
 import { BlobStore, blobStoreLayer, databaseLayer } from "../src/platform/cloudflare.js";
 
 const platformLayer = Layer.merge(blobStoreLayer(env.SKIT_BLOBS), databaseLayer(env.DB));
 
-const web = makeWebHandler(env);
+let web: ReturnType<typeof makeWebHandler>;
 
 const webPromise = <A>(evaluate: () => Promise<A>) =>
   // oxlint-disable-next-line skit/no-promise-wrappers -- Fetch-compatible Worker handlers are Promise APIs; this test helper owns that host boundary.
@@ -30,45 +31,18 @@ const sha256 = (value: string) =>
     ),
   );
 
-const prepareDatabase = Effect.flatMap(D1Client.D1Client, (sql) =>
-  sql.batch([
-    sql.unsafe("DROP TABLE IF EXISTS releases"),
-    sql.unsafe("DROP TABLE IF EXISTS resource_grants"),
-    sql.unsafe("DROP TABLE IF EXISTS namespaces"),
-    sql.unsafe("DROP TABLE IF EXISTS team_memberships"),
-    sql.unsafe("DROP TABLE IF EXISTS personal_access_tokens"),
-    sql.unsafe("DROP TABLE IF EXISTS principals"),
-    sql.unsafe(`CREATE TABLE releases (
-      owner_slug TEXT NOT NULL,
-      skit_slug TEXT NOT NULL,
-      version TEXT NOT NULL,
-      release_id TEXT NOT NULL UNIQUE,
-      archive_object_key TEXT NOT NULL UNIQUE,
-      published_at TEXT NOT NULL,
-      visibility TEXT NOT NULL CHECK (visibility IN ('public', 'unlisted', 'private')),
-      PRIMARY KEY (owner_slug, skit_slug, version)
-    )`),
-    sql.unsafe(`CREATE TABLE principals (
-      principal_id TEXT PRIMARY KEY, better_auth_user_id TEXT UNIQUE,
-      state TEXT NOT NULL, authorization_generation INTEGER NOT NULL
-    )`),
-    sql.unsafe(`CREATE TABLE personal_access_tokens (
-      token_id TEXT PRIMARY KEY, principal_id TEXT NOT NULL, token_hash TEXT NOT NULL,
-      scopes_json TEXT NOT NULL, authorization_generation INTEGER NOT NULL,
-      expires_at TEXT, revoked_at TEXT, last_used_at TEXT
-    )`),
-    sql.unsafe(
-      "CREATE TABLE team_memberships (team_id TEXT, principal_id TEXT, PRIMARY KEY (team_id, principal_id))",
-    ),
-    sql.unsafe(
-      "CREATE TABLE namespaces (namespace_slug TEXT PRIMARY KEY, subject_kind TEXT, subject_id TEXT)",
-    ),
-    sql.unsafe(`CREATE TABLE resource_grants (
-      grant_id TEXT PRIMARY KEY, subject_kind TEXT, subject_id TEXT,
-      resource_kind TEXT, resource_id TEXT, permission TEXT
-    )`),
-  ]),
-);
+beforeEach(async () => {
+  await reset();
+  await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
+  // Obsolete grants must never grant access, even if a database still contains them.
+  await env.DB.prepare(`CREATE TABLE resource_grants (
+    grant_id TEXT PRIMARY KEY, subject_kind TEXT, subject_id TEXT,
+    resource_kind TEXT, resource_id TEXT, permission TEXT
+  )`).run();
+  web = makeWebHandler(env);
+});
+
+afterEach(() => web.dispose());
 
 const insertRelease = (input: {
   version: string;
@@ -80,8 +54,8 @@ const insertRelease = (input: {
   Effect.flatMap(D1Client.D1Client, (sql) =>
     sql.unsafe(
       `INSERT INTO releases
-         (owner_slug, skit_slug, version, release_id, archive_object_key, published_at, visibility)
-         VALUES ('tim', 'tools', ?, ?, ?, ?, ?)`,
+         (owner_slug, skit_slug, version, release_id, archive_object_key, published_at, visibility, archive_digest, archive_bytes)
+         VALUES ('tim', 'tools', ?, ?, ?, ?, ?, 'fixture-digest', 0)`,
       [input.version, input.releaseId, input.objectKey, input.publishedAt, input.visibility],
     ),
   );
@@ -89,7 +63,6 @@ const insertRelease = (input: {
 describe("anonymous Release downloads", () => {
   it.effect("returns 404 for an empty latest lookup without consulting credentials", () =>
     Effect.gen(function* () {
-      yield* prepareDatabase;
       yield* Effect.flatMap(D1Client.D1Client, (sql) => sql`DROP TABLE personal_access_tokens`);
       const response = yield* request("/api/skits/tim/tools/releases/latest/download", {
         headers: { authorization: "Bearer skit_pat_missing" },
@@ -101,7 +74,6 @@ describe("anonymous Release downloads", () => {
 
   it.effect("serves an exact public Release as immutable", () =>
     Effect.gen(function* () {
-      yield* prepareDatabase;
       yield* insertRelease({
         version: "1.0.0",
         releaseId: "rel_public",
@@ -120,11 +92,15 @@ describe("anonymous Release downloads", () => {
       const tokenHash = yield* sha256(token);
       yield* Effect.flatMap(D1Client.D1Client, (sql) =>
         sql.batch([
-          sql.unsafe("INSERT INTO principals VALUES ('principal_public', NULL, 'active', 1)"),
+          sql.unsafe(`INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt)
+              VALUES ('user_public', 'Reader', 'public@example.test', 1, 1, 1)`),
+          sql.unsafe(`INSERT INTO principals
+              (principal_id, better_auth_user_id, state, authorization_generation, created_at, updated_at)
+              VALUES ('principal_public', 'user_public', 'active', 1, 'created', 'updated')`),
           sql.unsafe(
             `INSERT INTO personal_access_tokens
-               (token_id, principal_id, token_hash, scopes_json, authorization_generation)
-               VALUES ('pat_public', 'principal_public', ?, '[]', 1)`,
+               (token_id, principal_id, token_hash, scopes_json, authorization_generation, token_prefix, name, created_at)
+               VALUES ('pat_public', 'principal_public', ?, '[]', 1, 'skit_pat', 'fixture', 'created')`,
             [tokenHash],
           ),
         ]),
@@ -171,7 +147,6 @@ describe("anonymous Release downloads", () => {
 
   it.effect("selects the newest anonymously visible Release for latest", () =>
     Effect.gen(function* () {
-      yield* prepareDatabase;
       yield* insertRelease({
         version: "1.0.0",
         releaseId: "rel_public",
@@ -223,7 +198,6 @@ describe("anonymous Release downloads", () => {
 
   it.effect("conceals private Releases and distinguishes missing archives", () =>
     Effect.gen(function* () {
-      yield* prepareDatabase;
       yield* insertRelease({
         version: "1.0.0",
         releaseId: "rel_private",
@@ -257,16 +231,19 @@ describe("anonymous Release downloads", () => {
     "requires namespace ownership or current team membership for private Releases, never grants",
     () =>
       Effect.gen(function* () {
-        yield* prepareDatabase;
         const token = "skit_pat_private_download";
         const tokenHash = yield* sha256(token);
         yield* Effect.flatMap(D1Client.D1Client, (sql) =>
           sql.batch([
-            sql.unsafe("INSERT INTO principals VALUES ('principal_reader', NULL, 'active', 1)"),
+            sql.unsafe(`INSERT INTO user (id, name, email, emailVerified, createdAt, updatedAt)
+              VALUES ('user_reader', 'Reader', 'reader@example.test', 1, 1, 1)`),
+            sql.unsafe(`INSERT INTO principals
+              (principal_id, better_auth_user_id, state, authorization_generation, created_at, updated_at)
+              VALUES ('principal_reader', 'user_reader', 'active', 1, 'created', 'updated')`),
             sql.unsafe(
               `INSERT INTO personal_access_tokens
-               (token_id, principal_id, token_hash, scopes_json, authorization_generation)
-               VALUES ('pat_reader', 'principal_reader', ?, '["authoring:write"]', 1)`,
+               (token_id, principal_id, token_hash, scopes_json, authorization_generation, token_prefix, name, created_at)
+               VALUES ('pat_reader', 'principal_reader', ?, '["authoring:write"]', 1, 'skit_pat', 'fixture', 'created')`,
               [tokenHash],
             ),
             sql.unsafe(
@@ -311,7 +288,7 @@ describe("anonymous Release downloads", () => {
         expect((yield* request("/api/skits/tim/tools/releases/1.0.0/download")).status).toBe(404);
         for (const version of ["1.0.0", "latest"])
           expect((yield* download(version)).status).toBe(404);
-        yield* sql`INSERT INTO namespaces VALUES ('tim', 'principal', 'principal_reader')`;
+        yield* sql`INSERT INTO namespaces VALUES ('tim', 'principal', 'principal_reader', 'created')`;
         for (const [version, selected, content] of [
           ["1.0.0", "1.0.0", "private archive"],
           ["latest", "2.0.0", "newer private archive"],
@@ -324,11 +301,12 @@ describe("anonymous Release downloads", () => {
         }
         yield* sql.batch([
           sql`UPDATE namespaces SET subject_kind = 'team', subject_id = 'team_owner' WHERE namespace_slug = 'tim'`,
-          sql`INSERT INTO team_memberships VALUES ('team_other', 'principal_reader')`,
+          sql`INSERT INTO teams VALUES ('team_other', 'other', 'Other', 'created'), ('team_owner', 'owner', 'Owner', 'created')`,
+          sql`INSERT INTO team_memberships VALUES ('team_other', 'principal_reader', 'member', 'created')`,
         ]);
         for (const version of ["1.0.0", "latest"])
           expect((yield* download(version)).status).toBe(404);
-        yield* sql`INSERT INTO team_memberships VALUES ('team_owner', 'principal_reader')`;
+        yield* sql`INSERT INTO team_memberships VALUES ('team_owner', 'principal_reader', 'member', 'created')`;
         for (const version of ["1.0.0", "latest"])
           expect((yield* download(version)).status).toBe(200);
         yield* sql`DROP TABLE resource_grants`;

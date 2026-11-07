@@ -11,7 +11,6 @@ export interface BootstrapClaimResult {
   readonly username: string;
 }
 
-const CREDENTIAL_ISSUER = "local:credential";
 const BootstrapClaim = Schema.Struct({ claimed: Schema.Number });
 const UserCount = Schema.Struct({ count: Schema.Number });
 
@@ -125,8 +124,8 @@ export const makeBootstrap = (sql: DatabaseSqlClient, bootstrapSecret: string | 
           sql`INSERT INTO user (id, name, username, email, emailVerified, createdAt, updatedAt)
             VALUES (${userId}, ${username}, ${username}, ${email}, 0, ${now}, ${now})`,
           sql`INSERT INTO account
-             (id, issuer, accountId, providerId, userId, password, createdAt, updatedAt)
-            VALUES (${accountId}, ${CREDENTIAL_ISSUER}, ${userId}, 'credential', ${userId}, ${passwordHash}, ${now}, ${now})`,
+             (id, accountId, providerId, userId, password, createdAt, updatedAt)
+            VALUES (${accountId}, ${userId}, 'credential', ${userId}, ${passwordHash}, ${now}, ${now})`,
           ...provisionPrincipal(sql, { userId, username, principalId, timestamp }),
           sql`INSERT INTO server_operators (principal_id, created_at)
             VALUES (${principalId}, ${timestamp})`,

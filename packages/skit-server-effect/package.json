@@ -23,7 +23,7 @@
     "@effect/sql-d1": "4.1.1",
     "@foldkit/ui": "0.170.0",
     "@smolai/skit-core": "workspace:*",
-    "better-auth": "1.7.1",
+    "better-auth": "1.7.18",
     "cn": "^0.3.0",
     "effect": "4.1.1",
     "fflate": "0.8.2",

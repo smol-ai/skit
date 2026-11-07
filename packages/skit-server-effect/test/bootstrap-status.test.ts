@@ -42,7 +42,7 @@ const prepareIdentityDatabase = Effect.flatMap(D1Client.D1Client, (sql) =>
       createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL
     )`),
     sql.unsafe(`CREATE TABLE account (
-      id TEXT PRIMARY KEY, issuer TEXT NOT NULL, accountId TEXT NOT NULL,
+      id TEXT PRIMARY KEY, accountId TEXT NOT NULL,
       providerId TEXT NOT NULL, userId TEXT NOT NULL, password TEXT,
       createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL
     )`),
@@ -319,9 +319,10 @@ describe("bootstrap status", () => {
       });
       const account = yield* Effect.flatMap(
         D1Client.D1Client,
-        (sql) => sql<{ issuer: string; password: string }>`SELECT issuer, password FROM account`,
+        (sql) =>
+          sql<{ providerId: string; password: string }>`SELECT providerId, password FROM account`,
       );
-      expect(account[0]?.issuer).toBe("local:credential");
+      expect(account[0]?.providerId).toBe("credential");
       expect(
         yield* webPromise(() =>
           passwordCallbacks(globalThis.crypto).verify({
