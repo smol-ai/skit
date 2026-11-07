@@ -11,7 +11,10 @@ export const TreeFile = Schema.Struct({
   mode: Schema.Literals([0o644, 0o755]),
   bytes: Schema.Uint8Array,
 });
-export interface TreeFile extends Schema.Schema.Type<typeof TreeFile> {}
+export namespace TreeFile {
+  export interface Type extends Schema.Schema.Type<typeof TreeFile> {}
+}
+export type TreeFile = TreeFile.Type;
 
 export const TreeDirectory = Schema.Struct({
   path: Schema.String,

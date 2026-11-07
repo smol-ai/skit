@@ -124,7 +124,10 @@ export const LibraryStateFields = {
   installed_skills: Schema.mutable(Schema.Array(InstalledSkill)),
 };
 const syncPublication = Schema.Struct(LibraryStateFields);
-export interface SyncPublication extends Schema.Schema.Type<typeof syncPublication> {}
+export namespace SyncPublication {
+  export interface Type extends Schema.Schema.Type<typeof syncPublication> {}
+}
+export type SyncPublication = SyncPublication.Type;
 export const SyncPublication: Schema.Codec<SyncPublication, unknown> = Schema.Unknown.pipe(
   Schema.refine(
     (value): value is SyncPublication =>
@@ -384,7 +387,10 @@ const installedApply = Schema.TaggedStruct("Apply", {
   ]),
 });
 
-export interface InstalledApply extends Schema.Schema.Type<typeof installedApply> {}
+export namespace InstalledApply {
+  export interface Type extends Schema.Schema.Type<typeof installedApply> {}
+}
+export type InstalledApply = InstalledApply.Type;
 export interface StoredInstalledApply extends Schema.Codec.Encoded<typeof installedApply> {}
 export const InstalledApply: Schema.Codec<InstalledApply, StoredInstalledApply> = installedApply;
 

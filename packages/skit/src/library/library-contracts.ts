@@ -161,7 +161,10 @@ export const SkillsShLockFileEntry = Schema.Struct({
     }),
   ),
 });
-export interface SkillsShLockFileEntry extends Schema.Schema.Type<typeof SkillsShLockFileEntry> {}
+export namespace SkillsShLockFileEntry {
+  export interface Type extends Schema.Schema.Type<typeof SkillsShLockFileEntry> {}
+}
+export type SkillsShLockFileEntry = SkillsShLockFileEntry.Type;
 
 export const MaterializationProfile = Schema.Literals(["plain-skill/v1", "declared-skit-skill/v1"]);
 export type MaterializationProfile = typeof MaterializationProfile.Type;
@@ -206,7 +209,10 @@ export const CollectionVersion = Schema.Struct({
   copy_profile: Schema.Literal("verbatim/v1"),
   members: Schema.Array(CollectionVersionSkill),
 });
-export interface CollectionVersion extends Schema.Schema.Type<typeof CollectionVersion> {}
+export namespace CollectionVersion {
+  export interface Type extends Schema.Schema.Type<typeof CollectionVersion> {}
+}
+export type CollectionVersion = CollectionVersion.Type;
 
 /**
  * One observation of bytes for a Collection: either its Source, or a local edit the user retained
@@ -225,7 +231,10 @@ export const Import = Schema.Struct({
   machine_id: MachineId,
   lock_file_entries: Schema.Array(SkillsShLockFileEntry),
 });
-export interface Import extends Schema.Schema.Type<typeof Import> {}
+export namespace Import {
+  export interface Type extends Schema.Schema.Type<typeof Import> {}
+}
+export type Import = Import.Type;
 
 const gitObjectId = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
 
@@ -567,7 +576,10 @@ export const LibraryManifest = Schema.Struct({
     return true;
   }),
 );
-export interface LibraryManifest extends Schema.Schema.Type<typeof LibraryManifest> {}
+export namespace LibraryManifest {
+  export interface Type extends Schema.Schema.Type<typeof LibraryManifest> {}
+}
+export type LibraryManifest = LibraryManifest.Type;
 
 export const currentLibraryManifest = (
   fields: Omit<LibraryManifest, "schema">,

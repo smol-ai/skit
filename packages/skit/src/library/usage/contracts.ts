@@ -56,7 +56,10 @@ export const UsageReport = Schema.Struct({
   incomplete: Schema.Boolean,
   durationMs: Schema.Number,
 });
-export interface UsageReport extends Schema.Schema.Type<typeof UsageReport> {}
+export namespace UsageReport {
+  export interface Type extends Schema.Schema.Type<typeof UsageReport> {}
+}
+export type UsageReport = UsageReport.Type;
 export class InvalidUsageOptions
   extends Data.TaggedError("InvalidUsageOptions")<{ message: string }>
   implements SkitFailure
