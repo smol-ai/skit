@@ -10,7 +10,7 @@ import type { SetupCopySelection } from "@smolai/skit-core/library/setup";
  * Apply these selections from `scan` through setup's one apply path, updating no existing copies.
  * `beforeSteps` runs once the steps are built and before the Library runs any of them.
  */
-export const applySetupSelections = (
+export const applySetupSelections = <E>(
   setup: SetupOptions,
   scan: SetupResult,
   installOptions: InventoryRootOptions,
@@ -19,7 +19,7 @@ export const applySetupSelections = (
     readonly bindings?: readonly SetupCopySelection[];
     readonly ownership?: readonly SetupCopySelection[];
   },
-  beforeSteps?: Effect.Effect<void, unknown>,
+  beforeSteps?: Effect.Effect<void, E>,
 ) =>
   applySetupPlan(
     {

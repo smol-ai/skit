@@ -23,6 +23,7 @@ import {
   LibraryWriter,
   loadLibrary,
   writeLibrary,
+  type LibraryStateWriteError,
 } from "../src/library/store/library-store.js";
 import { Hash } from "../src/shared/hash.js";
 import { skitLayer } from "../src/platform/layer.js";
@@ -207,7 +208,7 @@ it.live("keeps the lock until a save already under way in a forked fiber has fin
     };
     const base = yield* loadLibrary(home);
     const next = { ...base, enabled: [] };
-    let child: Fiber.Fiber<void, unknown> | undefined;
+    let child: Fiber.Fiber<void, LibraryStateWriteError> | undefined;
     const owner = yield* writeLibrary(
       home,
       Effect.gen(function* () {
