@@ -281,64 +281,68 @@ export function validateSkitDirectory(
         });
         continue;
       }
-      try {
-        const manifest = parseSkillExample(source.success);
-        const [, directorySkill, directoryId] = match;
-        if (manifest.skill !== directorySkill || manifest.id !== directoryId)
-          diagnostics.push({
-            code: "EXAMPLE_PATH_IDENTITY_MISMATCH",
-            severity: "error",
-            path: file.path,
-            message: "Example skill and id must match examples/<skill>/<id>/case.yaml",
-          });
-        if (!skillNames.has(manifest.skill))
-          diagnostics.push({
-            code: "EXAMPLE_SKILL_UNKNOWN",
-            severity: "error",
-            path: file.path,
-            message: `Example references undeclared skill ${manifest.skill}`,
-          });
-        const key = `${manifest.skill}:${manifest.id}`;
-        if (exampleKeys.has(key))
-          diagnostics.push({
-            code: "EXAMPLE_ID_DUPLICATE",
-            severity: "error",
-            path: file.path,
-            message: `Duplicate example identity ${key}`,
-          });
-        exampleKeys.add(key);
-        const base = posix.dirname(file.path);
-        const references = [
-          { path: manifest.prompt.path, kind: "prompt" },
-          ...(manifest.execution.fixtures ?? []).map((path) => ({ path, kind: "fixture" })),
-          ...(manifest.screenshots ?? []).map((screenshot) => ({
-            path: screenshot.path,
-            kind: "screenshot",
-          })),
-        ];
-        for (const reference of references) {
-          const referencedPath = posix.join(base, reference.path);
-          const referencedFile = files.find((candidate) => candidate.path === referencedPath);
-          if (!referencedFile)
+      const checked = yield* Effect.result(
+        Effect.try(() => {
+          const manifest = parseSkillExample(source.success);
+          const [, directorySkill, directoryId] = match;
+          if (manifest.skill !== directorySkill || manifest.id !== directoryId)
             diagnostics.push({
-              code: `EXAMPLE_${reference.kind.toUpperCase()}_MISSING`,
+              code: "EXAMPLE_PATH_IDENTITY_MISMATCH",
               severity: "error",
-              path: referencedPath,
-              message: `Example ${reference.kind} does not exist`,
+              path: file.path,
+              message: "Example skill and id must match examples/<skill>/<id>/case.yaml",
             });
-          else if (
-            reference.kind === "screenshot" &&
-            !referencedFile.mediaType.startsWith("image/")
-          )
+          if (!skillNames.has(manifest.skill))
             diagnostics.push({
-              code: "EXAMPLE_SCREENSHOT_MEDIA_INVALID",
+              code: "EXAMPLE_SKILL_UNKNOWN",
               severity: "error",
-              path: referencedPath,
-              message: "Example screenshot must use an image media type",
+              path: file.path,
+              message: `Example references undeclared skill ${manifest.skill}`,
             });
-        }
-        examples.push({ path: file.path, manifest });
-      } catch (error) {
+          const key = `${manifest.skill}:${manifest.id}`;
+          if (exampleKeys.has(key))
+            diagnostics.push({
+              code: "EXAMPLE_ID_DUPLICATE",
+              severity: "error",
+              path: file.path,
+              message: `Duplicate example identity ${key}`,
+            });
+          exampleKeys.add(key);
+          const base = posix.dirname(file.path);
+          const references = [
+            { path: manifest.prompt.path, kind: "prompt" },
+            ...(manifest.execution.fixtures ?? []).map((path) => ({ path, kind: "fixture" })),
+            ...(manifest.screenshots ?? []).map((screenshot) => ({
+              path: screenshot.path,
+              kind: "screenshot",
+            })),
+          ];
+          for (const reference of references) {
+            const referencedPath = posix.join(base, reference.path);
+            const referencedFile = files.find((candidate) => candidate.path === referencedPath);
+            if (!referencedFile)
+              diagnostics.push({
+                code: `EXAMPLE_${reference.kind.toUpperCase()}_MISSING`,
+                severity: "error",
+                path: referencedPath,
+                message: `Example ${reference.kind} does not exist`,
+              });
+            else if (
+              reference.kind === "screenshot" &&
+              !referencedFile.mediaType.startsWith("image/")
+            )
+              diagnostics.push({
+                code: "EXAMPLE_SCREENSHOT_MEDIA_INVALID",
+                severity: "error",
+                path: referencedPath,
+                message: "Example screenshot must use an image media type",
+              });
+          }
+          examples.push({ path: file.path, manifest });
+        }),
+      );
+      if (Result.isFailure(checked)) {
+        const error = checked.failure.cause;
         diagnostics.push({
           code: "EXAMPLE_MANIFEST_INVALID",
           severity: "error",

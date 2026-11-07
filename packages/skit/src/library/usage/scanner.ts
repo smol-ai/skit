@@ -1,7 +1,7 @@
 import { NodeStream } from "@effect/platform-node";
 import { systemError } from "effect/PlatformError";
 import { createZstdDecompress } from "node:zlib";
-import { Clock, DateTime, Effect, FileSystem, Option, Stream, Order } from "effect";
+import { Clock, DateTime, Effect, FileSystem, Option, Stream, Order, Result } from "effect";
 import { createHash } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
 import { harnessDrivers } from "../../harnesses/drivers.js";
@@ -172,13 +172,12 @@ export const scanUsage = Effect.fn("Library.scanUsage")(function* (options: Usag
     const projectCwds = new Map<string, string>();
     const consume = Effect.fn("Usage.record")(function* (line: string) {
       if (!line.length) return;
-      let raw: unknown;
-      try {
-        raw = JSON.parse(line);
-      } catch {
+      const parsed = yield* Effect.result(Effect.try((): unknown => JSON.parse(line)));
+      if (Result.isFailure(parsed)) {
         c.malformed++;
         return;
       }
+      const raw = parsed.success;
       if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
         c.malformed++;
         return;

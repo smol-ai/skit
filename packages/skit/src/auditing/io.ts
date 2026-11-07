@@ -26,12 +26,10 @@ export const read = Effect.fn("Audit.read")(function* (path: string) {
 export const readJson = Effect.fn("Audit.readJson")(function* (path: string) {
   const source = yield* read(path);
   if (!source) return null;
-  try {
-    const value: unknown = JSON.parse(source);
-    return isJsonObject(value) ? (value as JsonObject) : null;
-  } catch {
-    return null;
-  }
+  const value = yield* Effect.try((): unknown => JSON.parse(source)).pipe(
+    Effect.orElseSucceed(() => null),
+  );
+  return isJsonObject(value) ? (value as JsonObject) : null;
 });
 
 export const walk = Effect.fn("Audit.walk")(function* (
