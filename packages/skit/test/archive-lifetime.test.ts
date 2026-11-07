@@ -24,20 +24,8 @@ it.effect.each([
     const output = join(outputRoot, "release.zip");
     yield* copySkitFixtureEffect("authored", root);
     if (stage === "existing") yield* fs.writeFileString(output, "pre-existing archive");
-    let producer: Readable | undefined;
-    const addBuffer = ZipFile.prototype.addBuffer;
-    yield* Effect.acquireRelease(
-      Effect.sync(() =>
-        vi.spyOn(ZipFile.prototype, "addBuffer").mockImplementation(function (
-          this: ZipFile,
-          ...args
-        ) {
-          if (!(this.outputStream instanceof Readable))
-            throw new Error("Expected Readable producer");
-          producer = this.outputStream;
-          return addBuffer.apply(this, args);
-        }),
-      ),
+    const addBuffer = yield* Effect.acquireRelease(
+      Effect.sync(() => vi.spyOn(ZipFile.prototype, "addBuffer")),
       (spy) => Effect.sync(() => spy.mockRestore()),
     );
     const ready = yield* Deferred.make<void>();
@@ -97,8 +85,9 @@ it.effect.each([
       expect(Cause.hasInterruptsOnly(exit.cause)).toBe(stage.endsWith("interrupt"));
       expect(Cause.hasDies(exit.cause)).toBe(false);
     }
-    expect(producer?.destroyed).toBe(true);
-    expect(producer?.closed).toBe(true);
+    const zip = addBuffer.mock.contexts.find((context) => context instanceof ZipFile);
+    expect(zip?.outputStream).toBeInstanceOf(Readable);
+    expect(zip?.outputStream).toMatchObject({ destroyed: true, closed: true });
     if (stage.startsWith("read")) {
       expect(sinkFinalized).toBe(false);
       expect(yield* fs.exists(output)).toBe(false);

@@ -4,7 +4,7 @@ import { it as effectIt } from "@effect/vitest";
 import { skitLayer } from "../src/platform/layer.js";
 import { invocationMetadataAdapters } from "../src/harnesses/invocation-metadata.js";
 import { join } from "node:path";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { applyInvocationPolicy } from "../src/installed-skills/policy.js";
 import {
   assessInvocationConformance,
@@ -520,18 +520,14 @@ effectIt.effect("unexpected adapter exceptions remain defects", () =>
   Effect.gen(function* () {
     const root = yield* workspace("explicit");
     const adapter = invocationMetadataAdapters["claude-code"];
-    const original = adapter.write;
     const defect = new Error("unexpected writer failure");
     yield* Effect.acquireRelease(
-      Effect.sync(() => {
-        adapter.write = () => {
+      Effect.sync(() =>
+        vi.spyOn(adapter, "write").mockImplementation(() => {
           throw defect;
-        };
-      }),
-      () =>
-        Effect.sync(() => {
-          adapter.write = original;
         }),
+      ),
+      (spy) => Effect.sync(() => spy.mockRestore()),
     );
     const exit = yield* Effect.exit(generateInvocationMetadata(root).pipe(Effect.result));
     expect(exit._tag).toBe("Failure");
