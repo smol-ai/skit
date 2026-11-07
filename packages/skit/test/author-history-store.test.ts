@@ -32,7 +32,8 @@ it.effect(
     Effect.gen(function* () {
       const f = yield* fixture;
       const store = yield* openStore(f.directory);
-      const large = new Uint8Array(2 * 1024 * 1024).fill(93);
+      // Size does not affect deduplication; keep the fixture small for full-tree comparisons.
+      const large = new Uint8Array(16 * 1024).fill(93);
       const first: History.Tree = [
         { path: "empty", kind: "directory" },
         { path: "large", kind: "file", mode: 0o755, bytes: large },
