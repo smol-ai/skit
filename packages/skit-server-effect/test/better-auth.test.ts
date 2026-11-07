@@ -1,7 +1,7 @@
 import { applyD1Migrations, env, reset } from "cloudflare:test";
 import { D1Client } from "@effect/sql-d1";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Order } from "effect";
 import { vi } from "vitest";
 import { makeWebHandler } from "../src/http.js";
 import { databaseLayer } from "../src/platform/cloudflare.js";
@@ -1503,7 +1503,7 @@ describe("Better Auth adapter", () => {
 
         // workerd may serialize the two requests; either way exactly one first write may commit.
         const raced = yield* Effect.all([firstWrite(), firstWrite()], { concurrency: "unbounded" });
-        expect(raced.map((response) => response.status).sort()).toEqual([200, 409]);
+        expect(raced.map((response) => response.status).sort(Order.Number)).toEqual([200, 409]);
         const winner = Schema.decodeUnknownSync(
           Schema.Struct({
             library: Schema.Struct({ library_id: Schema.String, revision_id: Schema.String }),

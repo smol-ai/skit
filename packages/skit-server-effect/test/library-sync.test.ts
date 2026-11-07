@@ -2,7 +2,7 @@
 import { applyD1Migrations, env, reset, SELF } from "cloudflare:test";
 import { beforeEach } from "vitest";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Order } from "effect";
 import {
   LibraryManifest,
   RemoteLibrary,
@@ -245,7 +245,7 @@ describe("Library sync Worker persistence", () => {
         [write(headers, null, empty), write(headers, null, other)],
         { concurrency: "unbounded" },
       );
-      expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+      expect(responses.map((response) => response.status).sort(Order.Number)).toEqual([200, 409]);
       const winner = Schema.decodeUnknownSync(remote)(
         yield* Effect.promise(() => responses.find((response) => response.status === 200)!.json()),
       ).library;

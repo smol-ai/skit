@@ -1,3 +1,4 @@
+import { Order } from "effect";
 import { expect, it } from "vitest";
 import {
   makeCollectionId,
@@ -323,6 +324,6 @@ it("groups installed copies by Collection identity, with independent loose Skill
     groups.installed
       .filter((group) => group.skills.length === 1)
       .map((group) => group.skills[0]?.path)
-      .sort(),
+      .sort(Order.mapInput(Order.String, String)),
   ).toEqual(["/claude/one", "/loose/one", "/loose/two"]);
 });

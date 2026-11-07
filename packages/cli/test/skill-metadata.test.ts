@@ -3,7 +3,7 @@ import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { ListResult } from "../src/library/list/output.js";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
-import { Effect, FileSystem, Schema } from "effect";
+import { Effect, FileSystem, Schema, Order } from "effect";
 import { join } from "node:path";
 
 import * as Library from "@smolai/skit-core/library";
@@ -207,7 +207,9 @@ it.effect("inventory distinguishes physical copy dates and follows symlink targe
     expect(inventory).not.toHaveProperty("schemaVersion");
     expect(inventory).not.toHaveProperty("device_skill_selection");
     expect(
-      inventory.machine.instances.map((instance) => instance.skill_md_modified_at).sort(),
+      inventory.machine.instances
+        .map((instance) => instance.skill_md_modified_at)
+        .sort(Order.mapInput(Order.String, String)),
     ).toEqual(["2026-01-03T00:00:00.000Z", "2026-09-20T00:00:00.000Z"]);
     expect((yield* readSkillPreviews([alias]))[0]?.modifiedAt).toBe("2026-01-03T00:00:00.000Z");
     expect((yield* readSkillPreviews([join(root, "missing")]))[0]?.modifiedAt).toBeNull();

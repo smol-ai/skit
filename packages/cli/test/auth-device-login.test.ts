@@ -2,7 +2,7 @@ import { systemError } from "effect/PlatformError";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
-import { Deferred, Effect, Exit, Fiber, FileSystem } from "effect";
+import { Deferred, Effect, Exit, Fiber, FileSystem, Order } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { addRegistryRemote, readConfig } from "../src/registry/auth.js";
@@ -439,7 +439,7 @@ it.live("concurrent browser login preparation publishes one reusable device code
       ],
       { concurrency: "unbounded" },
     ).pipe(Effect.provide(registryHttpLayer(testHttpClientLayer(server.handler))));
-    expect(attempts.map((attempt) => attempt.resumed).sort()).toEqual([false, true]);
+    expect(attempts.map((attempt) => attempt.resumed).sort(Order.Boolean)).toEqual([false, true]);
     expect(attempts[0].pending).toEqual(attempts[1].pending);
     expect(server.seen.filter((request) => request.path === "/api/auth/device/code")).toHaveLength(
       2,

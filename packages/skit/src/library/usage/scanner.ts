@@ -1,7 +1,7 @@
 import { NodeStream } from "@effect/platform-node";
 import { systemError } from "effect/PlatformError";
 import { createZstdDecompress } from "node:zlib";
-import { Clock, DateTime, Effect, FileSystem, Option, Stream } from "effect";
+import { Clock, DateTime, Effect, FileSystem, Option, Stream, Order } from "effect";
 import { createHash } from "node:crypto";
 import { isAbsolute, join, resolve } from "node:path";
 import { harnessDrivers } from "../../harnesses/drivers.js";
@@ -156,7 +156,7 @@ export const scanUsage = Effect.fn("Library.scanUsage")(function* (options: Usag
         return Effect.succeed([]);
       }),
     );
-    for (const name of names.sort()) yield* walk(join(dir, name), c);
+    for (const name of names.sort(Order.String)) yield* walk(join(dir, name), c);
   });
   for (const c of coverage) yield* walk(c.root, c, true);
   const observations: TranscriptEvent[] = [];

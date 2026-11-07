@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { D1Client } from "@effect/sql-d1";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Order } from "effect";
 import { makeWebHandler } from "../src/http.js";
 import { passwordCallbacks } from "../src/identity/internal/password.js";
 import { databaseLayer } from "../src/platform/cloudflare.js";
@@ -91,7 +91,7 @@ describe("bootstrap status", () => {
         ),
         { concurrency: "unbounded" },
       );
-      expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
+      expect(responses.map((response) => response.status).sort(Order.Number)).toEqual([201, 409]);
       const sql = yield* D1Client.D1Client;
       for (const table of [
         "user",
