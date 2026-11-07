@@ -10,10 +10,7 @@ const releaseOnlyWeb = makeWebHandler(env, {});
 
 const fetchEffect = (path: string) =>
   // oxlint-disable-next-line skit/no-promise-wrappers -- Fetch-compatible Worker handlers are Promise APIs; this test owns that host boundary.
-  Effect.tryPromise({
-    try: () => web.handler(new Request(`https://registry.test${path}`)),
-    catch: (cause) => cause,
-  }).pipe(Effect.orDie);
+  Effect.promise(() => web.handler(new Request(`https://registry.test${path}`)));
 
 describe("server discovery", () => {
   it("represents a release-download-only server without write capabilities", () => {

@@ -20,7 +20,7 @@ const web = makeWebHandler(env);
 
 const webPromise = <A>(evaluate: () => Promise<A>) =>
   // oxlint-disable-next-line skit/no-promise-wrappers -- Fetch-compatible Worker handlers are Promise APIs; this test helper owns that host boundary.
-  Effect.tryPromise({ try: evaluate, catch: (cause) => cause }).pipe(Effect.orDie);
+  Effect.promise(evaluate);
 
 const request = (path: string, init?: RequestInit) =>
   webPromise(() => web.handler(new Request(`https://registry.test${path}`, init)));
