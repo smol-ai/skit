@@ -1,4 +1,4 @@
-import { Effect, Schema as S } from "effect";
+import { Data, Effect, Schema as S } from "effect";
 import { Server } from "foldkit/experimental";
 import { Flags, init, view } from "./main.js";
 
@@ -17,25 +17,36 @@ const BootstrapStatus = S.Struct({ needed: S.Boolean });
 
 type RequestHandler = (request: Request) => Promise<Response>;
 
+class PageRequestFailed extends Data.TaggedError("PageRequestFailed")<{
+  message: string;
+  cause?: unknown;
+}> {}
+
 const requestJson = <A>(
   handler: RequestHandler,
   request: Request,
   schema: S.Codec<A, unknown, never, never>,
-): Effect.Effect<A, Error> =>
-  Effect.callback<A, Error>((resume, signal) => {
+): Effect.Effect<A, PageRequestFailed> =>
+  Effect.callback<A, PageRequestFailed>((resume, signal) => {
     handler(new Request(request, { signal }))
       .then(async (response) => {
         if (!response.ok) {
-          resume(Effect.fail(new Error(`HTTP ${response.status} from ${request.url}`)));
+          resume(
+            Effect.fail(
+              new PageRequestFailed({ message: `HTTP ${response.status} from ${request.url}` }),
+            ),
+          );
           return;
         }
         const body: unknown = await response.json();
         S.decodeUnknownPromise(schema)(body).then(
           (value) => resume(Effect.succeed(value)),
-          (cause) => resume(Effect.fail(new Error(String(cause)))),
+          (cause) => resume(Effect.fail(new PageRequestFailed({ message: String(cause), cause }))),
         );
       })
-      .catch((cause) => resume(Effect.fail(new Error(String(cause)))));
+      .catch((cause) =>
+        resume(Effect.fail(new PageRequestFailed({ message: String(cause), cause }))),
+      );
   });
 
 const requestFor = (request: Request, pathname: string): Request => {
@@ -46,7 +57,7 @@ const requestFor = (request: Request, pathname: string): Request => {
 export const flagsForRequest = (
   request: Request,
   handler: RequestHandler,
-): Effect.Effect<Flags, Error> =>
+): Effect.Effect<Flags, PageRequestFailed> =>
   Effect.gen(function* () {
     const url = new URL(request.url);
     const page =
@@ -107,7 +118,7 @@ export const renderPageEffect = (
   request: Request,
   handler: RequestHandler,
   buildId: string,
-): Effect.Effect<Server.EntryResult, Error | Server.RenderError> =>
+): Effect.Effect<Server.EntryResult, PageRequestFailed | Server.RenderError> =>
   Effect.gen(function* () {
     const flags = yield* flagsForRequest(request, handler);
     const renderedApplication = yield* Server.renderToString(
