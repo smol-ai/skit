@@ -1,5 +1,5 @@
 {
-  "$id": "skit.update.projection-retention.plan.v4",
+  "$id": "skit.update.projection-retention.plan.v3",
   "type": "object",
   "properties": {
     "revision": {

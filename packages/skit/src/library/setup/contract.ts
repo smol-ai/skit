@@ -59,7 +59,7 @@ export const SetupSkillsLock = Schema.Struct({
   scope: Schema.Literals(["project", "global"]),
   path: Schema.String,
   status: Schema.Literals(["valid", "malformed", "unsupported"]),
-  version: Schema.optionalKey(Schema.Number),
+  version: Schema.optionalKey(Schema.Finite),
   contentHash: Schema.optionalKey(Hash),
   entries: Schema.Array(SetupSkillsLockEntry),
 });
@@ -68,7 +68,7 @@ export type SetupSkillsLock = typeof SetupSkillsLock.Type;
 export const SetupLockMatch = Schema.Struct({
   scope: Schema.Literals(["project", "global"]),
   lockPath: Schema.String,
-  lockVersion: Schema.Number,
+  lockVersion: Schema.Finite,
   lockContentHash: Hash,
   content: Schema.Literals(["agrees", "mismatch", "unverifiable"]),
   entry: SetupSkillsLockEntry,

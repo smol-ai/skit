@@ -2,7 +2,7 @@
 
 `skit --version` prints the installed version without network access. `skit version`
 reports build identity and checks npm with a 1.5-second network timeout; `--json`
-returns `skit.version.v2` (replacing the subcommand’s previous v1 output).
+returns `skit.version.v3` (replacing the subcommand’s previous v1 output).
 The global `--version --json` retains `skit.version.v1`. An unavailable check does not fail local version reporting.
 Development builds can inspect npm but are not compared as published releases.
 

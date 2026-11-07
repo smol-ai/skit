@@ -13,8 +13,26 @@ import { enableOutputContracts } from "../src/library/enable.js";
 import { renderContract } from "../src/commands/output-presenters.js";
 import { defaultTerminalEnvironment, renderResultFrame } from "../src/commands/output-frame.js";
 import { writeCommandContractArtifacts } from "../src/platform/command-contracts.js";
+import { ReleaseCheck } from "../src/releases.js";
+import { UpdatePlan } from "../src/library/update/output.js";
 
 const contractsRoot = resolve(import.meta.dirname, "../contracts");
+
+test("release-check timestamps preserve finite millisecond precision", () => {
+  const timestamp = Schema.Struct({ checkedAt: ReleaseCheck.fields.checkedAt });
+  for (const checkedAt of [-1, 0, 1_700_000_000_000.25])
+    expect(Schema.encodeSync(timestamp)({ checkedAt })).toEqual({ checkedAt });
+  for (const checkedAt of [NaN, Infinity, -Infinity])
+    expect(() => Schema.encodeSync(timestamp)({ checkedAt })).toThrow();
+});
+
+test("new-available counts cannot emit fractional, negative or non-finite values", () => {
+  const count = Schema.Struct({ new_available: UpdatePlan.value.fields.new_available });
+  expect(Schema.encodeSync(count)({ new_available: 0 })).toEqual({ new_available: 0 });
+  expect(Schema.encodeSync(count)({ new_available: 3 })).toEqual({ new_available: 3 });
+  for (const new_available of [-1, 0.5, NaN, Infinity])
+    expect(() => Schema.encodeSync(count)({ new_available })).toThrow();
+});
 
 describe("generated command contracts", () => {
   it.effect("committed artifacts exactly match deterministic generation", () =>

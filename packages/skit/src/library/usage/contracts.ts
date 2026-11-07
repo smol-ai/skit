@@ -54,7 +54,7 @@ export const UsageReport = Schema.Struct({
   rows: Schema.Array(UsageRow),
   coverage: Schema.Array(UsageCoverage),
   incomplete: Schema.Boolean,
-  durationMs: Schema.Number,
+  durationMs: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
 });
 export namespace UsageReport {
   export interface Type extends Schema.Schema.Type<typeof UsageReport> {}

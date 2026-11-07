@@ -42,6 +42,7 @@ const envelope = (path: string, value: unknown) =>
   );
 const emptyDelivery = (): HistoryDelivery => ({ schemaVersion: 1, pending: [] });
 
+// oxlint-disable-next-line effecttsgo/schema-number -- Preserve numeric future-version diagnostics, including overflow.
 const StateVersion = Schema.Struct({ schemaVersion: Schema.Number });
 
 const readStateValue = Effect.fn("Library.readStateValue")(function* (path: string) {

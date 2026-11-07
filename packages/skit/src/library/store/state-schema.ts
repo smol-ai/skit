@@ -497,7 +497,7 @@ const StoredPlatformError = Schema.TaggedStruct("PlatformError", {
     method: Schema.String,
     description: Schema.optionalKey(Schema.String),
     syscall: Schema.optionalKey(Schema.String),
-    pathOrDescriptor: Schema.optionalKey(Schema.Union([Schema.String, Schema.Number])),
+    pathOrDescriptor: Schema.optionalKey(Schema.Union([Schema.String, Schema.Finite])),
   }),
 }).pipe(
   Schema.decodeTo(Schema.declare(isPlatformError), {

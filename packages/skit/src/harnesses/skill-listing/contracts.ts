@@ -18,7 +18,7 @@ export class ListingReadFailure
 export const ListingEntry = Schema.Struct({
   name: Schema.String,
   path: Schema.String,
-  demand: Schema.Number,
+  demand: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   collectionId: Schema.optionalKey(Schema.String),
 });
 export type ListingEntry = typeof ListingEntry.Type;
@@ -30,10 +30,14 @@ const fields = {
   cwd: Schema.String,
   model: Schema.NullOr(Schema.String),
   unit: Schema.Literals(["budget-tokens", "characters"]),
-  demand: Schema.Number,
+  demand: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   entries: Schema.Array(ListingEntry),
   collections: Schema.Array(
-    Schema.Struct({ collectionId: Schema.String, skills: Schema.Number, demand: Schema.Number }),
+    Schema.Struct({
+      collectionId: Schema.String,
+      skills: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      demand: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    }),
   ),
   basis: Schema.String,
   coverage: Schema.Array(Schema.String),
@@ -48,11 +52,14 @@ export const ListingBudget = Schema.Union([
   Schema.TaggedStruct("DemandOnly", fields),
   Schema.TaggedStruct("Estimated", {
     ...fields,
-    limit: Schema.Number,
-    fitted: Schema.NullOr(Schema.Number),
-    shortened: Schema.Number,
-    descriptionsDropped: Schema.Struct({ min: Schema.Number, max: Schema.Number }),
-    omitted: Schema.Number,
+    limit: Schema.Finite,
+    fitted: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+    shortened: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    descriptionsDropped: Schema.Struct({
+      min: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+      max: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    }),
+    omitted: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     fidelity: Schema.Literals(["modelled", "bounded"]),
   }),
 ]);

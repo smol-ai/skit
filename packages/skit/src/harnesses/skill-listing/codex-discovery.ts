@@ -28,7 +28,7 @@ const SkillsResponse = Schema.Struct({
   ),
 });
 const Envelope = Schema.Struct({
-  id: Schema.optionalKey(Schema.Union([Schema.Number, Schema.String])),
+  id: Schema.optionalKey(Schema.Union([Schema.Finite, Schema.String])),
   result: Schema.optionalKey(Schema.Unknown),
   error: Schema.optionalKey(Schema.Struct({ message: Schema.String })),
 });

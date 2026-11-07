@@ -132,6 +132,7 @@ export const SkillsShLockFileEntry = Schema.Struct({
   read_at: Schema.String,
   source_updated_at: Schema.optionalKey(Schema.String),
   lock_path: HistoricalLocator,
+  // oxlint-disable-next-line effecttsgo/schema-number -- Preserve lock metadata accepted by historical state migrations.
   lock_version: Schema.Number,
   lock_scope: Schema.Literals(["project", "global"]),
   lock_content_hash: Hash,

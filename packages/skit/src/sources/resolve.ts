@@ -467,7 +467,7 @@ export class CommandFailed
 export const SourcePolicyViolationReason = Schema.Union([
   Schema.TaggedStruct("Transport", {
     detail: Schema.String,
-    status: Schema.optionalKey(Schema.Number),
+    status: Schema.optionalKey(Schema.Int),
   }),
   Schema.TaggedStruct("LimitExceeded", { detail: Schema.String }),
   Schema.TaggedStruct("PinMismatch", { detail: Schema.String }),

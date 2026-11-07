@@ -206,7 +206,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     assert.deepStrictEqual(disabled.enabled, []);
     assert.deepStrictEqual(disabled.repositories, []);
     for (const result of yield* interaction.results) {
-      assert.strictEqual(result.schema, "skit.disable.v10");
+      assert.strictEqual(result.schema, "skit.disable.v8");
       assert.ok(
         renderSetEnabled(result.data as Parameters<typeof renderSetEnabled>[0], true).startsWith(
           "Disabled review",

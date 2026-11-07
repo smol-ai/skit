@@ -32,7 +32,7 @@ function failure(result: { stderr: string }): { code: string; message: string } 
 const CommandManifest = Schema.fromJsonString(
   Schema.Struct({
     commands: Schema.Array(
-      Schema.Struct({ path: Schema.Array(Schema.String), exitCodes: Schema.Array(Schema.Number) }),
+      Schema.Struct({ path: Schema.Array(Schema.String), exitCodes: Schema.Array(Schema.Int) }),
     ),
   }),
 );

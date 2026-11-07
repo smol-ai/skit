@@ -20,11 +20,11 @@ export const SyncResult = Schema.Struct({
   merge_base: Schema.optionalKey(Schema.Literals(["empty-first-sync", "empty-different-library"])),
   changed: Schema.optionalKey(Schema.Boolean),
   revision_id: Schema.optionalKey(Schema.String),
-  snapshots: Schema.optionalKey(Schema.Number),
+  snapshots: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   hash: Schema.optionalKey(Schema.String),
-  installed: Schema.optionalKey(Schema.Number),
-  uninstalled: Schema.optionalKey(Schema.Number),
-  collections_to_remove: Schema.optionalKey(Schema.Number),
+  installed: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+  uninstalled: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+  collections_to_remove: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   conflicts: Schema.optionalKey(Schema.Array(Schema.String)),
   conflict_details: Schema.optionalKey(Schema.Array(SyncConflictDetail)),
   sync_status: Schema.optionalKey(Schema.Literals(["clean", "pulled", "pushed", "merged"])),
@@ -34,5 +34,5 @@ export const SyncResult = Schema.Struct({
 export type SyncResult = typeof SyncResult.Type;
 
 export const syncOutputContracts = {
-  librarySync: { id: "skit.library.sync.v12", schema: SyncResult },
+  librarySync: { id: "skit.library.sync.v11", schema: SyncResult },
 } as const;

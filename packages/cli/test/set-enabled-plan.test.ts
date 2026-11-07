@@ -1406,7 +1406,7 @@ it.effect(
       assert.ok(result);
       assert.strictEqual(result.contract, "enable");
       if (result.contract !== "enable") return;
-      assert.strictEqual(result.schema, "skit.enable.v10");
+      assert.strictEqual(result.schema, "skit.enable.v8");
       assert.strictEqual(result.exitCode, 12);
       assert.strictEqual(result.data.application.status, "incomplete");
       assert.strictEqual(result.data.application.intent, "saved");

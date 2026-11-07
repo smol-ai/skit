@@ -16,10 +16,10 @@ export interface CodexListingOptions {
 const Configuration = Schema.Struct({
   config: Schema.Struct({
     model: Schema.optionalKey(Schema.NullOr(Schema.String)),
-    model_context_window: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+    model_context_window: Schema.optionalKey(Schema.NullOr(Schema.Finite)),
     skills: Schema.optionalKey(
       Schema.NullOr(
-        Schema.Struct({ max_context_tokens: Schema.optionalKey(Schema.NullOr(Schema.Number)) }),
+        Schema.Struct({ max_context_tokens: Schema.optionalKey(Schema.NullOr(Schema.Finite)) }),
       ),
     ),
   }),

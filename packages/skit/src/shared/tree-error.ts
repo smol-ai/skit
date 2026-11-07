@@ -4,7 +4,7 @@ import { FailureTypeId, type SkitFailure } from "./failure.js";
 const TreeErrorReason = Schema.Union([
   Schema.TaggedStruct("GitCommandFailed", {
     command: Schema.String,
-    exitCode: Schema.Number,
+    exitCode: Schema.Int,
   }),
   Schema.TaggedStruct("GitInspectionFailed", { detail: Schema.String }),
   Schema.TaggedStruct("EmbeddedRepository", { path: Schema.String }),

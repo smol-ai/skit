@@ -14,7 +14,11 @@ import {
   makeSkillVersionId,
 } from "../src/library/entity-ids.js";
 import { currentSkillVersion, type Enabled } from "../src/library/library-contracts.js";
-import { emptyLibraryState, type LibraryState } from "../src/library/library-state.js";
+import {
+  CURRENT_LIBRARY_STATE_VERSION,
+  emptyLibraryState,
+  type LibraryState,
+} from "../src/library/library-state.js";
 import { globalEnabled } from "../src/library/enabled.js";
 import { inspectLibrary, libraryLayer, saveLibrary } from "./helpers/library-store.js";
 import { migrateLocalLibraryState } from "../src/library/store/library-store.js";
@@ -26,6 +30,23 @@ const openedState = (home: string) =>
   migrateLocalLibraryState(home).pipe(Effect.andThen(inspectLibrary(home)));
 
 const fixtures = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "library-state");
+
+it.effect(
+  "fractional future version headers keep the unsupported-version diagnostic and bytes",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-future-version-" });
+      const path = join(home, "state.json");
+      const bytes = JSON.stringify({ schemaVersion: CURRENT_LIBRARY_STATE_VERSION + 0.5 });
+      yield* fs.writeFileString(path, bytes);
+      const failure = yield* Effect.flip(openedState(home));
+      assert.strictEqual(failure._tag, "InvalidLibraryState");
+      if (failure._tag === "InvalidLibraryState")
+        assert.match(failure.detail, /was written by a newer SKIT/);
+      assert.strictEqual(yield* fs.readFileString(path), bytes);
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
 
 const bindingEntries = (enabled: readonly Enabled[]) =>
   enabled.map((item) =>
@@ -1013,4 +1034,18 @@ it.effect("a failed backup flush preserves the historical state and can retry mi
     assert.strictEqual(migrated.present, true);
     if (migrated.present) assert.strictEqual(migrated.state.schemaVersion, 12);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect(
+  "classifies an overflow numeric future version without calling it a missing version",
+  () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const home = yield* fs.makeTempDirectoryScoped({ prefix: "skit-future-overflow-" });
+      yield* fs.writeFileString(join(home, "state.json"), '{"schemaVersion":1e309}');
+      const failure = yield* Effect.flip(openedState(home));
+      assert.strictEqual(failure._tag, "InvalidLibraryState");
+      if (failure._tag === "InvalidLibraryState")
+        assert.include(failure.detail, "schema vInfinity was written by a newer SKIT");
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

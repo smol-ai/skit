@@ -94,7 +94,7 @@ const syncPlan = Schema.TaggedStruct("Sync", {
     device: Schema.Unknown.pipe(Schema.refine(Schema.is(LibraryState))),
     deviceSelection: Schema.OptionFromOptionalKey(DeviceSkillSelection),
     installedSkills: Schema.OptionFromOptionalKey(SyncInstalledSkillsPreview),
-    collectionsToRemove: Schema.Number,
+    collectionsToRemove: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
     missingSelection: Schema.Array(Schema.String),
     collisions: Schema.Array(SyncConflictDetail),
     clean: Schema.Boolean,

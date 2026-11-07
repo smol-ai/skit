@@ -629,7 +629,7 @@ describe("Better Auth adapter", () => {
         user_code: Schema.String,
         verification_uri: Schema.String,
         verification_uri_complete: Schema.String,
-        interval: Schema.Number,
+        interval: Schema.Int,
       });
       expect(
         (yield* request("/api/auth/device/code", {
