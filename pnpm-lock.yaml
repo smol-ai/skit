@@ -5,10 +5,10 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  effect: 4.1.1
-  '@effect/platform-node-shared': 4.1.1
-  '@effect/platform-node': 4.1.1
-  '@effect/platform-browser': 4.1.1
+  effect: 4.1.2
+  '@effect/platform-node-shared': 4.1.2
+  '@effect/platform-node': 4.1.2
+  '@effect/platform-browser': 4.1.2
 
 patchedDependencies:
   '@cloudflare/vitest-plugin@1.3.5': 3533c80af9e0fa2bd7e5fec43098a7b36daa1ea52a5c258bf6020646d740a782
@@ -42,11 +42,11 @@ importers:
   packages/cli:
     devDependencies:
       '@effect/platform-node':
-        specifier: 4.1.1
-        version: 4.1.1(effect@4.1.1)(redis@6.2.1)
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)(redis@6.2.1)
       '@effect/vitest':
-        specifier: 4.1.1
-        version: 4.1.1(effect@4.1.1)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))
       '@smolai/skit-core':
         specifier: workspace:*
         version: link:../skit
@@ -57,8 +57,8 @@ importers:
         specifier: ^7.8.0
         version: 7.8.0
       effect:
-        specifier: 4.1.1
-        version: 4.1.1
+        specifier: 4.1.2
+        version: 4.1.2
       esbuild:
         specifier: 0.28.1
         version: 0.28.1
@@ -87,15 +87,15 @@ importers:
   packages/devtools:
     dependencies:
       '@effect/platform-node':
-        specifier: 4.1.1
-        version: 4.1.1(effect@4.1.1)(redis@6.2.1)
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)(redis@6.2.1)
       effect:
-        specifier: 4.1.1
-        version: 4.1.1
+        specifier: 4.1.2
+        version: 4.1.2
     devDependencies:
       '@effect/vitest':
-        specifier: 4.1.1
-        version: 4.1.1(effect@4.1.1)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))
       '@types/node':
         specifier: 24.10.1
         version: 24.10.1
@@ -109,17 +109,17 @@ importers:
   packages/skit:
     dependencies:
       '@effect/platform-node':
-        specifier: 4.1.1
-        version: 4.1.1(effect@4.1.1)(redis@6.2.1)
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)(redis@6.2.1)
       '@effect/sql-sqlite-node':
-        specifier: 4.1.1
-        version: 4.1.1(effect@4.1.1)
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)
       acorn:
         specifier: 8.15.0
         version: 8.15.0
       effect:
-        specifier: 4.1.1
-        version: 4.1.1
+        specifier: 4.1.2
+        version: 4.1.2
       typeid-js:
         specifier: ^1.2.0
         version: 1.2.0
@@ -131,8 +131,8 @@ importers:
         version: 3.3.1
     devDependencies:
       '@effect/vitest':
-        specifier: 4.1.1
-        version: 4.1.1(effect@4.1.1)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))
       '@types/node':
         specifier: 24.10.1
         version: 24.10.1
@@ -146,14 +146,14 @@ importers:
   packages/skit-server-effect:
     dependencies:
       '@effect/platform-browser':
-        specifier: 4.1.1
-        version: 4.1.1(effect@4.1.1)
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)
       '@effect/sql-d1':
-        specifier: 4.1.1
-        version: 4.1.1(effect@4.1.1)
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)
       '@foldkit/ui':
         specifier: 0.170.0
-        version: 0.170.0(effect@4.1.1)(foldkit@0.170.0(@effect/platform-browser@4.1.1(effect@4.1.1))(effect@4.1.1))
+        version: 0.170.0(effect@4.1.2)(foldkit@0.170.0(@effect/platform-browser@4.1.2(effect@4.1.2))(effect@4.1.2))
       '@smolai/skit-core':
         specifier: workspace:*
         version: link:../skit
@@ -164,8 +164,8 @@ importers:
         specifier: ^0.3.0
         version: 0.3.0
       effect:
-        specifier: 4.1.1
-        version: 4.1.1
+        specifier: 4.1.2
+        version: 4.1.2
       fflate:
         specifier: 0.8.2
         version: 0.8.2
@@ -186,11 +186,11 @@ importers:
         specifier: 1.3.5
         version: 1.3.5(patch_hash=3533c80af9e0fa2bd7e5fec43098a7b36daa1ea52a5c258bf6020646d740a782)(@cloudflare/workers-types@5.20261031.1)(@types/node@24.10.1)(@vitest/runner@4.1.10)(@vitest/snapshot@4.1.10)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))
       '@effect/vitest':
-        specifier: 4.1.1
-        version: 4.1.1(effect@4.1.1)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))
       '@foldkit/vite-plugin':
         specifier: 0.29.0
-        version: 0.29.0(effect@4.1.1)(foldkit@0.170.0(@effect/platform-browser@4.1.1(effect@4.1.1))(effect@4.1.1))(redis@6.2.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3))
+        version: 0.29.0(effect@4.1.2)(foldkit@0.170.0(@effect/platform-browser@4.1.2(effect@4.1.2))(effect@4.1.2))(redis@6.2.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3))
       '@tailwindcss/vite':
         specifier: ^4.3.3
         version: 4.3.3(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3))
@@ -199,7 +199,7 @@ importers:
         version: 24.10.1
       foldkit:
         specifier: 0.170.0
-        version: 0.170.0(@effect/platform-browser@4.1.1(effect@4.1.1))(effect@4.1.1)
+        version: 0.170.0(@effect/platform-browser@4.1.2(effect@4.1.2))(effect@4.1.2)
       tailwindcss:
         specifier: ^4.1.14
         version: 4.3.3
@@ -222,8 +222,8 @@ importers:
   packages/storybook:
     dependencies:
       '@effect/platform-node':
-        specifier: 4.1.1
-        version: 4.1.1(effect@4.1.1)(redis@6.2.1)
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)(redis@6.2.1)
       '@opentui/core':
         specifier: 0.5.9
         version: 0.5.9(typescript@5.9.3)(web-tree-sitter@0.25.10)
@@ -231,8 +231,8 @@ importers:
         specifier: workspace:*
         version: link:../cli
       effect:
-        specifier: 4.1.1
-        version: 4.1.1
+        specifier: 4.1.2
+        version: 4.1.2
     devDependencies:
       '@resvg/resvg-js':
         specifier: 2.6.2
@@ -265,12 +265,12 @@ importers:
         specifier: workspace:*
         version: link:../skit
       effect:
-        specifier: 4.1.1
-        version: 4.1.1
+        specifier: 4.1.2
+        version: 4.1.2
     devDependencies:
       '@effect/vitest':
-        specifier: 4.1.1
-        version: 4.1.1(effect@4.1.1)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))
+        specifier: 4.1.2
+        version: 4.1.2(effect@4.1.2)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))
       '@types/bun':
         specifier: latest
         version: 1.4.4
@@ -506,38 +506,38 @@ packages:
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
     engines: {node: '>=12'}
 
-  '@effect/platform-browser@4.1.1':
-    resolution: {integrity: sha512-bfJuCUX0qPv0fqVWq65cLNWoSFHt2vPDMn0m2cpaxz51/gaCclT3yBAk3JxN/7aEBvcKVXMui9G8uz4a9uoDgA==}
+  '@effect/platform-browser@4.1.2':
+    resolution: {integrity: sha512-O+C5hpnfdphBhSaOndFw8XA3dBG0x4SiF3m3QJzJwZZOlB4nGe+ghCZgknyaLcxigA8NqUtEj73rSsVVwshYFA==}
     peerDependencies:
-      effect: 4.1.1
+      effect: 4.1.2
 
-  '@effect/platform-node-shared@4.1.1':
-    resolution: {integrity: sha512-29zdEDs3i5W+t92+mWTFNSfzSHsTpZMcFZ9k4lkkz4tETlC1m4lRwjdjieJtvQ/bKHMnYrCtZwizsBFSf3L5Yg==}
+  '@effect/platform-node-shared@4.1.2':
+    resolution: {integrity: sha512-wSwl9A/G1hcVvF8nLI+YfB3EyOIDvWS6+lsTZBkmgDnPBL7m8YWZF+1HD+mdEsb52SUGfukip46Q3gRwSdk3QA==}
     engines: {node: '>=22.19.0'}
     peerDependencies:
-      effect: 4.1.1
+      effect: 4.1.2
 
-  '@effect/platform-node@4.1.1':
-    resolution: {integrity: sha512-Oy3eP27XeipUgejftptHy0zf2W75HU8/yPKwBqdz8uYxAvWdf4c48OFYs6KJX/+uIEKdMjnF6mXYgbauWgIcVA==}
+  '@effect/platform-node@4.1.2':
+    resolution: {integrity: sha512-ye0UjxORdd5Qu3paZ1LljgGOALWHt7muP9VTpjUSCNfcesiB/Hm7wPJIvZeu4gnwpTe5BtEnO1VHngWqjJp8mA==}
     engines: {node: '>=22.19.0'}
     peerDependencies:
-      effect: 4.1.1
+      effect: 4.1.2
       redis: '>=5.1.0 <7.0.0'
 
-  '@effect/sql-d1@4.1.1':
-    resolution: {integrity: sha512-CQMOiw9bmj4ifsUA4KLwIgBJBMpPHaF3OYdXnA9oOxeEmD61+XDLkJUSA2mG7BWCIEZc7MquGxl3HuUVOeqtSA==}
+  '@effect/sql-d1@4.1.2':
+    resolution: {integrity: sha512-7uzFwDg/SQali/+Edp6H/t0nQSXtdDsNO8dHkC8xl45/YITJ6F5Os0pBZdXMCdtqehekhDM3qzTtJut4rLGcEA==}
     peerDependencies:
-      effect: 4.1.1
+      effect: 4.1.2
 
-  '@effect/sql-sqlite-node@4.1.1':
-    resolution: {integrity: sha512-vg4ZuqrVN2no19hQnueU0APEbzpSeJ58TMMcqZUek9k2LtfVVhmSOsAgPnkNS37NmQnfXoAHkMY1ZjZBt48D8A==}
+  '@effect/sql-sqlite-node@4.1.2':
+    resolution: {integrity: sha512-fTmI8Ol1Lf8rGITtdIW285nuT9G46ETOPZ48CxlZ7vkfWDYgipYnH0dILxPGcZ6f/BMLeybmLRKKBcRWStShfQ==}
     peerDependencies:
-      effect: 4.1.1
+      effect: 4.1.2
 
-  '@effect/vitest@4.1.1':
-    resolution: {integrity: sha512-VkE9EUXE4G7mXMmV3X3Iu+6k3pZswWjOf7PB2qiaHMoFAZAPtHp+eUZo9oJM4Ip5z+ghQ9K0IDAQM2iG6+w5MA==}
+  '@effect/vitest@4.1.2':
+    resolution: {integrity: sha512-JJPwAHkJHxvM/woW9mMW/khjasAHcmwWdOMAgMy16rfqsxcVhFDnrRsvN9VI2+kMv8zDCCyBE2q1n5hzZlfE0w==}
     peerDependencies:
-      effect: 4.1.1
+      effect: 4.1.2
       vitest: '>=5.0.0 <6.0.0'
 
   '@emnapi/core@1.11.2':
@@ -721,14 +721,14 @@ packages:
     resolution: {integrity: sha512-OU6eDVwweFCUA8wsURIBoUptvohD1J7Xs+n+kRJT7h1vmqwajf8h6yu5PljntNrpi6QiRohjqR/sZt3fWSC65A==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
-      effect: 4.1.1
+      effect: 4.1.2
       foldkit: '>=0.167.0'
 
   '@foldkit/vite-plugin@0.29.0':
     resolution: {integrity: sha512-nLRScsxd7qzFI0omrkBsP9HtF+B0qhJ+wBEDhWSix+6yy2pmo8GXInq/Cdwu1OnaNkvo2+K4BOC/ZaV+/U7q0Q==}
     engines: {node: '>=22.19.0'}
     peerDependencies:
-      effect: 4.1.1
+      effect: 4.1.2
       foldkit: '>=0.167.0'
       vite: ^8.0.0
 
@@ -2425,8 +2425,8 @@ packages:
     resolution: {integrity: sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw==}
     engines: {node: '>=0.3.1'}
 
-  effect@4.1.1:
-    resolution: {integrity: sha512-XYu65BrcmNqu5i7PPvP4dqL+R5ma37zIsfuSPjcn78mog+6e5PkilNg7Xo+pBpjXJYlWEIpH4j91tMrfW05CMw==}
+  effect@4.1.2:
+    resolution: {integrity: sha512-d3Oah1WyKxFLFh19yWheS5IXIVaITzxZ71JkE1rkUozq/6EcJSU5nPk5bF2QrSygZ3SQoiNQB8TsxFriyMeMaQ==}
 
   emoji-regex@10.6.0:
     resolution: {integrity: sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A==}
@@ -2476,8 +2476,8 @@ packages:
     resolution: {integrity: sha512-H/MRQe/IZ/LqpgPi+Zy1S1OXQ8o12e2S/6U+phQu3WmoHSm7Vase/dEnOvrq9YZfqxK44/oVq6wE9oqXzEIaig==}
     engines: {node: '>=20.19.0'}
     peerDependencies:
-      '@effect/platform-browser': 4.1.1
-      effect: 4.1.1
+      '@effect/platform-browser': 4.1.2
+      effect: 4.1.2
 
   formatly@0.11.4:
     resolution: {integrity: sha512-TeCC10lP8KCgoX+Fe5lryILIT0/Dy+nP0OSVnsuB5CwXoLuOdqxCYlPFF1inR8S/zTy1ec7TjhS2TeRKWzzImA==}
@@ -3127,6 +3127,18 @@ packages:
       utf-8-validate:
         optional: true
 
+  ws@8.22.1:
+    resolution: {integrity: sha512-oyL6OPYme/CmiFvNuGzeoxCJ4nOrZE2O1FwM9MWM1AsGri6nLXB2pg+lNA8aLeXMSav0J6eIVS1j6vUPzUtK9g==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
   yallist@5.0.0:
     resolution: {integrity: sha512-YgvUTfwqyc7UXVMrB+SImsVYSmTS8X/tSrtdNZMImM+n7+QTriRXyXim0mBrTXNeqzVF0KWGgHPeiyViFFrNDw==}
     engines: {node: '>=18'}
@@ -3314,41 +3326,41 @@ snapshots:
     dependencies:
       '@jridgewell/trace-mapping': 0.3.9
 
-  '@effect/platform-browser@4.1.1(effect@4.1.1)':
+  '@effect/platform-browser@4.1.2(effect@4.1.2)':
     dependencies:
-      effect: 4.1.1
+      effect: 4.1.2
 
-  '@effect/platform-node-shared@4.1.1(effect@4.1.1)':
+  '@effect/platform-node-shared@4.1.2(effect@4.1.2)':
     dependencies:
       '@types/ws': 8.18.2
-      effect: 4.1.1
-      ws: 8.22.0
+      effect: 4.1.2
+      ws: 8.22.1
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@effect/platform-node@4.1.1(effect@4.1.1)(redis@6.2.1)':
+  '@effect/platform-node@4.1.2(effect@4.1.2)(redis@6.2.1)':
     dependencies:
-      '@effect/platform-node-shared': 4.1.1(effect@4.1.1)
-      effect: 4.1.1
+      '@effect/platform-node-shared': 4.1.2(effect@4.1.2)
+      effect: 4.1.2
       redis: 6.2.1
       undici: 8.12.3
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@effect/sql-d1@4.1.1(effect@4.1.1)':
+  '@effect/sql-d1@4.1.2(effect@4.1.2)':
     dependencies:
       '@cloudflare/workers-types': 5.20261031.1
-      effect: 4.1.1
+      effect: 4.1.2
 
-  '@effect/sql-sqlite-node@4.1.1(effect@4.1.1)':
+  '@effect/sql-sqlite-node@4.1.2(effect@4.1.2)':
     dependencies:
-      effect: 4.1.1
+      effect: 4.1.2
 
-  '@effect/vitest@4.1.1(effect@4.1.1)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))':
+  '@effect/vitest@4.1.2(effect@4.1.2)(vitest@5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)))':
     dependencies:
-      effect: 4.1.1
+      effect: 4.1.2
       vitest: 5.0.3(@types/node@24.10.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3))
 
   '@emnapi/core@1.11.2':
@@ -3461,18 +3473,18 @@ snapshots:
 
   '@floating-ui/utils@0.2.12': {}
 
-  '@foldkit/ui@0.170.0(effect@4.1.1)(foldkit@0.170.0(@effect/platform-browser@4.1.1(effect@4.1.1))(effect@4.1.1))':
+  '@foldkit/ui@0.170.0(effect@4.1.2)(foldkit@0.170.0(@effect/platform-browser@4.1.2(effect@4.1.2))(effect@4.1.2))':
     dependencies:
       '@floating-ui/dom': 1.8.0
-      effect: 4.1.1
-      foldkit: 0.170.0(@effect/platform-browser@4.1.1(effect@4.1.1))(effect@4.1.1)
+      effect: 4.1.2
+      foldkit: 0.170.0(@effect/platform-browser@4.1.2(effect@4.1.2))(effect@4.1.2)
 
-  '@foldkit/vite-plugin@0.29.0(effect@4.1.1)(foldkit@0.170.0(@effect/platform-browser@4.1.1(effect@4.1.1))(effect@4.1.1))(redis@6.2.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3))':
+  '@foldkit/vite-plugin@0.29.0(effect@4.1.2)(foldkit@0.170.0(@effect/platform-browser@4.1.2(effect@4.1.2))(effect@4.1.2))(redis@6.2.1)(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3))':
     dependencies:
-      '@effect/platform-node': 4.1.1(effect@4.1.1)(redis@6.2.1)
-      '@effect/platform-node-shared': 4.1.1(effect@4.1.1)
-      effect: 4.1.1
-      foldkit: 0.170.0(@effect/platform-browser@4.1.1(effect@4.1.1))(effect@4.1.1)
+      '@effect/platform-node': 4.1.2(effect@4.1.2)(redis@6.2.1)
+      '@effect/platform-node-shared': 4.1.2(effect@4.1.2)
+      effect: 4.1.2
+      foldkit: 0.170.0(@effect/platform-browser@4.1.2(effect@4.1.2))(effect@4.1.2)
       magic-string: 1.4.2
       vite: 8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3)
       vitefu: 1.1.3(vite@8.3.2(@types/node@24.10.1)(esbuild@0.28.1)(jiti@2.7.0)(yaml@2.8.3))
@@ -4525,7 +4537,7 @@ snapshots:
 
   diff@9.0.0: {}
 
-  effect@4.1.1: {}
+  effect@4.1.2: {}
 
   emoji-regex@10.6.0: {}
 
@@ -4585,10 +4597,10 @@ snapshots:
 
   fflate@0.8.2: {}
 
-  foldkit@0.170.0(@effect/platform-browser@4.1.1(effect@4.1.1))(effect@4.1.1):
+  foldkit@0.170.0(@effect/platform-browser@4.1.2(effect@4.1.2))(effect@4.1.2):
     dependencies:
-      '@effect/platform-browser': 4.1.1(effect@4.1.1)
-      effect: 4.1.1
+      '@effect/platform-browser': 4.1.2(effect@4.1.2)
+      effect: 4.1.2
       parse5: 8.0.1
 
   formatly@0.11.4:
@@ -5271,6 +5283,8 @@ snapshots:
   ws@8.21.0: {}
 
   ws@8.22.0: {}
+
+  ws@8.22.1: {}
 
   yallist@5.0.0: {}
 
