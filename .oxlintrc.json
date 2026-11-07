@@ -5,6 +5,7 @@
   "ignorePatterns": ["packages/cli/test/fixtures/source-regressions/humanlayer/**"],
   "jsPlugins": ["./lint/oxlint-plugin-skit.mjs"],
   "rules": {
+    "effecttsgo/experimental-api-usage": "off",
     "oxc/no-barrel-file": "error",
     "skit/frontend-no-resources": "error",
     "skit/no-failure-unions": "error",
