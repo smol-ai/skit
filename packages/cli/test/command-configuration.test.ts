@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { ConfigProvider, Effect, FileSystem } from "effect";
+import { Cause, ConfigProvider, Effect, Exit, FileSystem } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { Command } from "effect/cli";
 import { SkitConfiguration, resolveSkitConfiguration } from "@smolai/skit-core/platform";
@@ -8,6 +8,26 @@ import { rendererTestLayer } from "./helpers/renderer.js";
 import { skitCommand } from "../src/commands/tree.js";
 import type { CommandFailure } from "../src/commands/types.js";
 import { join } from "node:path";
+
+it.effect("an interrupted command propagates interruption without rendering a failure", () =>
+  Effect.gen(function* () {
+    const failures: CommandFailure[] = [];
+    const command = Command.make("probe", {}, () => Effect.interrupt);
+    const exit = yield* runCommandTree(command, [], "test").pipe(
+      Effect.provide(
+        rendererTestLayer({
+          failure: (failure) =>
+            Effect.sync(() => {
+              failures.push(failure);
+            }),
+        }),
+      ),
+      Effect.exit,
+    );
+    expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true);
+    expect(failures).toEqual([]);
+  }).pipe(Effect.provide(NodeServices.layer)),
+);
 
 it.effect("standalone commands resolve configuration and preserve a supplied snapshot", () =>
   Effect.gen(function* () {

@@ -94,8 +94,9 @@ export const makeSnapshots = (
   });
   const ownDefault = (principal: Principal) =>
     own(principal, true).pipe(
-      Effect.flatMap((library) =>
-        library === undefined ? Effect.fail(new SnapshotStoreInvalid()) : Effect.succeed(library),
+      Effect.filterOrFail(
+        (library) => library !== undefined,
+        () => new SnapshotStoreInvalid(),
       ),
     );
   const upload = Effect.fn("LibrarySnapshots.upload")(function* (

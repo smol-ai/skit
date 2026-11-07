@@ -98,10 +98,9 @@ export function runCommandTree<Name extends string, Input, ContextInput, E, R>(
         }),
       ),
     ).pipe(
-      Effect.catchCause((cause) =>
-        Cause.hasInterruptsOnly(cause)
-          ? Effect.failCause(cause)
-          : Effect.flatMap(Renderer, (renderer) => renderer.failure(commandFailure(cause))),
+      Effect.catchCauseIf(
+        (cause) => !Cause.hasInterruptsOnly(cause),
+        (cause) => Effect.flatMap(Renderer, (renderer) => renderer.failure(commandFailure(cause))),
       ),
     ),
   );

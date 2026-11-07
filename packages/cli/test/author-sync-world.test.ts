@@ -391,8 +391,9 @@ it.effect.each(["distinct", "hardlink"] as const)(
         })
         .pipe(
           Effect.as(true),
-          Effect.catch((error) =>
-            error.reason._tag === "AlreadyExists" ? Effect.succeed(false) : Effect.fail(error),
+          Effect.catchIf(
+            (error) => error.reason._tag === "AlreadyExists",
+            () => Effect.succeed(false),
           ),
         );
       if (!distinct) {
@@ -443,8 +444,9 @@ it.effect("a new incoming NFC name cannot create a twin beside an ignored NFD en
       })
       .pipe(
         Effect.as(true),
-        Effect.catch((error) =>
-          error.reason._tag === "AlreadyExists" ? Effect.succeed(false) : Effect.fail(error),
+        Effect.catchIf(
+          (error) => error.reason._tag === "AlreadyExists",
+          () => Effect.succeed(false),
         ),
       );
     if (!distinct) {
