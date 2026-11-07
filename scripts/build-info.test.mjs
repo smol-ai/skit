@@ -4,7 +4,7 @@ import { writeFileSync } from "node:fs";
 import { buildInfo } from "./build-info.mjs";
 import { releaseFixture } from "./release-test-fixture.mjs";
 
-test("release validation requires the artifact tag, supported version, and clean source", () => {
+await test("release validation requires the artifact tag, supported version, and clean source", () => {
   const fixture = releaseFixture();
   try {
     const release = buildInfo(fixture.metadata, { SKIT_RELEASE: "1" });

@@ -22,7 +22,7 @@ async function verify(expected = {}, healthBuild = build) {
   });
   return { code, output, errors };
 }
-test("reports running identity and verifies the requested release", async () => {
+await test("reports running identity and verifies the requested release", async () => {
   const result = await verify({
     SKIT_EXPECTED_SERVER_VERSION: "0.2.0",
     SKIT_EXPECTED_SERVER_COMMIT: "abc123",
@@ -30,12 +30,12 @@ test("reports running identity and verifies the requested release", async () => 
   assert.equal(result.code, 0);
   assert.match(result.output[1], /0.2.0.*release.*abc123.*build-1/);
 });
-test("fails a healthy deployment running a different commit", async () => {
+await test("fails a healthy deployment running a different commit", async () => {
   const result = await verify({ SKIT_EXPECTED_SERVER_COMMIT: "other" });
   assert.equal(result.code, 1);
   assert.match(result.errors[0], /expected commit other/);
 });
-test("accepts legacy health without expectations but fails identity verification", async () => {
+await test("accepts legacy health without expectations but fails identity verification", async () => {
   assert.equal((await verify({}, null)).code, 0);
   assert.equal((await verify({ SKIT_EXPECTED_SERVER_VERSION: "0.2.0" }, null)).code, 1);
 });

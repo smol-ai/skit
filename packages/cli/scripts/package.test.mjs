@@ -25,7 +25,7 @@ const cleanEnvironment = (cache) => ({
   SKIT_NPM_REGISTRY: "http://127.0.0.1:1",
 });
 
-test("the packed CLI installs and runs without workspace dependencies", () => {
+await test("the packed CLI installs and runs without workspace dependencies", () => {
   const root = mkdtempSync(join(tmpdir(), "skit-package-test-"));
   try {
     const environment = cleanEnvironment(join(root, "npm-cache"));
