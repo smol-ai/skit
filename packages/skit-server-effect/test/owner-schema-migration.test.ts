@@ -31,7 +31,10 @@ it.effect(
         `INSERT INTO namespaces VALUES ('alice', 'principal', 'principal_fixture', 'created'), ('team-fixture', 'team', 'team_fixture', 'created')`,
         `INSERT INTO server_operators VALUES ('principal_fixture', 'created')`,
         `INSERT INTO server_bootstrap VALUES ('singleton', 'created', 'principal_fixture')`,
-        `INSERT INTO drafts VALUES ('alice', 'tools', 'Tools', '', 'private', NULL, 'created', 'updated')`,
+        `INSERT INTO drafts VALUES ('alice', 'tools', 'Tools', '', 'private', 'revision_two', 'created', 'updated')`,
+        `INSERT INTO draft_revisions VALUES ('revision_one', 'alice', 'tools', NULL, 'sha256:one', '{}', '[]', 'first'),
+          ('revision_two', 'alice', 'tools', 'revision_one', 'sha256:two', '{}', '[]', 'second')`,
+        `INSERT INTO draft_files VALUES ('revision_two', 'skit.json', 'sha256:two', 2, 'application/json', 0, 'draft-blobs/two')`,
         `INSERT INTO releases (owner_slug, skit_slug, version, release_id, source_revision, archive_digest, archive_bytes, archive_object_key, published_at, visibility, adopted_content_digest)
         VALUES ('alice', 'tools', '1.0.0', 'release_one', 'revision_one', 'digest_one', 12, 'archive_one', 'first', 'private', 'legacy_digest'),
                ('alice', 'tools', '2.0.0', 'release_two', 'revision_two', 'digest_two', 24, 'archive_two', 'second', 'public', NULL)`,
@@ -76,7 +79,7 @@ it.effect(
       expect(
         (yield* host(() =>
           env.DB.prepare(
-            "SELECT name FROM sqlite_schema WHERE name IN ('drafts', 'draft_files', 'draft_revisions', 'resource_grants', 'rateLimit', 'idx_releases_adopted_content', 'skit_upgrade_requires_empty_legacy_drafts')",
+            "SELECT name FROM sqlite_schema WHERE name IN ('drafts', 'draft_files', 'draft_revisions', 'resource_grants', 'rateLimit', 'idx_releases_adopted_content')",
           ).all(),
         )).results,
       ).toEqual([]);
@@ -134,36 +137,44 @@ it.effect(
     }),
 );
 
-it.effect(
-  "the dev upgrade refuses legacy Draft snapshots without clearing their history or pointer",
-  () =>
-    Effect.gen(function* () {
-      yield* host(() => reset());
-      yield* host(() => applyD1Migrations(env.DB, previous()));
-      yield* host(() =>
-        env.DB.batch([
-          env.DB.prepare(
-            "INSERT INTO drafts VALUES ('alice', 'tools', 'Tools', '', 'private', 'draft_old', 'then', 'then')",
-          ),
-          env.DB.prepare(
-            `INSERT INTO draft_revisions VALUES ('draft_old', 'alice', 'tools', NULL, 'sha256:old', '{}', '[]', 'then')`,
-          ),
-          env.DB.prepare(
-            `INSERT INTO draft_files VALUES ('draft_old', 'skit.json', 'sha256:old', 2, 'application/json', 0, 'draft-blobs/old')`,
-          ),
-        ]),
-      );
-      const tables = ["drafts", "draft_revisions", "draft_files"];
-      const before = yield* Effect.forEach(tables, (table) =>
-        host(() => env.DB.prepare(`SELECT * FROM ${table}`).all()),
-      );
-      const failed = yield* Effect.exit(host(() => applyD1Migrations(env.DB, upgrade())));
-      expect(failed._tag).toBe("Failure");
-      if (failed._tag === "Failure")
-        expect(Cause.pretty(failed.cause)).toContain("CHECK constraint failed");
-      for (const [index, table] of tables.entries())
-        expect((yield* host(() => env.DB.prepare(`SELECT * FROM ${table}`).all())).results).toEqual(
-          before[index]?.results,
-        );
-    }),
+it.effect("the dev upgrade discards legacy Draft content and keeps the SKIT row", () =>
+  Effect.gen(function* () {
+    yield* host(() => reset());
+    yield* host(() => applyD1Migrations(env.DB, previous()));
+    yield* host(() =>
+      env.DB.batch([
+        env.DB.prepare(
+          "INSERT INTO drafts VALUES ('alice', 'tools', 'Tools', '', 'private', 'draft_old', 'then', 'then')",
+        ),
+        env.DB.prepare(
+          `INSERT INTO draft_revisions VALUES ('draft_old', 'alice', 'tools', NULL, 'sha256:old', '{}', '[]', 'then')`,
+        ),
+        env.DB.prepare(
+          `INSERT INTO draft_files VALUES ('draft_old', 'skit.json', 'sha256:old', 2, 'application/json', 0, 'draft-blobs/old')`,
+        ),
+      ]),
+    );
+    yield* host(() => applyD1Migrations(env.DB, upgrade()));
+    expect((yield* host(() => env.DB.prepare("SELECT * FROM skits").all())).results).toEqual([
+      {
+        owner_slug: "alice",
+        skit_slug: "tools",
+        visibility: "private",
+        current_revision_id: null,
+        created_at: "then",
+        updated_at: "then",
+        creation_request_id: null,
+      },
+    ]);
+    expect(
+      (yield* host(() =>
+        env.DB.prepare(
+          "SELECT name FROM sqlite_schema WHERE name IN ('draft_files', 'draft_revisions')",
+        ).all(),
+      )).results,
+    ).toEqual([]);
+    expect((yield* host(() => env.DB.prepare("PRAGMA foreign_key_check").all())).results).toEqual(
+      [],
+    );
+  }),
 );

@@ -92,10 +92,9 @@ old Worker uses tables that this migration replaces or removes, and deployment
 applies migrations before switching Workers. The previous unreleased
 compatibility-revision deployment sequence does not apply to this flattened chain.
 
-The migration refuses a database containing legacy Draft revisions, files or a
-current Draft pointer. It leaves that history intact instead of silently dropping
-it. Such an installation needs a reviewed data conversion before the upgrade can
-proceed. Branch-only migrations and file formats are not supported upgrade sources;
+The migration discards legacy Draft revisions, files and current Draft pointers;
+no released CLI could author Drafts. SKITs and their Releases are kept, and each
+SKIT starts with no current revision. Branch-only migrations and file formats are not supported upgrade sources;
 they were confirmed unused before consolidation.
 
 ## Promote to a custom domain

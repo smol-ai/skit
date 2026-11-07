@@ -1,13 +1,7 @@
 -- One upgrade from the dev schema (0009) to the current owner model.
--- Refuse legacy snapshots instead of discarding their files or revision pointers.
-CREATE TABLE IF NOT EXISTS skit_upgrade_requires_empty_legacy_drafts (
-  snapshots INTEGER NOT NULL CHECK (snapshots = 0)
-);
-INSERT INTO skit_upgrade_requires_empty_legacy_drafts
-  SELECT (SELECT COUNT(*) FROM draft_revisions)
-       + (SELECT COUNT(*) FROM draft_files)
-       + (SELECT COUNT(*) FROM drafts WHERE current_revision_id IS NOT NULL);
-DROP TABLE skit_upgrade_requires_empty_legacy_drafts;
+-- Legacy Draft content is discarded: no released CLI could author Drafts. SKIT rows and their
+-- Releases are kept; each SKIT starts with no current revision.
+UPDATE drafts SET current_revision_id = NULL;
 
 DROP TABLE draft_files;
 DROP TABLE draft_revisions;

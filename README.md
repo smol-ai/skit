@@ -30,6 +30,10 @@ SKIT exists because we think the UX for skills can and should be better than thi
 
 ## Getting started
 
+Requires Node.js `^24.22.1 || >=26.12.1`, matching the published package's
+`engines.node`. Node 22 and Node 25 are no longer supported. If you installed
+SKIT 0.3.0 on Node 22, upgrade Node before upgrading SKIT.
+
 Install:
 
 ```sh
