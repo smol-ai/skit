@@ -86,7 +86,7 @@ export const makePublication = (
   ) => Effect.Effect<SkitCurrentResponse | undefined, DatabaseError>,
   ownsNamespace: (principal: Principal, namespace: string) => Effect.Effect<boolean, DatabaseError>,
 ): Publication => {
-  const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
+  const db = <A, E>(operation: string, effect: Effect.Effect<A, E>) =>
     effect.pipe(databaseError(operation));
   const findRelease = Effect.fn("Publication.findRelease")(function* (
     owner: string,

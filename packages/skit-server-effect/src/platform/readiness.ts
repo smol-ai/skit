@@ -13,7 +13,7 @@ export const inspectReadiness = Effect.fn("Readiness.inspect")(function* (
 ): Effect.fn.Return<Readiness, never, BlobStore | D1Client.D1Client> {
   const blobs = yield* BlobStore;
   const sql: DatabaseSqlClient = yield* D1Client.D1Client;
-  const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
+  const db = <A, E>(operation: string, effect: Effect.Effect<A, E>) =>
     effect.pipe(databaseError(operation));
 
   const missing = [

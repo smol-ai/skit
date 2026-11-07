@@ -82,7 +82,7 @@ export const makeSync = (
   random: SecureRandom.SecureRandom["Service"],
   own: FindLibrary,
 ): Sync => {
-  const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
+  const db = <A, E>(operation: string, effect: Effect.Effect<A, E>) =>
     effect.pipe(databaseError(operation));
   const revision = Effect.fn("LibrarySync.revision")(function* (id: string) {
     const rows = yield* db(

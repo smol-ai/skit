@@ -90,7 +90,7 @@ class RegistryResponseDecodeError extends Data.TaggedError("RegistryResponseDeco
   }
 }
 
-export const markRegistryResponseDecoding = (effect: Effect.Effect<unknown, unknown, unknown>) =>
+export const markRegistryResponseDecoding = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.mapError((error) =>
       Schema.isSchemaError(error) ? new RegistryResponseDecodeError({ cause: error }) : error,

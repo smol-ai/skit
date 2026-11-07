@@ -62,7 +62,7 @@ export const layer = Layer.effect(
     const sql: DatabaseSqlClient = yield* D1Client.D1Client;
     const random = yield* SecureRandom.SecureRandom;
     const clock = yield* Clock.Clock;
-    const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
+    const db = <A, E>(operation: string, effect: Effect.Effect<A, E>) =>
       effect.pipe(databaseError(operation));
 
     const memberTeamIds = Effect.fn("Teams.memberTeamIds")(function* (principal: Principal) {

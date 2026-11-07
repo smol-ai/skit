@@ -310,7 +310,14 @@ export interface NativeDiscovery {
     version?: string,
   ) => Effect.Effect<
     { readonly skills: readonly HarnessDoctorSkill[]; readonly warnings: readonly string[] },
-    unknown,
+    Effect.Error<
+      ReturnType<
+        | typeof readClaudeCommands
+        | typeof readOpenCodeSkills
+        | typeof readOpenCodeV2Skills
+        | typeof readDevinSkills
+      >
+    >,
     ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | SourceProcess
   >;
   /** Drop diagnostics that only restate SKIT's own expected installed skills. */

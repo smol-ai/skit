@@ -68,7 +68,7 @@ export const makeBootstrap = (sql: DatabaseSqlClient, bootstrapSecret: string | 
     const random = yield* SecureRandom.SecureRandom;
     const digests = yield* Digest.Digest;
     const clock = yield* Clock.Clock;
-    const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
+    const db = <A, E>(operation: string, effect: Effect.Effect<A, E>) =>
       effect.pipe(databaseError(operation));
 
     const isNeeded = Effect.fn("Bootstrap.isNeeded")(function* () {

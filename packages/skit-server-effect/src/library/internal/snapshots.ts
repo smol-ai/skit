@@ -64,7 +64,7 @@ export const makeSnapshots = (
   clock: Clock.Clock,
   own: FindLibrary,
 ): Snapshots => {
-  const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
+  const db = <A, E>(operation: string, effect: Effect.Effect<A, E>) =>
     effect.pipe(databaseError(operation));
   const snapshotRow = Effect.fn("LibrarySnapshots.row")(function* (
     libraryId: string,

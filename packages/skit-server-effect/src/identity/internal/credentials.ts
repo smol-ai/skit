@@ -98,7 +98,7 @@ export const makeCredentials = (
     const digests = yield* Digest.Digest;
     const random = yield* SecureRandom.SecureRandom;
     const clock = yield* Clock.Clock;
-    const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
+    const db = <A, E>(operation: string, effect: Effect.Effect<A, E>) =>
       effect.pipe(databaseError(operation));
 
     const authenticatePat = Effect.fn("Authentication.authenticatePat")(function* (token: string) {

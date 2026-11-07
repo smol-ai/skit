@@ -34,7 +34,7 @@ const predicate = (subjects: ReadonlyArray<NamespaceSubject>) => ({
 export const makeNamespaceAccess = Effect.fn("Identity.makeNamespaceAccess")(function* () {
   const sql: DatabaseSqlClient = yield* D1Client.D1Client;
   const teams = yield* Teams;
-  const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
+  const db = <A, E>(operation: string, effect: Effect.Effect<A, E>) =>
     effect.pipe(databaseError(operation));
 
   const subjects = Effect.fn("Identity.subjects")(function* (principal: Principal) {

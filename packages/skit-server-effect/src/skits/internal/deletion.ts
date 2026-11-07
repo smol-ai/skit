@@ -62,7 +62,7 @@ export const makeDeletion = (
   blobs: BlobStoreService,
   ownsNamespace: (principal: Principal, namespace: string) => Effect.Effect<boolean, DatabaseError>,
 ): Deletion => {
-  const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
+  const db = <A, E>(operation: string, effect: Effect.Effect<A, E>) =>
     effect.pipe(databaseError(operation));
 
   const plan = Effect.fn("SkitDeletion.plan")(function* (owner: string, slug: string) {

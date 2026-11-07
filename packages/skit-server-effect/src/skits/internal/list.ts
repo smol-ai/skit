@@ -58,7 +58,7 @@ export const makeList = (
   sql: DatabaseSqlClient,
   ownedNamespaces: (principal: Principal) => Effect.Effect<ReadonlyArray<string>, DatabaseError>,
 ): List => {
-  const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
+  const db = <A, E>(operation: string, effect: Effect.Effect<A, E>) =>
     effect.pipe(databaseError(operation));
 
   const accessedSkits = (

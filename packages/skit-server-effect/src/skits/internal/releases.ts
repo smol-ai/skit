@@ -41,13 +41,13 @@ export interface Releases {
     readonly owner: string;
     readonly slug: string;
   }) => Effect.Effect<DownloadableRelease | null, DatabaseError | StoredReleaseInvalid>;
-  readonly findDownload: (
+  readonly findDownload: <E>(
     input: {
       readonly owner: string;
       readonly slug: string;
       readonly version: string;
     },
-    authenticate?: Effect.Effect<Principal | undefined, unknown>,
+    authenticate?: Effect.Effect<Principal | undefined, E>,
   ) => Effect.Effect<
     DownloadableRelease | null,
     DatabaseError | StoredReleaseInvalid | DownloadAuthenticationFailed
@@ -60,7 +60,7 @@ export const makeReleaseReads = (
   blobs: BlobStoreService,
   ownsNamespace: (principal: Principal, namespace: string) => Effect.Effect<boolean, DatabaseError>,
 ): Releases => {
-  const db = <A>(operation: string, effect: Effect.Effect<A, unknown>) =>
+  const db = <A, E>(operation: string, effect: Effect.Effect<A, E>) =>
     effect.pipe(databaseError(operation));
   const readArchive = Effect.fn("ReleaseStore.readArchive")((objectKey: string) =>
     blobs.get("read release archive", objectKey),
@@ -138,9 +138,9 @@ export const makeReleaseReads = (
     return yield* Effect.forEach(rows, decodeRelease);
   });
 
-  const findDownload = Effect.fn("ReleaseStore.findDownload")(function* (
+  const findDownload = Effect.fn("ReleaseStore.findDownload")(function* <E>(
     input: { readonly owner: string; readonly slug: string; readonly version: string },
-    authenticate?: Effect.Effect<Principal | undefined, unknown>,
+    authenticate?: Effect.Effect<Principal | undefined, E>,
   ) {
     if (input.version !== "latest") {
       const release = yield* findExactDownload(input);
