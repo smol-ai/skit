@@ -64,7 +64,7 @@ export const effectHygieneRules = {
     create(context) {
       const effect = effectImports();
       return {
-        ImportDeclaration: effect.ImportDeclaration,
+        ImportDeclaration: effect.ImportDeclaration.bind(effect),
         CallExpression(node) {
           if (effect.is(node.callee, "promise") && importsModule(node.arguments[0])) return;
           if (effect.is(node.callee, "promise") || effect.is(node.callee, "tryPromise"))
@@ -85,7 +85,7 @@ export const effectHygieneRules = {
     create(context) {
       const effect = effectImports();
       return {
-        ImportDeclaration: effect.ImportDeclaration,
+        ImportDeclaration: effect.ImportDeclaration.bind(effect),
         CallExpression(node) {
           if (!effect.is(node.callee, "catchCause")) return;
           // Both catchCause(handler) and catchCause(program, handler) are supported.
