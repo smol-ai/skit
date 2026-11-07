@@ -1,4 +1,5 @@
 import type * as Library from "../../library.js";
+import { uniqueInstallScopes } from "./set-enabled-request.js";
 import { StalePlan } from "../../library-plan.js";
 import { emptyLibraryState } from "../../library-state.js";
 import { InstalledSkillWouldDuplicate } from "../../library-plan.js";
@@ -15,14 +16,7 @@ import { invocationReadModel, type InvocationReadModel } from "./invocation.js";
 import type { AuthorInvocationRead } from "./invocation-source.js";
 import { scopeRowLabel, destinationLabel } from "./read-model.js";
 import { failureDetails, type FailureDetails } from "../../../shared/failure.js";
-import type { InventoryRootOptions } from "../../routing/roots.js";
-import {
-  applySetEnabledPlan,
-  openSetEnabledSession,
-  type SetEnabledIntent,
-  type SetEnabledSession,
-  type SetEnabledPlan,
-} from "./set-enabled.js";
+import { setEnabledOutcomes, type SetEnabledIntent, type SetEnabledPlan } from "./set-enabled.js";
 
 export interface ScopeRow {
   readonly scope: InstallScope;
@@ -72,27 +66,34 @@ export type LibraryActionOutcome =
   | { readonly kind: "cancelled"; readonly pending?: PendingLibraryChange }
   | { readonly kind: "failed"; readonly failure: FailureDetails };
 
-const sessionSelection = Symbol("LibrarySessionSelection");
+const sessionContext = Symbol("LibrarySessionContext");
+type SessionLibrary = Pick<Library.Interface, "read" | "skills" | "list" | "planEnabled" | "apply">;
+interface SessionContext {
+  readonly library: SessionLibrary;
+  readonly base: Library.Snapshot;
+  readonly collections: Effect.Success<ReturnType<Library.Interface["list"]>>["collections"];
+  readonly placements: Effect.Success<ReturnType<Library.Interface["list"]>>["placements"];
+}
 
 export interface LibrarySessionState {
-  readonly [sessionSelection]?: SetEnabledSession;
+  readonly [sessionContext]?: SessionContext;
   readonly skills: readonly LibrarySkillRow[];
   readonly pending?: PendingLibraryChange;
   readonly outcome?: LibraryActionOutcome;
 }
 
 export const openLibrarySession = Effect.fn("LibrarySession.open")(function* (
-  library: Pick<Library.Interface, "read" | "plan" | "apply">,
-  home: string,
-  roots: InventoryRootOptions,
+  library: SessionLibrary,
 ) {
-  return yield* sessionFromSelection(yield* openSetEnabledSession(library, home, roots));
+  return yield* sessionFromSnapshot(library, yield* library.read);
 });
 
-const sessionFromSelection = Effect.fn("LibrarySession.read")(function* (
-  selection: SetEnabledSession,
+const sessionFromSnapshot = Effect.fn("LibrarySession.read")(function* (
+  library: SessionLibrary,
+  base: Library.Snapshot,
 ) {
-  const rows = yield* selection.view.readSkills();
+  const rows = yield* library.skills({ base });
+  const { collections, placements } = yield* library.list({ base });
   const skills: LibrarySkillRow[] = rows.map((row) => ({
     source: row.source,
     revision: row.revision,
@@ -124,7 +125,10 @@ const sessionFromSelection = Effect.fn("LibrarySession.read")(function* (
       return { scope, invocation, policy, label: scopeRowLabel({ scope, policy }) };
     }),
   }));
-  const session: LibrarySessionState = { skills, [sessionSelection]: selection };
+  const session: LibrarySessionState = {
+    skills,
+    [sessionContext]: { library, base, collections, placements },
+  };
   return session;
 });
 
@@ -197,14 +201,14 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
   intent: SetEnabledIntent,
   policies: readonly InvocationReadModel[] = [],
 ) {
-  const selection = state[sessionSelection];
+  const context = state[sessionContext];
   const attempted = yield* Effect.result(
     Effect.gen(function* () {
-      if (selection === undefined)
+      if (context === undefined)
         return yield* new StalePlan({
           message: "Open the Library before proposing a Binding change",
         });
-      const plan = yield* selection.plan(intent);
+      const plan = yield* context.library.planEnabled([intent], { base: context.base });
       for (const change of plan.changes)
         if (change.duplicates?.length)
           return yield* new InstalledSkillWouldDuplicate({ duplicates: change.duplicates });
@@ -232,8 +236,8 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
         ? {
             wholeCollection: true,
             collectionLabel:
-              selection?.view.collections.find((collection) => collection.id === plan.subject_id)
-                ?.label ?? plan.subject_id,
+              context?.collections.find((collection) => collection.id === plan.subject_id)?.label ??
+              plan.subject_id,
           }
         : {}),
     })),
@@ -288,7 +292,10 @@ export function libraryCollectionScopes(
   state: LibrarySessionState,
   collectionId: string,
 ): InstallScope[] {
-  return state[sessionSelection]?.view.scopesFor(collectionId) ?? [];
+  const placements = state[sessionContext]?.placements ?? [];
+  return uniqueInstallScopes(
+    placements.filter((item) => item.collectionId === collectionId).map((item) => item.scope),
+  );
 }
 
 /** Whole-Collection intent follows future Source membership changes. */
@@ -346,11 +353,17 @@ export const confirmLibraryChange = Effect.fn("LibrarySession.confirm")(function
   const pending = state.pending;
   if (pending === undefined)
     return state.outcome?.kind === "unchanged" ? state : cancelLibraryChange(state);
-  const selection = state[sessionSelection];
-  if (selection === undefined)
+  const context = state[sessionContext];
+  if (context === undefined)
     return yield* new StalePlan({ message: "Open the Library before confirming a change" });
-  const applied = yield* Effect.result(applySetEnabledPlan(pending.plan));
-  const refreshed = yield* sessionFromSelection(yield* selection.refresh);
+  const applied = yield* Effect.result(
+    Effect.gen(function* () {
+      return yield* setEnabledOutcomes(
+        (yield* context.library.apply({ _tag: "Apply", plan: pending.plan.plan })).result,
+      );
+    }),
+  );
+  const refreshed = yield* sessionFromSnapshot(context.library, yield* context.library.read);
   const outcome: LibraryActionOutcome = Result.isSuccess(applied)
     ? { kind: "applied", pending }
     : { kind: "failed", failure: failureDetails(applied.failure) };

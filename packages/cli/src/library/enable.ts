@@ -11,10 +11,11 @@ import { enableOutputContracts } from "./enable/output.js";
 
 import { type InvocationOption, scopeChoices } from "@smolai/skit-core/library/session";
 import {
-  applySetEnabledPlan,
+  setEnabledOutcomes,
   SetEnabledIncomplete,
   type SetEnabledIntent,
   type EnabledCollection,
+  sameInstallScope,
 } from "@smolai/skit-core/library/enable";
 
 import { Prompter } from "../terminal/prompter.js";
@@ -56,8 +57,9 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
       requires: "a skill or collection",
       hint: "`skit list --json` lists them. Add `--global` or `--repo <path>` to choose the scope, and `--all` for a whole collection.",
     });
-  const selection = yield* Effect.flatMap(Library.Service, (library) => library.enable.open());
-  const view = selection.view;
+  const library = yield* Library.Service;
+  const base = yield* library.read;
+  const view = yield* library.list({ base });
   const prompter = yield* Prompter;
   const renderer = yield* Renderer;
   const collectionLabel = (collectionId: string) =>
@@ -76,7 +78,11 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
   // Disabling without a subject starts from where Skills are enabled.
   let targets: readonly EnabledTarget[] | undefined;
   if (query === undefined && !input.enabled) {
-    const enabled = view.placementsAt(input.scope).map(withLocation);
+    const enabled = view.placements
+      .filter(
+        (placement) => input.scope === undefined || sameInstallScope(placement.scope, input.scope),
+      )
+      .map(withLocation);
     if (enabled.length === 0)
       return yield* new NothingToSelect({ detail: "No Skills are currently enabled" });
     const everywhere = [...new Set(enabled.map((target) => target.collectionId))].flatMap(
@@ -132,9 +138,9 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
     [candidate.id, candidate.label].includes(query),
   );
   const members = collection
-    ? view.membersFor(
-        collection.id,
-        targets?.map((target) => target.scope),
+    ? collection.members.filter(
+        (member) =>
+          targets === undefined || targets.some((target) => target.skillIds.includes(member.id)),
       )
     : undefined;
   let wholeCollection = input.all;
@@ -145,7 +151,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
           value: "collection",
           label: input.enabled
             ? `Enable whole collection · ${descriptionLoadMessage(
-                yield* view.descriptionLoad({ collection: collection.id }),
+                yield* library.descriptionLoad({ collection: collection.id }, { base }),
               )}`
             : "Disable whole collection",
           hint: input.enabled
@@ -250,6 +256,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
     allowDuplicate: input.allowDuplicate,
     invocation: input.invocation,
   };
+  const plan = yield* library.planEnabled([intent], { base });
   const outcomes = yield* renderer.withStatus(
     input.dryRun
       ? "Planning Collection Bindings"
@@ -257,10 +264,10 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
         ? "Projecting retained Skills"
         : "Removing installed skills",
     Effect.gen(function* () {
-      const plan = yield* selection.plan(intent);
       return input.dryRun
         ? plan.changes.map((value) => ({ kind: "plan" as const, value }))
-        : yield* applySetEnabledPlan(plan).pipe(
+        : yield* library.apply({ _tag: "Apply", plan: plan.plan }).pipe(
+            Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)),
             Effect.catchTag("Library.SetEnabledIncomplete", (failure) => Effect.succeed(failure)),
           );
     }),
@@ -272,7 +279,13 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
       : outcomes;
   for (const outcome of reported) {
     if (input.enabled) {
-      const warning = largeCollectionWarning(view.listingSizeAfter(outcome.value));
+      const warning = largeCollectionWarning(
+        plan.changes.find(
+          (change) =>
+            change.subject_id === outcome.value.subject_id &&
+            sameInstallScope(change.scope, outcome.value.scope),
+        )!.listingSize,
+      );
       if (warning !== undefined) yield* renderer.note(warning, "Skill listing");
     }
     yield* renderer.result(

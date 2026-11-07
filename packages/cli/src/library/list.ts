@@ -6,7 +6,7 @@ import { encodeResult as result } from "../commands/encode-result.js";
 
 export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
   const library = yield* Library.Service;
-  const view = yield* library.list;
+  const view = yield* library.list();
   const subjects = view.subjects;
   const value = {
     subjects: subjects.map((subject) => ({

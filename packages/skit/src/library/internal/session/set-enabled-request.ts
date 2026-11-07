@@ -14,27 +14,7 @@ import type { InvocationOption } from "./invocation-option.js";
 import { OptionCombinationInvalid } from "../../../shared/input-failures.js";
 import { resolveLibrarySubject } from "../../subject-resolution.js";
 
-/** One enable or disable at one scope. */
-export interface SetEnabledRequest {
-  readonly query: string;
-  readonly all?: boolean;
-  readonly selectedSkills?: readonly string[];
-  readonly scope: InstallScope;
-  readonly enabled: boolean;
-  readonly invocation?: InvocationOption;
-  readonly allowDuplicate?: boolean;
-  /** Setup consent applies only to these exact symlinks, until installing succeeds. */
-  readonly allowedDuplicateSymlinks?: readonly {
-    readonly path: string;
-    readonly canonicalPath: string;
-    readonly dev: bigint;
-    readonly ino: bigint;
-    readonly linkTarget?: string;
-  }[];
-  readonly manage?: ManageApproval;
-}
-
-/** User intent, independent of the per-Scope requests needed to implement it. */
+/** Names, members and scopes chosen by the front end; resolved by Library. */
 export interface SetEnabledIntent {
   readonly subject: string;
   readonly enabled: boolean;

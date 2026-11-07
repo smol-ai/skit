@@ -10,37 +10,49 @@ import type { Snapshot } from "../../snapshot.js";
 import type { LibraryStateReadError } from "../../store/library-store.js";
 import type { SkitSource } from "../../library-contracts.js";
 import type { Hash } from "../../../shared/hash.js";
+import { suggestDoctorCleanup, type CleanupBudget } from "./cleanup-selection.js";
+import type { UsageReport } from "../../usage/contracts.js";
+import type { InventoryRootOptions } from "../../routing/roots.js";
 import type { SourceInspection } from "./source-updates.js";
 
 /**
- * The owner's passive reads over the Library at `home`, from the one read it supplies. Storage
- * stays inside the owner; the service's type never depends on these.
+ * Passive reports from the configured Library. An explicit base keeps displayed choices
+ * and subsequent planning on the same revision; no query exposes a writer or query closures.
  */
 export const libraryQueries = (
   read: Effect.Effect<Snapshot, LibraryStateReadError>,
   home: string,
+  roots: InventoryRootOptions,
   platform: Context.Context<TreeRequirements | Digest.Digest | HttpClient.HttpClient>,
 ) => {
-  const open = Effect.map(read, (snapshot) =>
-    libraryView(
-      snapshot._tag === "Present" ? snapshot.state : emptyLibraryState(),
-      join(home, "originals"),
-    ),
-  );
+  const viewFor = (options?: { readonly base: Snapshot }) =>
+    Effect.map(
+      options === undefined ? read : Effect.succeed(structuredClone(options.base)),
+      (snapshot) =>
+        libraryView(
+          snapshot._tag === "Present" ? snapshot.state : emptyLibraryState(),
+          join(home, "originals"),
+        ),
+    );
   return {
     workspaceClaims: Effect.fn("Library.readWorkspaceClaims")(function* (root: string) {
-      return yield* (yield* open).readWorkspaceClaims(root).pipe(Effect.provide(platform));
+      return yield* (yield* viewFor()).readWorkspaceClaims(root).pipe(Effect.provide(platform));
     }),
-    installedSkills: Effect.map(open, (view) => view.installedSkills),
-    manifest: Effect.flatMap(open, (view) => view.readManifest()).pipe(Effect.provide(platform)),
-    skillsShCollectionIds: Effect.map(open, (view) => view.skillsShCollectionIds),
+    installedSkills: Effect.map(viewFor(), (view) => view.installedSkills),
+    manifest: Effect.flatMap(viewFor(), (view) => view.readManifest()).pipe(
+      Effect.provide(platform),
+    ),
+    skillsShCollectionIds: Effect.map(viewFor(), (view) => view.skillsShCollectionIds),
     descriptionLoad: Effect.fn("Library.readDescriptionLoad")(function* (
       subject: { readonly collection: string } | { readonly skills: readonly string[] },
+      options?: { readonly base: Snapshot },
     ) {
-      return yield* (yield* open).descriptionLoad(subject).pipe(Effect.provide(platform));
+      return yield* (yield* viewFor(options))
+        .descriptionLoad(subject)
+        .pipe(Effect.provide(platform));
     }),
     securityReview: Effect.fn("Library.reviewSecurity")(function* (query: string) {
-      return yield* (yield* open).securityReview(query).pipe(Effect.provide(platform));
+      return yield* (yield* viewFor()).securityReview(query).pipe(Effect.provide(platform));
     }),
     check: Effect.fn("Library.checkSubjects")(function* <E, R>(
       query: string | undefined,
@@ -54,7 +66,7 @@ export const libraryQueries = (
         }) => Effect.Effect<void>;
       },
     ) {
-      return yield* (yield* open).checkSubjects(query, options).pipe(Effect.provide(platform));
+      return yield* (yield* viewFor()).checkSubjects(query, options).pipe(Effect.provide(platform));
     }),
     previewSourceUpdates: Effect.fn("Library.previewSourceUpdates")(function* <E, R>(
       query: string | undefined,
@@ -63,18 +75,36 @@ export const libraryQueries = (
         previousSkillPaths?: readonly string[],
       ) => Effect.Effect<SourceInspection, E, R>,
     ) {
-      return yield* (yield* open)
+      return yield* (yield* viewFor())
         .previewSourceUpdates(query, inspectSource)
         .pipe(Effect.provide(platform));
     }),
-    list: Effect.gen(function* () {
-      const view = yield* open;
-      return {
-        subjects: yield* view.readSubjects(),
-        placements: view.placements,
-        enabledEverywhere: view.enabledEverywhere,
-      };
-    }).pipe(Effect.provide(platform)),
+    skills: Effect.fn("Library.skills")(function* (options?: { readonly base: Snapshot }) {
+      return yield* (yield* viewFor(options)).readSkills().pipe(Effect.provide(platform));
+    }),
+    suggestCleanup: (
+      budgets: readonly CleanupBudget[],
+      usage: UsageReport,
+      options: { readonly base: Snapshot },
+    ) =>
+      suggestDoctorCleanup(
+        options.base._tag === "Present" ? options.base.state : emptyLibraryState(),
+        budgets,
+        usage,
+        roots,
+      ),
+    list: Effect.fn("Library.list")((options?: { readonly base: Snapshot }) =>
+      Effect.gen(function* () {
+        const view = yield* viewFor(options);
+        return {
+          subjects: yield* view.readSubjects(),
+          collections: view.collections,
+          installedSkills: view.installedSkills,
+          placements: view.placements,
+          enabledEverywhere: view.enabledEverywhere,
+        };
+      }).pipe(Effect.provide(platform)),
+    ),
   };
 };
 

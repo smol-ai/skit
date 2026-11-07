@@ -73,18 +73,17 @@ const boundRawReview = Effect.gen(function* () {
     const row = state.installed_skills.find((item) => item.destination === "agents");
     assert.ok(row);
     const skill = state.skills[0];
-    const view = yield* library.owned(
-      Effect.flatMap(Library.Service, (library) => library.enable.open()).pipe(
-        Effect.map((selection) => selection.view),
-      ),
-    );
+    const view = yield* library.owned(Library.Service);
+    const viewBase = yield* view.read;
+    const viewFacts = yield* view.list({ base: viewBase });
     return {
       row,
       selected:
         skill === undefined
           ? undefined
-          : view.membersFor(skill.collection_id).find((member) => member.id === skill.skill_id)
-              ?.versionId,
+          : viewFacts.collections
+              .find((collection) => collection.id === skill.collection_id)
+              ?.members.find((member) => member.id === skill.skill_id)?.versionId,
     };
   });
   return { fs, home, roots, library, observe, project, installedPath: installed, installedSkill };
@@ -131,12 +130,10 @@ it.effect("heals an untouched installed skill already recorded as conflicted", (
     yield* observe("second verbatim Skill\n");
     const state = yield* library.durable;
     assert.ok(state);
-    const view = yield* library.owned(
-      Effect.flatMap(Library.Service, (library) => library.enable.open()).pipe(
-        Effect.map((selection) => selection.view),
-      ),
-    );
-    const selected = view.collections
+    const view = yield* library.owned(Library.Service);
+    const viewBase = yield* view.read;
+    const viewFacts = yield* view.list({ base: viewBase });
+    const selected = viewFacts.collections
       .flatMap((collection) => collection.members)
       .find((member) => member.id === state.skills[0]?.skill_id)?.versionId;
     assert.ok(selected);

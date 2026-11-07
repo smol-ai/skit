@@ -115,11 +115,8 @@ it.effect(
       const after = yield* load;
       assert.deepStrictEqual(after.collections, before.collections);
       assert.deepStrictEqual(after.enabled, before.enabled);
-      const view = yield* run(
-        Effect.flatMap(Library.Service, (library) => library.enable.open()).pipe(
-          Effect.map((selection) => selection.view),
-        ),
-      );
+      const library = yield* run(Library.Service);
+      const view = yield* library.list();
       const collection = view.placements.find(
         (placement) => placement.collectionId === collectionId && placement.scope.kind === "global",
       );

@@ -722,7 +722,9 @@ export interface Library {
 export type LibraryOperation =
   | "addSource"
   | "importSource"
-  | "enable"
+  | "planEnabled"
+  | "skills"
+  | "suggestCleanup"
   | "session"
   | "sync"
   | "syncSession"

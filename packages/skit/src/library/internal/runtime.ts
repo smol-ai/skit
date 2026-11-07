@@ -1,5 +1,5 @@
 import { addSource, importSource } from "../source.js";
-import { openSetEnabledSession, planSetEnabled } from "./session/set-enabled.js";
+import { planEnabled } from "./session/set-enabled.js";
 import { openLibrarySession, readLibrarySkillContent } from "./session/session.js";
 import { syncLibrary } from "./sync/library-sync.js";
 import { openSyncSession } from "./sync/session.js";
@@ -231,17 +231,19 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
   const syncing = { ...operations, content };
   const editing = { ...operations, import: imports };
   const operation = Effect.provide(importing);
-  const queries = libraryQueries(read, home, importing);
+  const queries = libraryQueries(read, home, roots, importing);
   const library: Interface = {
     addSource: (request) =>
       operation(addSource({ import: imports, descriptionLoad: queries.descriptionLoad }, request)),
     importSource: (request) => operation(importSource(imports, request)),
-    enable: {
-      open: () => operation(openSetEnabledSession(operations, home, roots)),
-      plan: (requests) => operation(planSetEnabled(operations, home, roots, requests)),
-    },
+    skills: queries.skills,
+    suggestCleanup: queries.suggestCleanup,
+    planEnabled: (intents, options) =>
+      operation(
+        planEnabled(operations, structuredClone(intents), { base: structuredClone(options.base) }),
+      ),
     session: {
-      open: () => operation(openLibrarySession(operations, home, roots)),
+      open: () => operation(openLibrarySession(library)),
       readSkillContent: (skillVersionId) =>
         operation(readLibrarySkillContent(read, home, skillVersionId)),
     },
@@ -254,12 +256,12 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
     securityReview: (query) => operation(queries.securityReview(query)),
     acceptSecurityFinding: (query, input) =>
       operation(acceptLibrarySecurityFinding(operations, query, input)),
-    descriptionLoad: (subject) => operation(queries.descriptionLoad(subject)),
+    descriptionLoad: (subject, options) => operation(queries.descriptionLoad(subject, options)),
     workspaceClaims: (root) => operation(queries.workspaceClaims(root)),
     installedSkills: operation(queries.installedSkills),
     manifest: operation(queries.manifest),
     skillsShCollectionIds: operation(queries.skillsShCollectionIds),
-    list: operation(queries.list),
+    list: (options) => operation(queries.list(options)),
     inventory: {
       refresh: operation(refreshInventory(operations, roots)),
       refreshMachine: operation(

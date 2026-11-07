@@ -2,7 +2,7 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import type * as Library from "@smolai/skit-core/library";
+import * as Library from "@smolai/skit-core/library";
 type ImportRequestSkill = Parameters<
   Library.Interface["import"]["collection"]
 >[0]["skills"][number];
@@ -10,7 +10,8 @@ import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { isolatedRoots } from "./helpers/isolated-library.js";
 import { setLibraryEnabled, planLibraryEnabled } from "./helpers/set-enabled.js";
-import { applySetEnabledPlan } from "./helpers/set-enabled.js";
+import { withLibraryOwner } from "./helpers/library-owner.js";
+import { setEnabledOutcomes } from "./helpers/set-enabled.js";
 import {
   initializeLibraryMachine,
   importCollectionIn,
@@ -96,7 +97,12 @@ it.effect("partially binds raw Skills and converges after enable and disable", (
       Effect.provide(layer),
     );
     yield* library.writeDurable({ ...state, ownershipIssues: state.ownershipIssues ?? [] });
-    const stale = yield* applySetEnabledPlan(previewed).pipe(Effect.provide(layer), Effect.flip);
+    const stale = yield* Effect.gen(function* () {
+      const library = yield* Library.Service;
+      return yield* setEnabledOutcomes(
+        (yield* library.apply({ _tag: "Apply", plan: previewed.plan })).result,
+      );
+    }).pipe(withLibraryOwner(base.roots), Effect.provide(layer), Effect.flip);
     assert.strictEqual(stale._tag, "Library.StalePlan");
     yield* library.writeDurable(state);
 

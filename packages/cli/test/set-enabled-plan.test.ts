@@ -1,3 +1,4 @@
+import { toEnabledIntent } from "./helpers/set-enabled.js";
 import * as Library from "@smolai/skit-core/library";
 import { LibraryState } from "@smolai/skit-core/library";
 import { canonicalJson } from "@smolai/skit-core/shared";
@@ -23,10 +24,8 @@ import { join } from "node:path";
 
 import { withSandboxDenying } from "./helpers/sandbox.js";
 import {
-  applySetEnabledPlan,
+  setEnabledOutcomes,
   SetEnabledIncomplete,
-  openSetEnabledSession,
-  planSetEnabled,
   type SetEnabledRequest,
 } from "./helpers/set-enabled.js";
 import {
@@ -36,7 +35,7 @@ import {
 } from "@smolai/skit-core/library/session";
 
 import { presentDoctorCleanup } from "../src/library/doctor/cleanup.js";
-import { openDoctorCleanupSelection } from "../src/library/doctor/selection.js";
+import { scanDoctorCleanup, cleanupIntents } from "../src/library/doctor/selection.js";
 import { usageStory } from "../src/storybook/usage-stories.js";
 import { presentSetEnabled } from "../src/library/enable.js";
 import { skitCommand } from "../src/commands/tree.js";
@@ -115,8 +114,13 @@ it.effect("global enablement changes the device choice without changing account 
       }),
     );
     const account = (yield* f.home.durable).enabled;
-    const plan = yield* f.home.owned(planSetEnabled([f.request], f.home.installOptions));
-    yield* f.home.owned(applySetEnabledPlan(plan));
+    const planLibrary = yield* f.home.owned(Library.Service);
+    const plan = yield* planLibrary.planEnabled([f.request].map(toEnabledIntent), {
+      base: yield* planLibrary.read,
+    });
+    yield* planLibrary
+      .apply({ _tag: "Apply", plan: plan.plan })
+      .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)));
     const after = yield* f.home.durable;
     assert.deepStrictEqual(after.enabled, account);
     assert.strictEqual(after.device_skill_selection?.mode, "choose");
@@ -145,30 +149,34 @@ it.effect.each(["follows-collection", "empty"] as const)(
           },
         }),
       );
-      const enabled = yield* f.home.owned(
-        planSetEnabled(
-          [{ ...f.request, selectedSkills: ["alpha", "beta"] }],
-          f.home.installOptions,
-        ),
+      const enabledLibrary = yield* f.home.owned(Library.Service);
+      const enabled = yield* enabledLibrary.planEnabled(
+        [{ ...f.request, selectedSkills: ["alpha", "beta"] }].map(toEnabledIntent),
+        { base: yield* enabledLibrary.read },
       );
-      yield* f.home.owned(applySetEnabledPlan(enabled));
+      yield* enabledLibrary
+        .apply({ _tag: "Apply", plan: enabled.plan })
+        .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)));
       const account = (yield* f.home.durable).enabled;
-      const selection = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
+      const library = yield* f.home.owned(Library.Service);
+      const base = yield* library.read;
+
       const before = yield* f.fs.readFileString(f.home.statePath);
-      const plan = yield* f.home.owned(
-        selection.planMany(
-          ["alpha", "beta"].map((name) => ({
-            subject: f.request.query,
-            enabled: false,
-            members: [name],
-            where: [{ kind: "global" }],
-          })),
-        ),
+      const plan = yield* library.planEnabled(
+        ["alpha", "beta"].map((name) => ({
+          subject: f.request.query,
+          enabled: false,
+          members: [name],
+          where: [{ kind: "global" }],
+        })),
+        { base },
       );
       assert.strictEqual(yield* f.fs.readFileString(f.home.statePath), before);
       assert.strictEqual(plan.changes[0]?.enabled.length, 1);
       assert.strictEqual(plan.changes[1]?.enabled.length, 0);
-      const outcomes = yield* f.home.owned(applySetEnabledPlan(plan));
+      const outcomes = yield* library
+        .apply({ _tag: "Apply", plan: plan.plan })
+        .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)));
       assert.deepStrictEqual(outcomes[0]?.value.enabled, plan.changes[0]?.enabled);
       assert.deepStrictEqual(outcomes[1]?.value.enabled, []);
       const after = yield* f.home.durable;
@@ -197,10 +205,19 @@ it.effect("retrying an already selected device Skill still checks unmanaged copi
     const native = join(f.home.inventory.home, ".codex", "skills", "alpha");
     yield* f.fs.makeDirectory(native, { recursive: true });
     yield* f.fs.writeFileString(join(native, "SKILL.md"), "native copy\n");
-    const plan = yield* f.home.owned(
-      planSetEnabled([f.request], { ...f.home.installOptions, overrides: {} }),
+    const planLibrary = yield* f.home.owned(
+      Library.Service.pipe(withLibraryOwner({ ...f.home.installOptions, overrides: {} })),
     );
-    const error = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
+    const plan = yield* planLibrary.planEnabled([f.request].map(toEnabledIntent), {
+      base: yield* planLibrary.read,
+    });
+    const error = yield* f.home
+      .owned(
+        planLibrary
+          .apply({ _tag: "Apply", plan: plan.plan })
+          .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
+      )
+      .pipe(Effect.flip);
     assert.strictEqual(error._tag, "InstalledSkillWouldDuplicate");
     assert.strictEqual(yield* f.fs.readFileString(join(native, "SKILL.md")), "native copy\n");
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -210,7 +227,10 @@ it.effect("preparing a Binding plan changes neither Library metadata nor native 
   Effect.gen(function* () {
     const f = yield* fixture;
     const before = yield* f.fs.readFileString(f.home.statePath);
-    const plan = yield* f.home.owned(planSetEnabled([f.request], f.home.installOptions));
+    const planLibrary = yield* f.home.owned(Library.Service);
+    const plan = yield* planLibrary.planEnabled([f.request].map(toEnabledIntent), {
+      base: yield* planLibrary.read,
+    });
     assert.deepStrictEqual(plan.changes[0]?.skills, ["alpha"]);
     assert.strictEqual(yield* f.fs.readFileString(f.home.statePath), before);
     assert.strictEqual(yield* f.fs.exists(f.destination), false);
@@ -223,13 +243,17 @@ it.effect("applying a plan uses its captured selection and routing", () =>
     const selectedSkills = ["alpha"];
     const routes = [f.destination];
     const configuration = { ...f.home.installOptions, overrides: { codex: routes } };
-    const plan = yield* f.home.owned(
-      planSetEnabled([{ ...f.request, selectedSkills }], configuration),
+    const planLibrary = yield* f.home.owned(Library.Service.pipe(withLibraryOwner(configuration)));
+    const plan = yield* planLibrary.planEnabled(
+      [{ ...f.request, selectedSkills }].map(toEnabledIntent),
+      { base: yield* planLibrary.read },
     );
     selectedSkills.splice(0, 1, "beta");
     const redirected = join(f.root, "redirected");
     routes.splice(0, 1, redirected);
-    yield* f.home.owned(applySetEnabledPlan(plan));
+    yield* planLibrary
+      .apply({ _tag: "Apply", plan: plan.plan })
+      .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)));
     assert.strictEqual(
       yield* f.fs.readFileString(join(f.destination, "alpha", "SKILL.md")),
       "# alpha\n",
@@ -242,19 +266,30 @@ it.effect("applying a plan uses its captured selection and routing", () =>
 it.effect("refuses a plan when the Library changed during interactive selection", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    const selection = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
+    const library = yield* f.home.owned(Library.Service);
+    const base = yield* library.read;
+
     yield* Effect.flatMap(f.home.durable, (state) =>
       f.home.writeDurable({ ...state, ownershipIssues: [] }),
     );
-    const plan = yield* f.home.owned(
-      selection.plan({
-        subject: f.request.query,
-        members: ["alpha"],
-        enabled: true,
-        where: [{ kind: "global" }],
-      }),
+    const plan = yield* library.planEnabled(
+      [
+        {
+          subject: f.request.query,
+          members: ["alpha"],
+          enabled: true,
+          where: [{ kind: "global" }],
+        },
+      ],
+      { base },
     );
-    const error = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
+    const error = yield* f.home
+      .owned(
+        library
+          .apply({ _tag: "Apply", plan: plan.plan })
+          .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
+      )
+      .pipe(Effect.flip);
     assert.strictEqual(error._tag, "Library.StalePlan");
     assert.deepStrictEqual((yield* f.home.durable).enabled, []);
     assert.strictEqual(yield* f.fs.exists(f.destination), false);
@@ -264,13 +299,22 @@ it.effect("refuses a plan when the Library changed during interactive selection"
 it.effect("rechecks duplicates created after preview before saving Binding intent", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    const plan = yield* f.home.owned(
-      planSetEnabled([f.request], { ...f.home.installOptions, overrides: {} }),
+    const planLibrary = yield* f.home.owned(
+      Library.Service.pipe(withLibraryOwner({ ...f.home.installOptions, overrides: {} })),
     );
+    const plan = yield* planLibrary.planEnabled([f.request].map(toEnabledIntent), {
+      base: yield* planLibrary.read,
+    });
     const nativeCopy = join(f.home.inventory.home, ".codex", "skills", "alpha");
     yield* f.fs.makeDirectory(nativeCopy, { recursive: true });
     yield* f.fs.writeFileString(join(nativeCopy, "SKILL.md"), "native copy\n");
-    const error = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
+    const error = yield* f.home
+      .owned(
+        planLibrary
+          .apply({ _tag: "Apply", plan: plan.plan })
+          .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
+      )
+      .pipe(Effect.flip);
     assert.strictEqual(error._tag, "InstalledSkillWouldDuplicate");
     assert.deepStrictEqual((yield* f.home.durable).enabled, []);
     assert.strictEqual(yield* f.fs.exists(f.destination), false);
@@ -281,12 +325,21 @@ it.effect("rechecks duplicates created after preview before saving Binding inten
 it.effect("an unwritable root refuses enablement before saving Binding intent", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    const plan = yield* f.home.owned(
-      planSetEnabled([f.request], f.home.installOptions).pipe(
+    const planLibrary = yield* f.home.owned(
+      Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
         withSandboxDenying(join(f.root, "account", ".agents")),
       ),
     );
-    const error = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
+    const plan = yield* planLibrary.planEnabled([f.request].map(toEnabledIntent), {
+      base: yield* planLibrary.read,
+    });
+    const error = yield* f.home
+      .owned(
+        planLibrary
+          .apply({ _tag: "Apply", plan: plan.plan })
+          .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
+      )
+      .pipe(Effect.flip);
     assert.deepInclude(error, {
       _tag: "SkillsDirectoryNotWritable",
       root: f.destination,
@@ -300,9 +353,16 @@ it.effect("an unwritable root refuses enablement before saving Binding intent", 
 it.effect("an ambient Library cannot redirect a prepared operation", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    const plan = yield* f.home.owned(planSetEnabled([f.request], f.home.installOptions));
+    const planLibrary = yield* f.home.owned(Library.Service);
+    const plan = yield* planLibrary.planEnabled([f.request].map(toEnabledIntent), {
+      base: yield* planLibrary.read,
+    });
     const other = yield* libraryHome({ home: join(f.root, "other-library") });
-    yield* other.owned(applySetEnabledPlan(plan));
+    yield* other.owned(
+      planLibrary
+        .apply({ _tag: "Apply", plan: plan.plan })
+        .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
+    );
     assert.strictEqual((yield* other.snapshot)._tag, "Absent");
     assert.strictEqual(
       yield* f.fs.readFileString(join(f.destination, "alpha", "SKILL.md")),
@@ -320,18 +380,27 @@ it.effect("derives placements and filters multi-Scope disable intent to enabled 
       [["alpha"], [{ kind: "global" }]],
       [["beta"], [{ kind: "repository", root: repository }]],
     ] as const) {
-      const selection = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
-      const plan = yield* f.home.owned(
-        selection.plan({ subject: f.request.query, members, where, enabled: true }),
+      const library = yield* f.home.owned(Library.Service);
+      const base = yield* library.read;
+
+      const plan = yield* library.planEnabled(
+        [{ subject: f.request.query, members, where, enabled: true }],
+        {
+          base: base,
+        },
       );
-      yield* f.home.owned(applySetEnabledPlan(plan));
+      yield* library
+        .apply({ _tag: "Apply", plan: plan.plan })
+        .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)));
     }
-    const selection = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
+    const library = yield* f.home.owned(Library.Service);
+    const base = yield* library.read;
+    const facts = yield* library.list({ base });
     assert.deepStrictEqual(
-      selection.view.placements.map((placement) => [
+      facts.placements.map((placement) => [
         placement.scope.kind,
         placement.skillIds.map(
-          (id) => selection.view.collections[0]?.members.find((member) => member.id === id)?.name,
+          (id) => facts.collections[0]?.members.find((member) => member.id === id)?.name,
         ),
       ]),
       [
@@ -340,13 +409,16 @@ it.effect("derives placements and filters multi-Scope disable intent to enabled 
       ],
     );
     const before = yield* f.fs.readFileString(f.home.statePath);
-    const both = yield* f.home.owned(
-      selection.plan({
-        subject: f.request.query,
-        enabled: false,
-        members: ["alpha", "beta"],
-        where: "where-enabled",
-      }),
+    const both = yield* library.planEnabled(
+      [
+        {
+          subject: f.request.query,
+          enabled: false,
+          members: ["alpha", "beta"],
+          where: "where-enabled",
+        },
+      ],
+      { base },
     );
     assert.deepStrictEqual(
       both.changes.map((change) => [change.scope.kind, change.skills]),
@@ -355,19 +427,24 @@ it.effect("derives placements and filters multi-Scope disable intent to enabled 
         ["repository", ["beta"]],
       ],
     );
-    const onlyAlpha = yield* f.home.owned(
-      selection.plan({
-        subject: f.request.query,
-        enabled: false,
-        members: ["alpha"],
-        where: "where-enabled",
-      }),
+    const onlyAlpha = yield* library.planEnabled(
+      [
+        {
+          subject: f.request.query,
+          enabled: false,
+          members: ["alpha"],
+          where: "where-enabled",
+        },
+      ],
+      { base },
     );
     assert.strictEqual(onlyAlpha.changes.length, 1);
     assert.strictEqual(yield* f.fs.readFileString(f.home.statePath), before);
-    yield* f.home.owned(applySetEnabledPlan(onlyAlpha));
+    yield* library
+      .apply({ _tag: "Apply", plan: onlyAlpha.plan })
+      .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)));
     const settled = yield* f.home.durable;
-    const beta = selection.view.collections[0]?.members.find((member) => member.name === "beta");
+    const beta = facts.collections[0]?.members.find((member) => member.name === "beta");
     assert.ok(beta);
     assert.deepStrictEqual(settled.enabled, []);
     assert.deepStrictEqual(settled.repositories[0]?.enabled, [{ skill: beta.id }]);
@@ -401,26 +478,33 @@ it.effect("a TUI proposal keeps the revision displayed before the proposal was m
 it.effect("batch previews accumulate same-scope disables without restoring earlier members", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    const enabled = yield* f.home.owned(
-      planSetEnabled([{ ...f.request, selectedSkills: ["alpha", "beta"] }], f.home.installOptions),
+    const enabledLibrary = yield* f.home.owned(Library.Service);
+    const enabled = yield* enabledLibrary.planEnabled(
+      [{ ...f.request, selectedSkills: ["alpha", "beta"] }].map(toEnabledIntent),
+      { base: yield* enabledLibrary.read },
     );
-    yield* f.home.owned(applySetEnabledPlan(enabled));
-    const selection = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
+    yield* enabledLibrary
+      .apply({ _tag: "Apply", plan: enabled.plan })
+      .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)));
+    const library = yield* f.home.owned(Library.Service);
+    const base = yield* library.read;
+
     const before = yield* f.fs.readFileString(f.home.statePath);
-    const plan = yield* f.home.owned(
-      selection.planMany(
-        ["alpha", "beta"].map((name) => ({
-          subject: f.request.query,
-          enabled: false,
-          members: [name],
-          where: [{ kind: "global" }],
-        })),
-      ),
+    const plan = yield* library.planEnabled(
+      ["alpha", "beta"].map((name) => ({
+        subject: f.request.query,
+        enabled: false,
+        members: [name],
+        where: [{ kind: "global" }],
+      })),
+      { base },
     );
     assert.strictEqual(yield* f.fs.readFileString(f.home.statePath), before);
     assert.strictEqual(plan.changes[0]?.enabled.length, 1);
     assert.strictEqual(plan.changes[1]?.enabled.length, 0);
-    yield* f.home.owned(applySetEnabledPlan(plan));
+    yield* library
+      .apply({ _tag: "Apply", plan: plan.plan })
+      .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)));
     assert.deepStrictEqual((yield* f.home.durable).enabled, []);
     assert.strictEqual(yield* f.fs.exists(join(f.destination, "alpha")), false);
     assert.strictEqual(yield* f.fs.exists(join(f.destination, "beta")), false);
@@ -429,10 +513,14 @@ it.effect("batch previews accumulate same-scope disables without restoring earli
 
 const cleanupFixture = Effect.gen(function* () {
   const f = yield* fixture;
-  const enabled = yield* f.home.owned(
-    planSetEnabled([{ ...f.request, selectedSkills: ["alpha", "beta"] }], f.home.installOptions),
+  const enabledLibrary = yield* f.home.owned(Library.Service);
+  const enabled = yield* enabledLibrary.planEnabled(
+    [{ ...f.request, selectedSkills: ["alpha", "beta"] }].map(toEnabledIntent),
+    { base: yield* enabledLibrary.read },
   );
-  yield* f.home.owned(applySetEnabledPlan(enabled));
+  yield* enabledLibrary
+    .apply({ _tag: "Apply", plan: enabled.plan })
+    .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)));
   const budget: Extract<ListingBudget, { _tag: "Estimated" }> = {
     _tag: "Estimated",
     harness: "codex",
@@ -469,9 +557,11 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* cleanupFixture;
-      const selection = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
-      assert.isFalse(Object.hasOwn(selection, "state"));
-      const suggest = (usage = f.usage) => selection.suggestCleanup([f.budget], usage);
+      const library = yield* f.home.owned(Library.Service);
+      const base = yield* library.read;
+
+      assert.isFalse(Object.hasOwn(library, "state"));
+      const suggest = (usage = f.usage) => library.suggestCleanup([f.budget], usage, { base });
       assert.deepStrictEqual(
         suggest().map((c) => [c.name, c.selected]),
         [
@@ -581,8 +671,12 @@ it.effect("cleanup reads one captured Library and protects a Skill used in a rea
           return f.fs.readFileString(...args);
         }),
     };
-    const selection = yield* openDoctorCleanupSelection(
+    const library = yield* f.home
+      .owned(Library.Service)
+      .pipe(Effect.provideService(FileSystem.FileSystem, observed));
+    const selection = yield* scanDoctorCleanup(
       [f.budget],
+      library,
       f.home.installOptions,
       14,
       () => Effect.void,
@@ -595,7 +689,6 @@ it.effect("cleanup reads one captured Library and protects a Skill used in a rea
           }),
         ),
       ),
-      withLibraryOwner(f.home.inventory),
       Effect.provideService(FileSystem.FileSystem, observed),
       (effect) => f.home.owned(effect),
     );
@@ -609,10 +702,16 @@ it.effect("cleanup reads one captured Library and protects a Skill used in a rea
       14 * 86400000,
     );
     assert.ok(selection.usage.rows.some((row) => row.name === "beta" && row.reads === 1));
-    const plan = yield* selection.preview(selection.candidates.map((c) => c.id));
+    const plan = yield* library.planEnabled(cleanupIntents(selection.candidates), {
+      base: selection.base,
+    });
     assert.strictEqual(loads, capturedReads);
     assert.strictEqual(plan.changes.length, 1);
-    yield* f.home.owned(applySetEnabledPlan(plan));
+    yield* f.home.owned(
+      library
+        .apply({ _tag: "Apply", plan: plan.plan })
+        .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
+    );
     const after = yield* f.home.durable;
     const beta = after.skills.find((skill) => skill.name === "beta");
     assert.ok(beta);
@@ -714,10 +813,14 @@ it.effect(
     Effect.gen(function* () {
       const f = yield* cleanupFixture;
       const scope = { kind: "repository" as const, root: join(f.root, "repo") };
-      const enable = yield* f.home.owned(
-        planSetEnabled([{ ...f.request, scope }], f.home.installOptions),
+      const enableLibrary = yield* f.home.owned(Library.Service);
+      const enable = yield* enableLibrary.planEnabled(
+        [{ ...f.request, scope }].map(toEnabledIntent),
+        { base: yield* enableLibrary.read },
       );
-      yield* f.home.owned(applySetEnabledPlan(enable));
+      yield* enableLibrary
+        .apply({ _tag: "Apply", plan: enable.plan })
+        .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)));
       const state = yield* f.home.durable;
       const local = state.installed_skills.find(
         (p) =>
@@ -725,8 +828,10 @@ it.effect(
           p.skill_id === state.skills.find((s) => s.name === "alpha")?.skill_id,
       );
       assert.ok(local);
-      const selection = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
-      const candidates = selection.suggestCleanup(
+      const library = yield* f.home.owned(Library.Service);
+      const base = yield* library.read;
+
+      const candidates = library.suggestCleanup(
         [
           {
             ...f.budget,
@@ -734,6 +839,7 @@ it.effect(
           },
         ],
         f.usage,
+        { base },
       );
       assert.strictEqual(candidates.length, 1);
       assert.deepStrictEqual(candidates[0]?.scope, scope);
@@ -769,16 +875,21 @@ it.effect(
       );
       const gamma = (yield* f.home.durable).skills.find((s) => s.name === "gamma");
       assert.ok(gamma);
-      const enabled = yield* f.home.owned(
-        planSetEnabled(
-          [{ ...f.request, query: gamma.collection_id, selectedSkills: ["gamma"] }],
-          f.home.installOptions,
+      const enabledLibrary = yield* f.home.owned(Library.Service);
+      const enabled = yield* enabledLibrary.planEnabled(
+        [{ ...f.request, query: gamma.collection_id, selectedSkills: ["gamma"] }].map(
+          toEnabledIntent,
         ),
+        { base: yield* enabledLibrary.read },
       );
-      yield* f.home.owned(applySetEnabledPlan(enabled));
-      const selection = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
-      const plan = yield* f.home.owned(
-        selection.planMany([
+      yield* enabledLibrary
+        .apply({ _tag: "Apply", plan: enabled.plan })
+        .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)));
+      const library = yield* f.home.owned(Library.Service);
+      const base = yield* library.read;
+
+      const plan = yield* library.planEnabled(
+        [
           {
             subject: f.request.query,
             members: ["alpha"],
@@ -791,12 +902,15 @@ it.effect(
             enabled: false,
             where: [{ kind: "global" }],
           },
-        ]),
+        ],
+        { base },
       );
       const beta = (yield* f.home.durable).skills.find((s) => s.name === "beta");
       assert.ok(beta);
       assert.deepStrictEqual(plan.changes[1]?.enabled, [{ skill: beta.skill_id }]);
-      yield* f.home.owned(applySetEnabledPlan(plan));
+      yield* library
+        .apply({ _tag: "Apply", plan: plan.plan })
+        .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)));
       assert.deepStrictEqual((yield* f.home.durable).enabled, [{ skill: beta.skill_id }]);
       assert.strictEqual(yield* f.fs.exists(join(f.destination, "alpha")), false);
       assert.strictEqual(yield* f.fs.exists(join(f.destination, "gamma")), false);
@@ -813,9 +927,14 @@ it.effect(
       const f = yield* fixture;
       yield* f.fs.makeDirectory(join(f.destination, "alpha"), { recursive: true });
       yield* f.fs.writeFileString(join(f.destination, "alpha", "SKILL.md"), "# alpha\n");
-      const plan = yield* f.home.owned(planSetEnabled([f.request], f.home.installOptions));
+      const planLibrary = yield* f.home.owned(Library.Service);
+      const plan = yield* planLibrary.planEnabled([f.request].map(toEnabledIntent), {
+        base: yield* planLibrary.read,
+      });
 
-      const [outcome] = yield* f.home.owned(applySetEnabledPlan(plan));
+      const [outcome] = yield* planLibrary
+        .apply({ _tag: "Apply", plan: plan.plan })
+        .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)));
 
       assert.deepStrictEqual(
         outcome?.kind === "applied" ? outcome.value.installed_skills.map((p) => p.status) : [],
@@ -837,9 +956,16 @@ it.effect(
       yield* f.fs.makeDirectory(join(checkout, ".git"), { recursive: true });
       yield* f.fs.writeFileString(join(checkout, ".git", "HEAD"), "ref: refs/heads/main\n");
       yield* f.fs.writeFileString(join(checkout, "SKILL.md"), "# alpha\n");
-      const plan = yield* f.home.owned(planSetEnabled([f.request], f.home.installOptions));
+      const planLibrary = yield* f.home.owned(Library.Service);
+      const plan = yield* planLibrary.planEnabled([f.request].map(toEnabledIntent), {
+        base: yield* planLibrary.read,
+      });
 
-      const failure = yield* Effect.flip(f.home.owned(applySetEnabledPlan(plan)));
+      const failure = yield* Effect.flip(
+        planLibrary
+          .apply({ _tag: "Apply", plan: plan.plan })
+          .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
+      );
       assert.instanceOf(failure, SetEnabledIncomplete);
 
       // A checkout is someone else's: SKIT neither writes into it nor records it.
@@ -855,24 +981,35 @@ it.effect("a different copy at the destination is reported, and disabling leaves
     const theirs = join(f.destination, "alpha", "SKILL.md");
     yield* f.fs.makeDirectory(join(f.destination, "alpha"), { recursive: true });
     yield* f.fs.writeFileString(theirs, "# alpha, edited by hand\n");
-    const enable = yield* f.home.owned(planSetEnabled([f.request], f.home.installOptions));
+    const enableLibrary = yield* f.home.owned(Library.Service);
+    const enable = yield* enableLibrary.planEnabled([f.request].map(toEnabledIntent), {
+      base: yield* enableLibrary.read,
+    });
     // The preview names the folder, so a dry run does not promise a clean enable.
     assert.deepStrictEqual(
       enable.changes[0]?.unmanaged_destinations?.map((folder) => folder.path),
       [join(f.destination, "alpha")],
     );
 
-    const failure = yield* Effect.flip(f.home.owned(applySetEnabledPlan(enable)));
+    const failure = yield* Effect.flip(
+      enableLibrary
+        .apply({ _tag: "Apply", plan: enable.plan })
+        .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
+    );
     assert.instanceOf(failure, SetEnabledIncomplete);
 
     assert.deepStrictEqual(
       failure.results[0]?.installed_skills.map((p) => p.status),
       ["conflicted"],
     );
-    const disable = yield* f.home.owned(
-      planSetEnabled([{ ...f.request, enabled: false }], f.home.installOptions),
+    const disableLibrary = yield* f.home.owned(Library.Service);
+    const disable = yield* disableLibrary.planEnabled(
+      [{ ...f.request, enabled: false }].map(toEnabledIntent),
+      { base: yield* disableLibrary.read },
     );
-    yield* f.home.owned(applySetEnabledPlan(disable));
+    yield* disableLibrary
+      .apply({ _tag: "Apply", plan: disable.plan })
+      .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)));
     assert.strictEqual(yield* f.fs.readFileString(theirs), "# alpha, edited by hand\n");
     assert.deepStrictEqual((yield* f.home.durable).installed_skills, []);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -886,11 +1023,19 @@ it.effect("allow-duplicate refuses to replace the user's link at the destination
     yield* f.fs.writeFileString(join(elsewhere, "SKILL.md"), "# alpha\n");
     yield* f.fs.makeDirectory(f.destination, { recursive: true });
     yield* f.fs.symlink(elsewhere, join(f.destination, "alpha"));
-    const plan = yield* f.home.owned(
-      planSetEnabled([{ ...f.request, allowDuplicate: true }], f.home.installOptions),
+    const planLibrary = yield* f.home.owned(Library.Service);
+    const plan = yield* planLibrary.planEnabled(
+      [{ ...f.request, allowDuplicate: true }].map(toEnabledIntent),
+      { base: yield* planLibrary.read },
     );
 
-    const error = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
+    const error = yield* f.home
+      .owned(
+        planLibrary
+          .apply({ _tag: "Apply", plan: plan.plan })
+          .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
+      )
+      .pipe(Effect.flip);
 
     assert.strictEqual(error._tag, "InstalledSkillWouldReplaceLink");
     assert.deepStrictEqual((yield* f.home.durable).enabled, []);
@@ -909,18 +1054,29 @@ it.effect("enable leaves repository-owned identical copies unmanaged, including 
       const skill = join(f.destination, "alpha");
       yield* f.fs.makeDirectory(skill, { recursive: true });
       yield* f.fs.writeFileString(join(skill, "SKILL.md"), "# alpha\n");
-      const enable = yield* f.home.owned(planSetEnabled([f.request], f.home.installOptions));
-      const failure = yield* Effect.flip(f.home.owned(applySetEnabledPlan(enable)));
+      const enableLibrary = yield* f.home.owned(Library.Service);
+      const enable = yield* enableLibrary.planEnabled([f.request].map(toEnabledIntent), {
+        base: yield* enableLibrary.read,
+      });
+      const failure = yield* Effect.flip(
+        enableLibrary
+          .apply({ _tag: "Apply", plan: enable.plan })
+          .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
+      );
       assert.instanceOf(failure, SetEnabledIncomplete);
       assert.deepStrictEqual(
         failure.results[0]?.installed_skills.map((p) => p.status),
         ["conflicted"],
       );
       assert.strictEqual((yield* inspectOwnershipMarker(skill)).kind, "absent");
-      const disable = yield* f.home.owned(
-        planSetEnabled([{ ...f.request, enabled: false }], f.home.installOptions),
+      const disableLibrary = yield* f.home.owned(Library.Service);
+      const disable = yield* disableLibrary.planEnabled(
+        [{ ...f.request, enabled: false }].map(toEnabledIntent),
+        { base: yield* disableLibrary.read },
       );
-      yield* f.home.owned(applySetEnabledPlan(disable));
+      yield* disableLibrary
+        .apply({ _tag: "Apply", plan: disable.plan })
+        .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)));
       assert.strictEqual(yield* f.fs.readFileString(join(skill, "SKILL.md")), "# alpha\n");
     }
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -937,8 +1093,8 @@ it.effect(
         ...f.home.installOptions,
         overrides: { ...f.home.installOptions.overrides, "claude-code": [claude] },
       };
-      const plan = yield* f.home.owned(
-        planSetEnabled([f.request], configuration).pipe(
+      const planLibrary = yield* f.home.owned(
+        Library.Service.pipe(withLibraryOwner(configuration)).pipe(
           Effect.provideService(FileSystem.FileSystem, {
             ...f.fs,
             rename: (from, to) =>
@@ -955,7 +1111,14 @@ it.effect(
           }),
         ),
       );
-      const failed = yield* Effect.flip(f.home.owned(applySetEnabledPlan(plan)));
+      const plan = yield* planLibrary.planEnabled([f.request].map(toEnabledIntent), {
+        base: yield* planLibrary.read,
+      });
+      const failed = yield* Effect.flip(
+        planLibrary
+          .apply({ _tag: "Apply", plan: plan.plan })
+          .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
+      );
       assert.instanceOf(failed, SetEnabledIncomplete);
       assert.strictEqual(failed.code, "OPERATION_FAILED");
       const state = yield* f.home.durable;
@@ -974,8 +1137,15 @@ it.effect(
       );
       assert.strictEqual(yield* f.fs.exists(join(claude, "alpha")), false);
       assert.strictEqual(yield* f.fs.exists(join(f.destination, "beta")), false);
-      const retry = yield* f.home.owned(planSetEnabled([f.request], configuration));
-      const [completed] = yield* f.home.owned(applySetEnabledPlan(retry));
+      const retryLibrary = yield* f.home.owned(
+        Library.Service.pipe(withLibraryOwner(configuration)),
+      );
+      const retry = yield* retryLibrary.planEnabled([f.request].map(toEnabledIntent), {
+        base: yield* retryLibrary.read,
+      });
+      const [completed] = yield* retryLibrary
+        .apply({ _tag: "Apply", plan: retry.plan })
+        .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)));
       assert.strictEqual(completed.value.application.intent, "unchanged");
       assert.strictEqual(completed.value.application.status, "complete");
       assert.deepStrictEqual(
@@ -998,8 +1168,8 @@ it.effect("a refused intent save remains a refusal and creates no installed copy
       method: "rename",
       pathOrDescriptor: f.home.statePath,
     });
-    const plan = yield* f.home.owned(
-      planSetEnabled([f.request], f.home.installOptions).pipe(
+    const planLibrary = yield* f.home.owned(
+      Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
         Effect.provideService(FileSystem.FileSystem, {
           ...f.fs,
           rename: (from, to) =>
@@ -1007,8 +1177,15 @@ it.effect("a refused intent save remains a refusal and creates no installed copy
         }),
       ),
     );
+    const plan = yield* planLibrary.planEnabled([f.request].map(toEnabledIntent), {
+      base: yield* planLibrary.read,
+    });
     const before = yield* f.home.durable;
-    const failed = yield* Effect.flip(f.home.owned(applySetEnabledPlan(plan)));
+    const failed = yield* Effect.flip(
+      planLibrary
+        .apply({ _tag: "Apply", plan: plan.plan })
+        .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
+    );
     assert.strictEqual(failed, refused);
     assert.deepStrictEqual(yield* f.home.durable, before);
     assert.strictEqual(yield* f.fs.exists(join(f.destination, "alpha")), false);
@@ -1018,24 +1195,39 @@ it.effect("a refused intent save remains a refusal and creates no installed copy
 it.effect("a disable refuses an edited active copy before saving anything", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    const enable = yield* f.home.owned(planSetEnabled([f.request], f.home.installOptions));
-    yield* f.home.owned(applySetEnabledPlan(enable));
+    const enableLibrary = yield* f.home.owned(Library.Service);
+    const enable = yield* enableLibrary.planEnabled([f.request].map(toEnabledIntent), {
+      base: yield* enableLibrary.read,
+    });
+    yield* enableLibrary
+      .apply({ _tag: "Apply", plan: enable.plan })
+      .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)));
     const path = join(f.destination, "alpha", "SKILL.md");
     yield* f.fs.writeFileString(path, "Independent user edits\n");
     const before = yield* f.home.durable;
-    const disable = yield* f.home.owned(
-      planSetEnabled([{ ...f.request, enabled: false }], f.home.installOptions),
+    const disableLibrary = yield* f.home.owned(Library.Service);
+    const disable = yield* disableLibrary.planEnabled(
+      [{ ...f.request, enabled: false }].map(toEnabledIntent),
+      { base: yield* disableLibrary.read },
     );
-    const failed = yield* Effect.flip(f.home.owned(applySetEnabledPlan(disable)));
+    const failed = yield* Effect.flip(
+      disableLibrary
+        .apply({ _tag: "Apply", plan: disable.plan })
+        .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
+    );
     assert.strictEqual(failed._tag, "UninstallConflict");
     assert.deepStrictEqual(yield* f.home.durable, before);
     assert.strictEqual(yield* f.fs.readFileString(path), "Independent user edits\n");
     assert.strictEqual((yield* inspectOwnershipMarker(join(f.destination, "alpha"))).kind, "valid");
     yield* f.fs.writeFileString(path, "# alpha\n");
-    const retry = yield* f.home.owned(
-      planSetEnabled([{ ...f.request, enabled: false }], f.home.installOptions),
+    const retryLibrary = yield* f.home.owned(Library.Service);
+    const retry = yield* retryLibrary.planEnabled(
+      [{ ...f.request, enabled: false }].map(toEnabledIntent),
+      { base: yield* retryLibrary.read },
     );
-    const [completed] = yield* f.home.owned(applySetEnabledPlan(retry));
+    const [completed] = yield* retryLibrary
+      .apply({ _tag: "Apply", plan: retry.plan })
+      .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)));
     assert.strictEqual(completed.value.application.status, "complete");
     assert.strictEqual(yield* f.fs.exists(join(f.destination, "alpha")), false);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -1079,18 +1271,8 @@ it.effect("a batch saves every intent together and reports the scope that cannot
     const f = yield* fixture;
     const repository = join(f.root, "project");
     const target = join(repository, ".agents", "skills", "beta");
-    const plan = yield* f.home.owned(
-      planSetEnabled(
-        [
-          f.request,
-          {
-            ...f.request,
-            selectedSkills: ["beta"],
-            scope: { kind: "repository", root: repository },
-          },
-        ],
-        f.home.installOptions,
-      ).pipe(
+    const planLibrary = yield* f.home.owned(
+      Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
         Effect.provideService(FileSystem.FileSystem, {
           ...f.fs,
           rename: (from, to) =>
@@ -1107,7 +1289,22 @@ it.effect("a batch saves every intent together and reports the scope that cannot
         }),
       ),
     );
-    const failed = yield* Effect.flip(f.home.owned(applySetEnabledPlan(plan)));
+    const plan = yield* planLibrary.planEnabled(
+      [
+        f.request,
+        {
+          ...f.request,
+          selectedSkills: ["beta"],
+          scope: { kind: "repository" as const, root: repository },
+        },
+      ].map(toEnabledIntent),
+      { base: yield* planLibrary.read },
+    );
+    const failed = yield* Effect.flip(
+      planLibrary
+        .apply({ _tag: "Apply", plan: plan.plan })
+        .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
+    );
     assert.instanceOf(failed, SetEnabledIncomplete);
     assert.deepStrictEqual(
       failed.results.map((result) => [result.skills, result.application.status]),
@@ -1134,8 +1331,8 @@ it.effect.each(["defect", "interruption"] as const)(
   (kind) =>
     Effect.gen(function* () {
       const f = yield* fixture;
-      const plan = yield* f.home.owned(
-        planSetEnabled([f.request], f.home.installOptions).pipe(
+      const planLibrary = yield* f.home.owned(
+        Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
           Effect.provideService(FileSystem.FileSystem, {
             ...f.fs,
             rename: (from, to) =>
@@ -1147,7 +1344,14 @@ it.effect.each(["defect", "interruption"] as const)(
           }),
         ),
       );
-      const exit = yield* Effect.exit(f.home.owned(applySetEnabledPlan(plan)));
+      const plan = yield* planLibrary.planEnabled([f.request].map(toEnabledIntent), {
+        base: yield* planLibrary.read,
+      });
+      const exit = yield* Effect.exit(
+        planLibrary
+          .apply({ _tag: "Apply", plan: plan.plan })
+          .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
+      );
       assert.isTrue(Exit.isFailure(exit));
       if (Exit.isFailure(exit)) {
         assert.isTrue(
@@ -1220,10 +1424,17 @@ it.effect("a newly active agent target invalidates the review before any binding
     const f = yield* fixture;
     const claude = join(f.home.inventory.home, ".claude", "skills");
     const configuration = f.home.installOptions;
-    const plan = yield* f.home.owned(planSetEnabled([f.request], configuration));
+    const planLibrary = yield* f.home.owned(Library.Service.pipe(withLibraryOwner(configuration)));
+    const plan = yield* planLibrary.planEnabled([f.request].map(toEnabledIntent), {
+      base: yield* planLibrary.read,
+    });
     const before = yield* f.home.durable;
     yield* f.fs.makeDirectory(claude, { recursive: true });
-    const error = yield* Effect.flip(f.home.owned(applySetEnabledPlan(plan)));
+    const error = yield* Effect.flip(
+      planLibrary
+        .apply({ _tag: "Apply", plan: plan.plan })
+        .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
+    );
     assert.strictEqual(error._tag, "Library.StalePlan");
     assert.deepStrictEqual(yield* f.home.durable, before);
     assert.strictEqual(yield* f.fs.exists(join(f.destination, "alpha")), false);
@@ -1237,8 +1448,8 @@ it.effect(
     Effect.gen(function* () {
       const f = yield* fixture;
       let changed = false;
-      const plan = yield* f.home.owned(
-        planSetEnabled([f.request], f.home.installOptions).pipe(
+      const planLibrary = yield* f.home.owned(
+        Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
           Effect.provideService(FileSystem.FileSystem, {
             ...f.fs,
             rename: (from, to) =>
@@ -1263,7 +1474,14 @@ it.effect(
           }),
         ),
       );
-      const failed = yield* Effect.flip(f.home.owned(applySetEnabledPlan(plan)));
+      const plan = yield* planLibrary.planEnabled([f.request].map(toEnabledIntent), {
+        base: yield* planLibrary.read,
+      });
+      const failed = yield* Effect.flip(
+        planLibrary
+          .apply({ _tag: "Apply", plan: plan.plan })
+          .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
+      );
       assert.instanceOf(failed, SetEnabledIncomplete);
       assert.strictEqual(failed.reason, "update");
       assert.strictEqual(failed.code, "CONFLICT");
@@ -1334,23 +1552,31 @@ for (const drift of ["create", "modify", "symlink", "source"] as const)
       const f = yield* fixture;
       const path = join(f.destination, "alpha");
       if (drift === "modify" || drift === "symlink") {
-        const initial = yield* f.home.owned(planSetEnabled([f.request], f.home.installOptions));
-        yield* f.home.owned(applySetEnabledPlan(initial));
+        const initialLibrary = yield* f.home.owned(Library.Service);
+        const initial = yield* initialLibrary.planEnabled([f.request].map(toEnabledIntent), {
+          base: yield* initialLibrary.read,
+        });
+        yield* initialLibrary
+          .apply({ _tag: "Apply", plan: initial.plan })
+          .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)));
       }
-      const selection = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
-      const plan = yield* f.home.owned(
-        selection.plan({
-          subject: f.request.query,
-          members: ["alpha"],
-          enabled: true,
-          where: [{ kind: "global" }],
-        }),
+      const library = yield* f.home.owned(Library.Service);
+      const base = yield* library.read;
+
+      const plan = yield* library.planEnabled(
+        [
+          {
+            subject: f.request.query,
+            members: ["alpha"],
+            enabled: true,
+            where: [{ kind: "global" }],
+          },
+        ],
+        { base },
       );
-      assert.ok(plan.owner);
+      assert.ok(plan);
       if (drift === "source") {
-        const source = plan.owner.plan.folders.find((e) =>
-          e.path.startsWith(f.home.originals + "/"),
-        );
+        const source = plan.plan.folders.find((e) => e.path.startsWith(f.home.originals + "/"));
         assert.ok(source);
         yield* f.fs.writeFileString(
           join(source.path, "alpha", "SKILL.md"),
@@ -1365,7 +1591,13 @@ for (const drift of ["create", "modify", "symlink", "source"] as const)
         yield* f.fs.writeFileString(join(path, "SKILL.md"), "changed native bytes\n");
       }
       const before = yield* f.home.durable;
-      const error = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
+      const error = yield* f.home
+        .owned(
+          library
+            .apply({ _tag: "Apply", plan: plan.plan })
+            .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
+        )
+        .pipe(Effect.flip);
       assert.strictEqual(error._tag, "Library.StalePlan");
       assert.deepStrictEqual(yield* f.home.durable, before);
       if (drift === "symlink")
@@ -1388,18 +1620,29 @@ for (const directory of ["empty", "nested-symlink"] as const)
         yield* f.fs.writeFileString(join(path, "SKILL.md"), "foreign\n");
         yield* f.fs.symlink(f.root, join(path, "link"));
       }
-      const selection = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
-      const plan = yield* f.home.owned(
-        selection.plan({
-          subject: f.request.query,
-          members: ["alpha"],
-          enabled: true,
-          where: [{ kind: "global" }],
-        }),
+      const library = yield* f.home.owned(Library.Service);
+      const base = yield* library.read;
+
+      const plan = yield* library.planEnabled(
+        [
+          {
+            subject: f.request.query,
+            members: ["alpha"],
+            enabled: true,
+            where: [{ kind: "global" }],
+          },
+        ],
+        { base },
       );
-      assert.ok(plan.owner);
-      assert.ok(plan.owner.plan.folders.some((e) => e.path === path && e.entry._tag !== "Absent"));
-      const failure = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
+      assert.ok(plan);
+      assert.ok(plan.plan.folders.some((e) => e.path === path && e.entry._tag !== "Absent"));
+      const failure = yield* f.home
+        .owned(
+          library
+            .apply({ _tag: "Apply", plan: plan.plan })
+            .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
+        )
+        .pipe(Effect.flip);
       assert.instanceOf(failure, SetEnabledIncomplete);
       assert.strictEqual(yield* f.fs.exists(join(path, ".skit-ownership.json")), false);
       if (directory === "nested-symlink")
@@ -1413,15 +1656,19 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture;
-      const selection = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
+      const library = yield* f.home.owned(Library.Service);
+      const base = yield* library.read;
+
       const intent = {
         subject: f.request.query,
         members: ["alpha"],
         enabled: true,
         where: [{ kind: "global" as const }],
       };
-      const plan = yield* f.home.owned(selection.planMany([intent, intent]));
-      const results = yield* f.home.owned(applySetEnabledPlan(plan));
+      const plan = yield* library.planEnabled([intent, intent], { base });
+      const results = yield* library
+        .apply({ _tag: "Apply", plan: plan.plan })
+        .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)));
       assert.strictEqual(results.length, 2);
       assert.strictEqual(
         (yield* f.home.durable).installed_skills.filter(
@@ -1435,21 +1682,32 @@ it.effect(
 it.effect("an unwritable root keeps bindings unchanged and records its stopped attempt", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    const selection = yield* f.home.owned(
-      openSetEnabledSession(f.home.installOptions).pipe(
+    const library = yield* f.home.owned(
+      Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
         withSandboxDenying(join(f.root, "account", ".agents")),
       ),
     );
-    const plan = yield* f.home.owned(
-      selection.plan({
-        subject: f.request.query,
-        members: ["alpha"],
-        enabled: true,
-        where: [{ kind: "global" }],
-      }),
+    const base = yield* library.read;
+
+    const plan = yield* library.planEnabled(
+      [
+        {
+          subject: f.request.query,
+          members: ["alpha"],
+          enabled: true,
+          where: [{ kind: "global" }],
+        },
+      ],
+      { base },
     );
     const before = yield* f.home.durable;
-    const error = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
+    const error = yield* f.home
+      .owned(
+        library
+          .apply({ _tag: "Apply", plan: plan.plan })
+          .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
+      )
+      .pipe(Effect.flip);
     assert.deepInclude(error, {
       _tag: "SkillsDirectoryNotWritable",
       root: f.destination,
@@ -1469,32 +1727,43 @@ it.effect("an unwritable root keeps bindings unchanged and records its stopped a
 it.effect("Library owner rejects forged destination coordinates in a plain plan", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    const selection = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
-    const plan = yield* f.home.owned(
-      selection.plan({
-        subject: f.request.query,
-        members: ["alpha"],
-        enabled: true,
-        where: [{ kind: "global" }],
-      }),
+    const library = yield* f.home.owned(Library.Service);
+    const base = yield* library.read;
+
+    const plan = yield* library.planEnabled(
+      [
+        {
+          subject: f.request.query,
+          members: ["alpha"],
+          enabled: true,
+          where: [{ kind: "global" }],
+        },
+      ],
+      { base },
     );
-    assert.ok(plan.owner);
+    assert.ok(plan);
     const outside = join(f.root, "unreviewed");
     const forged = {
       ...plan,
-      owner: {
-        ...plan.owner,
-        plan: {
-          ...plan.owner.plan,
-          routes: plan.owner.plan.routes.map((route) => ({
-            ...route,
-            destinations: route.destinations.map((target) => ({ ...target, root: outside })),
-          })),
-        },
+      plan: {
+        ...plan.plan,
+        routes: plan.plan.routes.map((route) => ({
+          ...route,
+          destinations: route.destinations.map((target) => ({ ...target, root: outside })),
+        })),
       },
     };
     const before = yield* f.home.durable;
-    const error = yield* f.home.owned(applySetEnabledPlan(forged)).pipe(Effect.flip);
+    const error = yield* f.home
+      .owned(
+        Effect.gen(function* () {
+          const library = yield* Library.Service;
+          return yield* setEnabledOutcomes(
+            (yield* library.apply({ _tag: "Apply", plan: forged.plan })).result,
+          );
+        }),
+      )
+      .pipe(Effect.flip);
     assert.strictEqual(error._tag, "Library.StalePlan");
     assert.deepStrictEqual(yield* f.home.durable, before);
     assert.strictEqual(yield* f.fs.exists(outside), false);
@@ -1506,22 +1775,29 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture;
-      const first = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
-      const initial = yield* f.home.owned(
-        first.plan({
-          subject: f.request.query,
-          members: ["alpha"],
-          enabled: true,
-          where: [{ kind: "global" }],
-        }),
+      const first = yield* f.home.owned(Library.Service);
+      const firstBase = yield* first.read;
+
+      const initial = yield* first.planEnabled(
+        [
+          {
+            subject: f.request.query,
+            members: ["alpha"],
+            enabled: true,
+            where: [{ kind: "global" }],
+          },
+        ],
+        { base: firstBase },
       );
-      yield* f.home.owned(applySetEnabledPlan(initial));
+      yield* first
+        .apply({ _tag: "Apply", plan: initial.plan })
+        .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)));
       const before = yield* f.home.durable;
       const old = before.installed_skills[0];
       assert.ok(old);
       const path = join(f.destination, "alpha");
-      const selection = yield* f.home.owned(
-        openSetEnabledSession(f.home.installOptions).pipe(
+      const library = yield* f.home.owned(
+        Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
           Effect.provideServiceEffect(
             FileSystem.FileSystem,
             Effect.map(FileSystem.FileSystem, (fs) => ({
@@ -1541,17 +1817,28 @@ it.effect(
           ),
         ),
       );
-      const plan = yield* f.home.owned(
-        selection.plan({
-          subject: f.request.query,
-          members: ["alpha"],
-          enabled: true,
-          invocation: "explicit",
-          where: [{ kind: "global" }],
-        }),
+      const base = yield* library.read;
+
+      const plan = yield* library.planEnabled(
+        [
+          {
+            subject: f.request.query,
+            members: ["alpha"],
+            enabled: true,
+            invocation: "explicit",
+            where: [{ kind: "global" }],
+          },
+        ],
+        { base },
       );
 
-      const error = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
+      const error = yield* f.home
+        .owned(
+          library
+            .apply({ _tag: "Apply", plan: plan.plan })
+            .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
+        )
+        .pipe(Effect.flip);
       assert.instanceOf(error, SetEnabledIncomplete);
       const row = (yield* f.home.durable).installed_skills.find(
         (copy) => copy.installed_skill_id === old.installed_skill_id,
@@ -1578,21 +1865,28 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture;
-      const first = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
-      const initial = yield* f.home.owned(
-        first.plan({
-          subject: f.request.query,
-          members: ["alpha"],
-          enabled: true,
-          where: [{ kind: "global" }],
-        }),
+      const first = yield* f.home.owned(Library.Service);
+      const firstBase = yield* first.read;
+
+      const initial = yield* first.planEnabled(
+        [
+          {
+            subject: f.request.query,
+            members: ["alpha"],
+            enabled: true,
+            where: [{ kind: "global" }],
+          },
+        ],
+        { base: firstBase },
       );
-      yield* f.home.owned(applySetEnabledPlan(initial));
+      yield* first
+        .apply({ _tag: "Apply", plan: initial.plan })
+        .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)));
       const old = (yield* f.home.durable).installed_skills[0];
       assert.ok(old);
       const path = join(f.destination, "alpha");
-      const selection = yield* f.home.owned(
-        openSetEnabledSession(f.home.installOptions).pipe(
+      const library = yield* f.home.owned(
+        Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
           Effect.provideService(FileSystem.FileSystem, {
             ...f.fs,
             rename: (from, to) =>
@@ -1607,16 +1901,27 @@ it.effect(
           }),
         ),
       );
-      const plan = yield* f.home.owned(
-        selection.plan({
-          subject: f.request.query,
-          members: ["alpha"],
-          enabled: true,
-          invocation: "explicit",
-          where: [{ kind: "global" }],
-        }),
+      const base = yield* library.read;
+
+      const plan = yield* library.planEnabled(
+        [
+          {
+            subject: f.request.query,
+            members: ["alpha"],
+            enabled: true,
+            invocation: "explicit",
+            where: [{ kind: "global" }],
+          },
+        ],
+        { base },
       );
-      const failed = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
+      const failed = yield* f.home
+        .owned(
+          library
+            .apply({ _tag: "Apply", plan: plan.plan })
+            .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
+        )
+        .pipe(Effect.flip);
       assert.instanceOf(failed, SetEnabledIncomplete);
       assert.deepStrictEqual(
         (yield* f.home.durable).installed_skills.find(
@@ -1636,20 +1941,32 @@ for (const extras of ["reproducible", "empty-directory"] as const)
   it.effect(`Library owner settles an acknowledged uninstall backup (${extras})`, () =>
     Effect.gen(function* () {
       const f = yield* fixture;
-      const initial = yield* f.home.owned(planSetEnabled([f.request], f.home.installOptions));
-      yield* f.home.owned(applySetEnabledPlan(initial));
+      const initialLibrary = yield* f.home.owned(Library.Service);
+      const initial = yield* initialLibrary.planEnabled([f.request].map(toEnabledIntent), {
+        base: yield* initialLibrary.read,
+      });
+      yield* initialLibrary
+        .apply({ _tag: "Apply", plan: initial.plan })
+        .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)));
       if (extras === "empty-directory")
         yield* f.fs.makeDirectory(join(f.destination, "alpha", "notes"));
-      const selection = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
-      const plan = yield* f.home.owned(
-        selection.plan({
-          subject: f.request.query,
-          members: ["alpha"],
-          enabled: false,
-          where: [{ kind: "global" }],
-        }),
+      const library = yield* f.home.owned(Library.Service);
+      const base = yield* library.read;
+
+      const plan = yield* library.planEnabled(
+        [
+          {
+            subject: f.request.query,
+            members: ["alpha"],
+            enabled: false,
+            where: [{ kind: "global" }],
+          },
+        ],
+        { base },
       );
-      yield* f.home.owned(applySetEnabledPlan(plan));
+      yield* library
+        .apply({ _tag: "Apply", plan: plan.plan })
+        .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)));
       assert.strictEqual(yield* f.fs.exists(join(f.destination, "alpha")), false);
       assert.deepStrictEqual((yield* f.home.durable).installed_skills, []);
       const backups = (yield* f.fs.readDirectory(
@@ -1679,12 +1996,20 @@ for (const reverse of [false, true])
         const repository = yield* f.fs.realPath(project);
         const local: SetEnabledRequest = {
           ...f.request,
-          scope: { kind: "repository", root: repository },
+          scope: { kind: "repository" as const, root: repository },
         };
         yield* f.home.owned(
-          applySetEnabledPlan(
-            yield* f.home.owned(planSetEnabled([f.request, local], f.home.installOptions)),
-          ),
+          Effect.gen(function* () {
+            const library = yield* Library.Service;
+            return yield* setEnabledOutcomes(
+              (yield* library.apply({
+                _tag: "Apply",
+                plan: (yield* library.planEnabled([f.request, local].map(toEnabledIntent), {
+                  base: yield* library.read,
+                })).plan,
+              })).result,
+            );
+          }),
         );
         const alpha = (yield* f.home.durable).skills.find((skill) => skill.name === "alpha");
         assert.ok(alpha);
@@ -1695,8 +2020,8 @@ for (const reverse of [false, true])
         let failed = false;
         const requests = [{ ...local, invocation: "explicit" as const }, f.request];
         if (reverse) requests.reverse();
-        const plan = yield* f.home.owned(
-          planSetEnabled(requests, f.home.installOptions).pipe(
+        const planLibrary = yield* f.home.owned(
+          Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
             Effect.provideService(FileSystem.FileSystem, {
               ...f.fs,
               rename: (from, to) =>
@@ -1732,7 +2057,14 @@ for (const reverse of [false, true])
             }),
           ),
         );
-        const error = yield* Effect.flip(f.home.owned(applySetEnabledPlan(plan)));
+        const plan = yield* planLibrary.planEnabled(requests.map(toEnabledIntent), {
+          base: yield* planLibrary.read,
+        });
+        const error = yield* Effect.flip(
+          planLibrary
+            .apply({ _tag: "Apply", plan: plan.plan })
+            .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
+        );
         assert.instanceOf(error, SetEnabledIncomplete);
         assert.isTrue(accepted);
         assert.isTrue(failed);
@@ -1750,9 +2082,14 @@ for (const reverse of [false, true])
           (yield* f.home.durable).installed_skills.find((copy) => copy.path === path)?.status,
           "installed",
         );
-        const retry = yield* f.home.owned(planSetEnabled(requests, f.home.installOptions));
+        const retryLibrary = yield* f.home.owned(Library.Service);
+        const retry = yield* retryLibrary.planEnabled(requests.map(toEnabledIntent), {
+          base: yield* retryLibrary.read,
+        });
         assert.isTrue(
-          (yield* f.home.owned(applySetEnabledPlan(retry))).every(
+          (yield* retryLibrary
+            .apply({ _tag: "Apply", plan: retry.plan })
+            .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)))).every(
             (result) => result.value.application.status === "complete",
           ),
         );
@@ -1774,11 +2111,8 @@ it.effect("a shared final publication failure belongs to every accepted request"
       ),
     });
     let refused = false;
-    const plan = yield* f.home.owned(
-      planSetEnabled(
-        [f.request, { ...f.request, selectedSkills: ["beta"] }],
-        f.home.installOptions,
-      ).pipe(
+    const planLibrary = yield* f.home.owned(
+      Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
         Effect.provideService(FileSystem.FileSystem, {
           ...f.fs,
           rename: (from, to) =>
@@ -1804,7 +2138,15 @@ it.effect("a shared final publication failure belongs to every accepted request"
         }),
       ),
     );
-    const error = yield* Effect.flip(f.home.owned(applySetEnabledPlan(plan)));
+    const plan = yield* planLibrary.planEnabled(
+      [f.request, { ...f.request, selectedSkills: ["beta"] }].map(toEnabledIntent),
+      { base: yield* planLibrary.read },
+    );
+    const error = yield* Effect.flip(
+      planLibrary
+        .apply({ _tag: "Apply", plan: plan.plan })
+        .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
+    );
     assert.instanceOf(error, SetEnabledIncomplete);
     assert.isTrue(refused);
     assert.deepStrictEqual(
@@ -1819,14 +2161,15 @@ it.effect("a shared final publication failure belongs to every accepted request"
         yield* f.fs.readFileString(join(f.destination, name, "SKILL.md")),
         `# ${name}\n`,
       );
-    const retry = yield* f.home.owned(
-      planSetEnabled(
-        [f.request, { ...f.request, selectedSkills: ["beta"] }],
-        f.home.installOptions,
-      ),
+    const retryLibrary = yield* f.home.owned(Library.Service);
+    const retry = yield* retryLibrary.planEnabled(
+      [f.request, { ...f.request, selectedSkills: ["beta"] }].map(toEnabledIntent),
+      { base: yield* retryLibrary.read },
     );
     assert.isTrue(
-      (yield* f.home.owned(applySetEnabledPlan(retry))).every(
+      (yield* retryLibrary
+        .apply({ _tag: "Apply", plan: retry.plan })
+        .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result)))).every(
         (result) => result.value.application.status === "complete",
       ),
     );

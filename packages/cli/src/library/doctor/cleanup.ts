@@ -1,7 +1,8 @@
 import { type ListingBudget } from "@smolai/skit-core/harnesses";
 import { Effect } from "effect";
-import { applySetEnabledPlan } from "@smolai/skit-core/library/enable";
-import { openDoctorCleanupSelection, overBudget } from "./selection.js";
+import * as Library from "@smolai/skit-core/library";
+import { setEnabledOutcomes } from "@smolai/skit-core/library/enable";
+import { scanDoctorCleanup, cleanupIntents, overBudget } from "./selection.js";
 import { type InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { renderDoctorBudgetSelection } from "./budget.js";
 import { Renderer } from "../../terminal/renderer.js";
@@ -18,11 +19,12 @@ export const presentDoctorCleanup = Effect.fn("Doctor.cleanup")(function* (
 ) {
   const excessive = overBudget(budgets);
   if (!excessive.length) return false;
+  const library = yield* Library.Service;
   const renderer = yield* Renderer;
   const prompter = yield* Prompter;
   const selection = yield* renderer.withStatus(
     "Scanning local skill activity",
-    openDoctorCleanupSelection(excessive, configuration, days, (done, total) =>
+    scanDoctorCleanup(excessive, library, configuration, days, (done, total) =>
       renderer.updateStatus(`Scanning local skill activity: ${done}/${total} files`),
     ),
   );
@@ -83,7 +85,7 @@ export const presentDoctorCleanup = Effect.fn("Doctor.cleanup")(function* (
   );
   const selected = candidates.filter((c) => chosen.includes(c.id));
   if (!selected.length) return false;
-  const plan = yield* selection.preview(chosen);
+  const plan = yield* library.planEnabled(cleanupIntents(selected), { base: selection.base });
   for (const change of plan.changes)
     yield* renderer.result(result("disablePlan", enableOutputContracts.disablePlan, change));
   yield* renderer.note(
@@ -96,7 +98,9 @@ export const presentDoctorCleanup = Effect.fn("Doctor.cleanup")(function* (
     return false;
   const outcomes = yield* renderer.withStatus(
     "Disabling selected skills",
-    applySetEnabledPlan(plan),
+    library
+      .apply({ _tag: "Apply", plan: plan.plan })
+      .pipe(Effect.flatMap((outcome) => setEnabledOutcomes(outcome.result))),
   );
   for (const outcome of outcomes)
     yield* renderer.result(result("disable", enableOutputContracts.disable, outcome.value));

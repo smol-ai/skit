@@ -29,11 +29,11 @@ modules. A folder does not need a sibling re-export file.
 
 | Core package entry                                      | Responsibility and current operation boundary                                                                                                                                                                                |
 | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `library`                                               | `Library.Service` and its captured owner methods: `addSource`, `importSource`, `remove`, `update`, `edit`, queries, `inventory`, `enable`, `session`, `sync`, `syncSession`, `plan`, `apply`, `setup`, `history`, `recovery` |
+| `library`                                               | `Library.Service` and its captured owner methods: `addSource`, `importSource`, `remove`, `update`, `edit`, queries, `inventory`, `planEnabled`, `session`, `sync`, `syncSession`, `plan`, `apply`, `setup`, `history`, `recovery` |
 | `library/source`                                        | Source requests, parsing and passive `inspectSource`; mutation goes through `Library.addSource` / `importSource`                                                                                                             |
 | `library/queries`                                       | Report schemas and query vocabulary; execute reports on Library methods                                                                                                                                                      |
 | `library/session`                                       | Interactive session vocabulary and pure choice helpers; open with `Library.session.open`                                                                                                                                     |
-| `library/enable`                                        | Selection/result vocabulary and reviewed-plan application; open with `Library.enable.open`                                                                                                                                   |
+| `library/enable`                                        | Enable/disable intent and result vocabulary; review with `Library.planEnabled`, then use `Library.apply`                                                                                                                                   |
 | `library/update`, `library/edit`                        | Update/edit vocabulary and review helpers; start with `Library.update` / `edit`                                                                                                                                              |
 | `library/sync`                                          | Transport/session vocabulary and reviewed sync helpers; start with `Library.sync` / `syncSession`                                                                                                                            |
 | `library/recovery`                                      | Compatibility recovery workflows; passive facts are `Library.recovery.list` / `inspect`, restores use owner plans                                                                                                            |
@@ -65,13 +65,17 @@ For example, enable/disable follows:
 ```text
 commands/library-enable-command.ts       parse flags and scope
   → library/enable.ts                    collect choices and render outcomes
-    → Library.Service.enable.open()      capture the owner's selection view
-    → selection.plan(intent)              review without holding a writer
-    → applySetEnabledPlan(plan)           apply the captured owner's reviewed plan
-      → private Library implementation    own freshness, writes and recovery
+    → library = Library.Service          keep the configured Library explicit
+    → base = library.read                read the revision the choices describe
+    → library.list({ base })             plain collection/member/placement data
+    → library.planEnabled(intents, { base })  resolve choices and review; no writer held
+    → library.apply({ _tag: "Apply", plan: reviewed.plan })
+      → private Library implementation   recheck freshness, write and recover
 ```
 
-The prompts stay outside writer scopes; core owns the plan and its application.
+The same Library variable performs the queries, planning and application. Reviewed
+plans contain data only. Requery to show current choices; a stale reviewed plan
+is refused rather than silently rebuilt. Prompts stay outside writer scopes.
 We enforce resource and owner privacy, not the number of calls in a generator.
 Several calls across a preview/prompt/apply interaction are legitimate.
 

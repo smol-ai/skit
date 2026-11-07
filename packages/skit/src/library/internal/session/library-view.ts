@@ -7,7 +7,6 @@ import {
   currentCollectionSkills,
   currentSkillVersion,
   enabledSkillIds,
-  type Enabled,
 } from "../../library-contracts.js";
 import { removalSummary } from "./remove.js";
 import { securityReview } from "../security/review.js";
@@ -21,14 +20,8 @@ import { join } from "node:path";
 
 import { globalEnabled } from "../../enabled.js";
 
-import { type InstallScope } from "../../scope.js";
 import { Effect } from "effect";
-import {
-  enabledCollections,
-  sameInstallScope,
-  uniqueInstallScopes,
-  type EnabledCollection,
-} from "./set-enabled-request.js";
+import { enabledCollections } from "./set-enabled-request.js";
 import { librarySubjects } from "../../subject-resolution.js";
 import { readDescriptionLoad } from "./description-load.js";
 import { readLibrarySkillMetadata, sourceIdentityLabel } from "./skill-metadata.js";
@@ -87,10 +80,6 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
     label: collection.label,
     members: skills.filter((skill) => skill.collectionId === collection.collection_id),
   }));
-  const atScope = (scope: EnabledCollection["scope"] | undefined) =>
-    placements.filter(
-      (placement) => scope === undefined || sameInstallScope(placement.scope, scope),
-    );
   const readFacts = Effect.fn("LibraryView.readFacts")(function* () {
     const metadata = yield* readLibrarySkillMetadata(state, originalsPath);
     return yield* Effect.forEach(skills, (skill) => {
@@ -151,27 +140,6 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
     /** Collections whose retained imports carry skills.sh lock-file evidence. */
     skillsShCollectionIds,
     placements: structuredClone(placements),
-    placementsAt: (scope: EnabledCollection["scope"] | undefined) =>
-      structuredClone(atScope(scope)),
-    scopesFor: (collectionId: string) =>
-      structuredClone(
-        uniqueInstallScopes(
-          placements.filter((item) => item.collectionId === collectionId).map((item) => item.scope),
-        ),
-      ),
-    membersFor: (collectionId: string, scopes?: readonly EnabledCollection["scope"][]) =>
-      structuredClone(
-        skills.filter(
-          (skill) =>
-            skill.collectionId === collectionId &&
-            (scopes === undefined ||
-              placements.some(
-                (placement) =>
-                  placement.skillIds.includes(skill.id) &&
-                  scopes.some((scope) => sameInstallScope(scope, placement.scope)),
-              )),
-        ),
-      ),
     readSkills: Effect.fn("LibraryView.readSkills")(function* () {
       const facts = yield* readFacts();
       const readInvocation = yield* makeLibrarySkillInvocationReader(state, originalsPath);
@@ -234,16 +202,6 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
             : currentCollectionSkills(state, collection.collection_id),
       );
     },
-    listingSizeAfter: (change: {
-      readonly scope: InstallScope;
-      readonly enabled: readonly Enabled[];
-    }) =>
-      new Set([
-        ...enabledSkillIds(state, change.enabled),
-        ...(change.scope.kind === "repository"
-          ? enabledSkillIds(state, globalEnabled(state).enabled)
-          : []),
-      ]).size,
   };
 };
 

@@ -324,12 +324,8 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     assert.strictEqual(before.collections.length, 1);
     const skill = before.skills[0]!;
     assert.strictEqual(skill.collection_id, before.collections[0]?.collection_id);
-    const view = yield* run(
-      Effect.flatMap(Library.Service, (library) => library.enable.open()).pipe(
-        Effect.map((selection) => selection.view),
-      ),
-    );
-    const subjects = yield* run(view.readSubjects());
+    const view = yield* run(Library.Service);
+    const subjects = yield* run(view.list().pipe(Effect.map((report) => report.subjects)));
     assert.deepStrictEqual(
       subjects.map((subject) => [subject.kind, subject.id, subject.label]),
       [["collection", before.collections[0]?.collection_id, base]],

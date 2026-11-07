@@ -243,8 +243,8 @@ type Queries = ReturnType<typeof libraryQueries>;
 import type { syncLibrary, LibrarySyncTransport } from "./internal/sync/library-sync.js";
 import type { openSyncSession } from "./internal/sync/session.js";
 
-import type { openSetEnabledSession, planSetEnabled } from "./internal/session/set-enabled.js";
-import type { SetEnabledRequest } from "./internal/session/set-enabled-request.js";
+import type { planEnabled } from "./internal/session/set-enabled.js";
+import type { SetEnabledIntent } from "./internal/session/set-enabled-request.js";
 import type { openLibrarySession, readLibrarySkillContent } from "./internal/session/session.js";
 
 import type { addSource, importSource, SourceRequest } from "./source.js";
@@ -328,10 +328,13 @@ export interface Interface {
     Effect.Success<ReturnType<typeof importSource>>,
     Effect.Error<ReturnType<typeof importSource>>
   >;
-  readonly enable: {
-    readonly open: () => ReturnType<typeof openSetEnabledSession>;
-    readonly plan: (requests: readonly SetEnabledRequest[]) => ReturnType<typeof planSetEnabled>;
-  };
+  /** Resolve front-end choices at the displayed revision. Holds no writer while reviewing. */
+  readonly planEnabled: (
+    intents: readonly SetEnabledIntent[],
+    options: { readonly base: Snapshot },
+  ) => ReturnType<typeof planEnabled>;
+  readonly skills: Queries["skills"];
+  readonly suggestCleanup: Queries["suggestCleanup"];
   readonly session: {
     readonly open: () => Effect.Effect<
       Effect.Success<ReturnType<typeof openLibrarySession>>,

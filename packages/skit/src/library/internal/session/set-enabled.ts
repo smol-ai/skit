@@ -1,41 +1,24 @@
-import { join } from "node:path";
 import type * as Library from "../../library.js";
-import { StalePlan } from "../../library-plan.js";
 import { InvalidIntent } from "../../enabled-plan.js";
 import { FailureTypeId, type SkitFailure } from "../../../shared/failure.js";
 import { Effect, Schema } from "effect";
-import { type InventoryRootOptions } from "../../routing/roots.js";
-import {
-  expandSetEnabledIntent,
-  type SetEnabledIntent,
-  type SetEnabledRequest,
-} from "./set-enabled-request.js";
-export type { SetEnabledIntent, SetEnabledRequest } from "./set-enabled-request.js";
+import { expandSetEnabledIntent, type SetEnabledIntent } from "./set-enabled-request.js";
+export type { SetEnabledIntent } from "./set-enabled-request.js";
 import { failureDetails } from "../../../shared/failure.js";
 import { setEnabledResults, SetEnabledChange, SetEnabledResult } from "./set-enabled-contract.js";
 
 import { emptyLibraryState } from "../../library-state.js";
 import type { Snapshot } from "../../snapshot.js";
 import { resolveLibrarySubject } from "../../subject-resolution.js";
-import { libraryView } from "./library-view.js";
+import { enabledSkillIds } from "../../library-contracts.js";
+import { globalEnabled } from "../../enabled.js";
 
-import {
-  suggestDoctorCleanup,
-  type CleanupBudget,
-  type CleanupCandidate,
-} from "./cleanup-selection.js";
-import type { UsageReport } from "../../usage/contracts.js";
-
-/** Display facts plus the Library owner's plain plan for the exact intents and Library previewed. */
-const planOwner = Symbol("LibrarySelection.owner");
-
+/** A reviewed change contains data only. Call apply on the Library that planned it. */
 export interface SetEnabledPlan {
-  readonly [planOwner]: Pick<Library.Interface, "apply">;
-  readonly owner: {
-    readonly plan: Library.Plan;
-  };
+  readonly plan: Extract<Library.Plan, { readonly _tag: "Enabled" }>;
   readonly changes: readonly (Omit<SetEnabledChange, "invocation"> & {
     readonly invocation?: import("./invocation-option.js").InvocationOption;
+    readonly listingSize: number;
   })[];
 }
 
@@ -59,170 +42,82 @@ export class SetEnabledIncomplete
     "Inspect the saved bindings and installed copies, resolve the reported condition, then preview and retry the change. No binding rollback was attempted.";
 }
 
-/** Text and displayed names are resolved here; Library accepts only stable identities. */
-export type SelectionError =
-  | Library.PlanError
-  | import("../../store/library-store.js").LibraryLayerError
-  | import("../../subject-resolution.js").LibrarySubjectNotFound
-  | import("../../subject-resolution.js").LibrarySubjectAmbiguous
-  | import("../../../shared/input-failures.js").OptionCombinationInvalid;
-type SelectionRequirements = never;
-export interface LibraryChangeSelection {
-  readonly refresh: Effect.Effect<
-    LibraryChangeSelection,
-    import("../../store/library-store.js").LibraryStateReadError
-  >;
-  readonly suggestCleanup: (
-    budgets: readonly CleanupBudget[],
-    usage: UsageReport,
-  ) => readonly CleanupCandidate[];
-  readonly view: ReturnType<typeof libraryView>;
-  readonly planMany: (
-    intents: readonly SetEnabledIntent[],
-  ) => Effect.Effect<SetEnabledPlan, SelectionError, SelectionRequirements>;
-  readonly plan: (
-    intent: SetEnabledIntent,
-  ) => Effect.Effect<SetEnabledPlan, SelectionError, SelectionRequirements>;
-}
-function libraryChangeSelection(
-  current: Snapshot,
-  originalsPath: string,
-  library: Pick<Library.Interface, "read" | "plan" | "apply">,
-  configuration: InventoryRootOptions,
-): LibraryChangeSelection {
-  const snapshot = structuredClone(current);
+/** Resolve names and member choices against the explicitly reviewed snapshot. */
+export const planEnabled = Effect.fn("Library.planEnabled")(function* (
+  library: Pick<Library.Interface, "plan">,
+  intents: readonly SetEnabledIntent[],
+  options: { readonly base: Snapshot },
+) {
+  const snapshot = structuredClone(options.base);
   const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
-  const routing = {
-    home: configuration.home,
-    configHome: configuration.configHome,
-    overrides: structuredClone(configuration.overrides),
-  };
-  const planMany = Effect.fn("LibrarySelection.plan")(function* (
-    intents: readonly SetEnabledIntent[],
-  ) {
-    const selected: Library.Enabled["changes"][number][] = [];
-    for (const intent of intents) {
-      // Preserve frontend option errors before converting member names to IDs.
-      yield* expandSetEnabledIntent(state, intent);
-      const subject = yield* resolveLibrarySubject(state, intent.subject);
-      selected.push({
-        _tag: intent.enabled ? "Enable" : "Disable",
-        subject:
-          subject.kind === "collection"
-            ? { _tag: "Collection", id: subject.collection.collection_id }
-            : { _tag: "Skill", id: subject.skill.skill_id },
-        ...(intent.members === undefined
-          ? {}
-          : {
-              members:
-                intent.members === "whole"
-                  ? "whole"
-                  : intent.members.flatMap((name) =>
-                      subject.skills
-                        .filter((skill) => skill.name === name)
-                        .map((skill) => skill.skill_id),
-                    ),
-            }),
-        where: intent.where,
-        ...(intent.invocation === undefined ? {} : { invocation: intent.invocation }),
-        ...(intent.allowDuplicate === undefined ? {} : { allowDuplicate: intent.allowDuplicate }),
-        ...(intent.setup === undefined ? {} : { setup: intent.setup }),
-      });
-    }
-    const [first, ...rest] = selected;
-    if (first === undefined)
-      return yield* new InvalidIntent({
-        detail: "Choose something to enable or disable",
-      });
-    const plan = yield* library.plan(
-      { _tag: "Enabled", changes: [first, ...rest] },
-      {
-        base: snapshot,
-        approvals: intents.flatMap((intent) =>
-          intent.manage === undefined ? [] : [{ _tag: "Manage" as const, manage: intent.manage }],
-        ),
-      },
-    );
-    const prepared: SetEnabledPlan = {
-      [planOwner]: library,
-      changes: plan.changes.filter(
-        (change): change is Library.EnabledChange =>
-          change._tag === "Enable" || change._tag === "Disable",
-      ),
-      owner: { plan },
-    };
-    return prepared;
-  });
-  return {
-    refresh: Effect.map(library.read, (current) =>
-      libraryChangeSelection(current, originalsPath, library, routing),
-    ),
-    suggestCleanup: (budgets, usage) => suggestDoctorCleanup(state, budgets, usage, routing),
-    view: libraryView(state, originalsPath),
-    planMany,
-    plan: (intent: SetEnabledIntent) => planMany([intent]),
-  };
-}
-
-/** Initialize the configured owner once, then capture the Library before asking questions. */
-export const openSetEnabledSession = Effect.fn("Library.openSelection")(function* (
-  library: Pick<Library.Interface, "read" | "plan" | "apply">,
-  home: string,
-  configuration: InventoryRootOptions,
-) {
-  const snapshot = yield* library.read;
-  return libraryChangeSelection(snapshot, join(home, "originals"), library, configuration);
-}, Effect.scoped);
-export type SetEnabledSession = Effect.Success<ReturnType<typeof openSetEnabledSession>>;
-
-/** One request in front-end terms: its subject is text, resolved against the Library planned. */
-const intentFor = (request: SetEnabledRequest): SetEnabledIntent => ({
-  subject: request.query,
-  enabled: request.enabled,
-  ...(request.all
-    ? { members: "whole" as const }
-    : request.selectedSkills === undefined
-      ? {}
-      : { members: request.selectedSkills }),
-  where: [request.scope],
-  ...(request.invocation === undefined ? {} : { invocation: request.invocation }),
-  ...(request.allowDuplicate === undefined ? {} : { allowDuplicate: request.allowDuplicate }),
-  ...(request.manage === undefined ? {} : { manage: request.manage }),
-  ...(request.allowedDuplicateSymlinks !== undefined
-    ? {
-        setup: {
-          approvedSymlinks: (request.allowedDuplicateSymlinks ?? []).map((link) => ({
-            path: link.path,
-            canonicalPath: link.canonicalPath,
-            dev: String(link.dev),
-            ino: String(link.ino),
-            ...(link.linkTarget === undefined ? {} : { linkTarget: link.linkTarget }),
-          })),
-        },
-      }
-    : {}),
-});
-
-/** Internal managing/testing entry point; front ends use a held selection and user intent. */
-export const planSetEnabled = Effect.fn("SetEnabled.plan")(function* (
-  library: Pick<Library.Interface, "read" | "plan" | "apply">,
-  home: string,
-  configuration: InventoryRootOptions,
-  requests: readonly SetEnabledRequest[],
-) {
-  const selection = yield* openSetEnabledSession(library, home, configuration);
-  return yield* selection.planMany(requests.map(intentFor));
-});
-
-/** Apply the owner's plan; partial outcomes keep their published CLI shape. */
-export const applySetEnabledPlan = Effect.fn("SetEnabled.applyPlan")(function* (
-  plan: SetEnabledPlan,
-) {
-  if (plan[planOwner] === undefined)
-    return yield* new StalePlan({
-      message: "This plan belongs to another Library selection",
+  const selected: Library.Enabled["changes"][number][] = [];
+  for (const intent of intents) {
+    // Preserve frontend option errors before converting member names to IDs.
+    yield* expandSetEnabledIntent(state, intent);
+    const subject = yield* resolveLibrarySubject(state, intent.subject);
+    selected.push({
+      _tag: intent.enabled ? "Enable" : "Disable",
+      subject:
+        subject.kind === "collection"
+          ? { _tag: "Collection", id: subject.collection.collection_id }
+          : { _tag: "Skill", id: subject.skill.skill_id },
+      ...(intent.members === undefined
+        ? {}
+        : {
+            members:
+              intent.members === "whole"
+                ? "whole"
+                : intent.members.flatMap((name) =>
+                    subject.skills
+                      .filter((skill) => skill.name === name)
+                      .map((skill) => skill.skill_id),
+                  ),
+          }),
+      where: intent.where,
+      ...(intent.invocation === undefined ? {} : { invocation: intent.invocation }),
+      ...(intent.allowDuplicate === undefined ? {} : { allowDuplicate: intent.allowDuplicate }),
+      ...(intent.setup === undefined ? {} : { setup: intent.setup }),
     });
-  const outcome = (yield* plan[planOwner].apply({ _tag: "Apply", plan: plan.owner.plan })).result;
+  }
+  const [first, ...rest] = selected;
+  if (first === undefined)
+    return yield* new InvalidIntent({
+      detail: "Choose something to enable or disable",
+    });
+  const plan = yield* library.plan(
+    { _tag: "Enabled", changes: [first, ...rest] },
+    {
+      base: snapshot,
+      approvals: intents.flatMap((intent) =>
+        intent.manage === undefined ? [] : [{ _tag: "Manage" as const, manage: intent.manage }],
+      ),
+    },
+  );
+  const prepared: SetEnabledPlan = {
+    plan,
+    changes: plan.changes.flatMap((change) =>
+      change._tag === "Enable" || change._tag === "Disable"
+        ? [
+            {
+              ...change,
+              listingSize: new Set([
+                ...enabledSkillIds(state, change.enabled),
+                ...(change.scope.kind === "repository"
+                  ? enabledSkillIds(state, globalEnabled(state).enabled)
+                  : []),
+              ]).size,
+            },
+          ]
+        : [],
+    ),
+  };
+  return prepared;
+});
+
+/** Convert an application result to the published enable/disable outcomes. Does not write. */
+export const setEnabledOutcomes = Effect.fn("SetEnabled.outcomes")(function* (
+  outcome: import("../../library-plan.js").Outcome,
+) {
   const results = setEnabledResults(outcome);
   if (outcome._tag === "Incomplete")
     return yield* new SetEnabledIncomplete({

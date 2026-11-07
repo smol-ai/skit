@@ -108,11 +108,13 @@ it.effect(
         configHome: join(root, "config"),
         overrides: { codex: [join(root, "enabled")] },
       };
-      const selection = yield* Effect.flatMap(Library.Service, (library) =>
-        library.enable.open(),
-      ).pipe(Effect.provide(Library.layer({ home, roots: configuration })));
-      const failure = yield* selection
-        .plan({ subject: "review", enabled: true, where: [{ kind: "global" }] })
+      const library = yield* Library.Service.pipe(
+        Effect.provide(Library.layer({ home, roots: configuration })),
+      );
+      const failure = yield* library
+        .planEnabled([{ subject: "review", enabled: true, where: [{ kind: "global" }] }], {
+          base: yield* library.read,
+        })
         .pipe(Effect.flip);
       assert.strictEqual(failure._tag, "Library.SubjectAmbiguous");
       assert.isFalse(yield* fs.exists(join(root, "enabled")));

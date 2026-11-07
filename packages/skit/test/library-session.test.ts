@@ -3,13 +3,12 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
 import { join } from "node:path";
 import * as Library from "../src/library/library.js";
-import { applySetEnabledPlan } from "../src/library/enable.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { testRoots } from "./helpers/library-store.js";
 
 it.effect(
-  "a core selection captures its configured owner and applies independently of another ambient Library",
+  "explicit Library queries and data-only plans retain the reviewed revision across another ambient Library",
   () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -33,21 +32,34 @@ it.effect(
         configHome: join(root, "config"),
         overrides: { codex: [destination] },
       };
-      const selection = yield* Effect.flatMap(Library.Service, (library) =>
-        library.enable.open(),
-      ).pipe(Effect.provide(Library.layer({ home, roots: configuration })));
-      const plan = yield* selection.plan({
-        subject: "review",
-        enabled: true,
-        where: [{ kind: "global" }],
-      });
+      const library = yield* Library.Service.pipe(
+        Effect.provide(Library.layer({ home, roots: configuration })),
+      );
+      const base = yield* library.read;
+      const choices = yield* library.list({ base });
+      const plan = yield* library.planEnabled(
+        [
+          {
+            subject: "review",
+            enabled: true,
+            where: [{ kind: "global" }],
+          },
+        ],
+        { base },
+      );
+      const portablePlan = structuredClone(plan);
+      assert.deepStrictEqual(portablePlan, plan);
+      assert.deepStrictEqual(Reflect.ownKeys(plan), ["plan", "changes"]);
       assert.isFalse(yield* fs.exists(destination));
       const elsewhere = join(root, "another-library");
       const other = yield* Library.Service.pipe(
         Effect.provide(Library.layer({ home: elsewhere, roots: testRoots(elsewhere) })),
       );
       // The reviewed operation needs no ambient owner or platform and cannot be redirected.
-      const applying: Effect.Effect<unknown, unknown> = applySetEnabledPlan(plan);
+      const applying: Effect.Effect<unknown, unknown> = library.apply({
+        _tag: "Apply",
+        plan: portablePlan.plan,
+      });
       yield* applying.pipe(Effect.provideService(Library.Service, other));
       assert.isFalse(yield* fs.exists(elsewhere));
       assert.strictEqual(yield* fs.readFileString(join(destination, "review", "SKILL.md")), bytes);
@@ -71,8 +83,8 @@ it.effect(
         ],
       );
       // The selection's earlier read model remains the evidence from before applying.
-      assert.deepStrictEqual(selection.view.installedSkills, []);
-      assert.deepStrictEqual((yield* selection.view.readManifest()).enabled, []);
+      assert.deepStrictEqual(choices.installedSkills, []);
+      assert.deepStrictEqual((yield* library.list({ base })).enabledEverywhere.items, []);
       const portable = yield* view.readManifest();
       assert.strictEqual(portable.enabled.length, 1);
       for (const field of ["operations", "installed_skills", "repositories", "sync_ancestry"])

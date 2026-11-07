@@ -82,11 +82,8 @@ effectIt.effect(
         members.filter((member) => member.name === "keep"),
         "2026-10-13T00:00:00.000Z",
       );
-      const view = yield* home.owned(
-        Effect.flatMap(Library.Service, (library) => library.enable.open()).pipe(
-          Effect.map((selection) => selection.view),
-        ),
-      );
+      const view = yield* home.owned(Library.Service);
+
       expect(yield* view.descriptionLoad({ collection: first.collection.collection_id })).toEqual({
         skills: 1,
         characters: 3,

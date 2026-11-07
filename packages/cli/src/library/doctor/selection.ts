@@ -12,44 +12,49 @@ export const overBudget = (budgets: readonly ListingBudget[]): Estimated[] =>
     (budget): budget is Estimated => budget._tag === "Estimated" && budget.demand > budget.limit,
   );
 
-/** Captures all cleanup evidence and previews against the same Library revision. */
-export const openDoctorCleanupSelection = Effect.fn("Doctor.openCleanupSelection")(function* (
+/** Read cleanup evidence from one explicit Library revision. */
+export const scanDoctorCleanup = Effect.fn("Doctor.scanCleanup")(function* (
   budgets: readonly Estimated[],
+  library: Library.Interface,
   configuration: InventoryRootOptions,
   days: number,
   progress: (completed: number, total: number) => Effect.Effect<void>,
 ) {
-  const selection = yield* Effect.flatMap(Library.Service, (library) => library.enable.open());
-  const usage = yield* scanLocalUsage(selection.view.installedSkills, {
+  const base = yield* library.read;
+  const view = yield* library.list({ base });
+  const usage = yield* scanLocalUsage(view.installedSkills, {
     userHome: configuration.home,
     days,
     progress,
   });
-  const candidates = selection.suggestCleanup(budgets, usage);
+  const candidates = library.suggestCleanup(budgets, usage, { base });
   return {
+    base,
     usage,
     candidates: candidates.map((candidate) => ({
       ...candidate,
       collectionLabel:
-        selection.view.collections.find((item) => item.id === candidate.collectionId)?.label ??
+        view.collections.find((item) => item.id === candidate.collectionId)?.label ??
         candidate.collectionId,
     })),
-    preview: (ids: readonly string[]) => {
-      const selected = candidates.filter((candidate) => ids.includes(candidate.id));
-      const groups = Array.groupBy(selected, (candidate) =>
-        JSON.stringify([
-          candidate.collectionId,
-          candidate.scope.kind,
-          candidate.scope.kind === "global" ? "" : resolve(candidate.scope.root),
-        ]),
-      );
-      const intents: SetEnabledIntent[] = Object.values(groups).map((members) => ({
-        subject: members[0].collectionId,
-        enabled: false,
-        where: [members[0].scope],
-        members: members.map((candidate) => candidate.name),
-      }));
-      return selection.planMany(intents);
-    },
   };
 });
+
+/** Group the chosen rows into disable intents; Library resolves and plans them. */
+export const cleanupIntents = (
+  selected: ReturnType<Library.Interface["suggestCleanup"]>,
+): SetEnabledIntent[] => {
+  const groups = Array.groupBy(selected, (candidate) =>
+    JSON.stringify([
+      candidate.collectionId,
+      candidate.scope.kind,
+      candidate.scope.kind === "global" ? "" : resolve(candidate.scope.root),
+    ]),
+  );
+  return Object.values(groups).map((members) => ({
+    subject: members[0].collectionId,
+    enabled: false,
+    where: [members[0].scope],
+    members: members.map((candidate) => candidate.name),
+  }));
+};

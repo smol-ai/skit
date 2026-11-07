@@ -416,13 +416,10 @@ Tools
             ),
           ),
       };
-      const view = yield* home.owned(
-        Effect.flatMap(Library.Service, (library) => library.enable.open()).pipe(
-          Effect.map((selection) => selection.view),
-        ),
-      );
+      const view = yield* home.owned(Library.Service).pipe(Effect.provideService(FileSystem.FileSystem, recordingFs));
+      const viewBase = yield* view.read;
       const read = home
-        .owned(view.readSkills())
+        .owned(view.skills({ base: viewBase }))
         .pipe(Effect.provideService(FileSystem.FileSystem, recordingFs));
       const first = yield* read;
       expect(first).toHaveLength(2);

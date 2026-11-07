@@ -90,11 +90,9 @@ it.effect(
         })),
       };
       yield* home.writeDurable(selected);
-      const view = yield* home.owned(
-        Effect.flatMap(Library.Service, (library) => library.enable.open()).pipe(
-          Effect.map((selection) => selection.view),
-        ),
-      );
+      const view = yield* home.owned(Library.Service);
+      const viewBase = yield* view.read;
+      const viewFacts = yield* view.list({ base: viewBase });
       const interaction = yield* makeScriptedInteraction([]);
       yield* home.owned(presentListCommand().pipe(Effect.provide(interaction.layer)));
       const listing = yield* Schema.decodeUnknownEffect(ListResult)(
@@ -150,22 +148,24 @@ it.effect(
       );
       expect(conflicting.get(state.skills[0]!.skill_id)?.source_updated_at).toBeNull();
       expect(yield* home.durable).toEqual(selected);
-      const subjects = yield* view.readSubjects();
-      const rows = yield* view.readSkills();
+      const subjects = yield* view
+        .list({ base: viewBase })
+        .pipe(Effect.map((report) => report.subjects));
+      const rows = yield* view.skills({ base: viewBase });
       expect(subjects[0]?.skills[0]?.versions).toHaveLength(2);
       expect(subjects[0]?.skills[0]?.versionId).toBe(rows[0]?.versionId);
       expect(rows[0]?.revision).toBe("1".repeat(40));
       // A held view keeps the displayed selection even when another action selects newer bytes.
       yield* home.writeDurable(state);
-      view.collections.length = 0;
-      expect((yield* view.readSubjects())[0]?.skills[0]?.revision).toBe("1".repeat(40));
-      expect((yield* view.readSkills())[0]?.revision).toBe("1".repeat(40));
-      const fresh = yield* home.owned(
-        Effect.flatMap(Library.Service, (library) => library.enable.open()).pipe(
-          Effect.map((selection) => selection.view),
-        ),
-      );
-      expect((yield* fresh.readSkills())[0]?.revision).toBe("2".repeat(40));
+      viewFacts.collections.length = 0;
+      expect(
+        (yield* view.list({ base: viewBase }).pipe(Effect.map((report) => report.subjects)))[0]
+          ?.skills[0]?.revision,
+      ).toBe("1".repeat(40));
+      expect((yield* view.skills({ base: viewBase }))[0]?.revision).toBe("1".repeat(40));
+      const fresh = yield* home.owned(Library.Service);
+      const freshBase = yield* fresh.read;
+      expect((yield* fresh.skills({ base: freshBase }))[0]?.revision).toBe("2".repeat(40));
       expect(yield* home.durable).toEqual(state);
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
