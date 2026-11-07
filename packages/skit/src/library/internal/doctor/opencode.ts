@@ -79,7 +79,9 @@ export const readOpenCodeV2Skills = Effect.fn("Doctor.readOpenCodeV2Skills")(fun
         ),
       );
       yield* Effect.addFinalizer(() =>
-        Stream.empty.pipe(Stream.run(child.stdin), Effect.ignore).pipe(
+        Stream.empty.pipe(
+          Stream.run(child.stdin),
+          Effect.ignore,
           Effect.andThen(
             child.exitCode.pipe(
               Effect.timeoutOrElse({

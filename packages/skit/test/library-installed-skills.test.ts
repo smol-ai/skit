@@ -181,9 +181,7 @@ it.effect("records no installed copy when its written bytes fail verification", 
       target: "agents",
       root: targetRoot,
       variantsPath: join(home, "variants"),
-    })
-      .pipe(Effect.provide(diverged))
-      .pipe(Effect.result);
+    }).pipe(Effect.provide(diverged), Effect.result);
     assert.strictEqual(Result.isFailure(installed), true);
     if (Result.isFailure(installed))
       assert.strictEqual(installed.failure._tag, "InstalledSkillFailure");

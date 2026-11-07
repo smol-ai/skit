@@ -326,7 +326,8 @@ it.effect("an unwritable root refuses enablement before saving Binding intent", 
   Effect.gen(function* () {
     const f = yield* fixture;
     const planLibrary = yield* f.home.owned(
-      Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
+      Library.Service.pipe(
+        withLibraryOwner(f.home.installOptions),
         withSandboxDenying(join(f.root, "account", ".agents")),
       ),
     );
@@ -1094,7 +1095,8 @@ it.effect(
         overrides: { ...f.home.installOptions.overrides, "claude-code": [claude] },
       };
       const planLibrary = yield* f.home.owned(
-        Library.Service.pipe(withLibraryOwner(configuration)).pipe(
+        Library.Service.pipe(
+          withLibraryOwner(configuration),
           Effect.provideService(FileSystem.FileSystem, {
             ...f.fs,
             rename: (from, to) =>
@@ -1169,7 +1171,8 @@ it.effect("a refused intent save remains a refusal and creates no installed copy
       pathOrDescriptor: f.home.statePath,
     });
     const planLibrary = yield* f.home.owned(
-      Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
+      Library.Service.pipe(
+        withLibraryOwner(f.home.installOptions),
         Effect.provideService(FileSystem.FileSystem, {
           ...f.fs,
           rename: (from, to) =>
@@ -1272,7 +1275,8 @@ it.effect("a batch saves every intent together and reports the scope that cannot
     const repository = join(f.root, "project");
     const target = join(repository, ".agents", "skills", "beta");
     const planLibrary = yield* f.home.owned(
-      Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
+      Library.Service.pipe(
+        withLibraryOwner(f.home.installOptions),
         Effect.provideService(FileSystem.FileSystem, {
           ...f.fs,
           rename: (from, to) =>
@@ -1332,7 +1336,8 @@ it.effect.each(["defect", "interruption"] as const)(
     Effect.gen(function* () {
       const f = yield* fixture;
       const planLibrary = yield* f.home.owned(
-        Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
+        Library.Service.pipe(
+          withLibraryOwner(f.home.installOptions),
           Effect.provideService(FileSystem.FileSystem, {
             ...f.fs,
             rename: (from, to) =>
@@ -1449,7 +1454,8 @@ it.effect(
       const f = yield* fixture;
       let changed = false;
       const planLibrary = yield* f.home.owned(
-        Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
+        Library.Service.pipe(
+          withLibraryOwner(f.home.installOptions),
           Effect.provideService(FileSystem.FileSystem, {
             ...f.fs,
             rename: (from, to) =>
@@ -1683,7 +1689,8 @@ it.effect("an unwritable root keeps bindings unchanged and records its stopped a
   Effect.gen(function* () {
     const f = yield* fixture;
     const library = yield* f.home.owned(
-      Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
+      Library.Service.pipe(
+        withLibraryOwner(f.home.installOptions),
         withSandboxDenying(join(f.root, "account", ".agents")),
       ),
     );
@@ -1797,7 +1804,8 @@ it.effect(
       assert.ok(old);
       const path = join(f.destination, "alpha");
       const library = yield* f.home.owned(
-        Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
+        Library.Service.pipe(
+          withLibraryOwner(f.home.installOptions),
           Effect.provideServiceEffect(
             FileSystem.FileSystem,
             Effect.map(FileSystem.FileSystem, (fs) => ({
@@ -1886,7 +1894,8 @@ it.effect(
       assert.ok(old);
       const path = join(f.destination, "alpha");
       const library = yield* f.home.owned(
-        Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
+        Library.Service.pipe(
+          withLibraryOwner(f.home.installOptions),
           Effect.provideService(FileSystem.FileSystem, {
             ...f.fs,
             rename: (from, to) =>
@@ -2021,7 +2030,8 @@ for (const reverse of [false, true])
         const requests = [{ ...local, invocation: "explicit" as const }, f.request];
         if (reverse) requests.reverse();
         const planLibrary = yield* f.home.owned(
-          Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
+          Library.Service.pipe(
+            withLibraryOwner(f.home.installOptions),
             Effect.provideService(FileSystem.FileSystem, {
               ...f.fs,
               rename: (from, to) =>
@@ -2112,7 +2122,8 @@ it.effect("a shared final publication failure belongs to every accepted request"
     });
     let refused = false;
     const planLibrary = yield* f.home.owned(
-      Library.Service.pipe(withLibraryOwner(f.home.installOptions)).pipe(
+      Library.Service.pipe(
+        withLibraryOwner(f.home.installOptions),
         Effect.provideService(FileSystem.FileSystem, {
           ...f.fs,
           rename: (from, to) =>
