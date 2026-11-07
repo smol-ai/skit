@@ -232,9 +232,7 @@ it.effect("fails boot immediately when the launched Tart process has exited", ()
 it.live("keeps clone compatibility independent of a shell's CODEX_VERSION", () =>
   Effect.gen(function* () {
     const load = (codex: string) =>
-      Effect.gen(function* () {
-        return yield* Configuration;
-      }).pipe(
+      Configuration.pipe(
         Effect.provide(configurationLayer),
         Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ CODEX_VERSION: codex }))),
       );

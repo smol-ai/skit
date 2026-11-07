@@ -184,8 +184,8 @@ it.effect.each([
       method: "remove",
       pathOrDescriptor: root,
     });
-    const exit = yield* Effect.gen(function* () {
-      return yield* publish(root, "1.0.0", undefined).pipe(
+    const exit = yield* Effect.suspend(() =>
+      publish(root, "1.0.0", undefined).pipe(
         Effect.provide(
           registryHttpLayer(
             testHttpClientLayer((request) => {
@@ -235,8 +235,8 @@ it.effect.each([
               ? Effect.fail(cleanupError)
               : fs.remove(path, options),
         }),
-      );
-    }).pipe(Effect.provide(skitLayer), Effect.exit);
+      ),
+    ).pipe(Effect.provide(skitLayer), Effect.exit);
     yield* Effect.ensuring(
       Effect.gen(function* () {
         expect(exit._tag).toBe(outcome === "success" ? "Success" : "Failure");

@@ -84,12 +84,11 @@ export const scanUsage = Effect.fn("Library.scanUsage")(function* (options: Usag
   const window = { start: startDate.toISOString(), end: endDate.toISOString() };
   if (options.project !== undefined) {
     const info = yield* fs.stat(resolve(options.project)).pipe(
-      Effect.catch(() =>
-        Effect.fail(
+      Effect.mapError(
+        () =>
           new InvalidUsageOptions({
             message: "The project must be an accessible directory.",
           }),
-        ),
       ),
     );
     if (info.type !== "Directory")

@@ -51,8 +51,8 @@ it.effect.each([
     let packaging = false;
     let reads = 0;
     let sinkFinalized = false;
-    const operation = Effect.gen(function* () {
-      return yield* createSkitArchive(root, output).pipe(
+    const operation = Effect.suspend(() =>
+      createSkitArchive(root, output).pipe(
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
           makeDirectory: (path, options) =>
@@ -84,8 +84,8 @@ it.effect.each([
               ),
             ),
         }),
-      );
-    });
+      ),
+    );
     const fiber = yield* Effect.forkChild(operation);
     if (stage.endsWith("interrupt")) {
       yield* Deferred.await(ready);
