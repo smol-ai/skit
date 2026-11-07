@@ -11,10 +11,10 @@ export function renderSetEnabled(
       ? "Library choice saved for"
       : "Library choice unchanged for"
     : applied
-      ? data.enabled
+      ? data.action === "enable"
         ? "Enabled"
         : "Disabled"
-      : data.enabled
+      : data.action === "enable"
         ? "Would enable"
         : "Would disable";
   const skills =
@@ -27,7 +27,7 @@ export function renderSetEnabled(
   const change =
     incomplete || data.changed
       ? ""
-      : `${data.enabled ? " · Already enabled" : " · Already disabled"}${data.repair ? (applied ? " · Copies repaired" : " · Copies need repair") : ""}`;
+      : `${data.action === "enable" ? " · Already enabled" : " · Already disabled"}${data.repair ? (applied ? " · Copies repaired" : " · Copies need repair") : ""}`;
   const duplicates = data.duplicates ?? [];
   const warning = duplicates.length
     ? `\n${applied ? "Allowed duplicate copies" : "Blocked unless --allow-duplicate"}:\n${duplicates.flatMap((duplicate) => duplicate.aliases.map((alias) => `  ${duplicate.name} (${duplicate.harness}): ${alias.path}${alias.via === "symlink" ? ` → ${duplicate.canonicalPath} (symlink)` : " (directory)"}`)).join("\n")}`

@@ -4,6 +4,7 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, FileSystem, Result, Schema } from "effect";
 import { join } from "node:path";
+import { stripVTControlCharacters } from "node:util";
 
 import { presentListCommand } from "../src/library/list.js";
 import { browseLibrary } from "../src/library/list/browse.js";
@@ -20,6 +21,7 @@ import {
   writingTo,
 } from "./helpers/library-home.js";
 import type { CommandResult } from "../src/commands/types.js";
+import { renderSetEnabled } from "../src/library/enable/present.js";
 import { presentSetEnabled } from "../src/library/enable.js";
 
 it.effect("lists a retained Collection without Release-shaped fields", () =>
@@ -99,7 +101,11 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
       assert.strictEqual(stale.outcome.failure.code, "CONFLICT");
     yield* home.writeDurable(beforeStaleChange);
 
-    const interaction = yield* makeScriptedInteraction(["Done"]);
+    const interaction = yield* makeScriptedInteraction([
+      row.collectionId,
+      row.skillVersionId,
+      "done",
+    ]);
     yield* home.owned(
       browseLibrary(
         yield* home.owned(Effect.flatMap(Library.Service, (library) => library.session.open())),
@@ -107,6 +113,14 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
     );
     assert.strictEqual((yield* interaction.prompts)[0]?.message, "Select a collection");
     assert.strictEqual(yield* interaction.remaining, 0);
+    const detail = (yield* interaction.notes).find((note) => note.title === "Skill");
+    assert.ok(detail?.renderBody);
+    assert.ok(detail.body.includes("review"));
+    assert.strictEqual(detail.body.includes("\u001b"), false);
+    assert.strictEqual(detail.renderBody(false), detail.body);
+    const colored = detail.renderBody(true);
+    assert.ok(colored.includes("\u001b[36m"));
+    assert.strictEqual(stripVTControlCharacters(colored), detail.body);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -191,6 +205,15 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     const disabled = yield* home.durable;
     assert.deepStrictEqual(disabled.enabled, []);
     assert.deepStrictEqual(disabled.repositories, []);
+    for (const result of yield* interaction.results) {
+      assert.strictEqual(result.schema, "skit.disable.v10");
+      assert.ok(
+        renderSetEnabled(result.data as Parameters<typeof renderSetEnabled>[0], true).startsWith(
+          "Disabled review",
+        ),
+      );
+    }
+
     const collectionId = collection.collection!.collection_id;
     const enable = yield* makeScriptedInteraction([collectionId, "collection"]);
     yield* home.owned(
