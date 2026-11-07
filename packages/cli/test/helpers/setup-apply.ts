@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import * as Library from "@smolai/skit-core/library";
 import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { applySetupPlan } from "@smolai/skit-core/library/setup";
 import type { SetupOptions } from "@smolai/skit-core/library/setup";
@@ -23,10 +24,7 @@ export const applySetupSelections = (
   applySetupPlan(
     {
       manage: { installOptions },
-      withStatus: (message, stage) =>
-        beforeSteps !== undefined && message.startsWith("Applying setup")
-          ? Effect.andThen(Effect.orDie(beforeSteps), stage)
-          : stage,
+      withStatus: (_message, stage) => stage,
     },
     {
       setup,
@@ -38,4 +36,14 @@ export const applySetupSelections = (
       removals: { entries: [], folders: [] },
       changes: [],
     },
+  ).pipe(
+    Effect.updateService(Library.Service, (library) =>
+      beforeSteps === undefined
+        ? library
+        : {
+            ...library,
+            setup: (steps, options) =>
+              Effect.andThen(Effect.orDie(beforeSteps), library.setup(steps, options)),
+          },
+    ),
   );

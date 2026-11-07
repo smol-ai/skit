@@ -1,7 +1,7 @@
 import { recordedLibrary } from "../src/library/internal/setup/intent.js";
 import { emptyLibraryState } from "../src/library/library-state.js";
 import { assert, it } from "@effect/vitest";
-import { Context, Effect, Exit, FileSystem, Layer, Option, Schema } from "effect";
+import { Context, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Option, Schema } from "effect";
 import { join } from "node:path";
 import { deterministicTreeHash } from "../src/artifact/skit.js";
 import { migratedMachineId } from "../src/library/entity-ids.js";
@@ -9,6 +9,7 @@ import { observePathEvidence } from "../src/library/folder-evidence.js";
 import * as Library from "../src/library/library.js";
 import { OperationStatus, type SetupStep } from "../src/library/store/state-schema.js";
 import { inspectLocalLibraryState } from "../src/library/store/state-file.js";
+import { acquireFileLock } from "../src/platform/file-lock.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { inspectLibrary, libraryLayer } from "./helpers/library-store.js";
 
@@ -385,5 +386,38 @@ it.effect("a later setup replaces Done records and keeps Stopped ones", () =>
         { _tag: "Done", operationId: third.operationId },
       ],
     );
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("setup keeps the home lock after an additive step until later steps finish", () =>
+  Effect.gen(function* () {
+    const { fs, home, folder, steps } = yield* importFixture;
+    const reachedMove = yield* Deferred.make<void>();
+    const continueMove = yield* Deferred.make<void>();
+    const gated = Layer.succeed(FileSystem.FileSystem, {
+      ...fs,
+      rename: (from, to) =>
+        from === folder
+          ? Deferred.succeed(reachedMove, undefined).pipe(
+              Effect.andThen(Deferred.await(continueMove)),
+              Effect.andThen(fs.rename(from, to)),
+            )
+          : fs.rename(from, to),
+    });
+    const applying = yield* withLibrary(
+      home,
+      (library) => Effect.flatMap(library.read, (base) => library.setup(steps, { base })),
+      gated,
+    ).pipe(Effect.forkChild);
+    yield* Deferred.await(reachedMove);
+    const saved = yield* inspectLocalLibraryState(home);
+    assert.isTrue(saved.present);
+    if (saved.present) assert.strictEqual(saved.state.collections.length, 1);
+    const failure = yield* Effect.flip(Effect.scoped(acquireFileLock(join(home, "lock.sqlite"))));
+    assert.strictEqual(failure._tag, "FileLockBusy");
+    yield* Deferred.succeed(continueMove, undefined);
+    assert.strictEqual((yield* Fiber.join(applying))._tag, "Done");
+    // The independent holder can acquire it once the whole operation completes.
+    yield* Effect.scoped(acquireFileLock(join(home, "lock.sqlite")));
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

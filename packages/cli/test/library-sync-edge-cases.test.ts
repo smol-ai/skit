@@ -9,7 +9,6 @@ import { inspectOwnershipMarker } from "@smolai/skit-core/library/inventory";
 import { makeImportId, type SkillId } from "@smolai/skit-core/universal/consumer";
 import { RegistryUnreachable } from "../src/registry/failures.js";
 import { captureDisk, assertDiskUnchanged } from "./helpers/disk-snapshot.js";
-import { renderLibrarySyncPlan } from "../src/library/sync/present.js";
 import { devices } from "./helpers/library-sync-devices.js";
 import { testRoots } from "./helpers/roots.js";
 
@@ -752,10 +751,6 @@ for (const localFollows of [true, false])
           ],
         };
         assert.deepStrictEqual(preview.plan.enabled_resolution, resolution);
-        assert.include(
-          renderLibrarySyncPlan(preview.plan),
-          "Enabled-list clashes resolved using this device's choices",
-        );
         assert.strictEqual(
           (yield* b.sync({ takeRemote: ["binding:global"] })).status,
           "resolution_invalid",

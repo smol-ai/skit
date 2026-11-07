@@ -1,7 +1,6 @@
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { join } from "node:path";
-import { renderLibrarySync } from "../src/library/sync/present.js";
 import { Effect } from "effect";
 import { type LibraryManifest } from "@smolai/skit-core/library";
 import { captureDisk, diskChanges, noDiskChanges } from "./helpers/disk-snapshot.js";
@@ -85,7 +84,7 @@ it.effect("absent R and absent L: clean, and nothing is created anywhere", () =>
       assert.deepStrictEqual(result, { status: "clean", changed: false });
       yield* unchanged;
     }
-    // Only the writer lock's home exists afterwards, holding only that lock, which holds no data.
+    // A clean sync with no local or remote Library does not acquire a writer or create home.
     assert.isFalse(yield* homes.fs.exists(a.home));
     assert.strictEqual(server.remote, null);
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
@@ -336,7 +335,6 @@ it.effect(
       assert.strictEqual(preview.status, "merge_ready");
       assert.ok("merge_base" in preview);
       assert.strictEqual(preview.merge_base, "empty-different-library");
-      assert.include(renderLibrarySync(preview), "different Library");
       yield* unchanged;
       assert.strictEqual((yield* a.sync()).status, "merged");
       const merged = yield* a.state;

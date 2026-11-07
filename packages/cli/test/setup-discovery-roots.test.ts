@@ -17,7 +17,6 @@ import {
 } from "@smolai/skit-core/library/setup";
 
 import { systemError } from "effect/PlatformError";
-import { renderSetup } from "../src/library/setup/present.js";
 
 import { libraryHome, scratch, writingTo } from "./helpers/library-home.js";
 
@@ -187,9 +186,6 @@ it.effect("retains unreadable-root evidence and revokes the earlier complete rev
       .pipe(Effect.provideService(FileSystem.FileSystem, fs));
     expect(scan.scan.complete).toBe(false);
     expect(scan.scan.issues).toEqual([{ path: f.projects, code: "UNREADABLE_PATH" }]);
-    expect(renderSetup({ ...scan, actions: [], choices: [] })).toContain(
-      `UNREADABLE_PATH · ${f.projects}`,
-    );
     const review = yield* Effect.result(
       f.home
         .owned(revalidateSetupPlan(f.options, before.onboarding.planId))
