@@ -54,7 +54,7 @@ export const flagsForRequest = (
     const [configuration, session] = yield* Effect.all([
       requestJson(handler, requestFor(request, "/api/ui/config"), UiConfiguration),
       requestJson(handler, requestFor(request, "/api/auth/get-session"), Session).pipe(
-        Effect.catch(() => Effect.succeed(null)),
+        Effect.orElseSucceed(() => null),
       ),
     ]);
     const setupNeeded =
@@ -65,7 +65,7 @@ export const flagsForRequest = (
             BootstrapStatus,
           ).pipe(
             Effect.map(({ needed }) => needed),
-            Effect.catch(() => Effect.succeed(false)),
+            Effect.orElseSucceed(() => false),
           )
         : false;
     const user = session?.user;
@@ -80,7 +80,7 @@ export const flagsForRequest = (
             ProvisionedUsername,
           ).pipe(
             Effect.map((provisioned) => provisioned.username ?? ""),
-            Effect.catch(() => Effect.succeed(user.username ?? "")),
+            Effect.orElseSucceed(() => user.username ?? ""),
           );
     return {
       page,

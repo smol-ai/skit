@@ -68,7 +68,7 @@ const makeReleaseNotice = Effect.gen(function* () {
         cache ?? { schema: "skit.release-cache.v1", source, attemptedAt: now - DAY, tags: {} },
       ).pipe(
         Effect.as(true),
-        Effect.catch(() => Effect.succeed(false)),
+        Effect.orElseSucceed(() => false),
       );
       if (!writable) return { cache: undefined, now, reason: "Update cache is not writable." };
     }
@@ -145,7 +145,7 @@ const makeReleaseNotice = Effect.gen(function* () {
         notifiedAt: now,
       }).pipe(
         Effect.as(true),
-        Effect.catch(() => Effect.succeed(false)),
+        Effect.orElseSucceed(() => false),
       );
       if (!saved) return undefined;
       return checked;
