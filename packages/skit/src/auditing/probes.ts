@@ -1,9 +1,11 @@
 // Probes are declared subprocesses, so they belong to the command's fiber and an interrupted audit
 // kills the child. The allowlist is checked before spawning, and a probe that refuses, exceeds its
 // budget or answers with something other than JSON is a failed probe rather than a failed audit.
-import { Effect, Result } from "effect";
+import { Data, Effect, Result } from "effect";
 import { captureBounded } from "../harnesses/probe-process.js";
 import { arrayAt, isJsonObject } from "../shared/json.js";
+
+class ProbeFailed extends Data.TaggedError("ProbeFailed")<{ message: string }> {}
 
 export interface ProbeOptions {
   probes?: readonly string[];
@@ -40,17 +42,18 @@ export const runAuditProbes = Effect.fn("Audit.probes")(function* (options: Prob
     const invocation = args.join(" ");
     // The allowlist is the boundary: an undeclared invocation is refused before spawning.
     if (!allowed.has(invocation))
-      return yield* Effect.fail(new Error(`Probe is not declared: ${invocation}`));
+      return yield* new ProbeFailed({ message: `Probe is not declared: ${invocation}` });
     // The same budget spawnSync enforced with maxBuffer, and the same timeout.
     const captured = yield* captureBounded(args[0], args.slice(1), {
       limit: 5_000_000,
       timeoutMs: 10_000,
     });
-    if (captured.exitCode !== 0) return yield* Effect.fail(new Error(`exit ${captured.exitCode}`));
+    if (captured.exitCode !== 0)
+      return yield* new ProbeFailed({ message: `exit ${captured.exitCode}` });
     // Malformed output is a failed probe, as it was before, not a defect.
     return yield* Effect.try({
       try: (): unknown => JSON.parse(captured.output),
-      catch: () => new Error(`${invocation} did not return JSON`),
+      catch: () => new ProbeFailed({ message: `${invocation} did not return JSON` }),
     });
   });
   const results: ProbeResult[] = [];
