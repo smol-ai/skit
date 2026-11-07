@@ -1,18 +1,14 @@
 import { Effect } from "effect";
 import type { Interface } from "../../library.js";
 import { emptyLibraryState, type LibraryState } from "../../library-state.js";
-import { resolveLibrarySubject } from "../../subject-resolution.js";
+import { resolveLibrarySubject, type LibrarySubject } from "../../subject-resolution.js";
 import { enabledSkillIds } from "../../library-contracts.js";
-import {
-  SkillRemovalRequiresCollection,
-  CollectionRemovalMissing,
-} from "../../installation/remove.js";
+import { SkillRemovalRequiresCollection } from "../../installation/remove.js";
 
-export const removalSummary = Effect.fn("Library.planRemove")(function* (
+const describeRemoval = Effect.fn("Library.describeRemoval")(function* (
   state: LibraryState,
-  query: string,
+  subject: LibrarySubject,
 ) {
-  const subject = yield* resolveLibrarySubject(state, query);
   // A Source is its whole repository: a Skill cannot be removed from a Collection with other
   // Skills (it would return on the next refresh), only disabled. A Collection of one Skill is
   // removed with it.
@@ -50,34 +46,12 @@ export const removalSummary = Effect.fn("Library.planRemove")(function* (
   };
 });
 
-/** Capture the Library displayed; apply refuses if it changed since. */
-const openRemoveSession = Effect.fn("Library.openRemoveSession")(function* (
-  library: Pick<Interface, "read" | "plan" | "apply">,
+/** The read-only Library view also reports a removal summary without planning it. */
+export const removalSummary = Effect.fn("Library.planRemove")(function* (
+  state: LibraryState,
   query: string,
 ) {
-  const snapshot = yield* library.read;
-  const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
-  const summary = yield* removalSummary(state, query);
-  const collectionId =
-    summary.subject_kind === "collection"
-      ? state.collections.find((item) => item.collection_id === summary.subject_id)?.collection_id
-      : state.skills.find((skill) => skill.skill_id === summary.subject_id)?.collection_id;
-  if (collectionId === undefined)
-    return yield* new CollectionRemovalMissing({ collection_id: summary.subject_id });
-  return {
-    summary: structuredClone(summary),
-    apply: Effect.fn("Library.removeSelection")(function* () {
-      const outcome = (yield* library.apply({
-        _tag: "Apply",
-        plan: yield* library.plan({ _tag: "Remove", collectionId }, { base: snapshot }),
-      })).result;
-      const uninstalled =
-        outcome._tag === "Applied"
-          ? outcome.copies.filter((copy) => copy._tag === "Uninstalled").length
-          : 0;
-      return { ...summary, uninstalled };
-    }),
-  };
+  return yield* describeRemoval(state, yield* resolveLibrarySubject(state, query));
 });
 
 export interface RemoveOptions {
@@ -90,7 +64,20 @@ export const removeCollection = Effect.fn("Library.removeCollection")(function* 
   library: Pick<Interface, "read" | "plan" | "apply">,
   options: RemoveOptions,
 ) {
-  const selection = yield* openRemoveSession(library, options.query);
-  if (options.dryRun) return { kind: "plan" as const, value: selection.summary };
-  return { kind: "removed" as const, value: yield* selection.apply() };
+  const snapshot = yield* library.read;
+  const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
+  const subject = yield* resolveLibrarySubject(state, options.query);
+  const summary = yield* describeRemoval(state, subject);
+  if (options.dryRun) return { kind: "plan" as const, value: summary };
+  const collectionId =
+    subject.kind === "collection" ? subject.collection.collection_id : subject.skill.collection_id;
+  const outcome = (yield* library.apply({
+    _tag: "Apply",
+    plan: yield* library.plan({ _tag: "Remove", collectionId }, { base: snapshot }),
+  })).result;
+  const uninstalled =
+    outcome._tag === "Applied"
+      ? outcome.copies.filter((copy) => copy._tag === "Uninstalled").length
+      : 0;
+  return { kind: "removed" as const, value: { ...summary, uninstalled } };
 });
