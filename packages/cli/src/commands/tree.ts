@@ -135,5 +135,9 @@ export const skitCommand = Command.make("skit").pipe(
     versionCliCommand,
     Command.provide(usageCliCommand, libraryLayer),
   ]),
-  Command.provide(Layer.mergeAll(skitLayer, terminalPrompterLayer, terminalLibraryProgressLayer)),
+  Command.provide(
+    Layer.mergeAll(terminalPrompterLayer, terminalLibraryProgressLayer).pipe(
+      Layer.provideMerge(skitLayer),
+    ),
+  ),
 );
