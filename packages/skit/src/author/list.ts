@@ -25,7 +25,7 @@ export const listAuthorSkits = Effect.fn("Author.list")(function* <E, R>(
     Effect.gen(function* () {
       const separator = skit.skit_id.indexOf("/");
       if (separator < 1 || separator === skit.skit_id.length - 1)
-        return yield* Effect.fail(new AuthorListIdentityError({ identity: skit.skit_id }));
+        return yield* new AuthorListIdentityError({ identity: skit.skit_id });
       return {
         identity: skitLocator({
           schema: "skit.remote.v1",

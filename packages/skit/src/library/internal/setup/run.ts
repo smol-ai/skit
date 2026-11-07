@@ -744,7 +744,7 @@ export const applyRecorded = Effect.fn("Library.applyRecorded")(function* (
     outcome._tag === "Incomplete" &&
     (plan.intent._tag !== "Enabled" || outcome.results.length === 0)
   )
-    return yield* Effect.fail(outcome.cause);
+    return yield* outcome.cause;
   return outcome;
 }, Effect.scoped);
 

@@ -101,7 +101,7 @@ export const makeAuthorSyncServer = Effect.fn("Test.makeAuthorSyncServer")(funct
         ? [undefined, pending]
         : [pending[index], pending.filter((_, position) => position !== index)];
     });
-    if (fault?.action.kind === "drop-response") return yield* Effect.fail(transportError(request));
+    if (fault?.action.kind === "drop-response") return yield* transportError(request);
     if (fault?.action.kind === "gate") {
       yield* Deferred.succeed(fault.action.entered, undefined);
       yield* Deferred.await(fault.action.released);
@@ -113,7 +113,7 @@ export const makeAuthorSyncServer = Effect.fn("Test.makeAuthorSyncServer")(funct
 
   const transport = (device: AuthorDevice): TestHttpHandler =>
     Effect.fn("Test.authorSyncTransport")(function* (request, url) {
-      if ((yield* Ref.get(offline)).has(device)) return yield* Effect.fail(transportError(request));
+      if ((yield* Ref.get(offline)).has(device)) return yield* transportError(request);
       const state = yield* Ref.get(skit);
       if (request.method === "POST" && url.pathname === "/api/skits") {
         const input = yield* decode(SkitCreateRequest, request);

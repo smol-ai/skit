@@ -328,8 +328,7 @@ export const planSync = Effect.fn("Library.planSync")(function* (
   );
   if (inspected._tag === "Success")
     for (const folder of inspected.success.folders) paths.add(folder.path);
-  else if (!installation.independent && conflicts.length === 0)
-    return yield* Effect.fail(inspected.failure);
+  else if (!installation.independent && conflicts.length === 0) return yield* inspected.failure;
   const folders = yield* Effect.forEach([...paths], (path) =>
     Effect.map(files.inspect(path), (folder) => ({
       path,
@@ -518,7 +517,7 @@ export const applySync = Effect.fn("Library.applySync")(function* (
               Schema.is(TreeError)(error) ||
               isPlatformError(error)
             )
-              return yield* Effect.fail(error);
+              return yield* error;
           }
           return yield* new SyncStopped({ operationId: fresh.operationId, reason: result.reason });
         }

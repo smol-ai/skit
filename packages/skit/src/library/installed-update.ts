@@ -192,7 +192,7 @@ export const updateInstalledSkills = Effect.fn("Library.updateInstalledSkills")(
       return yield* new ReviewedChangeDiffers({ path: fact.path });
 
   const outcome = yield* scope.apply("update", plan);
-  if (outcome._tag === "Incomplete") return yield* Effect.fail(outcome.cause);
+  if (outcome._tag === "Incomplete") return yield* outcome.cause;
   const copies = outcome.copies;
   return facts.map((fact): UpdatedCopy => {
     const result = copies.find((copy) => copy._tag !== "Failed" && copy.copy.path === fact.path);

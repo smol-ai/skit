@@ -59,8 +59,7 @@ export const prepareApply = Effect.fn("Library.prepareRecordedApply")(function* 
         files.build(change, again.next, libraryOriginalsPath(home)),
       );
       if (built._tag === "Failure") {
-        if (built.failure._tag !== "Library.InstalledSkillInvalid")
-          return yield* Effect.fail(built.failure);
+        if (built.failure._tag !== "Library.InstalledSkillInvalid") return yield* built.failure;
         invalidSource = { path: change.path, reason: built.failure.detail };
         break;
       }

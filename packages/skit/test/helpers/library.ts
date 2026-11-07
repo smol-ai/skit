@@ -139,7 +139,7 @@ export const installEnabledSkills = (options: {
         },
       ),
     })).result;
-    if (outcome._tag === "Incomplete") return yield* Effect.fail(outcome.cause);
+    if (outcome._tag === "Incomplete") return yield* outcome.cause;
     return applied(outcome, "Installed");
   });
 

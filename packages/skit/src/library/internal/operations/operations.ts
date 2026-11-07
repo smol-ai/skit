@@ -63,7 +63,7 @@ export const operationScope = Effect.fn("Library.operationScope")(function* (
     savedOperation?._tag === "Pending" ? savedOperation.steps[index]?.applies?.at(-1) : undefined;
   if (latest) {
     const outcome = yield* runApply(operationId, index, latest.apply, latest.key);
-    if (outcome._tag === "Incomplete") return yield* Effect.fail(outcome.cause);
+    if (outcome._tag === "Incomplete") return yield* outcome.cause;
   }
   const applyBatch = Effect.fn("Library.applyBatch")(function* (key: string, plan: Plan) {
     const state = yield* loadLibrary(writer.home);

@@ -166,7 +166,7 @@ for (const boundary of ["before-rename", "after-rename"] as const)
           Effect.gen(function* () {
             if (to === f.bindings && boundary === "before-rename") {
               stopped = true;
-              return yield* Effect.fail(error);
+              return yield* error;
             }
             yield* f.fs.rename(from, to);
             if (to === f.bindings) renamed = true;

@@ -223,7 +223,7 @@ export const runSyncStep = Effect.fn("Library.sync.recordedStep")(function* (
             { home, base: snapshotOf({ present: true, state: current }) },
           ),
         );
-        if (outcome._tag === "Incomplete") return yield* Effect.fail(outcome.cause);
+        if (outcome._tag === "Incomplete") return yield* outcome.cause;
         uninstalled = outcome.copies.filter((copy) => copy._tag === "Uninstalled").length;
       }
     } else if (step.phase === "publish" && !alreadyPublished) {
@@ -241,14 +241,12 @@ export const runSyncStep = Effect.fn("Library.sync.recordedStep")(function* (
         }),
       );
       if (attempt._tag === "Failure") {
-        if (attempt.failure instanceof InstalledSkills.Changed)
-          return yield* Effect.fail(attempt.failure);
-        if (program.after.device_skill_selection?.mode !== "choose")
-          return yield* Effect.fail(attempt.failure);
+        if (attempt.failure instanceof InstalledSkills.Changed) return yield* attempt.failure;
+        if (program.after.device_skill_selection?.mode !== "choose") return yield* attempt.failure;
         issues.push(`Enablement failed: ${String(attempt.failure)}`);
       } else if (attempt.success._tag === "Incomplete") {
         if (program.after.device_skill_selection?.mode !== "choose")
-          return yield* Effect.fail(attempt.success.cause);
+          return yield* attempt.success.cause;
         issues.push(`Enablement failed: ${String(attempt.success.cause)}`);
       } else {
         installed = attempt.success.copies.filter((copy) => copy._tag === "Installed").length;

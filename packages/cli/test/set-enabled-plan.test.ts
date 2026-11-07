@@ -2123,14 +2123,12 @@ it.effect("a shared final publication failure belongs to every accepted request"
                 )(yield* f.fs.readFileString(from)).pipe(Effect.orDie);
                 if (state.operations.some(Schema.is(doneApply))) {
                   refused = true;
-                  return yield* Effect.fail(
-                    systemError({
-                      _tag: "PermissionDenied",
-                      module: "FileSystem",
-                      method: "rename",
-                      pathOrDescriptor: to,
-                    }),
-                  );
+                  return yield* systemError({
+                    _tag: "PermissionDenied",
+                    module: "FileSystem",
+                    method: "rename",
+                    pathOrDescriptor: to,
+                  });
                 }
               }
               yield* f.fs.rename(from, to);

@@ -564,7 +564,7 @@ export const loginEffect = Effect.fn("Auth.login")(
         message: `Sign out failed (${signOut.status}): ${detail.slice(0, 500)}; the CLI credential was not saved${original}`,
       });
     }
-    if (Result.isFailure(creation)) return yield* Effect.fail(creation.failure);
+    if (Result.isFailure(creation)) return yield* creation.failure;
     if (!created) return yield* new SignInFailed({ message: "Credential creation failed" });
 
     const signedIn = accounts.signedIn(origin, created, input.alias);
@@ -576,7 +576,7 @@ export const loginEffect = Effect.fn("Auth.login")(
         return yield* new SignInFailed({
           message: `Credential storage and cleanup failed; token ${created.tokenId} (${created.tokenPrefix}) may still be live`,
         });
-      return yield* Effect.fail(stored.failure);
+      return yield* stored.failure;
     }
     // Stored: an interrupt after this point must not revoke the credential the caller now has.
     unsaved = undefined;

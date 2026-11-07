@@ -130,7 +130,7 @@ export const layer = Layer.effect(
           namespace.isTaken,
         ]);
         if (teamExists || namespaceTaken) return yield* new TeamConflict();
-        return yield* Effect.fail(committed.failure);
+        return yield* committed.failure;
       }
       return { team_id: teamId, slug, name };
     });

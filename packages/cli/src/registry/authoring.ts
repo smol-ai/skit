@@ -193,7 +193,7 @@ export const listAuthorInventory = Effect.fn("Registry.listAuthorInventory")(fun
     cursor = page.next_cursor;
     pages++;
     if (cursor && (cursors.has(cursor) || pages >= 1_000 || skits.length > 100_000))
-      return yield* Effect.fail(new AuthorListPaginationError({ origin }));
+      return yield* new AuthorListPaginationError({ origin });
     if (cursor) cursors.add(cursor);
   } while (cursor);
   return { origin, skits };

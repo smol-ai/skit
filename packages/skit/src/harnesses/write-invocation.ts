@@ -39,7 +39,7 @@ export function applyHarnessInvocationPolicy(
         ),
       );
     if (text === undefined && adapter.required)
-      return yield* Effect.fail(new InstalledSkillFileMissing({ path }));
+      return yield* new InstalledSkillFileMissing({ path });
     const next = yield* Effect.fromResult(adapter.write(text, policy, path));
     if (next === null) {
       if (text === undefined) return false;

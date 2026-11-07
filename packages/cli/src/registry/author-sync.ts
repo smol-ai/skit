@@ -168,7 +168,7 @@ export const authorSyncApi = Effect.fn("Registry.authorSyncApi")(function* (inpu
           identity: locator,
         });
       if (!Schema.is(SkitNotFoundResponse)(existing.failure))
-        return yield* Effect.fail(failure("skit current", 200)(existing.failure));
+        return yield* failure("skit current", 200)(existing.failure);
     }),
     create: (visibility: AuthorVisibility, requestId: string) =>
       client.skits

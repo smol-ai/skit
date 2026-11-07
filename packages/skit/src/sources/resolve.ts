@@ -761,7 +761,7 @@ function discoverRoot(
         foundSkillPaths: foundSkills.map((directory) => relative(extracted, directory) || "."),
         ...(selection.diagnostics.length ? { diagnostics: selection.diagnostics } : {}),
       };
-    return yield* Effect.fail(new NoSkitDescriptorFound());
+    return yield* new NoSkitDescriptorFound();
   });
 }
 

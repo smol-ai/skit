@@ -226,14 +226,12 @@ for (const failurePhase of ["install", "source-cleanup"] as const) {
                 failurePhase === "install" && input?.prefix === ".skit-stage-" && !failed
                   ? Effect.gen(function* () {
                       failed = true;
-                      return yield* Effect.fail(
-                        systemError({
-                          _tag: "PermissionDenied",
-                          module: "FileSystem",
-                          method: "makeTempDirectoryScoped",
-                          pathOrDescriptor: join(f.root, "install-stage"),
-                        }),
-                      );
+                      return yield* systemError({
+                        _tag: "PermissionDenied",
+                        module: "FileSystem",
+                        method: "makeTempDirectoryScoped",
+                        pathOrDescriptor: join(f.root, "install-stage"),
+                      });
                     })
                   : f.fs.makeTempDirectoryScoped(input),
             }),

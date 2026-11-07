@@ -59,7 +59,7 @@ export function generateInvocationMetadata(
   return Effect.gen(function* () {
     const absolute = resolve(root);
     if (!(yield* isAuthorWorkspace(absolute)))
-      return yield* Effect.fail(new NotAnAuthorWorkspace({ path: absolute }));
+      return yield* new NotAnAuthorWorkspace({ path: absolute });
     const descriptor = yield* readSkitDescriptor(absolute);
     const results: InvocationMetadataGeneration[] = [];
     for (const skill of descriptor.skills) {

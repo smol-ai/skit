@@ -252,8 +252,9 @@ export const revalidateSetupPlan = Effect.fn("Setup.revalidatePlan")(function* (
 ) {
   const current = yield* scanForSetup(yield* Service, { ...options, persistRoots: false });
   if (current.scan.onboarding.planId !== approvedPlanId)
-    return yield* Effect.fail(
-      new SetupPlanStale({ approvedPlanId, currentPlanId: current.scan.onboarding.planId }),
-    );
+    return yield* new SetupPlanStale({
+      approvedPlanId,
+      currentPlanId: current.scan.onboarding.planId,
+    });
   return current;
 });

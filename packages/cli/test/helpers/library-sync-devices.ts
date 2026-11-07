@@ -97,15 +97,13 @@ export const devices = Effect.gen(function* () {
               !fault.anchoredOnly || next.sync_ancestry?.revision_id === server.remote?.revision_id,
           )
         )
-          return yield* Effect.fail(
-            systemError({
-              _tag: "PermissionDenied",
-              module: "FileSystem",
-              method: "rename",
-              pathOrDescriptor: to,
-              description: "Test interruption before local state publication",
-            }),
-          );
+          return yield* systemError({
+            _tag: "PermissionDenied",
+            module: "FileSystem",
+            method: "rename",
+            pathOrDescriptor: to,
+            description: "Test interruption before local state publication",
+          });
         yield* fs.rename(from, to);
         events.push(`save ${name}`);
         const obstruction = faults.take(

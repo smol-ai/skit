@@ -103,7 +103,7 @@ const entriesOf = Effect.fn("Setup.entries")(function* (directory: string, optio
       if (!optional) issues.push({ path: directory, code: "MISSING_ROOT" });
     } else if (reason === "PermissionDenied")
       issues.push({ path: directory, code: "UNREADABLE_PATH" });
-    else return yield* Effect.fail(listing.failure);
+    else return yield* listing.failure;
   } else {
     for (const name of listing.success.sort()) {
       const path = join(directory, name);
@@ -113,7 +113,7 @@ const entriesOf = Effect.fn("Setup.entries")(function* (directory: string, optio
         issues.push({ path, code: "MISSING_PATH" });
       else if (observed.failure.reason._tag === "PermissionDenied")
         issues.push({ path, code: "UNREADABLE_PATH" });
-      else return yield* Effect.fail(observed.failure);
+      else return yield* observed.failure;
     }
   }
   return { entries, issues, complete: issues.length === 0 };
@@ -132,7 +132,7 @@ const repositoryMarker = Effect.fn("Setup.repositoryMarker")(function* (
     if (required) issues.push({ path, code: "MISSING_ROOT" });
   } else if (marker.failure.reason._tag === "PermissionDenied")
     issues.push({ path, code: "UNREADABLE_PATH" });
-  else return yield* Effect.fail(marker.failure);
+  else return yield* marker.failure;
   return false;
 });
 
@@ -528,15 +528,14 @@ const collectBrokenLinks = Effect.fn("Setup.brokenLinks")(function* (
         issues.push({ path, code: "UNREADABLE_PATH" });
         continue;
       }
-      if (targetInfo.failure.reason._tag !== "NotFound")
-        return yield* Effect.fail(targetInfo.failure);
+      if (targetInfo.failure.reason._tag !== "NotFound") return yield* targetInfo.failure;
       const targetRead = yield* Effect.result(fs.readLink(path));
       if (Result.isFailure(targetRead)) {
         if (targetRead.failure.reason._tag === "NotFound")
           issues.push({ path, code: "MISSING_PATH" });
         else if (targetRead.failure.reason._tag === "PermissionDenied")
           issues.push({ path, code: "UNREADABLE_PATH" });
-        else return yield* Effect.fail(targetRead.failure);
+        else return yield* targetRead.failure;
         continue;
       }
       const target = targetRead.success;
