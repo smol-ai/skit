@@ -92,7 +92,7 @@ export const makeHistoryStore = Effect.fn("AuthorHistory.makeStore")(function* (
     read: (kind, hash) =>
       Effect.gen(function* () {
         const text = yield* fs.readFileString(storedPath(path, directory, kind, hash)).pipe(
-          Effect.map(Option.some),
+          Effect.asSome,
           Effect.catchReason("PlatformError", "NotFound", () => Effect.succeedNone),
         );
         if (Option.isNone(text) || kind === "revision") return text;

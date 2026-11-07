@@ -398,7 +398,7 @@ const make = Effect.gen(function* () {
   const sameConnection = Schema.toEquivalence(Connection);
   const lstat = (target: string) =>
     links.lstat(target).pipe(
-      Effect.map(Option.some),
+      Effect.asSome,
       Effect.catchReason("PlatformError", "NotFound", () => Effect.succeedNone),
     );
 
@@ -418,7 +418,7 @@ const make = Effect.gen(function* () {
   const readIdentity = Effect.fn("AuthorWorkspace.readIdentity")(function* (root: WorkspaceRoot) {
     const file = identityPath(root);
     const text = yield* fs.readFileString(file).pipe(
-      Effect.map(Option.some),
+      Effect.asSome,
       Effect.catchReason("PlatformError", "NotFound", () => Effect.succeedNone),
     );
     if (Option.isNone(text)) return Option.none<Identity>();
@@ -433,7 +433,7 @@ const make = Effect.gen(function* () {
     const file = remotePath(root);
     const invalid = () => new AuthorRemoteMetadataInvalid({ path: file });
     const text = yield* fs.readFileString(file).pipe(
-      Effect.map(Option.some),
+      Effect.asSome,
       Effect.catchTag("PlatformError", (error) =>
         isErrno(error, "ENOENT") ? Effect.succeedNone : Effect.fail(invalid()),
       ),
@@ -476,7 +476,7 @@ const make = Effect.gen(function* () {
     const remote = yield* readRemote(root);
     const file = connectionPath(root);
     const text = yield* fs.readFileString(file).pipe(
-      Effect.map(Option.some),
+      Effect.asSome,
       Effect.catchTag("PlatformError", (error) =>
         isErrno(error, "ENOENT") ? Effect.succeedNone : Effect.fail(error),
       ),

@@ -636,7 +636,7 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
 
   const loadSyncState = Effect.gen(function* () {
     const text = yield* fs.readFileString(syncStatePath).pipe(
-      Effect.map(Option.some),
+      Effect.asSome,
       Effect.catchReason("PlatformError", "NotFound", () => Effect.succeedNone),
     );
     if (Option.isNone(text))

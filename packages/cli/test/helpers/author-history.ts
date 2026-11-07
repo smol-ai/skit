@@ -39,7 +39,7 @@ const historyAt = Effect.fn("Test.historyEvidence")(function* (home: string) {
     read: (kind, hash) =>
       Effect.gen(function* () {
         const text = yield* fs.readFileString(join(folder(kind), `${hash.slice(7)}.json`)).pipe(
-          Effect.map(Option.some),
+          Effect.asSome,
           Effect.catchReason("PlatformError", "NotFound", () => Effect.succeedNone),
           Effect.mapError(failed),
         );

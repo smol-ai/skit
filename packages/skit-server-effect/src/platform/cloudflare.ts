@@ -95,7 +95,7 @@ export const blobStoreLayer = (
           Effect.flatMap((object) =>
             object === null
               ? Effect.succeedNone
-              : r2(operation, () => object.bytes()).pipe(Effect.map(Option.some)),
+              : r2(operation, () => object.bytes()).pipe(Effect.asSome),
           ),
         ),
       stream: (operation, key) =>
