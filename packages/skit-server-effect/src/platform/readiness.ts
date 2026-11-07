@@ -83,7 +83,7 @@ export const inspectReadiness = Effect.fn("Readiness.inspect")(function* (
           };
         }),
       ),
-      blobs.probe().pipe(
+      blobs.probe.pipe(
         Effect.result,
         Effect.map((result): ReadinessCheck => ({
           name: "r2",

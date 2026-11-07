@@ -43,7 +43,7 @@ export const bootstrapHandlers = (rateLimiter: RateLimiter) =>
 
       return handlers
         .handle("status", () =>
-          authentication.isBootstrapNeeded().pipe(
+          authentication.isBootstrapNeeded.pipe(
             Effect.tapError((error) => Effect.logError("bootstrap status failed", error)),
             Effect.mapError(() => storageFailureResponse),
             Effect.tap(() => noStore),

@@ -45,7 +45,7 @@ export type CreateError =
   | PasswordHashError;
 
 export interface BootstrapService {
-  readonly isNeeded: () => Effect.Effect<boolean, DatabaseError>;
+  readonly isNeeded: Effect.Effect<boolean, DatabaseError>;
   readonly createInitialOperator: (
     input: BootstrapInput,
   ) => Effect.Effect<BootstrapClaimResult, CreateError>;
@@ -74,7 +74,7 @@ export const makeBootstrap = (sql: DatabaseSqlClient, bootstrapSecret: string | 
     const db = <A, E>(operation: string, effect: Effect.Effect<A, E>) =>
       effect.pipe(databaseError(operation));
 
-    const isNeeded = Effect.fn("Bootstrap.isNeeded")(function* () {
+    const isNeeded = Effect.gen(function* () {
       if (bootstrapSecret === undefined) return false;
       const rows = yield* db(
         "read bootstrap claim",
@@ -87,7 +87,7 @@ export const makeBootstrap = (sql: DatabaseSqlClient, bootstrapSecret: string | 
         ),
       );
       return false;
-    });
+    }).pipe(Effect.withSpan("Bootstrap.isNeeded"));
 
     const createInitialOperator = Effect.fn("Bootstrap.createInitialOperator")(function* (
       input: BootstrapInput,
@@ -104,7 +104,7 @@ export const makeBootstrap = (sql: DatabaseSqlClient, bootstrapSecret: string | 
         input.password.length > 128
       )
         return yield* new InvalidBootstrapInput();
-      if (!(yield* isNeeded())) return yield* new BootstrapComplete();
+      if (!(yield* isNeeded)) return yield* new BootstrapComplete();
 
       const countRows = yield* db(
         "count users before bootstrap",
@@ -137,7 +137,7 @@ export const makeBootstrap = (sql: DatabaseSqlClient, bootstrapSecret: string | 
         ]),
       ).pipe(Effect.result);
       if (committed._tag === "Failure") {
-        const stillNeeded = yield* isNeeded().pipe(Effect.result);
+        const stillNeeded = yield* isNeeded.pipe(Effect.result);
         if (stillNeeded._tag === "Success" && !stillNeeded.success)
           return yield* new BootstrapComplete();
         return yield* committed.failure;

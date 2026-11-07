@@ -73,7 +73,7 @@ export interface BlobStoreService {
     operation: string,
     keys: ReadonlyArray<string>,
   ) => Effect.Effect<void, BlobStorageError>;
-  readonly probe: () => Effect.Effect<void, BlobStorageError>;
+  readonly probe: Effect.Effect<void, BlobStorageError>;
 }
 
 export class BlobStore extends Context.Service<BlobStore, BlobStoreService>()(
@@ -120,8 +120,7 @@ export const blobStoreLayer = (
         for (let index = 0; index < keys.length; index += MAX_DELETE_KEYS)
           yield* r2(operation, () => bucket.delete(keys.slice(index, index + MAX_DELETE_KEYS)));
       }),
-      probe: () =>
-        r2("list readiness sentinel", () => bucket.list({ limit: 1 })).pipe(Effect.asVoid),
+      probe: r2("list readiness sentinel", () => bucket.list({ limit: 1 })).pipe(Effect.asVoid),
     }),
   );
 };
