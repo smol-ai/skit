@@ -1,0 +1,60 @@
+{
+  "$id": "skit.author.list.v2",
+  "type": "object",
+  "properties": {
+    "registry": {
+      "type": "string"
+    },
+    "skits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "identity": {
+            "type": "string"
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "public",
+              "unlisted",
+              "private"
+            ]
+          },
+          "current_revision_id": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "current_revision_published": {
+            "type": "boolean"
+          },
+          "most_recent_release_version": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "identity",
+          "visibility",
+          "current_revision_id",
+          "current_revision_published",
+          "most_recent_release_version"
+        ],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": [
+    "registry",
+    "skits"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

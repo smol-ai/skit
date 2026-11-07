@@ -70,6 +70,7 @@ export type {
   DestinationFormInvalid,
   DirectoryAlreadyInLibrary,
   NoRemoteHome,
+  NotAnAuthorWorkspace,
   VisibilityNotAccepted,
 } from "./failures.js";
 export type { SkitValidationFailed } from "../artifact/failures.js";

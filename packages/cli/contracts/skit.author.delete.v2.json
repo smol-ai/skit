@@ -1,0 +1,55 @@
+{
+  "$id": "skit.author.delete.v2",
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "delete_ready",
+        "deleted",
+        "absent"
+      ]
+    },
+    "skit_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "changed": {
+      "type": "boolean"
+    },
+    "revisions": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "releases": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "release_versions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?$"
+      }
+    },
+    "archive_cleanup": {
+      "type": "string",
+      "enum": [
+        "complete",
+        "deferred"
+      ]
+    }
+  },
+  "required": [
+    "status",
+    "skit_id",
+    "changed",
+    "revisions",
+    "releases",
+    "release_versions"
+  ],
+  "additionalProperties": true,
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

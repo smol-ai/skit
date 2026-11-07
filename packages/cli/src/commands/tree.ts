@@ -38,6 +38,7 @@ import { registryDefaultCliCommand } from "../registry/commands/registry-default
 import { registryListCliCommand } from "../registry/commands/registry-list.js";
 import { registryRemoveCliCommand } from "../registry/commands/registry-remove.js";
 import { homeFlag, localFlags, JsonOutputFlag } from "./parameters.js";
+import { authorCliCommand } from "../author/commands.js";
 
 const authCommand = Command.make("auth").pipe(
   Command.withSharedFlags({ home: homeFlag }),
@@ -115,6 +116,10 @@ export const skitCommand = Command.make("skit").pipe(
   Command.withGlobalFlags([JsonOutputFlag]),
   Command.withSubcommands([
     authCommand,
+    authorCliCommand.pipe(
+      Command.withSharedFlags({ home: homeFlag }),
+      Command.provide((input) => Layer.merge(configurationLayer(input), registryHttpLayer())),
+    ),
     Command.provide(addCliCommand, sourceLayer),
     Command.provide(checkCliCommand, sourceLayer),
     Command.provide(doctorCliCommand, libraryLayer),

@@ -187,9 +187,9 @@ export const authorSyncApi = Effect.fn("Registry.authorSyncApi")(function* (inpu
 });
 
 /** Transport composition for Author; credentials are selected only for the named Registry. */
-export const authorRegistry = (home?: string) => ({
+export const authorRegistry = (home?: string, registry?: string) => ({
   list: Effect.gen(function* () {
-    return yield* listAuthorInventory(yield* Registry.credentials({ home }));
+    return yield* listAuthorInventory(yield* Registry.credentials({ home, registry }));
   }).pipe(Effect.withSpan("Registry.listAuthor")),
   delete: Effect.fn("Registry.deleteAuthor")(function* (
     remote: AuthorRemoteHome,
