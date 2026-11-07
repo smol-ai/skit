@@ -16,6 +16,17 @@ Judge a boundary by what callers no longer need to know. Explain what a new
 abstraction hides and why that justifies its interface. Avoid wrappers that leave
 callers responsible for assembling the same lifecycle or enforcing the same rules.
 
+## Call services directly
+
+Do not introduce helpers that only retrieve a service and forward a method call.
+Call the service directly where it is used. This applies to tests too: test
+fixtures provide layers, and tests express the operations they exercise.
+
+Use `Effect.gen` or generator-based `Effect.fn` for workflows with multiple
+sequential steps. Read dependencies into named variables with `yield*`. Keep
+`Effect.flatMap` for a single transformation; do not nest callbacks to express a
+sequence.
+
 ## Name things plainly
 
 Use the simplest words that say what a thing is or does. A reader who knows
