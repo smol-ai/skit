@@ -80,7 +80,7 @@ it.effect("persists successful checks, deduplicates notices, and backs off faile
         expect((yield* checkRelease(release("0.1.0"), true)).status).toBe("check-unavailable");
         yield* checkRelease(release("0.1.0"), false);
         expect(calls).toBe(2);
-      }).pipe(Effect.provide(layer), Effect.provide(config));
+      }).pipe(Effect.provide(layer.pipe(Layer.provideMerge(config))));
     }),
   ).pipe(Effect.provide(NodeServices.layer)),
 );
@@ -111,8 +111,13 @@ it.effect("records a timeout as a failed attempt and retries after the daily bac
         yield* Fiber.join(retry);
         expect(calls).toBe(2);
       }).pipe(
-        Effect.provide(releaseContext(http)),
-        Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ XDG_STATE_HOME: root }))),
+        Effect.provide(
+          releaseContext(http).pipe(
+            Layer.provideMerge(
+              ConfigProvider.layer(ConfigProvider.fromUnknown({ XDG_STATE_HOME: root })),
+            ),
+          ),
+        ),
       );
     }),
   ).pipe(Effect.provide(NodeServices.layer)),
@@ -138,9 +143,14 @@ it.effect("skips passive network access when state cannot be persisted", () =>
         expect((yield* checkRelease(release("0.1.0"), true)).status).toBe("update-available");
         expect(calls).toBe(1);
       }).pipe(
-        Effect.provide(releaseContext(http)),
         Effect.provide(
-          ConfigProvider.layer(ConfigProvider.fromUnknown({ XDG_STATE_HOME: `${root}/blocked` })),
+          releaseContext(http).pipe(
+            Layer.provideMerge(
+              ConfigProvider.layer(
+                ConfigProvider.fromUnknown({ XDG_STATE_HOME: `${root}/blocked` }),
+              ),
+            ),
+          ),
         ),
       );
     }),
@@ -184,13 +194,16 @@ it.effect.each(["not json", "non-finite timestamp"])(
           expect(yield* noticeRelease(release("0.1.0"))).toBeUndefined();
           expect(calls).toBe(3);
         }).pipe(
-          Effect.provide(releaseContext(http)),
           Effect.provide(
-            ConfigProvider.layer(
-              ConfigProvider.fromUnknown({
-                XDG_STATE_HOME: root,
-                SKIT_NPM_REGISTRY: "https://example.test",
-              }),
+            releaseContext(http).pipe(
+              Layer.provideMerge(
+                ConfigProvider.layer(
+                  ConfigProvider.fromUnknown({
+                    XDG_STATE_HOME: root,
+                    SKIT_NPM_REGISTRY: "https://example.test",
+                  }),
+                ),
+              ),
             ),
           ),
         );

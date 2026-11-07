@@ -770,21 +770,24 @@ for (const mode of ["dry-run", "decline", "apply", "cancel"] as const) {
       const changed = yield* f.home.owned(
         presentDoctorCleanup([f.budget], f.home.installOptions, 30, mode === "dry-run").pipe(
           Effect.catchTag("PromptCancelled", () => Effect.succeed(false)),
-          Effect.provide(prompt),
           Effect.provide(
-            rendererTestLayer({
-              note: (body) =>
-                Effect.sync(() => {
-                  notes.push(body);
+            prompt.pipe(
+              Layer.provideMerge(
+                rendererTestLayer({
+                  note: (body) =>
+                    Effect.sync(() => {
+                      notes.push(body);
+                    }),
                 }),
-            }),
-          ),
-          Effect.provide(
-            ConfigProvider.layer(
-              ConfigProvider.fromUnknown({
-                CODEX_HOME: join(f.root, "empty-codex"),
-                CLAUDE_CONFIG_DIR: join(f.root, "empty-claude"),
-              }),
+              ),
+              Layer.provideMerge(
+                ConfigProvider.layer(
+                  ConfigProvider.fromUnknown({
+                    CODEX_HOME: join(f.root, "empty-codex"),
+                    CLAUDE_CONFIG_DIR: join(f.root, "empty-claude"),
+                  }),
+                ),
+              ),
             ),
           ),
         ),

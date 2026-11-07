@@ -1,4 +1,4 @@
-import { Cause, Deferred, Effect, Exit, Fiber } from "effect";
+import { Layer, Cause, Deferred, Effect, Exit, Fiber } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { commandFailure } from "../src/commands/failure-classification.js";
@@ -47,8 +47,7 @@ it.effect("presentation waits for cleanup and reports its defect after interrupt
       ).pipe(Effect.andThen(Effect.never)),
     );
     const fiber = yield* runCommandTree(command, [], "test").pipe(
-      Effect.provide(interaction.layer),
-      Effect.provide(NodeServices.layer),
+      Effect.provide(interaction.layer.pipe(Layer.provideMerge(NodeServices.layer))),
       Effect.forkChild,
     );
 

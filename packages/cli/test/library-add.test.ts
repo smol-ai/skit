@@ -14,7 +14,7 @@ import { deterministicTreeHash } from "@smolai/skit-core/author";
 import * as Library from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem } from "effect";
+import { Layer, Effect, FileSystem } from "effect";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { HttpClient, HttpClientResponse } from "effect/http";
@@ -138,8 +138,11 @@ it.effect("previews without mutation, then retains exact root Skill bytes", () =
     const failure = yield* Effect.flatMap(Library.Service, (library) =>
       library.previewSourceUpdates(added.collection_id, inspectLibrarySource),
     ).pipe(
-      Effect.provide(Library.layer({ home, roots: testRoots(home) })),
-      Effect.provide(skitConfigurationLayer(home)),
+      Effect.provide(
+        Library.layer({ home, roots: testRoots(home) }).pipe(
+          Layer.provideMerge(skitConfigurationLayer(home)),
+        ),
+      ),
       Effect.flip,
     );
     if (failure._tag !== "Library.CollectionNotUpdatable")
@@ -315,8 +318,11 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     };
     const run = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
       effect.pipe(
-        Effect.provide(Library.layer({ home, roots: testRoots(home) })),
-        Effect.provide(skitConfigurationLayer(home)),
+        Effect.provide(
+          Library.layer({ home, roots: testRoots(home) }).pipe(
+            Layer.provideMerge(skitConfigurationLayer(home)),
+          ),
+        ),
         Effect.provideService(HttpClient.HttpClient, client),
       );
     const added = yield* run(importSource(source));
@@ -561,8 +567,11 @@ it.effect("records the Registry Release a Collection is added from, so sync can 
       slug: "tools",
       version: "1.2.3",
     }).pipe(
-      Effect.provide(Library.layer({ home, roots: testRoots(home) })),
-      Effect.provide(skitConfigurationLayer(home)),
+      Effect.provide(
+        Library.layer({ home, roots: testRoots(home) }).pipe(
+          Layer.provideMerge(skitConfigurationLayer(home)),
+        ),
+      ),
       Effect.provideService(HttpClient.HttpClient, client),
     );
     const state = yield* stateAt(home);

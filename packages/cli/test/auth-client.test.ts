@@ -88,8 +88,11 @@ describe("saved login reuse", () => {
         scopes: ["library:sync"],
         interactive: false,
       }).pipe(
-        Effect.provide(interaction.layer),
-        Effect.provide(registryHttpLayer(testHttpClientLayer(handler))),
+        Effect.provide(
+          interaction.layer.pipe(
+            Layer.provideMerge(registryHttpLayer(testHttpClientLayer(handler))),
+          ),
+        ),
       );
       expect(value).toMatchObject({
         alreadyAuthenticated: true,
@@ -113,14 +116,17 @@ describe("saved login reuse", () => {
           scopes: ["library:sync"],
           interactive: false,
         }).pipe(
-          Effect.provide(interaction.layer),
           Effect.provide(
-            registryHttpLayer(
-              testHttpClientLayer(() =>
-                Effect.succeed(
-                  Response.json(
-                    status === 200 ? { library: null } : { error: "insufficient_scope" },
-                    { status },
+            interaction.layer.pipe(
+              Layer.provideMerge(
+                registryHttpLayer(
+                  testHttpClientLayer(() =>
+                    Effect.succeed(
+                      Response.json(
+                        status === 200 ? { library: null } : { error: "insufficient_scope" },
+                        { status },
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -140,10 +146,15 @@ describe("saved login reuse", () => {
       const interaction = yield* makeScriptedInteraction([]);
       const failure = yield* Effect.flip(
         authLoginCommand({ home, scopes: ["library:sync"], interactive: false }).pipe(
-          Effect.provide(interaction.layer),
           Effect.provide(
-            registryHttpLayer(
-              testHttpClientLayer(() => Effect.sync(() => expect.fail("Expired bearer was sent"))),
+            interaction.layer.pipe(
+              Layer.provideMerge(
+                registryHttpLayer(
+                  testHttpClientLayer(() =>
+                    Effect.sync(() => expect.fail("Expired bearer was sent")),
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -160,11 +171,14 @@ describe("saved login reuse", () => {
       for (const status of [401, 503]) {
         const failure = yield* Effect.flip(
           authLoginCommand({ home, scopes: ["library:sync"], interactive: false }).pipe(
-            Effect.provide(interaction.layer),
             Effect.provide(
-              registryHttpLayer(
-                testHttpClientLayer(() =>
-                  Effect.succeed(Response.json({ error: "unavailable" }, { status })),
+              interaction.layer.pipe(
+                Layer.provideMerge(
+                  registryHttpLayer(
+                    testHttpClientLayer(() =>
+                      Effect.succeed(Response.json({ error: "unavailable" }, { status })),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -188,8 +202,11 @@ describe("saved login reuse", () => {
         interactive: true,
         relogin: true,
       }).pipe(
-        Effect.provide(interaction.layer),
-        Effect.provide(registryHttpLayer(testHttpClientLayer(successfulServer(requests)))),
+        Effect.provide(
+          interaction.layer.pipe(
+            Layer.provideMerge(registryHttpLayer(testHttpClientLayer(successfulServer(requests)))),
+          ),
+        ),
       );
       expect(value).toMatchObject({
         alreadyAuthenticated: false,

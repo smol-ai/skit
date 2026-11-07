@@ -2,7 +2,7 @@
 import { applyD1Migrations, env, reset, SELF } from "cloudflare:test";
 import { beforeEach } from "vitest";
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Schema, Order } from "effect";
+import { Layer, Effect, Schema, Order } from "effect";
 import {
   LibraryManifest,
   RemoteLibrary,
@@ -300,7 +300,11 @@ describe("Library sync Worker persistence", () => {
       ).toBe(true);
       expect(yield* stored(library_id)).toEqual(before);
       yield* assertArchive(library_id);
-    }).pipe(Effect.provide(databaseLayer(env.DB)), Effect.provide(BrowserCrypto.layerSecureRandom)),
+    }).pipe(
+      Effect.provide(
+        databaseLayer(env.DB).pipe(Layer.provideMerge(BrowserCrypto.layerSecureRandom)),
+      ),
+    ),
   );
 
   it.effect("rejects a stale base without adding revisions or changing snapshot bytes", () =>

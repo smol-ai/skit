@@ -1,6 +1,6 @@
 import { assert, it } from "@effect/vitest";
 import { NodeServices } from "@effect/platform-node";
-import { ConfigProvider, Effect, FileSystem } from "effect";
+import { Layer, ConfigProvider, Effect, FileSystem } from "effect";
 import { join } from "node:path";
 import { runCommandTree } from "../src/commands/runtime.js";
 import { skitCommand } from "../src/commands/tree.js";
@@ -23,18 +23,21 @@ it.effect("remove uses its parsed home and removes recorded copies after a passi
     const results: CommandResult[] = [];
     const run = (args: readonly string[]) =>
       runCommandTree(skitCommand, [...args, "--home", home, "--json"], "test").pipe(
-        Effect.provide(ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: ignored }))),
         Effect.provide(
-          rendererTestLayer({
-            failure: (failure) =>
-              Effect.sync(() => {
-                failures.push(failure);
+          ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: ignored })).pipe(
+            Layer.provideMerge(
+              rendererTestLayer({
+                failure: (failure) =>
+                  Effect.sync(() => {
+                    failures.push(failure);
+                  }),
+                result: (result) =>
+                  Effect.sync(() => {
+                    results.push(result);
+                  }),
               }),
-            result: (result) =>
-              Effect.sync(() => {
-                results.push(result);
-              }),
-          }),
+            ),
+          ),
         ),
       );
     yield* run(["add", source]);

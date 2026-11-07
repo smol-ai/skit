@@ -1,4 +1,4 @@
-import { Cause, Deferred, Effect, Fiber, FileSystem, Sink } from "effect";
+import { Layer, Cause, Deferred, Effect, Fiber, FileSystem, Sink } from "effect";
 import { systemError } from "effect/PlatformError";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { join } from "node:path";
@@ -113,9 +113,12 @@ it.effect.each([
     const operation = Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       return yield* publish(root, "1.0.0", undefined).pipe(
-        Effect.provide(registryHttpLayer(testHttpClientLayer(fetcher))),
-        Effect.provide(authorWorkspaceLayer),
-        Effect.provide(registryCredentialLayer("https://registry.test")),
+        Effect.provide(
+          registryHttpLayer(testHttpClientLayer(fetcher)).pipe(
+            Layer.provideMerge(authorWorkspaceLayer),
+            Layer.provideMerge(registryCredentialLayer("https://registry.test")),
+          ),
+        ),
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
           makeTempDirectory: (options) =>
@@ -214,10 +217,11 @@ it.effect.each([
                     : success(),
               );
             }),
+          ).pipe(
+            Layer.provideMerge(authorWorkspaceLayer),
+            Layer.provideMerge(registryCredentialLayer("https://registry.test")),
           ),
         ),
-        Effect.provide(authorWorkspaceLayer),
-        Effect.provide(registryCredentialLayer("https://registry.test")),
         Effect.provideService(FileSystem.FileSystem, {
           ...fs,
           makeTempDirectory: (options) =>

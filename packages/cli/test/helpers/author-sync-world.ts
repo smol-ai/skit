@@ -95,10 +95,13 @@ export const makeAuthorSyncWorld = Effect.fn("Test.makeAuthorSyncWorld")(functio
             ...(first ? { to: "swyx/tools", visibility: "private" as const } : {}),
           }).pipe(
             // This is the command's Registry environment; the Library's home layer must not replace it.
-            Effect.provide(registryCredentialLayer(remote.origin)),
-            Effect.provide(registryHttpLayer(testHttpClientLayer(server.transport(name)))),
-            // Fresh, so the author owners write through a FileSystem a test provides here.
-            Effect.provide(authorLayer(home)),
+            Effect.provide(
+              registryCredentialLayer(remote.origin).pipe(
+                Layer.provideMerge(registryHttpLayer(testHttpClientLayer(server.transport(name)))),
+                // Fresh, so the author owners write through a FileSystem a test provides here.
+                Layer.provideMerge(authorLayer(home)),
+              ),
+            ),
             // The Library's layer carries its own FileSystem; sync keeps the test's.
             Effect.provideService(FileSystem.FileSystem, yield* FileSystem.FileSystem),
             Effect.provideService(LinkStat, yield* LinkStat),
@@ -123,8 +126,11 @@ export const makeAuthorSyncWorld = Effect.fn("Test.makeAuthorSyncWorld")(functio
           });
           yield* backupAuthorWorkspace(workspace, api.remote);
         }).pipe(
-          Effect.provide(registryHttpLayer(testHttpClientLayer(server.transport(name)))),
-          Effect.provide(authorLayer(home)),
+          Effect.provide(
+            registryHttpLayer(testHttpClientLayer(server.transport(name))).pipe(
+              Layer.provideMerge(authorLayer(home)),
+            ),
+          ),
           Effect.scoped,
         ),
       sync: (first = false, allowLargeDeletion = false) =>

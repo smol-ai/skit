@@ -73,10 +73,8 @@ export const syncJourney = (failDownload: boolean) =>
               configHome: workspace,
               overrides: { codex: [join(workspace, "agents-skills")] },
             },
-          }),
+          }).pipe(Layer.provideMerge(skitConfigurationLayer(home)), Layer.provideMerge(transport)),
         ),
-        Effect.provide(skitConfigurationLayer(home)),
-        Effect.provide(transport),
         Effect.catchCause((cause) =>
           renderer.failure(commandFailure(cause)).pipe(Effect.andThen(Effect.failCause(cause))),
         ),

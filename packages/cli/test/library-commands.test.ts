@@ -2,7 +2,7 @@ import * as Library from "@smolai/skit-core/library";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
-import { Deferred, Effect, Fiber, FileSystem, Result, Schema } from "effect";
+import { Layer, Deferred, Effect, Fiber, FileSystem, Result, Schema } from "effect";
 import { join } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 
@@ -526,9 +526,8 @@ it.effect("rejects a stale multi-destination disable before changing any Binding
                 Effect.sync(() => {
                   results.push(value);
                 }),
-            }),
+            }).pipe(Layer.provideMerge(interaction.layer)),
           ),
-          Effect.provide(interaction.layer),
         ),
       )
       .pipe(Effect.result, Effect.forkScoped);

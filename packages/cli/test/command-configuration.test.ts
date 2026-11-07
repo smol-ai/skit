@@ -1,5 +1,5 @@
 import { expect, it } from "@effect/vitest";
-import { Cause, ConfigProvider, Effect, Exit, FileSystem } from "effect";
+import { Layer, Cause, ConfigProvider, Effect, Exit, FileSystem } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { Command } from "effect/cli";
 import { SkitConfiguration, resolveSkitConfiguration } from "@smolai/skit-core/platform";
@@ -45,10 +45,15 @@ it.effect("standalone commands resolve configuration and preserve a supplied sna
     yield* runCommandTree(command, [], "0.0.0");
     expect(seen).toEqual(["/supplied/state", "/environment/state"]);
   }).pipe(
-    Effect.provide(NodeServices.layer),
-    Effect.provide(rendererTestLayer()),
     Effect.provide(
-      ConfigProvider.layer(ConfigProvider.fromUnknown({ XDG_STATE_HOME: "/environment/state" })),
+      NodeServices.layer.pipe(
+        Layer.provideMerge(rendererTestLayer()),
+        Layer.provideMerge(
+          ConfigProvider.layer(
+            ConfigProvider.fromUnknown({ XDG_STATE_HOME: "/environment/state" }),
+          ),
+        ),
+      ),
     ),
   ),
 );
@@ -68,15 +73,16 @@ it.effect("grouped commands inherit home before or after the child without openi
         Effect.provideService(SkitConfiguration, snapshot),
         // An explicit application snapshot wins over later environment changes.
         Effect.provide(
-          ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: join(root, "later") })),
-        ),
-        Effect.provide(
-          rendererTestLayer({
-            failure: (failure) =>
-              Effect.sync(() => {
-                failures.push(failure);
+          ConfigProvider.layer(ConfigProvider.fromUnknown({ SKIT_HOME: join(root, "later") })).pipe(
+            Layer.provideMerge(
+              rendererTestLayer({
+                failure: (failure) =>
+                  Effect.sync(() => {
+                    failures.push(failure);
+                  }),
               }),
-          }),
+            ),
+          ),
         ),
       );
     yield* run(["registry", "--home", home, "add", "first", "https://first.example"]);

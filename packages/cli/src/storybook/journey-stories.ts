@@ -9,7 +9,7 @@ import * as Library from "@smolai/skit-core/library";
 import { presentDoctorCleanup } from "../library/doctor/cleanup.js";
 import { syncJourney } from "./sync-journey.js";
 import { join } from "node:path";
-import { ConfigProvider, Effect } from "effect";
+import { Layer, ConfigProvider, Effect } from "effect";
 
 import { inventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { presentSetEnabled } from "../library/enable.js";
@@ -54,11 +54,14 @@ const previewEnable = Effect.scoped(
         return yield* Effect.die("The enable preview changed the Library or installed files");
       return yield* library.session.open();
     }).pipe(
-      Effect.provide(Library.layer({ home, roots: configuration.inventory })),
-      Effect.provide(skitConfigurationLayer(home)),
+      Effect.provide(
+        Library.layer({ home, roots: configuration.inventory }).pipe(
+          Layer.provideMerge(skitConfigurationLayer(home)),
+        ),
+      ),
     );
   }),
-).pipe(Effect.provide(skitLayer), Effect.provide(skitConfigurationLayer()));
+).pipe(Effect.provide(skitLayer.pipe(Layer.provideMerge(skitConfigurationLayer()))));
 
 const previewDoctorCleanup = Effect.scoped(
   Effect.gen(function* () {
@@ -134,14 +137,17 @@ const previewDoctorCleanup = Effect.scoped(
         return yield* Effect.die("The cleanup preview changed the Library or installed bytes");
       return `Preview only · ${after.state.enabled.length} Skill remains enabled`;
     }).pipe(
-      Effect.provide(Library.layer({ home, roots: configuration })),
-      Effect.provide(skitConfigurationLayer(home)),
       Effect.provide(
-        ConfigProvider.layer(
-          ConfigProvider.fromUnknown({
-            CODEX_HOME: join(root, "codex"),
-            CLAUDE_CONFIG_DIR: join(root, "claude"),
-          }),
+        Library.layer({ home, roots: configuration }).pipe(
+          Layer.provideMerge(skitConfigurationLayer(home)),
+          Layer.provideMerge(
+            ConfigProvider.layer(
+              ConfigProvider.fromUnknown({
+                CODEX_HOME: join(root, "codex"),
+                CLAUDE_CONFIG_DIR: join(root, "claude"),
+              }),
+            ),
+          ),
         ),
       ),
     );

@@ -53,14 +53,20 @@ NodeRuntime.runMain(
         home,
         ...(first ? { to: destination, visibility: "private" as const } : {}),
       }).pipe(
-        Effect.provide(Library.layer({ home, roots: testRoots(home) })),
-        Effect.provide(registryHttpLayer(transport)),
+        Effect.provide(
+          Library.layer({ home, roots: testRoots(home) }).pipe(
+            Layer.provideMerge(registryHttpLayer(transport)),
+          ),
+        ),
       );
     });
     const outcome = yield* operation.pipe(
-      Effect.provide(authorLayer({ home })),
-      Effect.provide(skitConfigurationLayer(home)),
-      Effect.provide(skitLayer),
+      Effect.provide(
+        authorLayer({ home }).pipe(
+          Layer.provideMerge(skitConfigurationLayer(home)),
+          Layer.provideMerge(skitLayer),
+        ),
+      ),
       Effect.scoped,
       Effect.result,
     );

@@ -1,5 +1,5 @@
 import { join, resolve } from "node:path";
-import { Effect, FileSystem, Schema } from "effect";
+import { Layer, Effect, FileSystem, Schema } from "effect";
 import { it } from "@effect/vitest";
 import { makeCollectionId, makeSkillId } from "@smolai/skit-core/universal/consumer";
 import { skitLayer } from "@smolai/skit-core/platform";
@@ -25,8 +25,9 @@ describe("generated command contracts", () => {
       for (const [name, contents] of Object.entries(expected))
         expect(yield* fs.readFileString(join(contractsRoot, name))).toBe(contents);
     }).pipe(
-      Effect.provide(cliLayer(false, "/tmp/skit-contract-generation-test")),
-      Effect.provide(skitLayer),
+      Effect.provide(
+        cliLayer(false, "/tmp/skit-contract-generation-test").pipe(Layer.provideMerge(skitLayer)),
+      ),
     ),
   );
 

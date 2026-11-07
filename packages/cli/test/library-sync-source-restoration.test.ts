@@ -78,7 +78,7 @@ const fixture = Effect.gen(function* () {
           library.sync({ origin, apply: true }, transport),
         ),
       ),
-    ).pipe(Effect.provide(registryHttpLayer(http)), Effect.provide(http));
+    ).pipe(Effect.provide(registryHttpLayer(http).pipe(Layer.provideMerge(http))));
   const seed = (source: SkitSource) =>
     Effect.gen(function* () {
       yield* writingTo(home, importSource(source)).pipe(Effect.provide(http));

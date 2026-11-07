@@ -1,6 +1,6 @@
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Layer, Effect } from "effect";
 import { HttpClient } from "effect/http";
 import { MissingRequirement } from "../src/commands/input-failures.js";
 import { publishCommand } from "../src/author/publish.js";
@@ -9,8 +9,7 @@ import { rendererTestLayer } from "./helpers/renderer.js";
 
 it.effect("requires an exact release version before reading the workspace", () =>
   publishCommand({}).pipe(
-    Effect.provide(rendererTestLayer()),
-    Effect.provide(testPlatformLayer),
+    Effect.provide(rendererTestLayer().pipe(Layer.provideMerge(testPlatformLayer))),
     Effect.provideService(
       RegistryHttp,
       RegistryHttp.of({

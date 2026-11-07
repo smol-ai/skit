@@ -107,12 +107,15 @@ const terminalProgram = Effect.acquireUseRelease(
 );
 NodeRuntime.runMain(
   terminalProgram.pipe(
-    Effect.provide(services),
-    Effect.provide(NodeServices.layer),
     Effect.provide(
-      CliConfig.layer({
-        builtIns: GlobalFlag.BuiltIns.filter((flag) => flag !== GlobalFlag.Wizard),
-      }),
+      services.pipe(
+        Layer.provideMerge(NodeServices.layer),
+        Layer.provideMerge(
+          CliConfig.layer({
+            builtIns: GlobalFlag.BuiltIns.filter((flag) => flag !== GlobalFlag.Wizard),
+          }),
+        ),
+      ),
     ),
     Effect.catchTag("VmError", (error) =>
       Console.error(error.message).pipe(

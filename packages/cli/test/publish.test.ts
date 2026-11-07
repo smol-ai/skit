@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { expect } from "vitest";
 import { it } from "@effect/vitest";
-import { Cause, Effect, Exit, FileSystem, Schema } from "effect";
+import { Layer, Cause, Effect, Exit, FileSystem, Schema } from "effect";
 import { skitLayer } from "@smolai/skit-core/platform";
 import { releasePublishRequestSchema } from "@smolai/skit-core/api";
 import { publish } from "../src/author/publish.js";
@@ -25,10 +25,15 @@ const runPublish = (
   options: { transport: TestHttpHandler; credentialOrigin?: string },
 ) =>
   publish(root, version, revision).pipe(
-    Effect.provide(registryHttpLayer(testHttpClientLayer(options.transport))),
-    Effect.provide(authorWorkspaceLayer),
-    // The environment's token is for this Registry only.
-    Effect.provide(registryCredentialLayer(options.credentialOrigin ?? "https://registry.test")),
+    Effect.provide(
+      registryHttpLayer(testHttpClientLayer(options.transport)).pipe(
+        Layer.provideMerge(authorWorkspaceLayer),
+        // The environment's token is for this Registry only.
+        Layer.provideMerge(
+          registryCredentialLayer(options.credentialOrigin ?? "https://registry.test"),
+        ),
+      ),
+    ),
   );
 
 /** The error a publication failed or died with, or `undefined` when it succeeded. */

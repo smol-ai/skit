@@ -4,7 +4,7 @@ import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 
 import * as Library from "@smolai/skit-core/library";
 import { assert, it } from "@effect/vitest";
-import { Effect, FileSystem, Ref } from "effect";
+import { Layer, Effect, FileSystem, Ref } from "effect";
 import { join } from "node:path";
 
 import { importSource, inspectLibrarySource } from "../src/library/source.js";
@@ -39,8 +39,11 @@ it.effect("checks retained files without treating an observed local copy as an u
       Effect.flatMap(Library.Service, (library) =>
         library.check(query, { inspectSource: inspectLibrarySource, onCollection }),
       ).pipe(
-        Effect.provide(Library.layer({ home, roots: testRoots(home) })),
-        Effect.provide(skitConfigurationLayer(home)),
+        Effect.provide(
+          Library.layer({ home, roots: testRoots(home) }).pipe(
+            Layer.provideMerge(skitConfigurationLayer(home)),
+          ),
+        ),
       );
     const current = yield* check(imported.collection_id, (collection) =>
       Ref.update(checkedCollections, (names) => [...names, collection.display_name]),

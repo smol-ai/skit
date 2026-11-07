@@ -2,7 +2,7 @@ import { systemError } from "effect/PlatformError";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { parseArgs } from "node:util";
-import { Deferred, Effect, Exit, Fiber, FileSystem, Order } from "effect";
+import { Layer, Deferred, Effect, Exit, Fiber, FileSystem, Order } from "effect";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { addRegistryRemote, readConfig } from "../src/registry/auth.js";
@@ -243,8 +243,11 @@ it.live(
       const interaction = yield* makeScriptedInteraction([]);
       const run = (options: Parameters<typeof authLoginCommand>[0]) =>
         authLoginCommand(options).pipe(
-          Effect.provide(interaction.layer),
-          Effect.provide(registryHttpLayer(testHttpClientLayer(server.handler))),
+          Effect.provide(
+            interaction.layer.pipe(
+              Layer.provideMerge(registryHttpLayer(testHttpClientLayer(server.handler))),
+            ),
+          ),
         );
       const started = yield* run({
         registry: origin,
