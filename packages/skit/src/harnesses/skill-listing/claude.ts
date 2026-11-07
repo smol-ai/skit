@@ -18,7 +18,7 @@ export interface ClaudeListingOptions {
 const Settings = Schema.Struct({
   model: Schema.optionalKey(Schema.String),
   skillListingBudgetFraction: Schema.optionalKey(
-    Schema.Number.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1)),
+    Schema.Finite.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(1)),
   ),
   skillListingMaxDescChars: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThan(0))),
   skillOverrides: Schema.optionalKey(

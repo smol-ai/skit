@@ -152,7 +152,7 @@ const SkillsLockEntry = Schema.StructWithRest(
 
 const SkillsLockDocument = Schema.fromJsonString(
   Schema.Struct({
-    version: Schema.Number,
+    version: Schema.Finite,
     skills: Schema.Record(Schema.String, SkillsLockEntry),
   }),
 );

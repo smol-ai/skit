@@ -11,8 +11,8 @@ export interface BootstrapClaimResult {
   readonly username: string;
 }
 
-const BootstrapClaim = Schema.Struct({ claimed: Schema.Number });
-const UserCount = Schema.Struct({ count: Schema.Number });
+const BootstrapClaim = Schema.Struct({ claimed: Schema.Finite });
+const UserCount = Schema.Struct({ count: Schema.Finite });
 
 class InvalidBootstrapSecret extends Schema.TaggedError<InvalidBootstrapSecret>()(
   "Bootstrap.InvalidSecret",

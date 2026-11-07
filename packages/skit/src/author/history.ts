@@ -152,7 +152,7 @@ const PreparedWrite = Schema.Struct({
   from: History.TreeHash,
   to: History.TreeHash,
   ownerId: Schema.String,
-  revision: Schema.Number,
+  revision: Schema.Finite,
 }).pipe(Schema.brand("PreparedWrite"));
 export type PreparedWrite = typeof PreparedWrite.Type;
 

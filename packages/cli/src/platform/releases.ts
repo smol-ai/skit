@@ -24,11 +24,11 @@ const DistTags = Schema.Record(Schema.String, Schema.String);
 const Cache = Schema.Struct({
   schema: Schema.Literal("skit.release-cache.v1"),
   source: Schema.String,
-  attemptedAt: Schema.Number,
-  succeededAt: Schema.optionalKey(Schema.Number),
+  attemptedAt: Schema.Finite,
+  succeededAt: Schema.optionalKey(Schema.Finite),
   tags: DistTags,
   notifiedVersion: Schema.optionalKey(Schema.String),
-  notifiedAt: Schema.optionalKey(Schema.Number),
+  notifiedAt: Schema.optionalKey(Schema.Finite),
 });
 type Cache = typeof Cache.Type;
 const makeReleaseNotice = Effect.gen(function* () {

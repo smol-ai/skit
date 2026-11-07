@@ -29,7 +29,7 @@ const UserIdentity = Schema.Struct({
 });
 const SessionIdentity = Schema.Struct({
   user: Schema.Struct({ id: Schema.String }),
-  session: Schema.Struct({ authorizationGeneration: Schema.optionalKey(Schema.Number) }),
+  session: Schema.Struct({ authorizationGeneration: Schema.optionalKey(Schema.Finite) }),
 });
 
 interface SessionIdentity {

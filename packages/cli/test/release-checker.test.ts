@@ -147,48 +147,55 @@ it.effect("skips passive network access when state cannot be persisted", () =>
   ).pipe(Effect.provide(NodeServices.layer)),
 );
 
-it.effect("ignores corrupt caches, repeats notices after a day, and expires stale successes", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const root = yield* fs.makeTempDirectoryScoped();
-      const directory = `${root}/skit`;
-      yield* fs.makeDirectory(directory);
-      const path = `${directory}/releases-${encodeURIComponent("https://example.test")}.json`;
-      yield* fs.writeFileString(path, "not json");
-      let calls = 0;
-      let failure = false;
-      const http = HttpClient.make((request) => {
-        calls++;
-        return Effect.succeed(
-          HttpClientResponse.fromWeb(
-            request,
-            new Response('{"latest":"1.0.0"}', { status: failure ? 503 : 200 }),
+it.effect.each(["not json", "non-finite timestamp"])(
+  "ignores corrupt caches (%s), repeats notices after a day, and expires stale successes",
+  (corruption) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const root = yield* fs.makeTempDirectoryScoped();
+        const directory = `${root}/skit`;
+        yield* fs.makeDirectory(directory);
+        const path = `${directory}/releases-${encodeURIComponent("https://example.test")}.json`;
+        yield* fs.writeFileString(
+          path,
+          corruption === "not json"
+            ? "not json"
+            : '{"schema":"skit.release-cache.v1","source":"https://example.test/-/package/@smolai/skit/dist-tags","attemptedAt":0,"succeededAt":0,"notifiedVersion":"1.0.0","notifiedAt":1e999,"tags":{"latest":"1.0.0"}}',
+        );
+        let calls = 0;
+        let failure = false;
+        const http = HttpClient.make((request) => {
+          calls++;
+          return Effect.succeed(
+            HttpClientResponse.fromWeb(
+              request,
+              new Response('{"latest":"1.0.0"}', { status: failure ? 503 : 200 }),
+            ),
+          );
+        });
+        yield* Effect.gen(function* () {
+          expect((yield* noticeRelease(release("0.1.0")))?.status).toBe("update-available");
+          yield* TestClock.adjust("24 hours");
+          expect((yield* noticeRelease(release("0.1.0")))?.status).toBe("update-available");
+          expect(calls).toBe(2);
+          failure = true;
+          yield* TestClock.adjust("8 days");
+          expect(yield* noticeRelease(release("0.1.0"))).toBeUndefined();
+          expect(calls).toBe(3);
+        }).pipe(
+          Effect.provide(releaseContext(http)),
+          Effect.provide(
+            ConfigProvider.layer(
+              ConfigProvider.fromUnknown({
+                XDG_STATE_HOME: root,
+                SKIT_NPM_REGISTRY: "https://example.test",
+              }),
+            ),
           ),
         );
-      });
-      yield* Effect.gen(function* () {
-        expect((yield* noticeRelease(release("0.1.0")))?.status).toBe("update-available");
-        yield* TestClock.adjust("24 hours");
-        expect((yield* noticeRelease(release("0.1.0")))?.status).toBe("update-available");
-        expect(calls).toBe(2);
-        failure = true;
-        yield* TestClock.adjust("8 days");
-        expect(yield* noticeRelease(release("0.1.0"))).toBeUndefined();
-        expect(calls).toBe(3);
-      }).pipe(
-        Effect.provide(releaseContext(http)),
-        Effect.provide(
-          ConfigProvider.layer(
-            ConfigProvider.fromUnknown({
-              XDG_STATE_HOME: root,
-              SKIT_NPM_REGISTRY: "https://example.test",
-            }),
-          ),
-        ),
-      );
-    }),
-  ).pipe(Effect.provide(NodeServices.layer)),
+      }),
+    ).pipe(Effect.provide(NodeServices.layer)),
 );
 
 it.effect("uses the supplied application state directory instead of rereading XDG", () =>

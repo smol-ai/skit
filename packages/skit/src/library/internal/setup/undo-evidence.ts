@@ -13,7 +13,7 @@ const Entry = Schema.Struct({
   hash: Schema.String,
   marker: Schema.NullOr(Schema.String),
   markerType: Schema.optionalKey(Schema.NullOr(Schema.String)),
-  markerMode: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+  markerMode: Schema.optionalKey(Schema.NullOr(Schema.Finite)),
   linkTarget: Schema.NullOr(Schema.String),
 });
 

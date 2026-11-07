@@ -11,7 +11,7 @@ import { SecureRandom } from "effect/crypto";
 import type { FindLibrary } from "./owned.js";
 
 const RevisionRow = Schema.Struct({ manifest_json: Schema.String });
-const CountRow = Schema.Struct({ n: Schema.Number });
+const CountRow = Schema.Struct({ n: Schema.Finite });
 const StoredManifest = Schema.fromJsonString(StoredLibraryManifest);
 
 export class LibraryRevisionConflict extends Schema.TaggedError<LibraryRevisionConflict>()(

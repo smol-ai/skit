@@ -27,18 +27,18 @@ const PatRow = Schema.Struct({
   principal_id: Schema.String,
   token_id: Schema.String,
   state: Schema.String,
-  authorization_generation: Schema.Number,
-  token_generation: Schema.Number,
+  authorization_generation: Schema.Finite,
+  token_generation: Schema.Finite,
   scopes_json: Schema.String,
   expires_at: Schema.NullOr(Schema.String),
   revoked_at: Schema.NullOr(Schema.String),
 });
 const StoredScopes = Schema.fromJsonString(Schema.Array(Scope));
-const PrincipalGeneration = Schema.Struct({ authorization_generation: Schema.Number });
+const PrincipalGeneration = Schema.Struct({ authorization_generation: Schema.Finite });
 const SessionPrincipalRow = Schema.Struct({
   principal_id: Schema.String,
   state: Schema.String,
-  authorization_generation: Schema.Number,
+  authorization_generation: Schema.Finite,
 });
 const ListedPatRow = Schema.Struct({
   token_id: Schema.String,
