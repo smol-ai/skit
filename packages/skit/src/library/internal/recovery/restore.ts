@@ -40,7 +40,7 @@ export type RestorePlanError = Effect.Error<ReturnType<typeof planRestore>>;
 export interface RestoreOutcome {
   readonly _tag: "Restore";
   readonly result: {
-    readonly after: typeof RecoveryInspection.Type;
+    readonly after: RecoveryInspection;
     readonly phase: "restored" | "partial" | "conflicted";
   };
 }

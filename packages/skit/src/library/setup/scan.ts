@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { Data, Effect } from "effect";
 import { canonicalJson } from "../../shared/json.js";
-import { Hash } from "../../shared/hash.js";
+import type { Hash } from "../../shared/hash.js";
 import { hashParts } from "../../artifact/descriptor.js";
 import { libraryStateRevision } from "../library-state.js";
 import { isEntryLink, findDuplicates } from "../routing/duplicates.js";
@@ -32,8 +32,8 @@ import {
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 export class SetupPlanStale
   extends Data.TaggedError("SetupPlanStale")<{
-    approvedPlanId: typeof Hash.Type;
-    currentPlanId: typeof Hash.Type;
+    approvedPlanId: Hash;
+    currentPlanId: Hash;
   }>
   implements SkitFailure
 {
@@ -248,7 +248,7 @@ export const runSetup = (options: SetupOptions) =>
 /** Scan once more and hold it to the approved plan ID; a new plan never inherits consent. */
 export const revalidateSetupPlan = Effect.fn("Setup.revalidatePlan")(function* (
   options: SetupOptions,
-  approvedPlanId: typeof Hash.Type,
+  approvedPlanId: Hash,
 ) {
   const current = yield* scanForSetup(yield* Service, { ...options, persistRoots: false });
   if (current.scan.onboarding.planId !== approvedPlanId)
