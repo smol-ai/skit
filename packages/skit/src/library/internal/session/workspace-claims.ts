@@ -8,7 +8,7 @@ export interface WorkspaceClaim {
 }
 
 /** Import history records former locations; only the latest matching source names this one. */
-export const workspaceLocation = (
+const workspaceLocation = (
   state: LibraryState,
   collection: LibraryState["collections"][number],
 ) => {

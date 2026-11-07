@@ -115,7 +115,7 @@ const safeRelative = (path: string) =>
   (path === "." || path.split("/").every((part) => part !== "" && part !== "." && part !== ".."));
 
 /** Member facts from verified retained bytes; `sourcePath` is relative to the retained copy. */
-export interface ImportedSkillFact {
+interface ImportedSkillFact {
   readonly name: string;
   readonly sourcePath: string;
   readonly sourceHash: Hash;

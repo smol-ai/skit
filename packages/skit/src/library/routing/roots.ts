@@ -75,9 +75,7 @@ export const activeInstallDestinations = Effect.fn("Install.activeInstallDestina
   return installDestinationsFor(detected);
 });
 
-export const installDestinationsFor = (
-  detected: readonly HarnessName[],
-): readonly InstallDestination[] =>
+const installDestinationsFor = (detected: readonly HarnessName[]): readonly InstallDestination[] =>
   detected.includes("claude-code") ? ["agents", "claude"] : ["agents"];
 
 /** Every Harness's own global roots, plus the skills directories of each repository. */

@@ -6,4 +6,3 @@ export {
 } from "./internal/session/source-updates.js";
 export type { GitInspectionFailed } from "./internal/session/skills-sh-git-evidence.js";
 export type { CollectionNotUpdatable } from "./internal/session/source-updates.js";
-export type { SkillsShUpdateMember } from "./internal/session/skills-sh-update-check.js";

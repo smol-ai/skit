@@ -69,7 +69,7 @@ export class AuthorHistoryInvalid
 }
 
 /** Contention is temporary; it says nothing about the validity of stored history. */
-export class AuthorHistoryBusy
+class AuthorHistoryBusy
   extends Schema.TaggedError<AuthorHistoryBusy>()("AuthorHistoryBusy", { path: Schema.String })
   implements SkitFailure
 {
@@ -83,7 +83,7 @@ export class AuthorHistoryBusy
 }
 
 /** The saved checkpoint is no longer the one the step planned from. */
-export class AuthorSyncStateConflict
+class AuthorSyncStateConflict
   extends Schema.TaggedError<AuthorSyncStateConflict>()("AuthorSyncStateConflict", {
     key: SyncKey,
     found: Sync.SyncState,
@@ -100,7 +100,7 @@ export class AuthorSyncStateConflict
 }
 
 /** Another backup pass advanced this workspace's acknowledged observation. */
-export class AuthorBackupStateConflict
+class AuthorBackupStateConflict
   extends Schema.TaggedError<AuthorBackupStateConflict>()("AuthorBackupStateConflict", {
     key: SyncKey,
     found: Schema.NullOr(History.RevisionId),
@@ -117,7 +117,7 @@ export class AuthorBackupStateConflict
 }
 
 /** `from → to` is not a step the sync engine takes (Sync.allowsStep). */
-export class AuthorSyncStateIllegal
+class AuthorSyncStateIllegal
   extends Schema.TaggedError<AuthorSyncStateIllegal>()("AuthorSyncStateIllegal", {
     key: SyncKey,
     from: Sync.SyncState,
@@ -846,3 +846,10 @@ export const authorHistoryStoreError = (error: History.StoreError) =>
           ? `${error.kind} is missing`
           : error.reason,
   });
+
+export type {
+  AuthorHistoryBusy,
+  AuthorSyncStateConflict,
+  AuthorBackupStateConflict,
+  AuthorSyncStateIllegal,
+};

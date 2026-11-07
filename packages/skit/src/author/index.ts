@@ -1,8 +1,7 @@
 /** Device-local author owners and their public vocabulary. Storage and tree writes stay private. */
 export {
-  Identity,
   AuthorSyncStateInvalid,
-  AuthorWorkspaceConflict,
+  type AuthorWorkspaceConflict,
   AuthorWorkspaceRootInvalid,
   type AuthorWorkspaceUnsafe,
   type AuthorWorkspaceBusy,
@@ -12,7 +11,7 @@ export {
   type AuthorWorkspace,
 } from "./workspace.js";
 export {
-  AuthorHistoryInvalid,
+  type AuthorHistoryInvalid,
   type AuthorHistoryBusy,
   type AuthorSyncStateConflict,
   type AuthorBackupStateConflict,
@@ -23,10 +22,10 @@ export {
 } from "./history.js";
 export {
   AuthorWorkspaceMetadataInvalid,
-  AuthorWorkspaceAlreadyRegistered,
+  type AuthorWorkspaceAlreadyRegistered,
   InsecureOrigin,
   AuthorRemoteMetadataInvalid,
-  LocalFilesChangedDuringSync,
+  type LocalFilesChangedDuringSync,
   type AuthorLocalPathUnchecked,
   type AuthorNormalizationTwin,
   type AuthorNonNfcPathUnsupported,
@@ -52,7 +51,6 @@ export { initializeAuthorWorkspace } from "./initialize.js";
 export { generateAuthorInvocation } from "./invocation.js";
 export { parseAuthorDestination } from "./destination.js";
 export { AuthorSyncResult } from "./sync-result.js";
-export type { AuthorRegistry } from "./transport.js";
 // The Registry side of one SKIT and the one protocol failure an adapter raises itself.
 export { Moved, type Remote as SyncRemote } from "../sync/sync.js";
 export { DestinationExistsWithoutHistory } from "./failures.js";

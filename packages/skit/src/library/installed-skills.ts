@@ -110,14 +110,12 @@ export interface Backup {
   readonly path: string;
   readonly marker: OwnershipMarkerInspection;
 }
-export interface Installed {
+interface Installed {
   readonly path: string;
   readonly hash: Hash;
   /** The predecessor this install moved to recovery, if there was one. */
   readonly replaced: Option.Option<Backup>;
 }
-
-export { Warning } from "./installed-skill-facts.js";
 
 export type Cause =
   | InstalledSkillMutationError
@@ -526,42 +524,4 @@ export const make = Effect.fn("make")(function* (configuration?: Routing | Inven
       discard: (backup) => fs.remove(backup.path, { recursive: true }),
     },
   });
-});
-/**
- * Routes from where this device already has copies: each scope's recorded roots, each active. For
- * work that changes no routes, such as removing a Collection or updating copies in place.
- */
-export const recordedRouting = Effect.fn("recordedRouting")(function* (state: LibraryState) {
-  const fs = yield* FileSystem.FileSystem;
-  const real = new Map<string, string>();
-  for (const path of [
-    ...state.repositories.map((repository) => repository.root),
-    ...state.installed_skills.map((copy) => copy.root),
-  ])
-    real.set(path, yield* fs.realPath(path).pipe(Effect.orElseSucceed(() => resolve(path))));
-  const inside = (root: string, path: string) => {
-    const [parent, child] = [real.get(root) ?? root, real.get(path) ?? path];
-    return child === parent || child.startsWith(`${parent}/`);
-  };
-  const recorded = state.installed_skills;
-  const active = [...new Set(recorded.map((copy) => copy.destination))];
-  const destinations = (scope: InstallScope): readonly Destination[] =>
-    recorded
-      .filter((copy) =>
-        scope.kind === "repository"
-          ? inside(scope.root, copy.root)
-          : !state.repositories.some((repository) => inside(repository.root, copy.root)),
-      )
-      .map((copy) => ({ destination: copy.destination, root: copy.root }))
-      .filter(
-        (target, index, all) =>
-          all.findIndex(
-            (other) => other.destination === target.destination && other.root === target.root,
-          ) === index,
-      );
-  return {
-    active: Effect.succeed(active),
-    destinations: (scope) => Effect.succeed(destinations(scope)),
-    duplicates: { scan: () => Effect.succeed({ copies: [], warnings: [], roots: [] }) },
-  } satisfies Routing;
 });

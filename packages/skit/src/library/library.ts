@@ -18,12 +18,7 @@ import {
   type SyncPlanError,
   type SyncApplyError,
 } from "./internal/sync/sync.js";
-export {
-  SyncPlan,
-  isRemoteSyncPlan,
-  type RemoteSyncPlan,
-  type SyncStopped,
-} from "./internal/sync/sync.js";
+export { SyncPlan, isRemoteSyncPlan, type SyncStopped } from "./internal/sync/sync.js";
 import { makeOwner } from "./internal/runtime.js";
 import {
   type ManageIntent,
@@ -103,24 +98,14 @@ export {
   type DestinationsIncomplete,
   type InstalledSkillWouldReplaceLink,
   type InstalledSkillWouldDuplicate,
-  EnabledChange,
   Plan,
   type InstalledSkillResult,
 } from "./library-plan.js";
 export { UndoPlan } from "./internal/setup/undo-plan.js";
 
-export { reviewInstalledSkillChanges } from "./installed-skill-review.js";
-export {
-  InvalidIntent,
-  enabledCollections,
-  uniqueInstallScopes,
-  sameInstallScope,
-} from "./enabled-plan.js";
-export type { SetupApproval } from "./enabled-plan.js";
-
 export { Revision, type Snapshot } from "./snapshot.js";
 export type { LibraryLayerError, LibraryStateReadError } from "./store/library-store.js";
-export { RestoreInvalid, SourceRestoreInvalid } from "./internal/content/restore.js";
+export { type RestoreInvalid, SourceRestoreInvalid } from "./internal/content/restore.js";
 export type { StagedContent } from "./internal/content/content.js";
 export type {
   FolderEvidence,
@@ -155,7 +140,7 @@ export interface RemoveOutcome {
   readonly result: ExistingOutcome;
 }
 
-export interface UpdateOutcome {
+interface UpdateOutcome {
   readonly _tag: "Update";
   readonly result: ExistingOutcome;
 }
@@ -441,5 +426,3 @@ export const layer = (
 export type { LibraryStateWriteError } from "./store/library-store.js";
 
 export type { SetupResult } from "./internal/setup/run.js";
-
-export type { ImportRequest, AuthoredImport, EditImport } from "./import-collection.js";

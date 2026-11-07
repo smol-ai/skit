@@ -203,7 +203,7 @@ export class AuthorWorkspaceRootInvalid
  * The lease could not be taken safely: the root no longer realPaths to itself, .skit is not a
  * real directory, or the lock is a symlink, not a regular file, or not a lock SQLite can take.
  */
-export class AuthorWorkspaceUnsafe
+class AuthorWorkspaceUnsafe
   extends Schema.TaggedError<AuthorWorkspaceUnsafe>()("AuthorWorkspaceUnsafe", {
     path: Schema.String,
     reason: Schema.String,
@@ -220,7 +220,7 @@ export class AuthorWorkspaceUnsafe
 }
 
 /** Another process (or this one) holds the workspace lease. */
-export class AuthorWorkspaceBusy
+class AuthorWorkspaceBusy
   extends Schema.TaggedError<AuthorWorkspaceBusy>()("AuthorWorkspaceBusy", { root: WorkspaceRoot })
   implements SkitFailure
 {
@@ -234,7 +234,7 @@ export class AuthorWorkspaceBusy
 }
 
 /** writeTree's trees are not the ones a current, unused PreparedWrite names (A13). */
-export class AuthorWriteNotPrepared
+class AuthorWriteNotPrepared
   extends Schema.TaggedError<AuthorWriteNotPrepared>()("AuthorWriteNotPrepared", { key: SyncKey })
   implements SkitFailure
 {
@@ -690,3 +690,5 @@ export class AuthorWorkspace extends Context.Service<AuthorWorkspace, AuthorWork
 ) {
   static readonly layer = Layer.effect(AuthorWorkspace, make);
 }
+
+export type { AuthorWorkspaceUnsafe, AuthorWorkspaceBusy, AuthorWriteNotPrepared };

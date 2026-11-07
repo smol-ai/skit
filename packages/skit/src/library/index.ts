@@ -34,7 +34,6 @@ export type { RestoreProgress, RestorePhase } from "./restore-progress.js";
 export type {
   LibraryLayerError,
   LibraryStateReadError,
-  ApplyError,
   ManageStopped,
   SyncStopped,
   DestinationsIncomplete,
@@ -59,5 +58,3 @@ export type {
   SkillRemovalRequiresCollection,
 } from "./installation/remove.js";
 export type { RecoveryInvalid } from "./recovery-facts.js";
-
-export type { SourceRequest } from "./source.js";

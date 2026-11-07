@@ -1,5 +1,5 @@
 /** Recognize Effect imports, including named aliases and effect/Effect namespaces. */
-export function effectImports() {
+function effectImports() {
   const namespaces = new Set(["Effect"]);
   const members = new Map();
   return {
