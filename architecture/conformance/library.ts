@@ -1,11 +1,13 @@
 /**
  * Library conformance: the real implementation checked against architecture/library.ts.
  *
- * Every method and constructor requirement must match exactly. No migration exemptions.
+ * All method names must match. Only the signatures declared in Library are independently
+ * checked; LibraryMethod includes additional names without signature coverage. Constructor
+ * requirements must stay within LibraryRequires.
  */
 import type { Effect, Layer } from "effect";
 import type * as Implementation from "../../packages/skit/src/library/library.js";
-import type { Library, LibraryRequires } from "../library.js";
+import type { Library, LibraryMethod, LibraryRequires } from "../library.js";
 
 /** Exactly equal, including literal unions; `never` equals only `never`. */
 export type Equal<A, B> =
@@ -23,19 +25,13 @@ export type ChangedMethods<Contract, Actual> = {
 /** Services the constructor requires that the approved API does not allow. */
 export type UndeclaredRequirements<Make, Allowed> = Exclude<Effect.Services<Make>, Allowed>;
 
+type ExpectedMethods = Record<LibraryMethod, never>;
+
 export type Checks = [
   Assert<Equal<Extract<keyof typeof Implementation, "make">, never>>,
-  Assert<Equal<MissingMethods<Library, Implementation.Interface>, never>>,
-  Assert<Equal<ExtraMethods<Library, Implementation.Interface>, never>>,
-  Assert<Equal<Library["read"], Implementation.Interface["read"]>>,
-  Assert<Equal<Library["plan"], Implementation.Interface["plan"]>>,
-  Assert<Equal<Library["apply"], Implementation.Interface["apply"]>>,
-  Assert<Equal<Library["import"], Implementation.Interface["import"]>>,
-  Assert<Equal<Library["setup"], Implementation.Interface["setup"]>>,
-  Assert<Equal<Library["content"], Implementation.Interface["content"]>>,
-  Assert<Equal<Library["history"], Implementation.Interface["history"]>>,
-  Assert<Equal<Library["recovery"], Implementation.Interface["recovery"]>>,
-  Assert<Equal<Library["startup"], Implementation.Interface["startup"]>>,
+  Assert<Equal<MissingMethods<ExpectedMethods, Implementation.Interface>, never>>,
+  Assert<Equal<ExtraMethods<ExpectedMethods, Implementation.Interface>, never>>,
+  Assert<Equal<ChangedMethods<Library, Implementation.Interface>, never>>,
   Assert<
     Equal<Exclude<Layer.Services<ReturnType<typeof Implementation.layer>>, LibraryRequires>, never>
   >,

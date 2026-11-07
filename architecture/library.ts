@@ -12,17 +12,17 @@ import type {
   RecoveryInspection,
 } from "../packages/skit/src/library/recovery-facts.js";
 /**
- * Architecture contract: the Library slice, target API. Approved; enforced by
+ * Selected Library contracts. Checked by
  * architecture/conformance/library.ts and lint.
  *
- * Declares, independently of the implementation:
- *   1. each service's public surface,
- *   2. the services its constructor may require,
- *   3. the persisted state it alone may write, and the entry points that write it.
+ * Library declares independent signatures for read, plan, apply, import, setup, content,
+ * history, recovery and startup. LibraryMethod also lists the other operation names, without
+ * duplicating implementation-inferred signatures. Constructor requirements are bounded by
+ * LibraryRequires. State ownership and import authority are enforced separately by lint.
  *
- * Service surfaces are restated here, never re-exported from the implementation, so a change to
- * the implementation cannot change the contract. Domain data types (LibraryState, Plan, Folder …)
- * are vocabulary and are referenced by name.
+ * The selected signatures are restated independently of operation functions. Shared domain
+ * data types (LibraryState, Plan, Folder …) are vocabulary and are referenced by name.
+ * This is not a complete independent contract for every Library operation.
  *
  * Markers: APPROVE marks today's boundary, unchanged, for approval as-is. PROPOSED marks a change
  * from today's code. DEBT marks today's code that breaks the contract and is not approved.
@@ -716,109 +716,33 @@ export interface Library {
   };
   /** What startup recovery did when the layer was built. */
   readonly startup: StartupRecovery;
-  // ── Operations: intent in, report out. Home, roots and storage stay inside (decided 2026-11-07). ─
-  readonly addSource: (
-    request: SourceRequest,
-  ) => Effect.Effect<
-    Effect.Success<ReturnType<typeof addSource>>,
-    Effect.Error<ReturnType<typeof addSource>>
-  >;
-  readonly importSource: (
-    request: SourceRequest,
-  ) => Effect.Effect<
-    Effect.Success<ReturnType<typeof importSource>>,
-    Effect.Error<ReturnType<typeof importSource>>
-  >;
-  readonly enable: {
-    readonly open: () => ReturnType<typeof openSetEnabledSession>;
-    readonly plan: (requests: readonly SetEnabledRequest[]) => ReturnType<typeof planSetEnabled>;
-  };
-  readonly session: {
-    readonly open: () => Effect.Effect<
-      Effect.Success<ReturnType<typeof openLibrarySession>>,
-      Effect.Error<ReturnType<typeof openLibrarySession>>
-    >;
-    readonly readSkillContent: (
-      skillVersionId: string,
-    ) => Effect.Effect<
-      Effect.Success<ReturnType<typeof readLibrarySkillContent>>,
-      Effect.Error<ReturnType<typeof readLibrarySkillContent>>
-    >;
-  };
-  readonly sync: <ReadError, UploadError, WriteError, DownloadError, R>(
-    options: Parameters<typeof syncLibrary>[2],
-    transport: LibrarySyncTransport<ReadError, UploadError, WriteError, DownloadError, R>,
-  ) => Effect.Effect<
-    Effect.Success<
-      ReturnType<typeof syncLibrary<ReadError, UploadError, WriteError, DownloadError, R>>
-    >,
-    Effect.Error<
-      ReturnType<typeof syncLibrary<ReadError, UploadError, WriteError, DownloadError, R>>
-    >,
-    R
-  >;
-  readonly syncSession: (
-    request: Parameters<typeof openSyncSession>[2],
-    options: Parameters<typeof openSyncSession>[3],
-  ) => Effect.Effect<
-    Effect.Success<ReturnType<typeof openSyncSession>>,
-    Effect.Error<ReturnType<typeof openSyncSession>>
-  >;
-  readonly remove: (options: RemoveOptions) => ReturnType<typeof removeCollection>;
-  readonly update: <E, R, F extends { readonly remediation: string }>(
-    query: string | undefined,
-    adapters: SourceUpdateAdapters<E, R, F>,
-  ) => Effect.Effect<
-    Effect.Success<ReturnType<typeof updateSources<E, R, F>>>,
-    Effect.Error<ReturnType<typeof updateSources<E, R, F>>>,
-    R
-  >;
-  readonly edit: (
-    query: string,
-    selector: string,
-  ) => Effect.Effect<
-    Effect.Success<ReturnType<typeof openEditImport>>,
-    Effect.Error<ReturnType<typeof openEditImport>>
-  >;
-  readonly check: LibraryQueries["check"];
-  readonly previewSourceUpdates: LibraryQueries["previewSourceUpdates"];
-  readonly securityReview: LibraryQueries["securityReview"];
-  readonly acceptSecurityFinding: (
-    query: string,
-    input: Parameters<typeof acceptLibrarySecurityFinding>[2],
-  ) => ReturnType<typeof acceptLibrarySecurityFinding>;
-  readonly descriptionLoad: LibraryQueries["descriptionLoad"];
-  readonly workspaceClaims: LibraryQueries["workspaceClaims"];
-  readonly installedSkills: LibraryQueries["installedSkills"];
-  readonly manifest: LibraryQueries["manifest"];
-  readonly skillsShCollectionIds: LibraryQueries["skillsShCollectionIds"];
-  readonly list: LibraryQueries["list"];
-  readonly inventory: {
-    readonly refresh: ReturnType<typeof refreshInventory>;
-    readonly refreshMachine: Effect.Effect<
-      Effect.Success<ReturnType<typeof refreshMachineInventory>>,
-      Effect.Error<ReturnType<typeof refreshMachineInventory>>
-    >;
-  };
 }
-import type {
-  RemoveOptions,
-  removeCollection,
-} from "../packages/skit/src/library/internal/session/remove.js";
-import type {
-  updateSources,
-  SourceUpdateAdapters,
-} from "../packages/skit/src/library/internal/session/update-sources.js";
-import type { openEditImport } from "../packages/skit/src/library/internal/session/edit.js";
-import type {
-  libraryQueries,
-  acceptLibrarySecurityFinding,
-} from "../packages/skit/src/library/internal/session/queries.js";
-import type {
-  refreshInventory,
-  refreshMachineInventory,
-} from "../packages/skit/src/library/inventory.js";
-type LibraryQueries = ReturnType<typeof libraryQueries>;
+
+/** Other owner operations are checked by name only; their signatures are not locked here. */
+export type LibraryOperation =
+  | "addSource"
+  | "importSource"
+  | "enable"
+  | "session"
+  | "sync"
+  | "syncSession"
+  | "remove"
+  | "update"
+  | "edit"
+  | "check"
+  | "previewSourceUpdates"
+  | "securityReview"
+  | "acceptSecurityFinding"
+  | "descriptionLoad"
+  | "workspaceClaims"
+  | "installedSkills"
+  | "manifest"
+  | "skillsShCollectionIds"
+  | "list"
+  | "inventory";
+
+/** The complete method-name surface, distinct from the selected signature contract above. */
+export type LibraryMethod = keyof Library | LibraryOperation;
 
 /** The Library's storage home and the installation roots of this device. */
 export interface LibraryConfig {
@@ -944,25 +868,3 @@ export declare namespace InstalledSkills {
 }
 
 // Write authority, removals and debt for this slice live in app.ts (owners.Library, owners.InstalledSkills).
-
-import type {
-  syncLibrary,
-  LibrarySyncTransport,
-} from "../packages/skit/src/library/internal/sync/library-sync.js";
-import type { openSyncSession } from "../packages/skit/src/library/internal/sync/session.js";
-
-import type {
-  openSetEnabledSession,
-  planSetEnabled,
-} from "../packages/skit/src/library/internal/session/set-enabled.js";
-import type { SetEnabledRequest } from "../packages/skit/src/library/internal/session/set-enabled-request.js";
-import type {
-  openLibrarySession,
-  readLibrarySkillContent,
-} from "../packages/skit/src/library/internal/session/session.js";
-
-import type {
-  addSource,
-  importSource,
-  SourceRequest,
-} from "../packages/skit/src/library/source.js";

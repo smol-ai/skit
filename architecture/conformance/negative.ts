@@ -7,6 +7,7 @@ import type { Library, LibraryRequires } from "../library.js";
 import type {
   Assert,
   Equal,
+  ChangedMethods,
   ExtraMethods,
   MissingMethods,
   UndeclaredRequirements,
@@ -30,6 +31,18 @@ declare const makeWithUndeclared: Effect.Effect<Library, never, AuthorSync>;
 export type RejectsUndeclaredRequirement =
   // @ts-expect-error AuthorSync is not an allowed requirement.
   Assert<Equal<UndeclaredRequirements<typeof makeWithUndeclared, LibraryRequires>, never>>;
+
+// A covered operation cannot introduce a service requirement at invocation time.
+type ReadWithUndeclared = Omit<Library, "read"> & {
+  readonly read: Effect.Effect<
+    Effect.Success<Library["read"]>,
+    Effect.Error<Library["read"]>,
+    AuthorSync
+  >;
+};
+export type RejectsChangedReadRequirement =
+  // @ts-expect-error read must not require an undeclared service.
+  Assert<Equal<ChangedMethods<Library, ReadWithUndeclared>, never>>;
 
 // And the checks pass for a conforming implementation.
 declare const conforming: Effect.Effect<Library, never, LibraryRequires>;

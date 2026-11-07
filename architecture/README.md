@@ -1,9 +1,21 @@
 # Using the architecture locally
 
-`app.ts`, `library.ts` and `author.ts` describe the intended owners and interfaces.
-`conformance/` checks actual signatures and requirements. `boundaries.mjs` controls
-private imports and service identities; `layout.mjs` controls placement and import
-direction. Existing debt is a list of violations, not approval of their design.
+`boundaries.mjs` and `layout.mjs` feed lint rules for private imports, permitted
+services, placement and import direction. `app.ts` supplies owner identities and
+core package exports to the structure checker and lint. Its module/state labels
+are navigation, not a compiler-verified service graph.
+
+`conformance/` checks selected independent API declarations. For Library, all
+member names are checked, but independent signatures cover only `read`, `plan`,
+`apply`, `import`, `setup`, `content`, `history`, `recovery` and `startup`.
+The other operation names are listed in `LibraryOperation`; their signatures are
+not independently enforced here. Constructor requirements are checked against
+`LibraryRequires`. Author checks live separately in `conformance/author.ts`.
+Passing these checks does not establish runtime correctness or complete Library
+signature coverage.
+
+`decisions.md` retains design rationale. Historical migration checklists and
+progress belong in Arc Work rather than executable architecture declarations.
 
 ## Read the core/CLI boundary
 
@@ -15,19 +27,19 @@ Start at a command in `packages/cli/src/commands/` and follow its calls to core.
 CLI output schemas and rendering functions can be imported directly from their
 modules. A folder does not need a sibling re-export file.
 
-| Core package entry | Responsibility and current operation boundary |
-| --- | --- |
-| `library` | `Library.Service` and its captured owner methods: `addSource`, `importSource`, `remove`, `update`, `edit`, queries, `inventory`, `enable`, `session`, `sync`, `syncSession`, `plan`, `apply`, `setup`, `history`, `recovery` |
-| `library/source` | Source requests, parsing and passive `inspectSource`; mutation goes through `Library.addSource` / `importSource` |
-| `library/queries` | Report schemas and query vocabulary; execute reports on Library methods |
-| `library/session` | Interactive session vocabulary and pure choice helpers; open with `Library.session.open` |
-| `library/enable` | Selection/result vocabulary and reviewed-plan application; open with `Library.enable.open` |
-| `library/update`, `library/edit` | Update/edit vocabulary and review helpers; start with `Library.update` / `edit` |
-| `library/sync` | Transport/session vocabulary and reviewed sync helpers; start with `Library.sync` / `syncSession` |
-| `library/recovery` | Compatibility recovery workflows; passive facts are `Library.recovery.list` / `inspect`, restores use owner plans |
-| `library/setup` | Setup scanning, review and application workflow over Library and MachineSettings |
-| `library/routing`, `library/inventory`, `library/usage` | Device routing, inventory vocabulary and local transcript reports |
-| `machine-settings` | Device-local roots, repository choices and independently durable setup-settings undo |
+| Core package entry                                      | Responsibility and current operation boundary                                                                                                                                                                                |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `library`                                               | `Library.Service` and its captured owner methods: `addSource`, `importSource`, `remove`, `update`, `edit`, queries, `inventory`, `enable`, `session`, `sync`, `syncSession`, `plan`, `apply`, `setup`, `history`, `recovery` |
+| `library/source`                                        | Source requests, parsing and passive `inspectSource`; mutation goes through `Library.addSource` / `importSource`                                                                                                             |
+| `library/queries`                                       | Report schemas and query vocabulary; execute reports on Library methods                                                                                                                                                      |
+| `library/session`                                       | Interactive session vocabulary and pure choice helpers; open with `Library.session.open`                                                                                                                                     |
+| `library/enable`                                        | Selection/result vocabulary and reviewed-plan application; open with `Library.enable.open`                                                                                                                                   |
+| `library/update`, `library/edit`                        | Update/edit vocabulary and review helpers; start with `Library.update` / `edit`                                                                                                                                              |
+| `library/sync`                                          | Transport/session vocabulary and reviewed sync helpers; start with `Library.sync` / `syncSession`                                                                                                                            |
+| `library/recovery`                                      | Compatibility recovery workflows; passive facts are `Library.recovery.list` / `inspect`, restores use owner plans                                                                                                            |
+| `library/setup`                                         | Setup scanning, review and application workflow over Library and MachineSettings                                                                                                                                             |
+| `library/routing`, `library/inventory`, `library/usage` | Device routing, inventory vocabulary and local transcript reports                                                                                                                                                            |
+| `machine-settings`                                      | Device-local roots, repository choices and independently durable setup-settings undo                                                                                                                                         |
 
 These are package subpaths from `packages/skit/package.json`, not one public
 service per row. Removal and security operations have no separate package entry:
