@@ -20,7 +20,7 @@ const SetupManageSelections = Schema.Array(SetupCopySelection);
 
 class SetupManageSelectionInvalid
   extends Data.TaggedError("SetupManageSelectionInvalid")<{
-    name: string;
+    skillName: string;
     reason:
       | "duplicate-selection"
       | "candidate-not-found"
@@ -40,7 +40,7 @@ class SetupManageSelectionInvalid
   readonly code = "OPERATION_FAILED" as const;
   readonly remediation = "Set up again and review the current plan.";
   get message() {
-    return `Cannot manage ${this.name} during setup: ${this.reason}`;
+    return `Cannot manage ${this.skillName} during setup: ${this.reason}`;
   }
 }
 
@@ -92,7 +92,7 @@ const checkedSelections = Effect.fn("Setup.checkedSelections")(function* (
 ) {
   const decoded = yield* Schema.decodeUnknownEffect(SetupManageSelections)(selectionInput);
   const invalid = (name: string, reason: SetupManageSelectionInvalid["reason"]) =>
-    new SetupManageSelectionInvalid({ name, reason });
+    new SetupManageSelectionInvalid({ skillName: name, reason });
   const selected = new Set<string>();
   const checked = [];
   for (const input of decoded) {
@@ -133,12 +133,21 @@ export const setupExistingSelections = Effect.fn("Setup.existingSelections")(fun
   )) {
     const { name, sourcePath } = selection;
     if (candidate.action !== "bind-existing-entry")
-      return yield* new SetupManageSelectionInvalid({ name, reason: "candidate-not-bindable" });
+      return yield* new SetupManageSelectionInvalid({
+        skillName: name,
+        reason: "candidate-not-bindable",
+      });
     const currentHash = instance?.contentIdentity.currentHash;
     if (!currentHash)
-      return yield* new SetupManageSelectionInvalid({ name, reason: "content-identity-missing" });
+      return yield* new SetupManageSelectionInvalid({
+        skillName: name,
+        reason: "content-identity-missing",
+      });
     if (instance.scope !== "global" || !instance.harnesses.length)
-      return yield* new SetupManageSelectionInvalid({ name, reason: "path-not-projection-target" });
+      return yield* new SetupManageSelectionInvalid({
+        skillName: name,
+        reason: "path-not-projection-target",
+      });
     result.push({
       ...base,
       mode: "existing",
@@ -174,9 +183,15 @@ export const setupNewSelections = Effect.fn("Setup.newSelections")(function* (
       candidate.action !== "leave-alone" &&
       !(candidate.action === "blocked" && candidate.reason === "divergent-copies")
     )
-      return yield* new SetupManageSelectionInvalid({ name, reason: "candidate-not-manageable" });
+      return yield* new SetupManageSelectionInvalid({
+        skillName: name,
+        reason: "candidate-not-manageable",
+      });
     if (!instance)
-      return yield* new SetupManageSelectionInvalid({ name, reason: "source-not-candidate" });
+      return yield* new SetupManageSelectionInvalid({
+        skillName: name,
+        reason: "source-not-candidate",
+      });
     const currentHash = instance.contentIdentity.currentHash;
     const equalCopies = current.instances.filter(
       (other) =>
@@ -188,7 +203,10 @@ export const setupNewSelections = Effect.fn("Setup.newSelections")(function* (
     );
     const request = yield* localImportRequest(sourcePath, importedAt);
     if (Option.isNone(request))
-      return yield* new SetupManageSelectionInvalid({ name, reason: "source-not-candidate" });
+      return yield* new SetupManageSelectionInvalid({
+        skillName: name,
+        reason: "source-not-candidate",
+      });
     result.push({
       ...base,
       mode: "new",

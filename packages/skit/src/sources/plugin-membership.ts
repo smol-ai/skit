@@ -8,7 +8,7 @@ import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 
 export class PluginSkillConflict
   extends Data.TaggedError("PluginSkillConflict")<{
-    name: string;
+    skillName: string;
     paths: readonly string[];
     directories: readonly string[];
     locators?: readonly string[];
@@ -22,7 +22,7 @@ export class PluginSkillConflict
     const selections = this.locators
       ? this.locators.map((locator) => `  skit add '${locator.replaceAll("'", "'\\''")}'`)
       : this.directories.map((directory) => `  ${directory}`);
-    return `Skill name ${JSON.stringify(this.name)} is ambiguous at ${this.paths.map((path) => JSON.stringify(path)).join(" and ")}. Select the plugin or Skill directory explicitly; different plugin Skills cannot share one Collection name.\nAvailable selections:\n${selections.join("\n")}`;
+    return `Skill name ${JSON.stringify(this.skillName)} is ambiguous at ${this.paths.map((path) => JSON.stringify(path)).join(" and ")}. Select the plugin or Skill directory explicitly; different plugin Skills cannot share one Collection name.\nAvailable selections:\n${selections.join("\n")}`;
   }
 }
 
@@ -125,7 +125,7 @@ export const selectPluginMembers = Effect.fn("Source.selectPluginMembers")(funct
     if (left.length || right.length) {
       const conflicts = facts.filter((skill) => skill.name === name);
       return yield* new PluginSkillConflict({
-        name,
+        skillName: name,
         paths: conflicts.map((skill) => relative(root, skill.path)),
         directories: [
           ...new Set(

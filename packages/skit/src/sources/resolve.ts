@@ -1321,7 +1321,7 @@ export function resolveSkitSource(
       Effect.catchTag("PluginSkillConflict", (error) =>
         Effect.fail(
           new PluginSkillConflict({
-            name: error.name,
+            skillName: error.skillName,
             paths: error.paths,
             directories: error.directories,
             ...(source.type === "github"

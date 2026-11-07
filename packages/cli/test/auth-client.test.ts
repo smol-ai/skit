@@ -297,7 +297,7 @@ describe("CLI authentication journey", () => {
       expect(yield* resolveLoginTarget(undefined, home)).toBe("https://skit.smol.ai");
       expect(yield* Effect.flip(resolveLoginTarget("missing", home))).toMatchObject({
         _tag: "RegistryAliasNotFound",
-        name: "missing",
+        alias: "missing",
       });
     }).pipe(Effect.provide(testPlatformLayer)),
   );

@@ -311,6 +311,7 @@ export type InstalledSkillMutationError =
   | PlatformError;
 
 export const installedSkillName = Effect.fn("Install.name")(function* (name: string) {
-  if (!/^[a-z0-9][a-z0-9._-]*$/i.test(name)) return yield* new UnsafeInstalledSkillName({ name });
+  if (!/^[a-z0-9][a-z0-9._-]*$/i.test(name))
+    return yield* new UnsafeInstalledSkillName({ skillName: name });
   return name;
 });

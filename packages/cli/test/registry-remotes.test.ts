@@ -51,7 +51,7 @@ it.effect("resolves local Registry names without persisting them as authorities"
           home,
         }),
       ),
-    ).toMatchObject({ _tag: "RegistryAliasNotFound", name: "wrok" });
+    ).toMatchObject({ _tag: "RegistryAliasNotFound", alias: "wrok" });
     expect(yield* registryCredentials({ home })).toMatchObject({
       origin: "https://registry.example",
     });

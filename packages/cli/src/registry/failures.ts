@@ -111,7 +111,7 @@ export class SignOutRejected
 
 export class RegistryAliasInvalid
   extends Data.TaggedError("RegistryAliasInvalid")<{
-    name: string;
+    alias: string;
   }>
   implements SkitFailure
 {
@@ -120,29 +120,29 @@ export class RegistryAliasInvalid
   readonly remediation =
     "Use a name of lowercase letters, digits and hyphens that starts with a letter.";
   get message() {
-    return `Invalid Registry name: ${this.name}`;
+    return `Invalid Registry name: ${this.alias}`;
   }
 }
 
 export class RegistryAliasConflict
   extends Data.TaggedError("RegistryAliasConflict")<{
-    name: string;
+    alias: string;
   }>
   implements SkitFailure
 {
   readonly [FailureTypeId] = FailureTypeId;
   readonly code = "CONFLICT" as const;
   get remediation(): string {
-    return `Choose another name, or run \`skit registry remove ${this.name}\` first.`;
+    return `Choose another name, or run \`skit registry remove ${this.alias}\` first.`;
   }
   get message() {
-    return `Registry name already exists: ${this.name}`;
+    return `Registry name already exists: ${this.alias}`;
   }
 }
 
 export class RegistryAliasNotFound
   extends Data.TaggedError("RegistryAliasNotFound")<{
-    name: string;
+    alias: string;
   }>
   implements SkitFailure
 {
@@ -150,7 +150,7 @@ export class RegistryAliasNotFound
   readonly code = "NOT_FOUND" as const;
   readonly remediation = "Run `skit registry list` to see the configured Registry names.";
   get message() {
-    return `Unknown Registry name: ${this.name}`;
+    return `Unknown Registry name: ${this.alias}`;
   }
 }
 

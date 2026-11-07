@@ -8,7 +8,7 @@ import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 
 class SetupImportInvalid
   extends Data.TaggedError("SetupImportInvalid")<{
-    name: string;
+    skillName: string;
     reason:
       | "duplicate-selection"
       | "candidate-not-found"
@@ -24,7 +24,7 @@ class SetupImportInvalid
   readonly code = "OPERATION_FAILED" as const;
   readonly remediation = "Set up again and review the current plan.";
   get message(): string {
-    return `Cannot import ${this.name} during setup: ${this.reason}`;
+    return `Cannot import ${this.skillName} during setup: ${this.reason}`;
   }
 }
 
@@ -55,7 +55,7 @@ export const setupImportRequests = Effect.fn("Setup.importRequests")(function* (
     const key = `${selection.groupKey}\0${selection.name}\0${[...selection.paths].sort().join("\0")}`;
     if (selected.has(key))
       return yield* new SetupImportInvalid({
-        name: selection.name,
+        skillName: selection.name,
         reason: "duplicate-selection",
       });
     selected.add(key);
@@ -74,7 +74,7 @@ export const setupImportRequests = Effect.fn("Setup.importRequests")(function* (
     );
     if (!candidate)
       return yield* new SetupImportInvalid({
-        name: selection.name,
+        skillName: selection.name,
         reason: "candidate-not-found",
       });
     groups.set(candidate.groupKey, [
@@ -93,8 +93,8 @@ export const setupImportRequests = Effect.fn("Setup.importRequests")(function* (
       machineId,
       checkedAt,
     ).pipe(
-      Effect.catchTag("SkillsShImportEvidenceInvalid", ({ name, reason }) =>
-        Effect.fail(new SetupImportInvalid({ name, reason })),
+      Effect.catchTag("SkillsShImportEvidenceInvalid", ({ skillName, reason }) =>
+        Effect.fail(new SetupImportInvalid({ skillName, reason })),
       ),
     );
     requests.push({

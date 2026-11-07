@@ -90,6 +90,8 @@ it.effect("does not merge different same-name Skills across plugin namespaces", 
     assert.include(error.message, "plugins/finance/skills/review");
     assert.include(error.message, "plugins/commercial/skills/review");
     if (error._tag === "PluginSkillConflict") {
+      assert.strictEqual(error.name, "PluginSkillConflict");
+      assert.strictEqual(error.skillName, "review");
       assert.deepStrictEqual(error.directories, [
         "plugins/commercial",
         "plugins/finance",

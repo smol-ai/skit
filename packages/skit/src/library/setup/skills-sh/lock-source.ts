@@ -244,7 +244,7 @@ export const lockMatches = Effect.fn("Setup.lockMatches")(function* (
 class SkillsShImportEvidenceInvalid extends Schema.TaggedError<SkillsShImportEvidenceInvalid>()(
   "SkillsShImportEvidenceInvalid",
   {
-    name: Schema.String,
+    skillName: Schema.String,
     reason: Schema.Literals([
       "observation-missing",
       "contested-observation",
@@ -300,7 +300,7 @@ export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImpo
     const first = candidates[0];
     if (!first)
       return yield* new SkillsShImportEvidenceInvalid({
-        name: "collection",
+        skillName: "collection",
         reason: "observation-missing",
       });
     const foundSkills = [];
@@ -331,7 +331,7 @@ export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImpo
       );
       if (claimVariants.size > 1)
         return yield* new SkillsShImportEvidenceInvalid({
-          name: candidate.name,
+          skillName: candidate.name,
           reason: "contested-observation",
         });
       const instance = [...matchingInstances].sort((left, right) =>
@@ -341,7 +341,7 @@ export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImpo
       const lock = instance?.locks.find((item) => setupLockGroupKey(item) === groupKey);
       if (!instance || !currentHash || !lock)
         return yield* new SkillsShImportEvidenceInvalid({
-          name: candidate.name,
+          skillName: candidate.name,
           reason: "observation-missing",
         });
       claimedMembers.push({ lock, name: candidate.name });
@@ -369,14 +369,14 @@ export const prepareSkillsShImportEvidence = Effect.fn("SkillsShLock.prepareImpo
         );
       if (`sha256:${createHash("sha256").update(text).digest("hex")}` !== lock.lockContentHash)
         return yield* new SkillsShImportEvidenceInvalid({
-          name: first.name,
+          skillName: first.name,
           reason: "lock-changed",
         });
     }
     const resolution = resolveSkillsShSelectedSource(claimedMembers);
     if (resolution._tag !== "Resolved")
       return yield* new SkillsShImportEvidenceInvalid({
-        name: first.name,
+        skillName: first.name,
         reason: "source-unresolvable",
       });
     const source = resolution.source;
