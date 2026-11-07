@@ -11,7 +11,7 @@ import type { Principal } from "../src/identity/service.js";
 import * as History from "@smolai/skit-core/history";
 import { Schema } from "effect";
 
-const revisionId = Schema.decodeUnknownSync(History.RevisionId)(`sha256:${"a".repeat(64)}`);
+const revisionId = Schema.decodeSync(History.RevisionId)(`sha256:${"a".repeat(64)}`);
 
 const principal = (scopes: Principal["scopes"]): Principal => ({
   id: "principal_test",

@@ -40,7 +40,7 @@ export function inspectOwnershipMarker(
       .readFileString(join(path, ".skit-ownership.json"))
       .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined));
     if (text === undefined) return { kind: "absent" as const };
-    const parsed = Schema.decodeUnknownOption(OwnershipMarkerDocument)(text);
+    const parsed = Schema.decodeOption(OwnershipMarkerDocument)(text);
     return parsed._tag === "Some"
       ? parseOwnershipMarker(parsed.value)
       : ({ kind: "invalid", detail: "Ownership marker is invalid JSON" } as const);

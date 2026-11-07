@@ -29,7 +29,7 @@ export const feedbackInput = Effect.fnUntraced(function* (options: {
   const harness = options.harness?.trim() || undefined;
   const model = options.model?.trim() || undefined;
   const email = options.email?.trim() || undefined;
-  return yield* Schema.decodeUnknownEffect(FeedbackInput)({
+  return yield* Schema.decodeEffect(FeedbackInput)({
     message: text ?? message ?? "",
     ...(harness === undefined ? {} : { harness }),
     ...(model === undefined ? {} : { model }),

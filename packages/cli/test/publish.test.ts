@@ -78,7 +78,7 @@ it.effect("publish sends a validated archive to the Registry", () =>
         received = {
           url: url.toString(),
           authorization: input.headers["authorization"],
-          body: Schema.decodeUnknownSync(Schema.fromJsonString(Schema.JsonObject))(
+          body: Schema.decodeSync(Schema.fromJsonString(Schema.JsonObject))(
             new TextDecoder().decode(
               input.body._tag === "Uint8Array" ? input.body.body : undefined,
             ),
@@ -170,7 +170,7 @@ it.effect("publish uses skit.remote.json without including it in the Release", (
           if (input.url.includes(".well-known")) return new Response(null, { status: 404 });
           publishUrl = url.toString();
           archiveBase64 = String(
-            Schema.decodeUnknownSync(Schema.fromJsonString(Schema.JsonObject))(
+            Schema.decodeSync(Schema.fromJsonString(Schema.JsonObject))(
               new TextDecoder().decode(
                 input.body._tag === "Uint8Array" ? input.body.body : undefined,
               ),
@@ -210,7 +210,7 @@ it.effect("publish lets the Registry select its current SKIT when --revision is 
       transport: (input, url) =>
         Effect.sync(() => {
           if (url.toString().includes(".well-known")) return new Response(null, { status: 404 });
-          publishedRevision = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.JsonObject))(
+          publishedRevision = Schema.decodeSync(Schema.fromJsonString(Schema.JsonObject))(
             new TextDecoder().decode(
               input.body._tag === "Uint8Array" ? input.body.body : undefined,
             ),

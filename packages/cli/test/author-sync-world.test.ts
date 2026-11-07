@@ -43,7 +43,7 @@ const workspaceIdOf = Effect.fn("Test.workspaceIdOf")(function* (device: {
   readonly workspace: string;
 }) {
   const fs = yield* FileSystem.FileSystem;
-  const identity = yield* Schema.decodeUnknownEffect(
+  const identity = yield* Schema.decodeEffect(
     Schema.fromJsonString(Schema.Struct({ workspace_id: Schema.String })),
   )(yield* fs.readFileString(join(device.workspace, ".skit/workspace.json")));
   return identity.workspace_id;
@@ -55,7 +55,7 @@ const savedStates = Effect.fn("Test.savedSyncStates")(function* (device: {
   readonly home: string;
 }) {
   const fs = yield* FileSystem.FileSystem;
-  const bindings = yield* Schema.decodeUnknownEffect(
+  const bindings = yield* Schema.decodeEffect(
     Schema.fromJsonString(
       Schema.Struct({
         schema: Schema.Literal("skit.author-sync.v1"),

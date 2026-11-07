@@ -232,7 +232,7 @@ export const originFromWranglerConfig = Effect.fn("Bootstrap.origin")(function* 
 });
 
 const parseOrigin = (origin: string) =>
-  Schema.decodeUnknownEffect(Schema.URLFromString)(origin).pipe(
+  Schema.decodeEffect(Schema.URLFromString)(origin).pipe(
     Effect.mapError(() => new BootstrapOriginInvalid({ origin })),
   );
 

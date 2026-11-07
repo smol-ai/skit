@@ -26,7 +26,7 @@ function run(args: readonly string[], options: { home: string; cwd?: string }) {
 
 /** The structured error envelope, which is the contract callers parse. */
 function failure(result: { stderr: string }): { code: string; message: string } {
-  return Schema.decodeUnknownSync(FailureDocument)(result.stderr).error;
+  return Schema.decodeSync(FailureDocument)(result.stderr).error;
 }
 
 const CommandManifest = Schema.fromJsonString(
@@ -36,7 +36,7 @@ const CommandManifest = Schema.fromJsonString(
     ),
   }),
 );
-const commandManifest = Schema.decodeUnknownSync(CommandManifest)(
+const commandManifest = Schema.decodeSync(CommandManifest)(
   readFileSync(join(import.meta.dirname, "../contracts/command-manifest.json"), "utf8"),
 );
 const declaredFor = (...path: string[]) =>

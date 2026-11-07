@@ -66,7 +66,7 @@ describe("generated command contracts", () => {
   test("schemas validate representative branching payloads", () => {
     const collectionId = makeCollectionId();
     const skillId = makeSkillId();
-    expect(() => Schema.decodeUnknownSync(outputContracts.updatePlan.schema)([])).not.toThrow();
+    expect(() => Schema.decodeSync(outputContracts.updatePlan.schema)([])).not.toThrow();
     const enabled = Schema.decodeUnknownSync(outputContracts.enablePlan.schema)({
       subject_id: collectionId,
       skills: ["review"],
@@ -83,7 +83,7 @@ describe("generated command contracts", () => {
     // @ts-expect-error a disable definition cannot encode an enable result
     encodeResult("enablePlan", enableOutputContracts.disablePlan, enabled);
     expect(() =>
-      Schema.decodeUnknownSync(outputContracts.registryRemote.schema)({
+      Schema.decodeSync(outputContracts.registryRemote.schema)({
         name: "public",
         origin: "https://registry.example",
         isDefault: true,

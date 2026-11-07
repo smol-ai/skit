@@ -223,7 +223,7 @@ export const layer = Layer.effect(
         parentRows,
       ).pipe(databaseError("decode revision parents"));
       return yield* Effect.forEach(stored, (row) =>
-        Schema.decodeUnknownEffect(History.Revision)({
+        Schema.decodeEffect(History.Revision)({
           tree: row.tree_hash,
           parents: parents
             .filter(({ revision_id }) => revision_id === row.revision_id)

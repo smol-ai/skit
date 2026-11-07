@@ -178,7 +178,7 @@ export const readClaudeCommands = Effect.fn("Doctor.readClaudeCommands")(functio
         Stream.splitLines,
         Stream.filter((line) => line.trim().length > 0),
         Stream.mapEffect((line) =>
-          Schema.decodeUnknownEffect(Schema.fromJsonString(ClaudeEnvelope))(line),
+          Schema.decodeEffect(Schema.fromJsonString(ClaudeEnvelope))(line),
         ),
         Stream.filter(
           (message) =>

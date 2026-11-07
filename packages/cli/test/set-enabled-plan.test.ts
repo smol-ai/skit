@@ -2028,9 +2028,9 @@ for (const reverse of [false, true])
                 Effect.gen(function* () {
                   yield* f.fs.rename(from, to);
                   if (to === f.home.statePath) {
-                    const state = yield* Schema.decodeUnknownEffect(
-                      Schema.fromJsonString(LibraryState),
-                    )(yield* f.fs.readFileString(to)).pipe(Effect.orDie);
+                    const state = yield* Schema.decodeEffect(Schema.fromJsonString(LibraryState))(
+                      yield* f.fs.readFileString(to),
+                    ).pipe(Effect.orDie);
                     accepted ||=
                       state.repositories.find((entry) => entry.root === repository)
                         ?.invocation_policies?.[alpha.skill_id] === "explicit";
@@ -2118,9 +2118,9 @@ it.effect("a shared final publication failure belongs to every accepted request"
           rename: (from, to) =>
             Effect.gen(function* () {
               if (to === f.home.statePath) {
-                const state = yield* Schema.decodeUnknownEffect(
-                  Schema.fromJsonString(LibraryState),
-                )(yield* f.fs.readFileString(from)).pipe(Effect.orDie);
+                const state = yield* Schema.decodeEffect(Schema.fromJsonString(LibraryState))(
+                  yield* f.fs.readFileString(from),
+                ).pipe(Effect.orDie);
                 if (state.operations.some(Schema.is(doneApply))) {
                   refused = true;
                   return yield* systemError({

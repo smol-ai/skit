@@ -63,7 +63,7 @@ it.effect(
           { base },
         );
         const encoded = yield* Schema.encodeEffect(Library.SyncPlan)(plan);
-        const portable = yield* Schema.decodeUnknownEffect(Library.SyncPlan)(encoded);
+        const portable = yield* Schema.decodeEffect(Library.SyncPlan)(encoded);
         if (!Library.isRemoteSyncPlan(portable))
           return yield* Effect.die("Expected remote Sync review");
         const ancestry = {

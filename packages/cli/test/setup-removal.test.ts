@@ -143,7 +143,7 @@ it.effect(
         /^step-\d+$/.test(name),
       );
       const recovery = join(removed, directories[0], batch);
-      const moveRecord = yield* Schema.decodeUnknownEffect(
+      const moveRecord = yield* Schema.decodeEffect(
         Schema.fromJsonString(
           Schema.Struct({
             entries: Schema.Array(

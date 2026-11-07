@@ -57,9 +57,7 @@ it.effect("passive portable acceptance plans stamp apply time and preserve unkno
       assert.isFalse("acceptedAt" in plan.change.acceptance);
       assert.strictEqual(yield* f.fs.readFileString(path), before);
       const codec = Schema.fromJsonString(Library.AcceptFindingPlan);
-      const portable = yield* Schema.decodeUnknownEffect(codec)(
-        yield* Schema.encodeEffect(codec)(plan),
-      );
+      const portable = yield* Schema.decodeEffect(codec)(yield* Schema.encodeEffect(codec)(plan));
       assert.isTrue(Option.isNone(portable.intent.expiresAt));
       yield* TestClock.adjust("2 seconds");
       const result = (yield* library.apply({ _tag: "Apply", plan: portable })).result;
@@ -105,9 +103,7 @@ it.effect(
           { base },
         );
         const codec = Schema.fromJsonString(Library.AcceptFindingPlan);
-        const portable = yield* Schema.decodeUnknownEffect(codec)(
-          yield* Schema.encodeEffect(codec)(plan),
-        );
+        const portable = yield* Schema.decodeEffect(codec)(yield* Schema.encodeEffect(codec)(plan));
         assert.deepStrictEqual(portable.intent.expiresAt, plan.intent.expiresAt);
         assert.strictEqual(portable.change.acceptance.expiresAt, "1970-01-01T00:00:01.000Z");
         yield* TestClock.adjust("1 second");

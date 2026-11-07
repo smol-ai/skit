@@ -180,14 +180,14 @@ export const makeDeletion = (
         release_versions: [],
       };
     }
-    const revisions = yield* Schema.decodeUnknownEffect(Schema.Array(RevisionRow))(
+    const revisions = yield* Schema.decodeEffect(Schema.Array(RevisionRow))(
       deletedRevisions ?? [],
     ).pipe(
       Effect.mapError(
         (cause) => new DatabaseError({ operation: "decode deleted revisions", cause }),
       ),
     );
-    const releases = yield* Schema.decodeUnknownEffect(Schema.Array(DeletedReleaseRow))(
+    const releases = yield* Schema.decodeEffect(Schema.Array(DeletedReleaseRow))(
       deletedReleases ?? [],
     ).pipe(
       Effect.mapError(

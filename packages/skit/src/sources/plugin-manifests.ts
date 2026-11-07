@@ -81,7 +81,7 @@ const readManifest = Effect.fn("Source.readPluginManifest")(function* (
       path,
       detail: "Expected a JSON file no larger than 1 MiB",
     });
-  return yield* Schema.decodeUnknownEffect(jsonObject)(yield* fs.readFileString(selected)).pipe(
+  return yield* Schema.decodeEffect(jsonObject)(yield* fs.readFileString(selected)).pipe(
     Effect.mapError(() => new PluginManifestInvalid({ path, detail: "Expected a JSON object" })),
   );
 });

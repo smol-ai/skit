@@ -373,7 +373,7 @@ function classifySource(input: string, cwd: string): Effect.Effect<SkitSource, P
       const recognized = profile.recognize(value);
       if (recognized === undefined) continue;
       // Recognizers only split syntax; the schema decides whether the parts are safe.
-      return yield* Schema.decodeUnknownEffect(SkitSource)(recognized).pipe(
+      return yield* Schema.decodeEffect(SkitSource)(recognized).pipe(
         Effect.mapError(() =>
           recognized.type === "git" || recognized.type === "github"
             ? new UnsafeGitSubpath()
@@ -840,9 +840,9 @@ const fetchDiscovery = Effect.fn("Discovery.fetch")(function* (
     const indexUrl = `${baseUrl}/${path}/index.json`;
     const body = yield* readDiscoveryResponse(indexUrl, 2 * 1024 * 1024);
     if (!body) continue;
-    const document = yield* Schema.decodeUnknownEffect(discoveryJson)(
-      new TextDecoder().decode(body),
-    ).pipe(Effect.mapError((error) => invalidSource(`Invalid discovery index: ${error.message}`)));
+    const document = yield* Schema.decodeEffect(discoveryJson)(new TextDecoder().decode(body)).pipe(
+      Effect.mapError((error) => invalidSource(`Invalid discovery index: ${error.message}`)),
+    );
     selected = { indexUrl, path, document };
     break;
   }

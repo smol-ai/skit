@@ -54,7 +54,7 @@ const fixture = Effect.fn("test.undoRecovery.fixture")(function* (reconstruct = 
     Schema.decodeUnknownEffect(Schema.fromJsonString(LibraryState)),
   );
   const operations = Effect.flatMap(read, (state) =>
-    Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(state.operations),
+    Schema.decodeEffect(Schema.Array(OperationStatus))(state.operations),
   );
   return { fs, home, paths, plan, layer, read, operations, statePath };
 });
@@ -88,10 +88,10 @@ for (const boundary of ["record", "rename", "copy", "completion"] as const)
           rename: (from, to) =>
             Effect.gen(function* () {
               if (boundary === "completion" && to === f.statePath) {
-                const next = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(LibraryState))(
+                const next = yield* Schema.decodeEffect(Schema.fromJsonString(LibraryState))(
                   yield* f.fs.readFileString(from),
                 ).pipe(Effect.orDie);
-                const operations = yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
+                const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
                   next.operations,
                 ).pipe(Effect.orDie);
                 const last = operations.at(-1);

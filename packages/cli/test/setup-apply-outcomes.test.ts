@@ -124,9 +124,9 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
                   Effect.gen(function* () {
                     yield* gates.rename?.(from, to) ?? Effect.void;
                     if (to !== home.statePath) return yield* files.rename(from, to);
-                    const state = yield* Schema.decodeUnknownEffect(
-                      Schema.fromJsonString(LibraryState),
-                    )(yield* files.readFileString(from)).pipe(Effect.orDie);
+                    const state = yield* Schema.decodeEffect(Schema.fromJsonString(LibraryState))(
+                      yield* files.readFileString(from),
+                    ).pipe(Effect.orDie);
                     if (gates.refusePublication?.(state)) return yield* refuseRename(to);
                     yield* files.rename(from, to);
                     if (!announcedPublication) {
@@ -196,7 +196,7 @@ const readMoveRecord = Effect.fn("Test.readSetupMoveRecord")(function* (home: st
     if ((yield* fs.stat(join(home, "removed", directory!, batch))).type !== "Directory") continue;
     const path = join(home, "removed", directory!, batch, "receipt.json");
     if (yield* fs.exists(path))
-      return yield* Schema.decodeUnknownEffect(MoveRecord)(yield* fs.readFileString(path));
+      return yield* Schema.decodeEffect(MoveRecord)(yield* fs.readFileString(path));
   }
   return yield* Effect.die(new Error("No removal move record was written"));
 });
@@ -447,7 +447,7 @@ it.effect("every destination directory write has its preparation recorded first"
       directory: (path) =>
         Effect.gen(function* () {
           if (path !== root && !path.startsWith(root + "/")) return;
-          const state = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(LibraryState))(
+          const state = yield* Schema.decodeEffect(Schema.fromJsonString(LibraryState))(
             yield* f.fs.readFileString(f.home.statePath),
           );
           const operation = state.operations.find((operation) => operation._tag === "Pending");

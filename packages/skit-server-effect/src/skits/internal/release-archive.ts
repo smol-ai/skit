@@ -192,7 +192,7 @@ export const verifyReleaseArchive = Effect.fn("Integrity.verifyReleaseArchive")(
       executable: row.mode === 0o755,
     });
   }
-  const descriptor = yield* Schema.decodeUnknownEffect(JsonDocument)(revision.descriptor_json).pipe(
+  const descriptor = yield* Schema.decodeEffect(JsonDocument)(revision.descriptor_json).pipe(
     Effect.mapError(
       (error) => new IntegrityError({ code: "INVALID_DESCRIPTOR", detail: error.message }),
     ),

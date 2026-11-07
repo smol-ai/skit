@@ -15,7 +15,7 @@ import { join } from "node:path";
 const legacyMachineId = LegacyMachineId.make("018f47de-6c9a-7b21-8000-000000000001");
 
 const decode = (document: unknown) =>
-  Schema.decodeUnknownEffect(MachineDocumentJson)(JSON.stringify(document));
+  Schema.decodeEffect(MachineDocumentJson)(JSON.stringify(document));
 
 it.effect("normalizes every persisted machine document version to one current shape", () =>
   Effect.gen(function* () {

@@ -144,7 +144,7 @@ export const parseSkitReadme = Effect.fn("Descriptor.parseReadme")(function* (te
 });
 
 export const parseSkitConfig = Effect.fn("Descriptor.parseConfig")(function* (text: string) {
-  const input = yield* Schema.decodeUnknownEffect(JsonDocument)(text).pipe(
+  const input = yield* Schema.decodeEffect(JsonDocument)(text).pipe(
     Effect.mapError((error) => malformed("json", error.message)),
   );
   const parsed = yield* Schema.decodeUnknownEffect(skitConfigSchema, {

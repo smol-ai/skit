@@ -118,7 +118,7 @@ it.effect("the next write moves a token from auth.json into the OS store", () =>
         Effect.provide(skitConfigurationLayer(home)),
       );
 
-      const written = Schema.decodeUnknownSync(StoredFile)(
+      const written = Schema.decodeSync(StoredFile)(
         yield* fs.readFileString(join(home, "auth.json")),
       );
       assert.deepStrictEqual(written.servers[origin], {

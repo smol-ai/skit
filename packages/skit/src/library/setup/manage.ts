@@ -90,7 +90,7 @@ const checkedSelections = Effect.fn("Setup.checkedSelections")(function* (
   selectionInput: readonly SetupCopySelection[],
   kind: "existing" | "new",
 ) {
-  const decoded = yield* Schema.decodeUnknownEffect(SetupManageSelections)(selectionInput);
+  const decoded = yield* Schema.decodeEffect(SetupManageSelections)(selectionInput);
   const invalid = (name: string, reason: SetupManageSelectionInvalid["reason"]) =>
     new SetupManageSelectionInvalid({ skillName: name, reason });
   const selected = new Set<string>();

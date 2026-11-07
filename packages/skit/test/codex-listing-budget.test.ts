@@ -226,7 +226,7 @@ readline.createInterface({input:process.stdin}).on('line',line=>{
         "Skipped skill /broken/SKILL.md: missing YAML frontmatter delimited by ---",
       ];
       expect(withRejectedSkill).toEqual({ ...first, warnings });
-      expect(yield* Schema.decodeUnknownEffect(ListingBudget)(withRejectedSkill)).toMatchObject({
+      expect(yield* Schema.decodeEffect(ListingBudget)(withRejectedSkill)).toMatchObject({
         _tag: "Estimated",
         warnings,
       });

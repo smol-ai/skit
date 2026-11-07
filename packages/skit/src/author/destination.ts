@@ -4,7 +4,7 @@ import { decodeUrl, normalizeRemote, type AuthorRemoteHome } from "./remote.js";
 import { DestinationFormInvalid } from "./failures.js";
 
 const decodeAuthorSegment = (input: string) =>
-  Schema.decodeUnknownEffect(Schema.StringFromUriComponent)(input).pipe(
+  Schema.decodeEffect(Schema.StringFromUriComponent)(input).pipe(
     Effect.mapError(() => new AuthorDestinationMalformed({ message: "URI malformed" })),
   );
 

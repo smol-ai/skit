@@ -59,7 +59,7 @@ describe("Integrity descriptor", () => {
         ],
         capabilities: { executables: ["bin/review"] },
       };
-      const decoded = yield* Schema.decodeUnknownEffect(
+      const decoded = yield* Schema.decodeEffect(
         Schema.fromJsonString(skitDescriptorRequestSchema),
       )(JSON.stringify(descriptor));
       expect(decoded).toEqual(descriptor);

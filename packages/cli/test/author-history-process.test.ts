@@ -31,7 +31,7 @@ const eventsFrom = (
     Stream.decodeText(),
     Stream.splitLines,
     Stream.take(count),
-    Stream.mapEffect((line) => Schema.decodeUnknownEffect(WorkerEvent)(line)),
+    Stream.mapEffect((line) => Schema.decodeEffect(WorkerEvent)(line)),
     Stream.runCollect,
   );
 

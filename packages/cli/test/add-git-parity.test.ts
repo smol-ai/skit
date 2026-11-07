@@ -33,7 +33,7 @@ const AddPreviewDocument = Schema.fromJsonString(
   Schema.Struct({ data: outputContracts.addPreview.schema }),
 );
 const LibraryStateDocument = Schema.fromJsonString(LibraryState);
-const addResult = (text: string) => Schema.decodeUnknownSync(AddResultDocument)(text).data;
+const addResult = (text: string) => Schema.decodeSync(AddResultDocument)(text).data;
 
 /** A disposable local repository with a declared Descriptor and two Skills. */
 async function repository(root: string, outsideSymlink = false) {
@@ -169,7 +169,7 @@ test.runIf(realGit)(
 
       const preview = await run("add", REMOTE, "--list");
       expect(preview.code, preview.stderr).toBe(0);
-      const previewed = Schema.decodeUnknownSync(AddPreviewDocument)(preview.stdout).data;
+      const previewed = Schema.decodeSync(AddPreviewDocument)(preview.stdout).data;
       expect(previewed.kind).toBe("authored");
       expect(previewed.skills.map((skill) => skill.name).sort()).toEqual(["audit", "review"]);
       // Preview retains nothing: no state, no Original, no installed bytes.
@@ -187,7 +187,7 @@ test.runIf(realGit)(
       expect(entry.skills).toEqual(previewed.skills);
       expect(entry.skills.map((skill) => skill.name).sort()).toEqual(["audit", "review"]);
 
-      const state = Schema.decodeUnknownSync(LibraryStateDocument)(
+      const state = Schema.decodeSync(LibraryStateDocument)(
         await readFile(join(roots.home, "state.json"), "utf8"),
       );
       expect(state.collections.map((item) => item.collection_id)).toEqual([entry.collection_id]);
@@ -211,7 +211,7 @@ test.runIf(realGit)(
         "checkout",
         "rev-parse",
       ]);
-      const after = Schema.decodeUnknownSync(LibraryStateDocument)(
+      const after = Schema.decodeSync(LibraryStateDocument)(
         await readFile(join(roots.home, "state.json"), "utf8"),
       );
       expect(after.collections).toHaveLength(1);
@@ -222,7 +222,7 @@ test.runIf(realGit)(
       // Preview after add still agrees and still writes nothing of its own.
       const previewAgain = await run("add", REMOTE, "--list");
       expect(previewAgain.code, previewAgain.stderr).toBe(0);
-      const previewedAgain = Schema.decodeUnknownSync(AddPreviewDocument)(previewAgain.stdout).data;
+      const previewedAgain = Schema.decodeSync(AddPreviewDocument)(previewAgain.stdout).data;
       expect(previewedAgain.skills).toEqual(entry.skills);
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -279,7 +279,7 @@ test.runIf(realGit)(
 
       const preview = await run("add", source, "--list");
       expect(preview.code, preview.stderr).toBe(0);
-      const previewed = Schema.decodeUnknownSync(AddPreviewDocument)(preview.stdout).data;
+      const previewed = Schema.decodeSync(AddPreviewDocument)(preview.stdout).data;
       expect(previewed.kind).toBe("plain");
       expect(existsSync(join(roots.home, "state.json"))).toBe(false);
 
@@ -291,7 +291,7 @@ test.runIf(realGit)(
         "code-review",
         "security-review",
       ]);
-      const firstState = Schema.decodeUnknownSync(LibraryStateDocument)(
+      const firstState = Schema.decodeSync(LibraryStateDocument)(
         await readFile(join(roots.home, "state.json"), "utf8"),
       );
       const hex = firstState.collection_versions[0].hash.slice("sha256:".length);
@@ -315,7 +315,7 @@ test.runIf(realGit)(
       const repeated = addResult(again.stdout);
       expect(repeated.snapshot_digest).toBe(entry.snapshot_digest);
       expect(repeated.collection_version_id).toBe(entry.collection_version_id);
-      const state = Schema.decodeUnknownSync(LibraryStateDocument)(
+      const state = Schema.decodeSync(LibraryStateDocument)(
         await readFile(join(roots.home, "state.json"), "utf8"),
       );
       expect(state.collections).toHaveLength(1);

@@ -66,7 +66,7 @@ it.effect.each([false, true])(
           output: () => Effect.die("Unexpected native process"),
         }),
       );
-      yield* Schema.decodeUnknownEffect(DoctorReport)({
+      yield* Schema.decodeEffect(DoctorReport)({
         ...libraryDoctorReport(inventory),
         ...report,
       });

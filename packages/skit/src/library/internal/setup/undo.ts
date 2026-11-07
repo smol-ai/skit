@@ -157,7 +157,7 @@ const readUndo = Effect.fn("SetupUndo.read")(function* (
   const inspected = yield* inspectLocalLibraryState(home);
   const baseRevision = snapshotOf(inspected).revision;
   const state = inspected.present ? inspected.state : emptyLibraryState();
-  const operations = yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
+  const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
     state.operations,
   ).pipe(Effect.mapError(() => new RecoveryInvalid({ detail: "Invalid setup record" })));
   const recorded = operations.find((operation) => operation.operationId === operationId);
@@ -289,7 +289,7 @@ export const planUndo = Effect.fn("Library.planUndo")(function* (
 
 /** Recompute the review under the writer, record the inverse, restore files, then publish it. */
 export const applyUndo = Effect.fn("Library.applyUndo")(function* (home: string, input: UndoPlan) {
-  const approved = yield* Schema.decodeUnknownEffect(UndoPlan)(structuredClone(input)).pipe(
+  const approved = yield* Schema.decodeEffect(UndoPlan)(structuredClone(input)).pipe(
     Effect.mapError(() => new RecoveryInvalid({ detail: "Invalid undo plan" })),
   );
   const observations = new Map<CollectionId, UndoSourceImport>(

@@ -63,7 +63,7 @@ type AuthStatusCredential = {
 
 // URL syntax errors retain their generic command classification; programming defects do not.
 export const parseOrigin = (input: string) =>
-  Schema.decodeUnknownEffect(Schema.URLFromString)(input).pipe(
+  Schema.decodeEffect(Schema.URLFromString)(input).pipe(
     Effect.map((url) => url.origin),
     Effect.mapError(() => new RegistryOriginInvalid({ origin: input })),
   );

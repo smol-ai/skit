@@ -43,7 +43,7 @@ export interface StoredRevision {
 const decode = <S extends Schema.Top>(schema: S, request: HttpClientRequest.HttpClientRequest) =>
   request.body._tag !== "Uint8Array"
     ? Effect.die(new Error("Expected an encoded SKIT request"))
-    : Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.toCodecJson(schema)))(
+    : Schema.decodeEffect(Schema.fromJsonString(Schema.toCodecJson(schema)))(
         new TextDecoder().decode(request.body.body),
       ).pipe(Effect.orDie);
 

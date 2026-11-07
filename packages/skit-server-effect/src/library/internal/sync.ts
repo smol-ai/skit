@@ -100,7 +100,7 @@ export const makeSync = (
     const library = yield* own(principal, false);
     if (library?.current_revision_id === null || library === undefined) return undefined;
     const record = yield* revision(library.current_revision_id);
-    const manifest = yield* Schema.decodeUnknownEffect(StoredManifest)(record.manifest_json).pipe(
+    const manifest = yield* Schema.decodeEffect(StoredManifest)(record.manifest_json).pipe(
       Effect.mapError(() => new LibraryRevisionInvalid()),
     );
     return { library_id: library.library_id, revision_id: library.current_revision_id, manifest };

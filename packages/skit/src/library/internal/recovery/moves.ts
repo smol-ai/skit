@@ -331,9 +331,7 @@ const readRecoveryOperation = Effect.fn("Recovery.readOperation")(function* (
         detail: `Move record is not a regular file: ${moveRecordPath}`,
       });
     const raw = yield* fs.readFileString(moveRecordPath);
-    const moveRecord = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(MoveRecord))(
-      raw,
-    ).pipe(
+    const moveRecord = yield* Schema.decodeEffect(Schema.fromJsonString(MoveRecord))(raw).pipe(
       Effect.mapError(
         () => new RecoveryInvalid({ detail: `Invalid move record: ${moveRecordPath}` }),
       ),

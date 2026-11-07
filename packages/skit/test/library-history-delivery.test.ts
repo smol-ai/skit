@@ -220,7 +220,7 @@ it.effect("resumes a Pending operation into its original action event", () =>
         Effect.gen(function* () {
           const next =
             to === f.statePath
-              ? yield* Schema.decodeUnknownEffect(Schema.fromJsonString(LibraryState))(
+              ? yield* Schema.decodeEffect(Schema.fromJsonString(LibraryState))(
                   yield* f.fs.readFileString(from),
                 ).pipe(Effect.orDie)
               : undefined;

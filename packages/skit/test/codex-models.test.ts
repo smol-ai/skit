@@ -50,7 +50,7 @@ test("maximum is distinct from the default and must cover it", () => {
   expect(Option.getOrNull(modelMaxContextWindow("openai", "gpt-6.1-sol"))).toBe(1_000_000);
   expect(Option.getOrNull(modelMaxContextWindow("openai", "gpt-6-astra"))).toBeNull();
   expect(() =>
-    Schema.decodeUnknownSync(ModelContextCatalog)({
+    Schema.decodeSync(ModelContextCatalog)({
       ...modelContextCatalog,
       models: [{ ...modelContextCatalog.models[0], maxContextWindow: 499_999 }],
     }),
@@ -58,7 +58,7 @@ test("maximum is distinct from the default and must cover it", () => {
 });
 
 test("accepts a default equal to the supported maximum", () => {
-  const decoded = Schema.decodeUnknownSync(ModelContextCatalog)({
+  const decoded = Schema.decodeSync(ModelContextCatalog)({
     ...modelContextCatalog,
     models: [
       {

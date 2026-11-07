@@ -58,7 +58,7 @@ it.effect(
       const { operations: _old, ...oldSelection } = old;
       const { operations: _new, ...selection } = state;
       assert.deepStrictEqual(selection, oldSelection);
-      const operations = yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
+      const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
         state.operations,
       );
       assert.strictEqual(operations.at(-1)?._tag, "Done");
@@ -108,7 +108,7 @@ for (const diverge of [false, true])
         assert.strictEqual(exit._tag, "Failure");
         assert.isTrue(interrupted);
         const recorded = yield* f.read(yield* f.fs.readFileString(join(f.home, "state.json")));
-        const operations = yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
+        const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
           recorded.operations,
         );
         const pending = operations.at(-1);

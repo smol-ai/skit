@@ -284,7 +284,7 @@ export const makeBetterAuth = (configuration: BetterAuthConfiguration, sql: Data
               return { data: user };
             },
             after: async (unknownUser) => {
-              const decoded = Schema.decodeUnknownOption(UserIdentity)(unknownUser);
+              const decoded = Schema.decodeOption(UserIdentity)(unknownUser);
               // oxlint-disable-next-line skit/no-throw-in-effect -- Better Auth database hooks are Promise callbacks and reject by throwing.
               if (Option.isNone(decoded)) throw new Error("INVALID_USER_IDENTITY");
               if (
@@ -365,7 +365,7 @@ export const makeBetterAuth = (configuration: BetterAuthConfiguration, sql: Data
       }).pipe(
         Effect.flatMap((unknownSession) => {
           if (unknownSession === null) return Effect.undefined;
-          return Schema.decodeUnknownEffect(SessionIdentity)(unknownSession).pipe(
+          return Schema.decodeEffect(SessionIdentity)(unknownSession).pipe(
             Effect.map(({ user, session }) => ({
               userId: user.id,
               authorizationGeneration: session.authorizationGeneration ?? 1,

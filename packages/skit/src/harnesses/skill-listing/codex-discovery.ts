@@ -91,9 +91,7 @@ export const readCodexSkills = Effect.fn("Doctor.readCodexSkills")(function* (
         Stream.decodeText(),
         Stream.splitLines,
         Stream.filter((line) => line.trim().length > 0),
-        Stream.mapEffect((line) =>
-          Schema.decodeUnknownEffect(Schema.fromJsonString(Envelope))(line),
-        ),
+        Stream.mapEffect((line) => Schema.decodeEffect(Schema.fromJsonString(Envelope))(line)),
         Stream.mapEffect((message) =>
           message.error && !(includeConfig && message.id === 3)
             ? Effect.fail(new CodexDoctorFailure({ message: message.error.message }))

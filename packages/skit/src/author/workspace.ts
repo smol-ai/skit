@@ -401,7 +401,7 @@ const make = Effect.gen(function* () {
       Effect.catchReason("PlatformError", "NotFound", () => Effect.succeedNone),
     );
     if (Option.isNone(text)) return Option.none<Identity>();
-    const document = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(WorkspaceDocument), {
+    const document = yield* Schema.decodeEffect(Schema.fromJsonString(WorkspaceDocument), {
       onExcessProperty: "error",
     })(text.value).pipe(Effect.mapError(() => new AuthorWorkspaceMetadataInvalid({ path: file })));
     return Option.some(Identity.make({ workspaceId: document.workspace_id }));
@@ -418,7 +418,7 @@ const make = Effect.gen(function* () {
       ),
     );
     if (Option.isNone(text)) return Option.none<AuthorRemoteHome>();
-    const document = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(AuthorRemoteHome), {
+    const document = yield* Schema.decodeEffect(Schema.fromJsonString(AuthorRemoteHome), {
       onExcessProperty: "error",
     })(text.value).pipe(Effect.mapError(invalid));
     const normalized = yield* normalizeRemote(document).pipe(
@@ -437,7 +437,7 @@ const make = Effect.gen(function* () {
     file: string,
     text: string,
   ) {
-    const checkpoint = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Connecting), {
+    const checkpoint = yield* Schema.decodeEffect(Schema.fromJsonString(Connecting), {
       onExcessProperty: "error",
     })(text).pipe(
       Effect.mapError((error) => new AuthorSyncStateInvalid({ path: file, reason: String(error) })),

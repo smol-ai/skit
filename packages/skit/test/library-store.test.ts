@@ -300,7 +300,7 @@ it.effect("keeps operation records on this device: saved and loaded, never synce
 
     assert.deepStrictEqual(loaded, next);
     assert.deepStrictEqual(
-      yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(loaded.operations),
+      yield* Schema.decodeEffect(Schema.Array(OperationStatus))(loaded.operations),
       operations,
     );
     assert.deepStrictEqual(
@@ -354,7 +354,7 @@ it.effect(
         base,
       );
 
-      const loaded = yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
+      const loaded = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
         (yield* loadLibrary(home)).operations,
       );
 
@@ -405,7 +405,7 @@ it.effect("reads a recorded LibraryBusy failure without rewriting it, and encode
     const snapshot = yield* owner.read;
     assert.strictEqual(snapshot._tag, "Present");
     if (snapshot._tag !== "Present") return;
-    const operations = yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
+    const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(
       snapshot.state.operations,
     );
     const operation = operations[0];

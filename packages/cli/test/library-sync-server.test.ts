@@ -19,11 +19,11 @@ const fixtures = Effect.gen(function* () {
     "../../skit-server-effect/test/fixtures/library-sync/",
     import.meta.url,
   );
-  const manifest = Schema.decodeUnknownSync(Schema.fromJsonString(LibraryManifest))(
+  const manifest = Schema.decodeSync(Schema.fromJsonString(LibraryManifest))(
     yield* fs.readFileString(new URL("manifest.json", directory).pathname),
   );
   return {
-    archive: Schema.decodeUnknownSync(Schema.fromJsonString(SnapshotArchive))(
+    archive: Schema.decodeSync(Schema.fromJsonString(SnapshotArchive))(
       yield* fs.readFileString(new URL("archive.json", directory).pathname),
     ),
     manifest,

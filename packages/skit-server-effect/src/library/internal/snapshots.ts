@@ -87,7 +87,7 @@ export const makeSnapshots = (
     const object = yield* blobs.get("read snapshot object", key);
     if (Option.isNone(object)) return yield* new SnapshotStoreInvalid();
     const json = new TextDecoder().decode(object.value);
-    const value = yield* Schema.decodeUnknownEffect(JsonUnknown)(json).pipe(
+    const value = yield* Schema.decodeEffect(JsonUnknown)(json).pipe(
       Effect.mapError(() => new SnapshotStoreInvalid()),
     );
     return yield* verifySnapshotArchive(value).pipe(Effect.provideService(Digest.Digest, digests));

@@ -340,7 +340,7 @@ it.effect("reads a global skills.sh well-known base URL and preserves its digest
         ],
       }),
     ]);
-    const lock = Schema.decodeUnknownSync(SetupLockMatch)({
+    const lock = Schema.decodeSync(SetupLockMatch)({
       scope: "global",
       lockPath: "/state/skills/.skill-lock.json",
       lockVersion: 3,
@@ -370,7 +370,7 @@ it.effect("reads a global skills.sh well-known base URL and preserves its digest
 
 it.effect("turns selected GitHub lock paths into a structured GitHub Source", () =>
   Effect.sync(() => {
-    const lock = Schema.decodeUnknownSync(SetupLockMatch)({
+    const lock = Schema.decodeSync(SetupLockMatch)({
       scope: "project",
       lockPath: "/project/skills-lock.json",
       lockVersion: 1,

@@ -256,7 +256,7 @@ export const checkSteps = (home: string, steps: readonly SetupStep[]) => {
 };
 
 const decodeOperations = (state: LibraryState) =>
-  Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(state.operations);
+  Schema.decodeEffect(Schema.Array(OperationStatus))(state.operations);
 const encodeOperation = Schema.encodeEffect(OperationStatus);
 
 /** The decoded operation `operationId` names in `state`, if it records one. */

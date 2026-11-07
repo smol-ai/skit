@@ -164,7 +164,7 @@ export const readSkillsLock = Effect.fn("Setup.readSkillsLock")(function* (
   const fs = yield* FileSystem.FileSystem;
   const text = yield* fs.readFileString(path).pipe(Effect.orElseSucceed(() => undefined));
   if (text === undefined) return undefined;
-  const decoded = Schema.decodeUnknownResult(SkillsLockDocument)(text);
+  const decoded = Schema.decodeResult(SkillsLockDocument)(text);
   if (Result.isFailure(decoded)) return { scope, path, status: "malformed" as const, entries: [] };
   const expected = scope === "project" ? 1 : 3;
   if (decoded.success.version !== expected)

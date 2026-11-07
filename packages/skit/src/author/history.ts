@@ -626,7 +626,7 @@ const make = Effect.fn("AuthorHistory.make")(function* (config: AuthorHistoryCon
     );
     if (Option.isNone(text))
       return { schema: "skit.author-sync.v1", workspaces: {} } satisfies AuthorSyncState;
-    return yield* Schema.decodeUnknownEffect(AuthorSyncStateDocument)(text.value).pipe(
+    return yield* Schema.decodeEffect(AuthorSyncStateDocument)(text.value).pipe(
       Effect.mapError(
         (error) => new AuthorSyncStateInvalid({ path: syncStatePath, reason: String(error) }),
       ),

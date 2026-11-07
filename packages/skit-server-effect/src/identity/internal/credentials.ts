@@ -125,7 +125,7 @@ export const makeCredentials = (
         (row.expires_at !== null && row.expires_at <= now)
       )
         return undefined;
-      const scopes = yield* Schema.decodeUnknownEffect(StoredScopes)(row.scopes_json).pipe(
+      const scopes = yield* Schema.decodeEffect(StoredScopes)(row.scopes_json).pipe(
         Effect.mapError(
           (cause) => new DatabaseError({ operation: "decode access token scopes", cause }),
         ),
@@ -246,7 +246,7 @@ export const makeCredentials = (
             (cause) => new DatabaseError({ operation: "decode access token list", cause }),
           ),
           Effect.flatMap(({ scopes_json, ...row }) =>
-            Schema.decodeUnknownEffect(StoredScopes)(scopes_json).pipe(
+            Schema.decodeEffect(StoredScopes)(scopes_json).pipe(
               Effect.mapError(
                 (cause) =>
                   new DatabaseError({ operation: "decode listed access token scopes", cause }),

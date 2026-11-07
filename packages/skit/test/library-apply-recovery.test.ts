@@ -150,7 +150,7 @@ const interrupt = Effect.fn("test.applyRecovery.interrupt")(function* (
   const operation = state.operations.at(-1);
   assert.strictEqual(operation?._tag, "Pending");
   if (!operation) return yield* Effect.die("Missing durable operation");
-  return yield* Schema.decodeUnknownEffect(OperationStatus)(operation);
+  return yield* Schema.decodeEffect(OperationStatus)(operation);
 });
 
 for (const operation of ["enable", "disable", "update", "remove", "uninstall"] as const)

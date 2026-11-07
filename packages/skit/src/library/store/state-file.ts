@@ -54,7 +54,7 @@ const readStateValue = Effect.fn("Library.readStateValue")(function* (path: stri
       ),
     );
   if (text === undefined) return undefined;
-  return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
+  return yield* Schema.decodeEffect(Schema.fromJsonString(Schema.Unknown))(text).pipe(
     Effect.mapError(() => new InvalidLibraryState({ path, detail: "invalid Library JSON" })),
   );
 });
@@ -149,7 +149,7 @@ export const migrateLocalLibraryState = Effect.fn("Library.migrateState")(functi
       if (!isLegacyVersion(lockedVersion)) return;
       const migrated = yield* decodeCurrentState(
         path,
-        yield* Schema.decodeUnknownEffect(LegacyLibraryState)(lockedValue).pipe(
+        yield* Schema.decodeEffect(LegacyLibraryState)(lockedValue).pipe(
           Effect.mapError(
             () =>
               new InvalidLibraryState({
@@ -212,7 +212,7 @@ export const saveLibraryState = Effect.fn("Library.saveState")(function* (
       const stored = value === undefined ? undefined : yield* envelope(path, value);
       const delivery = stored?.historyDelivery ?? emptyDelivery();
       const prior = delivery.pending.find((item) => item.event.eventId === action.eventId);
-      const added = yield* Schema.decodeUnknownEffect(Schema.Array(OperationId))(
+      const added = yield* Schema.decodeEffect(Schema.Array(OperationId))(
         cleanNext.operations
           .filter(
             (operation) =>

@@ -39,7 +39,7 @@ export const schemaBodyJsonLimited = Effect.fn("Http.schemaBodyJsonLimited")(fun
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(schema))(
+  return yield* Schema.decodeEffect(Schema.fromJsonString(schema))(
     new TextDecoder().decode(bytes),
     options,
   );

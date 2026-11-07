@@ -64,7 +64,7 @@ export const read = Effect.fn("MachineSettings.read")(function* (home: string) {
   const document =
     text === undefined
       ? emptyMachineDocument()
-      : yield* Schema.decodeUnknownEffect(MachineDocumentJson)(text).pipe(
+      : yield* Schema.decodeEffect(MachineDocumentJson)(text).pipe(
           Effect.mapError(() => new Unusable({ path })),
         );
   return settingsAt(path, document);

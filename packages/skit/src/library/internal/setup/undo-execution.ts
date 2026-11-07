@@ -36,9 +36,7 @@ export const runUndo = Effect.fn("Library.runUndo")(function* (
   const directory = join(home, "removed", program.backupId, "step-1");
   const save = Effect.fn("Library.saveUndoProgress")(function* (next: UndoProgram) {
     const state = yield* loadLibrary(home);
-    const operations = yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
-      state.operations,
-    );
+    const operations = yield* Schema.decodeEffect(Schema.Array(OperationStatus))(state.operations);
     const operation = operations.find((item) => item.operationId === operationId);
     if (operation?._tag !== "Pending" || operation.steps[index]?.step._tag !== "Undo")
       return yield* new StalePlan({ message: "Undo requires its Pending operation" });

@@ -4,7 +4,7 @@ import { Effect, Schema } from "effect";
 
 const text = (value: string) => new TextEncoder().encode(value);
 
-export const device = Schema.decodeUnknownSync(MachineId)("mach_01h455vb4pex5vsknk084sn02q");
+export const device = Schema.decodeSync(MachineId)("mach_01h455vb4pex5vsknk084sn02q");
 
 /** A complete, publishable SKIT whose slug is `tools`. */
 export const skillTree: History.Tree = [

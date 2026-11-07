@@ -610,7 +610,7 @@ relay.listen(0, "127.0.0.1", () => process.stdout.write("listening " + relay.add
       expectedStatus,
     );
   const state = async (home: string) =>
-    Schema.decodeUnknownSync(Schema.fromJsonString(LibraryState))(
+    Schema.decodeSync(Schema.fromJsonString(LibraryState))(
       await readFile(join(home, "state.json"), "utf8"),
     );
   try {
