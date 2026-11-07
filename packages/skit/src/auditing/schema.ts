@@ -141,13 +141,11 @@ export type AuditMcpServerV1Alpha4 = typeof AuditMcpServerV1Alpha4.Type;
 const AuditRuleV1Alpha4 = Schema.Struct(auditEntryFields);
 type AuditRuleV1Alpha4 = typeof AuditRuleV1Alpha4.Type;
 const AuditMarketplaceV1Alpha4 = Schema.Struct(auditEntryFields);
-type AuditMarketplaceV1Alpha4 = typeof AuditMarketplaceV1Alpha4.Type;
 export type AuditEntryV1Alpha4 =
   | AuditSkillV1Alpha4
   | AuditPluginV1Alpha4
   | AuditMcpServerV1Alpha4
-  | AuditRuleV1Alpha4
-  | AuditMarketplaceV1Alpha4;
+  | AuditRuleV1Alpha4;
 
 const AuditFindingV1Alpha4 = Schema.Struct({
   id: Schema.String,

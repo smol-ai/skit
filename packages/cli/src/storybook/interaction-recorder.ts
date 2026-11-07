@@ -30,7 +30,7 @@ export type InteractionEvent = Data.TaggedEnum<{
     readonly message: string;
     readonly choices: ReadonlyArray<Choice<string>>;
   };
-  PromptAnswered: { readonly answer: ScriptedAnswer | "<redacted>" };
+  PromptAnswered: { readonly answer: string | readonly string[] | boolean };
   Note: {
     readonly title: string;
     readonly body: string;
@@ -96,7 +96,7 @@ export const makeScriptedInteraction = Effect.fn("InteractionRecorder.make")(fun
     );
   const shown = (kind: PromptKind, message: string, choices: ReadonlyArray<Choice<string>>) =>
     record(InteractionEvent.PromptShown({ kind, message, choices }));
-  const answered = (answer: ScriptedAnswer, redact: boolean = false) =>
+  const answered = (answer: string | readonly string[] | boolean, redact: boolean = false) =>
     record(InteractionEvent.PromptAnswered({ answer: redact ? "<redacted>" : answer }));
 
   const choice = <Value extends string>(

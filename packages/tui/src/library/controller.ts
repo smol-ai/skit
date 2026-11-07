@@ -41,7 +41,7 @@ export interface Chooser {
   choose: (value: string) => void | Promise<void>;
 }
 
-type Requirements = Library.Service | Effect.Services<ReturnType<typeof confirmLibraryChange>>;
+type Requirements = Library.Service;
 type Transition = <Error>(
   update: (state: LibrarySessionState) => Effect.Effect<LibrarySessionState, Error, Requirements>,
 ) => Promise<LibraryActionOutcome | undefined>;

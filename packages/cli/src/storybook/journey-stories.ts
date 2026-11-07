@@ -148,7 +148,15 @@ const previewDoctorCleanup = Effect.scoped(
   }),
 ).pipe(Effect.provide(skitLayer));
 
-export const journeyStories: ReadonlyArray<JourneyStory<string, unknown, Prompter | Renderer>> = [
+export const journeyStories: ReadonlyArray<
+  JourneyStory<
+    string,
+    Effect.Error<
+      typeof previewDoctorCleanup | typeof previewEnable | ReturnType<typeof syncJourney>
+    >,
+    Prompter | Renderer
+  >
+> = [
   {
     name: "doctor/cleanup-preview",
     initialState: "Codex listing ~12,000 / 10,000 tokens · no retained usage transcripts",

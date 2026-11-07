@@ -34,11 +34,11 @@ const skillBytes = (name: string, body = `${name} body`) =>
   `---\nname: ${name}\ndescription: ${name} fixture\n---\n\n${body}\n`;
 
 /** Explicit points in the apply where a test changes the world; never a timer. */
-interface Gates {
+interface Gates<E> {
   /** Runs once the confirmation prompt has approved the plan. */
-  readonly approved?: Effect.Effect<void, unknown>;
+  readonly approved?: Effect.Effect<void, E>;
   /** Runs once the first Library state has replaced state.json. */
-  readonly published?: Effect.Effect<void, unknown>;
+  readonly published?: Effect.Effect<void, E>;
   /** Refuses a publication selected by its domain state, independently of checkpoint count. */
   readonly refusePublication?: (state: LibraryState) => boolean;
   readonly directory?: (path: string) => Effect.Effect<void>;
@@ -66,9 +66,9 @@ const fixture = Effect.fn("Test.setupApplyFixture")(function* (input: { machine:
     probePath: "",
     skillsStateHome: join(root, "state"),
   };
-  const setup = (
+  const setup = <E = never>(
     answers: readonly ScriptedAnswer[],
-    gates: Gates = {},
+    gates: Gates<E> = {},
     flags: { interactive?: boolean; dryRun?: boolean; workDirFlag?: string } = {},
   ) =>
     Effect.gen(function* () {
