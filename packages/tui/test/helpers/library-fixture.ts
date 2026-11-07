@@ -1,3 +1,4 @@
+import type { PlatformError } from "effect/PlatformError";
 import { LinkStat } from "@smolai/skit-core/platform";
 import * as Library from "@smolai/skit-core/library";
 import { skitConfigurationLayer, skitLayer } from "@smolai/skit-core/platform";
@@ -117,7 +118,7 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
     tree: Effect.gen(function* () {
       const links = yield* LinkStat;
       const entries = new Map<string, string>();
-      const walk = (path: string): Effect.Effect<void, unknown> =>
+      const walk = (path: string): Effect.Effect<void, PlatformError> =>
         Effect.gen(function* () {
           const info = yield* links.lstat(path);
           if (info.type === "SymbolicLink")

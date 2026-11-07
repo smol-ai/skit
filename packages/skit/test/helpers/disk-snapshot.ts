@@ -1,3 +1,4 @@
+import type { PlatformError } from "effect/PlatformError";
 import { LinkStat } from "../../src/platform/index.js";
 import { assert } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
@@ -59,7 +60,7 @@ export const captureDisk = Effect.fn("Test.captureDisk")(function* (
   const entries: { path: readonly string[]; entry: DiskEntry }[] = [];
   const visit = Effect.fn("Test.captureDisk.visit")(function* (
     segments: readonly string[],
-  ): Effect.fn.Return<void, unknown, FileSystem.FileSystem | LinkStat> {
+  ): Effect.fn.Return<void, PlatformError, FileSystem.FileSystem | LinkStat> {
     const path = join(...segments);
     const observed = yield* Effect.result(links.lstat(path));
     if (observed._tag === "Failure")
