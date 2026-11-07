@@ -178,23 +178,22 @@ export const makePublication = (
       Effect.flatMap((rows) =>
         rows.length === 1 ? Effect.void : Effect.fail(new StaleRevision()),
       ),
-      Effect.catchTag("Publication.StaleRevision", (error) =>
-        cleanup.pipe(Effect.andThen(Effect.fail(error))),
-      ),
-      Effect.catchTag("Cloudflare.DatabaseError", (insertError) =>
-        Effect.gen(function* () {
-          yield* cleanup;
-          const raced = yield* findRelease(input.owner, input.slug, input.version).pipe(
-            Effect.catch((lookupError) =>
-              Effect.logError("release conflict lookup failed", lookupError).pipe(
-                Effect.andThen(Effect.fail(insertError)),
+      Effect.catchTags({
+        "Publication.StaleRevision": (error) => cleanup.pipe(Effect.andThen(Effect.fail(error))),
+        "Cloudflare.DatabaseError": (insertError) =>
+          Effect.gen(function* () {
+            yield* cleanup;
+            const raced = yield* findRelease(input.owner, input.slug, input.version).pipe(
+              Effect.catch((lookupError) =>
+                Effect.logError("release conflict lookup failed", lookupError).pipe(
+                  Effect.andThen(Effect.fail(insertError)),
+                ),
               ),
-            ),
-          );
-          if (raced !== undefined) return yield* new ReleaseConflict();
-          return yield* insertError;
-        }),
-      ),
+            );
+            if (raced !== undefined) return yield* new ReleaseConflict();
+            return yield* insertError;
+          }),
+      }),
     );
 
     return {
