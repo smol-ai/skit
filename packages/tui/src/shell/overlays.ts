@@ -126,11 +126,14 @@ export function createShellOverlays(
         search: query,
         searchIn: ["name", "title", "description", "keywords"],
       });
-      select.options = commands.map((command) => ({
-        name: commandField(command, "title"),
-        description: `${commandField(command, "description")}${command.shortcut ? `  ·  ${command.shortcut}` : ""}`,
-        value: command.name,
-      }));
+      select.options = commands.map((command) => {
+        const shortcut = commandField(command, "shortcut");
+        return {
+          name: commandField(command, "title"),
+          description: `${commandField(command, "description")}${shortcut ? `  ·  ${shortcut}` : ""}`,
+          value: command.name,
+        };
+      });
       select.setSelectedIndex(0);
     };
 
