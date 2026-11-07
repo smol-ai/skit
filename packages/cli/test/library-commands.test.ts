@@ -1,9 +1,8 @@
-import { SkitConfiguration } from "@smolai/skit-core/platform";
 import * as Library from "@smolai/skit-core/library";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
-import { Deferred, Effect, Fiber, FileSystem, Option, Result, Schema } from "effect";
+import { Deferred, Effect, Fiber, FileSystem, Result, Schema } from "effect";
 import { join } from "node:path";
 
 import { presentListCommand } from "../src/library/list.js";
@@ -11,11 +10,7 @@ import { browseLibrary } from "../src/library/list/browse.js";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import { renderLibraryList } from "../src/library/list/present.js";
 import { ListResult } from "../src/library/list/output.js";
-import {
-  confirmLibraryChange,
-  openLibrarySession,
-  proposeLibraryEnable,
-} from "@smolai/skit-core/library/session";
+import { confirmLibraryChange, proposeLibraryEnable } from "@smolai/skit-core/library/session";
 import { rendererTestLayer } from "./helpers/renderer.js";
 import { homeLockIsFree } from "./helpers/home-lock.js";
 import {
@@ -25,7 +20,6 @@ import {
   writingTo,
 } from "./helpers/library-home.js";
 import type { CommandResult } from "../src/commands/types.js";
-import { libraryCommandConfiguration } from "../src/commands/library-configuration.js";
 import { presentSetEnabled } from "../src/library/enable.js";
 
 it.effect("lists a retained Collection without Release-shaped fields", () =>
@@ -87,14 +81,12 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
     assert.strictEqual(JSON.stringify(listing).includes("release"), false);
 
     const session = yield* home.owned(
-      Effect.flatMap(SkitConfiguration, (paths) =>
-        openLibrarySession(paths.skitHome, home.installOptions),
-      ),
+      Effect.flatMap(Library.Service, (library) => library.session.open()),
     );
     const row = session.skills[0];
     assert.ok(row);
     const proposed = yield* home.owned(
-      proposeLibraryEnable(session, home.installOptions, row, { scope: { kind: "global" } }),
+      proposeLibraryEnable(session, row, { scope: { kind: "global" } }),
     );
     const beforeStaleChange = yield* home.durable;
     yield* home.writeDurable({
@@ -110,12 +102,7 @@ it.effect("lists a retained Collection without Release-shaped fields", () =>
     const interaction = yield* makeScriptedInteraction(["Done"]);
     yield* home.owned(
       browseLibrary(
-        yield* home.owned(
-          Effect.flatMap(SkitConfiguration, (paths) =>
-            openLibrarySession(paths.skitHome, home.installOptions),
-          ),
-        ),
-        home.installOptions,
+        yield* home.owned(Effect.flatMap(Library.Service, (library) => library.session.open())),
       ).pipe(Effect.provide(interaction.layer)),
     );
     assert.strictEqual((yield* interaction.prompts)[0]?.message, "Select a collection");
@@ -168,13 +155,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
       enabled: [{ skill: reviewId }],
       repositories: [{ root, enabled: [{ skill: reviewId }] }],
     });
-    const configuration = yield* libraryCommandConfiguration({
-      home: Option.some(home.home),
-      codexRoot: Option.none(),
-      claudeRoot: Option.none(),
-      opencodeRoot: Option.none(),
-      devinRoot: [],
-    });
+
     const interaction = yield* makeScriptedInteraction([
       `all:${collection.collection?.collection_id}`,
       "skills",
@@ -188,7 +169,6 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
         all: false,
         dryRun: false,
         interactive: true,
-        configuration,
       }).pipe(Effect.provide(interaction.layer)),
     );
     const prompts = yield* interaction.prompts;
@@ -222,7 +202,6 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
         dryRun: false,
         interactive: true,
         scope: { kind: "global" },
-        configuration,
       }).pipe(Effect.provide(enable.layer)),
     );
     assert.deepStrictEqual((yield* home.durable).enabled, [{ collection: collectionId }]);
@@ -237,15 +216,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     ]);
     yield* home.owned(
       browseLibrary(
-        yield* home.owned(
-          Effect.flatMap(SkitConfiguration, (paths) =>
-            openLibrarySession(paths.skitHome, {
-              ...home.installOptions,
-              ...configuration.inventory,
-            }),
-          ),
-        ),
-        { ...home.installOptions, ...configuration.inventory },
+        yield* home.owned(Effect.flatMap(Library.Service, (library) => library.session.open())),
       ).pipe(Effect.provide(unchangedBrowse.layer)),
     );
     assert.ok(!(yield* unchangedBrowse.prompts).some((prompt) => prompt.kind === "confirm"));
@@ -261,7 +232,6 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
         dryRun: false,
         interactive: true,
         scope: { kind: "global" },
-        configuration,
       }).pipe(Effect.provide((yield* makeScriptedInteraction(["cancel"])).layer)),
     );
     assert.deepStrictEqual(yield* home.durable, beforeCancel);
@@ -275,12 +245,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     ]);
     yield* home.owned(
       browseLibrary(
-        yield* home.owned(
-          Effect.flatMap(SkitConfiguration, (paths) =>
-            openLibrarySession(paths.skitHome, home.installOptions),
-          ),
-        ),
-        home.installOptions,
+        yield* home.owned(Effect.flatMap(Library.Service, (library) => library.session.open())),
       ).pipe(Effect.provide(browseCancel.layer)),
     );
     assert.deepStrictEqual(yield* home.durable, beforeCancel);
@@ -293,12 +258,7 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
     ]);
     yield* home.owned(
       browseLibrary(
-        yield* home.owned(
-          Effect.flatMap(SkitConfiguration, (paths) =>
-            openLibrarySession(paths.skitHome, home.installOptions),
-          ),
-        ),
-        home.installOptions,
+        yield* home.owned(Effect.flatMap(Library.Service, (library) => library.session.open())),
       ).pipe(Effect.provide(browseDisable.layer)),
     );
     assert.deepStrictEqual((yield* home.durable).enabled, []);
@@ -312,7 +272,6 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
         dryRun: false,
         interactive: false,
         scope: { kind: "repository", root },
-        configuration,
       }).pipe(Effect.provide((yield* makeScriptedInteraction([])).layer)),
     );
     const directDisable = yield* makeScriptedInteraction(["collection"]);
@@ -325,7 +284,6 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
         all: false,
         dryRun: false,
         interactive: true,
-        configuration,
       }).pipe(Effect.provide(directDisable.layer)),
     );
     assert.deepStrictEqual((yield* home.durable).repositories, []);
@@ -342,7 +300,6 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
           dryRun: false,
           interactive: false,
           scope,
-          configuration,
         }).pipe(Effect.provide((yield* makeScriptedInteraction([])).layer)),
       );
     }
@@ -356,7 +313,6 @@ it.effect("offers only enabled Skills and identifies their Binding location", ()
         all: false,
         dryRun: false,
         interactive: true,
-        configuration,
       }).pipe(Effect.provide(disableEverywhere.layer)),
     );
     assert.deepStrictEqual((yield* home.durable).enabled, []);
@@ -421,13 +377,7 @@ it.effect("bare disable asks before changing a global Binding spanning Collectio
       enabled: imported.skills.map((skill) => ({ skill: skill.skill_id })),
     };
     yield* home.writeDurable(state);
-    const configuration = yield* libraryCommandConfiguration({
-      home: Option.some(home.home),
-      codexRoot: Option.none(),
-      claudeRoot: Option.none(),
-      opencodeRoot: Option.none(),
-      devinRoot: [],
-    });
+
     const interaction = yield* makeScriptedInteraction(["cancel"]);
     yield* home.owned(
       presentSetEnabled({
@@ -437,7 +387,6 @@ it.effect("bare disable asks before changing a global Binding spanning Collectio
         all: false,
         dryRun: false,
         interactive: true,
-        configuration,
       }).pipe(Effect.provide(interaction.layer)),
     );
     const prompts = yield* interaction.prompts;
@@ -458,7 +407,6 @@ it.effect("bare disable asks before changing a global Binding spanning Collectio
         all: false,
         dryRun: false,
         interactive: true,
-        configuration,
       }).pipe(Effect.provide(selection.layer)),
     );
     const after = yield* home.durable;
@@ -474,7 +422,6 @@ it.effect("bare disable asks before changing a global Binding spanning Collectio
         all: false,
         dryRun: false,
         interactive: true,
-        configuration,
       }).pipe(Effect.provide(single.layer)),
     );
     assert.strictEqual((yield* single.prompts).length, 1);
@@ -527,13 +474,7 @@ it.effect("rejects a stale multi-destination disable before changing any Binding
       enabled: [{ skill: reviewId }],
       repositories: [{ root, enabled: [{ skill: reviewId }] }],
     });
-    const configuration = yield* libraryCommandConfiguration({
-      home: Option.some(home.home),
-      codexRoot: Option.none(),
-      claudeRoot: Option.none(),
-      opencodeRoot: Option.none(),
-      devinRoot: [],
-    });
+
     const interaction = yield* makeScriptedInteraction([
       `all:${collection.collection?.collection_id}`,
       "collection",
@@ -550,7 +491,6 @@ it.effect("rejects a stale multi-destination disable before changing any Binding
           all: false,
           dryRun: false,
           interactive: true,
-          configuration,
         }).pipe(
           Effect.provide(
             rendererTestLayer({

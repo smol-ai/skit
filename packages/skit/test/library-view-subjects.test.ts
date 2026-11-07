@@ -5,7 +5,7 @@ import * as Library from "../src/library/library.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { libraryView } from "../src/library/internal/session/library-view.js";
-import { openSetEnabledSession } from "../src/library/enable.js";
+
 import { matchingLibrarySubjects } from "../src/library/subject-resolution.js";
 import { makeCollectionId, makeSkillId } from "../src/library/entity-ids.js";
 import { testRoots } from "./helpers/library-store.js";
@@ -108,11 +108,11 @@ it.effect(
         configHome: join(root, "config"),
         overrides: { codex: [join(root, "enabled")] },
       };
-      const selection = yield* openSetEnabledSession(home, configuration).pipe(
-        Effect.provide(Library.layer({ home, roots: configuration })),
-      );
+      const selection = yield* Effect.flatMap(Library.Service, (library) =>
+        library.enable.open(),
+      ).pipe(Effect.provide(Library.layer({ home, roots: configuration })));
       const failure = yield* selection
-        .plan({ subject: "review", enabled: true, where: [{ kind: "global" }] }, configuration)
+        .plan({ subject: "review", enabled: true, where: [{ kind: "global" }] })
         .pipe(Effect.flip);
       assert.strictEqual(failure._tag, "Library.SubjectAmbiguous");
       assert.isFalse(yield* fs.exists(join(root, "enabled")));

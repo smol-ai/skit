@@ -1,9 +1,9 @@
 import { Effect, Option } from "effect";
-import * as Library from "../../library.js";
-import { RestoreInvalid } from "../../library.js";
+import type * as Library from "../../library.js";
+import { RestoreInvalid } from "../content/restore.js";
 import type { LibraryManifest, SnapshotArchive } from "../../library-contracts.js";
 import type { RestoreProgress } from "../../restore-progress.js";
-import type { InstallDestination } from "../../../installed-skills/destination.js";
+import type { InventoryRootOptions } from "../../routing/roots.js";
 import type { SyncChanges } from "../../sync-changes.js";
 import { openSyncSession, type SyncSessionRequest } from "./session.js";
 import { silentSyncProgress, type SyncPhase, type SyncProgress } from "./progress.js";
@@ -26,10 +26,10 @@ export interface LibrarySyncTransport<ReadError, UploadError, WriteError, Downlo
 
 /** Presentation brackets owner verification; Library alone knows retained paths and archive rules. */
 const inspectSyncSnapshots = Effect.fn("Library.sync.inspectSnapshots")(function* (
+  library: Pick<Library.Interface, "content">,
   snapshot: Library.Snapshot,
   progress: SyncProgress,
 ) {
-  const library = yield* Library.Service;
   const phase: SyncPhase = {
     kind: "verify-copies",
     total: snapshot._tag === "Present" ? snapshot.state.collection_versions.length : 0,
@@ -53,6 +53,7 @@ const prepareSyncTransfer = Effect.fn("Library.sync.prepareTransfer")(function* 
   DownloadError,
   R,
 >(
+  library: Pick<Library.Interface, "content">,
   archives: readonly SnapshotArchive[],
   desired: LibraryManifest,
   remote: RemoteLibrary | null,
@@ -68,7 +69,6 @@ const prepareSyncTransfer = Effect.fn("Library.sync.prepareTransfer")(function* 
   },
 ) {
   const progress = options.progress;
-  const library = yield* Library.Service;
   const content = yield* library.content.plan(desired, archives);
   const required = new Set(desired.collection_versions.map((tree) => tree.hash));
   const snapshotSet = new Set(desired.snapshot_digests);
@@ -120,7 +120,7 @@ const prepareSyncTransfer = Effect.fn("Library.sync.prepareTransfer")(function* 
 
 /**
  * One Library sync over the given transport; every local decision and effect stays here. The
- * Library is routed as this device's installs when `inventory` is given, otherwise unrouted.
+ * Library uses the roots it was constructed with.
  */
 export const syncLibrary = Effect.fn("Library.sync")(function* <
   ReadError,
@@ -129,7 +129,8 @@ export const syncLibrary = Effect.fn("Library.sync")(function* <
   DownloadError,
   R,
 >(
-  home: string,
+  library: Pick<Library.Interface, "read" | "plan" | "apply" | "content">,
+  roots: InventoryRootOptions,
   options: {
     readonly origin: string;
     readonly token?: string;
@@ -142,9 +143,6 @@ export const syncLibrary = Effect.fn("Library.sync")(function* <
           readonly skills: readonly string[];
           readonly collections: readonly string[];
         };
-    readonly installedSkill?: {
-      readonly rootFor: (target: InstallDestination) => string | undefined;
-    };
     readonly onPlan?: (plan: SyncChanges) => Effect.Effect<void>;
     readonly progress?: SyncProgress;
     readonly restoreProgress?: RestoreProgress;
@@ -152,13 +150,14 @@ export const syncLibrary = Effect.fn("Library.sync")(function* <
   transport: LibrarySyncTransport<ReadError, UploadError, WriteError, DownloadError, R>,
 ) {
   const progress = options.progress ?? silentSyncProgress;
-  const library = yield* Library.Service;
   const snapshot = yield* progress.around({ kind: "inspect-local" }, library.read);
-  const inventory = yield* inspectSyncSnapshots(snapshot, progress);
+  const inventory = yield* inspectSyncSnapshots(library, snapshot, progress);
   if (inventory._tag === "Changed")
     return { status: "local_bytes_changed" as const, hash: inventory.hash };
   const remote = yield* progress.around({ kind: "read-remote" }, transport.read());
   const session = yield* openSyncSession(
+    library,
+    roots,
     {
       origin: options.origin,
       remote,
@@ -167,7 +166,6 @@ export const syncLibrary = Effect.fn("Library.sync")(function* <
       ...(options.deviceSelection === undefined
         ? {}
         : { deviceSelection: options.deviceSelection }),
-      ...(options.installedSkill === undefined ? {} : { rootFor: options.installedSkill.rootFor }),
       around: (phase, work) => progress.around(phase, work),
     },
     { base: snapshot },
@@ -213,12 +211,21 @@ export const syncLibrary = Effect.fn("Library.sync")(function* <
       uninstalled: copies.uninstalled,
     };
   }
-  const transfer = yield* prepareSyncTransfer(inventory.archives, target, remote, transport, {
-    origin: options.origin,
-    ...(options.token === undefined ? {} : { token: options.token }),
-    progress,
-    ...(options.restoreProgress === undefined ? {} : { restoreProgress: options.restoreProgress }),
-  });
+  const transfer = yield* prepareSyncTransfer(
+    library,
+    inventory.archives,
+    target,
+    remote,
+    transport,
+    {
+      origin: options.origin,
+      ...(options.token === undefined ? {} : { token: options.token }),
+      progress,
+      ...(options.restoreProgress === undefined
+        ? {}
+        : { restoreProgress: options.restoreProgress }),
+    },
+  );
   const snapshots = transfer.snapshotCount;
   if (!options.apply)
     return session.direction === "push"

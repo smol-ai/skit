@@ -17,7 +17,7 @@ import type { AuthorVisibility, AuthorRemoteHome } from "./remote.js";
 import type { AuthorSyncResult } from "./sync-result.js";
 import { authorDecider, authorTree } from "./sync-policy.js";
 import { adoptFrom } from "./library-claims.js";
-import { readLibraryWorkspaceClaims } from "../library/queries.js";
+import * as Library from "../library/library.js";
 import { conflictKind } from "./merge/files.js";
 import * as History from "../history/history.js";
 import * as Sync from "../sync/sync.js";
@@ -145,7 +145,7 @@ export const syncAuthorWorkspace = Effect.fn("Sync.skit")(function* <E, R, P>(
             ? identity.value.workspaceId
             : yield* Effect.gen(function* () {
                 const adopt = adoptFrom(
-                  (yield* readLibraryWorkspaceClaims(options.home, root)).atRoot,
+                  (yield* (yield* Library.Service).workspaceClaims(root)).atRoot,
                 );
                 return (yield* lease.register(adopt)).workspaceId;
               });

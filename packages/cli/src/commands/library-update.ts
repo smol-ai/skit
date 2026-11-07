@@ -1,6 +1,9 @@
 import { updateOutputContracts } from "../library/update/output.js";
-import { planUpdates, updateSubjects, updateExitCode } from "../library/update/operation.js";
-import { prepareEditImport, EditImportMissing } from "../library/update/edit.js";
+import { updateExitCode } from "../library/update/exit-code.js";
+import { EditImportMissing } from "@smolai/skit-core/library/edit";
+import * as Library from "@smolai/skit-core/library";
+import { inspectLibrarySource } from "../library/source.js";
+import { updateAdapters } from "../library/update/adapters.js";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleSourceCommand } from "../application.js";
@@ -33,6 +36,7 @@ export const updateCliCommand = Command.make(
     handleSourceCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
+        const library = yield* Library.Service;
         const query = Option.getOrUndefined(input.subject);
         const installedSkillSelector = Option.getOrUndefined(input.fromProjection);
         if (installedSkillSelector !== undefined) {
@@ -45,7 +49,7 @@ export const updateCliCommand = Command.make(
               ? "Inspecting changed installed-skill bytes"
               : "Retaining changed installed-skill bytes",
             Effect.gen(function* () {
-              const prepared = yield* prepareEditImport(query, installedSkillSelector);
+              const prepared = yield* library.edit(query, installedSkillSelector);
               return input.dryRun
                 ? result(
                     "projectionRetentionPlan",
@@ -64,13 +68,13 @@ export const updateCliCommand = Command.make(
         if (input.dryRun) {
           const value = yield* renderer.withStatus(
             "Checking Source observations",
-            planUpdates(query),
+            library.previewSourceUpdates(query, inspectLibrarySource),
           );
           return yield* renderer.result(
             result("updatePlan", updateOutputContracts.updatePlan, value),
           );
         }
-        const value = yield* updateSubjects(query);
+        const value = yield* library.update(query, yield* updateAdapters);
         yield* renderer.result(
           result("update", updateOutputContracts.update, value, updateExitCode(value)),
         );

@@ -6,7 +6,6 @@
   "rules": {
     "oxc/no-barrel-file": "error",
     "skit/frontend-no-resources": "error",
-    "skit/frontend-no-library-service": "error",
     "skit/no-failure-unions": "error",
     "skit/command-module-exports": "error",
     "skit/no-record-any": "error",

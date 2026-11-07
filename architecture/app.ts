@@ -71,7 +71,6 @@ export const owners = {
       "localLibrary / recordedLibrary / 6 raw Library.make sites (routing modes move into Library.layer)",
       "setup-apply's LibraryStore substitution (done: setup-apply builds SetupStep[] and calls Library.setup)",
       "configuration-writer.ts (removed; Registry auth owns its write under HomeLock.withLock)",
-      "library/security.ts (two 3-line pass-throughs)",
       "library-application/{update,update-installed-skills,set-enabled}.ts pass-throughs",
       "raw librarySubjects/matchingLibrarySubjects exports (removed; subject resolution stays private to Library)",
       "raw libraryView/openLibraryView exports (removed; intent queries and selection sessions expose owner-backed snapshots; counterfactual tests live in core)",
@@ -419,11 +418,6 @@ export const coreExports = {
     owners: ["Library"],
     source: "packages/skit/src/library/queries.ts",
   },
-  "./library/remove": {
-    kind: "owner",
-    owners: ["Library"],
-    source: "packages/skit/src/library/remove.ts",
-  },
   "./library/edit": {
     kind: "owner",
     owners: ["Library"],
@@ -443,11 +437,6 @@ export const coreExports = {
     kind: "owner",
     owners: ["Library"],
     source: "packages/skit/src/library/recovery.ts",
-  },
-  "./library/security": {
-    kind: "owner",
-    owners: ["Library"],
-    source: "packages/skit/src/library/security.ts",
   },
   "./library/session": {
     kind: "owner",

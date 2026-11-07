@@ -6,11 +6,8 @@ export {
   type EnabledCollection,
 } from "./internal/session/set-enabled-request.js";
 export {
-  type SetEnabledConfiguration,
   type SetEnabledPlan,
   SetEnabledIncomplete,
-  openSetEnabledSession,
-  planSetEnabled,
   applySetEnabledPlan,
 } from "./internal/session/set-enabled.js";
 export type { SelectionError } from "./internal/session/set-enabled.js";

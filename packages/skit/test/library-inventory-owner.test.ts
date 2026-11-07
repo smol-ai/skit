@@ -2,7 +2,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option, Schema } from "effect";
 import { systemError } from "effect/PlatformError";
 import { join } from "node:path";
-import { readInventory, refreshInventory } from "../src/library/inventory.js";
+import { readInventory } from "../src/library/inventory.js";
 import * as Library from "../src/library/library.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
@@ -260,11 +260,7 @@ it.effect(
             { base: yield* library.read },
           ),
         });
-        const report = yield* refreshInventory({
-          home: f.root,
-          configHome: join(f.root, "config"),
-          overrides: roots,
-        });
+        const report = yield* library.inventory.refresh;
         assert.deepStrictEqual(
           report.unmanaged.map((item) => item.path),
           [join(f.skills, "review")],
@@ -286,6 +282,13 @@ it.effect(
             saved.state.unmanaged.map((item) => item.path).sort(),
             [join(other, "older"), join(f.skills, "review")].sort(),
           );
-      }).pipe(Effect.provide(Library.layer({ home: f.home, roots: testRoots(f.home) })));
+      }).pipe(
+        Effect.provide(
+          Library.layer({
+            home: f.home,
+            roots: { home: f.root, configHome: join(f.root, "config"), overrides: roots },
+          }),
+        ),
+      );
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

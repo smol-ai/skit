@@ -7,7 +7,6 @@ import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { makeMachineId } from "@smolai/skit-core/universal/consumer";
 import {
   confirmLibraryChange,
-  openLibrarySession,
   proposeLibraryCollectionChange,
   type Scope,
 } from "@smolai/skit-core/library/session";
@@ -90,10 +89,10 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
     /** Enable a whole Collection in `scopes` through the session workflows the TUI confirms. */
     bind: (label: string, scopes: readonly Scope[]) =>
       Effect.gen(function* () {
-        const session = yield* openLibrarySession(skitHome, configuration);
+        const session = yield* Effect.flatMap(Library.Service, (library) => library.session.open());
         const collectionId = session.skills.find((row) => row.heading === label)!.collectionId;
         const confirmed = yield* confirmLibraryChange(
-          yield* proposeLibraryCollectionChange(session, configuration, collectionId, true, scopes),
+          yield* proposeLibraryCollectionChange(session, collectionId, true, scopes),
         );
         if (confirmed.outcome?.kind !== "applied")
           return yield* Effect.die(`binding ${label} was ${confirmed.outcome?.kind}`);
@@ -109,7 +108,11 @@ export const tuiLibrary = Effect.fn("Test.tuiLibrary")(function* (
       Effect.provide(owner),
     ),
     /** The host the TUI builds for this Library, over the production application layer. */
-    host: () => createLibraryHost(application, openLibrarySession(skitHome, configuration)),
+    host: () =>
+      createLibraryHost(
+        application,
+        Effect.flatMap(Library.Service, (library) => library.session.open()),
+      ),
     /** Every path under the fixture, by lstat: its type, mode, link target and bytes. */
     tree: Effect.gen(function* () {
       const links = yield* LinkStat;

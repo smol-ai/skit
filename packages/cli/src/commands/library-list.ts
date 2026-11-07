@@ -1,12 +1,11 @@
-import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { openLibrarySession } from "@smolai/skit-core/library/session";
+import * as Library from "@smolai/skit-core/library";
+
 import { Effect } from "effect";
 import { Command } from "effect/cli";
 import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
 import { listOutputContracts, browseLibrary, presentListCommand } from "../library/list.js";
 import { localFlags } from "./parameters.js";
-import { libraryCommandConfiguration } from "./library-configuration.js";
 import { promptsAllowed } from "../terminal/interactivity.js";
 
 export const listCliCommand = Command.make("list", localFlags, (input) =>
@@ -17,11 +16,9 @@ export const listCliCommand = Command.make("list", localFlags, (input) =>
         needsStdout: true,
       });
       if (!interactive) return yield* presentListCommand();
-      const configuration = yield* libraryCommandConfiguration(input);
-      const session = yield* Effect.flatMap(SkitConfiguration, (paths) =>
-        openLibrarySession(paths.skitHome, configuration.pull.installOptions),
-      );
-      yield* browseLibrary(session, configuration.pull.installOptions);
+      const library = yield* Library.Service;
+      const session = yield* library.session.open();
+      yield* browseLibrary(session);
     }),
     input,
   ),

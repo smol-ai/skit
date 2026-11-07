@@ -3,13 +3,13 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Option } from "effect";
 import { join } from "node:path";
 import * as Library from "../src/library/library.js";
-import { applySetEnabledPlan, openSetEnabledSession } from "../src/library/enable.js";
+import { applySetEnabledPlan } from "../src/library/enable.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { testRoots } from "./helpers/library-store.js";
 
 it.effect(
-  "a core selection captures its configured owner, refuses another home and applies without frontend services",
+  "a core selection captures its configured owner and applies independently of another ambient Library",
   () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -33,23 +33,23 @@ it.effect(
         configHome: join(root, "config"),
         overrides: { codex: [destination] },
       };
-      const selection = yield* openSetEnabledSession(home, configuration).pipe(
-        Effect.provide(Library.layer({ home, roots: configuration })),
-      );
-      const plan = yield* selection.plan(
-        { subject: "review", enabled: true, where: [{ kind: "global" }] },
-        configuration,
-      );
+      const selection = yield* Effect.flatMap(Library.Service, (library) =>
+        library.enable.open(),
+      ).pipe(Effect.provide(Library.layer({ home, roots: configuration })));
+      const plan = yield* selection.plan({
+        subject: "review",
+        enabled: true,
+        where: [{ kind: "global" }],
+      });
       assert.isFalse(yield* fs.exists(destination));
       const elsewhere = join(root, "another-library");
-      const refused = yield* Effect.result(applySetEnabledPlan(elsewhere, plan));
-      assert.strictEqual(refused._tag, "Failure");
-      if (refused._tag === "Failure") assert.strictEqual(refused.failure._tag, "Library.StalePlan");
+      const other = yield* Library.Service.pipe(
+        Effect.provide(Library.layer({ home: elsewhere, roots: testRoots(elsewhere) })),
+      );
+      // The reviewed operation needs no ambient owner or platform and cannot be redirected.
+      const applying: Effect.Effect<unknown, unknown> = applySetEnabledPlan(plan);
+      yield* applying.pipe(Effect.provideService(Library.Service, other));
       assert.isFalse(yield* fs.exists(elsewhere));
-      assert.isFalse(yield* fs.exists(destination));
-      // The prepared operation captures the owner; applying requires no ambient store or platform.
-      const applying: Effect.Effect<unknown, unknown> = applySetEnabledPlan(home, plan);
-      yield* applying;
       assert.strictEqual(yield* fs.readFileString(join(destination, "review", "SKILL.md")), bytes);
       const view = yield* openLibraryView(home).pipe(
         Effect.provide(Library.layer({ home, roots: testRoots(home) })),

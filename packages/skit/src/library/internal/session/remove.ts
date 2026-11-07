@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import * as Library from "../../library.js";
+import type { Interface } from "../../library.js";
 import { emptyLibraryState, type LibraryState } from "../../library-state.js";
 import { resolveLibrarySubject } from "../../subject-resolution.js";
 import { enabledSkillIds } from "../../library-contracts.js";
@@ -51,8 +51,10 @@ export const removalSummary = Effect.fn("Library.planRemove")(function* (
 });
 
 /** Capture the Library displayed; apply refuses if it changed since. */
-const openRemoveSession = Effect.fn("Library.openRemoveSession")(function* (query: string) {
-  const library = yield* Library.Service;
+const openRemoveSession = Effect.fn("Library.openRemoveSession")(function* (
+  library: Pick<Interface, "read" | "plan" | "apply">,
+  query: string,
+) {
   const snapshot = yield* library.read;
   const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
   const summary = yield* removalSummary(state, query);
@@ -85,9 +87,10 @@ export interface RemoveOptions {
 
 /** Remove a Collection, or the sole Skill's Collection, and uninstall the Skills it installed. */
 export const removeCollection = Effect.fn("Library.removeCollection")(function* (
+  library: Pick<Interface, "read" | "plan" | "apply">,
   options: RemoveOptions,
 ) {
-  const selection = yield* openRemoveSession(options.query);
+  const selection = yield* openRemoveSession(library, options.query);
   if (options.dryRun) return { kind: "plan" as const, value: selection.summary };
   return { kind: "removed" as const, value: yield* selection.apply() };
 });

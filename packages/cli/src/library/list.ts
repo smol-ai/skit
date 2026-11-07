@@ -1,12 +1,12 @@
-import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { readLibraryList } from "@smolai/skit-core/library/queries";
+import * as Library from "@smolai/skit-core/library";
 import { Effect } from "effect";
 import { listOutputContracts } from "./list/output.js";
 import { Renderer } from "../terminal/renderer.js";
 import { encodeResult as result } from "../commands/encode-result.js";
 
 export const presentListCommand = Effect.fn("CLI.list.present")(function* () {
-  const view = yield* readLibraryList((yield* SkitConfiguration).skitHome);
+  const library = yield* Library.Service;
+  const view = yield* library.list;
   const subjects = view.subjects;
   const value = {
     subjects: subjects.map((subject) => ({

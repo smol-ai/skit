@@ -3,7 +3,8 @@ import { Effect } from "effect";
 import { Command, Flag } from "effect/cli";
 import { presentDoctorCleanup } from "../library/doctor/cleanup.js";
 import { doctorOutputContracts } from "../library/doctor/output.js";
-import { doctorCommand } from "../library/doctor/operation.js";
+import * as Library from "@smolai/skit-core/library";
+import { libraryDoctorReport, inspectNativeDiscovery } from "@smolai/skit-core/library/inventory";
 import { Renderer } from "../terminal/renderer.js";
 import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
@@ -38,14 +39,22 @@ export const doctorCliCommand = Command.make(
     handleLibraryCommand(
       Effect.gen(function* () {
         const paths = yield* SkitConfiguration;
-
-        const selectedHome = paths.skitHome;
-        const options = {
-          ...inventoryRootOptions(input, paths),
-          libraryHome: selectedHome,
-        };
+        const options = inventoryRootOptions(input, paths);
         const renderer = yield* Renderer;
-        const value = yield* doctorCommand(options);
+        const library = yield* Library.Service;
+        /** Diagnose the freshly saved inventory; the report itself is pure. */
+        const doctor = Effect.gen(function* () {
+          const inventory = yield* renderer.withStatus(
+            "Scanning harness installations",
+            library.inventory.refresh,
+          );
+          const native = yield* renderer.withStatus(
+            "Checking native harness skill discovery",
+            inspectNativeDiscovery(inventory, { ...options, cwd: process.cwd() }),
+          );
+          return { ...libraryDoctorReport(inventory), ...native };
+        });
+        const value = yield* doctor;
         yield* renderer.result(
           result("doctor", doctorOutputContracts.doctor, value, value.ok ? undefined : 12),
         );
@@ -57,7 +66,7 @@ export const doctorCliCommand = Command.make(
             input.dryRun,
           ).pipe(Effect.catchTag("PromptCancelled", () => Effect.succeed(false)));
           if (changed) {
-            const checked = yield* doctorCommand(options);
+            const checked = yield* doctor;
             yield* renderer.result(
               result("doctor", doctorOutputContracts.doctor, checked, checked.ok ? 0 : 12),
             );

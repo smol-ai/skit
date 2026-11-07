@@ -1,7 +1,7 @@
-import { SkitConfiguration } from "@smolai/skit-core/platform";
+import * as Library from "@smolai/skit-core/library";
 import { Effect, Option } from "effect";
 import { descriptionLoadMessage } from "../library/presentation/description-size.js";
-import { addSource, inspectSource } from "@smolai/skit-core/library/source";
+import { inspectSource } from "@smolai/skit-core/library/source";
 import { Argument, Command, Flag } from "effect/cli";
 import { handleSourceCommand } from "../application.js";
 import {
@@ -42,10 +42,10 @@ export const addCliCommand = Command.make(
           );
           return yield* renderer.result(result("addPreview", addOutputContracts.addPreview, value));
         }
-        const configuration = yield* SkitConfiguration;
+        const library = yield* Library.Service;
         const { added, descriptionLoad } = yield* renderer.withStatus(
           "Adding source",
-          addSource(configuration.skitHome, request),
+          library.addSource(request),
         );
         yield* renderer.result(result("add", addOutputContracts.add, added));
         yield* renderer.note(

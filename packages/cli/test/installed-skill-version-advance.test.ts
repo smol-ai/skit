@@ -3,7 +3,7 @@ import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
-import { openSetEnabledSession } from "@smolai/skit-core/library/enable";
+
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import * as Library from "@smolai/skit-core/library";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
@@ -74,7 +74,7 @@ const boundRawReview = Effect.gen(function* () {
     assert.ok(row);
     const skill = state.skills[0];
     const view = yield* library.owned(
-      openSetEnabledSession(home, { home: home, configHome: home, overrides: {} }).pipe(
+      Effect.flatMap(Library.Service, (library) => library.enable.open()).pipe(
         Effect.map((selection) => selection.view),
       ),
     );
@@ -132,11 +132,9 @@ it.effect("heals an untouched installed skill already recorded as conflicted", (
     const state = yield* library.durable;
     assert.ok(state);
     const view = yield* library.owned(
-      openSetEnabledSession(library.home, {
-        home: library.home,
-        configHome: library.home,
-        overrides: {},
-      }).pipe(Effect.map((selection) => selection.view)),
+      Effect.flatMap(Library.Service, (library) => library.enable.open()).pipe(
+        Effect.map((selection) => selection.view),
+      ),
     );
     const selected = view.collections
       .flatMap((collection) => collection.members)

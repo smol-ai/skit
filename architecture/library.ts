@@ -716,34 +716,118 @@ export interface Library {
   };
   /** What startup recovery did when the layer was built. */
   readonly startup: StartupRecovery;
+  // ── Operations: intent in, report out. Home, roots and storage stay inside (decided 2026-11-07). ─
+  readonly addSource: (
+    request: SourceRequest,
+  ) => Effect.Effect<
+    Effect.Success<ReturnType<typeof addSource>>,
+    Effect.Error<ReturnType<typeof addSource>>
+  >;
+  readonly importSource: (
+    request: SourceRequest,
+  ) => Effect.Effect<
+    Effect.Success<ReturnType<typeof importSource>>,
+    Effect.Error<ReturnType<typeof importSource>>
+  >;
+  readonly enable: {
+    readonly open: () => ReturnType<typeof openSetEnabledSession>;
+    readonly plan: (requests: readonly SetEnabledRequest[]) => ReturnType<typeof planSetEnabled>;
+  };
+  readonly session: {
+    readonly open: () => Effect.Effect<
+      Effect.Success<ReturnType<typeof openLibrarySession>>,
+      Effect.Error<ReturnType<typeof openLibrarySession>>
+    >;
+    readonly readSkillContent: (
+      skillVersionId: string,
+    ) => Effect.Effect<
+      Effect.Success<ReturnType<typeof readLibrarySkillContent>>,
+      Effect.Error<ReturnType<typeof readLibrarySkillContent>>
+    >;
+  };
+  readonly sync: <ReadError, UploadError, WriteError, DownloadError, R>(
+    options: Parameters<typeof syncLibrary>[2],
+    transport: LibrarySyncTransport<ReadError, UploadError, WriteError, DownloadError, R>,
+  ) => Effect.Effect<
+    Effect.Success<
+      ReturnType<typeof syncLibrary<ReadError, UploadError, WriteError, DownloadError, R>>
+    >,
+    Effect.Error<
+      ReturnType<typeof syncLibrary<ReadError, UploadError, WriteError, DownloadError, R>>
+    >,
+    R
+  >;
+  readonly syncSession: (
+    request: Parameters<typeof openSyncSession>[2],
+    options: Parameters<typeof openSyncSession>[3],
+  ) => Effect.Effect<
+    Effect.Success<ReturnType<typeof openSyncSession>>,
+    Effect.Error<ReturnType<typeof openSyncSession>>
+  >;
+  readonly remove: (options: RemoveOptions) => ReturnType<typeof removeCollection>;
+  readonly update: <E, R, F extends { readonly remediation: string }>(
+    query: string | undefined,
+    adapters: SourceUpdateAdapters<E, R, F>,
+  ) => Effect.Effect<
+    Effect.Success<ReturnType<typeof updateSources<E, R, F>>>,
+    Effect.Error<ReturnType<typeof updateSources<E, R, F>>>,
+    R
+  >;
+  readonly edit: (
+    query: string,
+    selector: string,
+  ) => Effect.Effect<
+    Effect.Success<ReturnType<typeof openEditImport>>,
+    Effect.Error<ReturnType<typeof openEditImport>>
+  >;
+  readonly check: LibraryQueries["check"];
+  readonly previewSourceUpdates: LibraryQueries["previewSourceUpdates"];
+  readonly securityReview: LibraryQueries["securityReview"];
+  readonly acceptSecurityFinding: (
+    query: string,
+    input: Parameters<typeof acceptLibrarySecurityFinding>[2],
+  ) => ReturnType<typeof acceptLibrarySecurityFinding>;
+  readonly descriptionLoad: LibraryQueries["descriptionLoad"];
+  readonly workspaceClaims: LibraryQueries["workspaceClaims"];
+  readonly installedSkills: LibraryQueries["installedSkills"];
+  readonly manifest: LibraryQueries["manifest"];
+  readonly skillsShCollectionIds: LibraryQueries["skillsShCollectionIds"];
+  readonly list: LibraryQueries["list"];
+  readonly inventory: {
+    readonly refresh: ReturnType<typeof refreshInventory>;
+    readonly refreshMachine: Effect.Effect<
+      Effect.Success<ReturnType<typeof refreshMachineInventory>>,
+      Effect.Error<ReturnType<typeof refreshMachineInventory>>
+    >;
+  };
 }
+import type {
+  RemoveOptions,
+  removeCollection,
+} from "../packages/skit/src/library/internal/session/remove.js";
+import type {
+  updateSources,
+  SourceUpdateAdapters,
+} from "../packages/skit/src/library/internal/session/update-sources.js";
+import type { openEditImport } from "../packages/skit/src/library/internal/session/edit.js";
+import type {
+  libraryQueries,
+  acceptLibrarySecurityFinding,
+} from "../packages/skit/src/library/internal/session/queries.js";
+import type {
+  refreshInventory,
+  refreshMachineInventory,
+} from "../packages/skit/src/library/inventory.js";
+type LibraryQueries = ReturnType<typeof libraryQueries>;
 
-/**
- * How the one constructor routes installed copies. FROM CODE: today's localLibrary (None),
- * recordedLibrary (Recorded) and the CLI-configured InstalledSkills (Configured).
- */
-export type Routing =
-  | { readonly _tag: "None" } // imports: fail rather than guess destinations
-  | { readonly _tag: "Recorded" } // where this device already has copies
-  | {
-      readonly _tag: "Configured";
-      readonly home: string;
-      readonly configHome: string;
-      readonly overrides: SkillsDirectoryOverrides;
-    };
-
-/**
- * Library.layer({ home, routing }). Under the home lock it migrates state.json once, then runs
- * startup recovery: each Pending operation finishes the steps safe to repeat, otherwise it is
- * marked Stopped and reported in Library.startup and history. Stopped operations are not layer
- * errors.
- * DECIDED (Tim, 2026-11-03): a stopped setup does not block other Library changes. Library reports
- * it; resume/undo recheck every folder against the recorded evidence and stop if anything changed
- * (t3code EffectOutbox.ts#L492-L519 parks and continues; humanlayer setup.machine.ts#L45-L70).
- */
+/** The Library's storage home and the installation roots of this device. */
 export interface LibraryConfig {
   readonly home: string;
-  readonly routing: Routing;
+  readonly roots: {
+    readonly home: string;
+    readonly configHome: string;
+    readonly overrides: SkillsDirectoryOverrides;
+  };
 }
 
 /**
@@ -860,3 +944,25 @@ export declare namespace InstalledSkills {
 }
 
 // Write authority, removals and debt for this slice live in app.ts (owners.Library, owners.InstalledSkills).
+
+import type {
+  syncLibrary,
+  LibrarySyncTransport,
+} from "../packages/skit/src/library/internal/sync/library-sync.js";
+import type { openSyncSession } from "../packages/skit/src/library/internal/sync/session.js";
+
+import type {
+  openSetEnabledSession,
+  planSetEnabled,
+} from "../packages/skit/src/library/internal/session/set-enabled.js";
+import type { SetEnabledRequest } from "../packages/skit/src/library/internal/session/set-enabled-request.js";
+import type {
+  openLibrarySession,
+  readLibrarySkillContent,
+} from "../packages/skit/src/library/internal/session/session.js";
+
+import type {
+  addSource,
+  importSource,
+  SourceRequest,
+} from "../packages/skit/src/library/source.js";

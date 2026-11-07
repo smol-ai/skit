@@ -10,7 +10,6 @@ import { importSource } from "../src/library/source.js";
 import { authorInitCommand } from "../src/author/init.js";
 import { authorInvocationCommand } from "../src/author/invocation.js";
 import { authorWorkspaceLayer, initSkit } from "@smolai/skit-core/author";
-import { removeCollection } from "@smolai/skit-core/library/remove";
 import * as Library from "@smolai/skit-core/library";
 import { systemError } from "effect/PlatformError";
 import {
@@ -185,10 +184,12 @@ it.effect.each(["collection", "skill"] as const)(
       assert.ok(skill);
       const identity = (yield* f.metadata).workspace_id;
       yield* f.home.owned(
-        removeCollection({
-          query: subject === "collection" ? first.entry.collection.collection_id : skill.skill_id,
-          dryRun: false,
-        }),
+        Effect.flatMap(Library.Service, (library) =>
+          library.remove({
+            query: subject === "collection" ? first.entry.collection.collection_id : skill.skill_id,
+            dryRun: false,
+          }),
+        ),
       );
       assert.deepStrictEqual(yield* f.metadata, { workspace_id: identity });
       assert.strictEqual((yield* f.home.durable).collections.length, 0);
@@ -211,10 +212,12 @@ it.effect("removal leaves a different workspace identity untouched", () =>
     });
     yield* f.fs.writeFileString(f.path, replacement);
     yield* f.home.owned(
-      removeCollection({
-        query: first.entry.collection.collection_id,
-        dryRun: false,
-      }),
+      Effect.flatMap(Library.Service, (library) =>
+        library.remove({
+          query: first.entry.collection.collection_id,
+          dryRun: false,
+        }),
+      ),
     );
     assert.strictEqual(yield* f.fs.readFileString(f.path), replacement);
     assert.strictEqual((yield* f.home.durable).collections.length, 0);
@@ -276,10 +279,12 @@ it.effect.each(["collection", "skill"] as const)(
       const skill = first.entry.skills[0];
       assert.ok(skill);
       yield* f.home.owned(
-        removeCollection({
-          query: subject === "collection" ? first.entry.collection.collection_id : skill.skill_id,
-          dryRun: false,
-        }),
+        Effect.flatMap(Library.Service, (library) =>
+          library.remove({
+            query: subject === "collection" ? first.entry.collection.collection_id : skill.skill_id,
+            dryRun: false,
+          }),
+        ),
       );
       assert.strictEqual((yield* f.metadataAt(moved)).workspace_id, identity);
       assert.strictEqual((yield* f.home.durable).collections.length, 0);
@@ -375,7 +380,9 @@ it.effect(
         .owned(
           Effect.gen(function* () {
             const result = yield* Effect.result(
-              removeCollection({ query: first.entry.collection.collection_id, dryRun: false }),
+              Effect.flatMap(Library.Service, (library) =>
+                library.remove({ query: first.entry.collection.collection_id, dryRun: false }),
+              ),
             );
             return { result, snapshot: yield* (yield* Library.Service).read };
           }),
@@ -416,7 +423,9 @@ it.effect(
       );
       // A typed refusal is Stopped, not a crash-Pending program: nothing retries it silently.
       const retried = yield* f.home.owned(
-        removeCollection({ query: first.entry.collection.collection_id, dryRun: false }),
+        Effect.flatMap(Library.Service, (library) =>
+          library.remove({ query: first.entry.collection.collection_id, dryRun: false }),
+        ),
       );
       assert.strictEqual(retried.kind, "removed");
       assert.strictEqual((yield* f.home.durable).collections.length, 0);

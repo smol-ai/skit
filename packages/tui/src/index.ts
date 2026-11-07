@@ -17,7 +17,7 @@ import {
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui";
 import { resolve } from "node:path";
 import { Effect, FileSystem, Layer, Schema } from "effect";
-import { openLibrarySession, readLibrarySkillContent } from "@smolai/skit-core/library/session";
+
 import { createLibraryController } from "./library/controller";
 import { errorMessage } from "@smolai/skit-core/shared";
 import { HarnessName, readListingBudgets, type ListingBudget } from "@smolai/skit-core/harnesses";
@@ -62,30 +62,33 @@ const flag = (name: string): string | undefined => {
   return index >= 0 ? args[index + 1] : undefined;
 };
 
+const codexRoot = flag("--codex-root");
+const claudeRoot = flag("--claude-root");
+const libraryRootOverrides = {
+  ...(codexRoot === undefined ? {} : { codex: [codexRoot] }),
+  ...(claudeRoot === undefined ? {} : { "claude-code": [claudeRoot] }),
+};
+
 // One host runtime and serialized state transitions for the writable Library view.
 const libraryHost = createLibraryHost(
   Layer.unwrap(
     Effect.map(SkitConfiguration, (paths) =>
-      Library.layer({ home: paths.skitHome, roots: inventoryRootOptions(paths) }),
+      Library.layer({
+        home: paths.skitHome,
+        roots: inventoryRootOptions(paths, libraryRootOverrides),
+      }),
     ),
   ).pipe(
     Layer.provideMerge(skitLayer),
     Layer.provideMerge(skitConfigurationLayer(flag("--skit-home"))),
   ),
-  Effect.flatMap(SkitConfiguration, (paths) =>
-    openLibrarySession(paths.skitHome, libraryConfiguration),
-  ),
+  Effect.flatMap(Library.Service, (library) => library.session.open()),
 );
 const paths = await libraryHost.run(SkitConfiguration);
-const codexRoot = flag("--codex-root");
-const claudeRoot = flag("--claude-root");
 const libraryConfiguration: InventoryRootOptions = {
   home: paths.userHome,
   configHome: paths.configHome,
-  overrides: {
-    ...(codexRoot === undefined ? {} : { codex: [codexRoot] }),
-    ...(claudeRoot === undefined ? {} : { "claude-code": [claudeRoot] }),
-  },
+  overrides: libraryRootOverrides,
 };
 let libraryOpenError: string | undefined;
 // Every workflow the TUI runs enters the runtime through the host, the audit included.
@@ -450,7 +453,11 @@ function populateDetails(details: ScrollBoxRenderable, item: InventoryItem): voi
     const content = text("library-skill-content", "Loading…", { width: "100%" });
     details.add(content);
     pendingSkillPreview = libraryHost
-      .run(readLibrarySkillContent(paths.skitHome, item.row.skillVersionId))
+      .run(
+        Effect.flatMap(Library.Service, (library) =>
+          library.session.readSkillContent(item.row.skillVersionId),
+        ),
+      )
       .then(
         (value) => {
           if (detailsScroll === details && revision === detailRevision) content.content = value;

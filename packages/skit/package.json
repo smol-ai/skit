@@ -88,10 +88,6 @@
       "types": "./dist/library/queries.d.ts",
       "import": "./dist/library/queries.js"
     },
-    "./library/remove": {
-      "types": "./dist/library/remove.d.ts",
-      "import": "./dist/library/remove.js"
-    },
     "./library/edit": {
       "types": "./dist/library/edit.d.ts",
       "import": "./dist/library/edit.js"
@@ -107,10 +103,6 @@
     "./library/recovery": {
       "types": "./dist/library/recovery.d.ts",
       "import": "./dist/library/recovery.js"
-    },
-    "./library/security": {
-      "types": "./dist/library/security.d.ts",
-      "import": "./dist/library/security.js"
     }
   },
   "scripts": {

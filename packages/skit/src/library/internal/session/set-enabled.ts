@@ -1,5 +1,7 @@
-import { join, resolve } from "node:path";
-import * as Library from "../../library.js";
+import { join } from "node:path";
+import type * as Library from "../../library.js";
+import { StalePlan } from "../../library-plan.js";
+import { InvalidIntent } from "../../enabled-plan.js";
 import { FailureTypeId, type SkitFailure } from "../../../shared/failure.js";
 import { Effect, Schema } from "effect";
 import { type InventoryRootOptions } from "../../routing/roots.js";
@@ -12,7 +14,6 @@ export type { SetEnabledIntent, SetEnabledRequest } from "./set-enabled-request.
 import { failureDetails } from "../../../shared/failure.js";
 import { setEnabledResults, SetEnabledChange, SetEnabledResult } from "./set-enabled-contract.js";
 
-import { canonicalJson } from "../../../shared/json.js";
 import { emptyLibraryState } from "../../library-state.js";
 import type { Snapshot } from "../../snapshot.js";
 import { resolveLibrarySubject } from "../../subject-resolution.js";
@@ -25,17 +26,13 @@ import {
 } from "./cleanup-selection.js";
 import type { UsageReport } from "../../usage/contracts.js";
 
-export type SetEnabledConfiguration = InventoryRootOptions;
-
 /** Display facts plus the Library owner's plain plan for the exact intents and Library previewed. */
 const planOwner = Symbol("LibrarySelection.owner");
 
 export interface SetEnabledPlan {
-  readonly [planOwner]: Library.Interface;
+  readonly [planOwner]: Pick<Library.Interface, "apply">;
   readonly owner: {
-    readonly home: string;
     readonly plan: Library.Plan;
-    readonly configuration: SetEnabledConfiguration;
   };
   readonly changes: readonly (Omit<SetEnabledChange, "invocation"> & {
     readonly invocation?: import("./invocation-option.js").InvocationOption;
@@ -71,8 +68,10 @@ export type SelectionError =
   | import("../../../shared/input-failures.js").OptionCombinationInvalid;
 type SelectionRequirements = never;
 export interface LibraryChangeSelection {
-  readonly configuration: SetEnabledConfiguration;
-  readonly home: string;
+  readonly refresh: Effect.Effect<
+    LibraryChangeSelection,
+    import("../../store/library-store.js").LibraryStateReadError
+  >;
   readonly suggestCleanup: (
     budgets: readonly CleanupBudget[],
     usage: UsageReport,
@@ -80,19 +79,16 @@ export interface LibraryChangeSelection {
   readonly view: ReturnType<typeof libraryView>;
   readonly planMany: (
     intents: readonly SetEnabledIntent[],
-    configuration: SetEnabledConfiguration,
   ) => Effect.Effect<SetEnabledPlan, SelectionError, SelectionRequirements>;
   readonly plan: (
     intent: SetEnabledIntent,
-    configuration: SetEnabledConfiguration,
   ) => Effect.Effect<SetEnabledPlan, SelectionError, SelectionRequirements>;
 }
 function libraryChangeSelection(
   current: Snapshot,
-  home: string,
   originalsPath: string,
-  library: Library.Interface,
-  configuration: SetEnabledConfiguration,
+  library: Pick<Library.Interface, "read" | "plan" | "apply">,
+  configuration: InventoryRootOptions,
 ): LibraryChangeSelection {
   const snapshot = structuredClone(current);
   const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
@@ -103,7 +99,6 @@ function libraryChangeSelection(
   };
   const planMany = Effect.fn("LibrarySelection.plan")(function* (
     intents: readonly SetEnabledIntent[],
-    configuration: SetEnabledConfiguration,
   ) {
     const selected: Library.Enabled["changes"][number][] = [];
     for (const intent of intents) {
@@ -134,20 +129,9 @@ function libraryChangeSelection(
         ...(intent.setup === undefined ? {} : { setup: intent.setup }),
       });
     }
-    if (
-      canonicalJson(routing) !==
-      canonicalJson({
-        home: configuration.home,
-        configHome: configuration.configHome,
-        overrides: configuration.overrides,
-      })
-    )
-      return yield* new Library.StalePlan({
-        message: "The install configuration changed; open a new Library selection",
-      });
     const [first, ...rest] = selected;
     if (first === undefined)
-      return yield* new Library.InvalidIntent({
+      return yield* new InvalidIntent({
         detail: "Choose something to enable or disable",
       });
     const plan = yield* library.plan(
@@ -165,34 +149,29 @@ function libraryChangeSelection(
         (change): change is Library.EnabledChange =>
           change._tag === "Enable" || change._tag === "Disable",
       ),
-      owner: { home, plan, configuration: routing },
+      owner: { plan },
     };
     return prepared;
   });
   return {
-    configuration: routing,
-    home,
+    refresh: Effect.map(library.read, (current) =>
+      libraryChangeSelection(current, originalsPath, library, routing),
+    ),
     suggestCleanup: (budgets, usage) => suggestDoctorCleanup(state, budgets, usage, routing),
     view: libraryView(state, originalsPath),
     planMany,
-    plan: (intent: SetEnabledIntent, configuration: SetEnabledConfiguration) =>
-      planMany([intent], configuration),
+    plan: (intent: SetEnabledIntent) => planMany([intent]),
   };
 }
 
 /** Initialize the configured owner once, then capture the Library before asking questions. */
 export const openSetEnabledSession = Effect.fn("Library.openSelection")(function* (
+  library: Pick<Library.Interface, "read" | "plan" | "apply">,
   home: string,
-  configuration: SetEnabledConfiguration,
+  configuration: InventoryRootOptions,
 ) {
-  const snapshot = yield* (yield* Library.Service).read;
-  return libraryChangeSelection(
-    snapshot,
-    home,
-    join(home, "originals"),
-    yield* Library.Service,
-    configuration,
-  );
+  const snapshot = yield* library.read;
+  return libraryChangeSelection(snapshot, join(home, "originals"), library, configuration);
 }, Effect.scoped);
 export type SetEnabledSession = Effect.Success<ReturnType<typeof openSetEnabledSession>>;
 
@@ -226,21 +205,21 @@ const intentFor = (request: SetEnabledRequest): SetEnabledIntent => ({
 
 /** Internal managing/testing entry point; front ends use a held selection and user intent. */
 export const planSetEnabled = Effect.fn("SetEnabled.plan")(function* (
+  library: Pick<Library.Interface, "read" | "plan" | "apply">,
   home: string,
+  configuration: InventoryRootOptions,
   requests: readonly SetEnabledRequest[],
-  configuration: SetEnabledConfiguration,
 ) {
-  const selection = yield* openSetEnabledSession(home, configuration);
-  return yield* selection.planMany(requests.map(intentFor), configuration);
+  const selection = yield* openSetEnabledSession(library, home, configuration);
+  return yield* selection.planMany(requests.map(intentFor));
 });
 
 /** Apply the owner's plan; partial outcomes keep their published CLI shape. */
 export const applySetEnabledPlan = Effect.fn("SetEnabled.applyPlan")(function* (
-  home: string,
   plan: SetEnabledPlan,
 ) {
-  if (resolve(home) !== resolve(plan.owner.home) || plan[planOwner] === undefined)
-    return yield* new Library.StalePlan({
+  if (plan[planOwner] === undefined)
+    return yield* new StalePlan({
       message: "This plan belongs to another Library selection",
     });
   const outcome = (yield* plan[planOwner].apply({ _tag: "Apply", plan: plan.owner.plan })).result;

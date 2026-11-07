@@ -1,7 +1,8 @@
 import { basename } from "node:path";
 import { Data, Effect } from "effect";
 import { hashParts } from "../../artifact/descriptor.js";
-import * as Library from "../library.js";
+import type { Interface } from "../library.js";
+import { reviewInstalledSkillChanges } from "../installed-skill-review.js";
 import { changeWrites } from "../installed-update.js";
 import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 import { emptyLibraryState } from "../library-state.js";
@@ -101,12 +102,12 @@ export const setupVersionAlternatives = (facts: readonly InstalledSkillChange[])
 
 /** What updating every installed copy would do, as setup reviews it. Changes nothing. */
 export const planInstalledSkillChanges = Effect.fn("Setup.planInstalledSkillChanges")(function* (
+  owner: Pick<Interface, "plan">,
   base: Snapshot,
 ) {
-  const owner = yield* Library.Service;
   const state = base._tag === "Present" ? base.state : emptyLibraryState();
   return yield* owner.plan({ _tag: "Install" }, { base }).pipe(
-    Effect.map(Library.reviewInstalledSkillChanges),
+    Effect.map(reviewInstalledSkillChanges),
     // Setup still discovers when the Library cannot plan its copies, and touches none of them.
     Effect.catch((error) =>
       Effect.succeed(

@@ -26,7 +26,9 @@ it.effect(
       yield* Effect.gen(function* () {
         for (const operation of [
           inspectSource(request).pipe(Effect.asVoid),
-          importSource(request).pipe(Effect.asVoid),
+          Effect.flatMap(Library.Service, (library) => importSource(library.import, request)).pipe(
+            Effect.asVoid,
+          ),
         ]) {
           const failure = yield* operation.pipe(Effect.flip);
           assert.instanceOf(failure, DedicatedInstallerRequired);
@@ -56,22 +58,21 @@ it.effect("add keeps its saved import when the optional description report canno
     yield* fs.writeFileString(join(source, "SKILL.md"), bytes);
     yield* Effect.gen(function* () {
       const library = yield* Library.Service;
-      const report = yield* addSource(home, {
-        source: { type: "local", path: source },
-        input: source,
-      }).pipe(
-        Effect.provideService(
-          Library.Service,
-          Library.Service.of({
-            ...library,
-            read: Effect.fail(
+      const report = yield* addSource(
+        {
+          import: library.import,
+          descriptionLoad: () =>
+            Effect.fail(
               new InvalidLibraryState({
                 path: join(home, "state.json"),
                 detail: "Report read unavailable",
               }),
             ),
-          }),
-        ),
+        },
+        {
+          source: { type: "local", path: source },
+          input: source,
+        },
       );
       assert.strictEqual(report.added.action, "added");
       assert.strictEqual(report.added.skill_ids.length, 1);

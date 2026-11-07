@@ -1,8 +1,8 @@
+import * as Library from "@smolai/skit-core/library";
 import type { ListingBudget } from "@smolai/skit-core/harnesses";
-import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Array, Effect } from "effect";
 import { resolve } from "node:path";
-import { openSetEnabledSession, type SetEnabledIntent } from "@smolai/skit-core/library/enable";
+import { type SetEnabledIntent } from "@smolai/skit-core/library/enable";
 import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { scanLocalUsage } from "../usage/scan.js";
 
@@ -19,10 +19,7 @@ export const openDoctorCleanupSelection = Effect.fn("Doctor.openCleanupSelection
   days: number,
   progress: (completed: number, total: number) => Effect.Effect<void>,
 ) {
-  const selection = yield* openSetEnabledSession(
-    (yield* SkitConfiguration).skitHome,
-    configuration,
-  );
+  const selection = yield* Effect.flatMap(Library.Service, (library) => library.enable.open());
   const usage = yield* scanLocalUsage(selection.view.installedSkills, {
     userHome: configuration.home,
     days,
@@ -52,7 +49,7 @@ export const openDoctorCleanupSelection = Effect.fn("Doctor.openCleanupSelection
         where: [members[0].scope],
         members: members.map((candidate) => candidate.name),
       }));
-      return selection.planMany(intents, configuration);
+      return selection.planMany(intents);
     },
   };
 });

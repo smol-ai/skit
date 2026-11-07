@@ -4,7 +4,8 @@ import { Renderer } from "../terminal/renderer.js";
 import { handleSourceCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
 import { checkOutputContracts } from "../library/check/output.js";
-import { checkSubjects } from "../library/check/operation.js";
+import * as Library from "@smolai/skit-core/library";
+import { inspectLibrarySource } from "../library/source.js";
 import { localFlags } from "./parameters.js";
 import { encodeResult as result } from "./encode-result.js";
 
@@ -14,11 +15,14 @@ export const checkCliCommand = Command.make("check", { subject, ...localFlags },
   handleSourceCommand(
     Effect.gen(function* () {
       const renderer = yield* Renderer;
+      const library = yield* Library.Service;
       const value = yield* renderer.withStatus(
         "Checking retained Collections",
-        checkSubjects(Option.getOrUndefined(input.subject), (collection) =>
-          renderer.updateStatus(`Checking ${collection.display_name}`),
-        ),
+        library.check(Option.getOrUndefined(input.subject), {
+          inspectSource: inspectLibrarySource,
+          onCollection: (collection) =>
+            renderer.updateStatus(`Checking ${collection.display_name}`),
+        }),
       );
       yield* renderer.result(result("check", checkOutputContracts.check, value));
     }),

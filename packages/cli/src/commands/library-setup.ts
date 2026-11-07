@@ -17,7 +17,6 @@ import { Cause, Effect, Option } from "effect";
 import { Command, Flag } from "effect/cli";
 import { resolve } from "node:path";
 import { commandFailure, handleSourceCommand } from "../application.js";
-import { libraryCommandConfiguration } from "./library-configuration.js";
 import { CommandMetadata } from "./metadata.js";
 
 import { inventoryRootOptions, localFlags, optionalString } from "./parameters.js";
@@ -162,15 +161,14 @@ export const setupCliCommand = Command.make(
         };
         const execution = yield* Effect.result(
           Effect.gen(function* () {
-            const configuration = yield* libraryCommandConfiguration(input);
             const options = {
               libraryHome: selectedHome,
-              inventory: configuration.inventory,
+              inventory: context.inventory,
               probePath: process.env.PATH,
               skillsStateHome: paths.xdgStateHome,
             };
             const manageOptions = {
-              installOptions: configuration.pull.installOptions,
+              installOptions: context.inventory,
             };
             if (
               [apply, reviewId, compare].filter((value) => value !== undefined).length > 1 ||

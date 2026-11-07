@@ -1,10 +1,8 @@
 import { type ResolvedAuth } from "../registry/index.js";
 import { Effect, Result } from "effect";
 
-import { syncLibrary } from "@smolai/skit-core/library/sync";
-import { SkitConfiguration } from "@smolai/skit-core/platform";
+import * as Library from "@smolai/skit-core/library";
 import { librarySyncApi } from "./sync/api.js";
-import type { LibraryInstallationConfiguration } from "./installation-configuration.js";
 import { officialRegistryOrigin } from "../registry/accounts.js";
 import { Renderer } from "../terminal/renderer.js";
 import { createColors } from "picocolors";
@@ -17,7 +15,6 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
   readonly apply: boolean;
   readonly takeRemote?: readonly string[];
   readonly keepEnabled?: readonly string[];
-  readonly installedSkill: Pick<LibraryInstallationConfiguration, "rootFor">;
   readonly deviceSelection?:
     | "follow-account"
     | {
@@ -30,7 +27,7 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
   const progress = terminalSyncProgress(renderer);
   // With no Registry configured, sync asks the hosted Registry, which then asks for a login.
   const origin = auth.origin ?? officialRegistryOrigin;
-  const home = (yield* SkitConfiguration).skitHome;
+  const library = yield* Library.Service;
   return yield* Effect.scoped(
     Effect.flatMap(
       librarySyncApi({
@@ -38,15 +35,13 @@ export const librarySyncCommand = Effect.fn("CLI.librarySync")(function* <AuthEr
         ...(auth.token === undefined ? {} : { token: auth.token }),
       }),
       (transport) =>
-        syncLibrary(
-          home,
+        library.sync(
           {
             origin,
             ...(auth.token === undefined ? {} : { token: auth.token }),
             apply: options.apply,
             ...(options.takeRemote === undefined ? {} : { takeRemote: options.takeRemote }),
             ...(options.keepEnabled === undefined ? {} : { keepEnabled: options.keepEnabled }),
-            installedSkill: options.installedSkill,
             ...(options.deviceSelection === undefined
               ? {}
               : { deviceSelection: options.deviceSelection }),

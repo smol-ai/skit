@@ -3,15 +3,15 @@ import { canonicalJson } from "../../shared/json.js";
 import { hashParts } from "../../artifact/descriptor.js";
 import * as MachineSettings from "../machine-settings.js";
 import { RecoveryInvalid } from "../recovery-facts.js";
+import { Service } from "../service.js";
 import { StalePlan } from "../library-plan.js";
-import * as Library from "../library.js";
 
 /** A combined review of two independently durable owner operations. No store or writer is opened. */
 export const prepareSetupUndo = Effect.fn("SetupUndo.prepare")(function* (
   home: string,
   operationId: string,
 ) {
-  const library = yield* Library.Service;
+  const library = yield* Service;
   const plan = yield* library.plan({ _tag: "Undo", operationId }, { base: yield* library.read });
   const settings = yield* MachineSettings.planRestoreDiscovery(home, operationId);
   const { next: _next, ...change } = plan.change;
@@ -40,7 +40,7 @@ export const prepareSetupUndo = Effect.fn("SetupUndo.prepare")(function* (
           return yield* new StalePlan({
             message: "The Library changed since this was previewed",
           });
-        const owner = yield* Library.Service;
+        const owner = yield* Service;
         const undone = yield* owner.apply({ _tag: "Apply", plan: plan }).pipe(
           Effect.map((outcome) => outcome.result),
           Effect.catchTag("Library.StalePlan", () =>

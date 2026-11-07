@@ -6,12 +6,13 @@ import { Effect, FileSystem } from "effect";
 import { HttpClient, HttpClientResponse } from "effect/http";
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
-import { openSetEnabledSession } from "@smolai/skit-core/library/enable";
+
 import { importSource } from "../src/library/source.js";
-import { planUpdates, updateSubjects } from "../src/library/update/operation.js";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { writingTo } from "./helpers/library-home.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
+import { updateAdapters } from "../src/library/update/adapters.js";
+import { inspectLibrarySource } from "../src/library/source.js";
 
 it.effect(
   "preserves existing mixed membership, IDs and bindings while discovering additions and real deletions",
@@ -97,17 +98,25 @@ it.effect(
       yield* skill("plugins/tools/skills/added", "added");
       yield* fs.remove(join(source, "skills/deleted"), { recursive: true });
       bytes = yield* archive();
-      const preview = yield* run(planUpdates());
+      const preview = yield* run(
+        Effect.flatMap(Library.Service, (library) =>
+          library.previewSourceUpdates(undefined, inspectLibrarySource),
+        ),
+      );
       assert.deepStrictEqual(preview[0]?.removed, ["deleted"]);
       assert.deepStrictEqual(preview[0]?.enabled, ["added"]);
-      const outcomes = yield* run(updateSubjects());
+      const outcomes = yield* run(
+        Effect.flatMap(Library.Service, (library) =>
+          Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
+        ),
+      );
       assert.strictEqual(outcomes.length, 1);
       assert.isFalse("status" in outcomes[0]!);
       const after = yield* load;
       assert.deepStrictEqual(after.collections, before.collections);
       assert.deepStrictEqual(after.enabled, before.enabled);
       const view = yield* run(
-        openSetEnabledSession(home, { home: home, configHome: home, overrides: {} }).pipe(
+        Effect.flatMap(Library.Service, (library) => library.enable.open()).pipe(
           Effect.map((selection) => selection.view),
         ),
       );
@@ -134,12 +143,20 @@ it.effect(
       assert.isTrue(yield* fs.exists(join(root, "codex/legacy/SKILL.md")));
       assert.isTrue(yield* fs.exists(join(root, "codex/added/SKILL.md")));
       assert.isFalse(yield* fs.exists(join(root, "codex/deleted")));
-      const retry = yield* run(updateSubjects());
+      const retry = yield* run(
+        Effect.flatMap(Library.Service, (library) =>
+          Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
+        ),
+      );
       assert.isTrue("changed" in retry[0]! && retry[0].changed === false);
       const beforeConflict = yield* load;
       yield* skill("plugins/tools/skills/review", "review", "A different variant");
       bytes = yield* archive();
-      const conflicted = yield* run(updateSubjects());
+      const conflicted = yield* run(
+        Effect.flatMap(Library.Service, (library) =>
+          Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
+        ),
+      );
       assert.isFalse("status" in conflicted[0]!);
       if ("changed" in conflicted[0]!) {
         assert.strictEqual(conflicted[0].changed, false);

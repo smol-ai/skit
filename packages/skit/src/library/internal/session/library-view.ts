@@ -11,7 +11,7 @@ import {
 } from "../../library-contracts.js";
 import { removalSummary } from "./remove.js";
 import { securityReview } from "../security/review.js";
-import * as Library from "../../library.js";
+import { Service } from "../../service.js";
 import {
   emptyLibraryState,
   libraryManifestFromLocalState,
@@ -249,7 +249,7 @@ export const libraryView = (current: LibraryState, originalsPath: string) => {
 
 /** Open once; all queries describe this Library revision without saving or reconciling. */
 export const openLibraryView = Effect.fn("LibraryView.open")(function* (home: string) {
-  const snapshot = yield* (yield* Library.Service).read;
+  const snapshot = yield* (yield* Service).read;
   return libraryView(
     snapshot._tag === "Present" ? snapshot.state : emptyLibraryState(),
     join(home, "originals"),

@@ -6,7 +6,6 @@ import * as Library from "@smolai/skit-core/library";
 import { join } from "node:path";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { skitLayer } from "@smolai/skit-core/platform";
-import { prepareEditImport } from "../src/library/update/edit.js";
 import {
   initializeLibraryMachine,
   importCollectionIn,
@@ -86,9 +85,9 @@ it.effect(
       const { fs, roots, home, source, skill, library, configuration } =
         yield* installedSkillFixture;
       const before = yield* library.durable;
-      const prepared = yield* prepareEditImport(skill.name, "agents").pipe(
-        Effect.provide(configuration),
-      );
+      const prepared = yield* Effect.flatMap(Library.Service, (library) =>
+        library.edit(skill.name, "agents"),
+      ).pipe(Effect.provide(configuration));
       const plan = prepared.preview;
       assert.strictEqual(plan.skill_id, skill.skill_id);
       assert.deepStrictEqual(
@@ -165,17 +164,16 @@ it.effect(
     }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
 
-it.effect.each(["selected", "other", "Library", "home"] as const)(
+it.effect.each(["selected", "other", "Library"] as const)(
   "refuses a prepared retention after %s changes without retaining or projecting",
   (change) =>
     Effect.gen(function* () {
       const f = yield* installedSkillFixture;
-      const prepared = yield* prepareEditImport(f.skill.name, "agents").pipe(
-        Effect.provide(f.configuration),
-      );
+      const prepared = yield* Effect.flatMap(Library.Service, (library) =>
+        library.edit(f.skill.name, "agents"),
+      ).pipe(Effect.provide(f.configuration));
       const otherHome = join(f.workspace, "other-library");
-      const applicationLayer =
-        change === "home" ? skitConfigurationLayer(otherHome) : f.configuration;
+      const applicationLayer = f.configuration;
       if (change === "Library") {
         const state = yield* f.library.durable;
         yield* f.library.writeDurable({
@@ -185,7 +183,7 @@ it.effect.each(["selected", "other", "Library", "home"] as const)(
             label: "renamed",
           })),
         });
-      } else if (change !== "home") {
+      } else {
         const root = change === "selected" ? f.roots.codexRoot : f.roots.claudeRoot;
         yield* f.fs.writeFileString(
           join(root, "review", "SKILL.md"),
@@ -214,9 +212,9 @@ it.effect("manages identical edited copies into one retained Version", () =>
     const before = yield* captureDisk([f.home, f.roots.codexRoot, f.roots.claudeRoot], {
       identity: true,
     });
-    const prepared = yield* prepareEditImport(f.skill.name, "agents").pipe(
-      Effect.provide(f.configuration),
-    );
+    const prepared = yield* Effect.flatMap(Library.Service, (library) =>
+      library.edit(f.skill.name, "agents"),
+    ).pipe(Effect.provide(f.configuration));
     yield* assertDiskUnchanged(before);
     assert.deepStrictEqual(
       prepared.preview.installed_skills.map((item) => item.agreement),
@@ -238,5 +236,19 @@ it.effect("manages identical edited copies into one retained Version", () =>
         yield* f.fs.readFileString(join(root, "review", "SKILL.md")),
         "selected change\n",
       );
+  }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
+
+it.effect("a prepared edit stays with its owner when ambient home changes", () =>
+  Effect.gen(function* () {
+    const f = yield* installedSkillFixture;
+    const prepared = yield* Effect.flatMap(Library.Service, (library) =>
+      library.edit(f.skill.name, "agents"),
+    ).pipe(Effect.provide(f.configuration));
+    const otherHome = join(f.workspace, "other-library");
+    const applied = yield* prepared.apply().pipe(Effect.provide(skitConfigurationLayer(otherHome)));
+    assert.isTrue(applied.imported);
+    assert.isFalse(yield* f.fs.exists(otherHome));
+    assert.strictEqual((yield* f.library.durable).skills[0]?.versions.length, 2);
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );

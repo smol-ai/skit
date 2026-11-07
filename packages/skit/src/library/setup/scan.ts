@@ -1,3 +1,5 @@
+import { Service } from "../service.js";
+import type { Interface } from "../library.js";
 import { join } from "node:path";
 
 import { Data, Effect } from "effect";
@@ -62,8 +64,11 @@ export interface SetupOptions {
 }
 
 /** One full setup scan, and the Library state its plan was made against. */
-const scanForSetup = Effect.fn("Library.setup")(function* (options: SetupOptions) {
-  const evidence = yield* collectSetupEvidence(options);
+export const scanForSetup = Effect.fn("Library.scan")(function* (
+  owner: Pick<Interface, "read" | "plan">,
+  options: SetupOptions,
+) {
+  const evidence = yield* collectSetupEvidence(owner, options);
   const {
     machineConfig,
     discoveryRoots,
@@ -118,7 +123,7 @@ const scanForSetup = Effect.fn("Library.setup")(function* (options: SetupOptions
     };
   });
   const sortedInstances = instances.sort((left, right) => left.path.localeCompare(right.path));
-  const installedSkillChanges = yield* planInstalledSkillChanges(evidence.snapshot);
+  const installedSkillChanges = yield* planInstalledSkillChanges(owner, evidence.snapshot);
   const recommended = recommendedSetupSelection(
     sortedInstances,
     onboarding,
@@ -236,14 +241,16 @@ const scanForSetup = Effect.fn("Library.setup")(function* (options: SetupOptions
 });
 
 export const runSetup = (options: SetupOptions) =>
-  Effect.map(scanForSetup(options), (result) => result.scan);
+  Effect.flatMap(Service, (owner) =>
+    Effect.map(scanForSetup(owner, options), (result) => result.scan),
+  );
 
 /** Scan once more and hold it to the approved plan ID; a new plan never inherits consent. */
 export const revalidateSetupPlan = Effect.fn("Setup.revalidatePlan")(function* (
   options: SetupOptions,
   approvedPlanId: typeof Hash.Type,
 ) {
-  const current = yield* scanForSetup({ ...options, persistRoots: false });
+  const current = yield* scanForSetup(yield* Service, { ...options, persistRoots: false });
   if (current.scan.onboarding.planId !== approvedPlanId)
     return yield* Effect.fail(
       new SetupPlanStale({ approvedPlanId, currentPlanId: current.scan.onboarding.planId }),

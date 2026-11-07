@@ -1,9 +1,8 @@
 /** Library owns source acquisition, pnpm protection, retained import and staging lifetime. */
 import { Clock, Effect } from "effect";
 import { checkSourceInstaller } from "../sources/installer-guidance.js";
-import { readLibraryDescriptionLoad } from "./internal/session/queries.js";
 export { DedicatedInstallerRequired } from "../sources/installer-guidance.js";
-import * as Library from "./library.js";
+import type { Interface } from "./library.js";
 import {
   describeSourceSkills,
   inspectResolvedSource,
@@ -65,7 +64,10 @@ export const inspectSource = Effect.fn("Library.inspectSource")(function* (reque
 });
 
 /** Keep source staging alive through Library import, then clean it up. */
-export const importSource = Effect.fn("Library.importSource")(function* (request: SourceRequest) {
+export const importSource = Effect.fn("Library.importSource")(function* (
+  imports: Interface["import"],
+  request: SourceRequest,
+) {
   return yield* withResolvedSource(request, ({ resolved, historicalInput, registryOrigin }) =>
     Effect.gen(function* () {
       const authority =
@@ -87,11 +89,10 @@ export const importSource = Effect.fn("Library.importSource")(function* (request
         revision: resolved.revision,
         importedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
       };
-      const library = yield* Library.Service;
       const imported =
         resolved.descriptorKind === "declared"
-          ? yield* library.import.authored({ ...request, root: resolved.root })
-          : yield* library.import.collection({
+          ? yield* imports.authored({ ...request, root: resolved.root })
+          : yield* imports.collection({
               ...request,
               skills: yield* describeSourceSkills(resolved, historicalInput),
               lockFileEntries: [],
@@ -127,12 +128,12 @@ export { sourceFromUpstream } from "./internal/session/upstream-source.js";
 
 /** Add owns the import and its optional report; a measurement failure cannot undo a saved import. */
 export const addSource = Effect.fn("Library.addSource")(function* (
-  home: string,
+  library: Pick<Interface, "import" | "descriptionLoad">,
   request: SourceRequest,
 ) {
-  const added = yield* importSource(request);
-  const descriptionLoad = yield* readLibraryDescriptionLoad(home, { skills: added.skill_ids }).pipe(
-    Effect.orElseSucceed(() => undefined),
-  );
+  const added = yield* importSource(library.import, request);
+  const descriptionLoad = yield* library
+    .descriptionLoad({ skills: added.skill_ids })
+    .pipe(Effect.orElseSucceed(() => undefined));
   return { added, descriptionLoad };
 });

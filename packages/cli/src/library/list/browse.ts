@@ -16,7 +16,6 @@ import {
   invocationBriefing,
   invocationRowSummary,
 } from "@smolai/skit-core/library/session";
-import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import {
   cancelLibraryChange,
   confirmLibraryChange,
@@ -74,7 +73,6 @@ function pendingReviewText(pending: PendingLibraryChange): string {
 
 const applyWithConfirmation = Effect.fn("CLI.libraryBrowse.apply")(function* (
   session: LibrarySessionState,
-  configuration: InventoryRootOptions,
   progress: string,
 ) {
   const prompter = yield* Prompter;
@@ -116,12 +114,11 @@ const applyWithConfirmation = Effect.fn("CLI.libraryBrowse.apply")(function* (
 
 const enableSkill = Effect.fn("CLI.libraryBrowse.enable")(function* (
   session: LibrarySessionState,
-  configuration: InventoryRootOptions,
   row: LibrarySkillRow,
 ) {
   const scope = yield* promptForScope(resolve(process.cwd()));
-  const proposed = yield* proposeLibraryEnable(session, configuration, row, { scope });
-  return yield* applyWithConfirmation(proposed, configuration, "Projecting Skill");
+  const proposed = yield* proposeLibraryEnable(session, row, { scope });
+  return yield* applyWithConfirmation(proposed, "Projecting Skill");
 });
 
 const chooseScope = Effect.fn("CLI.libraryBrowse.chooseScope")(function* (
@@ -143,7 +140,6 @@ const chooseScope = Effect.fn("CLI.libraryBrowse.chooseScope")(function* (
 
 const changeInvocation = Effect.fn("CLI.libraryBrowse.invocation")(function* (
   session: LibrarySessionState,
-  configuration: InventoryRootOptions,
   row: LibrarySkillRow,
 ) {
   const renderer = yield* Renderer;
@@ -162,23 +158,12 @@ const changeInvocation = Effect.fn("CLI.libraryBrowse.invocation")(function* (
     scopeRow.policy.question,
     invocationChoices(scopeRow),
   );
-  const proposed = yield* proposeLibraryInvocation(
-    session,
-    configuration,
-    row,
-    scopeRow,
-    invocation,
-  );
-  return yield* applyWithConfirmation(
-    proposed,
-    configuration,
-    "Updating when this Skill may be used",
-  );
+  const proposed = yield* proposeLibraryInvocation(session, row, scopeRow, invocation);
+  return yield* applyWithConfirmation(proposed, "Updating when this Skill may be used");
 });
 
 const disableSkill = Effect.fn("CLI.libraryBrowse.disable")(function* (
   session: LibrarySessionState,
-  configuration: InventoryRootOptions,
   row: LibrarySkillRow,
 ) {
   const options = row.scopes.map((scopeRow, index) => ({
@@ -194,14 +179,13 @@ const disableSkill = Effect.fn("CLI.libraryBrowse.disable")(function* (
         ]);
   const selected = choice === ALL_SCOPES ? row.scopes : [row.scopes[Number(choice)]];
   const scopes = selected.filter((scopeRow): scopeRow is ScopeRow => scopeRow !== undefined);
-  const proposed = yield* proposeLibraryDisable(session, configuration, row, scopes);
-  return yield* applyWithConfirmation(proposed, configuration, "Removing installed skills");
+  const proposed = yield* proposeLibraryDisable(session, row, scopes);
+  return yield* applyWithConfirmation(proposed, "Removing installed skills");
 });
 
 /** Interactive Library browser backed by the portable enable and disable workflows. */
 export const browseLibrary = Effect.fn("CLI.libraryBrowse")(function* (
   initial: LibrarySessionState,
-  configuration: InventoryRootOptions,
 ) {
   const prompter = yield* Prompter;
   const renderer = yield* Renderer;
@@ -270,14 +254,12 @@ export const browseLibrary = Effect.fn("CLI.libraryBrowse")(function* (
                   : [enabledScopes[Number(choice)]!];
             const proposed = yield* proposeLibraryCollectionChange(
               session,
-              configuration,
               collectionId,
               skillId === ENABLE_COLLECTION,
               scopes,
             );
             return yield* applyWithConfirmation(
               proposed,
-              configuration,
               "Updating the Collection's installed skills",
             );
           }),
@@ -312,11 +294,10 @@ export const browseLibrary = Effect.fn("CLI.libraryBrowse")(function* (
         if (action === "done") return;
         if (action === "back") break;
         if (action === "enable")
-          session = yield* abandonOnCancel(enableSkill(session, configuration, row), session);
+          session = yield* abandonOnCancel(enableSkill(session, row), session);
         else if (action === "disable")
-          session = yield* abandonOnCancel(disableSkill(session, configuration, row), session);
-        else
-          session = yield* abandonOnCancel(changeInvocation(session, configuration, row), session);
+          session = yield* abandonOnCancel(disableSkill(session, row), session);
+        else session = yield* abandonOnCancel(changeInvocation(session, row), session);
       }
     }
   }

@@ -3,7 +3,6 @@ import { join } from "node:path";
 import * as Library from "@smolai/skit-core/library";
 import { makeMachineId } from "@smolai/skit-core/universal/consumer";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
-import { readLibraryManifest } from "@smolai/skit-core/library/queries";
 
 /** Real retained bytes and owner-generated identities, shared by the preview journeys. */
 export const importReview = Effect.fn("Storybook.importReview")(function* (root: string) {
@@ -93,7 +92,7 @@ export const makeSyncJourneyFixture = Effect.gen(function* () {
     }
     const snapshot = yield* library.read;
     if (snapshot._tag === "Absent") return yield* Effect.die("Expected seeded Library");
-    const portable = yield* readLibraryManifest(seedHome);
+    const portable = yield* library.manifest;
     const manifest = {
       ...portable,
       enabled: portable.skills.map((skill) => ({ skill: skill.skill_id })),

@@ -1,16 +1,16 @@
 import { Effect, Result } from "effect";
-import * as Library from "../../library.js";
+import { Service } from "../../service.js";
 
 /** Saved-file recovery operations this Library recorded. Never writes. */
 export const listLibraryRecovery = Effect.fn("Library.recovery.list")(function* () {
-  return yield* (yield* Library.Service).recovery.list;
+  return yield* (yield* Service).recovery.list;
 });
 
 /** Move records and the original and saved files of one operation, unchanged. */
 export const inspectLibraryRecovery = Effect.fn("Library.recovery.inspect")(function* (
   operationId: string,
 ) {
-  return yield* (yield* Library.Service).recovery.inspect(operationId);
+  return yield* (yield* Service).recovery.inspect(operationId);
 });
 
 /**
@@ -21,7 +21,7 @@ export const inspectLibraryRecovery = Effect.fn("Library.recovery.inspect")(func
 export const openRecoveryRestore = Effect.fn("Library.recovery.openRestore")(function* (
   operationId: string,
 ) {
-  const library = yield* Library.Service;
+  const library = yield* Service;
   const plan = yield* library.plan({ _tag: "Restore", operationId }, { base: yield* library.read });
   return {
     change: plan.change,

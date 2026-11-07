@@ -1,5 +1,5 @@
 import { originalTreePath } from "./helpers/original-tree.js";
-import { SkitConfiguration, skitLayer } from "@smolai/skit-core/platform";
+import { skitLayer } from "@smolai/skit-core/platform";
 import { it } from "@effect/vitest";
 import { expect } from "vitest";
 import { Effect, FileSystem, Result } from "effect";
@@ -12,14 +12,12 @@ import { parseDocument } from "yaml";
 import {
   confirmLibraryChange,
   libraryPolicyAfter,
-  openLibrarySession,
   proposeLibraryDisable,
   proposeLibraryEnable,
   proposeLibraryInvocation,
   invocationBriefing,
   invocationRowSummary,
 } from "@smolai/skit-core/library/session";
-import { openSetEnabledSession } from "@smolai/skit-core/library/enable";
 
 import {
   initializeLibraryMachine,
@@ -86,16 +84,14 @@ it.effect(
       yield* fs.writeFileString(join(source, "SKILL.md"), text(false));
       const before = yield* home.durable;
       const session = yield* home.owned(
-        Effect.flatMap(SkitConfiguration, (paths) =>
-          openLibrarySession(paths.skitHome, home.installOptions),
-        ),
+        Effect.flatMap(Library.Service, (library) => library.session.open()),
       );
       const row = session.skills[0]!;
       expect(row.skillId).toBe(before.skills[0]?.skill_id);
       expect(Result.getOrThrow(row.authorInvocation)["claude-code"].policy).toBe("explicit");
       expect(Result.getOrThrow(row.authorInvocation).codex.policy).toBe("implicit");
       const proposed = yield* home.owned(
-        proposeLibraryEnable(session, home.installOptions, row, { scope: { kind: "global" } }),
+        proposeLibraryEnable(session, row, { scope: { kind: "global" } }),
       );
       expect(proposed.pending?.plan.changes[0]?.subject_id).toBe(row.skillId);
       const enabled = yield* home.owned(confirmLibraryChange(proposed));
@@ -147,12 +143,7 @@ it.effect(
         Result.getOrThrow(libraryPolicyAfter(row, "declared")).agents["claude-code"].authorPolicy,
       ).toBe("explicit");
       const disabled = yield* home.owned(
-        proposeLibraryDisable(
-          enabled,
-          home.installOptions,
-          enabled.skills[0]!,
-          enabled.skills[0]!.scopes,
-        ),
+        proposeLibraryDisable(enabled, enabled.skills[0]!, enabled.skills[0]!.scopes),
       );
       expect(disabled.pending?.plan.changes[0]?.subject_id).toBe(row.skillId);
     }).pipe(Effect.scoped, Effect.provide(skitLayer)),
@@ -176,9 +167,7 @@ it.effect(
       });
       const selected = yield* home.durable;
       const session = yield* home.owned(
-        Effect.flatMap(SkitConfiguration, (paths) =>
-          openLibrarySession(paths.skitHome, home.installOptions),
-        ),
+        Effect.flatMap(Library.Service, (library) => library.session.open()),
       );
       expect(Result.getOrThrow(session.skills[0]!.authorInvocation)["claude-code"].policy).toBe(
         "explicit",
@@ -224,9 +213,7 @@ Tools
         ),
       );
       const session = yield* home.owned(
-        Effect.flatMap(SkitConfiguration, (paths) =>
-          openLibrarySession(paths.skitHome, home.installOptions),
-        ),
+        Effect.flatMap(Library.Service, (library) => library.session.open()),
       );
       expect(
         Object.values(Result.getOrThrow(session.skills[0]!.authorInvocation)).every(
@@ -242,9 +229,7 @@ Tools
       const imported = originalTreePath(home.originals, state.collection_versions[0]!.hash);
       yield* fs.writeFileString(join(imported, "agents", "openai.yaml"), "policy: [\n");
       const broken = yield* home.owned(
-        Effect.flatMap(SkitConfiguration, (paths) =>
-          openLibrarySession(paths.skitHome, home.installOptions),
-        ),
+        Effect.flatMap(Library.Service, (library) => library.session.open()),
       );
       expect(Result.isFailure(broken.skills[0]!.authorInvocation)).toBe(true);
       expect(broken.skills[0]?.invocationWarning).toContain("Retained copy for review changed");
@@ -288,9 +273,7 @@ Tools
       ),
     );
     const session = yield* home.owned(
-      Effect.flatMap(SkitConfiguration, (paths) =>
-        openLibrarySession(paths.skitHome, home.installOptions),
-      ),
+      Effect.flatMap(Library.Service, (library) => library.session.open()),
     );
     expect(Result.getOrThrow(session.skills[0]!.authorInvocation).codex.policy).toBe("implicit");
     expect(Result.getOrThrow(session.skills[0]!.authorInvocation)["claude-code"].policy).toBe(
@@ -342,9 +325,7 @@ for (const problem of ["missing-skill", "malformed-metadata"] as const)
         enabled: [{ skill: badState.skills[0]!.skill_id }],
       });
       const session = yield* home.owned(
-        Effect.flatMap(SkitConfiguration, (paths) =>
-          openLibrarySession(paths.skitHome, home.installOptions),
-        ),
+        Effect.flatMap(Library.Service, (library) => library.session.open()),
       );
       const bad = session.skills.find((row) => row.name === "review")!;
       const good = session.skills.find((row) => row.name === "healthy")!;
@@ -354,20 +335,18 @@ for (const problem of ["missing-skill", "malformed-metadata"] as const)
       expect(bad.scopes[0]?.policy).toBeUndefined();
       expect(Result.isFailure(libraryPolicyAfter(bad, "declared"))).toBe(true);
       const policyChange = yield* home.owned(
-        proposeLibraryInvocation(session, home.installOptions, bad, bad.scopes[0]!, "explicit"),
+        proposeLibraryInvocation(session, bad, bad.scopes[0]!, "explicit"),
       );
       expect(policyChange.outcome?.kind).toBe("failed");
       expect(policyChange.pending).toBeUndefined();
-      const disabled = yield* home.owned(
-        proposeLibraryDisable(session, home.installOptions, bad, bad.scopes),
-      );
+      const disabled = yield* home.owned(proposeLibraryDisable(session, bad, bad.scopes));
       expect(disabled.outcome?.kind).toBe("preview");
       const confirmed = yield* home.owned(confirmLibraryChange(disabled));
       expect(confirmed.outcome?.kind).toBe("applied");
       const remaining = confirmed.skills.find((row) => row.skillId === bad.skillId)!;
       expect(remaining.scopes).toHaveLength(0);
       const enable = yield* home.owned(
-        proposeLibraryEnable(confirmed, home.installOptions, remaining, {
+        proposeLibraryEnable(confirmed, remaining, {
           scope: { kind: "global" },
         }),
       );
@@ -438,12 +417,8 @@ Tools
           ),
       };
       const view = yield* home.owned(
-        Effect.flatMap(SkitConfiguration, (paths) =>
-          openSetEnabledSession(paths.skitHome, {
-            home: paths.skitHome,
-            configHome: paths.skitHome,
-            overrides: {},
-          }).pipe(Effect.map((selection) => selection.view)),
+        Effect.flatMap(Library.Service, (library) => library.enable.open()).pipe(
+          Effect.map((selection) => selection.view),
         ),
       );
       const read = home

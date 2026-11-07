@@ -1,8 +1,5 @@
-import {
-  inspectSource,
-  importSource as importLibrarySource,
-  type SkitSource,
-} from "@smolai/skit-core/library/source";
+import * as Library from "@smolai/skit-core/library";
+import { inspectSource, type SkitSource } from "@smolai/skit-core/library/source";
 import { Effect } from "effect";
 import type { ResolvedAuth } from "../registry/index.js";
 import { sourceRequest } from "../registry/library-source.js";
@@ -33,5 +30,7 @@ export const importSource = Effect.fn("CLI.importSource")(function* (
   previousSkillPaths?: readonly string[],
   registry?: ResolvedAuth,
 ) {
-  return yield* importLibrarySource(yield* sourceRequest(input, previousSkillPaths, registry));
+  return yield* (yield* Library.Service).importSource(
+    yield* sourceRequest(input, previousSkillPaths, registry),
+  );
 });

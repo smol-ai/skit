@@ -3,7 +3,7 @@ import { Argument, Command, Flag } from "effect/cli";
 import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
 import { securityOutputContracts } from "../library/security/output.js";
-import { acceptLibrarySecurityFinding } from "../library/security/operation.js";
+import * as Library from "@smolai/skit-core/library";
 import { securityAcceptCommand } from "../library/security/accept.js";
 import { localFlags } from "./parameters.js";
 
@@ -36,11 +36,9 @@ export const securityAcceptCliCommand = Command.make(
     handleLibraryCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
+        const library = yield* Library.Service;
         const value = yield* securityAcceptCommand(
-          {
-            acceptSecurityFindingEffect: (query, input) =>
-              acceptLibrarySecurityFinding(query, input),
-          },
+          { acceptSecurityFindingEffect: library.acceptSecurityFinding },
           {
             query: skill,
             fingerprint: finding,

@@ -4,7 +4,6 @@ import { join } from "node:path";
 import * as Library from "../src/library/library.js";
 import { libraryManifestFromLocalState } from "../src/library/library-state.js";
 import { localImportRequest } from "../src/library/setup/local-import.js";
-import { openSyncSession } from "../src/library/sync.js";
 import { skitLayer } from "../src/platform/layer.js";
 import { testRoots } from "./helpers/library-store.js";
 
@@ -32,7 +31,10 @@ it.effect("sync session captures review inputs and refuses redirected staged con
         revision_id: "reviewed-revision",
         manifest: structuredClone(manifest),
       };
-      const opening = openSyncSession({ origin: "https://registry.test", remote }, { base });
+      const opening = (yield* Library.Service).syncSession(
+        { origin: "https://registry.test", remote },
+        { base },
+      );
       // Mutating caller-owned data after constructing the Effect cannot change its review.
       Reflect.set(remote.manifest.collections[0]!, "label", "changed remote input");
       Reflect.set(base.state.collections[0]!, "label", "changed local input");

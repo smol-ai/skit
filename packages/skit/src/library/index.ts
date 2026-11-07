@@ -43,6 +43,9 @@ export type {
 } from "./library.js";
 export type {
   ImportRequestInvalid,
+  ImportRequest,
+  AuthoredImport,
+  EditImport,
   ImportedCollection,
   InstalledSkillChanged,
   ImportedEdit,
@@ -56,3 +59,5 @@ export type {
   SkillRemovalRequiresCollection,
 } from "./installation/remove.js";
 export type { RecoveryInvalid } from "./recovery-facts.js";
+
+export type { SourceRequest } from "./source.js";

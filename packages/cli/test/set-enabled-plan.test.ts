@@ -1,4 +1,4 @@
-import { SkitConfiguration } from "@smolai/skit-core/platform";
+import * as Library from "@smolai/skit-core/library";
 import { LibraryState } from "@smolai/skit-core/library";
 import { canonicalJson } from "@smolai/skit-core/shared";
 import { createHash } from "node:crypto";
@@ -16,7 +16,6 @@ import {
   Exit,
   FileSystem,
   Layer,
-  Option,
   Schema,
   Stream,
 } from "effect";
@@ -31,7 +30,6 @@ import {
   type SetEnabledRequest,
 } from "./helpers/set-enabled.js";
 import {
-  openLibrarySession,
   proposeLibraryEnable,
   proposeLibraryCollectionChange,
   confirmLibraryChange,
@@ -41,7 +39,6 @@ import { presentDoctorCleanup } from "../src/library/doctor/cleanup.js";
 import { openDoctorCleanupSelection } from "../src/library/doctor/selection.js";
 import { usageStory } from "../src/storybook/usage-stories.js";
 import { presentSetEnabled } from "../src/library/enable.js";
-import { libraryCommandConfiguration } from "../src/commands/library-configuration.js";
 import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
@@ -166,7 +163,6 @@ it.effect.each(["follows-collection", "empty"] as const)(
             members: [name],
             where: [{ kind: "global" }],
           })),
-          f.home.installOptions,
         ),
       );
       assert.strictEqual(yield* f.fs.readFileString(f.home.statePath), before);
@@ -251,15 +247,12 @@ it.effect("refuses a plan when the Library changed during interactive selection"
       f.home.writeDurable({ ...state, ownershipIssues: [] }),
     );
     const plan = yield* f.home.owned(
-      selection.plan(
-        {
-          subject: f.request.query,
-          members: ["alpha"],
-          enabled: true,
-          where: [{ kind: "global" }],
-        },
-        f.home.installOptions,
-      ),
+      selection.plan({
+        subject: f.request.query,
+        members: ["alpha"],
+        enabled: true,
+        where: [{ kind: "global" }],
+      }),
     );
     const error = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
     assert.strictEqual(error._tag, "Library.StalePlan");
@@ -304,15 +297,17 @@ it.effect("an unwritable root refuses enablement before saving Binding intent", 
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
-it.effect("refuses to apply a prepared plan to another Library", () =>
+it.effect("an ambient Library cannot redirect a prepared operation", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
     const plan = yield* f.home.owned(planSetEnabled([f.request], f.home.installOptions));
     const other = yield* libraryHome({ home: join(f.root, "other-library") });
-    const error = yield* other.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
-    assert.strictEqual(error._tag, "Library.StalePlan");
+    yield* other.owned(applySetEnabledPlan(plan));
     assert.strictEqual((yield* other.snapshot)._tag, "Absent");
-    assert.strictEqual(yield* f.fs.exists(f.destination), false);
+    assert.strictEqual(
+      yield* f.fs.readFileString(join(f.destination, "alpha", "SKILL.md")),
+      "# alpha\n",
+    );
   }).pipe(Effect.provide(testPlatformLayer), Effect.scoped),
 );
 
@@ -327,10 +322,7 @@ it.effect("derives placements and filters multi-Scope disable intent to enabled 
     ] as const) {
       const selection = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
       const plan = yield* f.home.owned(
-        selection.plan(
-          { subject: f.request.query, members, where, enabled: true },
-          f.home.installOptions,
-        ),
+        selection.plan({ subject: f.request.query, members, where, enabled: true }),
       );
       yield* f.home.owned(applySetEnabledPlan(plan));
     }
@@ -349,15 +341,12 @@ it.effect("derives placements and filters multi-Scope disable intent to enabled 
     );
     const before = yield* f.fs.readFileString(f.home.statePath);
     const both = yield* f.home.owned(
-      selection.plan(
-        {
-          subject: f.request.query,
-          enabled: false,
-          members: ["alpha", "beta"],
-          where: "where-enabled",
-        },
-        f.home.installOptions,
-      ),
+      selection.plan({
+        subject: f.request.query,
+        enabled: false,
+        members: ["alpha", "beta"],
+        where: "where-enabled",
+      }),
     );
     assert.deepStrictEqual(
       both.changes.map((change) => [change.scope.kind, change.skills]),
@@ -367,15 +356,12 @@ it.effect("derives placements and filters multi-Scope disable intent to enabled 
       ],
     );
     const onlyAlpha = yield* f.home.owned(
-      selection.plan(
-        {
-          subject: f.request.query,
-          enabled: false,
-          members: ["alpha"],
-          where: "where-enabled",
-        },
-        f.home.installOptions,
-      ),
+      selection.plan({
+        subject: f.request.query,
+        enabled: false,
+        members: ["alpha"],
+        where: "where-enabled",
+      }),
     );
     assert.strictEqual(onlyAlpha.changes.length, 1);
     assert.strictEqual(yield* f.fs.readFileString(f.home.statePath), before);
@@ -393,18 +379,14 @@ it.effect("a TUI proposal keeps the revision displayed before the proposal was m
   Effect.gen(function* () {
     const f = yield* fixture;
     const displayed = yield* f.home.owned(
-      Effect.flatMap(SkitConfiguration, (paths) =>
-        openLibrarySession(paths.skitHome, f.home.installOptions),
-      ),
+      Effect.flatMap(Library.Service, (library) => library.session.open()),
     );
     yield* Effect.flatMap(f.home.durable, (state) =>
       f.home.writeDurable({ ...state, ownershipIssues: [] }),
     );
     const before = yield* f.fs.readFileString(f.home.statePath);
     const proposed = yield* f.home.owned(
-      proposeLibraryCollectionChange(displayed, f.home.installOptions, f.request.query, true, [
-        { kind: "global" },
-      ]),
+      proposeLibraryCollectionChange(displayed, f.request.query, true, [{ kind: "global" }]),
     );
     assert.strictEqual(proposed.outcome.kind, "preview");
     const confirmed = yield* f.home.owned(confirmLibraryChange(proposed));
@@ -433,7 +415,6 @@ it.effect("batch previews accumulate same-scope disables without restoring earli
           members: [name],
           where: [{ kind: "global" }],
         })),
-        f.home.installOptions,
       ),
     );
     assert.strictEqual(yield* f.fs.readFileString(f.home.statePath), before);
@@ -797,23 +778,20 @@ it.effect(
       yield* f.home.owned(applySetEnabledPlan(enabled));
       const selection = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
       const plan = yield* f.home.owned(
-        selection.planMany(
-          [
-            {
-              subject: f.request.query,
-              members: ["alpha"],
-              enabled: false,
-              where: [{ kind: "global" }],
-            },
-            {
-              subject: gamma.collection_id,
-              members: ["gamma"],
-              enabled: false,
-              where: [{ kind: "global" }],
-            },
-          ],
-          f.home.installOptions,
-        ),
+        selection.planMany([
+          {
+            subject: f.request.query,
+            members: ["alpha"],
+            enabled: false,
+            where: [{ kind: "global" }],
+          },
+          {
+            subject: gamma.collection_id,
+            members: ["gamma"],
+            enabled: false,
+            where: [{ kind: "global" }],
+          },
+        ]),
       );
       const beta = (yield* f.home.durable).skills.find((s) => s.name === "beta");
       assert.ok(beta);
@@ -1072,14 +1050,12 @@ it.effect(
       yield* f.fs.makeDirectory(path, { recursive: true });
       yield* f.fs.writeFileString(join(path, "SKILL.md"), "Foreign copy must remain\n");
       const opened = yield* f.home.owned(
-        Effect.flatMap(SkitConfiguration, (paths) =>
-          openLibrarySession(paths.skitHome, f.home.installOptions),
-        ),
+        Effect.flatMap(Library.Service, (library) => library.session.open()),
       );
       const row = opened.skills.find((skill) => skill.name === "alpha");
       assert.ok(row);
       const proposed = yield* f.home.owned(
-        proposeLibraryEnable(opened, f.home.installOptions, row, { scope: { kind: "global" } }),
+        proposeLibraryEnable(opened, row, { scope: { kind: "global" } }),
       );
       const confirmed = yield* f.home.owned(confirmLibraryChange(proposed));
       assert.strictEqual(confirmed.outcome?.kind, "failed");
@@ -1309,13 +1285,7 @@ it.effect("the CLI adapter keeps the I/O failure exit code after saving enableme
   Effect.gen(function* () {
     const f = yield* fixture;
     const interaction = yield* makeScriptedInteraction([]);
-    const configuration = yield* libraryCommandConfiguration({
-      home: Option.some(f.home.home),
-      codexRoot: Option.some(f.destination),
-      claudeRoot: Option.some(join(f.root, "claude")),
-      opencodeRoot: Option.some(join(f.root, "opencode")),
-      devinRoot: [],
-    });
+
     yield* f.home.owned(
       presentSetEnabled({
         action: "enable",
@@ -1326,7 +1296,6 @@ it.effect("the CLI adapter keeps the I/O failure exit code after saving enableme
         all: false,
         dryRun: false,
         interactive: false,
-        configuration,
       }).pipe(
         Effect.provide(interaction.layer),
         withLibraryOwner(f.home.inventory),
@@ -1370,15 +1339,12 @@ for (const drift of ["create", "modify", "symlink", "source"] as const)
       }
       const selection = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
       const plan = yield* f.home.owned(
-        selection.plan(
-          {
-            subject: f.request.query,
-            members: ["alpha"],
-            enabled: true,
-            where: [{ kind: "global" }],
-          },
-          f.home.installOptions,
-        ),
+        selection.plan({
+          subject: f.request.query,
+          members: ["alpha"],
+          enabled: true,
+          where: [{ kind: "global" }],
+        }),
       );
       assert.ok(plan.owner);
       if (drift === "source") {
@@ -1424,15 +1390,12 @@ for (const directory of ["empty", "nested-symlink"] as const)
       }
       const selection = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
       const plan = yield* f.home.owned(
-        selection.plan(
-          {
-            subject: f.request.query,
-            members: ["alpha"],
-            enabled: true,
-            where: [{ kind: "global" }],
-          },
-          f.home.installOptions,
-        ),
+        selection.plan({
+          subject: f.request.query,
+          members: ["alpha"],
+          enabled: true,
+          where: [{ kind: "global" }],
+        }),
       );
       assert.ok(plan.owner);
       assert.ok(plan.owner.plan.folders.some((e) => e.path === path && e.entry._tag !== "Absent"));
@@ -1457,7 +1420,7 @@ it.effect(
         enabled: true,
         where: [{ kind: "global" as const }],
       };
-      const plan = yield* f.home.owned(selection.planMany([intent, intent], f.home.installOptions));
+      const plan = yield* f.home.owned(selection.planMany([intent, intent]));
       const results = yield* f.home.owned(applySetEnabledPlan(plan));
       assert.strictEqual(results.length, 2);
       assert.strictEqual(
@@ -1478,15 +1441,12 @@ it.effect("an unwritable root keeps bindings unchanged and records its stopped a
       ),
     );
     const plan = yield* f.home.owned(
-      selection.plan(
-        {
-          subject: f.request.query,
-          members: ["alpha"],
-          enabled: true,
-          where: [{ kind: "global" }],
-        },
-        f.home.installOptions,
-      ),
+      selection.plan({
+        subject: f.request.query,
+        members: ["alpha"],
+        enabled: true,
+        where: [{ kind: "global" }],
+      }),
     );
     const before = yield* f.home.durable;
     const error = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
@@ -1511,15 +1471,12 @@ it.effect("Library owner rejects forged destination coordinates in a plain plan"
     const f = yield* fixture;
     const selection = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
     const plan = yield* f.home.owned(
-      selection.plan(
-        {
-          subject: f.request.query,
-          members: ["alpha"],
-          enabled: true,
-          where: [{ kind: "global" }],
-        },
-        f.home.installOptions,
-      ),
+      selection.plan({
+        subject: f.request.query,
+        members: ["alpha"],
+        enabled: true,
+        where: [{ kind: "global" }],
+      }),
     );
     assert.ok(plan.owner);
     const outside = join(f.root, "unreviewed");
@@ -1551,15 +1508,12 @@ it.effect(
       const f = yield* fixture;
       const first = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
       const initial = yield* f.home.owned(
-        first.plan(
-          {
-            subject: f.request.query,
-            members: ["alpha"],
-            enabled: true,
-            where: [{ kind: "global" }],
-          },
-          f.home.installOptions,
-        ),
+        first.plan({
+          subject: f.request.query,
+          members: ["alpha"],
+          enabled: true,
+          where: [{ kind: "global" }],
+        }),
       );
       yield* f.home.owned(applySetEnabledPlan(initial));
       const before = yield* f.home.durable;
@@ -1588,16 +1542,13 @@ it.effect(
         ),
       );
       const plan = yield* f.home.owned(
-        selection.plan(
-          {
-            subject: f.request.query,
-            members: ["alpha"],
-            enabled: true,
-            invocation: "explicit",
-            where: [{ kind: "global" }],
-          },
-          f.home.installOptions,
-        ),
+        selection.plan({
+          subject: f.request.query,
+          members: ["alpha"],
+          enabled: true,
+          invocation: "explicit",
+          where: [{ kind: "global" }],
+        }),
       );
 
       const error = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
@@ -1629,15 +1580,12 @@ it.effect(
       const f = yield* fixture;
       const first = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
       const initial = yield* f.home.owned(
-        first.plan(
-          {
-            subject: f.request.query,
-            members: ["alpha"],
-            enabled: true,
-            where: [{ kind: "global" }],
-          },
-          f.home.installOptions,
-        ),
+        first.plan({
+          subject: f.request.query,
+          members: ["alpha"],
+          enabled: true,
+          where: [{ kind: "global" }],
+        }),
       );
       yield* f.home.owned(applySetEnabledPlan(initial));
       const old = (yield* f.home.durable).installed_skills[0];
@@ -1660,16 +1608,13 @@ it.effect(
         ),
       );
       const plan = yield* f.home.owned(
-        selection.plan(
-          {
-            subject: f.request.query,
-            members: ["alpha"],
-            enabled: true,
-            invocation: "explicit",
-            where: [{ kind: "global" }],
-          },
-          f.home.installOptions,
-        ),
+        selection.plan({
+          subject: f.request.query,
+          members: ["alpha"],
+          enabled: true,
+          invocation: "explicit",
+          where: [{ kind: "global" }],
+        }),
       );
       const failed = yield* f.home.owned(applySetEnabledPlan(plan)).pipe(Effect.flip);
       assert.instanceOf(failed, SetEnabledIncomplete);
@@ -1697,15 +1642,12 @@ for (const extras of ["reproducible", "empty-directory"] as const)
         yield* f.fs.makeDirectory(join(f.destination, "alpha", "notes"));
       const selection = yield* f.home.owned(openSetEnabledSession(f.home.installOptions));
       const plan = yield* f.home.owned(
-        selection.plan(
-          {
-            subject: f.request.query,
-            members: ["alpha"],
-            enabled: false,
-            where: [{ kind: "global" }],
-          },
-          f.home.installOptions,
-        ),
+        selection.plan({
+          subject: f.request.query,
+          members: ["alpha"],
+          enabled: false,
+          where: [{ kind: "global" }],
+        }),
       );
       yield* f.home.owned(applySetEnabledPlan(plan));
       assert.strictEqual(yield* f.fs.exists(join(f.destination, "alpha")), false);

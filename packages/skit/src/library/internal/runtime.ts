@@ -1,3 +1,8 @@
+import { addSource, importSource } from "../source.js";
+import { openSetEnabledSession, planSetEnabled } from "./session/set-enabled.js";
+import { openLibrarySession, readLibrarySkillContent } from "./session/session.js";
+import { syncLibrary } from "./sync/library-sync.js";
+import { openSyncSession } from "./sync/session.js";
 import { listRecoveryOperations, inspectRecoveryOperation } from "./recovery/moves.js";
 import { resolve } from "node:path";
 import { planRestore, applyRestore } from "./recovery/restore.js";
@@ -7,7 +12,7 @@ import { stepRouting } from "../routing/step.js";
 import { planAcceptance, applyAcceptance } from "./security/accept.js";
 import { planInventory, applyInventory } from "./inventory/refresh.js";
 import { planUndo, applyUndo } from "./setup/undo.js";
-import { Context, Effect, FileSystem, Layer, Option, Path, Schema, Struct } from "effect";
+import { Context, Effect, FileSystem, Option, Path, Schema, Struct } from "effect";
 import { LinkStat } from "../../platform/link-stat.js";
 import { SourceProcess } from "../../platform/source-process.js";
 import { HttpClient } from "effect/http";
@@ -40,6 +45,11 @@ import { importCollection, importAuthoredCollection, importEdit } from "../impor
 import type { TreeRequirements } from "../../platform/tree-requirements.js";
 import { StalePlan, type Approval } from "../library-plan.js";
 import { planIntent } from "../plan-changes.js";
+import { removeCollection } from "./session/remove.js";
+import { updateSources } from "./session/update-sources.js";
+import { openEditImport } from "./session/edit.js";
+import { libraryQueries, acceptLibrarySecurityFinding } from "./session/queries.js";
+import { refreshInventory, refreshMachineInventory } from "../inventory.js";
 import type { InventoryRootOptions } from "../routing/roots.js";
 import type {
   Interface,
@@ -204,8 +214,59 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
     );
   }
 
-  return {
-    read: Effect.map(inspectLocalLibraryState(home), snapshotOf).pipe(Effect.provide(writer)),
+  const read = Effect.map(inspectLocalLibraryState(home), snapshotOf).pipe(Effect.provide(writer));
+  const operations = { read, plan: planFor, apply: applyFor };
+  const imports: Interface["import"] = {
+    collection: (request) => owned(importCollection(request)),
+    authored: (request) => owned(importAuthoredCollection(request)),
+    edit: (request) => owned(importEdit(request)),
+  };
+  const content: Interface["content"] = {
+    plan: (target, localArchives) =>
+      planContent(home, target, localArchives).pipe(Effect.provide(importing)),
+    inspect: (snapshot) => inspectContent(home, snapshot).pipe(Effect.provide(importing)),
+    pack: (snapshot) => packContent(home, snapshot).pipe(Effect.provide(importing)),
+    stage: stageFor,
+  };
+  const syncing = { ...operations, content };
+  const editing = { ...operations, import: imports };
+  const operation = Effect.provide(importing);
+  const queries = libraryQueries(read, home, importing);
+  const library: Interface = {
+    addSource: (request) =>
+      operation(addSource({ import: imports, descriptionLoad: queries.descriptionLoad }, request)),
+    importSource: (request) => operation(importSource(imports, request)),
+    enable: {
+      open: () => operation(openSetEnabledSession(operations, home, roots)),
+      plan: (requests) => operation(planSetEnabled(operations, home, roots, requests)),
+    },
+    session: {
+      open: () => operation(openLibrarySession(operations, home, roots)),
+      readSkillContent: (skillVersionId) =>
+        operation(readLibrarySkillContent(read, home, skillVersionId)),
+    },
+    remove: (options) => operation(removeCollection(operations, options)),
+    update: (query, adapters) => operation(updateSources(home, editing, query, adapters)),
+    edit: (query, selector) => operation(openEditImport(home, editing, query, selector)),
+    check: (query, options) => operation(queries.check(query, options)),
+    previewSourceUpdates: (query, inspect) =>
+      operation(queries.previewSourceUpdates(query, inspect)),
+    securityReview: (query) => operation(queries.securityReview(query)),
+    acceptSecurityFinding: (query, input) =>
+      operation(acceptLibrarySecurityFinding(operations, query, input)),
+    descriptionLoad: (subject) => operation(queries.descriptionLoad(subject)),
+    workspaceClaims: (root) => operation(queries.workspaceClaims(root)),
+    installedSkills: operation(queries.installedSkills),
+    manifest: operation(queries.manifest),
+    skillsShCollectionIds: operation(queries.skillsShCollectionIds),
+    list: operation(queries.list),
+    inventory: {
+      refresh: operation(refreshInventory(operations, roots)),
+      refreshMachine: operation(
+        refreshMachineInventory(operations, { ...roots, libraryHome: home }),
+      ),
+    },
+    read,
     history: Effect.gen(function* () {
       const state = yield* loadLibrary(home);
       const operations = yield* Schema.decodeUnknownEffect(Schema.Array(OperationStatus))(
@@ -235,34 +296,24 @@ const make = Effect.fn("Library.make")(function* (home: string, roots: Inventory
     },
     plan: planFor,
     apply: applyFor,
-    import: {
-      collection: (request) => owned(importCollection(request)),
-      authored: (request) => owned(importAuthoredCollection(request)),
-      edit: (request) => owned(importEdit(request)),
-    },
+    import: imports,
     startup,
-    content: {
-      plan: (target, localArchives) =>
-        planContent(home, target, localArchives).pipe(
-          Effect.provide(writer),
-          Effect.provide(importing),
-        ),
-      inspect: (snapshot) =>
-        inspectContent(home, snapshot).pipe(Effect.provide(writer), Effect.provide(importing)),
-      pack: (snapshot) =>
-        packContent(home, snapshot).pipe(Effect.provide(writer), Effect.provide(importing)),
-      stage: stageFor,
-    },
+    content,
+    sync: (options, transport) => operation(syncLibrary(syncing, roots, options, transport)),
+    syncSession: (request, options) => operation(openSyncSession(syncing, roots, request, options)),
     setup: (steps, options) =>
       writeLibrary(home, setup(steps, options)).pipe(
         Effect.provide(writer),
         Effect.provide(importing),
       ),
-  } satisfies Interface;
+  };
+  return library;
 });
 
 /** Routes installed skills from this device's roots. */
-export const makeOwner = (config: Config) =>
-  make(config.home, config.roots).pipe(
-    Effect.provideServiceEffect(InstalledSkills.Service, InstalledSkills.make(config.roots)),
+export const makeOwner = (config: Config) => {
+  const roots = structuredClone(config.roots);
+  return make(config.home, roots).pipe(
+    Effect.provideServiceEffect(InstalledSkills.Service, InstalledSkills.make(roots)),
   );
+};

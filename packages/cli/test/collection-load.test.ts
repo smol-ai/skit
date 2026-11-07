@@ -1,18 +1,17 @@
-import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import * as Library from "@smolai/skit-core/library";
 type ImportRequestSkill = Parameters<
   Library.Interface["import"]["collection"]
 >[0]["skills"][number];
 import { it as effectIt } from "@effect/vitest";
-import { Effect, FileSystem, Option } from "effect";
+import { Effect, FileSystem } from "effect";
 import { join } from "node:path";
 
 import {
   descriptionLoadMessage,
   largeCollectionWarning,
 } from "../src/library/presentation/description-size.js";
-import { openSetEnabledSession } from "@smolai/skit-core/library/enable";
+
 import {
   initializeLibraryMachine,
   libraryHome,
@@ -20,7 +19,6 @@ import {
   writingTo,
 } from "./helpers/library-home.js";
 import { presentSetEnabled } from "../src/library/enable.js";
-import { libraryCommandConfiguration } from "../src/commands/library-configuration.js";
 import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 
@@ -85,12 +83,8 @@ effectIt.effect(
         "2026-10-13T00:00:00.000Z",
       );
       const view = yield* home.owned(
-        Effect.flatMap(SkitConfiguration, (paths) =>
-          openSetEnabledSession(paths.skitHome, {
-            home: paths.skitHome,
-            configHome: paths.skitHome,
-            overrides: {},
-          }).pipe(Effect.map((selection) => selection.view)),
+        Effect.flatMap(Library.Service, (library) => library.enable.open()).pipe(
+          Effect.map((selection) => selection.view),
         ),
       );
       expect(yield* view.descriptionLoad({ collection: first.collection.collection_id })).toEqual({
@@ -109,13 +103,7 @@ effectIt.effect(
         "keep",
         "removed",
       ]);
-      const configuration = yield* libraryCommandConfiguration({
-        home: Option.some(home.home),
-        codexRoot: Option.none(),
-        claudeRoot: Option.none(),
-        opencodeRoot: Option.none(),
-        devinRoot: [],
-      });
+
       const interaction = yield* makeScriptedInteraction(["skills", []]);
       yield* home.owned(
         presentSetEnabled({
@@ -127,7 +115,6 @@ effectIt.effect(
           all: false,
           dryRun: true,
           interactive: true,
-          configuration,
         }).pipe(Effect.provide(interaction.layer)),
       );
       const prompts = yield* interaction.prompts;

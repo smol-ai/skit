@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { Effect, Option, Schema } from "effect";
 import { Hash } from "@smolai/skit-core/shared";
-import { readInstalledSkills } from "@smolai/skit-core/library/queries";
+import * as Library from "@smolai/skit-core/library";
 import { Renderer } from "../../terminal/renderer.js";
 import { OptionCombinationInvalid } from "../../commands/input-failures.js";
 import {
@@ -83,7 +83,8 @@ export const setupApplyCommand = Effect.fn("CLI.setup.apply")(function* (
     ...reconnects.map((copy) => copy.name),
     ...removals.entries.map((copy) => copy.name),
   ]);
-  const installedSkills = yield* readInstalledSkills(input.options.libraryHome);
+  const library = yield* Library.Service;
+  const installedSkills = yield* library.installedSkills;
   return {
     planId,
     changes: applied?.changes ?? changeResults(plan.summary.changes, false),

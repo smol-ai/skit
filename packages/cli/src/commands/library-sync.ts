@@ -3,7 +3,6 @@ import { Registry } from "../registry/index.js";
 import { Effect } from "effect";
 import { Command, Flag } from "effect/cli";
 import { handleSourceCommand } from "../application.js";
-import { libraryCommandConfiguration } from "./library-configuration.js";
 import {
   CommandMetadata,
   credentialStoreReadSubprocesses,
@@ -81,7 +80,6 @@ export const librarySyncCliCommand = Command.make(
           return yield* new OptionCombinationInvalid({
             detail: "Changing device selection requires --apply.",
           });
-        const configuration = yield* libraryCommandConfiguration(input);
         const authState = yield* Registry.librarySyncAccount(optionValue(input.registry)).pipe(
           Effect.result,
         );
@@ -90,7 +88,6 @@ export const librarySyncCliCommand = Command.make(
           apply: input.apply,
           takeRemote: input.takeRemote,
           keepEnabled: input.keepEnabled,
-          installedSkill: configuration.pull.installation,
           ...(input.followAccount
             ? { deviceSelection: "follow-account" as const }
             : choosing

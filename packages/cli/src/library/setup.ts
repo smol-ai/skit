@@ -1,5 +1,5 @@
-import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { readSkillsShCollectionIds, readSkillPreviews } from "@smolai/skit-core/library/queries";
+import { readSkillPreviews } from "@smolai/skit-core/library/queries";
+import * as Library from "@smolai/skit-core/library";
 import { Effect } from "effect";
 
 import { resolve } from "node:path";
@@ -19,7 +19,7 @@ import {
   type SetupReview,
   type ManageOptions,
 } from "@smolai/skit-core/library/setup";
-import { checkSubjects } from "./check/operation.js";
+import { inspectLibrarySource } from "./source.js";
 import { renderCheck } from "./check/present.js";
 import { setupReviewSkillChoices } from "./setup/skills.js";
 import { renderChangeResult } from "./presentation/installed-skill-changes.js";
@@ -164,7 +164,8 @@ export const setupCommand = Effect.fn("CLI.setup")(function* (input: {
 });
 
 const offerSkillsShUpdateCheck = Effect.fn("CLI.setup.offerSkillsShUpdateCheck")(function* () {
-  const collectionIds = yield* readSkillsShCollectionIds((yield* SkitConfiguration).skitHome);
+  const library = yield* Library.Service;
+  const collectionIds = yield* library.skillsShCollectionIds;
   if (!collectionIds.length) return;
   const prompter = yield* Prompter;
   if (
@@ -177,7 +178,9 @@ const offerSkillsShUpdateCheck = Effect.fn("CLI.setup.offerSkillsShUpdateCheck")
   const checks = yield* renderer.withStatus(
     "Checking retained skills.sh Sources",
     Effect.flatMap(
-      Effect.forEach(collectionIds, (collectionId) => checkSubjects(collectionId)),
+      Effect.forEach(collectionIds, (collectionId) =>
+        library.check(collectionId, { inspectSource: inspectLibrarySource }),
+      ),
       (results) => Effect.succeed(results.flat()),
     ),
   );

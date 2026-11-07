@@ -9,10 +9,10 @@ import {
   libraryProgressLayer,
   type LibraryProgressEvent,
 } from "../src/library/update/progress.js";
-import { updateSubjects } from "../src/library/update/operation.js";
 import { importSource } from "../src/library/source.js";
 import { copySkitFixtureEffect, libraryHome } from "./helpers/library-home.js";
 import { homeLockIsFree } from "./helpers/home-lock.js";
+import { updateAdapters } from "../src/library/update/adapters.js";
 
 it.effect("a headless update emits domain progress and records one attributed transaction", () =>
   Effect.gen(function* () {
@@ -50,7 +50,9 @@ it.effect("a headless update emits domain progress and records one attributed tr
     bytes = yield* archive;
     const results = yield* home
       .owned(
-        updateSubjects().pipe(
+        Effect.flatMap(Library.Service, (library) =>
+          Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
+        ).pipe(
           Effect.provide(
             libraryProgressLayer((event) =>
               Effect.sync(() => {

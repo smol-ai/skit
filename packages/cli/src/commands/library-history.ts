@@ -1,4 +1,4 @@
-import { readLibraryHistory } from "@smolai/skit-core/library/queries";
+import * as Library from "@smolai/skit-core/library";
 import { Effect } from "effect";
 import { Command } from "effect/cli";
 import { handleLibraryCommand } from "../application.js";
@@ -15,7 +15,8 @@ export const libraryHistoryCliCommand = Command.make(
     handleLibraryCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
-        const { events } = yield* readLibraryHistory();
+        const library = yield* Library.Service;
+        const { events } = yield* library.history;
         yield* renderer.result(
           result("libraryHistory", historyOutputContracts.libraryHistory, {
             events,

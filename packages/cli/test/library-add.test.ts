@@ -11,7 +11,6 @@ import { originalTreePath } from "./helpers/original-tree.js";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 
 import { deterministicTreeHash } from "@smolai/skit-core/author";
-import { removeCollection } from "@smolai/skit-core/library/remove";
 import * as Library from "@smolai/skit-core/library";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { assert, it } from "@effect/vitest";
@@ -21,16 +20,14 @@ import { join } from "node:path";
 import { HttpClient, HttpClientResponse } from "effect/http";
 
 import { importSource, previewLibrarySource } from "../src/library/source.js";
-import { planUpdates, updateSubjects } from "../src/library/update/operation.js";
-import { checkSubjects } from "../src/library/check/operation.js";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { setupIntent } from "@smolai/skit-core/library/setup";
-import { openSetEnabledSession } from "@smolai/skit-core/library/enable";
-import { openSyncSession } from "@smolai/skit-core/library/sync";
 
 import { rendererTestLayer } from "./helpers/renderer.js";
 import { homeLockIsFree } from "./helpers/home-lock.js";
 import { testRoots } from "./helpers/roots.js";
+import { updateAdapters } from "../src/library/update/adapters.js";
+import { inspectLibrarySource } from "../src/library/source.js";
 
 /** The Library at `home`, read through its owner. */
 const stateAt = (home: string) =>
@@ -138,7 +135,9 @@ it.effect("previews without mutation, then retains exact root Skill bytes", () =
     assert.strictEqual(refreshed.collections.length, 1);
     assert.strictEqual(refreshed.imports.length, 2);
     assert.strictEqual(refreshed.skills[0]?.versions.length, 2);
-    const failure = yield* planUpdates(added.collection_id).pipe(
+    const failure = yield* Effect.flatMap(Library.Service, (library) =>
+      library.previewSourceUpdates(added.collection_id, inspectLibrarySource),
+    ).pipe(
       Effect.provide(Library.layer({ home, roots: testRoots(home) })),
       Effect.provide(skitConfigurationLayer(home)),
       Effect.flip,
@@ -326,7 +325,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     const skill = before.skills[0]!;
     assert.strictEqual(skill.collection_id, before.collections[0]?.collection_id);
     const view = yield* run(
-      openSetEnabledSession(home, { home: home, configHome: home, overrides: {} }).pipe(
+      Effect.flatMap(Library.Service, (library) => library.enable.open()).pipe(
         Effect.map((selection) => selection.view),
       ),
     );
@@ -353,14 +352,25 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     assert.strictEqual(yield* fs.exists(join(root, "codex", "review", "SKILL.md")), true);
     assert.strictEqual(
       (yield* run(
-        checkSubjects(skill.skill_id).pipe(Effect.provide(skitConfigurationLayer(home))),
+        Effect.flatMap(Library.Service, (library) =>
+          library.check(skill.skill_id, { inspectSource: inspectLibrarySource }),
+        ).pipe(Effect.provide(skitConfigurationLayer(home))),
       ))[0]?.source_status,
       "current",
     );
     artifact = updated;
-    assert.strictEqual((yield* run(planUpdates(skill.skill_id)))[0]?.changed, true);
+    assert.strictEqual(
+      (yield* run(
+        Effect.flatMap(Library.Service, (library) =>
+          library.previewSourceUpdates(skill.skill_id, inspectLibrarySource),
+        ),
+      ))[0]?.changed,
+      true,
+    );
     const result = yield* run(
-      updateSubjects(skill.skill_id).pipe(Effect.provide(rendererTestLayer())),
+      Effect.flatMap(Library.Service, (library) =>
+        Effect.flatMap(updateAdapters, (adapters) => library.update(skill.skill_id, adapters)),
+      ).pipe(Effect.provide(rendererTestLayer())),
     );
     assert.isTrue(result[0] !== undefined && !("status" in result[0]) && result[0].changed);
     const after = yield* stateAt(home);
@@ -370,7 +380,7 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
     const sync = yield* run(
       Effect.gen(function* () {
         const library = yield* Library.Service;
-        return yield* openSyncSession(
+        return yield* (yield* Library.Service).syncSession(
           { origin: "https://registry.test", remote: null },
           { base: yield* library.read },
         );
@@ -385,10 +395,12 @@ it.effect("runs the complete lifecycle for a selected well-known Collection memb
       home,
       run(
         // The Collection's only Skill can be removed, taking its Collection with it.
-        removeCollection({
-          query: skill.skill_id,
-          dryRun: false,
-        }).pipe(Effect.provide(skitConfigurationLayer(home))),
+        Effect.flatMap(Library.Service, (library) =>
+          library.remove({
+            query: skill.skill_id,
+            dryRun: false,
+          }),
+        ).pipe(Effect.provide(skitConfigurationLayer(home))),
       ),
     );
     const removed = yield* stateAt(home);

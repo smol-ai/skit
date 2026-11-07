@@ -1,5 +1,5 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import { readInstalledSkills } from "@smolai/skit-core/library/queries";
+import * as Library from "@smolai/skit-core/library";
 import { UsageHarness } from "@smolai/skit-core/library/usage";
 import { Effect, Option } from "effect";
 import { Command, Flag } from "effect/cli";
@@ -41,7 +41,8 @@ export const usageCliCommand = Command.make(
       Effect.gen(function* () {
         const paths = yield* SkitConfiguration;
         const renderer = yield* Renderer;
-        const installedSkills = yield* readInstalledSkills(paths.skitHome);
+        const library = yield* Library.Service;
+        const installedSkills = yield* library.installedSkills;
         const report = yield* renderer.withStatus(
           "Scanning local transcripts",
           scanLocalUsage(installedSkills, {

@@ -24,7 +24,6 @@ import { skitCommand } from "../src/commands/tree.js";
 import { runCommandTree } from "../src/commands/runtime.js";
 import { renderContract } from "../src/commands/output-presenters.js";
 import * as Library from "@smolai/skit-core/library";
-import { openSyncSession } from "@smolai/skit-core/library/sync";
 import {
   deterministicTreeHash,
   libraryHome,
@@ -347,7 +346,7 @@ it.effect(
         Effect.gen(function* () {
           const library = yield* Library.Service;
           const base = yield* library.read;
-          const session = yield* openSyncSession(
+          const session = yield* (yield* Library.Service).syncSession(
             { origin: "https://registry.test", remote: head },
             { base },
           );
@@ -412,7 +411,7 @@ it.effect(
       const synced = yield* f.home.owned(
         Effect.gen(function* () {
           const library = yield* Library.Service;
-          return yield* openSyncSession(
+          return yield* (yield* Library.Service).syncSession(
             { origin: "https://registry.test", remote: head },
             { base: yield* library.read },
           );

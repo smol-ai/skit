@@ -1,4 +1,4 @@
-import { SkitConfiguration, skitLayer } from "@smolai/skit-core/platform";
+import { skitLayer } from "@smolai/skit-core/platform";
 import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { ListResult } from "../src/library/list/output.js";
 import { it } from "@effect/vitest";
@@ -11,9 +11,7 @@ type SkillsShLockFileEntry = Parameters<
   Library.Interface["import"]["collection"]
 >[0]["lockFileEntries"][number];
 import { readLibrarySkillMetadata, readSkillPreviews } from "@smolai/skit-core/library/queries";
-import { openSetEnabledSession } from "@smolai/skit-core/library/enable";
-import { openLibrarySession } from "@smolai/skit-core/library/session";
-import { inventoryCommand } from "../src/library/inventory/operation.js";
+
 import { renderMachineSkills } from "../src/library/inventory/present.js";
 import { renderLibraryList } from "../src/library/list/present.js";
 import { presentListCommand } from "../src/library/list.js";
@@ -93,12 +91,8 @@ it.effect(
       };
       yield* home.writeDurable(selected);
       const view = yield* home.owned(
-        Effect.flatMap(SkitConfiguration, (paths) =>
-          openSetEnabledSession(paths.skitHome, {
-            home: paths.skitHome,
-            configHome: paths.skitHome,
-            overrides: {},
-          }).pipe(Effect.map((selection) => selection.view)),
+        Effect.flatMap(Library.Service, (library) => library.enable.open()).pipe(
+          Effect.map((selection) => selection.view),
         ),
       );
       const interaction = yield* makeScriptedInteraction([]);
@@ -121,9 +115,7 @@ it.effect(
         ],
       });
       const session = yield* home.owned(
-        Effect.flatMap(SkitConfiguration, (paths) =>
-          openLibrarySession(paths.skitHome, home.installOptions),
-        ),
+        Effect.flatMap(Library.Service, (library) => library.session.open()),
       );
       expect(session.skills[0]).toMatchObject({
         revision: "1".repeat(40),
@@ -169,12 +161,8 @@ it.effect(
       expect((yield* view.readSubjects())[0]?.skills[0]?.revision).toBe("1".repeat(40));
       expect((yield* view.readSkills())[0]?.revision).toBe("1".repeat(40));
       const fresh = yield* home.owned(
-        Effect.flatMap(SkitConfiguration, (paths) =>
-          openSetEnabledSession(paths.skitHome, {
-            home: paths.skitHome,
-            configHome: paths.skitHome,
-            overrides: {},
-          }).pipe(Effect.map((selection) => selection.view)),
+        Effect.flatMap(Library.Service, (library) => library.enable.open()).pipe(
+          Effect.map((selection) => selection.view),
         ),
       );
       expect((yield* fresh.readSkills())[0]?.revision).toBe("2".repeat(40));
@@ -210,7 +198,7 @@ it.effect("inventory distinguishes physical copy dates and follows symlink targe
     });
     const interaction = yield* makeScriptedInteraction([]);
     const inventory = yield* home.owned(
-      inventoryCommand({ libraryHome: home.home, ...home.inventory }).pipe(
+      Effect.flatMap(Library.Service, (library) => library.inventory.refreshMachine).pipe(
         Effect.provide(interaction.layer),
       ),
     );

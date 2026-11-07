@@ -7,8 +7,7 @@ import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem, Ref } from "effect";
 import { join } from "node:path";
 
-import { checkSubjects } from "../src/library/check/operation.js";
-import { importSource } from "../src/library/source.js";
+import { importSource, inspectLibrarySource } from "../src/library/source.js";
 import { initializeLibraryMachine } from "./helpers/library-home.js";
 import { testRoots } from "./helpers/roots.js";
 
@@ -32,11 +31,19 @@ it.effect("checks retained files without treating an observed local copy as an u
     if (loaded._tag !== "Present") return;
     const beforeState = yield* fs.readFileString(join(home, "state.json"));
     const checkedCollections = yield* Ref.make<ReadonlyArray<string>>([]);
-    const current = yield* checkSubjects(imported.collection_id, (collection) =>
+    /** The check as the command runs it, with the CLI's Registry source inspection. */
+    const check = (
+      query: string,
+      onCollection?: (collection: { display_name: string }) => Effect.Effect<void>,
+    ) =>
+      Effect.flatMap(Library.Service, (library) =>
+        library.check(query, { inspectSource: inspectLibrarySource, onCollection }),
+      ).pipe(
+        Effect.provide(Library.layer({ home, roots: testRoots(home) })),
+        Effect.provide(skitConfigurationLayer(home)),
+      );
+    const current = yield* check(imported.collection_id, (collection) =>
       Ref.update(checkedCollections, (names) => [...names, collection.display_name]),
-    ).pipe(
-      Effect.provide(Library.layer({ home, roots: testRoots(home) })),
-      Effect.provide(skitConfigurationLayer(home)),
     );
     assert.strictEqual(current[0]?.collection_versions[0]?.original_intact, true);
     assert.deepStrictEqual(yield* Ref.get(checkedCollections), []);
@@ -48,18 +55,12 @@ it.effect("checks retained files without treating an observed local copy as an u
       loaded.state.collection_versions[0]!.hash,
     );
     yield* fs.writeFileString(join(path, "SKILL.md"), "changed retained bytes\n");
-    const changed = yield* checkSubjects(imported.collection_id).pipe(
-      Effect.provide(Library.layer({ home, roots: testRoots(home) })),
-      Effect.provide(skitConfigurationLayer(home)),
-    );
+    const changed = yield* check(imported.collection_id);
     assert.strictEqual(changed[0]?.collection_versions[0]?.original_intact, false);
     assert.strictEqual(changed[0]?.source_status, "not-applicable");
     assert.strictEqual(changed[0]?.available_snapshot_digest, undefined);
     yield* fs.remove(source, { recursive: true });
-    const withoutCopy = yield* checkSubjects(imported.collection_id).pipe(
-      Effect.provide(Library.layer({ home, roots: testRoots(home) })),
-      Effect.provide(skitConfigurationLayer(home)),
-    );
+    const withoutCopy = yield* check(imported.collection_id);
     assert.strictEqual(withoutCopy[0]?.source_status, "not-applicable");
     assert.strictEqual(
       withoutCopy[0]?.current_snapshot_digest,

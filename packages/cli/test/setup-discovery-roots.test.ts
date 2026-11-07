@@ -1,3 +1,4 @@
+import * as Library from "@smolai/skit-core/library";
 import { LinkStat } from "@smolai/skit-core/platform";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
@@ -111,14 +112,20 @@ it.effect("creating identity preserves V1 repository discovery until decisions a
       persistRoots: false,
       scanDecidedRepositories: true,
     };
-    const before = yield* home.owned(collectSetupEvidence(options));
+    const before = yield* home.owned(
+      Effect.flatMap(Library.Service, (library) => collectSetupEvidence(library, options)),
+    );
     expect(before.walk.repositories).toEqual([repository]);
     yield* MachineSettings.ensureIdentity(home.home);
-    const after = yield* home.owned(collectSetupEvidence(options));
+    const after = yield* home.owned(
+      Effect.flatMap(Library.Service, (library) => collectSetupEvidence(library, options)),
+    );
     expect(after.discovering).toBe(true);
     expect(after.walk.repositories).toEqual(before.walk.repositories);
     yield* MachineSettings.setRepositoryDecision(home.home, repository, "ignored");
-    const decided = yield* home.owned(collectSetupEvidence(options));
+    const decided = yield* home.owned(
+      Effect.flatMap(Library.Service, (library) => collectSetupEvidence(library, options)),
+    );
     expect(decided.discovering).toBe(false);
     expect(decided.walk.repositories).toEqual([]);
   }).pipe(Effect.provide(skitLayer)),
@@ -201,22 +208,26 @@ for (const reason of ["PermissionDenied", "NotFound"] as const)
       yield* f.fs.makeDirectory(join(good, ".git"), { recursive: true });
       yield* f.fs.makeDirectory(bad);
       const links = yield* LinkStat;
-      const evidence = yield* f.home.owned(collectSetupEvidence(f.options)).pipe(
-        Effect.provideService(LinkStat, {
-          ...links,
-          lstat: (path) =>
-            path === bad
-              ? Effect.fail(
-                  systemError({
-                    _tag: reason,
-                    module: "FileSystem",
-                    method: "lstat",
-                    pathOrDescriptor: path,
-                  }),
-                )
-              : links.lstat(path),
-        }),
-      );
+      const evidence = yield* f.home
+        .owned(
+          Effect.flatMap(Library.Service, (library) => collectSetupEvidence(library, f.options)),
+        )
+        .pipe(
+          Effect.provideService(LinkStat, {
+            ...links,
+            lstat: (path) =>
+              path === bad
+                ? Effect.fail(
+                    systemError({
+                      _tag: reason,
+                      module: "FileSystem",
+                      method: "lstat",
+                      pathOrDescriptor: path,
+                    }),
+                  )
+                : links.lstat(path),
+          }),
+        );
       expect(evidence.walk.repositories).toEqual([good]);
       expect(evidence.walk.complete).toBe(false);
       expect(evidence.discoveryIssues).toContainEqual({
@@ -236,24 +247,32 @@ it.effect("propagates unexpected filesystem failures and defects", () =>
       pathOrDescriptor: f.projects,
     });
     const failure = yield* Effect.result(
-      f.home.owned(collectSetupEvidence(f.options)).pipe(
-        Effect.provideService(FileSystem.FileSystem, {
-          ...f.fs,
-          readDirectory: (path) =>
-            path === f.projects ? Effect.fail(unexpected) : f.fs.readDirectory(path),
-        }),
-      ),
+      f.home
+        .owned(
+          Effect.flatMap(Library.Service, (library) => collectSetupEvidence(library, f.options)),
+        )
+        .pipe(
+          Effect.provideService(FileSystem.FileSystem, {
+            ...f.fs,
+            readDirectory: (path) =>
+              path === f.projects ? Effect.fail(unexpected) : f.fs.readDirectory(path),
+          }),
+        ),
     );
     expect(Result.isFailure(failure) && failure.failure).toBe(unexpected);
     const defect = new Error("discovery defect");
     const exit = yield* Effect.exit(
-      f.home.owned(collectSetupEvidence(f.options)).pipe(
-        Effect.provideService(FileSystem.FileSystem, {
-          ...f.fs,
-          readDirectory: (path) =>
-            path === f.projects ? Effect.die(defect) : f.fs.readDirectory(path),
-        }),
-      ),
+      f.home
+        .owned(
+          Effect.flatMap(Library.Service, (library) => collectSetupEvidence(library, f.options)),
+        )
+        .pipe(
+          Effect.provideService(FileSystem.FileSystem, {
+            ...f.fs,
+            readDirectory: (path) =>
+              path === f.projects ? Effect.die(defect) : f.fs.readDirectory(path),
+          }),
+        ),
     );
     expect(
       Exit.isFailure(exit) &&
@@ -298,7 +317,9 @@ it.effect("retains missing explicit collection and watched-repository evidence",
         discovery: { exclude: [], collections: [{ path: "custom-skills" }] },
       }),
     );
-    const evidence = yield* f.home.owned(collectSetupEvidence(f.options));
+    const evidence = yield* f.home.owned(
+      Effect.flatMap(Library.Service, (library) => collectSetupEvidence(library, f.options)),
+    );
     expect(evidence.discoveryComplete).toBe(false);
     expect(evidence.discoveryIssues).toContainEqual({
       path: join(f.projects, "custom-skills"),
@@ -321,13 +342,17 @@ it.effect("propagates discovery interruption", () =>
   Effect.gen(function* () {
     const f = yield* discoveryFixture();
     const exit = yield* Effect.exit(
-      f.home.owned(collectSetupEvidence(f.options)).pipe(
-        Effect.provideService(FileSystem.FileSystem, {
-          ...f.fs,
-          readDirectory: (path) =>
-            path === f.projects ? Effect.interrupt : f.fs.readDirectory(path),
-        }),
-      ),
+      f.home
+        .owned(
+          Effect.flatMap(Library.Service, (library) => collectSetupEvidence(library, f.options)),
+        )
+        .pipe(
+          Effect.provideService(FileSystem.FileSystem, {
+            ...f.fs,
+            readDirectory: (path) =>
+              path === f.projects ? Effect.interrupt : f.fs.readDirectory(path),
+          }),
+        ),
     );
     expect(Exit.hasInterrupts(exit)).toBe(true);
   }).pipe(Effect.provide(skitLayer)),
@@ -345,7 +370,9 @@ it.effect("evidence collection never writes machine settings even with save inte
       machineDisplayName: "Requested name",
       repositoryDecisions: [{ path: f.projects, status: "watched" as const }],
     };
-    const evidence = yield* f.home.owned(collectSetupEvidence(options));
+    const evidence = yield* f.home.owned(
+      Effect.flatMap(Library.Service, (library) => collectSetupEvidence(library, options)),
+    );
     expect(evidence.existingDecisions.get(f.projects)).toBe("watched");
     expect(evidence.machineConfig.machineId).toBeUndefined();
     expect(yield* f.fs.readFileString(path)).toBe(legacy);

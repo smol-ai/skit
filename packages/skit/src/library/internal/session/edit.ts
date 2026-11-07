@@ -1,4 +1,4 @@
-import * as Library from "../../library.js";
+import type { Interface } from "../../library.js";
 import { canonicalJson } from "../../../shared/json.js";
 import { deterministicTreeHash } from "../../../artifact/skit.js";
 import { inspectOwnershipMarker } from "../../../installed-skills/marker-inspection.js";
@@ -159,29 +159,24 @@ const enablingScope = (
 /** Capture the Library and observations once; callers only render or apply this operation. */
 export const openEditImport = Effect.fn("Library.openEditImport")(function* (
   home: string,
+  library: Pick<Interface, "read" | "plan" | "apply" | "import">,
   query: string,
   selector: string,
 ) {
-  const library = yield* Library.Service;
   const snapshot = yield* library.read;
   const initial = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
-  const context = yield* Effect.context<Library.Service | TreeRequirements | Digest.Digest>();
+  const context = yield* Effect.context<TreeRequirements | Digest.Digest>();
   const preview = yield* planEditImport(home, initial, query, selector);
   return {
     preview: structuredClone(preview),
-    apply: (currentHome: string) =>
-      resolve(currentHome) !== resolve(home)
-        ? Effect.fail(
-            new StalePlan({
-              message: "This retention preview belongs to a different Library",
-            }),
-          )
-        : applyEditImport(home, preview, query, selector).pipe(Effect.provide(context)),
+    apply: () =>
+      applyEditImport(home, library, preview, query, selector).pipe(Effect.provide(context)),
   };
 }, Effect.scoped);
 
 const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
   home: string,
+  library: Pick<Interface, "read" | "plan" | "apply" | "import">,
   preview: EditImportPlan,
   query: string,
   selector: string,
@@ -207,7 +202,6 @@ const applyEditImport = Effect.fn("Library.applyEditImport")(function* (
         return yield* new StalePlan({
           message: "The reviewed installed Skill is no longer recorded",
         });
-      const library = yield* Library.Service;
       const imported = preview.import_required
         ? yield* library.import.edit({
             skillId: preview.skill_id,

@@ -1,4 +1,3 @@
-import { SkitConfiguration } from "@smolai/skit-core/platform";
 import * as Library from "@smolai/skit-core/library";
 import { assert, it } from "@effect/vitest";
 import { Effect, FileSystem } from "effect";
@@ -8,8 +7,6 @@ import { deterministicTreeHash } from "@smolai/skit-core/author";
 import { skitLayer } from "@smolai/skit-core/platform";
 import {
   confirmLibraryChange,
-  openLibrarySession,
-  readLibrarySkillContent,
   proposeLibraryEnable,
   proposeLibraryDisable,
   proposeLibraryCollectionChange,
@@ -60,12 +57,10 @@ it.effect("a front end that confirms a Library session change leaves attributed 
     const importedEvents = (yield* history).length;
 
     const session = yield* home.owned(
-      Effect.flatMap(SkitConfiguration, (paths) =>
-        openLibrarySession(paths.skitHome, home.installOptions),
-      ),
+      Effect.flatMap(Library.Service, (library) => library.session.open()),
     );
     const proposed = yield* home.owned(
-      proposeLibraryEnable(session, home.installOptions, session.skills[0]!, {
+      proposeLibraryEnable(session, session.skills[0]!, {
         scope: { kind: "global" },
       }),
     );
@@ -118,9 +113,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
       ),
     );
     const session = yield* home.owned(
-      Effect.flatMap(SkitConfiguration, (paths) =>
-        openLibrarySession(paths.skitHome, home.installOptions),
-      ),
+      Effect.flatMap(Library.Service, (library) => library.session.open()),
     );
     const collectionId = (yield* home.durable).collections[0]!.collection_id;
     assert.strictEqual(session.skills.length, 2);
@@ -134,23 +127,21 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     const alpha = session.skills.find((row) => row.name === "alpha")!;
     assert.strictEqual(
       yield* home.owned(
-        Effect.flatMap(SkitConfiguration, (paths) =>
-          readLibrarySkillContent(paths.skitHome, alpha.skillVersionId),
+        Effect.flatMap(Library.Service, (library) =>
+          library.session.readSkillContent(alpha.skillVersionId),
         ),
       ),
       "# alpha\n",
     );
     const scopes = [{ kind: "global" } as const];
     const proposed = yield* home.owned(
-      proposeLibraryCollectionChange(session, home.installOptions, collectionId, true, scopes),
+      proposeLibraryCollectionChange(session, collectionId, true, scopes),
     );
     assert.strictEqual(proposed.outcome.kind, "preview");
     assert.deepStrictEqual(proposed.pending?.facts[0]?.skills.slice().sort(), ["alpha", "beta"]);
     assert.ok(
       (yield* home.owned(
-        Effect.flatMap(SkitConfiguration, (paths) =>
-          openLibrarySession(paths.skitHome, home.installOptions),
-        ),
+        Effect.flatMap(Library.Service, (library) => library.session.open()),
       )).skills.every((row) => row.scopes.length === 0),
     );
     const enabled = yield* home.owned(confirmLibraryChange(proposed));
@@ -158,7 +149,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     assert.ok(enabled.skills.every((row) => row.scopes.length === 1));
     assert.deepStrictEqual((yield* home.durable).enabled, [{ collection: collectionId }]);
     const unchanged = yield* home.owned(
-      proposeLibraryCollectionChange(enabled, home.installOptions, collectionId, true, scopes),
+      proposeLibraryCollectionChange(enabled, collectionId, true, scopes),
     );
     assert.strictEqual(unchanged.outcome.kind, "unchanged");
     assert.strictEqual(unchanged.pending, undefined);
@@ -169,7 +160,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     const installedSkill = beforeRepair.installed_skills[0]!;
     yield* fs.remove(installedSkill.path, { recursive: true });
     const repair = yield* home.owned(
-      proposeLibraryCollectionChange(enabled, home.installOptions, collectionId, true, scopes),
+      proposeLibraryCollectionChange(enabled, collectionId, true, scopes),
     );
     assert.strictEqual(repair.outcome.kind, "preview");
     const repaired = yield* home.owned(confirmLibraryChange(repair));
@@ -182,12 +173,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     const alphaRow = repaired.skills.find((row) => row.name === "alpha")!;
     const cleanup = yield* home.owned(
       proposeLibraryDisable(
-        yield* home.owned(
-          Effect.flatMap(SkitConfiguration, (paths) =>
-            openLibrarySession(paths.skitHome, home.installOptions),
-          ),
-        ),
-        home.installOptions,
+        yield* home.owned(Effect.flatMap(Library.Service, (library) => library.session.open())),
         alphaRow,
         alphaRow.scopes,
       ),
@@ -205,7 +191,7 @@ it.effect("Collection actions preview and apply all Skills together", () =>
     );
 
     const removal = yield* home.owned(
-      proposeLibraryCollectionChange(cleaned, home.installOptions, collectionId, false, scopes),
+      proposeLibraryCollectionChange(cleaned, collectionId, false, scopes),
     );
     assert.strictEqual(removal.outcome.kind, "preview");
     const disabled = yield* home.owned(confirmLibraryChange(removal));
@@ -246,14 +232,11 @@ const twoScopeProposal = (scopeCount = 2) =>
       ),
     );
     const session = yield* home.owned(
-      Effect.flatMap(SkitConfiguration, (paths) =>
-        openLibrarySession(paths.skitHome, home.installOptions),
-      ),
+      Effect.flatMap(Library.Service, (library) => library.session.open()),
     );
     const proposed = yield* home.owned(
       proposeLibraryCollectionChange(
         session,
-        home.installOptions,
         (yield* home.durable).collections[0]!.collection_id,
         true,
         ([{ kind: "global" }, { kind: "repository", root: repository }] as const).slice(

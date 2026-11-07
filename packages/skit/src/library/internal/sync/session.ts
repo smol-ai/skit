@@ -1,11 +1,17 @@
 import { Data, Effect, Option } from "effect";
-import * as Library from "../../library.js";
+import type * as Library from "../../library.js";
+import { StalePlan } from "../../library-plan.js";
+import { isRemoteSyncPlan } from "./sync.js";
 import { currentLibraryManifest, type LibraryManifest } from "../../library-contracts.js";
 import { libraryManifestFromLocalState } from "../../library-state.js";
 import { normalizeLibraryManifest } from "../../manifest.js";
 import { withDeviceSkillSelection, prepareDeviceInstallation } from "../../enabled.js";
 import type { Snapshot } from "../../snapshot.js";
-import type { InstallDestination } from "../../../installed-skills/destination.js";
+import {
+  activeInstallDestinations,
+  skillsDirectoryFor,
+  type InventoryRootOptions,
+} from "../../routing/roots.js";
 import { canonicalJson } from "../../../shared/json.js";
 import { FailureTypeId, type SkitFailure } from "../../../shared/failure.js";
 import { OptionCombinationInvalid } from "../../../shared/input-failures.js";
@@ -41,7 +47,6 @@ export interface SyncSessionRequest {
   readonly deviceSelection?:
     | "follow-account"
     | { readonly skills: readonly string[]; readonly collections: readonly string[] };
-  readonly rootFor?: (target: InstallDestination) => string | undefined;
   readonly around?: <A, E, R>(
     phase: { readonly kind: "merge" | "check-destinations" | "check-installed-skills" },
     work: Effect.Effect<A, E, R>,
@@ -69,13 +74,22 @@ const conflict = (details: readonly SyncConflictDetail[], revision_id?: string) 
  * Transport may stage the returned target and CAS it remotely; only this session constructs the
  * local plan and receipt. Returned facts are copies, so changing a view cannot redirect apply.
  */
-export function openSyncSession(request: SyncSessionRequest, options: { readonly base: Snapshot }) {
+export function openSyncSession(
+  library: Pick<Library.Interface, "read" | "plan" | "apply" | "content">,
+  roots: InventoryRootOptions,
+  request: SyncSessionRequest,
+  options: { readonly base: Snapshot },
+) {
   const snapshot = structuredClone(options.base);
-  const { rootFor, around: report, ...choices } = request;
+  const { around: report, ...choices } = request;
   const input = structuredClone(choices);
   const around: NonNullable<SyncSessionRequest["around"]> = report ?? ((_phase, work) => work);
   return Effect.gen(function* () {
-    const library = yield* Library.Service;
+    const active = yield* activeInstallDestinations(roots);
+    const rootFor = (
+      target: import("../../../installed-skills/destination.js").InstallDestination,
+    ) =>
+      active.includes(target) ? skillsDirectoryFor(target, { kind: "global" }, roots) : undefined;
     const remote = input.remote;
     const present = snapshot._tag === "Present";
     const ancestry = present ? snapshot.state.sync_ancestry : undefined;
@@ -114,7 +128,7 @@ export function openSyncSession(request: SyncSessionRequest, options: { readonly
             },
             { base: snapshot },
           );
-          if (Library.isRemoteSyncPlan(plan)) return yield* new SyncLocalChanged();
+          if (isRemoteSyncPlan(plan)) return yield* new SyncLocalChanged();
           yield* library.apply({ _tag: "Apply", plan });
         }),
       };
@@ -203,7 +217,7 @@ export function openSyncSession(request: SyncSessionRequest, options: { readonly
       const staged = structuredClone(content);
       return Effect.gen(function* () {
         if (!same(yield* libraryManifestFromLocalState(staged.state), desired))
-          return yield* new Library.StalePlan({
+          return yield* new StalePlan({
             message: "Staged Sync content differs from the reviewed target",
           });
         const plan = yield* library
@@ -221,7 +235,7 @@ export function openSyncSession(request: SyncSessionRequest, options: { readonly
             },
             { base: snapshot },
           )
-          .pipe(Effect.filterOrFail(Library.isRemoteSyncPlan, () => new SyncLocalChanged()));
+          .pipe(Effect.filterOrFail(isRemoteSyncPlan, () => new SyncLocalChanged()));
         return {
           checkCurrent:
             remote === null

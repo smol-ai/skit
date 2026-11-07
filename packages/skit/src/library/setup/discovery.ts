@@ -1,4 +1,4 @@
-import * as Library from "../library.js";
+import type { Interface } from "../library.js";
 import { basename, join, posix, relative, resolve, sep } from "node:path";
 import { Effect, FileSystem, Result, Schema } from "effect";
 import { LinkStat } from "../../platform/link-stat.js";
@@ -627,6 +627,7 @@ const setupMachineScope = (options: SetupOptions, prior: MachineSettings.Setting
 };
 
 export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function* (
+  owner: Pick<Interface, "read">,
   options: SetupOptions,
 ) {
   const prior = yield* MachineSettings.read(options.libraryHome);
@@ -641,7 +642,6 @@ export const collectSetupEvidence = Effect.fn("Setup.collectEvidence")(function*
       );
   const machineConfig = prior;
   const harnessRoots = collectSkillsDirectories(options.inventory, walk.repositories);
-  const owner = yield* Library.Service;
   const snapshot = yield* owner.read;
   const library = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
   const authoredCollections = yield* collectAuthoredCollections(walk.repositories, library);

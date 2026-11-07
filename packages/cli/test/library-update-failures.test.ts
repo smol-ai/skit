@@ -14,10 +14,11 @@ import { join } from "node:path";
 import { setLibraryEnabled } from "./helpers/set-enabled.js";
 import { writingTo } from "./helpers/library-home.js";
 import { importSource } from "../src/library/source.js";
-import { updateSubjects, updateExitCode } from "../src/library/update/operation.js";
+import { updateExitCode } from "../src/library/update/exit-code.js";
 import { rendererTestLayer } from "./helpers/renderer.js";
 import { defaultTerminalEnvironment, renderResultFrame } from "../src/commands/output-frame.js";
 import { result } from "../src/commands/result.js";
+import { updateAdapters } from "../src/library/update/adapters.js";
 
 const fixture = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
@@ -92,7 +93,13 @@ it.effect("stops the batch when shared machine settings cannot be read", () =>
     f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "after"));
     yield* f.fs.writeFileString(join(f.home, "machine.json"), "invalid machine settings");
     const before = yield* f.fs.readFileString(join(f.home, "state.json"));
-    const error = yield* f.run(updateSubjects()).pipe(Effect.flip);
+    const error = yield* f
+      .run(
+        Effect.flatMap(Library.Service, (library) =>
+          Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
+        ),
+      )
+      .pipe(Effect.flip);
     assert.strictEqual(error._tag, "MachineSettingsUnusable");
     assert.deepStrictEqual(f.requests, [f.urls[0]]);
     assert.strictEqual(yield* f.fs.readFileString(join(f.home, "state.json")), before);
@@ -112,7 +119,9 @@ it.effect(
         pathOrDescriptor: join(f.root, "source-temp"),
       });
       const outcomes = yield* f.run(
-        updateSubjects().pipe(
+        Effect.flatMap(Library.Service, (library) =>
+          Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
+        ).pipe(
           Effect.provide(
             rendererTestLayer({
               withStatus: (status, operation) =>
@@ -182,7 +191,9 @@ for (const failurePhase of ["install", "source-cleanup"] as const) {
         f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "after"));
         let failed = false;
         const outcomes = yield* f.run(
-          updateSubjects().pipe(
+          Effect.flatMap(Library.Service, (library) =>
+            Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
+          ).pipe(
             // The owner is built under this test's faulting filesystem.
             Effect.provide(Library.layer({ home: f.home, roots })),
             Effect.provide(
@@ -239,7 +250,11 @@ for (const failurePhase of ["install", "source-cleanup"] as const) {
         const imported = yield* f.load;
         const retry = yield* writingTo(
           f.home,
-          run(updateSubjects().pipe(Effect.provide(rendererTestLayer()))),
+          run(
+            Effect.flatMap(Library.Service, (library) =>
+              Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
+            ).pipe(Effect.provide(rendererTestLayer())),
+          ),
         );
         // The Source is current, so nothing changed; its retained snapshot installs this time.
         assert.isTrue("changed" in retry[0]! && !retry[0].changed && retry[0].installed === 1);
@@ -248,7 +263,11 @@ for (const failurePhase of ["install", "source-cleanup"] as const) {
         assert.strictEqual(after.imports.length, imported.imports.length);
         const unchanged = yield* writingTo(
           f.home,
-          run(updateSubjects().pipe(Effect.provide(rendererTestLayer()))),
+          run(
+            Effect.flatMap(Library.Service, (library) =>
+              Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
+            ).pipe(Effect.provide(rendererTestLayer())),
+          ),
         );
         assert.isTrue(
           unchanged.every((item) => "changed" in item && !item.changed && item.installed === 0),
@@ -265,7 +284,9 @@ for (const kind of ["defect", "interrupt"] as const) {
         kind === "defect" ? Effect.die(new Error("programming defect")) : Effect.interrupt;
       const exit = yield* Effect.exit(
         f.run(
-          updateSubjects().pipe(Effect.provide(rendererTestLayer({ withStatus: () => failure }))),
+          Effect.flatMap(Library.Service, (library) =>
+            Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
+          ).pipe(Effect.provide(rendererTestLayer({ withStatus: () => failure }))),
         ),
       );
       assert.isTrue(Exit.isFailure(exit));
@@ -288,9 +309,13 @@ it.effect("stops on typed filesystem errors in shared Library storage", () =>
       pathOrDescriptor: join(alias, "state.json"),
     });
     const exit = yield* Effect.exit(
-      f.run(
-        updateSubjects().pipe(
-          Effect.provide(rendererTestLayer()),
+      f
+        .run(
+          Effect.flatMap(Library.Service, (library) =>
+            Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
+          ).pipe(Effect.provide(rendererTestLayer())),
+        )
+        .pipe(
           Effect.provideService(FileSystem.FileSystem, {
             ...f.fs,
             readFileString: (path, options) =>
@@ -299,7 +324,6 @@ it.effect("stops on typed filesystem errors in shared Library storage", () =>
                 : f.fs.readFileString(path, options),
           }),
         ),
-      ),
     );
     assert.isTrue(Exit.isFailure(exit));
     assert.deepStrictEqual(f.requests, [f.urls[0]]);
@@ -325,7 +349,11 @@ it.effect("keeps candidate manifest validation failures local to their Collectio
       execFileSync("tar", ["-cf", archivePath, "-C", join(f.root, "broken"), "."]),
     );
     f.bodies.set(f.urls[0]!, yield* f.fs.readFile(archivePath));
-    const outcomes = yield* f.run(updateSubjects().pipe(Effect.provide(rendererTestLayer())));
+    const outcomes = yield* f.run(
+      Effect.flatMap(Library.Service, (library) =>
+        Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
+      ).pipe(Effect.provide(rendererTestLayer())),
+    );
     assert.isTrue("status" in outcomes[0]!);
     if (!("status" in outcomes[0]!)) return;
     assert.strictEqual(outcomes[0].error.code, "VALIDATION_FAILED");
@@ -341,18 +369,24 @@ it.effect("aborts the batch on typed shared state failures", () =>
     const f = yield* fixture;
     const statePath = join(f.home, "state.json");
     const exit = yield* Effect.exit(
-      f.run(updateSubjects().pipe(Effect.provide(rendererTestLayer()))).pipe(
-        Effect.provideService(FileSystem.FileSystem, {
-          ...f.fs,
-          readFileString: (path, options) =>
-            path === statePath && f.requests.length > 0
-              ? Effect.as(
-                  f.fs.writeFileString(statePath, "invalid state bytes\n"),
-                  "invalid state bytes\n",
-                )
-              : f.fs.readFileString(path, options),
-        }),
-      ),
+      f
+        .run(
+          Effect.flatMap(Library.Service, (library) =>
+            Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
+          ).pipe(Effect.provide(rendererTestLayer())),
+        )
+        .pipe(
+          Effect.provideService(FileSystem.FileSystem, {
+            ...f.fs,
+            readFileString: (path, options) =>
+              path === statePath && f.requests.length > 0
+                ? Effect.as(
+                    f.fs.writeFileString(statePath, "invalid state bytes\n"),
+                    "invalid state bytes\n",
+                  )
+                : f.fs.readFileString(path, options),
+          }),
+        ),
     );
     assert.isTrue(Exit.isFailure(exit));
     if (Exit.isFailure(exit))
@@ -376,7 +410,9 @@ it.effect("a stale installed-copy plan aborts before fetching the next Source", 
     let changed: string | undefined;
     const failure = yield* Effect.flip(
       f.run(
-        updateSubjects().pipe(
+        Effect.flatMap(Library.Service, (library) =>
+          Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
+        ).pipe(
           Effect.provide(
             rendererTestLayer({
               withStatus: (status, operation) =>
@@ -415,7 +451,11 @@ it.effect("stops on corruption of an existing retained object", () =>
     );
     f.bodies.set(f.urls[0]!, yield* f.archive("broken", false, "before"));
     const exit = yield* Effect.exit(
-      f.run(updateSubjects().pipe(Effect.provide(rendererTestLayer()))),
+      f.run(
+        Effect.flatMap(Library.Service, (library) =>
+          Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
+        ).pipe(Effect.provide(rendererTestLayer())),
+      ),
     );
     assert.isTrue(Exit.isFailure(exit));
     if (Exit.isFailure(exit))
@@ -436,7 +476,11 @@ it.effect("several successful source updates are one composed history action", (
     f.bodies.set(first, yield* f.archive("broken", false, "after"));
     const auditPath = join(f.home, "audit.jsonl");
     const before = (yield* f.fs.readFileString(auditPath)).trim().split("\n").length;
-    const outcomes = yield* f.run(updateSubjects());
+    const outcomes = yield* f.run(
+      Effect.flatMap(Library.Service, (library) =>
+        Effect.flatMap(updateAdapters, (adapters) => library.update(undefined, adapters)),
+      ),
+    );
     assert.strictEqual(outcomes.length, 2);
     assert.isTrue(outcomes.every((item) => "changed" in item && item.changed));
     const after = (yield* f.fs.readFileString(auditPath)).trim().split("\n").length;

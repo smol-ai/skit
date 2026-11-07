@@ -5,7 +5,8 @@ import { FailureTypeId, type SkitFailure } from "../../shared/failure.js";
 import { type Hash } from "../../shared/hash.js";
 import * as MachineSettings from "../machine-settings.js";
 import { stepRouting } from "../routing/step.js";
-import * as Library from "../library.js";
+import type * as Library from "../library.js";
+import { Service } from "../service.js";
 import type { ManageOptions } from "./manage-existing.js";
 import { revalidateSetupPlan, type SetupOptions } from "./scan.js";
 import type {
@@ -120,7 +121,7 @@ export const applySetupPlan = Effect.fn("Setup.applyPlan")(function* (
   options: SetupApplyOptions,
   approval: SetupApproval,
 ) {
-  const library = yield* Library.Service;
+  const library = yield* Service;
   // Read before the scan: a change after it fails the plan ID, one after this read the setup.
   const base = yield* library.read;
   const revalidated = yield* options.withStatus(

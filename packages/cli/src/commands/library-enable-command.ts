@@ -7,7 +7,6 @@ import { Argument, Command, Flag } from "effect/cli";
 import { resolve } from "node:path";
 import { handleLibraryCommand } from "../application.js";
 
-import { libraryCommandConfiguration } from "./library-configuration.js";
 import { CommandMetadata } from "./metadata.js";
 import { enableOutputContracts, presentSetEnabled } from "../library/enable.js";
 import { localFlags, optionalString } from "./parameters.js";
@@ -61,7 +60,6 @@ export const setEnabledCliCommand = (enabled: boolean) => {
             return yield* new OptionCombinationInvalid({
               detail: "Choose one scope: --global or --repo <path>",
             });
-          const configuration = yield* libraryCommandConfiguration(input);
           const selectedSubject = Option.getOrUndefined(input.subject);
           const selectedScope: Scope | undefined = input.global
             ? { kind: "global" }
@@ -87,7 +85,6 @@ export const setEnabledCliCommand = (enabled: boolean) => {
             invocation: selectedInvocation,
             dryRun: input.dryRun,
             interactive,
-            configuration,
           });
         }),
         input,

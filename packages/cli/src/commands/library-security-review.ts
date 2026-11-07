@@ -3,7 +3,7 @@ import { Argument, Command } from "effect/cli";
 import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
 import { securityOutputContracts } from "../library/security/output.js";
-import { reviewLibrarySecurity as reviewSecurity } from "../library/security/operation.js";
+import * as Library from "@smolai/skit-core/library";
 import { securityReviewCommand } from "../library/security/review.js";
 import { localFlags } from "./parameters.js";
 
@@ -19,7 +19,11 @@ export const securityReviewCliCommand = Command.make(
     handleLibraryCommand(
       Effect.gen(function* () {
         const renderer = yield* Renderer;
-        const value = yield* securityReviewCommand({ securityReviewEffect: reviewSecurity }, skill);
+        const library = yield* Library.Service;
+        const value = yield* securityReviewCommand(
+          { securityReviewEffect: library.securityReview },
+          skill,
+        );
         yield* renderer.result(
           result("securityReview", securityOutputContracts.securityReview, value),
         );

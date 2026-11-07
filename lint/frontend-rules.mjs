@@ -185,46 +185,6 @@ function commandExport(context, exports) {
 }
 
 export const frontendRules = {
-  "frontend-no-library-service": {
-    meta: {
-      type: "problem",
-      docs: {
-        description: "Frontends call Library operations; one root constructs the Library",
-      },
-      messages: {
-        forbidden:
-          "Library.{{name}} is the owner's own. Call the matching Library operation entry instead.",
-      },
-    },
-    create(context) {
-      const file = relative(root, context.filename);
-      if (!file.startsWith(cli) || /^(storybook|platform)\//.test(file.slice(cli.length)))
-        return {};
-      const bindings = imports();
-      // The executable composes its one Library in application.ts; nothing else constructs one.
-      const owned = new Set(
-        file === `${cli}application.ts`
-          ? ["Service", "Interface"]
-          : ["Service", "layer", "Interface"],
-      );
-      const report = (node, name) =>
-        context.report({ node, messageId: "forbidden", data: { name } });
-      return {
-        ImportDeclaration(node) {
-          bindings.add(node);
-          if (node.source.value !== "@smolai/skit-core/library") return;
-          for (const specifier of node.specifiers)
-            if (specifier.type === "ImportSpecifier" && owned.has(specifier.imported?.name))
-              report(specifier, specifier.imported.name);
-        },
-        MemberExpression(node) {
-          const path = bindings.path(node);
-          if (path?.length === 2 && path[0] === "@smolai/skit-core/library" && owned.has(path[1]))
-            report(node, path[1]);
-        },
-      };
-    },
-  },
   "frontend-no-resources": {
     meta: {
       type: "problem",

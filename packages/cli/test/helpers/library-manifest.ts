@@ -1,6 +1,5 @@
 import { Effect } from "effect";
 import * as Library from "@smolai/skit-core/library";
-import { readLibraryManifest as readManifest } from "@smolai/skit-core/library/queries";
 import { assertDiskUnchanged, captureDisk } from "./disk-snapshot.js";
 import { testRoots } from "./roots.js";
 
@@ -10,7 +9,7 @@ export const readLibraryManifest = Effect.fn("Test.readLibraryManifest")(functio
   roots: readonly string[],
 ) {
   const before = yield* captureDisk(roots, { identity: true });
-  const manifest = yield* readManifest(home).pipe(
+  const manifest = yield* Effect.flatMap(Library.Service, (library) => library.manifest).pipe(
     Effect.provide(Library.layer({ home, roots: testRoots(home) })),
   );
   yield* assertDiskUnchanged(before);

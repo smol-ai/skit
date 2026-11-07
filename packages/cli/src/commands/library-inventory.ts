@@ -1,13 +1,12 @@
-import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { Effect } from "effect";
 import { Command } from "effect/cli";
 import { Renderer } from "../terminal/renderer.js";
 import { handleLibraryCommand } from "../application.js";
 import { CommandMetadata } from "./metadata.js";
-import { inventoryRootOptions, localFlags } from "./parameters.js";
+import { localFlags } from "./parameters.js";
 import { encodeResult as result } from "./encode-result.js";
 import { inventoryOutputContracts } from "../library/inventory/output.js";
-import { inventoryCommand } from "../library/inventory/operation.js";
+import * as Library from "@smolai/skit-core/library";
 
 const machineInventoryMetadata = {
   effects: {
@@ -28,15 +27,12 @@ const machineInventoryMetadata = {
 export const inventoryCliCommand = Command.make("inventory", localFlags, (input) =>
   handleLibraryCommand(
     Effect.gen(function* () {
-      const paths = yield* SkitConfiguration;
-
-      const selectedHome = paths.skitHome;
-      const options = {
-        ...inventoryRootOptions(input, paths),
-        libraryHome: selectedHome,
-      };
       const renderer = yield* Renderer;
-      const inventory = yield* inventoryCommand(options);
+      const library = yield* Library.Service;
+      const inventory = yield* renderer.withStatus(
+        "Scanning repository and harness skills",
+        library.inventory.refreshMachine,
+      );
       yield* renderer.result(result("inventory", inventoryOutputContracts.inventory, inventory));
     }),
     input,

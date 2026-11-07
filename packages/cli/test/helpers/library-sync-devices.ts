@@ -13,7 +13,6 @@ import { deterministicTreeHash } from "@smolai/skit-core/author";
 import * as Library from "@smolai/skit-core/library";
 import { skitConfigurationLayer } from "@smolai/skit-core/platform";
 import { registryHttpLayer } from "../../src/registry/registry-http.js";
-import { syncLibrary } from "@smolai/skit-core/library/sync";
 import { librarySyncApi } from "../../src/library/sync/api.js";
 import { HttpClient, HttpClientError, HttpClientResponse } from "effect/http";
 
@@ -299,13 +298,13 @@ export const devices = Effect.gen(function* () {
         ),
       sync: (
         options: {
-          progress?: Parameters<typeof syncLibrary>[1]["progress"];
-          restoreProgress?: Parameters<typeof syncLibrary>[1]["restoreProgress"];
-          onPlan?: Parameters<typeof syncLibrary>[1]["onPlan"];
+          progress?: Parameters<Library.Interface["sync"]>[0]["progress"];
+          restoreProgress?: Parameters<Library.Interface["sync"]>[0]["restoreProgress"];
+          onPlan?: Parameters<Library.Interface["sync"]>[0]["onPlan"];
           apply?: boolean;
           takeRemote?: readonly string[];
           keepEnabled?: readonly string[];
-          deviceSelection?: Parameters<typeof syncLibrary>[1]["deviceSelection"];
+          deviceSelection?: Parameters<Library.Interface["sync"]>[0]["deviceSelection"];
           /** The roots this device's Library is built from; defaults to `rootFor`'s. */
           inventory?: InventoryRootOptions;
           rootFor?: (target: InstallDestination) => string | undefined;
@@ -317,16 +316,16 @@ export const devices = Effect.gen(function* () {
             librarySyncApi({ origin: "https://registry.test", token: "test" }),
           ),
           ([, transport]) =>
-            syncLibrary(
-              home,
-              {
-                origin: "https://registry.test",
-                token: "test",
-                apply: true,
-                ...Struct.omit(options, ["inventory", "rootFor"]),
-                installedSkill: { rootFor: options.rootFor ?? rootFor },
-              },
-              transport,
+            Effect.flatMap(Library.Service, (library) =>
+              library.sync(
+                {
+                  origin: "https://registry.test",
+                  token: "test",
+                  apply: true,
+                  ...Struct.omit(options, ["inventory", "rootFor"]),
+                },
+                transport,
+              ),
             ).pipe(
               Effect.provide(
                 Library.layer({ home, roots: syncInventory(options.rootFor, options.inventory) }),

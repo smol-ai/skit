@@ -51,7 +51,9 @@ import {
 export { RefreshInventoryPlan } from "./internal/inventory/refresh.js";
 import { type UndoPlanError, type UndoApplyError } from "./internal/setup/undo.js";
 import type { UndoIntent, UndoPlan, UndoResult } from "./internal/setup/undo-plan.js";
-import { Context, Effect, Layer } from "effect";
+import { Effect, Layer } from "effect";
+import { Service } from "./service.js";
+export { Service } from "./service.js";
 import {
   type StagedContent,
   type ContentSource,
@@ -231,6 +233,22 @@ export type ApplyError = Exclude<
   LibraryChanged
 >;
 
+import type { RemoveOptions, removeCollection } from "./internal/session/remove.js";
+import type { updateSources, SourceUpdateAdapters } from "./internal/session/update-sources.js";
+import type { openEditImport } from "./internal/session/edit.js";
+import type { libraryQueries, acceptLibrarySecurityFinding } from "./internal/session/queries.js";
+import type { refreshInventory, refreshMachineInventory } from "./inventory.js";
+type Queries = ReturnType<typeof libraryQueries>;
+
+import type { syncLibrary, LibrarySyncTransport } from "./internal/sync/library-sync.js";
+import type { openSyncSession } from "./internal/sync/session.js";
+
+import type { openSetEnabledSession, planSetEnabled } from "./internal/session/set-enabled.js";
+import type { SetEnabledRequest } from "./internal/session/set-enabled-request.js";
+import type { openLibrarySession, readLibrarySkillContent } from "./internal/session/session.js";
+
+import type { addSource, importSource, SourceRequest } from "./source.js";
+
 export interface Interface {
   /**
    * One read. Never writes: a legacy state.json was migrated when the layer was built, and a read
@@ -298,6 +316,96 @@ export interface Interface {
   };
   /** Audit events and recorded operations, including Pending and Stopped setup. Never writes. */
   readonly history: Effect.Effect<History, LibraryStateReadError | LibraryAuditInvalid>;
+  readonly addSource: (
+    request: SourceRequest,
+  ) => Effect.Effect<
+    Effect.Success<ReturnType<typeof addSource>>,
+    Effect.Error<ReturnType<typeof addSource>>
+  >;
+  readonly importSource: (
+    request: SourceRequest,
+  ) => Effect.Effect<
+    Effect.Success<ReturnType<typeof importSource>>,
+    Effect.Error<ReturnType<typeof importSource>>
+  >;
+  readonly enable: {
+    readonly open: () => ReturnType<typeof openSetEnabledSession>;
+    readonly plan: (requests: readonly SetEnabledRequest[]) => ReturnType<typeof planSetEnabled>;
+  };
+  readonly session: {
+    readonly open: () => Effect.Effect<
+      Effect.Success<ReturnType<typeof openLibrarySession>>,
+      Effect.Error<ReturnType<typeof openLibrarySession>>
+    >;
+    readonly readSkillContent: (
+      skillVersionId: string,
+    ) => Effect.Effect<
+      Effect.Success<ReturnType<typeof readLibrarySkillContent>>,
+      Effect.Error<ReturnType<typeof readLibrarySkillContent>>
+    >;
+  };
+  readonly sync: <ReadError, UploadError, WriteError, DownloadError, R>(
+    options: Parameters<typeof syncLibrary>[2],
+    transport: LibrarySyncTransport<ReadError, UploadError, WriteError, DownloadError, R>,
+  ) => Effect.Effect<
+    Effect.Success<
+      ReturnType<typeof syncLibrary<ReadError, UploadError, WriteError, DownloadError, R>>
+    >,
+    Effect.Error<
+      ReturnType<typeof syncLibrary<ReadError, UploadError, WriteError, DownloadError, R>>
+    >,
+    R
+  >;
+  readonly syncSession: (
+    request: Parameters<typeof openSyncSession>[2],
+    options: Parameters<typeof openSyncSession>[3],
+  ) => Effect.Effect<
+    Effect.Success<ReturnType<typeof openSyncSession>>,
+    Effect.Error<ReturnType<typeof openSyncSession>>
+  >;
+  // ── Operations: intent in, report out. Home, roots and storage stay inside. ──────────────────
+  /** Remove a Collection, or the sole Skill's Collection, and uninstall the Skills it installed. */
+  readonly remove: (options: RemoveOptions) => ReturnType<typeof removeCollection>;
+  /** Update retained Sources from their origins and install their members on this device. */
+  readonly update: <E, R, F extends { readonly remediation: string }>(
+    query: string | undefined,
+    adapters: SourceUpdateAdapters<E, R, F>,
+  ) => Effect.Effect<
+    Effect.Success<ReturnType<typeof updateSources<E, R, F>>>,
+    Effect.Error<ReturnType<typeof updateSources<E, R, F>>>,
+    R
+  >;
+  /** Review an edited installed copy as a new Version; `apply` retains it as previewed. */
+  readonly edit: (
+    query: string,
+    selector: string,
+  ) => Effect.Effect<
+    Effect.Success<ReturnType<typeof openEditImport>>,
+    Effect.Error<ReturnType<typeof openEditImport>>
+  >;
+  /** Compare retained Collections with their Sources. */
+  readonly check: Queries["check"];
+  readonly previewSourceUpdates: Queries["previewSourceUpdates"];
+  readonly securityReview: Queries["securityReview"];
+  readonly acceptSecurityFinding: (
+    query: string,
+    input: Parameters<typeof acceptLibrarySecurityFinding>[2],
+  ) => ReturnType<typeof acceptLibrarySecurityFinding>;
+  readonly descriptionLoad: Queries["descriptionLoad"];
+  readonly workspaceClaims: Queries["workspaceClaims"];
+  readonly installedSkills: Queries["installedSkills"];
+  readonly manifest: Queries["manifest"];
+  readonly skillsShCollectionIds: Queries["skillsShCollectionIds"];
+  readonly list: Queries["list"];
+  readonly inventory: {
+    /** Scan this device's roots and save what was found. */
+    readonly refresh: ReturnType<typeof refreshInventory>;
+    /** The saved inventory with this machine's discovered copies. */
+    readonly refreshMachine: Effect.Effect<
+      Effect.Success<ReturnType<typeof refreshMachineInventory>>,
+      Effect.Error<ReturnType<typeof refreshMachineInventory>>
+    >;
+  };
   /** Passive recovery facts; malformed audit history must not hide saved files. */
   readonly recovery: {
     readonly list: Effect.Effect<readonly string[], PlatformError | RecoveryInvalid>;
@@ -308,7 +416,6 @@ export interface Interface {
   /** What startup recovery did when the layer was built. */
   readonly startup: StartupRecovery;
 }
-export class Service extends Context.Service<Service, Interface>()("skit/library/Library") {}
 
 /**
  * This device's roots are part of constructing the Library, never assembled by an operation's
@@ -331,3 +438,5 @@ export const layer = (
 export type { LibraryStateWriteError } from "./store/library-store.js";
 
 export type { SetupResult } from "./internal/setup/run.js";
+
+export type { ImportRequest, AuthoredImport, EditImport } from "./import-collection.js";

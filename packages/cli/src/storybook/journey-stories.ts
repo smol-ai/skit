@@ -9,14 +9,13 @@ import * as Library from "@smolai/skit-core/library";
 import { presentDoctorCleanup } from "../library/doctor/cleanup.js";
 import { syncJourney } from "./sync-journey.js";
 import { join } from "node:path";
-import { ConfigProvider, Effect, Option } from "effect";
+import { ConfigProvider, Effect } from "effect";
 
-import { libraryCommandConfiguration } from "../commands/library-configuration.js";
+import { inventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { presentSetEnabled } from "../library/enable.js";
 import type { Prompter } from "../terminal/prompter.js";
 import type { Renderer } from "../terminal/renderer.js";
 import type { ScriptedAnswer } from "./interaction-recorder.js";
-import { openLibrarySession } from "@smolai/skit-core/library/session";
 
 export interface JourneyStory<A, E, R> {
   readonly name: string;
@@ -30,13 +29,9 @@ export interface JourneyStory<A, E, R> {
 const previewEnable = Effect.scoped(
   Effect.gen(function* () {
     const { home, codexRoot, installedEmpty } = yield* makeEnablePreviewFixture;
-    const configuration = yield* libraryCommandConfiguration({
-      home: Option.some(home),
-      codexRoot: Option.some(codexRoot),
-      claudeRoot: Option.none(),
-      opencodeRoot: Option.none(),
-      devinRoot: [],
-    });
+    const configuration = {
+      inventory: inventoryRootOptions(yield* SkitConfiguration, { codex: [codexRoot] }),
+    };
     return yield* Effect.gen(function* () {
       const library = yield* Library.Service;
       yield* importReview(home);
@@ -48,7 +43,6 @@ const previewEnable = Effect.scoped(
         all: true,
         dryRun: true,
         interactive: true,
-        configuration,
       });
       const after = yield* library.read;
       if (
@@ -58,9 +52,7 @@ const previewEnable = Effect.scoped(
         !(yield* installedEmpty)
       )
         return yield* Effect.die("The enable preview changed the Library or installed files");
-      return yield* Effect.flatMap(SkitConfiguration, (paths) =>
-        openLibrarySession(paths.skitHome, configuration.pull.installOptions),
-      );
+      return yield* library.session.open();
     }).pipe(
       Effect.provide(Library.layer({ home, roots: configuration.inventory })),
       Effect.provide(skitConfigurationLayer(home)),

@@ -68,46 +68,6 @@ export default { meta: plugin.meta, rules: { ${JSON.stringify(rule)}: {
   }
 }
 
-describe("skit/frontend-no-library-service", () => {
-  test("only the application root constructs the production Library", async () => {
-    const source = `import * as Library from "@smolai/skit-core/library";
-export const layer = Library.layer({ home: ".", routing: { _tag: "None" } });`;
-    expect(
-      await lint(
-        "frontend-no-library-service",
-        source,
-        undefined,
-        "packages/cli/src/application.ts",
-      ),
-    ).toEqual([]);
-    expect(
-      await lint(
-        "frontend-no-library-service",
-        source,
-        undefined,
-        "packages/cli/src/commands/handler.ts",
-      ),
-    ).toEqual([2]);
-  });
-  test("rejects the Library service and layer through namespace and named imports", async () => {
-    expect(
-      await lint(
-        "frontend-no-library-service",
-        `
-import * as Library from "@smolai/skit-core/library";
-import { Service, type LibraryManifest } from "@smolai/skit-core/library";
-import { Effect } from "effect";
-const a = Effect.gen(function* () {
-  const library = yield* Library.Service;
-  yield* Effect.provide(library.read, Library.layer({ home: ".", routing: { _tag: "None" } }));
-});
-const b = Library.RestoreInvalid;
-`,
-      ),
-    ).toEqual([3, 6, 7]);
-  }, 30_000);
-});
-
 describe("skit/frontend-no-resources", () => {
   test("checks aliases, direct imports, resource types and dynamic Node imports", async () => {
     expect(

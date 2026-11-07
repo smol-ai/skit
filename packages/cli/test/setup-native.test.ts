@@ -1,3 +1,4 @@
+import * as Library from "@smolai/skit-core/library";
 import { withLibraryOwner } from "./helpers/library-owner.js";
 import { testPlatformLayer } from "./helpers/platform.js";
 import { createHash } from "node:crypto";
@@ -531,7 +532,9 @@ for (const failure of ["ls-files", "status"] as const) {
       }
       yield* git(f.repository, "add", ".");
       yield* git(f.repository, "commit", "-qm", "repository copies");
-      const evidence = yield* collectSetupEvidence(f.options).pipe(
+      const evidence = yield* Effect.flatMap(Library.Service, (library) =>
+        collectSetupEvidence(library, f.options),
+      ).pipe(
         withLibraryOwner(f.options.inventory),
         Effect.provide(skitConfigurationLayer(f.libraryHome)),
       );

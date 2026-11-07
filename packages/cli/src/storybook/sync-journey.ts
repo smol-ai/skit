@@ -67,10 +67,6 @@ export const syncJourney = (failDownload: boolean) =>
           source: "stored",
         }),
         apply: true,
-
-        installedSkill: {
-          rootFor: (target) => (target === "agents" ? join(workspace, "agents-skills") : undefined),
-        },
       }).pipe(
         // The fixture device's Library, routed as its installs.
         Effect.provide(

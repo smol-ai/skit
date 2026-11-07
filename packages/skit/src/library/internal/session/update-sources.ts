@@ -1,7 +1,7 @@
 import { Cause, Effect, FileSystem, Predicate } from "effect";
 import { isPlatformError } from "effect/PlatformError";
 import { dirname, join, resolve } from "node:path";
-import * as Library from "../../library.js";
+import type { Interface } from "../../library.js";
 import { emptyLibraryState, type LibraryState } from "../../library-state.js";
 import { loadLibrary, writeLibrary } from "../../store/library-store.js";
 import { latestSourceImport, type LibrarySubject } from "../../subject-resolution.js";
@@ -22,6 +22,7 @@ export interface SourceUpdateAdapters<E, R, F extends { readonly remediation: st
   readonly importSource: (
     input: SkitSource,
     previousSkillPaths: readonly string[],
+    imports: Interface["import"],
   ) => Effect.Effect<
     {
       readonly snapshot_digest: Hash;
@@ -66,12 +67,12 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <
   F extends { readonly remediation: string },
 >(
   home: string,
+  library: Pick<Interface, "read" | "plan" | "apply" | "import">,
   state: LibraryState,
   before: LibrarySubject,
   adapters: SourceUpdateAdapters<E, R, F>,
 ) {
   const progress = adapters.progress;
-  const library = yield* Library.Service;
   const storeHome = yield* canonicalStoragePath(home);
   let phase: "source" | "install" = "source";
   let source = before.label;
@@ -83,12 +84,11 @@ const updateCollection = Effect.fn("Library.updateCollection")(function* <
       const subject = { id: before.subjectId, label: before.label };
       const imported = yield* progress.around(
         { kind: "source", subject },
-        adapters
-          .importSource(
-            input,
-            priorTree.members.map((member) => member.source_path),
-          )
-          .pipe(Effect.provideService(Library.Service, library)),
+        adapters.importSource(
+          input,
+          priorTree.members.map((member) => member.source_path),
+          library.import,
+        ),
         (value) => ({
           kind: "source-inspected",
           changed: value.snapshot_digest !== priorTree.hash,
@@ -234,8 +234,12 @@ export const updateSources = Effect.fn("Library.updateSources")(function* <
   E,
   R,
   F extends { readonly remediation: string },
->(home: string, query: string | undefined, adapters: SourceUpdateAdapters<E, R, F>) {
-  const library = yield* Library.Service;
+>(
+  home: string,
+  library: Pick<Interface, "read" | "plan" | "apply" | "import">,
+  query: string | undefined,
+  adapters: SourceUpdateAdapters<E, R, F>,
+) {
   return yield* writeLibrary(
     home,
     Effect.gen(function* () {
@@ -243,7 +247,7 @@ export const updateSources = Effect.fn("Library.updateSources")(function* <
       const state = snapshot._tag === "Present" ? snapshot.state : emptyLibraryState();
       const selected = yield* selectSubjects(state, query);
       return yield* Effect.forEach(selected, (subject) =>
-        updateCollection(home, state, subject, adapters),
+        updateCollection(home, library, state, subject, adapters),
       );
     }),
   );

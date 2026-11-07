@@ -1,8 +1,8 @@
+import * as Library from "@smolai/skit-core/library";
 import { resolve } from "node:path";
 import { Effect } from "effect";
 import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 import {
-  openLibrarySession,
   proposeLibraryEnable,
   proposeLibraryCollectionChange,
   libraryCollectionScopes,
@@ -41,7 +41,7 @@ export interface Chooser {
   choose: (value: string) => void | Promise<void>;
 }
 
-type Requirements = Effect.Services<ReturnType<typeof openLibrarySession>>;
+type Requirements = Library.Service | Effect.Services<ReturnType<typeof confirmLibraryChange>>;
 type Transition = <Error>(
   update: (state: LibrarySessionState) => Effect.Effect<LibrarySessionState, Error, Requirements>,
 ) => Promise<LibraryActionOutcome | undefined>;
@@ -63,7 +63,6 @@ interface Options {
 /** Library navigation and interaction flow; the host alone runs and serializes core operations. */
 export function createLibraryController(options: Options) {
   const libraryHost = options.host;
-  const libraryConfiguration = options.configuration;
   const { openChooser, openConfirm, closeConfirm, render, refreshListingBudgets } = options;
   let collectionId: string | undefined;
   let selectedIndex = 0;
@@ -125,13 +124,7 @@ export function createLibraryController(options: Options) {
       chooseScopeThen(async (scope) =>
         afterProposal(
           await transitionLibrary((state) =>
-            proposeLibraryCollectionChange(
-              state,
-              libraryConfiguration,
-              collection.collectionId,
-              true,
-              [scope],
-            ),
+            proposeLibraryCollectionChange(state, collection.collectionId, true, [scope]),
           ),
         ),
       );
@@ -158,14 +151,8 @@ export function createLibraryController(options: Options) {
           afterProposal(
             await transitionLibrary((state) =>
               value === "collection"
-                ? proposeLibraryCollectionChange(
-                    state,
-                    libraryConfiguration,
-                    row.collectionId,
-                    true,
-                    [scope],
-                  )
-                : proposeLibraryEnable(state, libraryConfiguration, row, { scope }),
+                ? proposeLibraryCollectionChange(state, row.collectionId, true, [scope])
+                : proposeLibraryEnable(state, row, { scope }),
             ),
           ),
         ),
@@ -179,13 +166,7 @@ export function createLibraryController(options: Options) {
     const disable = async (selectedScopes: readonly Scope[]) =>
       afterProposal(
         await transitionLibrary((state) =>
-          proposeLibraryCollectionChange(
-            state,
-            libraryConfiguration,
-            collectionId,
-            false,
-            selectedScopes,
-          ),
+          proposeLibraryCollectionChange(state, collectionId, false, selectedScopes),
         ),
       );
     if (scopes.length === 1) void disable(scopes);
@@ -234,9 +215,7 @@ export function createLibraryController(options: Options) {
         }
         const disable = async (scopes: readonly ScopeRow[]) =>
           afterProposal(
-            await transitionLibrary((state) =>
-              proposeLibraryDisable(state, libraryConfiguration, row, scopes),
-            ),
+            await transitionLibrary((state) => proposeLibraryDisable(state, row, scopes)),
           );
         if (row.scopes.length === 1) void disable(row.scopes);
         else
@@ -272,13 +251,7 @@ export function createLibraryController(options: Options) {
         choose: async (value) =>
           afterProposal(
             await transitionLibrary((state) =>
-              proposeLibraryInvocation(
-                state,
-                libraryConfiguration,
-                row,
-                scopeRow,
-                value as InvocationOption,
-              ),
+              proposeLibraryInvocation(state, row, scopeRow, value as InvocationOption),
             ),
           ),
       });
@@ -309,10 +282,13 @@ export function createLibraryController(options: Options) {
   async function refreshLibrary(): Promise<void> {
     if (!libraryHost.state) return;
     await transitionLibrary((state) =>
-      Effect.map(openLibrarySession(options.home, libraryConfiguration), (session) => ({
-        ...session,
-        ...(state.outcome === undefined ? {} : { outcome: state.outcome }),
-      })),
+      Effect.map(
+        Effect.flatMap(Library.Service, (library) => library.session.open()),
+        (session) => ({
+          ...session,
+          ...(state.outcome === undefined ? {} : { outcome: state.outcome }),
+        }),
+      ),
     );
     await refreshListingBudgets();
     render();
@@ -369,21 +345,13 @@ export function createLibraryController(options: Options) {
       if (collection && libraryHost.state)
         afterProposal(
           await transitionLibrary((state) =>
-            proposeLibraryCollectionChange(
-              state,
-              libraryConfiguration,
-              collection.collectionId,
-              true,
-              [scope],
-            ),
+            proposeLibraryCollectionChange(state, collection.collectionId, true, [scope]),
           ),
         );
       const row = selectedLibraryRow();
       if (row && libraryHost.state)
         afterProposal(
-          await transitionLibrary((state) =>
-            proposeLibraryEnable(state, libraryConfiguration, row, { scope }),
-          ),
+          await transitionLibrary((state) => proposeLibraryEnable(state, row, { scope })),
         );
     },
     startEnable,

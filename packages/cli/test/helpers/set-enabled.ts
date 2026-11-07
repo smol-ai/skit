@@ -2,29 +2,28 @@ import { Effect } from "effect";
 import type { InstallScope } from "@smolai/skit-core/library";
 import type { InvocationOption } from "@smolai/skit-core/library/session";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
-import * as Selection from "@smolai/skit-core/library/enable";
 import * as Library from "@smolai/skit-core/library";
 import type { SetEnabledRequest } from "@smolai/skit-core/library/enable";
 export { SetEnabledIncomplete, type SetEnabledRequest } from "@smolai/skit-core/library/enable";
 
 /** Test fixtures supply paths as a service; the Library is built from the roots the test gives. */
-export const openSetEnabledSession = (configuration: Selection.SetEnabledConfiguration) =>
+export const openSetEnabledSession = (configuration: InventoryRootOptions) =>
   Effect.flatMap(SkitConfiguration, (paths) =>
-    Selection.openSetEnabledSession(paths.skitHome, configuration).pipe(
+    Effect.flatMap(Library.Service, (library) => library.enable.open()).pipe(
       Effect.provide(Library.layer({ home: paths.skitHome, roots: configuration })),
     ),
   );
 export const planSetEnabled = (
   requests: readonly SetEnabledRequest[],
-  configuration: Selection.SetEnabledConfiguration,
+  configuration: InventoryRootOptions,
 ) =>
   Effect.flatMap(SkitConfiguration, (paths) =>
-    Selection.planSetEnabled(paths.skitHome, requests, configuration).pipe(
+    Effect.flatMap(Library.Service, (library) => library.enable.plan(requests)).pipe(
       Effect.provide(Library.layer({ home: paths.skitHome, roots: configuration })),
     ),
   );
-export const applySetEnabledPlan = (plan: Selection.SetEnabledPlan) =>
-  Effect.flatMap(SkitConfiguration, (paths) => Selection.applySetEnabledPlan(paths.skitHome, plan));
+export { applySetEnabledPlan } from "@smolai/skit-core/library/enable";
+import { applySetEnabledPlan } from "@smolai/skit-core/library/enable";
 
 import type { InventoryRootOptions } from "@smolai/skit-core/library/routing";
 

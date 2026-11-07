@@ -1,3 +1,4 @@
+import * as Library from "@smolai/skit-core/library";
 import { MissingRequirement } from "../commands/input-failures.js";
 
 import { type InstallScope as Scope } from "@smolai/skit-core/library";
@@ -5,7 +6,6 @@ import { type InstallScope as Scope } from "@smolai/skit-core/library";
 import { Effect } from "effect";
 
 import { NothingToSelect } from "../terminal/interaction-failures.js";
-import { libraryCommandConfiguration } from "../commands/library-configuration.js";
 
 import { enableOutputContracts } from "./enable/output.js";
 
@@ -13,7 +13,6 @@ import { type InvocationOption, scopeChoices } from "@smolai/skit-core/library/s
 import {
   applySetEnabledPlan,
   SetEnabledIncomplete,
-  openSetEnabledSession,
   type SetEnabledIntent,
   type EnabledCollection,
 } from "@smolai/skit-core/library/enable";
@@ -39,7 +38,6 @@ export interface SetEnabledCommandInput {
   readonly invocation?: InvocationOption;
   readonly dryRun: boolean;
   readonly interactive: boolean;
-  readonly configuration: Effect.Success<ReturnType<typeof libraryCommandConfiguration>>;
 }
 
 type EnabledTarget = EnabledCollection & { readonly location: string };
@@ -58,10 +56,7 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
       requires: "a skill or collection",
       hint: "`skit list --json` lists them. Add `--global` or `--repo <path>` to choose the scope, and `--all` for a whole collection.",
     });
-  const selection = yield* openSetEnabledSession(
-    input.configuration.libraryHome,
-    input.configuration.pull.installOptions,
-  );
+  const selection = yield* Effect.flatMap(Library.Service, (library) => library.enable.open());
   const view = selection.view;
   const prompter = yield* Prompter;
   const renderer = yield* Renderer;
@@ -262,10 +257,10 @@ export const presentSetEnabled = Effect.fn("CLI.setEnabled.portable")(function* 
         ? "Projecting retained Skills"
         : "Removing installed skills",
     Effect.gen(function* () {
-      const plan = yield* selection.plan(intent, input.configuration.inventory);
+      const plan = yield* selection.plan(intent);
       return input.dryRun
         ? plan.changes.map((value) => ({ kind: "plan" as const, value }))
-        : yield* applySetEnabledPlan(input.configuration.libraryHome, plan).pipe(
+        : yield* applySetEnabledPlan(plan).pipe(
             Effect.catchTag("Library.SetEnabledIncomplete", (failure) => Effect.succeed(failure)),
           );
     }),

@@ -1,8 +1,9 @@
-import { runSetup } from "./setup.js";
+import { scanForSetup } from "./setup/scan.js";
+import type { Interface } from "./library.js";
 import { skillModificationTime } from "./internal/session/skill-metadata.js";
 /** Inventory refresh and read reports belong to Library; frontends provide roots and rendering. */
 import { Effect } from "effect";
-import * as Library from "./library.js";
+import { Service } from "./service.js";
 import { emptyLibraryState, libraryInventory } from "./library-state.js";
 import { selectInventoryRoots, type InventoryRootOptions } from "./routing/roots.js";
 
@@ -11,16 +12,16 @@ export { libraryDoctorReport } from "./inventory/doctor-report.js";
 
 /** Read the saved inventory without scanning, preparing a mutation or exposing absent-state layout. */
 export const readInventory = Effect.gen(function* () {
-  const library = yield* Library.Service;
+  const library = yield* Service;
   const snapshot = yield* library.read;
   return libraryInventory(snapshot._tag === "Present" ? snapshot.state : emptyLibraryState());
 });
 
 /** Read, select roots, scan and apply through the owner; return no persisted-state representation. */
 export const refreshInventory = Effect.fn("Library.refreshInventory")(function* (
+  library: Pick<Interface, "read" | "plan" | "apply">,
   options: InventoryRootOptions,
 ) {
-  const library = yield* Library.Service;
   const base = yield* library.read;
   const roots = selectInventoryRoots(
     base._tag === "Present" ? base.state : emptyLibraryState(),
@@ -35,10 +36,11 @@ export { inspectOwnershipMarker } from "../installed-skills/marker-inspection.js
 
 /** One owner assembles the saved inventory and this machine's discovered copy facts. */
 export const refreshMachineInventory = Effect.fn("Library.refreshMachineInventory")(function* (
+  owner: Pick<Interface, "read" | "plan" | "apply">,
   options: InventoryRootOptions & { readonly libraryHome: string },
 ) {
-  const library = yield* refreshInventory(options);
-  const scan = yield* runSetup({
+  const library = yield* refreshInventory(owner, options);
+  const { scan } = yield* scanForSetup(owner, {
     libraryHome: options.libraryHome,
     inventory: options,
     persistRoots: false,

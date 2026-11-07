@@ -3,7 +3,6 @@ import { ImportContentInvalid } from "../library/index.js";
 import { initSkit as scaffoldSkit } from "./scaffold.js";
 import { validateSkitDirectory } from "../artifact/skit.js";
 import * as Library from "../library/index.js";
-import { readLibraryWorkspaceClaims } from "../library/queries.js";
 
 import {
   AuthorWorkspace,
@@ -25,7 +24,7 @@ const checkLibraryClaims = Effect.fn("Author.checkLibraryClaims")(function* (
   root: WorkspaceRoot,
   identity: Option.Option<Identity>,
 ) {
-  const claims = yield* readLibraryWorkspaceClaims(home, root);
+  const claims = yield* (yield* Library.Service).workspaceClaims(root);
   const sameRoot = claims.atRoot;
   const imported = sameRoot.find((collection) => collection.workspaceId !== undefined);
   const expected = Option.isSome(identity) ? identity.value.workspaceId : imported?.workspaceId;

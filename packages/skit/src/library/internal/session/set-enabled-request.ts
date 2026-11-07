@@ -4,7 +4,12 @@ import { type LibraryState } from "../../library-state.js";
 import { type InstallScope } from "../../scope.js";
 import { type ManageApproval } from "../../../installed-skills/files.js";
 import { Effect } from "effect";
-import * as Library from "../../library.js";
+import {
+  sameInstallScope,
+  uniqueInstallScopes,
+  enabledCollections,
+  type SetupApproval,
+} from "../../enabled-plan.js";
 import type { InvocationOption } from "./invocation-option.js";
 import { OptionCombinationInvalid } from "../../../shared/input-failures.js";
 import { resolveLibrarySubject } from "../../subject-resolution.js";
@@ -38,7 +43,7 @@ export interface SetEnabledIntent {
   readonly invocation?: InvocationOption;
   readonly allowDuplicate?: boolean;
   /** What a setup review approved, and nothing else. */
-  readonly setup?: Library.SetupApproval;
+  readonly setup?: SetupApproval;
   /** The folder the user approved managing, as previewed. */
   readonly manage?: ManageApproval;
 }
@@ -50,10 +55,7 @@ export interface EnabledCollection {
   readonly invocationBySkill: Readonly<Record<string, InvocationOption>>;
 }
 
-export const sameInstallScope = Library.sameInstallScope;
-export const uniqueInstallScopes = Library.uniqueInstallScopes;
-export const enabledCollections: (state: LibraryState) => EnabledCollection[] =
-  Library.enabledCollections;
+export { sameInstallScope, uniqueInstallScopes, enabledCollections };
 
 /** Expand once, filtering a multi-Scope disable to the members actually enabled at each Scope. */
 export const expandSetEnabledIntent = Effect.fn("SetEnabled.expandIntent")(function* (

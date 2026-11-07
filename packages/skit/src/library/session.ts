@@ -19,8 +19,6 @@ export {
   type PendingLibraryChange,
   type LibraryActionOutcome,
   type LibrarySessionState,
-  openLibrarySession,
-  readLibrarySkillContent,
   libraryPolicyAfter,
   proposeLibraryEnable,
   proposeLibraryDisable,
