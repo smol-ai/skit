@@ -1,5 +1,5 @@
 import * as Library from "@smolai/skit-core/library";
-import { Effect, Option } from "effect";
+import { Effect } from "effect";
 import { descriptionLoadMessage } from "../library/presentation/description-size.js";
 import { inspectSource } from "@smolai/skit-core/library/source";
 import { Argument, Command, Flag } from "effect/cli";
@@ -30,7 +30,7 @@ export const addCliCommand = Command.make(
   (input) =>
     Effect.gen(function* () {
       const renderer = yield* Renderer;
-      const request = yield* addSourceRequest(input.source, Option.getOrUndefined(input.registry));
+      const request = yield* addSourceRequest(input.source, input.registry);
       if (input.preview) {
         const value = yield* renderer.withStatus(
           `Inspecting ${input.source}`,

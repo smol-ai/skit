@@ -54,19 +54,16 @@ export const setEnabledCliCommand = (enabled: boolean) => {
     },
     (input) =>
       Effect.gen(function* () {
-        if (input.global && Option.isSome(input.repo))
+        if (input.global && input.repo !== undefined)
           return yield* new OptionCombinationInvalid({
             detail: "Choose one scope: --global or --repo <path>",
           });
         const selectedSubject = Option.getOrUndefined(input.subject);
         const selectedScope: Scope | undefined = input.global
           ? { kind: "global" }
-          : Option.getOrUndefined(
-              Option.map(input.repo, (root): Scope => ({
-                kind: "repository",
-                root: resolve(root),
-              })),
-            );
+          : input.repo === undefined
+            ? undefined
+            : { kind: "repository", root: resolve(input.repo) };
         const selectedInvocation = Option.getOrUndefined(input.invocation) as
           | InvocationOption
           | undefined;

@@ -1,10 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { Effect } from "effect";
-import { NodeServices } from "@effect/platform-node";
 import { commandContractArtifacts } from "../dist/src/commands/artifacts.js";
 import { checkContractCompatibility } from "../dist/src/commands/contract-compatibility.js";
-import { commandApplicationLayer } from "../dist/src/application.js";
+import { cliLayer } from "../dist/src/application.js";
 
 const root = resolve(import.meta.dirname, "../../..");
 const contractsPath = "packages/cli/contracts";
@@ -30,8 +29,8 @@ const baseArtifacts = Object.fromEntries(
 const baseManifest = git(["show", `${base}:${contractsPath}/command-manifest.json`]);
 const headArtifacts = await Effect.runPromise(
   commandContractArtifacts().pipe(
-    Effect.provide(commandApplicationLayer(false, join(root, ".tmp", "contract-check-home"))),
-    Effect.provide(NodeServices.layer),
+    Effect.provide(cliLayer(false, join(root, ".tmp", "contract-check-home"))),
+    Effect.scoped,
   ),
 );
 const result = checkContractCompatibility({ baseArtifacts, headArtifacts, baseManifest });

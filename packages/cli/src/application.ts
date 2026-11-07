@@ -1,4 +1,4 @@
-import { Effect, Layer, Option } from "effect";
+import { Effect, Layer } from "effect";
 import { NodeServices } from "@effect/platform-node";
 import { consoleRendererLayer } from "./terminal/console-renderer.js";
 import { registryHttpLayer } from "./registry/registry-http.js";
@@ -12,19 +12,16 @@ import { inventoryRootOptions } from "@smolai/skit-core/library/routing";
 import { rootOverrides, type RootFlags } from "./commands/parameters.js";
 
 /** Parsed configuration flags. Grouped commands inherit home from their parent. */
-type CommandInput = { readonly home?: Option.Option<string> } & Partial<RootFlags>;
+type CommandInput = { readonly home?: string } & Partial<RootFlags>;
 
 /** Select home from the existing process snapshot; do not resolve its environment again. */
 export const configurationLayer = (input: CommandInput = {}) =>
-  Layer.effect(
-    SkitConfiguration,
-    configurationForHome(Option.getOrUndefined(input.home ?? Option.none())),
-  );
+  Layer.effect(SkitConfiguration, configurationForHome(input.home));
 
 /** One configured Library for the selected command; its implementation owns startup recovery. */
 export const libraryLayer = (input: CommandInput = {}) =>
   Layer.unwrap(
-    Effect.map(configurationForHome(Option.getOrUndefined(input.home ?? Option.none())), (paths) =>
+    Effect.map(configurationForHome(input.home), (paths) =>
       Layer.merge(
         Layer.succeed(SkitConfiguration, paths),
         Library.layer({

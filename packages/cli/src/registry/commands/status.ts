@@ -5,7 +5,7 @@ import { Command } from "effect/cli";
 import { Registry } from "../index.js";
 import { CommandMetadata, credentialStoreReadSubprocesses } from "../../commands/metadata.js";
 import { outputContracts } from "../../commands/output-contracts.js";
-import { jsonFlag, optionalString, optionValue } from "../../commands/parameters.js";
+import { jsonFlag, optionalString } from "../../commands/parameters.js";
 import { Renderer } from "../../terminal/renderer.js";
 import { result } from "../../commands/result.js";
 
@@ -22,7 +22,7 @@ export const authStatusCliCommand = Command.make(
 
       const selectedHome = paths.skitHome;
       const renderer = yield* Renderer;
-      const value = yield* Registry.status(selectedHome, optionValue(registry));
+      const value = yield* Registry.status(selectedHome, registry);
       yield* renderer.result(result("authStatus", value));
     }),
 ).pipe(

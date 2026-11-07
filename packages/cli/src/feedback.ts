@@ -45,10 +45,10 @@ export const feedbackSendCliCommand = Command.make(
       const renderer = yield* Renderer;
       const input = yield* feedbackInput({
         text: Option.getOrUndefined(options.text),
-        message: Option.getOrUndefined(options.message),
-        harness: Option.getOrUndefined(options.harness),
-        model: Option.getOrUndefined(options.model),
-        email: Option.getOrUndefined(options.email),
+        message: options.message,
+        harness: options.harness,
+        model: options.model,
+        email: options.email,
       });
       const sent = yield* submitFeedback(input, {
         signedIn: options.signedIn,

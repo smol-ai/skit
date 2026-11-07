@@ -98,6 +98,7 @@ const duplicatesFlag = Flag.Literals("duplicates", SetupDuplicateAction.literals
     "Choose what happens to other copies of the selected skills: retain-only imports into the Library without enabling; keep-both enables and leaves the other copies; retire-aliases enables and moves symlinks to the skill into recovery; preserve-duplicates enables and moves identical global copies into recovery.",
   ),
   Flag.optional,
+  Flag.map(Option.getOrUndefined),
 );
 
 export const setupCliCommand = Command.make(
@@ -117,12 +118,14 @@ export const setupCliCommand = Command.make(
     Effect.gen(function* () {
       const paths = yield* SkitConfiguration;
       const selectedHome = paths.skitHome;
-      const apply = Option.getOrUndefined(input.apply);
-      const reviewId = Option.getOrUndefined(input.review);
-      const compare = Option.getOrUndefined(input.compare);
-      const reviewedPlanId = Option.getOrUndefined(input.reviewed);
-      const duplicates = Option.getOrUndefined(input.duplicates);
-      const workDir = Option.getOrUndefined(input.workDir);
+      const {
+        apply,
+        review: reviewId,
+        compare,
+        reviewed: reviewedPlanId,
+        duplicates,
+        workDir,
+      } = input;
       const explicit =
         input.onlySelected ||
         input.selectPath.length > 0 ||

@@ -1,4 +1,4 @@
-import { Effect, Option } from "effect";
+import { Effect } from "effect";
 import { Command } from "effect/cli";
 import { bootstrapServer } from "../bootstrap.js";
 import { Renderer } from "../../terminal/renderer.js";
@@ -23,10 +23,10 @@ export const serverBootstrapCliCommand = Command.make(
     Effect.gen(function* () {
       const renderer = yield* Renderer;
       const value = yield* bootstrapServer({
-        configPath: Option.getOrUndefined(config),
-        environment: Option.getOrUndefined(env),
-        origin: Option.getOrUndefined(url),
-        wrangler: Option.getOrUndefined(wrangler),
+        configPath: config,
+        environment: env,
+        origin: url,
+        wrangler: wrangler,
       });
       yield* renderer.result(
         result("serverBootstrap", {

@@ -1,7 +1,7 @@
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import * as Library from "@smolai/skit-core/library";
 import { UsageHarness } from "@smolai/skit-core/library/usage";
-import { Effect, Option } from "effect";
+import { Effect } from "effect";
 import { Command, Flag } from "effect/cli";
 import { scanLocalUsage } from "../library/usage/scan.js";
 import { usageOutputContracts } from "../library/usage/output.js";
@@ -48,12 +48,12 @@ export const usageCliCommand = Command.make(
           userHome: paths.userHome,
           harness: input.harness,
           homes: {
-            codex: Option.getOrUndefined(input.codexHome),
-            "claude-code": Option.getOrUndefined(input.claudeHome),
+            codex: input.codexHome,
+            "claude-code": input.claudeHome,
           },
           days: input.days,
-          end: Option.getOrUndefined(input.end),
-          project: Option.getOrUndefined(input.project),
+          end: input.end,
+          project: input.project,
           progress: (completed, total) =>
             renderer.updateStatus(`Scanning local transcripts: ${completed}/${total} files`),
         }),

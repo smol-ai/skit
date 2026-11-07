@@ -9,7 +9,7 @@ import {
   sourceFetchSubprocesses,
 } from "./metadata.js";
 
-import { localFlags, optionalString, optionValue } from "./parameters.js";
+import { localFlags, optionalString } from "./parameters.js";
 import { Renderer } from "../terminal/renderer.js";
 import { encodeResult as result } from "./encode-result.js";
 import { OptionCombinationInvalid } from "./input-failures.js";
@@ -79,9 +79,7 @@ export const librarySyncCliCommand = Command.make(
         return yield* new OptionCombinationInvalid({
           detail: "Changing device selection requires --apply.",
         });
-      const authState = yield* Registry.librarySyncAccount(optionValue(input.registry)).pipe(
-        Effect.result,
-      );
+      const authState = yield* Registry.librarySyncAccount(input.registry).pipe(Effect.result);
       const value = yield* librarySyncCommand({
         authState,
         apply: input.apply,

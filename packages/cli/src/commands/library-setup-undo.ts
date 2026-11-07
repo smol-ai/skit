@@ -1,4 +1,4 @@
-import { Cause, Effect, Option } from "effect";
+import { Cause, Effect } from "effect";
 import { Argument, Command } from "effect/cli";
 import { commandFailure } from "./failure-classification.js";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
@@ -48,7 +48,7 @@ export const librarySetupUndoCliCommand = Command.make(
         );
       }
       const plan = prepared.success;
-      const approved = Option.getOrUndefined(input.apply);
+      const approved = input.apply;
       if (approved === undefined)
         return yield* renderer.result(
           result(

@@ -32,7 +32,11 @@ export const jsonRequested = (argv: readonly string[] = process.argv.slice(2)): 
 };
 
 export const optionalString = (name: string, description: string) =>
-  Flag.String(name).pipe(Flag.withDescription(description), Flag.optional);
+  Flag.String(name).pipe(
+    Flag.withDescription(description),
+    Flag.optional,
+    Flag.map(Option.getOrUndefined),
+  );
 
 export const homeFlag = optionalString("home", "Override the SKIT state directory.");
 const codexRootFlag = optionalString(
@@ -66,17 +70,17 @@ export const localFlags = {
 
 /** The parsed root flags: skills directories named on the command line. */
 export interface RootFlags {
-  readonly codexRoot: Option.Option<string>;
-  readonly claudeRoot: Option.Option<string>;
-  readonly opencodeRoot: Option.Option<string>;
+  readonly codexRoot: string | undefined;
+  readonly claudeRoot: string | undefined;
+  readonly opencodeRoot: string | undefined;
   readonly devinRoot: readonly string[];
 }
 
 export function rootOverrides(input: Partial<RootFlags>): SkillsDirectoryOverrides {
   const overrides: Record<HarnessName, readonly string[]> = {
-    codex: Option.toArray(input.codexRoot ?? Option.none()),
-    "claude-code": Option.toArray(input.claudeRoot ?? Option.none()),
-    opencode: Option.toArray(input.opencodeRoot ?? Option.none()),
+    codex: input.codexRoot === undefined ? [] : [input.codexRoot],
+    "claude-code": input.claudeRoot === undefined ? [] : [input.claudeRoot],
+    opencode: input.opencodeRoot === undefined ? [] : [input.opencodeRoot],
     devin: input.devinRoot ?? [],
   };
   return Record.filter(overrides, (roots) => roots.length > 0);
@@ -88,6 +92,3 @@ export function inventoryRootOptions(
 ): InventoryRootOptions {
   return deviceRoots(paths, rootOverrides(input));
 }
-
-export const optionValue = <A>(value: Option.Option<A>): A | undefined =>
-  Option.getOrUndefined(value);

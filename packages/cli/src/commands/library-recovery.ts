@@ -1,4 +1,4 @@
-import { Cause, Effect, Option } from "effect";
+import { Cause, Effect } from "effect";
 import { Argument, Command } from "effect/cli";
 import { SkitConfiguration } from "@smolai/skit-core/platform";
 import { commandFailure } from "./failure-classification.js";
@@ -83,7 +83,7 @@ const restore = Command.make("restore", { operation, apply, ...flags }, (input) 
     const renderer = yield* Renderer;
     const restore = yield* openRecoveryRestore(input.operation);
     const plan = { change: restore.change };
-    const approved = Option.getOrUndefined(input.apply);
+    const approved = input.apply;
     if (approved === undefined)
       return yield* renderer.result(
         result("recovery", recoveryOutputContracts.recovery, {
