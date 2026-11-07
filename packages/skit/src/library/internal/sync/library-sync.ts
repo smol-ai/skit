@@ -12,7 +12,7 @@ export type RemoteLibrary = NonNullable<SyncSessionRequest["remote"]>;
 
 /** Registry protocol only: the owner decides what to read, upload, write and download. */
 export interface LibrarySyncTransport<ReadError, UploadError, WriteError, DownloadError, R> {
-  readonly read: () => Effect.Effect<RemoteLibrary | null, ReadError, R>;
+  readonly read: Effect.Effect<RemoteLibrary | null, ReadError, R>;
   readonly upload: (archive: SnapshotArchive) => Effect.Effect<unknown, UploadError, R>;
   readonly write: (
     expectedRevisionId: string | null,
@@ -154,7 +154,7 @@ export const syncLibrary = Effect.fn("Library.sync")(function* <
   const inventory = yield* inspectSyncSnapshots(library, snapshot, progress);
   if (inventory._tag === "Changed")
     return { status: "local_bytes_changed" as const, hash: inventory.hash };
-  const remote = yield* progress.around({ kind: "read-remote" }, transport.read());
+  const remote = yield* progress.around({ kind: "read-remote" }, transport.read);
   const session = yield* openSyncSession(
     library,
     roots,

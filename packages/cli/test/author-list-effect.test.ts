@@ -22,7 +22,7 @@ import { makeScriptedInteraction } from "../src/storybook/interaction-recorder.j
 import { testHttpClientLayer, type TestHttpHandler } from "./helpers/http-test-client.js";
 
 const listWithTransport = (input: { origin?: string; token?: string }, fetcher: TestHttpHandler) =>
-  listAuthorSkits({ list: () => listAuthorInventory(input) }).pipe(
+  listAuthorSkits({ list: listAuthorInventory(input) }).pipe(
     Effect.provide(registryHttpLayer(testHttpClientLayer(fetcher))),
   );
 

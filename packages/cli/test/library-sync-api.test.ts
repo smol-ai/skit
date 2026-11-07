@@ -11,7 +11,7 @@ it.effect("retains an undeclared response status without inventing an error code
         origin: "https://registry.test",
         token: "test-token",
       });
-      const failure = yield* Effect.flip(api.read());
+      const failure = yield* Effect.flip(api.read);
 
       assert.strictEqual(failure._tag, "Library.LibraryApiRejected");
       if (failure._tag === "Library.LibraryApiRejected") {
@@ -35,7 +35,7 @@ it.effect("rejects an undecodable remote Library instead of returning it", () =>
         origin: "https://registry.test",
         token: "test-token",
       });
-      const failure = yield* Effect.flip(api.read());
+      const failure = yield* Effect.flip(api.read);
 
       assert.strictEqual(failure._tag, "Library.LibraryApiInvalidResponse");
     }).pipe(

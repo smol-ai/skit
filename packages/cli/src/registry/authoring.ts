@@ -203,5 +203,5 @@ export type { AuthorListPaginationError, AuthorListResponseError };
 
 /** Adapt the command's captured account without leaking its credential into Author. */
 export const authorInventoryRegistry = (account: ResolvedAuth) => ({
-  list: () => listAuthorInventory(account),
+  list: listAuthorInventory(account),
 });

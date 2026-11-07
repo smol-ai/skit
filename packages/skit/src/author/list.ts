@@ -20,7 +20,7 @@ export class AuthorListIdentityError
 export const listAuthorSkits = Effect.fn("Author.list")(function* <E, R>(
   registry: Pick<AuthorRegistry<E, R>, "list">,
 ) {
-  const { origin, skits } = yield* registry.list();
+  const { origin, skits } = yield* registry.list;
   const inventory = yield* Effect.forEach(skits, (skit) =>
     Effect.gen(function* () {
       const separator = skit.skit_id.indexOf("/");
