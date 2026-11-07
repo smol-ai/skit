@@ -2112,13 +2112,11 @@ for (const reverse of [false, true])
 it.effect("a shared final publication failure belongs to every accepted request", () =>
   Effect.gen(function* () {
     const f = yield* fixture;
-    const doneApply = Schema.Struct({
-      _tag: Schema.Literal("Pending"),
+    const doneApply = Schema.TaggedStruct("Pending", {
       steps: Schema.Array(
         Schema.Struct({
-          step: Schema.Struct({
-            _tag: Schema.Literal("Apply"),
-            phase: Schema.Struct({ _tag: Schema.Literal("Done") }),
+          step: Schema.TaggedStruct("Apply", {
+            phase: Schema.TaggedStruct("Done", {}),
           }),
         }),
       ),

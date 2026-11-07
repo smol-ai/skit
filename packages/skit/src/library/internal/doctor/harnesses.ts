@@ -50,9 +50,8 @@ type HarnessDoctorSkill = typeof HarnessDoctorSkill.Type;
 const NativeDoctorHarness = HarnessName.pick(["claude-code", "opencode", "devin"]);
 type NativeDoctorHarness = typeof NativeDoctorHarness.Type;
 const NativeDiscoveryFinding = Schema.Union([
-  Schema.Struct({ _tag: Schema.Literal("Warning"), message: Schema.String }),
-  Schema.Struct({
-    _tag: Schema.Literal("NameCollision"),
+  Schema.TaggedStruct("Warning", { message: Schema.String }),
+  Schema.TaggedStruct("NameCollision", {
     name: Schema.String,
     paths: Schema.Array(Schema.String),
     selectedPath: Schema.optionalKey(Schema.String),

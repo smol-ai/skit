@@ -7,8 +7,8 @@ import { InstallScope } from "./scope.js";
 import { FailureTypeId, type SkitFailure } from "../shared/failure.js";
 import { resolve } from "node:path";
 const Subject = Schema.Union([
-  Schema.Struct({ _tag: Schema.Literal("Skill"), id: SkillId }),
-  Schema.Struct({ _tag: Schema.Literal("Collection"), id: CollectionId }),
+  Schema.TaggedStruct("Skill", { id: SkillId }),
+  Schema.TaggedStruct("Collection", { id: CollectionId }),
 ]);
 type Subject = typeof Subject.Type;
 import { Invocation } from "./device-state.js";

@@ -490,8 +490,7 @@ const SystemErrorTags = Schema.Literals([
  * Effect's PlatformError, stored as the fields it exposes. Its `cause` can be any value, so it is
  * not stored; a read-back error has none.
  */
-const StoredPlatformError = Schema.Struct({
-  _tag: Schema.Literal("PlatformError"),
+const StoredPlatformError = Schema.TaggedStruct("PlatformError", {
   reason: Schema.Struct({
     _tag: Schema.Union([SystemErrorTags, Schema.Literal("BadArgument")]),
     module: Schema.String,

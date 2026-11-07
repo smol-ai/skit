@@ -465,15 +465,14 @@ export class CommandFailed
  * itself rather than by matching the message text.
  */
 export const SourcePolicyViolationReason = Schema.Union([
-  Schema.Struct({
-    _tag: Schema.Literal("Transport"),
+  Schema.TaggedStruct("Transport", {
     detail: Schema.String,
     status: Schema.optionalKey(Schema.Number),
   }),
-  Schema.Struct({ _tag: Schema.Literal("LimitExceeded"), detail: Schema.String }),
-  Schema.Struct({ _tag: Schema.Literal("PinMismatch"), detail: Schema.String }),
-  Schema.Struct({ _tag: Schema.Literal("VersionDisagreement"), detail: Schema.String }),
-  Schema.Struct({ _tag: Schema.Literal("InvalidSource"), detail: Schema.String }),
+  Schema.TaggedStruct("LimitExceeded", { detail: Schema.String }),
+  Schema.TaggedStruct("PinMismatch", { detail: Schema.String }),
+  Schema.TaggedStruct("VersionDisagreement", { detail: Schema.String }),
+  Schema.TaggedStruct("InvalidSource", { detail: Schema.String }),
 ]);
 export type SourcePolicyViolationReason = typeof SourcePolicyViolationReason.Type;
 

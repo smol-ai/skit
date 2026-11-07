@@ -2,22 +2,20 @@ import { Schema } from "effect";
 import { FailureTypeId, type SkitFailure } from "./failure.js";
 
 const TreeErrorReason = Schema.Union([
-  Schema.Struct({
-    _tag: Schema.Literal("GitCommandFailed"),
+  Schema.TaggedStruct("GitCommandFailed", {
     command: Schema.String,
     exitCode: Schema.Number,
   }),
-  Schema.Struct({ _tag: Schema.Literal("GitInspectionFailed"), detail: Schema.String }),
-  Schema.Struct({ _tag: Schema.Literal("EmbeddedRepository"), path: Schema.String }),
-  Schema.Struct({ _tag: Schema.Literal("Submodule"), path: Schema.String }),
-  Schema.Struct({ _tag: Schema.Literal("IgnoredRoot") }),
-  Schema.Struct({ _tag: Schema.Literal("FullyExcludedRoot") }),
-  Schema.Struct({ _tag: Schema.Literal("EscapedPath"), path: Schema.String }),
-  Schema.Struct({ _tag: Schema.Literal("InvalidSymlink"), path: Schema.String }),
-  Schema.Struct({ _tag: Schema.Literal("UnsupportedEntry"), path: Schema.String }),
-  Schema.Struct({ _tag: Schema.Literal("ChangedDuringRead"), path: Schema.String }),
-  Schema.Struct({
-    _tag: Schema.Literal("CannotRetain"),
+  Schema.TaggedStruct("GitInspectionFailed", { detail: Schema.String }),
+  Schema.TaggedStruct("EmbeddedRepository", { path: Schema.String }),
+  Schema.TaggedStruct("Submodule", { path: Schema.String }),
+  Schema.TaggedStruct("IgnoredRoot", {}),
+  Schema.TaggedStruct("FullyExcludedRoot", {}),
+  Schema.TaggedStruct("EscapedPath", { path: Schema.String }),
+  Schema.TaggedStruct("InvalidSymlink", { path: Schema.String }),
+  Schema.TaggedStruct("UnsupportedEntry", { path: Schema.String }),
+  Schema.TaggedStruct("ChangedDuringRead", { path: Schema.String }),
+  Schema.TaggedStruct("CannotRetain", {
     entryType: Schema.String,
     path: Schema.String,
   }),
