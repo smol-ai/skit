@@ -40,7 +40,7 @@ NodeRuntime.runMain(
               path.endsWith(".json")
             ) {
               yield* Console.log(JSON.stringify({ event: "paused" }));
-              if (mode === "pause") yield* Effect.never;
+              if (mode === "pause") return yield* Effect.never;
               else
                 yield* Stream.fromAsyncIterable(process.stdin, (cause) => cause).pipe(
                   Stream.take(1),

@@ -925,7 +925,7 @@ it.effect("an interrupted pull never moves current and the next sync pulls again
         link: Effect.fn("Test.pauseRemoteOnlyApplication")(function* (from, to) {
           if (to.endsWith("/notes/new.txt")) {
             yield* Deferred.succeed(reachedApply, undefined);
-            yield* Effect.never;
+            return yield* Effect.never;
           }
           yield* fs.link(from, to);
         }),
@@ -1254,7 +1254,7 @@ it.effect.each(["pull", "merge"] as const)(
             yield* fs.link(from, to);
             if (to.endsWith("/notes/1.txt")) {
               yield* Deferred.succeed(appliedFirst, undefined);
-              yield* Effect.never;
+              return yield* Effect.never;
             }
           }),
         }),
@@ -1311,7 +1311,7 @@ it.effect("repeatedly interrupted pulls keep real edits and finish remote deleti
             yield* fs.link(from, to);
             if (to === join(world.a.workspace, path)) {
               yield* Deferred.succeed(written, undefined);
-              yield* Effect.never;
+              return yield* Effect.never;
             }
           }),
         }),

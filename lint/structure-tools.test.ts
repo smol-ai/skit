@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,7 +7,6 @@ import { afterEach, describe, expect, test } from "vitest";
 
 const root = join(import.meta.dirname, "..");
 const knip = fileURLToPath(new URL("../bin/knip.js", import.meta.resolve("knip")));
-const oxlint = fileURLToPath(new URL("bin/oxlint", import.meta.resolve("oxlint/package.json")));
 const directories: string[] = [];
 
 function fixture(files: { [path: string]: string }): string {
@@ -119,9 +118,17 @@ describe("structure tooling", () => {
           : `import { value as next } from "./module${index + 1}.js"; export const value = next;`;
     }
     const directory = fixture(files);
+    symlinkSync(join(root, "node_modules"), join(directory, "node_modules"), "junction");
     const result = spawnSync(
       process.execPath,
-      [oxlint, "--config", join(root, ".oxlintrc.json"), "--format=json", "barrel.ts", "named.ts"],
+      [
+        join(root, "scripts/oxlint.mjs"),
+        "--config",
+        join(root, ".oxlintrc.json"),
+        "--format=json",
+        "barrel.ts",
+        "named.ts",
+      ],
       {
         cwd: directory,
         encoding: "utf8",

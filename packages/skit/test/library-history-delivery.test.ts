@@ -417,7 +417,7 @@ it.effect("preserves caller interruption after committed state and settles histo
       Effect.gen(function* () {
         yield* owner.import.collection(f.request);
         yield* Deferred.succeed(committed, undefined);
-        yield* Effect.never;
+        return yield* Effect.never;
       }),
     ).pipe(Effect.forkChild);
     yield* Deferred.await(committed);

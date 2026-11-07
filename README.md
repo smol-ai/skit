@@ -177,4 +177,24 @@ resolve the conflict, and retry `skit sync --apply`.
 
 The [SKIT server](packages/skit-server-effect/README.md) is open source, and supports self-hosting on Cloudflare.
 
+## Development tooling
+
+Run `pnpm install --frozen-lockfile`, then `pnpm lint:code` for the existing SKIT
+rules and the Effect language service's recommended type-aware diagnostics.
+The pinned versions are `@effect/tsgo` 0.67.5, Oxlint 1.92.0, and
+`oxlint-tsgolint` 7.0.2006. Update them together against the
+[upstream compatibility table](https://github.com/Effect-TS/tsgo#supported-package-versions).
+
+VS Code users can install the recommended Oxc extension. Workspace settings run
+`scripts/oxlint.mjs --lsp`, the same entry point used by CLI linting. For other
+LSP clients, use `node scripts/oxlint.mjs --lsp` from the repository root.
+These commands use the packaged Effect builds without patching `node_modules`.
+The existing install-time build and package-specific TypeScript versions stay in place.
+
+For a separate native TypeScript language server with Effect hover and quick-fix
+support, configure an LSP client to run `pnpm lsp:typescript` from the repository
+root. It selects TypeScript 7.0.2 explicitly. Shared `tsconfig.effect.json` settings
+leave Effect diagnostics to Oxlint, avoiding duplicate reports from that server.
+Existing warnings remain visible; no lint baseline is used.
+
 This repository is licensed under the [MIT licence](LICENSE).

@@ -1,4 +1,5 @@
 {
+  "extends": "../../tsconfig.effect.json",
   "compilerOptions": {
     "target": "ESNext",
     "module": "ESNext",

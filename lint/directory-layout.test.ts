@@ -2,12 +2,11 @@ import { spawnSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 
 const root = join(import.meta.dirname, "..");
 const pluginPath = join(import.meta.dirname, "oxlint-plugin-skit.mjs");
-const oxlintPath = fileURLToPath(new URL("bin/oxlint", import.meta.resolve("oxlint/package.json")));
+const oxlintPath = join(root, "scripts/oxlint.mjs");
 
 /**
  * Writes a probe file at `path` in the real tree (the rules judge repository paths), lints it with

@@ -1,0 +1,4 @@
+{
+  "oxc.path.oxlint": "./scripts/oxlint.mjs",
+  "oxc.typeAware": true
+}
