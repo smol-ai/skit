@@ -416,7 +416,9 @@ Tools
             ),
           ),
       };
-      const view = yield* home.owned(Library.Service).pipe(Effect.provideService(FileSystem.FileSystem, recordingFs));
+      const view = yield* home
+        .owned(Library.Service)
+        .pipe(Effect.provideService(FileSystem.FileSystem, recordingFs));
       const viewBase = yield* view.read;
       const read = home
         .owned(view.skills({ base: viewBase }))
