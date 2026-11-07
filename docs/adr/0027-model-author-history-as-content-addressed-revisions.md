@@ -150,7 +150,7 @@ that one boundary, as ADR-0025 requires.
 ## Consequences
 
 The three unshipped Draft migrations become one schema: `revisions`, `revision_parents`, trees,
-blobs, and a `current` pointer per Draft. The local history journal and sync bindings become the
-device `Store` plus one `SyncState` per Draft. The diff3 core of `merge/three-way.ts` survives
+blobs, and a `current` pointer per SKIT. The local history journal and sync bindings become the
+device history store plus one `SyncState` per Author Workspace and SKIT locator. The diff3 core of `packages/skit/src/sync/merge.ts` survives
 inside `Merge.lines`. The author-sync demo replays `plan` and `run`, so it follows the real code
 path.

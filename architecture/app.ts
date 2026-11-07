@@ -511,7 +511,7 @@ export const workflows = {
  */
 /** Platform services, each kept under the service rule above (not every entry is re-checked yet). */
 export const platform = [
-  "AuthorIgnoreRepository (runtime-scoped resource; author-sync-testing.md:1117-1135)",
+  "AuthorIgnoreRepository (runtime-scoped ignore-rule resource; author workspace owner)",
 
   "Renderer",
   "Prompter (second real implementation: the storybook journey recorder, storybook/interaction-recorder.ts)",

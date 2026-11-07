@@ -1,16 +1,16 @@
 # Library sync outcomes
 
-This document is the test oracle for `skit sync`. It lists every path through `syncLibrary` (`packages/cli/src/workflows/library/library-sync.ts`), the durable effects each path makes in order, and the outcomes a crash, a lost response, or a competing writer may legally produce at each boundary. Multi-home tests assert against these tables rather than against an informal notion of "converges".
+This document is the test oracle for `skit sync`. It lists every path through `syncLibrary` (`packages/skit/src/library/internal/sync/library-sync.ts`), the durable effects each path makes in order, and the outcomes a crash, a lost response, or a competing writer may legally produce at each boundary. Multi-home tests assert against these tables rather than against an informal notion of "converges".
 
 | Coverage | Where |
 | --- | --- |
 | Named preflight, push, pull, and merge fault rows; byte-level state and projection checks; the commit order of every applying path; `--take-remote` refused before collision checks; edited copies recorded before reconciliation | `packages/cli/test/library-sync-outcomes.test.ts` |
 | Lost response on a later push, restored older state, ancestry, removals, device policies, every declared device field through push, merge and clean, and undeclared fields | `packages/cli/test/library-sync-crash.test.ts` |
-| Projection custody, collision resolution, identity retirement, and interrupted adoption | `packages/cli/test/library-sync-edge-cases.test.ts` |
+| Projection custody, collision resolution, identity retirement, and recorded local Sync recovery | `packages/cli/test/library-sync-edge-cases.test.ts` |
 | Stale bases, retries of a committed manifest, and snapshot readiness/reuse, on real D1 and on the client fake | `packages/skit-server-effect/test/library-sync.test.ts`, `packages/cli/test/library-sync-server.test.ts` |
-| Merge properties over generated manifests | `packages/cli/test/library-merge-properties.test.ts` |
+| Merge properties over generated manifests | `packages/skit/test/library-merge-properties.test.ts` |
 | Hand-derived alias cases: the same upstream under different Collection IDs (with device policy, repository Binding, projection and ancestry remapping), distinct upstreams with identical bytes, an equal artifact digest with a different validation digest, many homes converging on one identity, `local_version_id`, and a divergent import with and without a takeable remote choice | `packages/cli/test/library-sync-aliases.test.ts` |
-| Independently constructed conflict-free and conflicting merge families, including aligned-import families (same selection, older local history, equal artifact with a different source digest, a selected retained edit), alone and in combination | `packages/cli/test/library-merge-families.test.ts` |
+| Independently constructed conflict-free and conflicting merge families, including aligned-import families (same selection, older local history, equal artifact with a different source digest, a selected retained edit), alone and in combination | `packages/skit/test/library-merge-families.test.ts` |
 | Absent versus empty remote, absent versus empty local state, an empty accepted base, and no-op syncs that publish nothing locally and send no Registry write | `packages/cli/test/library-sync-absence.test.ts` |
 | Literal supported-wire bodies decoded and encoded by the client; a literal newer head and receipt refused | `packages/cli/test/library-sync-wire.test.ts` |
 | A sync killed after the Registry commits, and two homes racing with independent additions | `packages/skit-server-effect/test/e2e.test.ts` |
@@ -129,7 +129,7 @@ Independent imports of the same upstream and tracking configuration adopt the pu
 
 | Step | Effect | Commit point |
 | --- | --- | --- |
-| P0 | `prepareRestore` re-verifies L's retained copies | Originals (already present) |
+| P0 | `Library.content.inspect` re-verifies L's retained copies | Originals (already present) |
 | P1 | Upload each snapshot | Remote snapshots |
 | P2 | `api.write(null, L)` | **Remote head** |
 | P3 | Retire intact copies the Binding choice removes | Projections, local state (B unchanged) |
@@ -150,7 +150,7 @@ Independent imports of the same upstream and tracking configuration adopt the pu
 | Step | Effect | Commit point |
 | --- | --- | --- |
 | U1 | Download snapshots; reacquire source-restorable copies | — |
-| U2 | `prepareRestore` retains trees | Originals |
+| U2 | `Library.content.stage` stores verified trees before owner planning | Originals |
 | U3 | Re-inspect; fail `SyncLocalChanged` if L now exists | — |
 | U4 | Publish restored state with B = R | **Local state** |
 | U5 | Reconcile global projections | Projections |
@@ -192,7 +192,7 @@ Apply:
 | Step | Effect | Commit point |
 | --- | --- | --- |
 | M1 | Download missing snapshots; reacquire source-restorable copies | — |
-| M2 | `prepareRestore` retains trees | Originals |
+| M2 | `Library.content.stage` stores verified trees before owner planning | Originals |
 | M3 | Re-inspect; fail `SyncLocalChanged` if L changed | — |
 | M4 | Upload snapshots the merge introduced | Remote snapshots |
 | M5 | `api.write(R.revision, merged)`, skipped when merged = R | **Remote head** |

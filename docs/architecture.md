@@ -245,10 +245,10 @@ reports a conflict with its path; a blocked new destination leaves the old worki
 Installations selected by repository Bindings remain in place. Physical aliases of one root are
 reconciled as one target rather than treated as a relocation.
 
-This native boundary covers core `setProjection`, each normalized CLI Binding batch,
-and complete local author initialization/registration.
-Install, update, remove, Binding reconciliation, and author refresh share this mutation and
-custody policy in `projection/mutation.ts`.
+Installed-skill writes use staging, ownership-marker and hash checks, and directory replacement
+in `packages/skit/src/installed-skills/files.ts`. Library owns install/update/remove planning,
+writer scopes and recovery; CLI binding changes call the captured owner through reviewed plans.
+Author initialization calls Library operations rather than writing its installed folders itself.
 
 ### Author initialization
 
@@ -440,10 +440,10 @@ The packages are currently private and versioned `0.1.0`. The repository is lice
 
 The current boundaries are coherent, but several files concentrate change and should be watched:
 
-- `packages/skit/src/library/installation/install-directory.ts`: Installation state transitions and Projection transactions;
+- `packages/skit/src/installed-skills/files.ts`: staged folder writes and ownership verification;
 - `packages/skit/src/harnesses/catalog.ts`: a growing body of evidence-backed harness knowledge;
-- `packages/cli/src/library.ts`: CLI-to-core workflow adaptation;
-- `packages/cli/src/cli.ts`: command-handler orchestration.
+- `packages/cli/src/library/setup.ts`: guided setup across Library and MachineSettings;
+- `packages/cli/src/commands/tree.ts`: command grammar and owner provisioning.
 
 File size alone is not a reason to split them. Extract a component when it has a stable responsibility, invariant, and test boundary of its own.
 
