@@ -68,8 +68,9 @@ describe("bootstrap status", () => {
   it.effect("commits one complete identity when operator claims race", () =>
     Effect.gen(function* () {
       yield* prepareIdentityDatabase;
-      const responses = yield* Effect.all(
-        ["first", "second"].map((name, index) =>
+      const responses = yield* Effect.forEach(
+        ["first", "second"],
+        (name, index) =>
           webPromise(() =>
             web.handler(
               new Request("https://registry.test/api/bootstrap", {
@@ -88,7 +89,6 @@ describe("bootstrap status", () => {
               }),
             ),
           ),
-        ),
         { concurrency: "unbounded" },
       );
       expect(responses.map((response) => response.status).sort(Order.Number)).toEqual([201, 409]);

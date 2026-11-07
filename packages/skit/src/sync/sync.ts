@@ -526,7 +526,7 @@ const authoredTree = (input: Extract<PlanInput, { readonly _tag: "Writing" }>) =
 export const run = <Prepared, SaveError, WriteError, R>(
   options: RunOptions<Prepared, SaveError, WriteError, R>,
 ): Effect.Effect<RunResult, SaveError | WriteError | History.StoreError | SkitFailure, R> =>
-  Effect.fn("Sync.run")(function* () {
+  Effect.gen(function* () {
     const { store, remote } = options;
     const start = { hash: options.local, tree: yield* store.tree(options.local) };
     yield* checkTree(start.tree);
@@ -746,4 +746,4 @@ export const run = <Prepared, SaveError, WriteError, R>(
       { state: options.state, local: start, status: "up_to_date", choices: [] },
       0,
     );
-  })();
+  }).pipe(Effect.withSpan("Sync.run"));

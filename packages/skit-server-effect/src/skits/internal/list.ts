@@ -102,10 +102,9 @@ export const makeList = (
     const limit = parseLimit(query.limit);
     const namespaces = yield* ownedNamespaces(principal);
     if (namespaces.length === 0) return { outcome: "page" as const, skits: [], next_cursor: null };
-    const rowBatches = yield* Effect.all(
-      EffectArray.chunksOf(namespaces, ACCESS_BATCH_SIZE).map((batch) =>
-        accessedSkits(batch, after, limit),
-      ),
+    const rowBatches = yield* Effect.forEach(
+      EffectArray.chunksOf(namespaces, ACCESS_BATCH_SIZE),
+      (batch) => accessedSkits(batch, after, limit),
       { concurrency: SUBREQUEST_CONCURRENCY },
     );
     const decoded = yield* Effect.forEach(rowBatches, (rows) =>

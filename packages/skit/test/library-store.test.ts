@@ -94,8 +94,9 @@ it.effect("accepts exactly one of two writes planned from the same state", () =>
     const global = { ...base, enabled };
     const local = { ...base, repositories: [{ root: "/workspace", enabled }] };
 
-    const outcomes = yield* Effect.all(
-      [global, local].map((next) => Effect.result(save(next, base))),
+    const outcomes = yield* Effect.forEach(
+      [global, local],
+      (next) => Effect.result(save(next, base)),
       { concurrency: "unbounded" },
     );
 
@@ -122,8 +123,9 @@ it.effect("accepts exactly one of two concurrent saves sharing one write", () =>
       home,
       Effect.gen(function* () {
         const writer = yield* LibraryWriter;
-        return yield* Effect.all(
-          [global, local].map((next) => Effect.result(writer.save(next, base))),
+        return yield* Effect.forEach(
+          [global, local],
+          (next) => Effect.result(writer.save(next, base)),
           { concurrency: "unbounded" },
         );
       }),
