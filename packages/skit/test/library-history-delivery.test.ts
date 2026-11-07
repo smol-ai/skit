@@ -465,3 +465,51 @@ it.effect("does not recover an interrupted history delivery as a successful retr
     );
   }).pipe(Effect.provide(skitLayer), Effect.scoped),
 );
+
+it.effect(
+  "external audit corruption preserves committed writes and replays queued identities after archival",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const owner = yield* Library.Service.pipe(Effect.provide(f.layer));
+      yield* owner.import.collection(f.request);
+      const delivered = (yield* owner.history).events;
+      const damaged = `${yield* f.fs.readFileString(f.logPath)}{ externally damaged tail`;
+      yield* f.fs.writeFileString(f.logPath, damaged);
+
+      // Two actual owner mutations still commit; only their history delivery is blocked.
+      yield* owner.remove({ query: "review", dryRun: false });
+      yield* owner.import.collection(f.request);
+      const before = yield* owner.read;
+      assert.strictEqual(before._tag, "Present");
+      const queued = (yield* readEnvelope(yield* f.fs.readFileString(f.statePath))).historyDelivery!
+        .pending;
+      assert.strictEqual(queued.length, 2);
+      assert.strictEqual(new Set(queued.map((item) => item.event.eventId)).size, 2);
+      const failure = yield* Effect.flip(owner.history);
+      assert.strictEqual(failure._tag, "LibraryAuditInvalid");
+      if (failure._tag === "LibraryAuditInvalid") {
+        assert.strictEqual(failure.path, f.logPath);
+        assert.strictEqual(failure.line, delivered.length + 1);
+      }
+      assert.deepStrictEqual(yield* owner.recovery.list, []);
+      assert.strictEqual(yield* f.fs.readFileString(f.logPath), damaged);
+
+      // Execute the reported recovery contract explicitly; SKIT never discards damaged bytes itself.
+      const archive = `${f.logPath}.damaged`;
+      yield* f.fs.rename(f.logPath, archive);
+      const recovered = yield* Library.Service.pipe(Effect.provide(f.layer));
+      assert.strictEqual((yield* recovered.read).revision, before.revision);
+      assert.deepStrictEqual(
+        (yield* recovered.history).events,
+        queued.map((item) => item.event),
+      );
+      assert.strictEqual(yield* f.fs.readFileString(archive), damaged);
+      assert.isUndefined(
+        (yield* readEnvelope(yield* f.fs.readFileString(f.statePath))).historyDelivery,
+      );
+      const log = yield* f.fs.readFileString(f.logPath);
+      yield* recoverLibraryHistory(f.home);
+      assert.strictEqual(yield* f.fs.readFileString(f.logPath), log);
+    }).pipe(Effect.provide(skitLayer), Effect.scoped),
+);
