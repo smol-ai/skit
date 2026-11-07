@@ -89,7 +89,7 @@ it.effect(
         Effect.all(
           [
             MachineSettings.ensureIdentity(home),
-            MachineSettings.updateDiscovery(home, {
+            MachineSettings.updateDiscovery<never>(home, {
               discoveryRoots: ["/second", "/first", "/second"],
               repositories: [{ path: "/one", status: "watched" }],
               displayName: "Discovery name",
