@@ -184,14 +184,14 @@ const unavailablePolicyChange = (
   }) satisfies LibrarySessionState & { readonly outcome: LibraryActionOutcome };
 
 const factFromPlan = (plan: SetEnabledPlan["changes"][number]): PreviewFacts => ({
-  action: plan.enabled ? "enable" : "disable",
+  action: plan.action,
   skills: plan.skills,
   scope: plan.scope,
   destination: destinationLabel(plan.scope),
   ...(plan.invocation === undefined ? {} : { invocation: plan.invocation }),
   writes: !plan.changed
     ? "nothing to change"
-    : plan.enabled
+    : plan.action === "enable"
       ? "projection created"
       : "projection removed",
 });
@@ -227,9 +227,10 @@ const proposeLibraryChange = Effect.fn("LibrarySession.propose")(function* (
       ...factFromPlan(plan),
       ...(plan.repair
         ? {
-            writes: plan.enabled
-              ? ("copies checked for repair" as const)
-              : ("projection removed" as const),
+            writes:
+              plan.action === "enable"
+                ? ("copies checked for repair" as const)
+                : ("projection removed" as const),
           }
         : {}),
       ...(intent.members === "whole"

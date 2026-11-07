@@ -4,7 +4,8 @@ import {
   metadataRevision,
   metadataDate,
 } from "../presentation/skill-metadata.js";
-import { terminalColors } from "../../terminal/style.js";
+import { createColors } from "picocolors";
+import { terminalData } from "../../terminal/text.js";
 import { Effect } from "effect";
 import { resolve } from "node:path";
 import type { InvocationOption } from "@smolai/skit-core/library/session";
@@ -270,16 +271,18 @@ export const browseLibrary = Effect.fn("CLI.libraryBrowse")(function* (
       while (true) {
         const row = session.skills.find((candidate) => candidate.skillVersionId === skillId);
         if (row === undefined) break;
-        yield* renderer.note(
-          [
-            terminalColors().cyan(row.heading),
-            `  ${terminalColors().bold(row.name)}`,
-            ...skillMetadataLines(row).map((line) => `    ${terminalColors().dim(line)}`),
-            ...(row.invocationWarning ? [`    ${row.invocationWarning}`] : []),
-            `  ${row.scopes.length === 0 ? "not enabled" : row.scopes.map((scopeRow) => scopeRow.label).join("\n  ")}`,
-          ].join("\n"),
-          "Skill",
-        );
+        const detail = terminalData(row);
+        const renderDetail = (color: boolean) => {
+          const colors = createColors(color);
+          return [
+            colors.cyan(detail.heading),
+            `  ${colors.bold(detail.name)}`,
+            ...skillMetadataLines(detail).map((line) => `    ${colors.dim(line)}`),
+            ...(detail.invocationWarning ? [`    ${detail.invocationWarning}`] : []),
+            `  ${detail.scopes.length === 0 ? "not enabled" : detail.scopes.map((scopeRow) => scopeRow.label).join("\n  ")}`,
+          ].join("\n");
+        };
+        yield* renderer.note(renderDetail(false), "Skill", { renderBody: renderDetail });
         const action = yield* prompter
           .select<"enable" | "disable" | "invocation" | "back" | "done">("What next?", [
             { value: "enable", label: "Enable" },
